@@ -99,21 +99,35 @@ export function LoginForm({
 
     setLoading(true)
 
-    const supabase = createClient()
-    const { data, error: signInError } = await supabase.auth.signInWithPassword(
-      { email, password }
-    )
+    // try/catch obligatorio: `createClient()` LANZA si faltan las variables
+    // NEXT_PUBLIC_SUPABASE_* (p. ej. un preview de Vercel sin envs marcadas
+    // para Preview). Sin él, la excepción escapaba del handler y el botón se
+    // quedaba "cargando" para siempre sin mostrar ningún error.
+    try {
+      const supabase = createClient()
+      const { data, error: signInError } = await supabase.auth.signInWithPassword(
+        { email, password }
+      )
 
-    if (signInError) {
-      setError(mensajeDeError(signInError.message, signInError.status))
+      if (signInError) {
+        setError(mensajeDeError(signInError.message, signInError.status))
+        setLoading(false)
+        return
+      }
+
+      const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
+      const redirect = safeInternalPath(searchParams.get('redirect'), ROLE_HOME[role])
+      router.replace(redirect)
+      router.refresh()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : ''
+      setError(
+        message.includes('Missing env var')
+          ? `Este entorno no está configurado (${message.replace('Missing env var: ', 'falta ')}). Configura las variables de Supabase para este entorno en Vercel.`
+          : 'No se pudo iniciar sesión. Intenta de nuevo en unos momentos.'
+      )
       setLoading(false)
-      return
     }
-
-    const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
-    const redirect = safeInternalPath(searchParams.get('redirect'), ROLE_HOME[role])
-    router.replace(redirect)
-    router.refresh()
   }, [email, password, searchParams, router])
 
   // Avisos del flujo de verificación de correo (Fase 1 · O-1).
