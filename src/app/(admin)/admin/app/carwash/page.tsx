@@ -109,21 +109,21 @@ export default async function CarwashShellPage() {
     ...(activas.has('POS_CAJA')
       ? [{ href: '/empleado/caja', label: 'Caja', descripcion: 'Cobros y órdenes del día', icon: Banknote } as Modulo]
       : []),
-    // Futuros (E5): visibles como "próximamente" hasta encender su capacidad.
+    // E5: construidos; visibles como "próximamente" hasta encender su capacidad.
     {
-      href: activas.has('COLA_VEHICULOS') ? '/admin/app/carwash' : null,
+      href: activas.has('COLA_VEHICULOS') ? '/admin/app/carwash/cola' : null,
       label: 'Cola de vehículos',
       descripcion: 'Estado de cada vehículo en pista',
       icon: ListOrdered,
     },
     {
-      href: activas.has('INVENTARIO') ? '/admin/app/carwash' : null,
+      href: activas.has('INVENTARIO') ? '/admin/app/carwash/inventario' : null,
       label: 'Inventario',
       descripcion: 'Productos, químicos y existencias',
       icon: PackageSearch,
     },
     {
-      href: activas.has('EVIDENCIA_FOTOS') ? '/admin/app/carwash' : null,
+      href: activas.has('EVIDENCIA_FOTOS') ? '/admin/app/carwash/evidencias' : null,
       label: 'Fotos antes/después',
       descripcion: 'Evidencia y control de daños',
       icon: Camera,

@@ -99,3 +99,28 @@ necesita.
    → /admin/citas queda bloqueada (server action devuelve no autorizado) y
    al quitar el override vuelve a funcionar (esperar el caché de 5 min o
    revalidar).
+
+## E5 entregada: cola, inventario y fotos antes/después
+
+Los tres módulos operativos nuevos de la app Car Wash, cada uno detrás de su
+capacidad (todas NACEN APAGADAS — encenderlas por empresa en
+/superadmin/capacidades):
+
+| Capacidad | Ruta | Qué hace |
+|---|---|---|
+| `COLA_VEHICULOS` | /admin/app/carwash/cola | Tablero de pista: EN_ESPERA → EN_SERVICIO → LISTO → ENTREGADO (o CANCELADO). Alta rápida por placa; si la placa es de un vehículo registrado, la entrada se liga sola al cliente. |
+| `INVENTARIO` | /admin/app/carwash/inventario | Productos con stock/mínimo/costo. El stock SOLO cambia con movimientos (ENTRADA/SALIDA/AJUSTE) que congelan el stock resultante. |
+| `EVIDENCIA_FOTOS` | /admin/app/carwash/evidencias | Fotos antes/después por placa o ligadas a una entrada de la cola (desde la tarjeta de la pista, icono de cámara). |
+
+Código: `src/modules/carwash/{cola,inventario,evidencias}[-actions].ts` y
+`src/components/carwash/`. Todas las acciones exigen sección `app` + capacidad
+encendida + pertenencia a la empresa, y dejan rastro en AuditLog.
+
+Requisitos de infraestructura:
+
+1. **Migración `20260759_e5_carwash`** (Supabase SQL Editor, idempotente):
+   crea `cola_vehiculos`, `productos_inventario`, `movimientos_inventario` y
+   `evidencias_foto`. Sin la migración, las pantallas muestran un aviso (no
+   rompen nada).
+2. **Bucket de Storage `evidencias`** (público) en Supabase — las fotos se
+   suben directo desde el navegador, igual que el bucket `promociones`.
