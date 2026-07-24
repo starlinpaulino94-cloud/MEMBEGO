@@ -106,5 +106,17 @@ export function appUrlFor(path = ''): string {
  */
 export function sessionCookieDomain(): string | undefined {
   const raw = process.env.NEXT_PUBLIC_COOKIE_DOMAIN?.trim()
-  return raw ? raw : undefined
+  if (!raw) return undefined
+  // Red de seguridad anti-previews: si el deployment NO es producción
+  // (previews de Vercel en *.vercel.app) o el host del navegador no pertenece
+  // al dominio configurado, fijar `Domain` haría que el navegador RECHACE la
+  // cookie en silencio → login que "se queda cargando". En esos casos, cookie
+  // host-only.
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'production') return undefined
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    const base = raw.replace(/^\./, '')
+    if (host !== base && !host.endsWith(`.${base}`)) return undefined
+  }
+  return raw
 }

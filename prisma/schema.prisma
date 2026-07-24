@@ -162,6 +162,10 @@ model User {
   ofertaUsosRegistrados     OfertaUso[]                @relation("OfertaUsoRegistradoPor")
   comprasAprobadas          ProductoCompra[]           @relation("CompraAprobadaPor")
   transicionesCompra        ProductoCompraTransicion[]
+  // App Car Wash · E5.
+  colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
+  movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
+  evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
 
   @@index([companyId])
   @@map("users")
@@ -257,6 +261,11 @@ model Company {
   // permitirRegalos?, maxTransferenciasMes?, vigenciaHoras? }. null = defaults.
   regalosConfig Json?
 
+  // Plataforma modular (docs/ESTRATEGIA-PLATAFORMA.md · E1). JSON:
+  // { categoria?, overrides?: { CAPACIDAD: boolean } }. null = paquete base
+  // de su categoría (fail-open: nada de lo actual desaparece).
+  capacidades Json?
+
   // Seguimiento de beneficios gratis (docs/SEGUIMIENTO-BENEFICIOS.md · S3).
   // JSON: { umbralPorVencerDias?, recordatorioAuto?, recordatorioDiasAntes?,
   // recordatorioFrecuenciaDias?, plantillaMensaje?, promosExcluidas? }.
@@ -334,6 +343,11 @@ model Company {
   regalos        Regalo[]
   giftCards      GiftCard[]
 
+  // App Car Wash · E5.
+  colaVehiculos       ColaVehiculo[]
+  productosInventario ProductoInventario[]
+  evidenciasFoto      EvidenciaFoto[]
+
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
   @@index([type])
@@ -360,6 +374,7 @@ model Sucursal {
   membershipsPago Membership[]     @relation("MembershipSucursalPago")
   comprasPago     ProductoCompra[] @relation("CompraSucursalPago")
   citas           Cita[]
+  colaVehiculos   ColaVehiculo[]
 
   @@index([companyId])
   @@map("sucursales")
@@ -446,16 +461,16 @@ model CajaSesion {
 /// Afecta el arqueo (esperado = inicial + cobros efectivo + entradas − salidas).
 /// `registradoPor` guarda el nombre del empleado (documento), no su correo.
 model MovimientoCaja {
-  id           String             @id @default(cuid())
-  companyId    String
-  cajaSesionId String
-  cajaSesion   CajaSesion         @relation(fields: [cajaSesionId], references: [id], onDelete: Cascade)
-  tipo         MovimientoCajaTipo
-  monto        Decimal            @db.Decimal(10, 2)
-  concepto     String
+  id              String             @id @default(cuid())
+  companyId       String
+  cajaSesionId    String
+  cajaSesion      CajaSesion         @relation(fields: [cajaSesionId], references: [id], onDelete: Cascade)
+  tipo            MovimientoCajaTipo
+  monto           Decimal            @db.Decimal(10, 2)
+  concepto        String
   registradoPorId String?
   registradoPor   String?
-  createdAt    DateTime           @default(now())
+  createdAt       DateTime           @default(now())
 
   @@index([cajaSesionId])
   @@index([companyId, createdAt])
@@ -468,11 +483,11 @@ model MovimientoCaja {
 /// solo guarda las partes, el contenido y el resultado. Mismo companyId
 /// siempre (los usos son de una empresa). Nada se elimina: estados finales.
 model Regalo {
-  id      String       @id @default(cuid())
+  id        String       @id @default(cuid())
   companyId String
-  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  tipo    RegaloTipo
-  estado  RegaloEstado @default(PENDIENTE)
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tipo      RegaloTipo
+  estado    RegaloEstado @default(PENDIENTE)
 
   // Partes. destinatarioId null = receptor aún sin cuenta (se reclama al
   // registrarse vía destinatarioContacto).
@@ -532,10 +547,10 @@ model GiftCard {
 
   // Partes (ids planos, como Regalo). destinatarioClienteId null = receptor
   // sin cuenta aún (se reclama al registrarse vía destinatarioContacto).
-  compradorClienteId   String
+  compradorClienteId    String
   destinatarioClienteId String?
-  destinatarioContacto String?
-  mensaje              String?
+  destinatarioContacto  String?
+  mensaje               String?
 
   /// Cobro confirmado: método y Transaction SALE del ingreso.
   metodoCobro MetodoCobroTipo?
@@ -776,6 +791,10 @@ model Cliente {
   // Regalos P2P.
   regalosEnviados  Regalo[] @relation("RegalosEnviados")
   regalosRecibidos Regalo[] @relation("RegalosRecibidos")
+
+  // App Car Wash · E5.
+  colaVehiculos  ColaVehiculo[]
+  evidenciasFoto EvidenciaFoto[]
 
   @@unique([supabaseId, companyId])
   // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).
@@ -1197,52 +1216,56 @@ model Vehiculo {
   visits Visit[]
   citas  Cita[]
 
+  // App Car Wash · E5.
+  colaEntradas ColaVehiculo[]
+  evidencias   EvidenciaFoto[]
+
   @@index([clienteId])
   @@map("vehiculos")
 }
 
 model Membership {
-  id                  String           @id @default(cuid())
-  clienteId           String
-  cliente             Cliente          @relation(fields: [clienteId], references: [id])
-  companyId           String
-  company             Company          @relation(fields: [companyId], references: [id])
-  planId              String
-  plan                Plan             @relation(fields: [planId], references: [id])
+  id                    String           @id @default(cuid())
+  clienteId             String
+  cliente               Cliente          @relation(fields: [clienteId], references: [id])
+  companyId             String
+  company               Company          @relation(fields: [companyId], references: [id])
+  planId                String
+  plan                  Plan             @relation(fields: [planId], references: [id])
   // Cambio de plan solicitado por el cliente mientras la membresía sigue ACTIVA.
   // El admin lo aprueba (con el comprobante) y se aplica; hasta entonces el plan
   // vigente no cambia. null = sin cambio pendiente.
-  planIdSolicitado    String?
-  planSolicitado      Plan?            @relation("PlanSolicitado", fields: [planIdSolicitado], references: [id])
-  userId              String? // empleado/admin que la creó
-  user                User?            @relation(fields: [userId], references: [id])
-  metodoPagoId        String? // método de pago seleccionado
-  metodoPago          MetodoPago?      @relation(fields: [metodoPagoId], references: [id])
+  planIdSolicitado      String?
+  planSolicitado        Plan?            @relation("PlanSolicitado", fields: [planIdSolicitado], references: [id])
+  userId                String? // empleado/admin que la creó
+  user                  User?            @relation(fields: [userId], references: [id])
+  metodoPagoId          String? // método de pago seleccionado
+  metodoPago            MetodoPago?      @relation(fields: [metodoPagoId], references: [id])
   // Pago presencial (POS): referencia única que el cliente muestra en caja y
   // sucursal elegida para pagar. Null en pagos por transferencia.
-  referencia          String?          @unique
-  sucursalPagoId      String?
-  sucursalPago        Sucursal?        @relation("MembershipSucursalPago", fields: [sucursalPagoId], references: [id])
-  estado              MembershipEstado @default(PENDIENTE)
+  referencia            String?          @unique
+  sucursalPagoId        String?
+  sucursalPago          Sucursal?        @relation("MembershipSucursalPago", fields: [sucursalPagoId], references: [id])
+  estado                MembershipEstado @default(PENDIENTE)
   // Pago
-  comprobanteUrl      String? // URL del comprobante subido (Supabase Storage)
-  comprobanteNota     String? // nota del cliente al enviar comprobante
-  rechazadoReason     String? // motivo de rechazo por admin
-  adminNota           String? // nota interna del admin, no visible al cliente
-  pagoConfirmado      Boolean          @default(false)
-  montoPagado         Decimal?         @db.Decimal(10, 2)
+  comprobanteUrl        String? // URL del comprobante subido (Supabase Storage)
+  comprobanteNota       String? // nota del cliente al enviar comprobante
+  rechazadoReason       String? // motivo de rechazo por admin
+  adminNota             String? // nota interna del admin, no visible al cliente
+  pagoConfirmado        Boolean          @default(false)
+  montoPagado           Decimal?         @db.Decimal(10, 2)
   // O-13: descuento de bienvenida congelado al solicitar el plan (null = sin
   // descuento). Solo se aplica si la membresía nunca se activó (fechaInicio null).
-  descuentoBienvenida Decimal?         @db.Decimal(10, 2)
+  descuentoBienvenida   Decimal?         @db.Decimal(10, 2)
   // Regalos P2P: si la membresía fue un regalo, quién la recibe.
   beneficiarioClienteId String?
 
   // Período activo
-  fechaInicio         DateTime?
-  fechaVencimiento    DateTime?
-  lavadosRestantes    Int              @default(0)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  fechaInicio      DateTime?
+  fechaVencimiento DateTime?
+  lavadosRestantes Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   visits       Visit[]
   comprobantes Comprobante[]
@@ -2978,33 +3001,33 @@ model AgendaConfig {
 /// Cita reservada por un cliente. `inicio` se guarda en UTC; el turno se
 /// calcula y se muestra en la zona horaria de la empresa.
 model Cita {
-  id                String     @id @default(cuid())
+  id                String          @id @default(cuid())
   companyId         String
-  company           Company    @relation(fields: [companyId], references: [id])
+  company           Company         @relation(fields: [companyId], references: [id])
   clienteId         String
-  cliente           Cliente    @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cliente           Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   sucursalId        String?
-  sucursal          Sucursal?  @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  sucursal          Sucursal?       @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
   vehiculoId        String?
-  vehiculo          Vehiculo?  @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  vehiculo          Vehiculo?       @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
   inicio            DateTime
   duracionMin       Int
   /// Qué viene a hacer (texto libre del cliente o del negocio).
   servicio          String?
   notaCliente       String?
   notaInterna       String?
-  estado            CitaEstado @default(CONFIRMADA)
+  estado            CitaEstado      @default(CONFIRMADA)
   /// 'CLIENTE' | 'NEGOCIO' cuando estado = CANCELADA.
   canceladaPor      String?
   motivoCancelacion String?
   atendidaPorId     String?
-  atendidaPor       User?      @relation("CitaAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: SetNull)
+  atendidaPor       User?           @relation("CitaAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: SetNull)
   /// Recompensa gratis que el cliente viene a canjear: su QR se habilita al
   /// agendar esta cita (docs/SEGUIMIENTO-BENEFICIOS.md · cita antes del QR).
   compraId          String?
   compra            ProductoCompra? @relation("CitaCompra", fields: [compraId], references: [id], onDelete: SetNull)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   // Agenda del día por empresa y "mis citas" del cliente.
   @@index([companyId, inicio])
@@ -3087,4 +3110,110 @@ model OfertaUso {
   @@index([invitadoId, createdAt])
   @@index([companyId, createdAt])
   @@map("oferta_usos")
+}
+
+// ─── App Car Wash · E5: cola, inventario y evidencia fotográfica ─────────────
+
+/// Vehículo dentro del flujo operativo del día (pista). Estados (String
+/// validado en código — src/modules/carwash/cola.ts): EN_ESPERA → EN_SERVICIO
+/// → LISTO → ENTREGADO, o CANCELADO. Puede ligarse a un cliente/vehículo
+/// registrado o capturarse "al vuelo" solo con placa/descripción.
+model ColaVehiculo {
+  id              String    @id @default(cuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId      String?
+  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  clienteId       String?
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculoId      String?
+  vehiculo        Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  /// Para vehículos sin registrar: placa y descripción libres.
+  placa           String?
+  descripcion     String?
+  servicio        String?
+  notaInterna     String?
+  estado          String    @default("EN_ESPERA")
+  inicioAt        DateTime?
+  listoAt         DateTime?
+  entregadoAt     DateTime?
+  registradaPorId String?
+  registradaPor   User?     @relation("ColaRegistradaPor", fields: [registradaPorId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  evidencias EvidenciaFoto[]
+
+  // Tablero del día por estado.
+  @@index([companyId, estado, createdAt])
+  @@map("cola_vehiculos")
+}
+
+/// Producto/insumo del negocio (químicos, ceras, toallas…). El stock SOLO se
+/// mueve con MovimientoInventario (rastro completo); borrar = activo:false.
+model ProductoInventario {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  categoria   String?
+  unidad      String   @default("unidad")
+  stock       Decimal  @default(0) @db.Decimal(12, 2)
+  /// Umbral de alerta: stock <= stockMinimo = "stock bajo".
+  stockMinimo Decimal  @default(0) @db.Decimal(12, 2)
+  costo       Decimal? @db.Decimal(12, 2)
+  activo      Boolean  @default(true)
+  notas       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  movimientos MovimientoInventario[]
+
+  @@index([companyId, activo])
+  @@map("productos_inventario")
+}
+
+/// Movimiento de stock: ENTRADA | SALIDA | AJUSTE (String validado en código).
+/// `stockResultante` congela el stock después del movimiento (auditoría).
+model MovimientoInventario {
+  id              String             @id @default(cuid())
+  productoId      String
+  producto        ProductoInventario @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  companyId       String
+  tipo            String
+  cantidad        Decimal            @db.Decimal(12, 2)
+  stockResultante Decimal            @db.Decimal(12, 2)
+  motivo          String?
+  registradoPorId String?
+  registradoPor   User?              @relation("MovInventarioPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+
+  @@index([productoId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("movimientos_inventario")
+}
+
+/// Foto de evidencia del vehículo: ANTES | DESPUES (String validado en
+/// código). Se liga a una entrada de la cola cuando existe, o solo a la placa.
+model EvidenciaFoto {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  colaId      String?
+  cola        ColaVehiculo? @relation(fields: [colaId], references: [id], onDelete: SetNull)
+  clienteId   String?
+  cliente     Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculoId  String?
+  vehiculo    Vehiculo?     @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  placa       String?
+  momento     String
+  url         String
+  nota        String?
+  subidaPorId String?
+  subidaPor   User?         @relation("EvidenciaSubidaPor", fields: [subidaPorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([colaId])
+  @@map("evidencias_foto")
 }

@@ -64,5 +64,15 @@ export async function requireSection(
   const user = await getUser()
   if (!user) return null
   if (!canAccessAdminSection(user.metadata.role, section)) return null
+
+  // Plataforma modular · E1: capa de CAPACIDADES por empresa (rol Y capacidad
+  // deben permitir). El superadmin no se gatea; el resolutor es fail-open
+  // (empresa sin configurar o migración pendiente = todo lo actual permitido).
+  if (user.metadata.role !== 'SUPERADMIN') {
+    const { seccionPermitidaPorCapacidades } = await import('@/modules/capacidades/resolver')
+    if (!(await seccionPermitidaPorCapacidades(user.metadata.companyId, section))) {
+      return null
+    }
+  }
   return user
 }

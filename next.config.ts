@@ -3,6 +3,13 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // El build de producción en Vercel (2 núcleos / 8 GB) murió por OOM
+    // (SIGKILL). Esta opción hace que webpack libere memoria entre fases de
+    // compilación a costa de un build algo más lento — necesario porque la app
+    // ya tiene cientos de rutas.
+    webpackMemoryOptimizations: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -95,6 +102,9 @@ export default withSentryConfig(nextConfig, {
   widenClientFileUpload: true,
   tunnelRoute: '/monitoring',
   sourcemaps: {
+    // Sin SENTRY_AUTH_TOKEN no hay a dónde subirlos: generarlos solo consume
+    // memoria del build (el OOM de Vercel). Con token, todo sigue igual.
+    disable: !process.env.SENTRY_AUTH_TOKEN,
     deleteSourcemapsAfterUpload: true,
   },
   // Ubicación nueva de estas opciones desde @sentry/nextjs 10 (antes vivían

@@ -71,7 +71,11 @@ export default async function MiCompraPage({
   let citaCanje: { inicio: Date; estado: string } | null = null
   let requiereCita = false
   if (esGratis && compra.estado === 'ACTIVA' && qr) {
-    const agenda = await getAgendaConfig(compra.companyId).catch(() => null)
+    // E4: la regla "cita antes del QR" ahora es una capacidad apagable por
+    // empresa (fail-open: sin configurar = activa, como hasta ahora).
+    const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
+    const reglaActiva = await tieneCapacidad(compra.companyId, 'CITA_ANTES_DEL_QR')
+    const agenda = reglaActiva ? await getAgendaConfig(compra.companyId).catch(() => null) : null
     if (agenda?.activa) {
       try {
         citaCanje = await prisma.cita.findFirst({

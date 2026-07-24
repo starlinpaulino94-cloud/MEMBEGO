@@ -128,9 +128,12 @@ lavados gratis, Sucursales, Vehículos (hoy viven dentro de la ficha del
 cliente → ganan módulo propio), y los futuros: cola de vehículos,
 inventario, fotos antes/después, control de daños.
 
-**Ambiguos (decidir en E0, propuesta entre paréntesis):** Citas (Car Wash —
-es operación de pista), Seguimiento (Car Wash), Sucursales (Car Wash),
-Reportes (se queda en Platform; la app tendrá los suyos operativos).
+**Ambiguos — DECIDIDO (E0 firmada):** Citas → **Car Wash** (operación de
+pista), Seguimiento → **Car Wash**, Sucursales → **Car Wash**, Reportes →
+**Platform** (la app tendrá reportes operativos propios). Nombre de la app
+en el launchpad: **"Car Wash"**. Catálogo v1 de categorías y capacidades:
+ver `docs/CAPACIDADES.md` (fuente de verdad en
+`src/modules/capacidades/catalogo.ts`).
 
 > Nota: "mudarse" en las primeras etapas significa **aparecer en el menú de
 > la app** — la ruta física puede quedarse donde está todo el tiempo que haga
@@ -144,7 +147,7 @@ Cada etapa termina con: verificación técnica completa (tipos, lint, build),
 prueba manual del flujo crítico (registro → regalo → cita → QR → canje →
 caja), y entrega desplegada. Ninguna etapa deja la app "a medias".
 
-### E0 · Cimientos de decisión (sin tocar código de la app)
+### E0 · Cimientos de decisión (sin tocar código de la app) ✅ *firmada*
 - Cerrar la clasificación de la sección 4 (la lista de ambiguos).
 - Definir el catálogo v1: categorías (`CAR_WASH` primero; las demás solo
   como valores reservados) y capacidades v1 (`POS_CAJA`, `CITAS`,
@@ -155,7 +158,7 @@ caja), y entrega desplegada. Ninguna etapa deja la app "a medias".
 - **Entregable:** este documento actualizado con las decisiones firmadas.
 - **Riesgo: cero.** No se despliega nada.
 
-### E1 · Fundaciones invisibles (el usuario no ve ningún cambio)
+### E1 · Fundaciones invisibles (el usuario no ve ningún cambio) ✅ *entregada — ver docs/CAPACIDADES.md*
 - Columna de capacidades en la empresa (migración idempotente, manual).
 - Catálogo de categorías/capacidades en código + resolutor único:
   *empresa → categoría → módulos base → capacidades → secciones visibles*.

@@ -41,19 +41,38 @@ async function empresasDisponibles(
   }
 }
 
+/**
+ * Plataforma modular · E2 (interruptor D7): con la capacidad NAVEGACION_V2
+ * encendida, los módulos operativos salen del menú de MembeGo y viven solo
+ * dentro de la app Car Wash (launchpad → shell). Apagada (el default), el
+ * menú es EXACTAMENTE el de siempre. Fail-open ante cualquier error.
+ */
+async function navOcultaPorApps(companyId: string | null | undefined): Promise<string[]> {
+  if (!companyId) return []
+  try {
+    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
+    const capacidades = await getCapacidadesEmpresa(companyId)
+    if (!capacidades.navegacionV2) return []
+    return ['/admin/scanner', '/admin/citas', '/admin/seguimiento', '/admin/sucursales']
+  } catch {
+    return []
+  }
+}
+
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const [notifCount, empresas] = await Promise.all([
+  const [notifCount, empresas, hiddenNav] = await Promise.all([
     getUnreadCount().catch(() => 0),
     empresasDisponibles(
       user.metadata.role,
       user.metadata.dbUserId,
       user.metadata.companyId ?? null
     ),
+    navOcultaPorApps(user.metadata.companyId),
   ])
   return (
     <AppShell
@@ -65,6 +84,7 @@ export default async function AdminLayout({
       title="MembeGo"
       userEmail={user.email}
       notifCount={notifCount}
+      hiddenNav={hiddenNav}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       <AdminCompanySwitcher

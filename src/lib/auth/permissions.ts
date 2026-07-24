@@ -43,6 +43,10 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
+  // Plataforma modular · E2: launchpad de aplicaciones y shells de negocio
+  // (/admin/aplicaciones y /admin/app/<categoria>).
+  'aplicaciones',
+  'app',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).
@@ -53,7 +57,7 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 // como aterrizaje. Todo lo no listado queda denegado (fail-closed).
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones'],
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'clientes', 'membresias', 'pagos', 'scanner', 'citas'],
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app'],
 }
 
 /** ¿Puede este rol abrir esta sección del panel? */

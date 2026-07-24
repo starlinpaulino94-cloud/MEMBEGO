@@ -50,6 +50,12 @@ export async function comprarGiftCard(
     if (!config.permitirGiftCards) {
       return { error: 'El negocio no tiene activadas las gift cards.' }
     }
+    // Plataforma modular · E4: la capacidad GIFT_CARDS también manda (el
+    // superadmin puede apagarla por empresa). Fail-open: sin config = activa.
+    const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
+    if (!(await tieneCapacidad(companyId, 'GIFT_CARDS'))) {
+      return { error: 'El negocio no tiene activadas las gift cards.' }
+    }
     if (!Number.isFinite(monto) || monto < config.giftCardMontoMin || monto > config.giftCardMontoMax) {
       return {
         error: `El monto debe estar entre ${fmtRD(config.giftCardMontoMin)} y ${fmtRD(config.giftCardMontoMax)}.`,
