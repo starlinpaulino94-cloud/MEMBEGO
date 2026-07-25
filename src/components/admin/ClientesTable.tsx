@@ -34,7 +34,12 @@ const columns: ColumnDef<ClienteRow>[] = [
     header: 'Registrado',
     cell: ({ row }) => {
       const date = new Date(row.getValue('createdAt') as Date)
-      return new Intl.DateTimeFormat('es-DO', { dateStyle: 'short' }).format(date)
+      // Fecha Y hora: el registro es una acción, y la trazabilidad exige saber
+      // el momento exacto, no solo el día.
+      return new Intl.DateTimeFormat('es-DO', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(date)
     },
   },
   {

@@ -66,6 +66,30 @@ export function formatDate(
 }
 
 /**
+ * Formatea FECHA Y HORA. Úsalo siempre que se muestre CUÁNDO OCURRIÓ ALGO
+ * (una acción, un cobro, un canje, una nota, un movimiento): la trazabilidad
+ * exige la hora, no solo el día. `formatDate` queda para conceptos que son
+ * de día completo (vencimiento, cumpleaños, vigencia de una promoción).
+ */
+export function formatDateTime(
+  date: Date | string,
+  prefs?: RegionalPrefs | null
+): string {
+  return formatDate(date, prefs, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+/**
+ * Fecha y hora CON SEGUNDOS, para bitácoras de auditoría donde el orden
+ * exacto de dos acciones seguidas importa.
+ */
+export function formatDateTimeExacto(
+  date: Date | string,
+  prefs?: RegionalPrefs | null
+): string {
+  return formatDate(date, prefs, { dateStyle: 'medium', timeStyle: 'medium' })
+}
+
+/**
  * Monto en pesos dominicanos SIN redondear a entero (a diferencia de
  * `formatMoney`, conserva decimales si el número los trae). Usado por los
  * paneles de superadmin que agregan montos de varias empresas.

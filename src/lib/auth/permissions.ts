@@ -37,6 +37,8 @@ export const ADMIN_SECTIONS = [
   'regalos',
   'seguimiento',
   'reportes',
+  // Bitácora de actividad: toda acción con su fecha y hora exactas.
+  'actividad',
   'adquisicion',
   'audiencia',
   'invitaciones',
@@ -57,7 +59,7 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 // como aterrizaje. Todo lo no listado queda denegado (fail-closed).
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones'],
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app'],
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app'],
 }
 
 /** ¿Puede este rol abrir esta sección del panel? */

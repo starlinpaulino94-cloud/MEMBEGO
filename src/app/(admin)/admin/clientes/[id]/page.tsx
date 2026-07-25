@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatMoney, formatDate } from '@/lib/format'
+import { formatMoney, formatDate, formatDateTime } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 import { QRDisplay } from '@/components/qr/QRDisplay'
 import { EstadoBadge } from '@/components/EstadoBadge'
@@ -27,6 +27,15 @@ export const dynamic = 'force-dynamic'
 function fmtDate(d: Date | null) {
   if (!d) return '—'
   return formatDate(d)
+}
+
+/**
+ * Para lo que OCURRIÓ (visitas, canjes): fecha Y hora. `fmtDate` queda para
+ * los límites del período de la membresía, que son de día completo.
+ */
+function fmtFechaHora(d: Date | null) {
+  if (!d) return '—'
+  return formatDateTime(d)
 }
 
 export default async function ClienteDetailPage({
@@ -350,7 +359,7 @@ export default async function ClienteDetailPage({
                       </p>
                     )}
                   </div>
-                  <span className="text-muted-foreground">{fmtDate(v.fechaVisita)}</span>
+                  <span className="text-muted-foreground">{fmtFechaHora(v.fechaVisita)}</span>
                 </li>
               ))}
             </ul>
