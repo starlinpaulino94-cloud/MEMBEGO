@@ -6,6 +6,7 @@ import { EstadoBadge } from '@/components/EstadoBadge'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { formatDate } from '@/lib/format'
 import { MembershipAdminActions } from '@/components/admin/MembershipAdminActions'
+import { AjustarLavados } from '@/components/superadmin/AjustarLavados'
 import type { MembershipEstado } from '@/types'
 
 function fmtDate(d: Date | null) {
@@ -30,6 +31,7 @@ export default async function SuperadminMembresiasPage({
     estado: string
     fechaInicio: Date | null
     fechaVencimiento: Date | null
+    lavadosRestantes: number
     clienteId: string
     cliente: { nombre: string; email: string; company: { name: string } }
     plan: { nombre: string; precio: unknown; lavadosIncluidos: number; esIlimitado: boolean }
@@ -59,6 +61,7 @@ export default async function SuperadminMembresiasPage({
         estado: true,
         fechaInicio: true,
         fechaVencimiento: true,
+        lavadosRestantes: true,
         clienteId: true,
         plan: { select: { nombre: true, precio: true, lavadosIncluidos: true, esIlimitado: true } },
         cliente: {
@@ -129,6 +132,7 @@ export default async function SuperadminMembresiasPage({
               <th className="px-4 py-3 text-left">Cliente</th>
               <th className="px-4 py-3 text-left">Empresa</th>
               <th className="px-4 py-3 text-left">Plan</th>
+              <th className="px-4 py-3 text-left">Lavados</th>
               <th className="px-4 py-3 text-left">Estado</th>
               <th className="px-4 py-3 text-left">Inicio</th>
               <th className="px-4 py-3 text-left">Vencimiento</th>
@@ -144,6 +148,13 @@ export default async function SuperadminMembresiasPage({
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{m.cliente.company.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{m.plan.nombre}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <AjustarLavados
+                    membershipId={m.id}
+                    lavados={m.lavadosRestantes}
+                    esIlimitado={m.plan.esIlimitado}
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <EstadoBadge estado={m.estado as MembershipEstado} />
                 </td>
@@ -163,7 +174,7 @@ export default async function SuperadminMembresiasPage({
             ))}
             {membresias.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                   No hay membresías.
                 </td>
               </tr>
