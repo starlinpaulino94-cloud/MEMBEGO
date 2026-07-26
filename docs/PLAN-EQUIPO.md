@@ -1,36 +1,219 @@
-# Plan de trabajo del equipo (3 personas · ciclo de 14 semanas)
+# Plan de trabajo del equipo (3 personas · ciclo de 8 semanas)
 
-> Distribución de tareas sobre `docs/ESTRATEGIA-PLATAFORMA.md` (etapas E0–E6).
-> Los planes individuales completos están en los PDF entregados; este es el
-> resumen operativo de referencia.
+> **Versión 2 — reescrita al cerrar el plan de plataforma.**
+> El backlog original de este documento (etapas E0–E6 de
+> `docs/ESTRATEGIA-PLATAFORMA.md`) está **entregado, desplegado y probado en
+> producción**. Lo que sigue NO es continuar aquel plan: es lo que el proyecto
+> necesita ahora que la plataforma modular existe.
 
-## Roles
+---
 
-| Persona | Rol | Módulos a cargo |
+## 1. Punto de partida (leer antes de asignar nada)
+
+**Ya está hecho — no lo vuelvan a construir:**
+
+| Pieza | Dónde vive |
+|---|---|
+| Sistema de capacidades por empresa | `src/modules/capacidades/` · `docs/CAPACIDADES.md` |
+| Launchpad + shell genérico de apps | `/admin/aplicaciones` · `/admin/app/[app]` |
+| Catálogo de aplicaciones por categoría | `src/modules/apps/catalogo.ts` |
+| Tablero operativo del día | `src/modules/apps/dashboard.ts` |
+| Módulo Vehículos | `/admin/app/carwash/vehiculos` |
+| Cola de vehículos, Inventario, Fotos antes/después | `/admin/app/carwash/{cola,inventario,evidencias}` |
+| Panel de capacidades (superadmin + solo-lectura del admin) | `/superadmin/capacidades` · `/admin/aplicaciones/capacidades` |
+| Bitácora de actividad con fecha y hora | `/admin/actividad` · `/superadmin/auditoria` · `docs/ACTIVIDAD.md` |
+| Segunda categoría (barbería) montada solo con catálogo | `src/modules/apps/catalogo.ts` |
+
+**Decisiones ya tomadas — no reabrir sin hablar con Estarlin:**
+
+- **Las rutas NO se mudan** (`/admin/citas` se queda donde está). Mudarlas
+  rompería el control de permisos por rol, que se deriva del segundo segmento
+  de la URL. Está explicado en `docs/ESTRATEGIA-PLATAFORMA.md · E3`.
+- **Restaurante y gimnasio no se construyen todavía.** Sus categorías existen
+  como valores reservados; sus apps exigen módulos grandes (mesas, cocina,
+  rutinas) y no hay cliente que los pida.
+
+---
+
+## 2. Roles
+
+| Persona | Rol | De qué responde |
 |---|---|---|
-| **Estarlin** | Líder técnico y Core Platform | Arquitectura y decisiones (E0); núcleo (clientes, membresías, promociones, pagos, motores); sistema de capacidades (E1); BD/migraciones; deploys; revisión de TODOS los PRs; integración E6 |
-| **Programador 1** | Frontend y Experiencia | Launchpad "Aplicaciones" + shell de la app Car Wash (E2); rutas propias con redirecciones y dashboard operativo (E3); módulo Vehículos; pantallas de los módulos de P2 |
-| **Programador 2** | Backend y Módulos de negocio | Panel de capacidades (E4); cola de vehículos; inventario básico; fotos antes/después + control de daños; reportes operativos |
+| **Estarlin** | Líder técnico y Core Platform | Arquitectura y decisiones; migraciones de BD y deploys; revisión de TODOS los PRs; el núcleo (clientes, membresías, pagos, motores); adopción del cambio con el equipo de CARTOWN |
+| **Programador 1** | Frontend, Experiencia y Calidad de UI | Reportes operativos de la app; pruebas de interfaz de los flujos críticos; pulido de los módulos nuevos con feedback real de pista |
+| **Programador 2** | Backend, Pruebas y Confiabilidad | Red de pruebas automatizadas del dinero y los canjes; endurecimiento de flujos; herramientas de diagnóstico |
 
-## Calendario general
+---
 
-- **Sem 1–2** · E0 (Estarlin) + onboarding de P1 y P2 (entorno, docs, tareas pequeñas supervisadas).
-- **Sem 2–3** · E1 fundaciones invisibles (Estarlin).
-- **Sem 3–5** · E2 launchpad/shell (P1) y E4 panel de capacidades (P2).
-- **Sem 6–8** · E3 rutas + dashboard operativo + Vehículos (P1); cola de vehículos (P2).
-- **Sem 9–11** · Inventario básico (P2) con pantallas de P1; pulido UX.
-- **Sem 12–13** · Fotos antes/después + control de daños (P2).
-- **Sem 12–14** · E6 segunda categoría (Estarlin con apoyo de ambos).
+## 3. Frentes de trabajo
 
-## Reglas de trabajo (aplican a todos)
+Cada tarea trae **pasos concretos** y **"terminado cuando"**. Si un paso no se
+entiende, se pregunta ANTES de empezar, no a mitad de camino.
+
+---
+
+### F1 · Adopción de la navegación de dos niveles — **Estarlin** · Semana 1
+
+Todo está construido pero apagado. Este frente es encenderlo sin romper los
+hábitos del equipo de pista.
+
+**Pasos:**
+1. Avisar al equipo de CARTOWN con 2 días de anticipación: qué van a ver
+   distinto (Escáner, Citas, Seguimiento y Sucursales pasan a vivir dentro de
+   "Aplicaciones → Car Wash") y qué NO cambia (las direcciones guardadas
+   siguen funcionando).
+2. Encender `NAVEGACION_V2` para CARTOWN en `/superadmin/capacidades`, un día
+   de poco movimiento y por la mañana.
+3. Acompañar la primera jornada: estar disponible para el equipo de pista.
+4. Anotar cada fricción real (no suposiciones) en una lista.
+5. Si la fricción es alta: apagar la capacidad (vuelve todo al instante, sin
+   desplegar) y corregir antes de reintentar.
+
+**Terminado cuando:** el equipo de pista completa un día entero de operación
+con la navegación nueva sin pedir ayuda, y la lista de fricciones está
+resuelta o priorizada.
+
+---
+
+### F2 · Red de pruebas del dinero y los canjes — **Programador 2** · Semanas 1–4
+
+**El problema real:** hoy hay 2 archivos de prueba (`tests/`) para un sistema
+con caja, facturación, canje de QR y capacidades. La verificación es
+`tsc + lint + build`, que confirma que el código *compila*, no que *hace lo
+correcto*. Con dos personas nuevas tocando el código, eso ya no alcanza.
+
+**Pasos:**
+1. Leer `tests/referidos-e6.test.ts` para entender el estilo que ya se usa
+   (Node test runner con `tsx`, sin frameworks nuevos — **no** instalar Jest
+   ni Vitest sin aprobación).
+2. Escribir pruebas del **canje de promoción**: QR válido se canja una vez;
+   el segundo intento con el mismo token se rechaza; un QR de otra empresa se
+   rechaza. Archivo: `tests/canje.test.ts`.
+3. Pruebas de **caja**: no se puede cobrar con la caja cerrada; el arqueo
+   cuadra; una orden ya cobrada no se cobra dos veces.
+   Archivo: `tests/caja.test.ts`.
+4. Pruebas del **resolutor de capacidades** (`src/modules/capacidades/`): sin
+   configuración devuelve el paquete base; un override enciende y apaga; ante
+   error de base de datos devuelve todo permitido (fail-open).
+   Archivo: `tests/capacidades.test.ts`.
+5. Pruebas de **inventario**: una salida mayor al stock se rechaza; el
+   `stockResultante` del movimiento coincide con el stock del producto.
+   Archivo: `tests/inventario.test.ts`.
+6. Agregar `npm test` a la rutina: ninguna rama se aprueba con pruebas en rojo.
+
+**Terminado cuando:** `npm test` corre en verde, cubre los cuatro flujos, y
+al menos una prueba falla a propósito si se rompe la lógica (compruébalo
+rompiéndola a mano y viendo que la prueba lo detecta).
+
+---
+
+### F3 · Reportes operativos de la app — **Programador 1** · Semanas 2–5
+
+Es lo único del plan original que nunca se construyó. El tablero del día
+muestra el "ahora"; falta el "cómo nos fue".
+
+**Pasos:**
+1. Leer `src/modules/apps/dashboard.ts` (el tablero del día) y
+   `src/app/(admin)/admin/reportes/` (los reportes de plataforma, para NO
+   duplicarlos: aquellos son de negocio, estos son de operación).
+2. Crear `src/modules/apps/reportes.ts` con consultas por rango de fechas:
+   vehículos atendidos por día, tiempo promedio entre entrada y entrega
+   (usar `inicioAt`/`entregadoAt` de `cola_vehiculos`), servicios más
+   vendidos, consumo de inventario del período.
+3. Crear la pantalla `/admin/app/carwash/reportes` siguiendo el patrón de
+   `/admin/app/carwash/inventario` (filtros con `next/form`, tabla, estado
+   vacío).
+4. Agregarla al catálogo en `src/modules/apps/catalogo.ts` como módulo de la
+   app Car Wash (sin capacidad nueva: es parte del paquete base).
+5. Export CSV, copiando el patrón de `/admin/actividad/export/route.ts`.
+
+**Terminado cuando:** un encargado puede responder "¿cuántos carros hicimos
+esta semana y cuánto tardamos en promedio?" sin salir de la app, y bajarlo a
+Excel.
+
+---
+
+### F4 · Pulido con feedback real de pista — **Programador 1** · Semanas 5–8
+
+Los módulos de la E5 se probaron, pero con datos de prueba, no con un sábado
+lleno.
+
+**Pasos:**
+1. Acompañar media jornada al equipo de pista, en persona, observando cómo
+   usan la cola en el celular. Anotar; no proponer nada todavía.
+2. Priorizar con Estarlin las tres fricciones más caras.
+3. Corregirlas de una en una, con PR separado por fricción.
+4. Repetir la observación tras el cambio.
+
+**Terminado cuando:** el equipo de pista usa la cola por decisión propia
+durante una semana completa, sin que nadie se lo recuerde.
+
+---
+
+### F5 · Endurecimiento y diagnóstico — **Programador 2** · Semanas 5–8
+
+**Pasos:**
+1. Revisar `scripts/db-doctor.mjs` y extenderlo para que verifique que TODAS
+   las migraciones manuales están aplicadas (columnas y tablas esperadas), no
+   solo unas pocas.
+   *Contexto: ya nos pasó — una migración sin correr dejó las capacidades
+   apagadas en silencio durante días, porque el código es fail-open a
+   propósito. La herramienta debe delatar eso.*
+2. Agregar al panel de superadmin un aviso visible cuando falte una migración
+   esperada.
+3. Revisar los `catch` silenciosos del código nuevo (`.catch(() => {})`) y
+   asegurar que al menos registren en consola con contexto.
+
+**Terminado cuando:** `npm run db:doctor` reporta el estado real de todas las
+migraciones manuales y un superadmin ve el aviso sin tener que entrar a la
+base de datos.
+
+---
+
+## 4. Calendario
+
+| Semana | Estarlin | Programador 1 | Programador 2 |
+|---|---|---|---|
+| 1 | F1 · Encender navegación | Onboarding + leer `docs/` | Onboarding + F2 pasos 1–2 |
+| 2 | Revisión + acompañamiento | F3 · consultas | F2 · canje y caja |
+| 3–4 | Revisión de PRs | F3 · pantalla | F2 · capacidades e inventario |
+| 5 | Revisión de PRs | F3 cierre + F4 observación | F5 · db-doctor |
+| 6–7 | Revisión de PRs | F4 · correcciones | F5 · avisos y catches |
+| 8 | Cierre y retrospectiva | F4 cierre | F5 cierre |
+
+**Onboarding (ambos, semana 1):** leer en este orden `README.md`,
+`docs/ESTRATEGIA-PLATAFORMA.md`, `docs/CAPACIDADES.md`, `docs/ACTIVIDAD.md`.
+Levantar el proyecto, correr `npm test` y `npm run build` en verde **antes**
+de escribir una línea.
+
+---
+
+## 5. Reglas de trabajo
 
 1. Una rama por tarea y Pull Request SIEMPRE; nada se mezcla sin revisión y
    aprobación de Estarlin.
-2. Migraciones de BD: solo Estarlin (aditivas, idempotentes, se corren ANTES
-   del deploy).
-3. Definición de terminado: `tsc` + lint + build en verde, prueba manual del
-   flujo afectado y docs actualizadas.
+2. **Migraciones de BD: solo Estarlin.** Aditivas, idempotentes, corridas a
+   mano ANTES del deploy — y **verificadas** después (la migración que no se
+   corre no avisa: el código es fail-open a propósito).
+3. **Definición de terminado:** `npm test` + `tsc` + lint + build en verde,
+   prueba manual del flujo afectado y documentación actualizada en `docs/`.
 4. Los motores del núcleo (reglas, beneficios, caja, facturación, growth) no
    se tocan sin aprobación previa.
-5. Las URLs existentes nunca se rompen: toda pantalla movida deja redirección.
-6. Daily corto + revisión de entregables los viernes.
+5. Las URLs existentes nunca se rompen.
+6. **Toda función nueva nace apagada** detrás de su capacidad, y se enciende
+   por empresa cuando esté probada.
+7. Daily corto + revisión de entregables los viernes.
+
+---
+
+## 6. Qué haría falta para crecer (fuera de este ciclo)
+
+Para cuando exista la demanda, no antes:
+
+- **Segunda categoría como producto real:** si aparece una barbería cliente,
+  el trabajo NO es de arquitectura (ya está resuelto) sino de producto:
+  plantillas de planes y promociones para el oficio, vocabulario y onboarding.
+- **Apps de restaurante o gimnasio:** sí exigen módulos grandes. Decisión de
+  negocio, no técnica.
+- **Migración de rutas (E3):** solo si aparece una razón de producto concreta,
+  y sabiendo que arrastra rediseñar los permisos por sección.
