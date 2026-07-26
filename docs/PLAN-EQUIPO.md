@@ -75,7 +75,12 @@ resuelta o priorizada.
 
 ---
 
-### F2 · Red de pruebas del dinero y los canjes — **Programador 2** · Semanas 1–4
+### F2 · Red de pruebas del dinero y los canjes — **Programador 2** · Semanas 1–4 — ENTREGADA
+> `npm test` pasó de 2 a 5 archivos y de 24 a 71 pruebas: arqueo de caja,
+> stock de inventario, resolutor de capacidades, bordes del canje y máquina de
+> estados de la cola. Se verificó que detectan roturas reales (rompiendo la
+> lógica a propósito). **Encontró un bug de producción**: un campo de cantidad
+> vacío con tipo AJUSTE ponía el stock del producto en cero — corregido.
 
 **El problema real:** hoy hay 2 archivos de prueba (`tests/`) para un sistema
 con caja, facturación, canje de QR y capacidades. La verificación es
@@ -107,7 +112,9 @@ rompiéndola a mano y viendo que la prueba lo detecta).
 
 ---
 
-### F3 · Reportes operativos de la app — **Programador 1** · Semanas 2–5
+### F3 · Reportes operativos de la app — **Programador 1** · Semanas 2–5 — ENTREGADA
+> `/admin/app/carwash/reportes` con rango de fechas, vehículos por día, tiempo
+> promedio de servicio, servicios más pedidos, consumo de insumos y export CSV.
 
 Es lo único del plan original que nunca se construyó. El tablero del día
 muestra el "ahora"; falta el "cómo nos fue".
@@ -133,7 +140,9 @@ Excel.
 
 ---
 
-### F4 · Pulido con feedback real de pista — **Programador 1** · Semanas 5–8
+### F4 · Pulido con feedback real de pista — **Programador 1** · Semanas 5–8 — PENDIENTE
+> Único frente que no se puede hacer desde el escritorio: exige acompañar al
+> equipo en pista y observar. Queda para el Programador 1 cuando entre.
 
 Los módulos de la E5 se probaron, pero con datos de prueba, no con un sábado
 lleno.
@@ -150,7 +159,11 @@ durante una semana completa, sin que nadie se lo recuerde.
 
 ---
 
-### F5 · Endurecimiento y diagnóstico — **Programador 2** · Semanas 5–8
+### F5 · Endurecimiento y diagnóstico — **Programador 2** · Semanas 5–8 — ENTREGADA
+> Hallazgo: `db-doctor` YA cubría todas las migraciones (las deriva del
+> `schema.prisma`); lo que faltaba era que avisara solo. Ahora el panel del
+> superadmin muestra un banner cuando hay migraciones sin correr, con qué deja
+> de funcionar y qué SQL correr.
 
 **Pasos:**
 1. Revisar `scripts/db-doctor.mjs` y extenderlo para que verifique que TODAS

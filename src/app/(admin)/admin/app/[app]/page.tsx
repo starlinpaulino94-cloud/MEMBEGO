@@ -22,6 +22,7 @@ import {
   PackageSearch,
   ListOrdered,
   Camera,
+  BarChart3,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -39,6 +40,7 @@ const ICONOS: Record<IconoApp, LucideIcon> = {
   Camera,
   Users,
   Sparkles,
+  BarChart3,
 }
 
 function fmtRD(n: number) {

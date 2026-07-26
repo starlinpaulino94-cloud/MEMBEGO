@@ -5,6 +5,7 @@ import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import {
   getInventario,
   getMovimientosRecientes,
+  esStockBajo,
   MOV_TIPO_LABELS,
   type MovTipo,
 } from '@/modules/carwash/inventario'
@@ -85,7 +86,7 @@ export default async function InventarioPage({
   }
 
   const activos = productos.filter((p) => p.activo)
-  const bajos = activos.filter((p) => p.stock <= p.stockMinimo && p.stockMinimo > 0)
+  const bajos = activos.filter((p) => esStockBajo(p.stock, p.stockMinimo))
   const productoEditar = editar ? productos.find((p) => p.id === editar) : undefined
 
   return (
@@ -137,7 +138,7 @@ export default async function InventarioPage({
             </thead>
             <tbody className="divide-y divide-border/50">
               {productos.map((p) => {
-                const bajo = p.activo && p.stockMinimo > 0 && p.stock <= p.stockMinimo
+                const bajo = p.activo && esStockBajo(p.stock, p.stockMinimo)
                 return (
                   <tr key={p.id} className={p.activo ? '' : 'opacity-50'}>
                     <td className="px-4 py-3">
