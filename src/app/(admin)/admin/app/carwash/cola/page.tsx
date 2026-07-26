@@ -189,12 +189,15 @@ function TarjetaCola({ entrada, tz }: { entrada: ColaEntrada; tz: string }) {
             <p className="mt-0.5 text-xs italic text-muted-foreground">{entrada.notaInterna}</p>
           )}
         </div>
+        {/* Pista (F4): blanco táctil de 44 px. Antes era un chip de 11 px que
+            había que apuntar con precisión para tomar una foto. */}
         <Link
           href={`/admin/app/carwash/evidencias?cola=${entrada.id}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-muted px-3 text-sm font-semibold text-muted-foreground hover:text-foreground"
           title="Fotos antes/después"
+          aria-label={`Fotos de este vehículo (${entrada._count.evidencias})`}
         >
-          <Camera className="h-3.5 w-3.5" /> {entrada._count.evidencias}
+          <Camera className="h-4 w-4" /> {entrada._count.evidencias}
         </Link>
       </div>
       <div className="mt-2">

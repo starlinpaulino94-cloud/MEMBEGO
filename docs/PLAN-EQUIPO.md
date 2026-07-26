@@ -140,22 +140,43 @@ Excel.
 
 ---
 
-### F4 · Pulido con feedback real de pista — **Programador 1** · Semanas 5–8 — PENDIENTE
-> Único frente que no se puede hacer desde el escritorio: exige acompañar al
-> equipo en pista y observar. Queda para el Programador 1 cuando entre.
+### F4 · Pulido con feedback real de pista — **Programador 1** · Semanas 5–8 — PARCIAL
 
-Los módulos de la E5 se probaron, pero con datos de prueba, no con un sábado
-lleno.
+> **Hecho (defectos verificables en código, sin observación):**
+> - Los botones de acción de la cola medían **32 px** de alto (`size="sm"`);
+>   ahora **44 px**, el mínimo táctil. Es la acción más frecuente del módulo y
+>   se usa de pie, con un celular y las manos mojadas.
+> - **"Cancelar" estaba pegado a "Iniciar" y no pedía confirmación**: un toque
+>   errado sacaba el vehículo de la pista sin vuelta atrás. Ahora confirma y
+>   está separado visualmente del botón de avance.
+> - El campo de placa abría el teclado en minúsculas y con corrector: ahora
+>   `autoCapitalize="characters"` + corrector apagado.
+> - El icono de cámara de cada tarjeta era un blanco de 11 px; ahora 44 px.
+> - Toda transición confirma con un aviso ("Listo ✓"): antes solo se veía un
+>   spinner y no quedaba claro si había pasado algo.
+>
+> **PENDIENTE — solo se resuelve en pista.** Lo anterior quita los defectos
+> obvios; lo que sigue depende de ver a la gente trabajar y NO debe adivinarse:
 
 **Pasos:**
 1. Acompañar media jornada al equipo de pista, en persona, observando cómo
    usan la cola en el celular. Anotar; no proponer nada todavía.
-2. Priorizar con Estarlin las tres fricciones más caras.
-3. Corregirlas de una en una, con PR separado por fricción.
-4. Repetir la observación tras el cambio.
+2. Preguntas a responder con lo observado (no con suposiciones):
+   - ¿Cuántos toques toma registrar un vehículo en la práctica? ¿Llenan la
+     descripción y el servicio, o solo la placa?
+   - Con la cola llena, ¿cuánto hay que desplazarse para llegar a "Listo"?
+     (en el celular las tres columnas quedan una debajo de otra).
+   - ¿Se lee la pantalla al sol? ¿Suben el brillo, se acercan a la sombra?
+   - ¿Registran el vehículo al momento o lo apuntan y lo cargan después?
+     Si es lo segundo, el módulo está estorbando y hay que entender por qué.
+   - ¿Usan las fotos antes/después, o se saltan ese paso cuando hay prisa?
+3. Priorizar con Estarlin las TRES fricciones más caras. No más de tres.
+4. Corregir de una en una, con un Pull Request separado por fricción.
+5. Volver a observar y confirmar que la fricción desapareció de verdad.
 
 **Terminado cuando:** el equipo de pista usa la cola por decisión propia
-durante una semana completa, sin que nadie se lo recuerde.
+durante una semana completa, sin que nadie se lo recuerde. Ese es el único
+indicador que vale: si hay que recordárselo, el módulo todavía estorba.
 
 ---
 
