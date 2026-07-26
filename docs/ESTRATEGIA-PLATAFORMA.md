@@ -167,7 +167,7 @@ caja), y entrega desplegada. Ninguna etapa deja la app "a medias".
 - **Prueba de éxito:** la app se ve y funciona EXACTAMENTE igual que antes.
 - **Rollback:** trivial (la capa nueva devuelve "todo permitido").
 
-### E2 · El launchpad y el shell (el cambio visible, con interruptor)
+### E2 · El launchpad y el shell (el cambio visible, con interruptor) — ENTREGADA
 - Entrada "Aplicaciones" en el menú de MembeGo → pantalla launchpad que
   muestra solo las apps de la empresa (hoy: Car Wash).
 - Shell de la app Car Wash: layout propio (identidad visual diferenciada,
@@ -180,7 +180,23 @@ caja), y entrega desplegada. Ninguna etapa deja la app "a medias".
   la experiencia de dos niveles funciona y TODAS las URLs viejas siguen vivas.
 - **Rollback:** apagar el interruptor.
 
-### E3 · Identidad real de la app (rutas propias + dashboard operativo)
+### E3 · Identidad real de la app (rutas propias + dashboard operativo) — PARCIAL
+> **Entregado:** dashboard operativo del día y Vehículos como módulo propio.
+> **Pendiente y EN PAUSA — decisión de negocio:** mudar las rutas
+> (`/admin/citas` → dentro de la app) con redirección desde cada URL vieja.
+>
+> **Hallazgo que cambia el costo:** los permisos por sección se derivan del
+> SEGUNDO segmento de la URL (`adminSectionForPath`: `/admin/citas` → sección
+> `citas`). Si las pantallas se mudan bajo `/admin/app/<app>/…`, TODAS pasan a
+> derivar la sección `app` y se pierde el control fino por rol (hoy Marketing
+> no ve Citas y Supervisor sí; tras la mudanza ambos quedarían bajo una sola
+> llave). Mudar las rutas exige entonces rediseñar la derivación de secciones
+> — trabajo real en el corazón del sistema de permisos, no una redirección.
+>
+> **Recomendación:** NO mudar las rutas. La experiencia de dos niveles ya está
+> entregada (E2/E6) y las URLs estables son un activo: los `href` de
+> notificaciones ya enviadas, los enlaces guardados y los hábitos del equipo
+> siguen intactos. Retomar solo si aparece una razón de producto concreta.
 - Espacio de rutas propio para la app Car Wash con redirecciones desde cada
   URL vieja (D5). Se muda una pantalla a la vez, empezando por las de menos
   tráfico; el escáner y la caja de última.
@@ -191,7 +207,14 @@ caja), y entrega desplegada. Ninguna etapa deja la app "a medias".
 - **Prueba de éxito:** enlaces de notificaciones viejas redirigen bien;
   el equipo de pista no nota fricción en escáner/caja.
 
-### E4 · Capacidades administrables
+### E4 · Capacidades administrables — ENTREGADA
+> Panel del superadmin en `/superadmin/capacidades`; vista de SOLO LECTURA
+> para el admin de la empresa en `/admin/aplicaciones/capacidades` (encender y
+> apagar sigue siendo exclusivo del superadmin, para que un negocio no se
+> desactive por error un módulo del que depende). Cumplimiento fail-closed en
+> servidor: GIFT_CARDS, CITA_ANTES_DEL_QR, POS_CAJA, COLA_VEHICULOS,
+> INVENTARIO y EVIDENCIA_FOTOS se validan en las acciones, no solo en el menú;
+> CITAS, SEGUIMIENTO y RULETA se aplican vía guard de sección.
 - Panel (superadmin, y versión de solo-lectura para el admin de la empresa)
   para encender/apagar capacidades por empresa.
 - El launchpad, los menús y los guards de servidor obedecen la capacidad
@@ -200,13 +223,23 @@ caja), y entrega desplegada. Ninguna etapa deja la app "a medias".
   del-QR…) bajo este panel, manteniendo compatibilidad con su configuración
   actual.
 
-### E5 · Nuevas features del Car Wash (recién aquí)
+### E5 · Nuevas features del Car Wash (recién aquí) — ENTREGADA
+> Cola de vehículos, inventario con movimientos auditados y fotos
+> antes/después, cada una tras su capacidad (nacen apagadas). Migración
+> `20260759_e5_carwash` + bucket `evidencias` con sus políticas RLS
+> (`scripts/supabase-20260759-bucket-evidencias.sql`).
 Con la casa ordenada, se construye lo que hoy no existe, cada una como
 capacidad apagada por defecto: cola de vehículos del día, inventario básico
 (productos/movimientos/existencias), fotos antes/después + control de daños
 en el canje. Prioridad según lo que CARTOWN pida primero.
 
-### E6 · Segunda categoría (la prueba de fuego de la arquitectura)
+### E6 · Segunda categoría (la prueba de fuego de la arquitectura) — ENTREGADA
+> **Resultado:** la prueba destapó tres fugas (launchpad, shell y ocultamiento
+> de menú estaban cableados a mano para Car Wash) y se corrigieron: hoy las
+> apps salen de `src/modules/apps/catalogo.ts` y el shell es la ruta genérica
+> `/admin/app/[app]`. Agregar una categoría = una entrada de datos. Detalle y
+> guía de prueba en `docs/CAPACIDADES.md`.
+
 - Elegir una categoría cercana (barbería/salón: también es agenda + servicios
   + membresías) y montarla **solo con catálogo + navegación**, sin escribir
   módulos nuevos. Si para lograrlo hay que tocar código del núcleo, la

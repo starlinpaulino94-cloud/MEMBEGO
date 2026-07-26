@@ -45,7 +45,10 @@ const columns: ColumnDef<EmpleadoRow>[] = [
     header: 'Registrado',
     cell: ({ row }) => {
       const date = new Date(row.getValue('createdAt') as Date)
-      return new Intl.DateTimeFormat('es-DO', { dateStyle: 'short' }).format(date)
+      return new Intl.DateTimeFormat('es-DO', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      }).format(date)
     },
   },
   {

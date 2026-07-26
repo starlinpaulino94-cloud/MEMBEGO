@@ -1,9 +1,11 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { prisma } from '@/lib/prisma'
 import { getCapacidadesEmpresa } from '@/modules/capacidades/resolver'
-import { getDashboardOperativo } from '@/modules/carwash/dashboard'
+import { appPorSlug, type IconoApp } from '@/modules/apps/catalogo'
+import { getDashboardOperativo } from '@/modules/apps/dashboard'
 import { hmEnTz } from '@/modules/citas/disponibilidad'
 import { CitaEstadoBadge } from '@/components/citas/CitaEstadoBadge'
 import {
@@ -14,11 +16,30 @@ import {
   Building2,
   Banknote,
   Car,
+  Scissors,
+  Users,
+  Sparkles,
   PackageSearch,
   ListOrdered,
   Camera,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+
+/** Resuelve el nombre de icono del catálogo (dato puro) a su componente. */
+const ICONOS: Record<IconoApp, LucideIcon> = {
+  Car,
+  Scissors,
+  ScanLine,
+  CalendarDays,
+  QrCode,
+  Building2,
+  Banknote,
+  PackageSearch,
+  ListOrdered,
+  Camera,
+  Users,
+  Sparkles,
+}
 
 function fmtRD(n: number) {
   return new Intl.NumberFormat('es-DO', {
@@ -37,25 +58,28 @@ const TIPO_LABEL: Record<string, string> = {
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Car Wash' }
-
-interface Modulo {
-  href: string | null // null = próximamente
-  label: string
-  descripcion: string
-  icon: LucideIcon
+export async function generateMetadata({ params }: { params: Promise<{ app: string }> }) {
+  const { app } = await params
+  return { title: appPorSlug(app)?.nombre ?? 'Aplicación' }
 }
 
 /**
- * Plataforma modular · E2 — SHELL de la app Car Wash.
+ * Plataforma modular · E6 — SHELL GENÉRICO de una app de negocio.
  *
- * El "sistema del negocio": identidad propia y SU menú de módulos operativos.
- * En E2 los módulos ENLAZAN a las pantallas actuales (regla D5: ninguna URL
- * se mueve); en E3 ganarán rutas propias con redirecciones y el dashboard
- * operativo real. Los módulos futuros (cola, inventario, evidencia) aparecen
- * como "próximamente" hasta que su capacidad se encienda (E4/E5).
+ * Una sola pantalla sirve a TODAS las categorías: la identidad, los módulos y
+ * el vocabulario salen del catálogo (`modules/apps/catalogo.ts`), y el tablero
+ * del día de motores compartidos. Antes de E6 esta pantalla estaba escrita a
+ * mano para Car Wash; montar una categoría nueva ya no toca este archivo.
  */
-export default async function CarwashShellPage() {
+export default async function AppShellPage({
+  params,
+}: {
+  params: Promise<{ app: string }>
+}) {
+  const { app: slug } = await params
+  const definicion = appPorSlug(slug)
+  if (!definicion) notFound()
+
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId as string | undefined
   if (!companyId) {
@@ -72,8 +96,9 @@ export default async function CarwashShellPage() {
   const color = empresa?.colorPrimario || '#0D9488'
   const activas = new Set(capacidades?.activas ?? [])
   const tz = empresa?.zonaHoraria || 'America/Santo_Domingo'
+  const IconApp = ICONOS[definicion.icon]
 
-  // E3: dashboard operativo del día (citas, canjes, ventas, recompensas).
+  // Tablero operativo del día (compartido por todas las apps).
   const dia = await getDashboardOperativo(companyId, tz)
   const kpis = [
     { label: 'Citas de hoy', valor: String(dia.citasActivas), href: '/admin/citas' },
@@ -96,39 +121,13 @@ export default async function CarwashShellPage() {
     .filter((c) => ['PENDIENTE', 'CONFIRMADA'].includes(c.estado))
     .slice(0, 6)
 
-  const modulos: Modulo[] = [
-    { href: '/admin/scanner', label: 'Escanear QR', descripcion: 'Canjes y visitas en pista', icon: ScanLine },
-    ...(activas.has('CITAS')
-      ? [{ href: '/admin/citas', label: 'Citas', descripcion: 'Agenda y turnos del día', icon: CalendarDays } as Modulo]
-      : []),
-    ...(activas.has('SEGUIMIENTO')
-      ? [{ href: '/admin/seguimiento', label: 'Seguimiento', descripcion: 'Lavados gratis: quién no ha venido', icon: QrCode } as Modulo]
-      : []),
-    { href: '/admin/app/carwash/vehiculos', label: 'Vehículos', descripcion: 'Busca por placa, marca o dueño', icon: Car },
-    { href: '/admin/sucursales', label: 'Sucursales', descripcion: 'Puntos de servicio', icon: Building2 },
-    ...(activas.has('POS_CAJA')
-      ? [{ href: '/empleado/caja', label: 'Caja', descripcion: 'Cobros y órdenes del día', icon: Banknote } as Modulo]
-      : []),
-    // E5: construidos; visibles como "próximamente" hasta encender su capacidad.
-    {
-      href: activas.has('COLA_VEHICULOS') ? '/admin/app/carwash/cola' : null,
-      label: 'Cola de vehículos',
-      descripcion: 'Estado de cada vehículo en pista',
-      icon: ListOrdered,
-    },
-    {
-      href: activas.has('INVENTARIO') ? '/admin/app/carwash/inventario' : null,
-      label: 'Inventario',
-      descripcion: 'Productos, químicos y existencias',
-      icon: PackageSearch,
-    },
-    {
-      href: activas.has('EVIDENCIA_FOTOS') ? '/admin/app/carwash/evidencias' : null,
-      label: 'Fotos antes/después',
-      descripcion: 'Evidencia y control de daños',
-      icon: Camera,
-    },
-  ]
+  // Módulos del catálogo filtrados por las capacidades encendidas.
+  const modulos = definicion.modulos
+    .filter((m) => !m.capacidad || activas.has(m.capacidad) || m.proximamente)
+    .map((m) => ({
+      ...m,
+      disponible: !m.capacidad || activas.has(m.capacidad),
+    }))
 
   return (
     <div className="space-y-6">
@@ -153,7 +152,7 @@ export default async function CarwashShellPage() {
             />
           ) : (
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
-              <Car className="h-7 w-7" />
+              <IconApp className="h-7 w-7" />
             </span>
           )}
           <div>
@@ -161,13 +160,13 @@ export default async function CarwashShellPage() {
               Sistema del negocio
             </p>
             <h1 className="text-2xl font-extrabold tracking-tight">
-              Car Wash · {empresa?.name ?? ''}
+              {definicion.nombre} · {empresa?.name ?? ''}
             </h1>
           </div>
         </div>
       </div>
 
-      {/* Dashboard operativo del día (E3) */}
+      {/* Tablero del día */}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {kpis.map((k) => (
           <Link
@@ -243,22 +242,22 @@ export default async function CarwashShellPage() {
         </section>
       </div>
 
-      {/* Menú de la app */}
+      {/* Menú de la app (del catálogo) */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {modulos.map((m) => {
-          const Icon = m.icon
+          const Icon = ICONOS[m.icon]
           const contenido = (
             <>
               <span
                 className="flex h-11 w-11 items-center justify-center rounded-xl text-white"
-                style={{ backgroundColor: m.href ? color : '#94A3B8' }}
+                style={{ backgroundColor: m.disponible ? color : '#94A3B8' }}
               >
                 <Icon className="h-5 w-5" />
               </span>
               <div className="min-w-0">
                 <p className="font-bold text-foreground">
                   {m.label}
-                  {!m.href && (
+                  {!m.disponible && (
                     <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
                       próximamente
                     </span>
@@ -268,7 +267,7 @@ export default async function CarwashShellPage() {
               </div>
             </>
           )
-          return m.href ? (
+          return m.disponible ? (
             <Link
               key={m.label}
               href={m.href}
@@ -288,8 +287,8 @@ export default async function CarwashShellPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Los módulos marcados como &quot;próximamente&quot; se activarán desde el panel de
-        capacidades cuando estén construidos.
+        Los módulos marcados como &quot;próximamente&quot; se activan desde el panel de
+        capacidades.
       </p>
     </div>
   )

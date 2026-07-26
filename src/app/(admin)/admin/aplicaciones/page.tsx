@@ -5,18 +5,24 @@ import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/ui/page-header'
 import { getCapacidadesEmpresa } from '@/modules/capacidades/resolver'
 import { CATEGORIA_LABELS } from '@/modules/capacidades/catalogo'
-import { Car, ArrowRight } from 'lucide-react'
+import { appDeCategoria, type IconoApp } from '@/modules/apps/catalogo'
+import { Car, Scissors, Sparkles, ArrowRight } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Aplicaciones' }
 
+/** Iconos de portada de app (el catálogo guarda solo el nombre). */
+const ICONOS: Partial<Record<IconoApp, LucideIcon>> = { Car, Scissors, Sparkles }
+
 /**
- * Plataforma modular · E2 — LAUNCHPAD (docs/ESTRATEGIA-PLATAFORMA.md).
+ * Plataforma modular · E2 (+ E6) — LAUNCHPAD.
  *
  * La puerta al segundo nivel: MembeGo administra la relación con el cliente;
- * cada APLICACIÓN administra la operación del negocio. Aquí solo aparecen
- * las apps de la categoría de la empresa (hoy: Car Wash).
+ * cada APLICACIÓN administra la operación del negocio. Desde E6 las apps salen
+ * del catálogo (`modules/apps/catalogo.ts`): agregar una categoría no toca
+ * esta pantalla.
  */
 export default async function AplicacionesPage() {
   const user = await requireRole(ADMIN_ROLES)
@@ -34,22 +40,8 @@ export default async function AplicacionesPage() {
     getCapacidadesEmpresa(companyId).catch(() => null),
   ])
   const categoria = capacidades?.categoria ?? 'CAR_WASH'
-
-  // Apps disponibles por categoría. v1: solo Car Wash está construida; las
-  // demás categorías reutilizarán esta misma tarjeta cuando existan (E6).
-  const apps =
-    categoria === 'CAR_WASH'
-      ? [
-          {
-            href: '/admin/app/carwash',
-            nombre: 'Car Wash',
-            descripcion:
-              'La operación de la pista: escáner, citas, seguimiento de lavados, sucursales y caja.',
-            icon: Car,
-            color: empresa?.colorPrimario || '#0D9488',
-          },
-        ]
-      : []
+  const app = appDeCategoria(categoria)
+  const color = empresa?.colorPrimario || '#0D9488'
 
   return (
     <div className="space-y-6">
@@ -58,24 +50,23 @@ export default async function AplicacionesPage() {
         description={`Los sistemas de ${empresa?.name ?? 'tu negocio'}. MembeGo administra a tus clientes; cada aplicación administra la operación.`}
       />
 
-      {apps.length === 0 ? (
+      {!app ? (
         <p className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-8 text-center text-sm text-muted-foreground">
           Tu categoría ({CATEGORIA_LABELS[categoria]}) aún no tiene una aplicación
           especializada. Muy pronto.
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {apps.map((app) => {
-            const Icon = app.icon
+          {(() => {
+            const Icon = ICONOS[app.icon] ?? Sparkles
             return (
               <Link
-                key={app.href}
-                href={app.href}
+                href={`/admin/app/${app.slug}`}
                 className="group rounded-2xl border border-border/70 bg-card p-6 shadow-card transition hover:-translate-y-0.5 hover:border-foreground/30"
               >
                 <span
                   className="flex h-14 w-14 items-center justify-center rounded-2xl text-white"
-                  style={{ backgroundColor: app.color }}
+                  style={{ backgroundColor: color }}
                 >
                   <Icon className="h-7 w-7" />
                 </span>
@@ -86,9 +77,16 @@ export default async function AplicacionesPage() {
                 </span>
               </Link>
             )
-          })}
+          })()}
         </div>
       )}
+
+      <Link
+        href="/admin/aplicaciones/capacidades"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      >
+        Ver los módulos activos de tu negocio →
+      </Link>
     </div>
   )
 }

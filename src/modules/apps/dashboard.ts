@@ -5,10 +5,14 @@ import { getSeguimiento } from '@/modules/seguimiento/queries'
 import { getSeguimientoConfig } from '@/modules/seguimiento/config'
 
 /**
- * App Car Wash · E3 — datos del DASHBOARD OPERATIVO del día
- * (docs/ESTRATEGIA-PLATAFORMA.md). Todo se arma con consultas/motores que ya
- * existen: citas (módulo citas), canjes y ventas (Transaction Engine) y
- * recompensas por vencer (módulo seguimiento). Nada de esquema nuevo.
+ * DASHBOARD OPERATIVO del día, compartido por TODAS las apps de negocio
+ * (docs/ESTRATEGIA-PLATAFORMA.md · E3 y E6). Todo se arma con consultas y
+ * motores que ya existen: citas (módulo citas), canjes y ventas (Transaction
+ * Engine) y recompensas por vencer (módulo seguimiento). Nada de esquema nuevo.
+ *
+ * Vivía en `modules/carwash` hasta E6; se movió aquí al comprobar que no tiene
+ * NADA específico de car wash — es el mismo tablero para barbería, salón o
+ * cualquier negocio de agenda + servicios.
  */
 
 export interface OperacionReciente {

@@ -4,14 +4,15 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { prisma } from '@/lib/prisma'
-import { formatDate } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
 import { EliminarEmpleadoForm } from '@/components/admin/EmpleadoForms'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const dynamic = 'force-dynamic'
 
 function fmtDate(d: Date) {
-  return formatDate(d)
+  // La creación de la cuenta es una acción: se muestra con su hora.
+  return formatDateTime(d)
 }
 
 export default async function EmpleadoDetailPage({
