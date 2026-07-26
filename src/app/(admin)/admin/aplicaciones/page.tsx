@@ -80,6 +80,13 @@ export default async function AplicacionesPage() {
           })()}
         </div>
       )}
+
+      <Link
+        href="/admin/aplicaciones/capacidades"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      >
+        Ver los módulos activos de tu negocio →
+      </Link>
     </div>
   )
 }

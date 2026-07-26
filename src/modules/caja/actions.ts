@@ -39,6 +39,12 @@ async function staffAutorizado() {
   const user = await requireRole(SCANNER_ROLES)
   const companyId = user.metadata.companyId
   if (!companyId) return null
+  // Plataforma modular · E4: la capacidad POS_CAJA manda en el SERVIDOR, no
+  // solo escondiendo el módulo del menú. Es fail-open (empresa sin configurar
+  // = caja disponible, como siempre), así que apagarla es una decisión
+  // explícita del superadmin.
+  const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
+  if (!(await tieneCapacidad(companyId, 'POS_CAJA'))) return null
   const userId = user.metadata.dbUserId ?? null
   // Documento comercial: SIEMPRE el nombre del empleado, nunca su correo.
   const nombre = userId

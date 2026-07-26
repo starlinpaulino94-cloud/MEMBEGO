@@ -63,6 +63,20 @@ export default async function CajaPage({
     )
   }
 
+  // E4: si el superadmin apagó la capacidad POS_CAJA para esta empresa, la
+  // caja no está disponible (las acciones también lo rechazan en servidor).
+  const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
+  if (!(await tieneCapacidad(companyId, 'POS_CAJA'))) {
+    return (
+      <main className="container max-w-2xl py-8">
+        <p className="text-muted-foreground">
+          La caja no está activada para este negocio. Si crees que es un error,
+          contacta al administrador.
+        </p>
+      </main>
+    )
+  }
+
   const { q = '' } = await searchParams
   let sucursales = await getSucursalesActivas(companyId)
 
