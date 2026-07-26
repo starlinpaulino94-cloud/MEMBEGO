@@ -206,7 +206,13 @@ capacidad apagada por defecto: cola de vehículos del día, inventario básico
 (productos/movimientos/existencias), fotos antes/después + control de daños
 en el canje. Prioridad según lo que CARTOWN pida primero.
 
-### E6 · Segunda categoría (la prueba de fuego de la arquitectura)
+### E6 · Segunda categoría (la prueba de fuego de la arquitectura) — ENTREGADA
+> **Resultado:** la prueba destapó tres fugas (launchpad, shell y ocultamiento
+> de menú estaban cableados a mano para Car Wash) y se corrigieron: hoy las
+> apps salen de `src/modules/apps/catalogo.ts` y el shell es la ruta genérica
+> `/admin/app/[app]`. Agregar una categoría = una entrada de datos. Detalle y
+> guía de prueba en `docs/CAPACIDADES.md`.
+
 - Elegir una categoría cercana (barbería/salón: también es agenda + servicios
   + membresías) y montarla **solo con catálogo + navegación**, sin escribir
   módulos nuevos. Si para lograrlo hay que tocar código del núcleo, la

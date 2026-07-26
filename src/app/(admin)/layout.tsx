@@ -53,7 +53,9 @@ async function navOcultaPorApps(companyId: string | null | undefined): Promise<s
     const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
     const capacidades = await getCapacidadesEmpresa(companyId)
     if (!capacidades.navegacionV2) return []
-    return ['/admin/scanner', '/admin/citas', '/admin/seguimiento', '/admin/sucursales']
+    // E6: qué se oculta lo declara la app de la categoría, no este archivo.
+    const { appDeCategoria } = await import('@/modules/apps/catalogo')
+    return appDeCategoria(capacidades.categoria)?.navOculta ?? []
   } catch {
     return []
   }

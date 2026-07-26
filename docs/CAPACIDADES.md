@@ -124,3 +124,63 @@ Requisitos de infraestructura:
    rompen nada).
 2. **Bucket de Storage `evidencias`** (público) en Supabase — las fotos se
    suben directo desde el navegador, igual que el bucket `promociones`.
+
+## E6 entregada: segunda categoría (la prueba de fuego)
+
+La E6 no era "construir barbería": era **comprobar si montar una categoría
+nueva se puede hacer solo con catálogo + navegación**. La respuesta fue *casi*:
+la prueba destapó tres fugas y se corrigieron.
+
+### Fugas encontradas y corregidas
+
+| Fuga | Antes | Ahora |
+|---|---|---|
+| El launchpad decidía la app con un `if (categoria === 'CAR_WASH')` y la tarjeta escrita a mano. | Código | Lee `APPS_POR_CATEGORIA`. |
+| El shell era la ruta fija `/admin/app/carwash/page.tsx` con sus módulos escritos a mano. | Código | Ruta genérica `/admin/app/[app]`; identidad y módulos salen del catálogo. |
+| El menú lateral ocultaba 4 enlaces con una lista escrita en `(admin)/layout.tsx`. | Código | Cada app declara su `navOculta`. |
+| El dashboard operativo vivía en `modules/carwash/` aunque no tiene nada de car wash. | Ubicación engañosa | Movido a `modules/apps/dashboard.ts`, compartido por todas las apps. |
+
+### Cómo se agrega una categoría ahora
+
+Una sola entrada en `src/modules/apps/catalogo.ts`:
+
+```ts
+BARBERIA: {
+  slug: 'barberia',
+  nombre: 'Barbería',
+  descripcion: '…',
+  icon: 'Scissors',
+  modulos: [ESCANER, CITAS, SEGUIMIENTO, /* … */],
+  navOculta: NAV_SERVICIOS,
+},
+```
+
+Cero módulos nuevos, cero columnas nuevas, cero cambios en el núcleo. Los
+módulos apuntan a las pantallas que YA existen (regla D5: ninguna URL se mueve).
+
+### Rutas
+
+- `/admin/app/carwash` → sigue funcionando **igual** (la resuelve la ruta
+  dinámica; el manifiesto del build lo confirma). Los enlaces que ya usa el
+  equipo no cambian.
+- `/admin/app/barberia` → nuevo, para empresas de categoría BARBERIA.
+- `/admin/app/<slug desconocido>` → 404 controlado.
+- `/admin/app/carwash/{cola,inventario,evidencias,vehiculos}` → intactas; son
+  módulos propios del Car Wash y conservan prioridad sobre la ruta dinámica.
+
+### Cómo probar barbería sin afectar producción
+
+1. Crear una empresa de prueba (o usar una existente que NO sea CARTOWN).
+2. En `/superadmin/capacidades`, elegirla y cambiar su categoría a
+   **Barbería / Salón**; encender `NAVEGACION_V2`.
+3. Entrar como admin de esa empresa → *Aplicaciones* muestra la tarjeta
+   **Barbería**, y dentro está el mismo tablero del día con sus módulos.
+
+CARTOWN no se toca: su categoría sigue siendo CAR_WASH y su app es la misma.
+
+### Lo que E6 NO hizo (a propósito)
+
+Restaurante y gimnasio siguen **sin app**. Sus categorías existen en el catálogo
+pero no tienen entrada en `APPS_POR_CATEGORIA`, así que el launchpad dice
+"aún no tiene una aplicación especializada". Construirlas exige módulos nuevos
+grandes (mesas, cocina, rutinas) y eso está fuera del alcance de esta etapa.
