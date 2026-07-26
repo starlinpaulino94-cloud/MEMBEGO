@@ -122,8 +122,13 @@ Requisitos de infraestructura:
    crea `cola_vehiculos`, `productos_inventario`, `movimientos_inventario` y
    `evidencias_foto`. Sin la migración, las pantallas muestran un aviso (no
    rompen nada).
-2. **Bucket de Storage `evidencias`** (público) en Supabase — las fotos se
-   suben directo desde el navegador, igual que el bucket `promociones`.
+2. **Bucket de Storage `evidencias`** + SUS POLÍTICAS RLS:
+   `scripts/supabase-20260759-bucket-evidencias.sql`. Crear el bucket desde la
+   interfaz NO basta — las fotos se suben desde el navegador con la sesión del
+   empleado (rol `authenticated`) y las políticas de `storage.objects` de este
+   proyecto se escriben POR NOMBRE de bucket. Sin la política de INSERT que
+   nombre a `evidencias`, la subida falla con error de permisos aunque el
+   bucket exista y sea público. El script trae verificación de 9 filas.
 
 ## E6 entregada: segunda categoría (la prueba de fuego)
 
