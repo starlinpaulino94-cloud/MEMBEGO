@@ -432,6 +432,59 @@ todas apagadas al nacer.
 **Aditivo y tolerante**, como las fases anteriores: sin la migración corrida las
 pantallas nuevas dicen qué falta, y el inventario existente no se entera.
 
+## Clientes de mostrador — ENTREGADO
+
+No estaba en el plan original y es la pieza que faltaba para que el negocio no
+necesite un sistema aparte: **la mitad de los carros que entran a una pista son
+de gente que no tiene, ni quiere tener, cuenta en una app.** Sin poder
+registrarlos, esos lavados vivían en un cuaderno y el negocio quedaba partido
+en dos.
+
+Migración `20260766_cliente_mostrador`. Sin capacidad propia: anotar quién trajo
+el carro es parte de operar la pista, no un módulo opcional.
+
+### Decisiones tomadas al construir
+
+1. **Un cliente de mostrador es un `Cliente` normal**, con `esLocal: true`. NO
+   se creó una tabla paralela. Una tabla aparte habría obligado a duplicar cada
+   consulta del sistema ("busca en clientes… y también en clientes_locales"), y
+   esa duplicación es la que termina en pantallas que muestran la mitad de los
+   datos. Así, historial, vehículos, cola, incidencias, notas y reportes
+   funcionan sin tocar nada.
+
+2. **No puede iniciar sesión, y no por una comprobación que haya que recordar
+   escribir.** Su `supabaseId` lleva el prefijo `local:`; Supabase solo emite
+   UUID, así que ese identificador no puede salir jamás de una sesión real. Es
+   imposible por forma, no por validación.
+
+3. **Solo el nombre es obligatorio.** Pedir correo o cédula en la puerta de una
+   pista es la forma más rápida de que el encargado deje de usar el sistema.
+
+4. **La placa es el buscador principal.** El encargado no recuerda nombres,
+   recuerda carros. Buscar por nombre obligaría a recordar a la gente, que es
+   justo lo que el sistema debería evitar.
+
+5. **El alta ocurre dentro de la pantalla de la pista.** Si registrar a alguien
+   exige irse a otra pantalla, no se hace. Y al darlo de alta con placa se crea
+   también su vehículo: la próxima vez que ese carro entre, se reconoce solo.
+
+6. **Una placa no puede estar en dos fichas.** Dos fichas con el mismo carro
+   parten el historial en dos y nadie vuelve a saber cuántas veces vino ese
+   cliente. Al intentarlo, el sistema dice de quién es esa placa.
+
+7. **Vincular con la cuenta real cuando la persona se registra.** Sin esto, el
+   cliente que lleva dos años lavando aquí se registra y el sistema lo trata
+   como nuevo: pierde su historial y el negocio pierde el dato de que es su
+   mejor cliente. La fusión mueve vehículos, visitas e incidencias; si a la
+   ficha local le cuelga algo más (una membresía dada a mano), se conserva y se
+   avisa, en vez de fallar a medias.
+
+8. **Registrar al cliente nunca bloquea recibir el carro.** El alta en línea es
+   a prueba de fallos: si algo sale mal, el vehículo entra a la cola sin dueño.
+   Anotar al cliente es deseable; atender el carro es obligatorio.
+
+---
+
 ## Fase 4 · Escala — NO EMPEZADA, A PROPÓSITO
 
 Multi-sede real, comparativo entre sucursales, consolidado.

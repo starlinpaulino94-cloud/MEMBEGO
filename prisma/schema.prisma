@@ -761,10 +761,20 @@ model Cliente {
   id                 String    @id @default(cuid())
   companyId          String
   company            Company   @relation(fields: [companyId], references: [id])
+  /// Identidad en Supabase Auth. Para los clientes de MOSTRADOR (`esLocal`)
+  /// lleva el prefijo `local:` — Supabase solo emite UUID, así que un id con
+  /// ese prefijo JAMÁS puede venir de una sesión real y ese cliente no puede
+  /// iniciar sesión ni por accidente.
   supabaseId         String
   nombre             String
   telefono           String?
+  /// Vacío en los clientes de mostrador. `sendEmail` ya descarta destinatarios
+  /// inválidos, así que un correo vacío no intenta enviar nada.
   email              String
+  /// Cliente de MOSTRADOR: vino a lavar sin tener cuenta en la plataforma.
+  /// Se le registra igual para que su historial exista y no haya que llevarlo
+  /// en un cuaderno aparte. Puede vincularse después a una cuenta real.
+  esLocal            Boolean   @default(false)
   fechaNacimiento    DateTime?
   avatarUrl          String?
   // F5/Onboarding paso 2 (B2C): perfil ampliado del cliente.

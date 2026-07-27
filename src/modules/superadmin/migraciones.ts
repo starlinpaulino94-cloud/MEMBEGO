@@ -184,6 +184,12 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     migracion: '20260765_carwash_fase3',
     afecta: 'Turnos, asistencia y costo laboral por lavado',
   },
+  {
+    tabla: 'clientes',
+    columna: 'esLocal',
+    migracion: '20260766_cliente_mostrador',
+    afecta: 'Clientes de mostrador (los que vienen sin cuenta)',
+  },
 ]
 
 export interface MigracionPendiente {

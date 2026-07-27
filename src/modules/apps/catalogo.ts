@@ -128,6 +128,12 @@ export const APPS_POR_CATEGORIA: Partial<Record<CategoriaNegocio, AplicacionNego
       CITAS,
       SEGUIMIENTO,
       {
+        label: 'Clientes de la pista',
+        descripcion: 'Con cuenta o de mostrador, buscables por placa',
+        icon: 'Users',
+        href: '/admin/app/carwash/clientes',
+      },
+      {
         label: 'Vehículos',
         descripcion: 'Busca por placa, marca o dueño',
         icon: 'Car',
