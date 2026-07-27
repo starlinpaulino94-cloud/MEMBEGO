@@ -15,6 +15,13 @@ const eslintConfig = [
     },
   },
   {
+    // Los scripts de terminal imprimen por diseño: su salida ES el producto.
+    // Sin esta excepción, `npm run lint` acumulaba 77 avisos de no-console que
+    // no había que corregir nunca, y eso entrena a ignorar la salida del lint.
+    files: ['scripts/**/*.{ts,mjs,js}'],
+    rules: { 'no-console': 'off' },
+  },
+  {
     // SERVIDOR: prohibido tragarse un error sin dejar rastro.
     //
     // `.catch(() => {})` ya nos costó caro: una migración sin correr dejó las
