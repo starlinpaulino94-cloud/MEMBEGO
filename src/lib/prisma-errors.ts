@@ -96,3 +96,27 @@ export function logErrorBd(contexto: string, e: unknown, extra?: Record<string, 
   })
   return info
 }
+
+/**
+ * Manejador para fallos NO fatales que igual deben dejar rastro.
+ *
+ * Sustituye al patrón `.catch(() => {})`, que se traga el error sin dejar nada
+ * en el log. Ese patrón ya nos costó caro: una migración sin correr dejó las
+ * capacidades apagadas en silencio durante días, porque el código es fail-open
+ * a propósito y nadie vio un solo error.
+ *
+ * El flujo sigue sin romperse (es justo lo que buscamos al ignorar el fallo),
+ * pero queda registrado con su contexto y, si el error es de Prisma, con la
+ * clasificación y el remedio (`SCHEMA_DRIFT` → «corre db-doctor»).
+ *
+ * Uso:
+ *   await prisma.auditLog.create({ ... }).catch(anotarFallo('campanas:auditoria'))
+ *
+ * @param contexto  `modulo:operacion`, para poder grepear el log.
+ * @param extra     Datos útiles para diagnosticar (ids, no datos personales).
+ */
+export function anotarFallo(contexto: string, extra?: Record<string, unknown>) {
+  return (e: unknown): void => {
+    logErrorBd(contexto, e, extra)
+  }
+}

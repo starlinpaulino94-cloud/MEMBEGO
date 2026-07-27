@@ -6,6 +6,7 @@ import {
   completeGoogleOnboarding,
   type GoogleOnboardingResult,
 } from '@/lib/auth/googleOnboarding'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * Callback de OAuth (Onboarding Fase 5 · O-16). Google redirige aquí con un
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
   // Defensa: no aceptar identidades cuyo correo venga explícitamente sin
   // verificar por el proveedor (Google lo marca en user_metadata).
   if (data.user.user_metadata?.email_verified === false) {
-    await supabase.auth.signOut().catch(() => {})
+    await supabase.auth.signOut().catch(anotarFallo('auth:signout-email-no-verificado'))
     return toLogin('google')
   }
 

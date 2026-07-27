@@ -1,3 +1,4 @@
+import { anotarFallo } from '@/lib/prisma-errors'
 /**
  * Puerto de transporte de impresión (Receipt Engine, Fase E4).
  *
@@ -101,7 +102,7 @@ export function createWebUsbTransport(): PrinterTransport {
       await device.transferOut(endpoint.endpointNumber, buf)
     },
     async close() {
-      await device?.close().catch(() => {})
+      await device?.close().catch(anotarFallo('receipts:cerrar-impresora'))
       device = null
     },
   }

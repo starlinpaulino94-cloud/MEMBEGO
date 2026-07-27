@@ -197,6 +197,13 @@ indicador que vale: si hay que recordárselo, el módulo todavía estorba.
    esperada.
 3. Revisar los `catch` silenciosos del código nuevo (`.catch(() => {})`) y
    asegurar que al menos registren en consola con contexto.
+   *Cerrado: los 46 del servidor usan `anotarFallo('modulo:operacion')`
+   (`src/lib/prisma-errors.ts`), que registra con clasificación y remedio
+   (`SCHEMA_DRIFT` → «corre db-doctor») sin romper el flujo. Una regla de
+   ESLint (`no-restricted-syntax`) impide que vuelvan a colarse en
+   `src/modules`, `src/lib` y `src/app`. En la UI se dejaron intactos: ahí
+   `navigator.share().catch(() => {})` significa «el usuario canceló», y no
+   hay nada que registrar.*
 
 **Terminado cuando:** `npm run db:doctor` reporta el estado real de todas las
 migraciones manuales y un superadmin ve el aviso sin tener que entrar a la

@@ -14,6 +14,7 @@ import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface RegistroState {
   error?: string
@@ -524,7 +525,7 @@ export async function registrarCuentaGeneral(
       if (sesion.metadata.clienteId && telefono) {
         await prisma.cliente
           .update({ where: { id: sesion.metadata.clienteId }, data: { telefono } })
-          .catch(() => {})
+          .catch(anotarFallo('registro:cliente.update'))
       }
       // Atribución de marketing: cookie del enlace ?src= o canal declarado.
       if (sesion.metadata.clienteId) {

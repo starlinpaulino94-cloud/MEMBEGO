@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { registrarTransicionCompra } from '@/modules/promociones/compra'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * CAMPAÑAS EN CADENA — marketing cruzado entre empresas aliadas.
@@ -271,7 +272,7 @@ export async function avanzarCadenaTrasCanje(compraId: string): Promise<Resultad
             where: { campanaId: paso.campanaId, clienteId: clienteAqui.id },
             data: { estado: 'COMPLETADA', completadaAt: new Date() },
           })
-          .catch(() => {})
+          .catch(anotarFallo('campanas:campanaInscripcion.updateMany'))
       }
       return { completada: true }
     }
@@ -291,7 +292,7 @@ export async function avanzarCadenaTrasCanje(compraId: string): Promise<Resultad
           where: { campanaId: paso.campanaId, clienteId: clienteAqui.id },
           data: { pasoActual: siguiente.orden },
         })
-        .catch(() => {})
+        .catch(anotarFallo('campanas:campanaInscripcion.updateMany'))
     }
 
     return {

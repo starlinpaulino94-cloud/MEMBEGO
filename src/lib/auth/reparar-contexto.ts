@@ -5,6 +5,7 @@ import { otorgarBienvenidaDirecta } from '@/modules/invitaciones/beneficios'
 import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
 import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 import type { AppRole, SessionUser } from '@/types'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * AUTO-REPARACIÓN de sesiones incompletas.
@@ -115,7 +116,7 @@ export async function repararContextoCliente(user: SessionUser): Promise<Session
           update: {},
           create: { userId: dbUser.id, companyId: cliente.companyId },
         })
-        .catch(() => {})
+        .catch(anotarFallo('auth:companyFollow.upsert'))
 
       // Misma experiencia que un registro normal: canal de marketing (?src=),
       // regalo de bienvenida de la campaña activa + regalos P2P que esperaban

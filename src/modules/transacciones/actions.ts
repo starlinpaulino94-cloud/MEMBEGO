@@ -26,6 +26,7 @@ import type {
   ReceiptTransaccionInfo,
   ReceiptEmpresaInfo,
 } from '@/lib/receipts'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 // ── Info serializable para la pantalla "Historial del QR" ────────────────────
 
@@ -253,7 +254,7 @@ export async function registrarImpresionTx(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('transacciones:auditLog.create'))
 
     return { numero, esCopia }
   } catch {
@@ -322,7 +323,7 @@ export async function anularTransaccion(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('transacciones:auditLog.create'))
 
     revalidatePath('/admin/registros')
     revalidatePath('/admin/facturas')
@@ -395,7 +396,7 @@ export async function anularTransaccionesCliente(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('transacciones:auditLog.create'))
 
     revalidatePath('/admin/registros')
     revalidatePath('/admin/facturas')
@@ -489,7 +490,7 @@ export async function guardarPlantillaRecibo(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('transacciones:auditLog.create'))
 
     revalidatePath('/admin/perfil')
     return { success: true }

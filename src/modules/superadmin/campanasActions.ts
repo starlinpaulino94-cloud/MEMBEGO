@@ -21,6 +21,7 @@ import {
   type PlantillaPlan,
   type PlantillaPromocion,
 } from './campanasGlobales'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface CampanaActionState {
   error?: string
@@ -268,7 +269,7 @@ export async function aplicarCampanaGlobal(
               where: { id: paso.id },
               data: { error: e instanceof Error ? e.message.slice(0, 300) : 'Error desconocido' },
             })
-            .catch(() => {})
+            .catch(anotarFallo('superadmin:campanaPaso.update'))
         }
       }
       await prisma.campanaGlobal.update({
@@ -361,7 +362,7 @@ export async function aplicarCampanaGlobal(
             where: { id: p.id },
             data: { error: e instanceof Error ? e.message.slice(0, 300) : 'Error desconocido' },
           })
-          .catch(() => {})
+          .catch(anotarFallo('superadmin:campanaGlobalEmpresa.update'))
       }
     }
 
@@ -383,7 +384,7 @@ export async function aplicarCampanaGlobal(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('superadmin:auditLog.create'))
 
     revalidatePath(RUTA)
     revalidatePath(`${RUTA}/${campanaId}`)
@@ -452,7 +453,7 @@ export async function archivarCampanaGlobal(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('superadmin:auditoria-campana'))
 
     revalidatePath(RUTA)
     revalidatePath(`${RUTA}/${campanaId}`)

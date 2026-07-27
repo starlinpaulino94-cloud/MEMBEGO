@@ -12,6 +12,7 @@ import { registrarVentaConfirmada } from '@/modules/pagos/venta'
 import { paymentLimiter } from '@/lib/rate-limit'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { INVITABLE_ROLES, type AppRole } from '@/types'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /** Ensure the membership belongs to the admin's company (superadmin = any). */
 async function assertOwnership(
@@ -685,7 +686,7 @@ export async function crearEmpleado(
       })
     } catch (e) {
       // Roll back the auth user so we don't leave an orphan.
-      await supabase.auth.admin.deleteUser(supabaseId).catch(() => {})
+      await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('admin:user.create'))
       throw e
     }
 
