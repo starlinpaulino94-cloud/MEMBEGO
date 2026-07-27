@@ -50,6 +50,13 @@ export default async function MiCompraPage({
       metodoPago: true,
       transiciones: { orderBy: { createdAt: 'asc' } },
       qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+      campanaPaso: {
+        select: {
+          orden: true,
+          campanaId: true,
+          campana: { select: { nombre: true } },
+        },
+      },
     },
   })
   if (!compra || compra.clienteId !== user.metadata.clienteId) notFound()
@@ -91,6 +98,20 @@ export default async function MiCompraPage({
       }
     }
   }
+  // Campaña en cadena: qué beneficio se desbloquea al canjear este.
+  const siguienteEnCadena = compra.campanaPaso
+    ? await prisma.campanaPaso
+        .findFirst({
+          where: {
+            campanaId: compra.campanaPaso.campanaId,
+            orden: { gt: compra.campanaPaso.orden },
+          },
+          orderBy: { orden: 'asc' },
+          select: { titulo: true, company: { select: { name: true } } },
+        })
+        .catch(() => null)
+    : null
+
   const fmtCita = (d: Date) =>
     new Intl.DateTimeFormat('es-DO', {
       timeZone: compra.company.zonaHoraria,
@@ -177,6 +198,22 @@ export default async function MiCompraPage({
           </div>
         </CardContent>
       </Card>
+
+      {/* Campaña en cadena: de dónde vino esto y qué se desbloquea después. */}
+      {compra.campanaPaso && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="space-y-1.5 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-primary">
+              {compra.campanaPaso.campana.nombre} · paso {compra.campanaPaso.orden}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {siguienteEnCadena
+                ? `Al canjear este beneficio se te activa automáticamente «${siguienteEnCadena.titulo}» en ${siguienteEnCadena.company.name}.`
+                : 'Este es el último beneficio de la cadena. ¡Disfrútalo!'}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Invitación a agendar (opcional): el QR de abajo ya está disponible. */}
       {compra.estado === 'ACTIVA' && qr && sugiereCita && (

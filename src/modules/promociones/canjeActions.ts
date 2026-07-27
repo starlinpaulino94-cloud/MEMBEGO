@@ -28,6 +28,8 @@ export interface CanjeState {
   codigo?: string
   ticketNumero?: string
   ticket?: TicketPayload
+  /** Campaña en cadena: beneficio que este canje acaba de desbloquear. */
+  siguientePaso?: { titulo: string; companyName: string }
 }
 
 export async function confirmarCanjePromocion(
@@ -212,6 +214,22 @@ export async function confirmarCanjePromocion(
     // invitación (deduplicado internamente; nunca rompe el canje).
     await registrarHitoInvitacion(compra.clienteId, 'PRIMER_CANJE')
 
+    // Campañas conjuntas EN CADENA: si esta compra era un eslabón, canjearlo
+    // desbloquea el beneficio de la empresa aliada. Va DESPUÉS de la
+    // transacción y con fail-open: el canje ya está confirmado y ningún
+    // problema de la cadena puede revertirlo.
+    let siguientePaso: { titulo: string; companyName: string } | null = null
+    if (result.consumida) {
+      const { avanzarCadenaTrasCanje } = await import('@/modules/campanas/cadena')
+      const avance = await avanzarCadenaTrasCanje(compra.id)
+      if (avance.entregado) {
+        siguientePaso = {
+          titulo: avance.entregado.titulo,
+          companyName: avance.entregado.companyName,
+        }
+      }
+    }
+
     // Payload del ticket (Receipt Engine) — plantilla de la empresa.
     const [plantilla, promosActivas] = await Promise.all([
       prisma.receiptTemplate.findUnique({ where: { companyId: compra.companyId } }).catch(() => null),
@@ -280,6 +298,7 @@ export async function confirmarCanjePromocion(
       codigo: result.transaccion.codigo,
       ticketNumero: result.transaccion.ticketNumero,
       ticket,
+      ...(siguientePaso ? { siguientePaso } : {}),
     }
   } catch (e) {
     if (e instanceof Error && e.message === 'QR_YA_USADO') {

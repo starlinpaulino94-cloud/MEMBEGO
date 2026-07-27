@@ -20,8 +20,11 @@ export function CampanaGlobalForm({
   empresas: { id: string; name: string }[]
 }) {
   const [abierto, setAbierto] = useState(false)
+  const [modo, setModo] = useState<'COPIA' | 'CADENA'>('COPIA')
   const [tipo, setTipo] = useState<string>('PROMOCION')
   const [todas, setTodas] = useState(true)
+  // Eslabones de la cadena. Arrancan en 2 porque una cadena de 1 no es cadena.
+  const [pasos, setPasos] = useState<number[]>([0, 1])
   const [pending, startTransition] = useTransition()
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -60,11 +63,45 @@ export function CampanaGlobalForm({
         </Button>
       </div>
 
+      {/* Modo: replicar la misma oferta vs. cadena entre negocios distintos */}
+      <input type="hidden" name="modo" value={modo} />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setModo('COPIA')}
+          className={`rounded-xl border p-3 text-left transition-colors ${
+            modo === 'COPIA' ? 'border-primary bg-primary/5' : 'border-border/70 hover:bg-muted/40'
+          }`}
+        >
+          <span className="block text-sm font-bold text-foreground">Misma oferta en todas</span>
+          <span className="block text-xs text-muted-foreground">
+            La misma promoción o membresía se crea igual en cada empresa.
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setModo('CADENA')}
+          className={`rounded-xl border p-3 text-left transition-colors ${
+            modo === 'CADENA' ? 'border-primary bg-primary/5' : 'border-border/70 hover:bg-muted/40'
+          }`}
+        >
+          <span className="block text-sm font-bold text-foreground">Cadena entre negocios</span>
+          <span className="block text-xs text-muted-foreground">
+            Cada empresa da un beneficio distinto y canjear uno desbloquea el siguiente.
+          </span>
+        </button>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="c-nombre">Nombre de la campaña *</Label>
           <Input id="c-nombre" name="nombre" required maxLength={120} placeholder="Ej. Black Friday MembeGo" />
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="c-img">Imagen de portada (URL)</Label>
+          <Input id="c-img" name="imagenUrl" placeholder="https://..." />
+        </div>
+        {modo === 'COPIA' && (
         <div className="space-y-1.5">
           <Label htmlFor="c-tipo">¿Qué se crea en cada empresa? *</Label>
           <select
@@ -81,12 +118,15 @@ export function CampanaGlobalForm({
             ))}
           </select>
         </div>
+        )}
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="c-desc">Nota interna (opcional)</Label>
           <Input id="c-desc" name="descripcion" maxLength={500} placeholder="Para qué es esta campaña" />
         </div>
       </div>
 
+      {modo === 'COPIA' && (
+        <>
       {/* Plantilla según el tipo */}
       <fieldset className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
         <legend className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -189,6 +229,96 @@ export function CampanaGlobalForm({
           </div>
         )}
       </fieldset>
+        </>
+      )}
+
+      {/* ── CADENA: un eslabón por empresa, en orden ───────────────────── */}
+      {modo === 'CADENA' && (
+        <fieldset className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4">
+          <legend className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Los eslabones de la cadena
+          </legend>
+          <p className="text-xs text-muted-foreground">
+            El cliente recibe el <b>paso 1</b> al tomarlo. Cuando lo canjea, se le
+            entrega solo el paso 2 en la otra empresa, y así sucesivamente.
+          </p>
+
+          {pasos.map((key, i) => (
+            <div key={key} className="space-y-3 rounded-xl border border-border/60 bg-card p-4">
+              <div className="flex items-center justify-between">
+                <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase text-primary">
+                  Paso {i + 1}
+                </span>
+                {pasos.length > 2 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPasos(pasos.filter((k) => k !== key))}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Empresa que lo da *</Label>
+                  <select
+                    name="paso_companyId"
+                    required
+                    defaultValue=""
+                    className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="" disabled>
+                      Elegir empresa…
+                    </option>
+                    {empresas.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Beneficio *</Label>
+                  <Input
+                    name="paso_titulo"
+                    required
+                    maxLength={120}
+                    placeholder={i === 0 ? 'Ej. Lavado gratis' : 'Ej. 20% en desayuno'}
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Descripción</Label>
+                  <Input name="paso_descripcion" maxLength={300} placeholder="Detalle para el cliente" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Imagen del beneficio (URL)</Label>
+                  <Input name="paso_imagenUrl" placeholder="Si lo dejas vacío, usa la portada" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Descuento (%)</Label>
+                  <Input name="paso_descuento" inputMode="numeric" placeholder="20" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Usos</Label>
+                  <Input name="paso_usos" inputMode="numeric" placeholder="1" />
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setPasos([...pasos, Date.now()])}
+          >
+            + Agregar otra empresa a la cadena
+          </Button>
+        </fieldset>
+      )}
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending} className="gap-1.5">
