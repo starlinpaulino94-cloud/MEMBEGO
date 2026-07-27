@@ -84,10 +84,20 @@ export async function crearEmpresa(
   const supabase = createAdminClient()
   let supabaseId: string | null = null
 
+  // Empresa de DEMOSTRACIÓN (entrenamiento). Se nombra igual que cualquier
+  // otra y se crea por este mismo camino a propósito: el alta es parte de lo
+  // que se entrena. Lo único distinto es la marca — y todo lo que esa marca
+  // apaga hacia afuera (ver src/modules/demo/index.ts).
+  //
+  // El campo se añade al `data` solo cuando se pide: si la columna todavía no
+  // está migrada, crear empresas NORMALES tiene que seguir funcionando.
+  const esDemo = String(formData.get('esDemo') ?? '') === '1'
+
   try {
     const slug = await uniqueCompanySlug(name)
     const company = await prisma.company.create({
       data: {
+        ...(esDemo ? { esDemo: true } : {}),
         name,
         slug,
         type,
@@ -157,8 +167,14 @@ export async function crearEmpresa(
     })
 
     revalidatePath('/superadmin/empresas')
+    revalidatePath('/superadmin/demo')
     revalidatePath('/empresas')
-    return { success: true, message: `Empresa "${name}" creada con su administrador.` }
+    return {
+      success: true,
+      message: esDemo
+        ? `Empresa de demostración "${name}" creada. Comparte su enlace de registro para entrenar.`
+        : `Empresa "${name}" creada con su administrador.`,
+    }
   } catch (e) {
     console.error('[empresa] crearEmpresa error:', e)
     // Rollback: borrar el auth user y la empresa recién creada para no dejar

@@ -30,6 +30,9 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
       where: {
         isPublished: true,
         isActive: true,
+        // Las empresas de DEMOSTRACIÓN no salen en la vitrina pública: un
+        // cliente real no puede tropezarse con la de práctica.
+        esDemo: false,
         ...(search && {
           OR: [
             { name: { contains: search, mode: 'insensitive' } },
@@ -193,6 +196,7 @@ export async function getPromotionsPublic(filters: PromotionFilters = {}): Promi
         company: {
           isPublished: true,
           isActive: true,
+          esDemo: false,
           ...(company && { slug: company }),
         },
         ...(search && {
@@ -274,7 +278,7 @@ export async function getClientePromociones(
         archivada: false,
         vigenciaDesde: { lte: now },
         OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-        company: { isPublished: true, isActive: true },
+        company: { isPublished: true, isActive: true, esDemo: false },
       },
       select: {
         id: true,
@@ -323,6 +327,7 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
         company: {
           isPublished: true,
           isActive: true,
+          esDemo: false,
         },
       },
       select: {
@@ -481,7 +486,7 @@ export async function getPromotionOg(promotionId: string): Promise<PromotionOg |
         activo: true,
         archivada: false,
         visibilidad: 'publica',
-        company: { isPublished: true, isActive: true },
+        company: { isPublished: true, isActive: true, esDemo: false },
         OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
       },
       select: {
@@ -610,7 +615,7 @@ export async function getCategoriesPublic(): Promise<CategoryPublic[]> {
           select: {
             companies: {
               where: {
-                company: { isPublished: true, isActive: true },
+                company: { isPublished: true, isActive: true, esDemo: false },
               },
             },
           },
@@ -692,7 +697,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
     const now = new Date()
     const [empresas, membresiasActivas, promocionesVigentes, ciudadesRows] =
       await Promise.all([
-        prisma.company.count({ where: { isActive: true, isPublished: true } }),
+        prisma.company.count({ where: { isActive: true, isPublished: true, esDemo: false } }),
         prisma.membership.count({ where: { estado: 'ACTIVA' } }),
         prisma.promocion.count({
           where: {
@@ -701,7 +706,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
             visibilidad: 'publica',
             vigenciaDesde: { lte: now },
             OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-            company: { isPublished: true, isActive: true },
+            company: { isPublished: true, isActive: true, esDemo: false },
           },
         }),
         prisma.company.findMany({

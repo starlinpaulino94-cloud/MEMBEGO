@@ -190,6 +190,12 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     migracion: '20260766_cliente_mostrador',
     afecta: 'Clientes de mostrador (los que vienen sin cuenta)',
   },
+  {
+    tabla: 'companies',
+    columna: 'esDemo',
+    migracion: '20260767_empresa_demo',
+    afecta: 'Empresas de demostración para entrenar al personal',
+  },
 ]
 
 export interface MigracionPendiente {

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import type { CompraEstado } from '@prisma/client'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { cardnetConfigurado } from '@/lib/payments/cardnet'
+import { esEmpresaDemo } from '@/modules/demo'
 
 /**
  * QUÉ MÉTODOS DE PAGO SE OFRECEN, y a quién.
@@ -45,15 +46,22 @@ export interface MetodosDePago {
  * sin poder cobrar por un error de lectura.
  */
 export async function getMetodosParaCompraNueva(companyId: string): Promise<MetodosDePago> {
-  const [transferencia, cardnet] = await Promise.all([
+  const [transferencia, cardnet, demo] = await Promise.all([
     tieneCapacidad(companyId, 'PAGO_TRANSFERENCIA').catch(() => true),
     tieneCapacidad(companyId, 'PAGO_CARDNET').catch(() => false),
+    esEmpresaDemo(companyId),
   ])
 
   const disponibles: MetodoDisponible[] = []
   // CardNET primero: si está activo es el camino preferente (cobro inmediato,
   // sin trabajo manual de validación).
-  if (cardnet && cardnetConfigurado()) disponibles.push('CARDNET')
+  //
+  // NUNCA en una empresa de demostración. Es el único punto de todo el sistema
+  // donde el dinero de una persona se mueve de verdad, y un cobro hecho en un
+  // entrenamiento es un cobro que hay que devolver. La transferencia sí se
+  // deja: es manual, alguien tendría que ir al banco a propósito, y practicar
+  // el flujo de subir y validar un comprobante es justo lo que se entrena.
+  if (cardnet && cardnetConfigurado() && !demo) disponibles.push('CARDNET')
   if (transferencia) disponibles.push('TRANSFERENCIA')
 
   const cuentas = disponibles.includes('TRANSFERENCIA')
