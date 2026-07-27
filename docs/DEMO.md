@@ -39,12 +39,56 @@ encabezado, en el panel (`(admin)/layout.tsx`) y en el portal del cliente
 práctica no es que alguien la use mal, es que alguien **no sepa** que está en
 ella, y un aviso que se cierra deja de avisar justo cuando importa.
 
+## Quién entra a la empresa de práctica
+
+Hay dos formas, y la primera es la normal:
+
+**Cuenta existente (recomendada).** Se le da acceso al administrador que **ya
+usa la plataforma**. No se crea ninguna cuenta, no hay otra contraseña que
+recordar y —lo importante— **no se le cambia su empresa activa**: sigue en su
+negocio, y la empresa de práctica le aparece en el selector de empresas de
+arriba del panel. Entra al modo de prueba con dos clics y vuelve igual. Es lo
+que hace que "entrenar" no sea "cerrar sesión y volver a entrar con otro
+correo".
+
+**Cuenta nueva.** Se crea un usuario aparte con su correo y contraseña. Tiene
+sentido cuando la empresa es de otra persona, o cuando se quiere una cuenta de
+entrenamiento compartida y desechable.
+
+Se elige al crear la empresa (`/superadmin/demo/nueva` o
+`/superadmin/empresas/nueva`) y se puede cambiar después desde la tarjeta de la
+empresa en `/superadmin/demo`, agregando o quitando personas de una en una.
+
+### El encierro que esto podía provocar (y cómo se evita)
+
+El selector de empresas se arma con las filas de `UserCompanyAccess` **más** la
+empresa activa. Parece completo, pero tenía un agujero: si la empresa de siempre
+de una persona no tenía fila en `UserCompanyAccess` —el caso normal hasta ahora,
+porque se llegaba a ella por `User.companyId` y ya—, en cuanto cambiaba a otra
+empresa la suya desaparecía de la lista: dejaba de ser la activa, nunca tuvo
+fila, y el selector ya no la podía ofrecer. **Quedaba encerrada en la empresa a
+la que acababa de entrar.**
+
+Antes no salía a la luz porque casi nadie tenía dos empresas. Vincular un
+administrador a una empresa de práctica lo provoca a la primera: entra a
+practicar y no puede volver a su negocio.
+
+Por eso, al dar acceso a una empresa nueva se escribe **también** la fila de su
+empresa de siempre (`filasDeAcceso` en `src/modules/empresas/accesos.ts`, con
+pruebas en `tests/accesos.test.ts`). Es idempotente y no concede nada que la
+persona no tuviera ya: solo hace explícito lo que era implícito.
+
+Quitar el acceso tiene el cuidado simétrico: si esa empresa es la que la persona
+tiene abierta en ese momento, primero se la devuelve a otra de las suyas, y si
+no le queda ninguna se rechaza la operación en vez de dejarla sin panel.
+
 ## Cómo se usa
 
 1. **Crear**: `/superadmin/demo` → "Nueva empresa de práctica". Es el mismo
    formulario que una empresa real (crear el alta también es parte de lo que se
    entrena); lo único distinto es la marca, que va en un campo oculto porque
-   se entra por esa pantalla o no se entra.
+   se entra por esa pantalla o no se entra. Ahí se elige si la administra una
+   cuenta existente o una nueva.
 2. **Entrenar**: copiar el **enlace de registro** (`/registro/<slug>`) y
    compartirlo. Quien se registre por ahí es cliente de esa empresa y, por
    tanto, cliente de práctica.
@@ -79,6 +123,12 @@ ella, y un aviso que se cierra deja de avisar justo cuando importa.
   archivo `'use server'`: allí cada export se convierte en un endpoint llamable
   desde el navegador, y exportar "borra este cliente por id" habría creado sin
   querer un botón de borrado sin autenticación.
+- Dar y quitar acceso se hace **de a uno**
+  (`src/modules/empresas/accesosActions.ts`), no reemplazando el conjunto
+  completo. La pantalla de Usuarios ya permite reasignar todas las empresas de
+  una persona de golpe; eso sirve para arreglar a alguien, pero si se abre para
+  sumar una empresa y se guarda con una casilla desmarcada por accidente, se le
+  quita el acceso a un negocio real.
 
 ## Migración
 
