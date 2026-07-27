@@ -160,6 +160,30 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     migracion: '20260764_carwash_fase2',
     afecta: 'Tarifas de comisión por servicio',
   },
+  {
+    tabla: 'proveedores',
+    columna: null,
+    migracion: '20260765_carwash_fase3',
+    afecta: 'Proveedores del car wash',
+  },
+  {
+    tabla: 'ordenes_compra',
+    columna: null,
+    migracion: '20260765_carwash_fase3',
+    afecta: 'Órdenes de compra y reposición de inventario',
+  },
+  {
+    tabla: 'activos',
+    columna: null,
+    migracion: '20260765_carwash_fase3',
+    afecta: 'Equipos y mantenimiento',
+  },
+  {
+    tabla: 'turnos',
+    columna: null,
+    migracion: '20260765_carwash_fase3',
+    afecta: 'Turnos, asistencia y costo laboral por lavado',
+  },
 ]
 
 export interface MigracionPendiente {

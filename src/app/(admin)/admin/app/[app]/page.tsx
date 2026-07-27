@@ -25,6 +25,9 @@ import {
   BarChart3,
   Wallet,
   ShieldAlert,
+  ShoppingCart,
+  Wrench,
+  Clock,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Pista, PistaSinCatalogo } from '@/components/carwash/Pista'
@@ -46,6 +49,9 @@ const ICONOS: Record<IconoApp, LucideIcon> = {
   BarChart3,
   Wallet,
   ShieldAlert,
+  ShoppingCart,
+  Wrench,
+  Clock,
 }
 
 function fmtRD(n: number) {

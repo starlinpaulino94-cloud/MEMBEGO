@@ -371,17 +371,76 @@ y se avisa, pero el vehículo queda entregado.
 pantallas nuevas dicen exactamente qué falta —en vez de fingir que están
 vacías— y el resto de la app no se entera.
 
-## Fase 3 · Que la operación no se caiga
+## Fase 3 · Que la operación no se caiga — ENTREGADA
 
-| Entregable | Por qué |
+| Entregable | Estado |
 |---|---|
-| Proveedores y órdenes de compra | Mantiene vivo el inventario. |
-| Activos y mantenimiento | Uptime de los equipos. |
-| Turnos y asistencia | Costo laboral por lavado. |
+| Proveedores y órdenes de compra | ✅ `Proveedor` + `OrdenCompra` + `OrdenCompraLinea`, recibir alimenta el inventario |
+| Activos y mantenimiento | ✅ `Activo` + `Mantenimiento`, con aviso antes de que toque |
+| Turnos y asistencia | ✅ `Turno`, con costo laboral por lavado |
 
-## Fase 4 · Escala (solo cuando exista la segunda sucursal)
+Migración `20260765_carwash_fase3`. Capacidades `COMPRAS`, `ACTIVOS` y `TURNOS`,
+todas apagadas al nacer.
 
-Multi-sede real, comparativo entre sucursales, consolidado. **No antes.**
+### Decisiones tomadas al construir
+
+1. **Recibir una orden es la ÚNICA puerta nueva al stock**, y usa el camino de
+   siempre (`MovimientoInventario` de ENTRADA). No se creó un segundo mecanismo
+   para mover existencias: el rastro de auditoría del inventario sigue siendo
+   una sola línea.
+
+2. **El estado `PEDIDA` es el punto del módulo.** Entre pedir y recibir pasan
+   días, y en ese hueco nadie sabe si el shampoo viene en camino o si no se
+   pidió. Sin ese estado, la única forma de averiguarlo es preguntar.
+
+3. **`cantidadRecibida` va aparte de `cantidad`.** El proveedor entrega
+   incompleto más a menudo de lo que uno quisiera; con una sola columna,
+   recibir 8 de 10 obligaría a mentir en el pedido o a inventar un ajuste.
+   Recibir cero es un valor legítimo y NO cae al fallback de lo pedido —
+   confundirlos inflaría el inventario.
+
+4. **"Por pedir" ≠ "bajo mínimo".** Inventario ya dice qué está bajo mínimo.
+   Lo que agrega compras es el *y nadie lo ha pedido todavía*: sin ese filtro,
+   se compra dos veces.
+
+5. **El correlativo sale del máximo, no de un conteo.** Si alguna vez se borra
+   una orden, contar repetiría un número y el unique lo rechazaría con un error
+   sin explicación.
+
+6. **Recibir es idempotente por transacción.** El cambio de estado va
+   condicionado a que la orden siga en `PEDIDA`; si dos personas dan a "recibir"
+   a la vez, la segunda no encuentra nada y el stock no se suma dos veces.
+
+7. **Un equipo mide pista parada, no patrimonio.** Por eso `horasParado` en cada
+   mantenimiento: el costo real de una avería no es la factura del técnico, son
+   las horas de bahía perdidas. Registrar un mantenimiento devuelve el equipo a
+   OPERATIVO — quien acaba de arreglarlo no debería necesitar un segundo clic.
+
+8. **Un empleado no puede tener dos turnos abiertos.** Lo garantiza un índice
+   único PARCIAL en la base (`WHERE salidaAt IS NULL`), no solo el código: dos
+   pestañas marcando entrada a la vez no pueden duplicarlo. Verificado contra
+   PostgreSQL 16, incluyendo que los turnos ya cerrados no estorban.
+
+9. **Horas negativas dan cero.** Un turno con salida anterior a la entrada
+   restaría en el costo total y abarataría el lavado por arte de magia.
+
+10. **El costo por lavado es `null` sin vehículos, no infinito.** Un panel que
+    muestra "∞ por lavado" es peor que uno que muestra un guión. Y si ningún
+    turno lleva costo por hora, la pantalla lo dice en vez de mostrar cero y
+    dejar creer que la mano de obra es gratis.
+
+**Aditivo y tolerante**, como las fases anteriores: sin la migración corrida las
+pantallas nuevas dicen qué falta, y el inventario existente no se entera.
+
+## Fase 4 · Escala — NO EMPEZADA, A PROPÓSITO
+
+Multi-sede real, comparativo entre sucursales, consolidado.
+
+**La condición sigue sin cumplirse: hay una sola sucursal.** Construir el
+comparativo entre sedes hoy sería mantener código que compara una sucursal
+consigo misma. Se retoma cuando exista la segunda, no antes — y esa decisión
+está tomada desde la Parte 4 de este documento, no se cambia por tener tiempo
+libre.
 
 ## Documentado como futuro, no como plan
 
