@@ -14,9 +14,15 @@
 import { useActionState, useEffect, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
-import { Check, Copy, FlaskConical, Loader2, RotateCcw, ShieldCheck } from 'lucide-react'
+import { Check, Copy, FlaskConical, Loader2, RotateCcw, ShieldCheck, UserMinus, UserPlus } from 'lucide-react'
 import { marcarComoDemo, reiniciarDemo, type DemoState } from '@/modules/demo/actions'
+import {
+  darAccesoAEmpresa,
+  quitarAccesoAEmpresa,
+  type AccesoState,
+} from '@/modules/empresas/accesosActions'
 import type { InventarioDemo } from '@/modules/demo'
+import type { AccesoEmpresa, AdminVinculable } from '@/modules/empresas/accesos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,6 +34,8 @@ export interface EmpresaDemoUI {
   clientes: number
   enlaceRegistro: string
   inventario: InventarioDemo
+  /** Quién puede entrar hoy a esta empresa de práctica. */
+  accesos: AccesoEmpresa[]
 }
 
 const init: DemoState = {}
@@ -42,7 +50,13 @@ function Enviar({ children, variant }: { children: React.ReactNode; variant?: 'd
   )
 }
 
-export function DemoPanel({ empresas }: { empresas: EmpresaDemoUI[] }) {
+export function DemoPanel({
+  empresas,
+  admins,
+}: {
+  empresas: EmpresaDemoUI[]
+  admins: AdminVinculable[]
+}) {
   if (empresas.length === 0) {
     return (
       <Card className="border-border/60 shadow-card">
@@ -61,13 +75,13 @@ export function DemoPanel({ empresas }: { empresas: EmpresaDemoUI[] }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {empresas.map((e) => (
-        <TarjetaDemo key={e.id} e={e} />
+        <TarjetaDemo key={e.id} e={e} admins={admins} />
       ))}
     </div>
   )
 }
 
-function TarjetaDemo({ e }: { e: EmpresaDemoUI }) {
+function TarjetaDemo({ e, admins }: { e: EmpresaDemoUI; admins: AdminVinculable[] }) {
   const [reinicio, accionReinicio] = useActionState(reiniciarDemo, init)
   const [marca, accionMarca] = useActionState(marcarComoDemo, init)
 
@@ -93,6 +107,8 @@ function TarjetaDemo({ e }: { e: EmpresaDemoUI }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <EnlaceRegistro url={e.enlaceRegistro} />
+
+        <QuienEntra empresaId={e.id} accesos={e.accesos} admins={admins} />
 
         <div>
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -162,6 +178,120 @@ function TarjetaDemo({ e }: { e: EmpresaDemoUI }) {
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+const initAcceso: AccesoState = {}
+
+/**
+ * Quién puede entrar a la empresa de práctica.
+ *
+ * No se entra con una segunda cuenta: se le da acceso a la cuenta que la
+ * persona YA usa, y el modo de prueba queda como una empresa más en el
+ * selector de arriba de su panel. Entra, practica y vuelve a su negocio con
+ * dos clics, sin cerrar sesión ni recordar otra contraseña.
+ *
+ * Se agrega y se quita de a uno. La pantalla de Usuarios permite reasignar
+ * todas las empresas de una persona de golpe, pero ahí una casilla
+ * desmarcada por accidente le quita el acceso a un negocio real.
+ */
+function QuienEntra({
+  empresaId,
+  accesos,
+  admins,
+}: {
+  empresaId: string
+  accesos: AccesoEmpresa[]
+  admins: AdminVinculable[]
+}) {
+  const [dar, accionDar] = useActionState(darAccesoAEmpresa, initAcceso)
+  const [quitar, accionQuitar] = useActionState(quitarAccesoAEmpresa, initAcceso)
+
+  useEffect(() => {
+    if (dar.success) toast.success(dar.mensaje ?? 'Acceso concedido.')
+    if (dar.error) toast.error(dar.error)
+  }, [dar])
+
+  useEffect(() => {
+    if (quitar.success) toast.success(quitar.mensaje ?? 'Acceso retirado.')
+    if (quitar.error) toast.error(quitar.error)
+  }, [quitar])
+
+  const yaTienen = new Set(accesos.map((a) => a.userId))
+  const disponibles = admins.filter((a) => !yaTienen.has(a.id))
+
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Quién puede entrar al modo de prueba
+      </p>
+
+      {accesos.length === 0 ? (
+        <p className="mb-2 text-sm text-muted-foreground">
+          Nadie todavía. Agrega abajo a un administrador que ya use la plataforma.
+        </p>
+      ) : (
+        <ul className="mb-2 space-y-1">
+          {accesos.map((a) => (
+            <li
+              key={a.userId}
+              className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-1.5"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {a.name}
+                  {a.activaAhora && (
+                    <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700 dark:text-amber-200">
+                      dentro ahora
+                    </span>
+                  )}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">{a.email}</span>
+              </span>
+              <form action={accionQuitar} className="shrink-0">
+                <input type="hidden" name="companyId" value={empresaId} />
+                <input type="hidden" name="userId" value={a.userId} />
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  aria-label={`Quitar el acceso de ${a.name}`}
+                >
+                  <UserMinus className="h-4 w-4" />
+                </Button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {disponibles.length > 0 && (
+        <form action={accionDar} className="flex gap-2">
+          <input type="hidden" name="companyId" value={empresaId} />
+          <select
+            name="userId"
+            required
+            defaultValue=""
+            aria-label="Administrador al que dar acceso"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-sm"
+          >
+            <option value="" disabled>
+              Agregar administrador…
+            </option>
+            {disponibles.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} · {a.email}
+                {a.empresa ? ` (${a.empresa})` : ''}
+              </option>
+            ))}
+          </select>
+          <Enviar variant="outline">
+            <UserPlus className="mr-1.5 h-4 w-4" /> Dar acceso
+          </Enviar>
+        </form>
+      )}
+    </div>
   )
 }
 
