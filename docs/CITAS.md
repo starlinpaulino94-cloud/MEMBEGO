@@ -82,3 +82,22 @@ src/components/citas/*   # ReservarCita (grid+diálogo), acciones, config form
 - Recordatorio automático 24 h antes vía el motor de automatizaciones.
 - Reagendar en un paso (hoy: cancelar + reservar).
 - Bloqueos de fecha puntuales (feriados) además del horario semanal.
+
+## Agenda del panel: toda la agenda, no solo hoy
+
+`/admin/citas` abre en **Próximas** (de ahora en adelante) porque es lo que el
+negocio necesita para prepararse. Desde ahí se filtra sin perder el contexto:
+
+- **Rango**: Próximas · Hoy · Próximos 7 días · Pasadas · Todas.
+- **Estado**: por confirmar, confirmadas, completadas, canceladas, no asistió.
+  Cada chip muestra su conteo real dentro del rango elegido.
+- **Búsqueda** por nombre o teléfono del cliente.
+
+Las citas se **agrupan por día** con encabezado fijo, para que la lista se lea
+como una agenda y no como un volcado de filas. Pagina de 25 en 25; las
+"pasadas" se ordenan de la más reciente hacia atrás, el resto cronológicamente.
+
+Implementación: `getAgenda()` en `src/modules/citas/queries.ts` (una consulta
+de página + un `count` + un `groupBy` para los conteos por estado).
+`leerFiltrosAgenda()` normaliza los parámetros de la URL, así que un parámetro
+manipulado nunca rompe la pantalla.

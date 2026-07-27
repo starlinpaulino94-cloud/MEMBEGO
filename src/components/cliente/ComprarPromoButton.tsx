@@ -6,7 +6,7 @@
  * El botón es SIEMPRE "Adquirir promoción" (gratis o de pago), nunca
  * "Ver promoción" ni "Solicitar". Al presionarlo se muestra una confirmación
  * con el resumen (gratis vs. precio) antes de crear la solicitud:
- *   · Gratis  → confirmar → activada → QR inmediato.
+ *   · Gratis  → confirmar → activada → ofrecer cita (omitible) → QR.
  *   · De pago → confirmar → solicitud → pantalla de pago → QR al validar.
  */
 
@@ -53,7 +53,14 @@ export function ComprarPromoButton({
           ? '¡Promoción activada! Tu QR está listo.'
           : 'Solicitud creada. Completa el pago para activarla.'
       )
-      router.push(`/cliente/mis-promociones/${state.compraId}`)
+      // Activada: pasamos por el paso OPCIONAL de agendar cita (esa pantalla
+      // se salta sola si la empresa no tiene agenda). Si quedó pendiente de
+      // pago, va directo al detalle a completar la transferencia.
+      router.push(
+        state.activada
+          ? `/cliente/mis-promociones/${state.compraId}/agendar`
+          : `/cliente/mis-promociones/${state.compraId}`
+      )
     } else if (state.error) {
       toast.error(state.error)
       // Ya tiene una compra viva de esta promo: llevarlo a esa compra.

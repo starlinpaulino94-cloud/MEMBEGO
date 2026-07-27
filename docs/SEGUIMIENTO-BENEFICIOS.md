@@ -104,19 +104,27 @@ ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "seguimientoConfig" JSONB;
 
 ## 5. Cita antes del QR (extensión)
 
-Las recompensas **GRATIS** exigen **agendar una cita** para habilitar su QR
-(si la empresa tiene la agenda de citas activa; si no, el QR se muestra como
-antes):
+La cita es una **sugerencia, no un requisito**. Al adquirir un beneficio se
+ofrece agendar, y el cliente puede **omitirlo**: el QR se entrega siempre.
 
-- El detalle del beneficio (`/cliente/mis-promociones/[id]`) oculta el QR y
-  muestra "Agenda tu cita para recibir tu QR" → `/cliente/citas?compra=<id>`.
-- `reservarCita` acepta `compraId` (valida dueño/empresa/ACTIVA/usos>0),
-  prellena el servicio con "Canje: <promo>" (visible en la agenda del admin) y
-  vincula `citas.compraId` tras crear la cita (defensivo: si la columna no
-  existe aún, la cita se crea igual sin vínculo y el QR no se bloquea).
-- Con cita activa (no CANCELADA/NO_ASISTIO) el QR aparece junto a la fecha de
-  la cita. Migración `20260756_cita_compra` (columna + índice + FK,
-  idempotente).
+Antes esto era un candado (sin cita no había QR) y se retiró: bloquear el uso
+de algo que el cliente ya adquirió es hostil y genera soporte. Agendar sigue
+siendo valioso para el negocio, así que se ofrece en dos momentos:
+
+- **Al adquirir** → `/cliente/mis-promociones/<id>/agendar`: pantalla con
+  "Agendar mi cita" y "Omitir por ahora". Si la empresa no tiene agenda activa
+  (o el cliente ya agendó), redirige sola al detalle y no añade un paso vacío.
+- **En el detalle del beneficio** → tarjeta "¿Quieres agendar tu cita?" cuando
+  aún no hay cita. El QR se muestra igual, debajo.
+
+`reservarCita` vincula `citas.compraId` tras crear la cita (defensivo: si la
+columna no existe aún, la cita se crea igual sin vínculo). Con cita activa (no
+CANCELADA/NO_ASISTIO) el QR aparece junto a la fecha de la cita. Migración
+`20260756_cita_compra`.
+
+La capacidad `CITA_ANTES_DEL_QR` ya **no decide si se entrega el QR**: decide
+si se INVITA a agendar. Apagarla oculta la invitación y nada más.
+
 
 ## 4. Decisiones tomadas
 

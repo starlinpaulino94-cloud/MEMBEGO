@@ -68,7 +68,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   SEGUIMIENTO: 'Seguimiento de recompensas gratis',
   RULETA: 'Ruleta de premios',
   GIFT_CARDS: 'Gift cards de monto abierto',
-  CITA_ANTES_DEL_QR: 'Cita obligatoria antes del QR del regalo',
+  CITA_ANTES_DEL_QR: 'Invitar a agendar cita al adquirir un beneficio',
   POS_CAJA: 'Caja / punto de venta',
   INVENTARIO: 'Inventario de productos',
   COLA_VEHICULOS: 'Cola de vehículos del día',
