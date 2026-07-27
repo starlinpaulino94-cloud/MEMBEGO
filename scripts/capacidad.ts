@@ -127,6 +127,16 @@ async function main(): Promise<void> {
   const empresaArg = accion === 'estado' ? limpios[1] : limpios[2]
   const empresa = empresaArg?.trim() || EMPRESA_POR_DEFECTO
 
+  // Trampa fácil: `estado NAVEGACION_V2` se leería como "empresa llamada
+  // NAVEGACION_V2" y devolvería vacío sin explicar por qué. `estado` muestra
+  // TODAS las capacidades, así que no acepta una.
+  if (accion === 'estado' && empresaArg && (CAPACIDADES as readonly string[]).includes(empresaArg)) {
+    console.error(`✗ "estado" no lleva capacidad: ya muestra todas.`)
+    console.error(`  ¿Querías ver el estado?      npm run cap`)
+    console.error(`  ¿O encender esa capacidad?   npm run cap -- on ${empresaArg}`)
+    process.exit(1)
+  }
+
   if (accion !== 'estado') {
     if (!cap) {
       console.error('✗ Falta la capacidad. Ej: npm run cap -- on NAVEGACION_V2')
