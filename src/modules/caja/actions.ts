@@ -17,6 +17,7 @@ import {
   type CierreReporte,
   type ReporteEmpleadoDia,
 } from '@/modules/caja/queries'
+import { calcularArqueo, etiquetaArqueo } from '@/modules/caja/arqueo'
 
 /**
  * Caja (POS) · acciones del turno: abrir, cerrar (con arqueo) y cobrar.
@@ -199,12 +200,14 @@ export async function cerrarCaja(
       _sum: { monto: true },
     }),
   ])
-  const balanceEsperado =
-    Number(sesion.balanceInicial) +
-    Number(efectivo._sum.monto ?? 0) +
-    Number(entradas._sum.monto ?? 0) -
-    Number(salidas._sum.monto ?? 0)
-  const diferencia = balanceFinal - balanceEsperado
+  // La cuenta vive en `arqueo.ts` (pura, cubierta por tests/caja.test.ts).
+  const { balanceEsperado, diferencia } = calcularArqueo({
+    balanceInicial: Number(sesion.balanceInicial),
+    cobrosEfectivo: Number(efectivo._sum.monto ?? 0),
+    entradas: Number(entradas._sum.monto ?? 0),
+    salidas: Number(salidas._sum.monto ?? 0),
+    balanceFinal,
+  })
 
   const meta = await getRequestMeta()
   // Guard atómico: solo cierra si sigue ABIERTA (dos cierres concurrentes → uno gana).
@@ -242,7 +245,7 @@ export async function cerrarCaja(
   })
 
   revalidatePath('/empleado/caja')
-  const signo = diferencia === 0 ? 'cuadrada' : diferencia > 0 ? `sobrante RD$${diferencia.toFixed(2)}` : `faltante RD$${Math.abs(diferencia).toFixed(2)}`
+  const signo = etiquetaArqueo(diferencia)
   return { success: true, detalle: `Caja cerrada (${signo}).` }
 }
 

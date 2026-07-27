@@ -26,6 +26,7 @@ export type IconoApp =
   | 'Camera'
   | 'Users'
   | 'Sparkles'
+  | 'BarChart3'
 
 export interface ModuloApp {
   /** Etiqueta en el menú de la app. */
@@ -123,6 +124,12 @@ export const APPS_POR_CATEGORIA: Partial<Record<CategoriaNegocio, AplicacionNego
       },
       SUCURSALES,
       CAJA,
+      {
+        label: 'Reportes operativos',
+        descripcion: 'Cómo nos fue: vehículos, tiempos y consumo',
+        icon: 'BarChart3',
+        href: '/admin/app/carwash/reportes',
+      },
       {
         label: 'Cola de vehículos',
         descripcion: 'Estado de cada vehículo en pista',

@@ -29,22 +29,39 @@ export function ColaRegistrarForm() {
       action={action}
       className="grid gap-3 rounded-2xl border border-border/70 bg-card p-4 sm:grid-cols-2 lg:grid-cols-5"
     >
+      {/* Pista (F4): el teclado del celular abre en MAYÚSCULAS y sin corrector,
+          que es como se escribe una placa. Sin esto había que pulsar shift en
+          cada letra y el corrector "arreglaba" la placa. */}
       <Input
         name="placa"
         placeholder="Placa (ej. A123456)"
-        className="uppercase"
+        className="min-h-11 uppercase"
         maxLength={20}
         autoComplete="off"
+        autoCapitalize="characters"
+        autoCorrect="off"
+        spellCheck={false}
       />
       <Input
         name="descripcion"
         placeholder="Vehículo (ej. Corolla gris)"
+        className="min-h-11"
         maxLength={120}
         autoComplete="off"
       />
-      <Input name="servicio" placeholder="Servicio (ej. Lavado full)" maxLength={120} />
-      <Input name="notaInterna" placeholder="Nota interna (opcional)" maxLength={300} />
-      <Button type="submit" disabled={pending} className="gap-1.5">
+      <Input
+        name="servicio"
+        placeholder="Servicio (ej. Lavado full)"
+        className="min-h-11"
+        maxLength={120}
+      />
+      <Input
+        name="notaInterna"
+        placeholder="Nota interna (opcional)"
+        className="min-h-11"
+        maxLength={300}
+      />
+      <Button type="submit" disabled={pending} className="min-h-11 gap-1.5">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         Agregar a la cola
       </Button>

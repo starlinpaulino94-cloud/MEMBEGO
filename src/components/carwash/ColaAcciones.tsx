@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/button'
 /**
  * App Car Wash · E5 — botones de transición de una entrada de la cola.
  * Recibe los destinos permitidos ya calculados en el servidor.
+ *
+ * DISEÑO PARA PISTA (F4): esto se usa de pie, en un celular, con las manos
+ * mojadas y a veces al sol. Por eso:
+ *  - Los botones miden 44 px de alto como mínimo (el estándar táctil). Con el
+ *    tamaño `sm` por defecto quedaban en 32 px: demasiado fáciles de errar.
+ *  - "Cancelar" pide confirmación y se separa del resto: está pegado a la
+ *    acción de avance y un toque errado cancelaba el vehículo sin vuelta atrás.
  */
 export function ColaAcciones({
   id,
@@ -19,31 +26,49 @@ export function ColaAcciones({
 }) {
   const [pending, startTransition] = useTransition()
 
-  function mover(destino: string) {
+  function mover(destino: string, label: string) {
+    // Confirmación solo en lo irreversible: cancelar saca el vehículo de la
+    // pista y no se puede deshacer desde la interfaz.
+    if (destino === 'CANCELADO' && !window.confirm('¿Cancelar este vehículo de la cola?')) {
+      return
+    }
     startTransition(async () => {
       const res = await moverCola(id, destino)
       if (res.error) toast.error(res.error)
+      else toast.success(`${label} ✓`)
     })
   }
 
   if (destinos.length === 0) return null
 
+  const avances = destinos.filter((d) => d.estado !== 'CANCELADO')
+  const cancelar = destinos.find((d) => d.estado === 'CANCELADO')
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-      {destinos.map((d) => (
+    <div className="flex items-center gap-2">
+      {avances.map((d) => (
         <Button
           key={d.estado}
           type="button"
-          size="sm"
-          variant={d.estado === 'CANCELADO' ? 'ghost' : 'secondary'}
-          className={d.estado === 'CANCELADO' ? 'text-destructive hover:text-destructive' : ''}
+          className="min-h-11 flex-1 text-sm font-semibold"
           disabled={pending}
-          onClick={() => mover(d.estado)}
+          onClick={() => mover(d.estado, d.label)}
         >
-          {d.label}
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : d.label}
         </Button>
       ))}
+      {cancelar && (
+        <Button
+          type="button"
+          variant="ghost"
+          // Separado y sin color de acción: no compite con el botón de avance.
+          className="min-h-11 shrink-0 px-3 text-xs text-muted-foreground hover:text-destructive"
+          disabled={pending}
+          onClick={() => mover(cancelar.estado, cancelar.label)}
+        >
+          {cancelar.label}
+        </Button>
+      )}
     </div>
   )
 }

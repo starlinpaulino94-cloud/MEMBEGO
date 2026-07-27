@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
-import { MOV_TIPOS, type MovTipo } from './inventario'
+import { MOV_TIPOS, calcularNuevoStock, parseCantidad, type MovTipo } from './inventario'
 
 const RUTA_INVENTARIO = '/admin/app/carwash/inventario'
 
@@ -30,13 +30,6 @@ async function contextoInventario() {
     return { error: 'El inventario no está activado para tu negocio.' as const }
   }
   return { user, companyId }
-}
-
-/** Número no negativo con hasta 2 decimales; null si el texto no es válido. */
-function parseCantidad(raw: FormDataEntryValue | null): number | null {
-  const n = Number(String(raw ?? '').trim().replace(',', '.'))
-  if (!Number.isFinite(n) || n < 0) return null
-  return Math.round(n * 100) / 100
 }
 
 export async function guardarProducto(
@@ -139,12 +132,8 @@ export async function registrarMovimiento(
         return { error: 'Producto no encontrado.' as const }
       }
       const stockActual = Number(producto.stock)
-      const nuevoStock =
-        tipo === 'ENTRADA'
-          ? stockActual + cantidad
-          : tipo === 'SALIDA'
-            ? stockActual - cantidad
-            : cantidad // AJUSTE fija el stock en la cantidad indicada
+      // La cuenta vive en `inventario.ts` (pura, cubierta por tests/inventario.test.ts).
+      const nuevoStock = calcularNuevoStock(tipo, stockActual, cantidad)
       if (nuevoStock < 0) {
         return {
           error: `Stock insuficiente: quedan ${stockActual} ${producto.unidad}.` as const,
