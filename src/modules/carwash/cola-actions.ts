@@ -55,10 +55,18 @@ export async function registrarEnCola(
       return { error: 'Indica al menos la placa o una descripción del vehículo.' }
     }
 
-    // Si la placa pertenece a un vehículo registrado de la empresa, la entrada
-    // queda ligada al cliente (su historial y sus fotos se conectan solos).
+    // ── A quién es el carro ────────────────────────────────────────────────
+    // Tres caminos, en este orden:
+    //   1. La placa ya está registrada → se liga sola. Es el caso frecuente y
+    //      el que hace que el encargado no tenga que escribir nada.
+    //   2. El encargado eligió un cliente en el selector.
+    //   3. Escribió el nombre de alguien nuevo → se crea de MOSTRADOR ahí
+    //      mismo, sin sacarlo de la pantalla de la pista.
+    // Si no hay nada de eso, la entrada queda anónima como siempre: nunca se
+    // bloquea la recepción de un carro por falta de datos del dueño.
     let vehiculoId: string | null = null
     let clienteId: string | null = null
+
     if (placa) {
       const vehiculo = await prisma.vehiculo
         .findFirst({
@@ -72,6 +80,32 @@ export async function registrarEnCola(
       if (vehiculo) {
         vehiculoId = vehiculo.id
         clienteId = vehiculo.clienteId
+      }
+    }
+
+    if (!clienteId) {
+      const elegido = String(formData.get('clienteId') ?? '').trim()
+      if (elegido) {
+        // Se revalida contra la empresa: un id copiado de otro negocio no puede
+        // colar un cliente ajeno en esta pista.
+        const c = await prisma.cliente
+          .findFirst({ where: { id: elegido, companyId: ctx.companyId }, select: { id: true } })
+          .catch(() => null)
+        if (c) clienteId = c.id
+      }
+    }
+
+    const nombreNuevo = String(formData.get('clienteNombre') ?? '').trim().slice(0, 80)
+    if (!clienteId && nombreNuevo) {
+      const creado = await crearMostradorEnLinea(ctx.companyId, {
+        nombre: nombreNuevo,
+        telefono: String(formData.get('clienteTelefono') ?? '').trim().slice(0, 30) || null,
+        placa: placa || null,
+        descripcion,
+      })
+      if (creado) {
+        clienteId = creado.clienteId
+        vehiculoId = creado.vehiculoId
       }
     }
 
@@ -265,4 +299,61 @@ async function cargarAFlotaSiAplica(
   })
 
   return { cuenta: cuenta.nombre, monto }
+}
+
+/**
+ * Da de alta un cliente de MOSTRADOR desde la propia pantalla de la pista.
+ *
+ * Si viene placa, se le crea también el vehículo: así la PRÓXIMA vez que ese
+ * carro entre, la placa lo reconoce solo y no hay que volver a escribir nada.
+ * Ese es el punto entero — el sistema tiene que aprender de cada visita.
+ *
+ * A prueba de fallos: si algo sale mal, devuelve null y el vehículo entra a la
+ * cola sin dueño. Registrar al cliente es deseable; recibir el carro es
+ * obligatorio.
+ */
+async function crearMostradorEnLinea(
+  companyId: string,
+  datos: { nombre: string; telefono: string | null; placa: string | null; descripcion: string }
+): Promise<{ clienteId: string; vehiculoId: string | null } | null> {
+  try {
+    const { nuevoIdLocal } = await import('./mostrador')
+    return await prisma.$transaction(async (tx) => {
+      const cliente = await tx.cliente.create({
+        data: {
+          companyId,
+          supabaseId: nuevoIdLocal(),
+          nombre: datos.nombre,
+          telefono: datos.telefono,
+          email: '',
+          esLocal: true,
+          canalOrigen: 'MOSTRADOR',
+        },
+        select: { id: true },
+      })
+
+      let vehiculoId: string | null = null
+      if (datos.placa) {
+        // La descripción libre que escribió el encargado ("Corolla gris") se
+        // aprovecha como marca/modelo en vez de perderse.
+        const partes = datos.descripcion.split(/\s+/).filter(Boolean)
+        const v = await tx.vehiculo.create({
+          data: {
+            clienteId: cliente.id,
+            placa: datos.placa,
+            marca: partes[0] ?? 'Sin marca',
+            modelo: partes.slice(1).join(' ') || 'Sin modelo',
+            anio: new Date().getFullYear(),
+            color: 'Sin color',
+          },
+          select: { id: true },
+        })
+        vehiculoId = v.id
+      }
+      return { clienteId: cliente.id, vehiculoId }
+    })
+  } catch (e) {
+    console.error('[cola] alta de mostrador:', e)
+    return null
+  }
 }
