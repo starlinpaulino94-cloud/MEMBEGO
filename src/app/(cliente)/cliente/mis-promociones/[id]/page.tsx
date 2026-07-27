@@ -208,7 +208,7 @@ export default async function MiCompraPage({
             </p>
             <p className="text-sm text-muted-foreground">
               {siguienteEnCadena
-                ? `Al canjear este beneficio se te activa automáticamente «${siguienteEnCadena.titulo}» en ${siguienteEnCadena.company.name}.`
+                ? `La primera vez que uses este beneficio se te activa automáticamente «${siguienteEnCadena.titulo}» en ${siguienteEnCadena.company.name}.`
                 : 'Este es el último beneficio de la cadena. ¡Disfrútalo!'}
             </p>
           </CardContent>

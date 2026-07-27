@@ -7,8 +7,14 @@ import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
  *
  * Ejemplo real: carwash + restaurante. Paso 1 = lavado gratis en el carwash;
  * paso 2 = 20% en desayuno en el restaurante. El cliente recibe el paso 1 al
- * inscribirse y, cuando lo CANJEA, se le entrega automáticamente el paso 2 en
- * la otra empresa. Cada canje empuja al cliente hacia el siguiente negocio.
+ * inscribirse y, en cuanto lo USA POR PRIMERA VEZ, se le entrega el paso 2 en
+ * la otra empresa. Cada visita empuja al cliente hacia el siguiente negocio.
+ *
+ * POR QUÉ AL PRIMER USO Y NO AL AGOTARLO: el desbloqueo debe sentirse como una
+ * recompensa inmediata por haber ido. Si el beneficio trae varios usos y hay
+ * que gastarlos todos, la recompensa llega semanas después y se pierde el
+ * vínculo entre visitar un negocio y ganar algo en el otro. Entregar dos veces
+ * es imposible: `entregarPaso` detecta que el eslabón ya existe.
  *
  * EL PUENTE ENTRE EMPRESAS: `Cliente` es una fila POR EMPRESA
  * (`@@unique([supabaseId, companyId])`), así que el cliente del carwash no
@@ -70,7 +76,10 @@ export async function entregarPaso(
   pasoId: string,
   supabaseId: string,
   datos: { nombre: string; email: string; telefono: string | null }
-): Promise<{ compraId: string; titulo: string; companyName: string } | { error: string }> {
+): Promise<
+  | { compraId: string; titulo: string; companyName: string; yaExistia: boolean }
+  | { error: string }
+> {
   const paso = await prisma.campanaPaso.findUnique({
     where: { id: pasoId },
     include: {
@@ -106,7 +115,14 @@ export async function entregarPaso(
     select: { id: true },
   })
   if (yaLoTiene) {
-    return { compraId: yaLoTiene.id, titulo: paso.titulo, companyName: paso.company.name }
+    // Ya se lo habíamos entregado (p. ej. un segundo uso del mismo beneficio):
+    // no se duplica y se avisa para no volver a anunciar el desbloqueo.
+    return {
+      compraId: yaLoTiene.id,
+      titulo: paso.titulo,
+      companyName: paso.company.name,
+      yaExistia: true,
+    }
   }
 
   const compra = await prisma.$transaction(async (tx) => {
@@ -138,7 +154,12 @@ export async function entregarPaso(
   })
   if (!res.ok) return { error: res.error }
 
-  return { compraId: compra.id, titulo: paso.titulo, companyName: paso.company.name }
+  return {
+    compraId: compra.id,
+    titulo: paso.titulo,
+    companyName: paso.company.name,
+    yaExistia: false,
+  }
 }
 
 /**
@@ -181,6 +202,7 @@ export async function inscribirEnCadena(
 
     const entrega = await entregarPaso(primero.id, supabaseId, datos)
     if ('error' in entrega) return { error: entrega.error }
+    if (entrega.yaExistia) return { sinCambios: true }
 
     return {
       entregado: {
@@ -259,6 +281,9 @@ export async function avanzarCadenaTrasCanje(compraId: string): Promise<Resultad
       console.error('[campañas cadena] no se pudo entregar el paso siguiente:', entrega.error)
       return { error: entrega.error }
     }
+    // Usos posteriores del mismo beneficio: el siguiente eslabón ya se entregó
+    // en el primer canje, así que no hay nada nuevo que anunciar.
+    if (entrega.yaExistia) return { sinCambios: true }
 
     if (clienteAqui) {
       await prisma.campanaInscripcion

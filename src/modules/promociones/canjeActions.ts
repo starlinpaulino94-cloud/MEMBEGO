@@ -218,8 +218,12 @@ export async function confirmarCanjePromocion(
     // desbloquea el beneficio de la empresa aliada. Va DESPUÉS de la
     // transacción y con fail-open: el canje ya está confirmado y ningún
     // problema de la cadena puede revertirlo.
+    // Se dispara en CUALQUIER canje, no solo en el último: el desbloqueo llega
+    // al PRIMER uso, para que la recompensa se sienta inmediata. En usos
+    // posteriores la cadena detecta que el eslabón ya se entregó y no anuncia
+    // nada, así que llamar siempre es seguro.
     let siguientePaso: { titulo: string; companyName: string } | null = null
-    if (result.consumida) {
+    {
       const { avanzarCadenaTrasCanje } = await import('@/modules/campanas/cadena')
       const avance = await avanzarCadenaTrasCanje(compra.id)
       if (avance.entregado) {

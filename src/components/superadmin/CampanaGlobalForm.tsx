@@ -239,8 +239,9 @@ export function CampanaGlobalForm({
             Los eslabones de la cadena
           </legend>
           <p className="text-xs text-muted-foreground">
-            El cliente recibe el <b>paso 1</b> al tomarlo. Cuando lo canjea, se le
-            entrega solo el paso 2 en la otra empresa, y así sucesivamente.
+            El cliente recibe el <b>paso 1</b> al tomarlo. En cuanto lo usa por
+            primera vez se le entrega el paso 2 en la otra empresa, y así
+            sucesivamente.
           </p>
 
           {pasos.map((key, i) => (

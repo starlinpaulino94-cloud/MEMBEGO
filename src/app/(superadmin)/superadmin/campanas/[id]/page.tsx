@@ -133,7 +133,7 @@ export default async function CampanaGlobalDetallePage({
                 <p className="mt-1 text-xs text-muted-foreground">
                   {i === 0
                     ? 'El cliente lo toma por su cuenta; es la puerta de entrada.'
-                    : `Se entrega solo al canjear el paso ${p.orden - 1}.`}
+                    : `Se entrega en cuanto el cliente usa el paso ${p.orden - 1} por primera vez.`}
                 </p>
                 {p.error && <p className="mt-1 text-xs text-destructive">Error: {p.error}</p>}
               </div>

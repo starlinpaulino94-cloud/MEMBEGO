@@ -74,7 +74,7 @@ siguiente**.
 
 **Ejemplo real:** carwash + restaurante.
 1. **Paso 1 — Carwash:** lavado gratis. El cliente lo toma él mismo.
-2. **Paso 2 — Restaurante:** 20% en desayuno. Aparece **solo** cuando canjea el lavado.
+2. **Paso 2 — Restaurante:** 20% en desayuno. Aparece en cuanto **usa** el lavado.
 
 ## Por qué esto funciona para los dos negocios
 
@@ -124,6 +124,8 @@ verificación de 4 filas al final.
 ## Límites conocidos
 
 - La cadena es **lineal** (1 → 2 → 3). No hay ramas ni "elige uno de estos dos".
-- El desbloqueo ocurre cuando la compra queda **CONSUMIDA** (último uso). Un
-  beneficio de varios usos desbloquea el siguiente al agotarse, no al primer uso.
+- El desbloqueo ocurre al **primer uso** del eslabón, no al agotarlo: la
+  recompensa debe sentirse inmediata por haber ido. Si el beneficio trae varios
+  usos, los siguientes no vuelven a desbloquear nada (`entregarPaso` detecta
+  que el eslabón ya existe, así que llamar en cada canje es seguro).
 - No hay vencimiento propio del eslabón: se usa el de la promoción generada.
