@@ -21,6 +21,7 @@ import { QRShareCard } from '@/components/qr/QRShareCard'
 import { OpcionesPago } from '@/components/membresia/OpcionesPago'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney } from '@/lib/format'
+import { ofrecerTransferencia } from '@/modules/pagos/metodosDisponibles'
 
 export const metadata = {
   title: 'Detalles de Membresía',
@@ -138,10 +139,24 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
       : 0
   const montoAPagar = Math.max(0, Number(planAPagar?.precio ?? 0) - descuentoBienvenida)
 
+  // La transferencia se ofrece si la empresa la tiene encendida O si esta
+  // membresía ya se comprometió con ella (eligió cuenta o subió comprobante).
+  // Apagar el método no puede dejar tirado a quien ya iba por ese camino.
+  // PRESENCIAL no se toca: pagar en el local sigue existiendo siempre.
+  const comprometidaConTransferencia =
+    membership.metodoPago?.tipo === 'TRANSFERENCIA' || membership.comprobanteUrl != null
+  const transferenciaActiva =
+    needsPayment &&
+    (await ofrecerTransferencia(membership.cliente.companyId, comprometidaConTransferencia))
+
   const [metodosPago, sucursales] = needsPayment
     ? await Promise.all([
         prisma.metodoPago.findMany({
-          where: { companyId: membership.cliente.companyId, activo: true },
+          where: {
+            companyId: membership.cliente.companyId,
+            activo: true,
+            ...(transferenciaActiva ? {} : { tipo: 'PRESENCIAL' as const }),
+          },
           orderBy: { createdAt: 'asc' },
         }),
         prisma.sucursal.findMany({
@@ -270,6 +285,7 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
                   membership.metodoPago?.tipo === 'PRESENCIAL' && !membership.comprobanteUrl
                 }
                 referencia={membership.referencia}
+                transferenciaDisponible={transferenciaActiva}
               />
             </div>
           </section>

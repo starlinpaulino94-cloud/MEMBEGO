@@ -354,6 +354,7 @@ model Company {
   tipoVehiculos         TipoVehiculo[]
   servicios             Servicio[]
   bahias                Bahia[]
+  pagoIntentos          PagoIntento[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -805,6 +806,7 @@ model Cliente {
   evidenciasFoto EvidenciaFoto[]
 
   campanaInscripciones CampanaInscripcion[]
+  pagoIntentos         PagoIntento[]
 
   @@unique([supabaseId, companyId])
   // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).
@@ -1283,6 +1285,7 @@ model Membership {
 
   visits       Visit[]
   comprobantes Comprobante[]
+  pagoIntentos PagoIntento[]
   qrTokens     QrToken[]
 
   transacciones Transaction[]
@@ -1327,6 +1330,8 @@ model ProductoCompra {
   id     String                @id @default(cuid())
   tipo   ProductoComercialTipo @default(PROMOCION)
   estado CompraEstado          @default(SOLICITADA)
+
+  pagoIntentos PagoIntento[]
 
   /// Si esta compra nació de una campaña en cadena, el eslabón que la generó.
   /// Es lo que permite, al canjearla, saber qué paso desbloquear después.
@@ -3485,4 +3490,64 @@ model ColaServicio {
   @@index([colaId])
   @@index([servicioId])
   @@map("cola_servicios")
+}
+
+// ─── Pasarela de pago (CardNET) ──────────────────────────────────────────────
+
+/// Un intento de cobro contra una pasarela externa.
+///
+/// POR QUÉ EXISTE: con transferencia, el "pago" era un comprobante que un
+/// humano validaba. Con pasarela hay un ida y vuelta con un tercero, y hace
+/// falta un registro propio para: (a) saber qué se intentó cobrar aunque el
+/// cliente cierre el navegador a mitad, (b) que la confirmación sea IDEMPOTENTE
+/// —una pasarela puede notificar el mismo pago dos veces y no se puede activar
+/// dos veces—, y (c) conciliar contra el reporte del procesador.
+///
+/// `respuesta` guarda el payload crudo del retorno: ante una disputa, lo que
+/// vale es lo que el procesador dijo, no nuestra interpretación.
+model PagoIntento {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  /// 'CARDNET' | 'TRANSFERENCIA' | … (PaymentProviderKind, validado en código).
+  proveedor String
+
+  /// Qué se está pagando. Uno de los dos, según el tipo.
+  compraId     String?
+  compra       ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
+  membershipId String?
+  membership   Membership?     @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  monto  Decimal @db.Decimal(10, 2)
+  moneda String  @default("DOP")
+
+  /// 'CREADO' | 'REDIRIGIDO' | 'APROBADO' | 'RECHAZADO' | 'EXPIRADO' | 'ERROR'.
+  estado String @default("CREADO")
+
+  /// Identificador de la sesión/transacción en la pasarela (para conciliar).
+  referenciaExterna String?
+  /// Código de autorización que devuelve el procesador cuando aprueba.
+  autorizacion      String?
+  /// Motivo del rechazo, tal como lo reporta la pasarela.
+  motivoRechazo     String?
+  /// Payload crudo del retorno. Evidencia ante disputas.
+  respuesta         Json?
+
+  /// Se llena cuando la activación del producto YA se ejecutó. Es el guardia
+  /// de idempotencia: si tiene fecha, una notificación repetida no hace nada.
+  activadoAt DateTime?
+
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, estado, createdAt])
+  @@index([referenciaExterna])
+  @@index([compraId])
+  @@index([membershipId])
+  @@map("pago_intentos")
 }

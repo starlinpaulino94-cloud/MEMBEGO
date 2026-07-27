@@ -107,6 +107,12 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     afecta: 'Avance de los clientes dentro de una campaña en cadena',
   },
   {
+    tabla: 'pago_intentos',
+    columna: null,
+    migracion: '20260763_pago_intentos',
+    afecta: 'Cobros por pasarela (CardNET): registro y conciliación',
+  },
+  {
     tabla: 'tipos_vehiculo',
     columna: null,
     migracion: '20260762_carwash_fase1',

@@ -21,6 +21,7 @@ import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
 import { compraEstadoUi, compraEstadoVisual } from '@/components/cliente/compra-estado'
 import { Button } from '@/components/ui/button'
 import { getAgendaConfig } from '@/modules/citas/queries'
+import { getCuentasTransferencia, ofrecerTransferencia } from '@/modules/pagos/metodosDisponibles'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,13 +120,16 @@ export default async function MiCompraPage({
       timeStyle: 'short',
     }).format(d)
 
-  // Cuentas bancarias activas de la empresa (transferencia).
-  const metodosPago = ESPERA_PAGO.includes(compra.estado)
-    ? await prisma.metodoPago.findMany({
-        where: { companyId: compra.companyId, activo: true, tipo: 'TRANSFERENCIA' },
-        select: { id: true, nombre: true, titular: true, numeroCuenta: true, tipoCuenta: true, instrucciones: true },
-      })
-    : []
+  // ── Métodos de pago ────────────────────────────────────────────────────
+  // La transferencia se ofrece si la empresa la tiene encendida O si ESTA
+  // compra ya se comprometió con ella (eligió cuenta o subió comprobante).
+  // Lo segundo es lo que impide que apagar el método deje compras atrapadas:
+  // quien ya iba por ese camino puede terminarlo.
+  const esperaPago = ESPERA_PAGO.includes(compra.estado)
+  const comprometidaConTransferencia = compra.metodoPagoId != null || compra.comprobanteUrl != null
+  const transferenciaActiva =
+    esperaPago && (await ofrecerTransferencia(compra.companyId, comprometidaConTransferencia))
+  const metodosPago = transferenciaActiva ? await getCuentasTransferencia(compra.companyId) : []
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -261,8 +265,30 @@ export default async function MiCompraPage({
         </Card>
       )}
 
+      {/* Espera pago pero no hay ningún método en línea disponible */}
+      {esperaPago && !transferenciaActiva && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Landmark className="h-4 w-4 text-primary" /> Pago pendiente
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Tu compra de{' '}
+              <span className="font-semibold text-foreground">{fmtRD(precio)}</span> está
+              reservada. {compra.company.name} está actualizando sus formas de pago; comunícate
+              con el negocio para completarla.
+            </p>
+            <div className="flex justify-center border-t border-border/60 pt-3">
+              <CancelarCompraButton compraId={compra.id} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Pago pendiente: instrucciones + comprobante */}
-      {ESPERA_PAGO.includes(compra.estado) && (
+      {transferenciaActiva && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

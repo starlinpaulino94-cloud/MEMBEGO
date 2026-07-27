@@ -43,6 +43,13 @@ interface Props {
   avisoPresencialEnviado: boolean
   /** Referencia ya generada (persistida en la orden). */
   referencia: string | null
+  /**
+   * false = la empresa retiró la transferencia y esta membresía no se había
+   * comprometido con ella. Se oculta la pestaña entera: no es lo mismo "no hay
+   * cuentas cargadas todavía" (se muestra y se explica) que "este método ya no
+   * se ofrece" (no debe aparecer).
+   */
+  transferenciaDisponible: boolean
 }
 
 const initial: PresencialState = {}
@@ -61,9 +68,10 @@ export function OpcionesPago({
   sucursales,
   avisoPresencialEnviado,
   referencia,
+  transferenciaDisponible,
 }: Props) {
   const [opcion, setOpcion] = useState<'transferencia' | 'presencial'>(
-    avisoPresencialEnviado ? 'presencial' : 'transferencia'
+    avisoPresencialEnviado || !transferenciaDisponible ? 'presencial' : 'transferencia'
   )
   const [state, formAction, pending] = useActionState(avisarPagoPresencial, initial)
 
@@ -79,6 +87,7 @@ export function OpcionesPago({
   return (
     <div className="space-y-5">
       {/* Selector de forma de pago */}
+      {transferenciaDisponible && (
       <div>
         <h3 className="text-sm font-medium text-foreground">¿Cómo prefieres pagar?</h3>
         <div className="mt-2 grid grid-cols-2 gap-3">
@@ -110,6 +119,7 @@ export function OpcionesPago({
           ))}
         </div>
       </div>
+      )}
 
       {opcion === 'transferencia' ? (
         <div className="space-y-5">
