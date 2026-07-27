@@ -172,6 +172,11 @@ model User {
   comisiones                Comision[]                 @relation("ComisionLavador")
   incidenciasReportadas     Incidencia[]               @relation("IncidenciaReportadaPor")
   incidenciasAsignadas      Incidencia[]               @relation("IncidenciaResponsable")
+  // App Car Wash · Fase 3.
+  ordenesCompra             OrdenCompra[]              @relation("OrdenCompraCreadaPor")
+  mantenimientos            Mantenimiento[]            @relation("MantenimientoPor")
+  turnos                    Turno[]                    @relation("TurnoEmpleado")
+  turnosCerrados            Turno[]                    @relation("TurnoCerradoPor")
 
   @@index([companyId])
   @@map("users")
@@ -362,6 +367,10 @@ model Company {
   cuentasCorporativas   CuentaCorporativa[]
   comisiones            Comision[]
   incidencias           Incidencia[]
+  proveedores           Proveedor[]
+  ordenesCompra         OrdenCompra[]
+  activos               Activo[]
+  turnos                Turno[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -3224,6 +3233,12 @@ model ProductoInventario {
 
   movimientos MovimientoInventario[]
 
+  // App Car Wash · Fase 3.
+  /// Proveedor habitual. Solo sugiere al armar una orden; no obliga.
+  proveedorId String?
+  proveedor   Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  lineasOrden OrdenCompraLinea[]
+
   @@index([companyId, activo])
   @@map("productos_inventario")
 }
@@ -3241,6 +3256,10 @@ model MovimientoInventario {
   motivo          String?
   registradoPorId String?
   registradoPor   User?              @relation("MovInventarioPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  /// Fase 3 · si esta ENTRADA vino de recibir una orden de compra, cuál.
+  /// Es lo que permite responder "¿esta caja de shampoo de dónde salió?".
+  ordenCompraId   String?
+  ordenCompra     OrdenCompra?       @relation(fields: [ordenCompraId], references: [id], onDelete: SetNull)
   createdAt       DateTime           @default(now())
 
   @@index([productoId, createdAt])
@@ -3702,6 +3721,204 @@ model Incidencia {
   @@index([companyId, tipo, createdAt])
   @@index([colaId])
   @@map("incidencias")
+}
+
+// ─── App Car Wash · Fase 3 ───────────────────────────────────────────────────
+
+/// A quién se le compra. Deliberadamente mínimo: nombre, contacto y condiciones.
+/// Un proveedor de un car wash de barrio no necesita ficha fiscal completa —
+/// necesita que alguien sepa a quién llamar cuando se acabó el shampoo.
+model Proveedor {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  nombre      String
+  rnc         String?
+  contacto    String?
+  telefono    String?
+  email       String?
+  /// Días de crédito que da el proveedor. Informativo.
+  diasCredito Int      @default(0)
+  notas       String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ordenes   OrdenCompra[]
+  productos ProductoInventario[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo])
+  @@map("proveedores")
+}
+
+/// Una compra a un proveedor. BORRADOR → PEDIDA → RECIBIDA (o CANCELADA).
+///
+/// POR QUÉ IMPORTA EL ESTADO "PEDIDA": entre pedir y recibir pasan días, y en
+/// ese hueco el encargado no sabe si el shampoo ya viene en camino o si nadie
+/// lo pidió. Sin ese estado, la única forma de saberlo es preguntar.
+///
+/// RECIBIR ES LO QUE MUEVE EL STOCK: al marcar la orden como recibida se genera
+/// un MovimientoInventario de ENTRADA por cada línea. El stock nunca se toca a
+/// mano desde aquí — sigue habiendo un solo camino hacia el inventario.
+model OrdenCompra {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proveedorId String
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id])
+
+  /// Correlativo legible para hablar con el proveedor ("la OC-000042").
+  numero String
+
+  /// 'BORRADOR' | 'PEDIDA' | 'RECIBIDA' | 'CANCELADA'.
+  estado String @default("BORRADOR")
+
+  /// Total congelado al recibir. Antes de eso se calcula de las líneas.
+  total Decimal? @db.Decimal(12, 2)
+
+  notas      String?
+  pedidaAt   DateTime?
+  recibidaAt DateTime?
+
+  creadaPorId String?
+  creadaPor   User?   @relation("OrdenCompraCreadaPor", fields: [creadaPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineas      OrdenCompraLinea[]
+  movimientos MovimientoInventario[]
+
+  @@unique([companyId, numero])
+  @@index([companyId, estado, createdAt])
+  @@map("ordenes_compra")
+}
+
+/// Línea de una orden: qué producto, cuánto y a qué costo.
+///
+/// `cantidadRecibida` existe aparte de `cantidad` porque el proveedor entrega
+/// incompleto más a menudo de lo que uno quisiera. Si solo hubiera una columna,
+/// recibir 8 de 10 obligaría a mentir en el pedido o a inventar un ajuste.
+model OrdenCompraLinea {
+  id      String      @id @default(cuid())
+  ordenId String
+  orden   OrdenCompra @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  productoId String
+  producto   ProductoInventario @relation(fields: [productoId], references: [id])
+  /// Copia del nombre al pedir: sobrevive a que renombren el producto.
+  nombre     String
+
+  cantidad         Decimal  @db.Decimal(12, 2)
+  cantidadRecibida Decimal? @db.Decimal(12, 2)
+  costoUnitario    Decimal  @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([ordenId])
+  @@index([productoId])
+  @@map("orden_compra_lineas")
+}
+
+/// Un equipo del que depende la pista: hidrolavadora, aspiradora, compresor.
+///
+/// LO QUE MIDE ESTE MODELO NO ES EL EQUIPO, ES LA PISTA PARADA. Un car wash con
+/// dos hidrolavadoras y una dañada trabaja al 50% — y eso hoy no se ve en
+/// ningún número. `estado` es lo que convierte "se dañó la máquina" en un dato.
+model Activo {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  nombre    String
+  /// Agrupador libre: "Hidrolavadora", "Aspiradora", "Compresor".
+  categoria String?
+  marca     String?
+  modelo    String?
+  serie     String?
+  ubicacion String?
+
+  /// 'OPERATIVO' | 'EN_MANTENIMIENTO' | 'DANADO' | 'BAJA'.
+  estado String @default("OPERATIVO")
+
+  fechaCompra          DateTime?
+  costo                Decimal?  @db.Decimal(12, 2)
+  /// Cada cuántos días toca mantenimiento preventivo. 0 = no programado.
+  frecuenciaDias       Int       @default(0)
+  /// Se recalcula al registrar un mantenimiento. Con esto el panel puede
+  /// avisar ANTES de que el equipo falle, que es el punto entero.
+  proximoMantenimiento DateTime?
+
+  notas     String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mantenimientos Mantenimiento[]
+
+  @@index([companyId, activo, estado])
+  @@map("activos")
+}
+
+/// Un mantenimiento hecho a un equipo (preventivo o correctivo).
+model Mantenimiento {
+  id       String @id @default(cuid())
+  activoId String
+  activo   Activo @relation(fields: [activoId], references: [id], onDelete: Cascade)
+
+  /// 'PREVENTIVO' | 'CORRECTIVO'.
+  tipo        String
+  descripcion String
+  costo       Decimal? @db.Decimal(12, 2)
+  /// Cuánto tiempo estuvo el equipo fuera de servicio. El costo real de una
+  /// avería no es la factura del técnico: son las horas de pista perdidas.
+  horasParado Decimal? @db.Decimal(8, 2)
+
+  realizadoAt DateTime @default(now())
+  hechoPorId  String?
+  hechoPor    User?    @relation("MantenimientoPor", fields: [hechoPorId], references: [id], onDelete: SetNull)
+  proveedor   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([activoId, realizadoAt])
+  @@map("mantenimientos")
+}
+
+/// Un turno trabajado: entrada, salida y lo que costó.
+///
+/// PARA QUÉ SIRVE DE VERDAD: cruzado con los vehículos entregados da el COSTO
+/// LABORAL POR LAVADO, que es el número que dice si el precio de lista tiene
+/// sentido. Sin turnos, ese número no existe y el precio se pone a ojo.
+///
+/// `salidaAt` nulo = turno abierto. Es el estado normal durante la jornada, no
+/// un error: la fila se crea al marcar entrada y se cierra al marcar salida.
+model Turno {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation("TurnoEmpleado", fields: [userId], references: [id], onDelete: Cascade)
+
+  entradaAt DateTime  @default(now())
+  salidaAt  DateTime?
+
+  /// Costo por hora al momento del turno. Se CONGELA: subir el sueldo mañana
+  /// no puede reescribir lo que costó la semana pasada.
+  costoHora Decimal? @db.Decimal(10, 2)
+  notas     String?
+
+  cerradoPorId String?
+  cerradoPor   User?   @relation("TurnoCerradoPor", fields: [cerradoPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, entradaAt])
+  @@index([userId, salidaAt])
+  @@map("turnos")
 }
 
 // ─── Pasarela de pago (CardNET) ──────────────────────────────────────────────

@@ -29,6 +29,9 @@ export type IconoApp =
   | 'BarChart3'
   | 'Wallet'
   | 'ShieldAlert'
+  | 'ShoppingCart'
+  | 'Wrench'
+  | 'Clock'
 
 export interface ModuloApp {
   /** Etiqueta en el menú de la app. */
@@ -185,6 +188,31 @@ export const APPS_POR_CATEGORIA: Partial<Record<CategoriaNegocio, AplicacionNego
         icon: 'ShieldAlert',
         href: '/admin/app/carwash/incidencias',
         capacidad: 'INCIDENCIAS',
+        proximamente: true,
+      },
+      // ── Fase 3 · que la operación no se caiga ───────────────────────────
+      {
+        label: 'Compras',
+        descripcion: 'Proveedores y órdenes de compra',
+        icon: 'ShoppingCart',
+        href: '/admin/app/carwash/compras',
+        capacidad: 'COMPRAS',
+        proximamente: true,
+      },
+      {
+        label: 'Equipos',
+        descripcion: 'Mantenimiento y tiempo parado',
+        icon: 'Wrench',
+        href: '/admin/app/carwash/activos',
+        capacidad: 'ACTIVOS',
+        proximamente: true,
+      },
+      {
+        label: 'Turnos',
+        descripcion: 'Asistencia y costo por lavado',
+        icon: 'Clock',
+        href: '/admin/app/carwash/turnos',
+        capacidad: 'TURNOS',
         proximamente: true,
       },
     ],

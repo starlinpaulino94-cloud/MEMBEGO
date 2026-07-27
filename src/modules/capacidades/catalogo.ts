@@ -70,6 +70,10 @@ export const CAPACIDADES = [
   'CUENTAS_CORPORATIVAS',
   'COMISIONES',
   'INCIDENCIAS',
+  // Car Wash · Fase 3 (que la operación no se caiga). Nacen APAGADAS.
+  'COMPRAS',
+  'ACTIVOS',
+  'TURNOS',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -89,6 +93,9 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   CUENTAS_CORPORATIVAS: 'Cuentas corporativas y flotillas (cobro a crédito)',
   COMISIONES: 'Comisiones por lavador',
   INCIDENCIAS: 'Incidencias, daños y rewash',
+  COMPRAS: 'Proveedores y órdenes de compra',
+  ACTIVOS: 'Equipos y mantenimiento',
+  TURNOS: 'Turnos y asistencia',
 }
 
 /**
