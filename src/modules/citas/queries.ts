@@ -154,3 +154,158 @@ export async function getCitasDia(companyId: string, ymd: string, timeZone: stri
     orderBy: { inicio: 'asc' },
   })
 }
+
+// ─── Agenda completa (panel de la empresa) ──────────────────────────────────
+
+/**
+ * Rango temporal de la agenda. El panel ya no muestra SOLO el día de hoy: por
+ * defecto abre en "próximas" (de ahora en adelante), que es lo que el negocio
+ * necesita para prepararse, y desde ahí se puede ver todo o mirar atrás.
+ */
+export const RANGOS_AGENDA = ['proximas', 'hoy', 'semana', 'pasadas', 'todas'] as const
+export type RangoAgenda = (typeof RANGOS_AGENDA)[number]
+
+export const RANGO_LABELS: Record<RangoAgenda, string> = {
+  proximas: 'Próximas',
+  hoy: 'Hoy',
+  semana: 'Próximos 7 días',
+  pasadas: 'Pasadas',
+  todas: 'Todas',
+}
+
+export const ESTADOS_CITA = [
+  'PENDIENTE',
+  'CONFIRMADA',
+  'COMPLETADA',
+  'CANCELADA',
+  'NO_ASISTIO',
+] as const
+export type EstadoCita = (typeof ESTADOS_CITA)[number]
+
+export interface FiltrosAgenda {
+  rango: RangoAgenda
+  /** null = todos los estados. */
+  estado: EstadoCita | null
+  /** Búsqueda por nombre o teléfono del cliente. */
+  q: string
+  /** Página (1-based). */
+  pagina: number
+}
+
+/** Normaliza los parámetros de la URL a filtros válidos (nunca lanza). */
+export function leerFiltrosAgenda(sp: {
+  rango?: string
+  estado?: string
+  q?: string
+  p?: string
+}): FiltrosAgenda {
+  const rango = (RANGOS_AGENDA as readonly string[]).includes(sp.rango ?? '')
+    ? (sp.rango as RangoAgenda)
+    : 'proximas'
+  const estado = (ESTADOS_CITA as readonly string[]).includes(sp.estado ?? '')
+    ? (sp.estado as EstadoCita)
+    : null
+  const pagina = Math.max(1, Number.parseInt(sp.p ?? '1', 10) || 1)
+  return { rango, estado, q: (sp.q ?? '').trim().slice(0, 60), pagina }
+}
+
+const POR_PAGINA = 25
+
+/** Traduce el rango elegido a un filtro de fechas sobre `inicio`. */
+function ventanaDeRango(rango: RangoAgenda, timeZone: string) {
+  const ahora = new Date()
+  const hoyYmd = ymdEnTz(ahora, timeZone)
+  switch (rango) {
+    case 'hoy':
+      return {
+        gte: utcDesdeLocal(hoyYmd, '00:00', timeZone),
+        lt: utcDesdeLocal(sumarDias(hoyYmd, 1), '00:00', timeZone),
+      }
+    case 'semana':
+      return {
+        gte: utcDesdeLocal(hoyYmd, '00:00', timeZone),
+        lt: utcDesdeLocal(sumarDias(hoyYmd, 7), '00:00', timeZone),
+      }
+    case 'pasadas':
+      return { lt: ahora }
+    case 'todas':
+      return undefined
+    case 'proximas':
+    default:
+      return { gte: ahora }
+  }
+}
+
+export interface AgendaPagina {
+  citas: Awaited<ReturnType<typeof getCitasDia>>
+  total: number
+  pagina: number
+  totalPaginas: number
+  /** Conteo por estado dentro del rango (sin aplicar el filtro de estado). */
+  porEstado: Record<EstadoCita, number>
+}
+
+/**
+ * Agenda completa con filtros y paginación. Devuelve además el conteo por
+ * estado del rango para que las pestañas muestren números reales.
+ */
+export async function getAgenda(
+  companyId: string,
+  filtros: FiltrosAgenda,
+  timeZone: string
+): Promise<AgendaPagina> {
+  const inicio = ventanaDeRango(filtros.rango, timeZone)
+  const q = filtros.q
+  const baseWhere = {
+    companyId,
+    ...(inicio ? { inicio } : {}),
+    ...(q
+      ? {
+          cliente: {
+            OR: [
+              { nombre: { contains: q, mode: 'insensitive' as const } },
+              { telefono: { contains: q } },
+            ],
+          },
+        }
+      : {}),
+  }
+  const where = { ...baseWhere, ...(filtros.estado ? { estado: filtros.estado } : {}) }
+
+  // Las pasadas se leen de la más reciente hacia atrás; el resto, cronológico.
+  const orden = filtros.rango === 'pasadas' ? 'desc' : 'asc'
+
+  const [citas, total, agrupado] = await Promise.all([
+    prisma.cita.findMany({
+      where,
+      include: {
+        cliente: { select: { id: true, nombre: true, telefono: true } },
+        vehiculo: { select: { marca: true, modelo: true, color: true } },
+        sucursal: { select: { nombre: true } },
+        atendidaPor: { select: { name: true } },
+      },
+      orderBy: { inicio: orden },
+      skip: (filtros.pagina - 1) * POR_PAGINA,
+      take: POR_PAGINA,
+    }),
+    prisma.cita.count({ where }),
+    prisma.cita.groupBy({ by: ['estado'], where: baseWhere, _count: { _all: true } }),
+  ])
+
+  const porEstado = Object.fromEntries(ESTADOS_CITA.map((e) => [e, 0])) as Record<
+    EstadoCita,
+    number
+  >
+  for (const g of agrupado) {
+    const k = g.estado as EstadoCita
+    if (k in porEstado) porEstado[k] = g._count._all
+  }
+
+  return {
+    citas,
+    total,
+    pagina: filtros.pagina,
+    totalPaginas: Math.max(1, Math.ceil(total / POR_PAGINA)),
+    porEstado,
+  }
+}

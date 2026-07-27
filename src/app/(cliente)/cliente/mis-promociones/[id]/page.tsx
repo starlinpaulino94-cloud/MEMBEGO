@@ -64,18 +64,19 @@ export default async function MiCompraPage({
   const precio = Number(compra.precioCongelado ?? 0)
   const promoPublica = promo?.visibilidad === 'publica'
 
-  // Cita antes del QR: las recompensas GRATIS exigen agendar una cita para
-  // habilitar el QR (docs/SEGUIMIENTO-BENEFICIOS.md), si la empresa tiene la
-  // agenda de citas activa. Tolerante a la migración 20260756 pendiente.
+  // Cita SUGERIDA, no obligatoria (decisión de producto): agendar ayuda al
+  // negocio a organizarse, pero jamás debe impedir que el cliente use lo que
+  // ya adquirió. Antes esto era un candado: sin cita no había QR. Ahora el QR
+  // se entrega siempre y la cita se OFRECE — el cliente puede omitirla.
   const esGratis = compra.promocionId != null && precio <= 0
   let citaCanje: { inicio: Date; estado: string } | null = null
-  let requiereCita = false
+  let sugiereCita = false
   if (esGratis && compra.estado === 'ACTIVA' && qr) {
-    // E4: la regla "cita antes del QR" ahora es una capacidad apagable por
-    // empresa (fail-open: sin configurar = activa, como hasta ahora).
+    // La capacidad CITA_ANTES_DEL_QR decide si se INVITA a agendar; ya no
+    // decide si se entrega el QR. Apagarla oculta la invitación y nada más.
     const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
-    const reglaActiva = await tieneCapacidad(compra.companyId, 'CITA_ANTES_DEL_QR')
-    const agenda = reglaActiva ? await getAgendaConfig(compra.companyId).catch(() => null) : null
+    const invitar = await tieneCapacidad(compra.companyId, 'CITA_ANTES_DEL_QR')
+    const agenda = invitar ? await getAgendaConfig(compra.companyId).catch(() => null) : null
     if (agenda?.activa) {
       try {
         citaCanje = await prisma.cita.findFirst({
@@ -83,9 +84,9 @@ export default async function MiCompraPage({
           orderBy: { inicio: 'desc' },
           select: { inicio: true, estado: true },
         })
-        requiereCita = !citaCanje
+        sugiereCita = !citaCanje
       } catch (e) {
-        // Columna citas.compraId sin migrar: no bloquear el QR.
+        // Columna citas.compraId sin migrar: simplemente no se sugiere nada.
         console.error('[mis-promociones] cita del canje:', e)
       }
     }
@@ -177,21 +178,20 @@ export default async function MiCompraPage({
         </CardContent>
       </Card>
 
-      {/* Recompensa gratis sin cita: agendar ANTES de recibir el QR */}
-      {compra.estado === 'ACTIVA' && qr && requiereCita && (
+      {/* Invitación a agendar (opcional): el QR de abajo ya está disponible. */}
+      {compra.estado === 'ACTIVA' && qr && sugiereCita && (
         <Card className="border-primary/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarDays className="h-4 w-4 text-primary" /> Agenda tu cita para
-              recibir tu QR
+              <CalendarDays className="h-4 w-4 text-primary" /> ¿Quieres agendar tu cita?
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pb-6">
             <p className="text-sm text-muted-foreground">
               Tu <strong className="text-foreground">{promo?.titulo ?? 'recompensa'}</strong>{' '}
-              gratis está reservada a tu nombre. Para usarla, primero elige el día y la
-              hora en que vendrás; al confirmar la cita, tu QR aparecerá aquí listo para
-              presentarlo en el local.
+              ya está lista y su QR está abajo. Si agendas, el local te reserva el turno y
+              evitas la espera — pero es <strong className="text-foreground">opcional</strong>:
+              puedes ir cuando prefieras.
             </p>
             <Button asChild className="w-full gap-2 font-bold sm:w-auto">
               <Link href={`/cliente/citas?compra=${compra.id}`}>
@@ -202,8 +202,8 @@ export default async function MiCompraPage({
         </Card>
       )}
 
-      {/* QR activo */}
-      {compra.estado === 'ACTIVA' && qr && !requiereCita && (
+      {/* QR activo — se entrega SIEMPRE, con cita o sin ella. */}
+      {compra.estado === 'ACTIVA' && qr && (
         <Card className="border-success/25">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
