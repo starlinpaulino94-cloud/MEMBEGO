@@ -299,13 +299,77 @@ Ordenado por lo que desbloquea más con menos.
 devuelve `null` y la portada cae al tablero genérico de siempre. Una empresa
 sin catálogo configurado sigue operando exactamente como antes.
 
-## Fase 2 · Lo que da dinero
+## Fase 2 · Lo que da dinero — ENTREGADA
 
-| Entregable | Por qué |
+| Entregable | Estado |
 |---|---|
-| Cuentas corporativas / flotillas | Ingreso recurrente alto, y hoy no existe. |
-| Comisiones por lavador | Alinea al personal y saca el cuaderno de la operación. |
-| Incidencias y rewash | Reduce reclamos y mide calidad real. |
+| Cuentas corporativas / flotillas | ✅ `CuentaCorporativa` + `CuentaVehiculo` + `CargoCuenta`, con estado de cuenta y corte |
+| Comisiones por lavador | ✅ `Comision`, congelada al entregar; tarifa por servicio |
+| Incidencias y rewash | ✅ `Incidencia` con tasa de rewash y repetición enlazada a la cola |
+
+Migración `20260764_carwash_fase2`. Capacidades nuevas —`CUENTAS_CORPORATIVAS`,
+`COMISIONES`, `INCIDENCIAS`— todas nacen apagadas.
+
+### Cómo funciona, en una línea cada una
+
+**Flotillas.** La empresa cliente registra sus placas. Cuando una de esas placas
+se ENTREGA en pista, el servicio se carga a su cuenta en vez de esperar un cobro
+en caja. El ciclo del dinero son tres estados: *por facturar* → *facturado* (se
+cierra el corte con una referencia) → *pagado*.
+
+**Comisiones.** Se asigna el lavador desde la propia tarjeta de la cola, y al
+entregar se devenga la comisión de los servicios de esa orden.
+
+**Incidencias.** Daños, quejas, faltantes y rewash. "Mandar a repetir" crea una
+entrada NUEVA en la cola enlazada a la incidencia.
+
+### Decisiones tomadas al construir
+
+1. **La flota NO es un `Cliente`.** Un cliente es una persona con membresía, QR
+   y beneficios; una flota no acumula puntos ni canjea promociones — necesita
+   que sus 40 camionetas se facturen juntas contra un RNC. Meterla en `Cliente`
+   habría llenado de excepciones el módulo de membresías.
+
+2. **La llave de la flota es la PLACA, no el vehículo registrado.** El chofer
+   que llega no siempre está en el sistema; lo que el encargado tiene delante es
+   una placa. `normalizarPlaca()` se aplica al guardar Y al buscar, siempre por
+   el mismo camino: si solo se aplicara en uno, `A123456` no encontraría a
+   `a-123 456` y el camión de la flota se cobraría en caja.
+
+3. **El límite de crédito AVISA, no bloquea.** Dejar un camión sin lavar por un
+   tope administrativo es peor negocio que cobrarlo después. Lo decide quien
+   está en la pista, no el sistema.
+
+4. **La comisión se CONGELA al entregar.** Si se recalculara al consultar,
+   subir mañana la comisión del detallado reescribiría lo que ya se le debía a
+   la gente por trabajos de la semana pasada. Eso no se ve en un log: se ve en
+   la nómina. El `@@unique([colaId, userId])` es el seguro contra el doble pago.
+
+5. **Encender COMISIONES no mueve dinero.** Un servicio sin tarifa paga cero, y
+   la pantalla lo dice en grande. Nadie se encuentra una nómina inventada por
+   haber probado una capacidad.
+
+6. **Si están el porcentaje y el monto fijo, manda el porcentaje.** Tener los
+   dos activos en la misma línea sería ambiguo, y la ambigüedad en nómina se
+   paga cara. Cada línea se redondea ANTES de sumar, para que el total coincida
+   con el desglose que se le enseña al lavador.
+
+7. **El rewash crea una entrada NUEVA en la cola.** Reabrir la original
+   escondería el costo: una repetición consume bahía, minutos y químicos como
+   cualquier otro trabajo. La tasa de rewash se calcula sobre los vehículos
+   *entregados* del período.
+
+8. **Cerrar un corte y pagar comisiones son `updateMany` filtrados por estado.**
+   Repetir el clic no vuelve a facturar ni a pagar lo ya procesado.
+
+**El cierre de la entrega no puede tumbar la entrega.** La comisión y el cargo a
+la flota corren DESPUÉS de cambiar el estado y a prueba de fallos: el cliente ya
+tiene su llave y no se puede "des-entregar" un carro. Si algo falla se registra
+y se avisa, pero el vehículo queda entregado.
+
+**Aditivo y tolerante**, igual que la Fase 1: sin la migración corrida, las
+pantallas nuevas dicen exactamente qué falta —en vez de fingir que están
+vacías— y el resto de la app no se entera.
 
 ## Fase 3 · Que la operación no se caiga
 
@@ -336,8 +400,10 @@ Se retoman si aparece un cliente con túnel express.
    Sí, y eso permite un solo "PLAN SILVER" con precios por tipo, en vez de
    cuatro planes duplicados.
 
-3. **¿Las flotillas pagan a crédito?** Si sí, hace falta estado de cuenta y
-   corte mensual, no solo facturación al momento.
+3. **¿Las flotillas pagan a crédito?** RESUELTO en la Fase 2: sí, con estado
+   de cuenta y corte. El corte no es mensual por calendario sino manual — se
+   cierra cuando el negocio quiere facturar, que es como funciona de verdad
+   cuando el cliente pide la factura a mitad de mes.
 
 4. **¿Las comisiones son por servicio, por vehículo o porcentaje de venta?**
    Cambia el modelo de datos. Hay que preguntárselo al negocio, no asumirlo.
