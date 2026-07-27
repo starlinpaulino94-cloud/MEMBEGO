@@ -221,6 +221,7 @@ const SUPERADMIN_NAV: NavGroup[] = [
       { href: '/superadmin/planes', label: 'Planes globales', icon: Package },
       { href: '/superadmin/membresias', label: 'Membresías globales', icon: CreditCard },
       { href: '/superadmin/operaciones', label: 'Operaciones', icon: ClipboardList },
+      { href: '/superadmin/campanas', label: 'Campañas conjuntas', icon: Megaphone },
       { href: '/superadmin/capacidades', label: 'Capacidades', icon: SlidersHorizontal },
       { href: '/superadmin/auditoria', label: 'Auditoría', icon: History },
       { href: '/superadmin/reportes', label: 'Reportes globales', icon: BarChart3 },

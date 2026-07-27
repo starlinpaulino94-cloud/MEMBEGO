@@ -164,6 +164,7 @@ model User {
   transicionesCompra        ProductoCompraTransicion[]
   // App Car Wash · E5.
   colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
+  campanasGlobales          CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
   movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
   evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
 
@@ -344,9 +345,10 @@ model Company {
   giftCards      GiftCard[]
 
   // App Car Wash · E5.
-  colaVehiculos       ColaVehiculo[]
-  productosInventario ProductoInventario[]
-  evidenciasFoto      EvidenciaFoto[]
+  colaVehiculos         ColaVehiculo[]
+  productosInventario   ProductoInventario[]
+  evidenciasFoto        EvidenciaFoto[]
+  campanaGlobalEmpresas CampanaGlobalEmpresa[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -3216,4 +3218,62 @@ model EvidenciaFoto {
   @@index([companyId, createdAt])
   @@index([colaId])
   @@map("evidencias_foto")
+}
+
+// ─── Campañas globales (superadmin · marketing conjunto entre empresas) ──────
+
+/// Campaña que el SUPERADMIN define una vez y se REPARTE a varias empresas.
+///
+/// Decisión de arquitectura: la campaña NO es una promoción/plan con varias
+/// empresas dueñas — eso rompería el multi-tenant (todo el sistema asume UNA
+/// empresa por fila: canje, caja, reportes, permisos). En su lugar, aplicar la
+/// campaña GENERA una promoción o un plan REAL dentro de cada empresa
+/// participante. Cada empresa lo ve como suyo y todos los motores existentes
+/// funcionan sin tocar una línea.
+model CampanaGlobal {
+  id               String    @id @default(cuid())
+  nombre           String
+  /// 'PROMOCION' | 'PLAN' — qué se genera en cada empresa (validado en código).
+  tipo             String
+  descripcion      String?
+  /// Plantilla con los campos del objeto a crear (título, precio, vigencia…).
+  /// Se guarda como JSON para no acoplar la campaña al esquema de destino.
+  plantilla        Json      @default("{}")
+  /// 'BORRADOR' | 'APLICADA' | 'ARCHIVADA' (validado en código).
+  estado           String    @default("BORRADOR")
+  /// true = alcanza a TODAS las empresas activas (incluidas las futuras que se
+  /// agreguen con "volver a aplicar"); false = solo las elegidas a mano.
+  todasLasEmpresas Boolean   @default(false)
+  creadaPorId      String?
+  creadaPor        User?     @relation("CampanaGlobalCreadaPor", fields: [creadaPorId], references: [id], onDelete: SetNull)
+  aplicadaAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  participantes CampanaGlobalEmpresa[]
+
+  @@index([estado, createdAt])
+  @@map("campanas_globales")
+}
+
+/// Empresa participante de una campaña global y el rastro de lo que se le
+/// generó. `promocionId`/`planId` permiten ver, editar o revertir lo aplicado
+/// sin adivinar cuál fila salió de la campaña.
+model CampanaGlobalEmpresa {
+  id          String        @id @default(cuid())
+  campanaId   String
+  campana     CampanaGlobal @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Fila creada en la empresa (una de las dos, según el tipo de campaña).
+  promocionId String?
+  planId      String?
+  /// Mensaje de error si la generación falló para esta empresa concreta.
+  error       String?
+  aplicadaAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([campanaId, companyId])
+  @@index([companyId])
+  @@map("campana_global_empresas")
 }

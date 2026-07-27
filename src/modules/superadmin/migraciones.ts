@@ -82,6 +82,18 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     migracion: '20260759_e5_carwash',
     afecta: 'Fotos antes/después',
   },
+  {
+    tabla: 'campanas_globales',
+    columna: null,
+    migracion: '20260760_campanas_globales',
+    afecta: 'Campañas conjuntas entre empresas',
+  },
+  {
+    tabla: 'campana_global_empresas',
+    columna: null,
+    migracion: '20260760_campanas_globales',
+    afecta: 'Empresas participantes de las campañas conjuntas',
+  },
 ]
 
 export interface MigracionPendiente {
