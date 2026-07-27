@@ -164,9 +164,14 @@ model User {
   transicionesCompra        ProductoCompraTransicion[]
   // App Car Wash · E5.
   colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
+  colaAtendida              ColaVehiculo[]             @relation("ColaAtendidaPor")
   campanasGlobales          CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
   movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
   evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
+  // App Car Wash · Fase 2.
+  comisiones                Comision[]                 @relation("ComisionLavador")
+  incidenciasReportadas     Incidencia[]               @relation("IncidenciaReportadaPor")
+  incidenciasAsignadas      Incidencia[]               @relation("IncidenciaResponsable")
 
   @@index([companyId])
   @@map("users")
@@ -350,6 +355,13 @@ model Company {
   evidenciasFoto        EvidenciaFoto[]
   campanaGlobalEmpresas CampanaGlobalEmpresa[]
   campanaPasos          CampanaPaso[]
+  tipoVehiculos         TipoVehiculo[]
+  servicios             Servicio[]
+  bahias                Bahia[]
+  pagoIntentos          PagoIntento[]
+  cuentasCorporativas   CuentaCorporativa[]
+  comisiones            Comision[]
+  incidencias           Incidencia[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -378,6 +390,7 @@ model Sucursal {
   comprasPago     ProductoCompra[] @relation("CompraSucursalPago")
   citas           Cita[]
   colaVehiculos   ColaVehiculo[]
+  bahias          Bahia[]
 
   @@index([companyId])
   @@map("sucursales")
@@ -798,8 +811,11 @@ model Cliente {
   // App Car Wash · E5.
   colaVehiculos  ColaVehiculo[]
   evidenciasFoto EvidenciaFoto[]
+  // App Car Wash · Fase 2.
+  incidencias    Incidencia[]
 
   campanaInscripciones CampanaInscripcion[]
+  pagoIntentos         PagoIntento[]
 
   @@unique([supabaseId, companyId])
   // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).
@@ -1221,9 +1237,17 @@ model Vehiculo {
   visits Visit[]
   citas  Cita[]
 
+  /// Fase 1 · el tipo se recuerda para no volver a preguntarlo cada visita.
+  tipoVehiculoId String?
+  tipoVehiculo   TipoVehiculo? @relation(fields: [tipoVehiculoId], references: [id], onDelete: SetNull)
+
   // App Car Wash · E5.
   colaEntradas ColaVehiculo[]
   evidencias   EvidenciaFoto[]
+
+  // App Car Wash · Fase 2.
+  cuentaVehiculos CuentaVehiculo[]
+  incidencias     Incidencia[]
 
   @@index([clienteId])
   @@map("vehiculos")
@@ -1274,6 +1298,7 @@ model Membership {
 
   visits       Visit[]
   comprobantes Comprobante[]
+  pagoIntentos PagoIntento[]
   qrTokens     QrToken[]
 
   transacciones Transaction[]
@@ -1318,6 +1343,8 @@ model ProductoCompra {
   id     String                @id @default(cuid())
   tipo   ProductoComercialTipo @default(PROMOCION)
   estado CompraEstado          @default(SOLICITADA)
+
+  pagoIntentos PagoIntento[]
 
   /// Si esta compra nació de una campaña en cadena, el eslabón que la generó.
   /// Es lo que permite, al canjearla, saber qué paso desbloquear después.
@@ -3129,30 +3156,48 @@ model OfertaUso {
 /// → LISTO → ENTREGADO, o CANCELADO. Puede ligarse a un cliente/vehículo
 /// registrado o capturarse "al vuelo" solo con placa/descripción.
 model ColaVehiculo {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   companyId       String
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sucursalId      String?
-  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  sucursal        Sucursal?     @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
   clienteId       String?
-  cliente         Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  cliente         Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   vehiculoId      String?
-  vehiculo        Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  vehiculo        Vehiculo?     @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
   /// Para vehículos sin registrar: placa y descripción libres.
   placa           String?
   descripcion     String?
   servicio        String?
   notaInterna     String?
-  estado          String    @default("EN_ESPERA")
+  estado          String        @default("EN_ESPERA")
   inicioAt        DateTime?
   listoAt         DateTime?
   entregadoAt     DateTime?
   registradaPorId String?
-  registradaPor   User?     @relation("ColaRegistradaPor", fields: [registradaPorId], references: [id], onDelete: SetNull)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  registradaPor   User?         @relation("ColaRegistradaPor", fields: [registradaPorId], references: [id], onDelete: SetNull)
+  /// Fase 1 · quién trabajó el vehículo (base de comisiones y productividad).
+  atendidoPorId   String?
+  atendidoPor     User?         @relation("ColaAtendidaPor", fields: [atendidoPorId], references: [id], onDelete: SetNull)
+  /// Fase 1 · puesto de trabajo asignado.
+  bahiaId         String?
+  bahia           Bahia?        @relation(fields: [bahiaId], references: [id], onDelete: SetNull)
+  /// Fase 1 · tipo de vehículo (define el precio de cada servicio).
+  tipoVehiculoId  String?
+  tipoVehiculo    TipoVehiculo? @relation(fields: [tipoVehiculoId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   evidencias EvidenciaFoto[]
+  servicios  ColaServicio[]
+
+  // App Car Wash · Fase 2.
+  cargos      CargoCuenta[]
+  comisiones  Comision[]
+  incidencias Incidencia[]  @relation("IncidenciaCola")
+  /// Si esta entrada ES el rehacer de un trabajo mal hecho, la incidencia que
+  /// lo ordenó. Permite medir cuántas horas de pista se van en repetir.
+  rehaceDe    Incidencia[]  @relation("IncidenciaRewash")
 
   // Tablero del día por estado.
   @@index([companyId, estado, createdAt])
@@ -3346,4 +3391,375 @@ model CampanaGlobalEmpresa {
   @@unique([campanaId, companyId])
   @@index([companyId])
   @@map("campana_global_empresas")
+}
+
+// ─── App Car Wash · Fase 1 · Catálogo del oficio ─────────────────────────────
+
+/// Tipo de vehículo (sedán, SUV pequeña, jeepeta, camioneta…).
+///
+/// POR QUÉ EXISTE: sin esta dimensión, la única forma de decir "esto cuesta
+/// distinto según el carro" era duplicar el plan y escribirlo en el nombre —
+/// de ahí los "PLAN SILVER (SUV PEQ)". El precio de un servicio se define por
+/// servicio × tipo de vehículo, no repitiendo el servicio.
+model TipoVehiculo {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre    String
+  /// Menor = primero en los selectores.
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  precios      ServicioPrecio[]
+  vehiculos    Vehiculo[]
+  colaEntradas ColaVehiculo[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo, orden])
+  @@map("tipos_vehiculo")
+}
+
+/// Servicio vendible suelto (lavado básico, detallado, pulido, tapicería).
+///
+/// NO reemplaza a `Promocion` ni a `Plan`: el servicio es LO QUE SE VENDE;
+/// la promoción es un descuento sobre eso, y el plan es la forma recurrente
+/// de pagarlo. Antes de esto el negocio solo podía vender planes y promos,
+/// que es como facturar sin catálogo.
+model Servicio {
+  id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  /// Agrupador libre para la pantalla de cobro ("Lavado", "Detallado"…).
+  categoria   String?
+  /// Minutos estimados. Alimenta el tiempo esperado en pista.
+  duracionMin Int     @default(30)
+  /// true = es un extra que se suma a un servicio principal (cera, motor).
+  esAdicional Boolean @default(false)
+  orden       Int     @default(0)
+  activo      Boolean @default(true)
+
+  /// Fase 2 · comisión del lavador por este servicio. Si hay porcentaje se usa
+  /// ese (sobre el precio cobrado); si no, el monto fijo por unidad. Ambos
+  /// nulos = este servicio no paga comisión.
+  comisionPorcentaje Decimal? @db.Decimal(5, 2)
+  comisionMonto      Decimal? @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  precios ServicioPrecio[]
+  lineas  ColaServicio[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo, orden])
+  @@map("servicios")
+}
+
+/// Precio de un servicio para un tipo de vehículo concreto.
+/// Sin fila para un par (servicio, tipo) = ese servicio no aplica a ese tipo.
+model ServicioPrecio {
+  id             String       @id @default(cuid())
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  tipoVehiculoId String
+  tipoVehiculo   TipoVehiculo @relation(fields: [tipoVehiculoId], references: [id], onDelete: Cascade)
+  precio         Decimal      @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([servicioId, tipoVehiculoId])
+  @@index([tipoVehiculoId])
+  @@map("servicio_precios")
+}
+
+/// Puesto de trabajo dentro de una sucursal (bahía 1, bahía 2, área de
+/// detallado). Es lo que convierte la cola en una cabina: la pregunta
+/// operativa central de una pista es CUÁL ESTÁ LIBRE.
+model Bahia {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId String?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  nombre     String
+  orden      Int       @default(0)
+  activa     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  colaEntradas ColaVehiculo[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa, orden])
+  @@map("bahias")
+}
+
+/// Línea de servicio de un vehículo en pista: QUÉ se le está haciendo.
+///
+/// La entrada en cola (`ColaVehiculo`) es la orden de servicio; estas son sus
+/// líneas. El precio se CONGELA al agregarlo, para que un cambio de tarifa no
+/// reescriba el historial.
+model ColaServicio {
+  id         String       @id @default(cuid())
+  colaId     String
+  cola       ColaVehiculo @relation(fields: [colaId], references: [id], onDelete: Cascade)
+  servicioId String
+  servicio   Servicio     @relation(fields: [servicioId], references: [id])
+  /// Copia del nombre al momento de agregarlo (sobrevive a renombres).
+  nombre     String
+  precio     Decimal      @db.Decimal(10, 2)
+  cantidad   Int          @default(1)
+  createdAt  DateTime     @default(now())
+
+  @@index([colaId])
+  @@index([servicioId])
+  @@map("cola_servicios")
+}
+
+// ─── App Car Wash · Fase 2 ───────────────────────────────────────────────────
+
+/// Cuenta corporativa (flota): una empresa que manda sus vehículos y paga
+/// después, no en el momento.
+///
+/// POR QUÉ ES UN MODELO Y NO UN CLIENTE MÁS: un `Cliente` es una persona con
+/// membresía, QR y beneficios. Una flota es lo contrario — no acumula puntos,
+/// no canjea promociones, y lo que necesita es que sus 40 camionetas se cobren
+/// juntas a fin de mes contra un solo RNC. Meterla en `Cliente` habría obligado
+/// a llenar de excepciones el módulo de membresías.
+model CuentaCorporativa {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  nombre   String
+  rnc      String?
+  contacto String?
+  telefono String?
+  email    String?
+
+  /// Tope de deuda sin pagar. 0 o null = sin tope (se avisa, no se bloquea).
+  limiteCredito Decimal? @db.Decimal(12, 2)
+  /// Días de crédito acordados. Solo informativo: alimenta el aviso de mora.
+  diasCredito   Int      @default(30)
+
+  notas     String?
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehiculos CuentaVehiculo[]
+  cargos    CargoCuenta[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
+  @@map("cuentas_corporativas")
+}
+
+/// Vehículo autorizado de una flota, identificado POR PLACA.
+///
+/// La placa es la llave y no el `Vehiculo` registrado, porque el chofer que
+/// llega no siempre está en el sistema: lo que el encargado tiene delante es
+/// una placa. Si además existe la ficha del vehículo se enlaza, pero no es
+/// obligatorio — exigirlo convertiría cada visita de flota en un alta.
+model CuentaVehiculo {
+  id         String            @id @default(cuid())
+  cuentaId   String
+  cuenta     CuentaCorporativa @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  /// Normalizada en mayúsculas y sin espacios al guardar (ver cuentas.ts).
+  placa      String
+  alias      String?
+  vehiculoId String?
+  vehiculo   Vehiculo?         @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  activo     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+
+  @@unique([cuentaId, placa])
+  @@index([placa])
+  @@map("cuenta_vehiculos")
+}
+
+/// Un consumo cargado a la cuenta en vez de cobrado en caja.
+///
+/// El monto se CONGELA aquí: es lo que se le va a facturar a la flota, y no
+/// puede cambiar porque mañana alguien edite una tarifa.
+model CargoCuenta {
+  id       String            @id @default(cuid())
+  cuentaId String
+  cuenta   CuentaCorporativa @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  colaId   String?
+  cola     ColaVehiculo?     @relation(fields: [colaId], references: [id], onDelete: SetNull)
+
+  placa    String?
+  concepto String
+  monto    Decimal @db.Decimal(12, 2)
+
+  /// 'PENDIENTE' → 'FACTURADO' → 'PAGADO'. También 'ANULADO'.
+  estado      String    @default("PENDIENTE")
+  /// Identificador del corte con el que se facturó (agrupa el estado de cuenta).
+  corteRef    String?
+  facturadoAt DateTime?
+  pagadoAt    DateTime?
+
+  notas     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cuentaId, estado, createdAt])
+  @@index([corteRef])
+  @@index([colaId])
+  @@map("cargos_cuenta")
+}
+
+/// Comisión devengada por un lavador al ENTREGAR un vehículo.
+///
+/// SE CONGELA AL ENTREGAR, no se calcula al consultar. Si se calculara sobre
+/// las tarifas de hoy, subir la comisión de un servicio reescribiría lo que ya
+/// se le debía a la gente por trabajos de la semana pasada — y eso se nota en
+/// la nómina, no en un log.
+///
+/// `@@unique([colaId, userId])` es el seguro contra el doble pago: entregar dos
+/// veces el mismo vehículo (doble clic, reintento) no devenga dos comisiones.
+model Comision {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  colaId    String
+  cola      ColaVehiculo @relation(fields: [colaId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation("ComisionLavador", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Total de los servicios sobre el que se calculó.
+  base    Decimal @db.Decimal(12, 2)
+  monto   Decimal @db.Decimal(12, 2)
+  /// Desglose legible de cómo salió el número ("Lavado full 10% = RD$120").
+  detalle String?
+
+  /// 'PENDIENTE' | 'PAGADA' | 'ANULADA'.
+  estado   String    @default("PENDIENTE")
+  /// Identificador del lote de pago (agrupa el corte de nómina).
+  loteRef  String?
+  pagadaAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([colaId, userId])
+  @@index([companyId, estado, createdAt])
+  @@index([userId, estado])
+  @@map("comisiones")
+}
+
+/// Algo salió mal: un daño, una queja, un faltante, o un trabajo que hay que
+/// repetir (rewash).
+///
+/// El rewash es el dato que ningún car wash mide y todos pagan: cada repetición
+/// es una bahía ocupada gratis. Por eso `rewashColaId` enlaza la entrada en cola
+/// creada para rehacer el trabajo — así el costo del error se puede ver en
+/// minutos de pista, no solo en quejas.
+model Incidencia {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  colaId       String?
+  cola         ColaVehiculo? @relation("IncidenciaCola", fields: [colaId], references: [id], onDelete: SetNull)
+  /// Entrada de cola creada para REHACER el trabajo, si hubo rewash.
+  rewashColaId String?
+  rewashCola   ColaVehiculo? @relation("IncidenciaRewash", fields: [rewashColaId], references: [id], onDelete: SetNull)
+
+  clienteId  String?
+  cliente    Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculoId String?
+  vehiculo   Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  placa      String?
+
+  /// 'REWASH' | 'DANO' | 'QUEJA' | 'FALTANTE' | 'OTRO'.
+  tipo        String
+  /// 'BAJA' | 'MEDIA' | 'ALTA'.
+  gravedad    String   @default("MEDIA")
+  descripcion String
+  /// Lo que le costó al negocio (reposición, descuento, servicio regalado).
+  costo       Decimal? @db.Decimal(12, 2)
+
+  /// 'ABIERTA' | 'EN_PROCESO' | 'RESUELTA'.
+  estado     String    @default("ABIERTA")
+  resolucion String?
+  resueltaAt DateTime?
+
+  reportadaPorId String?
+  reportadaPor   User?   @relation("IncidenciaReportadaPor", fields: [reportadaPorId], references: [id], onDelete: SetNull)
+  responsableId  String?
+  responsable    User?   @relation("IncidenciaResponsable", fields: [responsableId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, estado, createdAt])
+  @@index([companyId, tipo, createdAt])
+  @@index([colaId])
+  @@map("incidencias")
+}
+
+// ─── Pasarela de pago (CardNET) ──────────────────────────────────────────────
+
+/// Un intento de cobro contra una pasarela externa.
+///
+/// POR QUÉ EXISTE: con transferencia, el "pago" era un comprobante que un
+/// humano validaba. Con pasarela hay un ida y vuelta con un tercero, y hace
+/// falta un registro propio para: (a) saber qué se intentó cobrar aunque el
+/// cliente cierre el navegador a mitad, (b) que la confirmación sea IDEMPOTENTE
+/// —una pasarela puede notificar el mismo pago dos veces y no se puede activar
+/// dos veces—, y (c) conciliar contra el reporte del procesador.
+///
+/// `respuesta` guarda el payload crudo del retorno: ante una disputa, lo que
+/// vale es lo que el procesador dijo, no nuestra interpretación.
+model PagoIntento {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  /// 'CARDNET' | 'TRANSFERENCIA' | … (PaymentProviderKind, validado en código).
+  proveedor String
+
+  /// Qué se está pagando. Uno de los dos, según el tipo.
+  compraId     String?
+  compra       ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
+  membershipId String?
+  membership   Membership?     @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  monto  Decimal @db.Decimal(10, 2)
+  moneda String  @default("DOP")
+
+  /// 'CREADO' | 'REDIRIGIDO' | 'APROBADO' | 'RECHAZADO' | 'EXPIRADO' | 'ERROR'.
+  estado String @default("CREADO")
+
+  /// Identificador de la sesión/transacción en la pasarela (para conciliar).
+  referenciaExterna String?
+  /// Código de autorización que devuelve el procesador cuando aprueba.
+  autorizacion      String?
+  /// Motivo del rechazo, tal como lo reporta la pasarela.
+  motivoRechazo     String?
+  /// Payload crudo del retorno. Evidencia ante disputas.
+  respuesta         Json?
+
+  /// Se llena cuando la activación del producto YA se ejecutó. Es el guardia
+  /// de idempotencia: si tiene fecha, una notificación repetida no hace nada.
+  activadoAt DateTime?
+
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, estado, createdAt])
+  @@index([referenciaExterna])
+  @@index([compraId])
+  @@index([membershipId])
+  @@map("pago_intentos")
 }

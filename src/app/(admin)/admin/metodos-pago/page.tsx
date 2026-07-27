@@ -9,6 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/ui/page-header'
 import { DeleteMetodoPagoButton } from '@/components/admin/DeleteMetodoPagoButton'
 import { CreditCard, Building2, Plus, Pencil } from 'lucide-react'
+import { EstadoPasarelas } from '@/components/admin/EstadoPasarelas'
+import { getTransferenciasEnVuelo } from '@/modules/pagos/metodosDisponibles'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
+import { cardnetConfigurado } from '@/lib/payments/cardnet'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,6 +36,17 @@ export default async function MetodosPagoPage() {
     console.error('[admin-metodos-pago]', e)
   }
 
+  // Estado de los cobros en línea. Solo para una empresa concreta: el
+  // superadmin viendo todas las empresas a la vez no tiene un "estado" único.
+  const estado = companyId
+    ? {
+        transferencia: await tieneCapacidad(companyId, 'PAGO_TRANSFERENCIA').catch(() => true),
+        cardnet: await tieneCapacidad(companyId, 'PAGO_CARDNET').catch(() => false),
+        enVuelo: await getTransferenciasEnVuelo(companyId),
+        cuentasCargadas: metodos.filter((m) => m.tipo === 'TRANSFERENCIA' && m.activo).length,
+      }
+    : null
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -46,6 +61,16 @@ export default async function MetodosPagoPage() {
           </Link>
         }
       />
+
+      {estado && (
+        <EstadoPasarelas
+          transferencia={estado.transferencia}
+          cardnet={estado.cardnet}
+          cardnetConfigurado={cardnetConfigurado()}
+          enVuelo={estado.enVuelo}
+          cuentasCargadas={estado.cuentasCargadas}
+        />
+      )}
 
       {metodos.length === 0 ? (
         <Card>

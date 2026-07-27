@@ -107,10 +107,58 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     afecta: 'Avance de los clientes dentro de una campaña en cadena',
   },
   {
+    tabla: 'pago_intentos',
+    columna: null,
+    migracion: '20260763_pago_intentos',
+    afecta: 'Cobros por pasarela (CardNET): registro y conciliación',
+  },
+  {
+    tabla: 'tipos_vehiculo',
+    columna: null,
+    migracion: '20260762_carwash_fase1',
+    afecta: 'Catálogo de la pista: tipos de vehículo y precios por tipo',
+  },
+  {
+    tabla: 'servicios',
+    columna: null,
+    migracion: '20260762_carwash_fase1',
+    afecta: 'Servicios vendibles del car wash',
+  },
+  {
+    tabla: 'bahias',
+    columna: null,
+    migracion: '20260762_carwash_fase1',
+    afecta: 'Bahías y la cabina de pista',
+  },
+  {
     tabla: 'campanas_globales',
     columna: 'modo',
     migracion: '20260761_campanas_cadena',
     afecta: 'Modo e imagen de las campañas conjuntas',
+  },
+  {
+    tabla: 'cuentas_corporativas',
+    columna: null,
+    migracion: '20260764_carwash_fase2',
+    afecta: 'Cuentas corporativas y flotillas del car wash',
+  },
+  {
+    tabla: 'comisiones',
+    columna: null,
+    migracion: '20260764_carwash_fase2',
+    afecta: 'Comisiones por lavador',
+  },
+  {
+    tabla: 'incidencias',
+    columna: null,
+    migracion: '20260764_carwash_fase2',
+    afecta: 'Incidencias, daños y rewash',
+  },
+  {
+    tabla: 'servicios',
+    columna: 'comisionPorcentaje',
+    migracion: '20260764_carwash_fase2',
+    afecta: 'Tarifas de comisión por servicio',
   },
 ]
 

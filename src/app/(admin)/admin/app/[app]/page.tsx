@@ -23,8 +23,11 @@ import {
   ListOrdered,
   Camera,
   BarChart3,
+  Wallet,
+  ShieldAlert,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Pista, PistaSinCatalogo } from '@/components/carwash/Pista'
 
 /** Resuelve el nombre de icono del catálogo (dato puro) a su componente. */
 const ICONOS: Record<IconoApp, LucideIcon> = {
@@ -41,6 +44,8 @@ const ICONOS: Record<IconoApp, LucideIcon> = {
   Users,
   Sparkles,
   BarChart3,
+  Wallet,
+  ShieldAlert,
 }
 
 function fmtRD(n: number) {
@@ -123,6 +128,27 @@ export default async function AppShellPage({
     .filter((c) => ['PENDIENTE', 'CONFIRMADA'].includes(c.estado))
     .slice(0, 6)
 
+  // Fase 1 · Car Wash: la portada deja de ser un menú y pasa a ser la CABINA.
+  // Solo esta app la tiene; el resto conserva el tablero genérico. Si la
+  // migración 20260762 no está aplicada, `getEstadoPista` devuelve null y la
+  // pantalla cae al tablero de siempre sin romperse.
+  const esCarWash = definicion.slug === 'carwash'
+  const [pista, catalogo] = esCarWash
+    ? await Promise.all([
+        (await import('@/modules/carwash/pista')).getEstadoPista(companyId, dia.inicioDia),
+        (await import('@/modules/carwash/catalogo'))
+          .getEstadoCatalogo(companyId)
+          .catch(() => null),
+      ])
+    : [null, null]
+  const faltanEnCatalogo = catalogo
+    ? [
+        catalogo.tipos === 0 && 'tipos de vehículo',
+        catalogo.servicios === 0 && 'servicios',
+        catalogo.bahias === 0 && 'bahías',
+      ].filter((x): x is string => typeof x === 'string')
+    : []
+
   // Módulos del catálogo filtrados por las capacidades encendidas.
   const modulos = definicion.modulos
     .filter((m) => !m.capacidad || activas.has(m.capacidad) || m.proximamente)
@@ -168,7 +194,15 @@ export default async function AppShellPage({
         </div>
       </div>
 
-      {/* Tablero del día */}
+      {/* Car Wash · la CABINA reemplaza al tablero genérico: lo que pasa en
+          pista AHORA, en vez de contadores de cierre a media jornada. */}
+      {esCarWash && faltanEnCatalogo.length > 0 && (
+        <PistaSinCatalogo faltan={faltanEnCatalogo} />
+      )}
+      {esCarWash && pista && <Pista estado={pista} />}
+
+      {/* Tablero del día (resto de apps, o Car Wash sin migración aplicada) */}
+      {!(esCarWash && pista) && (
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {kpis.map((k) => (
           <Link
@@ -183,7 +217,10 @@ export default async function AppShellPage({
           </Link>
         ))}
       </dl>
+      )}
 
+      {/* Citas y últimas operaciones: solo cuando no hay cabina de pista. */}
+      {!(esCarWash && pista) && (
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Próximas citas de hoy */}
         <section className="rounded-2xl border border-border/70 bg-card p-4">
@@ -243,6 +280,7 @@ export default async function AppShellPage({
           )}
         </section>
       </div>
+      )}
 
       {/* Menú de la app (del catálogo) */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

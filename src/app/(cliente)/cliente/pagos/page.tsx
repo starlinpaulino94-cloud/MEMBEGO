@@ -66,7 +66,45 @@ function EstadoDot({ estado }: { estado: string }) {
   )
 }
 
-export default async function PagosPage() {
+/**
+ * Aviso del retorno de la pasarela (`?pago=`). Lo escribe /api/pagos/cardnet/retorno.
+ *
+ * "pendiente" no es un error del cliente: es que el cobro no se pudo confirmar
+ * contra la pasarela en ese momento. Se le dice la verdad —que no active nada
+ * y que no vuelva a pagar— en vez de un "algo salió mal" que invita a
+ * reintentar y pagar dos veces.
+ */
+const AVISO_PAGO: Record<string, { tono: string; titulo: string; texto: string }> = {
+  ok: {
+    tono: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100',
+    titulo: 'Pago aprobado',
+    texto: 'Tu compra ya está activa. Puedes usarla desde tus beneficios.',
+  },
+  rechazado: {
+    tono: 'border-rose-500/30 bg-rose-500/10 text-rose-900 dark:text-rose-100',
+    titulo: 'Pago rechazado',
+    texto: 'El banco no aprobó la transacción. No se te cobró nada. Puedes intentar con otra tarjeta.',
+  },
+  pendiente: {
+    tono: 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+    titulo: 'Estamos confirmando tu pago',
+    texto:
+      'No pudimos confirmar el resultado con el banco todavía. No vuelvas a pagar: si el cobro se realizó, tu compra se activará sola y te avisaremos.',
+  },
+  error: {
+    tono: 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+    titulo: 'No pudimos procesar el retorno',
+    texto: 'Si crees que se te cobró, escríbenos con la fecha y hora antes de intentar de nuevo.',
+  },
+}
+
+export default async function PagosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pago?: string }>
+}) {
+  const { pago } = await searchParams
+  const aviso = pago ? AVISO_PAGO[pago] : undefined
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
   if (!clienteId) {
@@ -95,6 +133,13 @@ export default async function PagosPage() {
 
   return (
     <main className="container max-w-5xl py-8">
+      {aviso && (
+        <div className={cn('mb-6 rounded-2xl border p-4', aviso.tono)}>
+          <p className="font-bold">{aviso.titulo}</p>
+          <p className="mt-1 text-small opacity-90">{aviso.texto}</p>
+        </div>
+      )}
+
       {/* ── Cabecera ──────────────────────────────────────────────────────── */}
       <header className="mb-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

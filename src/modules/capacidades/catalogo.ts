@@ -55,10 +55,21 @@ export const CAPACIDADES = [
   /** Las recompensas gratis exigen cita para habilitar su QR. */
   'CITA_ANTES_DEL_QR',
   'POS_CAJA',
+  /// Pagos en línea: qué métodos se ofrecen al cliente para compras NUEVAS.
+  /// Apagar TRANSFERENCIA no rompe las compras que ya están esperando su
+  /// comprobante — solo deja de ofrecerla de aquí en adelante.
+  'PAGO_TRANSFERENCIA',
+  'PAGO_CARDNET',
   // Futuras del Car Wash (P2 · E5). Nacen APAGADAS.
   'INVENTARIO',
   'COLA_VEHICULOS',
   'EVIDENCIA_FOTOS',
+  // Car Wash · Fase 2. Nacen APAGADAS. COMISIONES además no devenga nada
+  // hasta que se llenen las tarifas por servicio: encenderla no mueve dinero
+  // sola.
+  'CUENTAS_CORPORATIVAS',
+  'COMISIONES',
+  'INCIDENCIAS',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -70,9 +81,14 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   GIFT_CARDS: 'Gift cards de monto abierto',
   CITA_ANTES_DEL_QR: 'Invitar a agendar cita al adquirir un beneficio',
   POS_CAJA: 'Caja / punto de venta',
+  PAGO_TRANSFERENCIA: 'Cobrar por transferencia bancaria',
+  PAGO_CARDNET: 'Cobrar con tarjeta (pasarela CardNET)',
   INVENTARIO: 'Inventario de productos',
   COLA_VEHICULOS: 'Cola de vehículos del día',
   EVIDENCIA_FOTOS: 'Fotos antes/después y control de daños',
+  CUENTAS_CORPORATIVAS: 'Cuentas corporativas y flotillas (cobro a crédito)',
+  COMISIONES: 'Comisiones por lavador',
+  INCIDENCIAS: 'Incidencias, daños y rewash',
 }
 
 /**
@@ -100,10 +116,10 @@ export const CAPACIDAD_DE_SECCION: Partial<Record<AdminSection, Capacidad>> = Ob
  * (NAVEGACION_V2, INVENTARIO, COLA, EVIDENCIA) nace apagado.
  */
 export const CAPACIDADES_BASE: Record<CategoriaNegocio, Capacidad[]> = {
-  CAR_WASH: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA'],
-  BARBERIA: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
-  RESTAURANTE: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
-  GYM: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
+  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA'],
+  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
+  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
+  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
 }
 
 // ── Configuración guardada (companies.capacidades) ───────────────────────────

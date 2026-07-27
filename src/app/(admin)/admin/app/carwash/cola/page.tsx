@@ -15,6 +15,7 @@ import {
 import { hmEnTz, ymdEnTz, utcDesdeLocal } from '@/modules/citas/disponibilidad'
 import { ColaRegistrarForm } from '@/components/carwash/ColaRegistrarForm'
 import { ColaAcciones } from '@/components/carwash/ColaAcciones'
+import { LavadorSelect, type LavadorOpcion } from '@/components/carwash/LavadorSelect'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ArrowLeft, Camera, ListOrdered } from 'lucide-react'
@@ -89,6 +90,21 @@ export default async function ColaPage() {
     entradas: tablero.activos.filter((e) => e.estado === estado),
   }))
 
+  // Fase 2 · el selector de lavador solo aparece con la capacidad encendida.
+  // Apagada, la tarjeta se ve exactamente como antes.
+  const conComisiones = await tieneCapacidad(companyId, 'COMISIONES')
+  const lavadores: LavadorOpcion[] = conComisiones
+    ? await prisma.user
+        .findMany({
+          // Solo el personal: los CLIENTE de la empresa no lavan carros.
+          where: { companyId, role: { not: 'CLIENTE' } },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, email: true },
+        })
+        .then((us) => us.map((u) => ({ id: u.id, nombre: u.name || u.email || 'Sin nombre' })))
+        .catch(() => [])
+    : []
+
   return (
     <div className="space-y-6">
       {volver}
@@ -113,7 +129,7 @@ export default async function ColaPage() {
             ) : (
               <ul className="space-y-3">
                 {col.entradas.map((e) => (
-                  <TarjetaCola key={e.id} entrada={e} tz={tz} />
+                  <TarjetaCola key={e.id} entrada={e} tz={tz} lavadores={lavadores} />
                 ))}
               </ul>
             )}
@@ -156,7 +172,15 @@ export default async function ColaPage() {
   )
 }
 
-function TarjetaCola({ entrada, tz }: { entrada: ColaEntrada; tz: string }) {
+function TarjetaCola({
+  entrada,
+  tz,
+  lavadores,
+}: {
+  entrada: ColaEntrada
+  tz: string
+  lavadores: LavadorOpcion[]
+}) {
   const destinos = (COLA_TRANSICIONES[entrada.estado as ColaEstado] ?? []).map((d) => ({
     estado: d,
     label: COLA_ACCION_LABELS[d] ?? d,
@@ -200,6 +224,11 @@ function TarjetaCola({ entrada, tz }: { entrada: ColaEntrada; tz: string }) {
           <Camera className="h-4 w-4" /> {entrada._count.evidencias}
         </Link>
       </div>
+      <LavadorSelect
+        colaId={entrada.id}
+        actual={entrada.atendidoPorId}
+        lavadores={lavadores}
+      />
       <div className="mt-2">
         <ColaAcciones id={entrada.id} destinos={destinos} />
       </div>

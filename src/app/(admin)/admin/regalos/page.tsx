@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { prisma } from '@/lib/prisma'
 import Form from 'next/form'
+import Link from 'next/link'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
@@ -190,8 +191,23 @@ export default async function RegalosAdminPage({
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
                     >
-                      {ESTADO_REGALO_LABEL[r.estado] ?? r.estado}
+                      {/* "Pendiente" a secas no dice si hay que cobrar algo o
+                          si solo falta que el destinatario responda. Lo
+                          primero es trabajo del negocio; lo segundo no. */}
+                      {r.espera === 'PAGO'
+                        ? 'Por cobrar'
+                        : r.espera === 'RESPUESTA'
+                          ? 'Esperando respuesta'
+                          : (ESTADO_REGALO_LABEL[r.estado] ?? r.estado)}
                     </span>
+                    {r.espera === 'PAGO' && (
+                      <Link
+                        href="/admin/pagos"
+                        className="mt-1 block text-[11px] font-medium text-primary hover:underline"
+                      >
+                        {r.pago?.referencia ? `Cobrar ${r.pago.referencia}` : 'Ver en Pagos'}
+                      </Link>
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                     {fmtFecha(r.createdAt)}

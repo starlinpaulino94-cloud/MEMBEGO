@@ -35,7 +35,10 @@ export function ColaAcciones({
     startTransition(async () => {
       const res = await moverCola(id, destino)
       if (res.error) toast.error(res.error)
-      else toast.success(`${label} ✓`)
+      // `aviso` llega al entregar: la comisión devengada y/o el cargo a la
+      // flota. Se muestra porque es dinero que se movió sin que el encargado
+      // hiciera nada, y enterarse después es peor que enterarse ahora.
+      else toast.success(`${label} ✓`, res.aviso ? { description: res.aviso } : undefined)
     })
   }
 

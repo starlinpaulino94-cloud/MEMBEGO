@@ -57,6 +57,8 @@ const SELECT_ENTRADA = {
   createdAt: true,
   cliente: { select: { id: true, nombre: true } },
   vehiculo: { select: { marca: true, modelo: true, placa: true } },
+  /// Fase 2 · quién trabaja el vehículo. Sin esto la comisión no tiene dueño.
+  atendidoPorId: true,
   _count: { select: { evidencias: true } },
 } as const
 

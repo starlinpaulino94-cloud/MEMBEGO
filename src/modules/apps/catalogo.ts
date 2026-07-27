@@ -27,6 +27,8 @@ export type IconoApp =
   | 'Users'
   | 'Sparkles'
   | 'BarChart3'
+  | 'Wallet'
+  | 'ShieldAlert'
 
 export interface ModuloApp {
   /** Etiqueta en el menú de la app. */
@@ -113,6 +115,12 @@ export const APPS_POR_CATEGORIA: Partial<Record<CategoriaNegocio, AplicacionNego
       'La operación de la pista: escáner, citas, seguimiento de lavados, vehículos, sucursales y caja.',
     icon: 'Car',
     modulos: [
+      {
+        label: 'Catálogo de la pista',
+        descripcion: 'Servicios, precios por vehículo y bahías',
+        icon: 'Sparkles',
+        href: '/admin/app/carwash/catalogo',
+      },
       ESCANER,
       CITAS,
       SEGUIMIENTO,
@@ -152,6 +160,31 @@ export const APPS_POR_CATEGORIA: Partial<Record<CategoriaNegocio, AplicacionNego
         icon: 'Camera',
         href: '/admin/app/carwash/evidencias',
         capacidad: 'EVIDENCIA_FOTOS',
+        proximamente: true,
+      },
+      // ── Fase 2 · lo que da dinero ───────────────────────────────────────
+      {
+        label: 'Cuentas corporativas',
+        descripcion: 'Flotillas que pagan a crédito',
+        icon: 'Building2',
+        href: '/admin/app/carwash/cuentas',
+        capacidad: 'CUENTAS_CORPORATIVAS',
+        proximamente: true,
+      },
+      {
+        label: 'Comisiones',
+        descripcion: 'Lo que se le debe a cada lavador',
+        icon: 'Wallet',
+        href: '/admin/app/carwash/comisiones',
+        capacidad: 'COMISIONES',
+        proximamente: true,
+      },
+      {
+        label: 'Incidencias y rewash',
+        descripcion: 'Daños, quejas y trabajos repetidos',
+        icon: 'ShieldAlert',
+        href: '/admin/app/carwash/incidencias',
+        capacidad: 'INCIDENCIAS',
         proximamente: true,
       },
     ],
