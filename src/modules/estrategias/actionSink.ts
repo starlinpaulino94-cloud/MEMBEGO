@@ -115,6 +115,7 @@ export class LiveActionSink implements ActionSink {
   }
 
   private async enviarEmail(input: {
+    companyId: string
     subjectId: string | null
     params: Record<string, unknown>
   }) {
@@ -124,7 +125,14 @@ export class LiveActionSink implements ActionSink {
     }
     const asunto = String(input.params.subject ?? 'Novedades')
     const cuerpo = String(input.params.body ?? '')
-    const res = await sendEmail({ to: destino.email, subject: asunto, text: cuerpo })
+    // companyId para que `sendEmail` corte el envío si la empresa es de
+    // demostración: una automatización de práctica no puede escribirle a nadie.
+    const res = await sendEmail({
+      to: destino.email,
+      subject: asunto,
+      text: cuerpo,
+      companyId: input.companyId,
+    })
     return { ok: res.sent, detail: { channel: 'email', to: destino.email, sent: res.sent } }
   }
 

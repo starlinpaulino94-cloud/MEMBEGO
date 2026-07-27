@@ -9,6 +9,7 @@ import {
   ScanLine,
   Wallet,
   Building2,
+  FlaskConical,
   Landmark,
   Package,
   MessageCircle,
@@ -217,6 +218,7 @@ const SUPERADMIN_NAV: NavGroup[] = [
     label: 'Plataforma',
     items: [
       { href: '/superadmin/empresas', label: 'Empresas', icon: Building2 },
+      { href: '/superadmin/demo', label: 'Demostración', icon: FlaskConical },
       { href: '/superadmin/usuarios', label: 'Usuarios', icon: UserCog },
       { href: '/superadmin/planes', label: 'Planes globales', icon: Package },
       { href: '/superadmin/membresias', label: 'Membresías globales', icon: CreditCard },

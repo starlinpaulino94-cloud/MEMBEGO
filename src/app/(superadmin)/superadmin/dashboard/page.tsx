@@ -10,6 +10,7 @@ import {
   Activity,
   LifeBuoy,
   EyeOff,
+  FlaskConical,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { prisma } from '@/lib/prisma'
@@ -31,6 +32,8 @@ const ACCION_LABEL: Record<string, string> = {
   REFERIDO_COMPLETADO: 'Referido completado',
   RECOMPENSA_OTORGADA: 'Recompensa otorgada',
   NOTA_INTERNA: 'Nota interna',
+  EMPRESA_DEMO_CAMBIADA: 'Marca de demostración cambiada',
+  EMPRESA_DEMO_REINICIADA: 'Empresa de demostración reiniciada',
 }
 
 function fmtHora(d: Date) {
@@ -40,6 +43,117 @@ function fmtHora(d: Date) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(d))
+}
+
+const SELECT_EMPRESA = {
+  id: true, name: true, slug: true, type: true,
+  isActive: true, isPublished: true, logoUrl: true,
+  _count: { select: { clientes: true, plans: true } },
+} as const
+
+/**
+ * Empresas con su marca de demostración.
+ *
+ * Doble camino a propósito: si la columna `esDemo` todavía no está migrada, la
+ * consulta con `esDemo` revienta y se reintenta sin ella. El centro de control
+ * no puede quedarse en blanco por una columna que aún no existe; sin la columna
+ * simplemente no hay empresas demo todavía, que es la verdad.
+ */
+async function empresasDelPanel() {
+  try {
+    return await prisma.company.findMany({
+      orderBy: { name: 'asc' },
+      select: { ...SELECT_EMPRESA, esDemo: true },
+    })
+  } catch {
+    const filas = await prisma.company
+      .findMany({ orderBy: { name: 'asc' }, select: SELECT_EMPRESA })
+      .catch(() => [])
+    return filas.map((f) => ({ ...f, esDemo: false }))
+  }
+}
+
+/** Clientes nuevos SIN contar los de las empresas de práctica. */
+async function nuevosReales(desde: Date) {
+  try {
+    return await prisma.cliente.count({
+      where: { createdAt: { gte: desde }, company: { esDemo: false } },
+    })
+  } catch {
+    return prisma.cliente.count({ where: { createdAt: { gte: desde } } }).catch(() => 0)
+  }
+}
+
+interface EmpresaPanel {
+  id: string
+  name: string
+  logoUrl: string | null
+  isActive: boolean
+  isPublished: boolean
+  esDemo: boolean
+  activas: number
+  pendientes: number
+  _count: { clientes: number; plans: number }
+}
+
+/** La misma tarjeta para las reales y para las de práctica: se distinguen por
+ *  el apartado donde salen y por la etiqueta, no por verse distinto. */
+function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
+  return (
+    <Card className="card-interactive border-border/60 shadow-card">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {c.logoUrl ? (
+              <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-border/60">
+                <Image src={c.logoUrl} alt="" fill className="object-cover" />
+              </span>
+            ) : (
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-teal-500 text-[10px] font-bold text-white">
+                {c.name.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+            <CardTitle className="truncate text-base">{c.name}</CardTitle>
+          </div>
+          <div className="flex shrink-0 gap-1.5">
+            {c.esDemo ? (
+              <Badge variant="warning">Demo</Badge>
+            ) : !c.isActive ? (
+              <Badge variant="destructive">Inactiva</Badge>
+            ) : !c.isPublished ? (
+              <Badge variant="warning">Sin publicar</Badge>
+            ) : (
+              <Badge variant="success">Publicada</Badge>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          {[
+            { label: 'Clientes', value: c._count.clientes },
+            { label: 'Planes', value: c._count.plans },
+            { label: 'Activas', value: c.activas },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl bg-muted/40 py-3">
+              <p className="text-2xl font-bold tabular-nums text-foreground">{s.value}</p>
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {c.pendientes > 0 && (
+          <Link
+            href="/superadmin/operaciones"
+            className="mt-3 flex items-center justify-end gap-1 text-xs font-medium text-warning-foreground hover:underline"
+          >
+            {c.pendientes} pago{c.pendientes !== 1 ? 's' : ''} pendiente
+            {c.pendientes !== 1 ? 's' : ''} <ArrowRight className="h-3 w-3" />
+          </Link>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export default async function SuperadminDashboard() {
@@ -52,14 +166,7 @@ export default async function SuperadminDashboard() {
   // groupBy por companyId/estado.
   const [companies, membershipCounts, clientesNuevos30d, ticketsAbiertos, actividad] =
     await Promise.all([
-      prisma.company.findMany({
-        orderBy: { name: 'asc' },
-        select: {
-          id: true, name: true, slug: true, type: true,
-          isActive: true, isPublished: true, logoUrl: true,
-          _count: { select: { clientes: true, plans: true } },
-        },
-      }),
+      empresasDelPanel(),
       prisma.membership
         .groupBy({
           by: ['companyId', 'estado'],
@@ -67,7 +174,7 @@ export default async function SuperadminDashboard() {
           _count: { _all: true },
         })
         .catch(() => []),
-      prisma.cliente.count({ where: { createdAt: { gte: hace30d } } }).catch(() => 0),
+      nuevosReales(hace30d),
       prisma.supportTicket
         .count({ where: { estado: { in: ['NUEVO', 'EN_PROCESO', 'ESPERANDO_CLIENTE'] } } })
         .catch(() => 0),
@@ -97,10 +204,21 @@ export default async function SuperadminDashboard() {
     pendientes: countFor(c.id, 'PENDIENTE_PAGO'),
   }))
 
-  const totalClientes = perCompany.reduce((s, c) => s + c._count.clientes, 0)
-  const totalActivas = perCompany.reduce((s, c) => s + c.activas, 0)
-  const totalPendientes = perCompany.reduce((s, c) => s + c.pendientes, 0)
-  const sinPublicar = perCompany.filter((c) => !c.isPublished).length
+  // Los números de arriba son los del NEGOCIO. Las empresas de práctica se
+  // apartan: si los 40 clientes inventados de un entrenamiento suman a
+  // "clientes totales", el número deja de servir para decidir nada — y lo peor
+  // es que nadie se entera de que dejó de servir. Las demo siguen visibles más
+  // abajo, en su propio apartado, porque ocultarlas del todo sería peor.
+  const reales = perCompany.filter((c) => !c.esDemo)
+  const demos = perCompany.filter((c) => c.esDemo)
+
+  const totalClientes = reales.reduce((s, c) => s + c._count.clientes, 0)
+  const totalActivas = reales.reduce((s, c) => s + c.activas, 0)
+  // Pendientes y sin publicar SÍ cuentan solo lo real: son avisos de trabajo
+  // por hacer, y nadie tiene que ir a validar el pago de mentira de un
+  // entrenamiento ni a publicar una empresa que no debe publicarse nunca.
+  const totalPendientes = reales.reduce((s, c) => s + c.pendientes, 0)
+  const sinPublicar = reales.filter((c) => !c.isPublished).length
 
   return (
     <div className="space-y-8 animate-fade-up">
@@ -191,60 +309,39 @@ export default async function SuperadminDashboard() {
             </Link>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {perCompany.map((c) => (
-              <Card key={c.id} className="card-interactive border-border/60 shadow-card">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      {c.logoUrl ? (
-                        <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-border/60">
-                          <Image src={c.logoUrl} alt="" fill className="object-cover" />
-                        </span>
-                      ) : (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-teal-500 text-[10px] font-bold text-white">
-                          {c.name.slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                      <CardTitle className="truncate text-base">{c.name}</CardTitle>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
-                      {!c.isActive ? (
-                        <Badge variant="destructive">Inactiva</Badge>
-                      ) : !c.isPublished ? (
-                        <Badge variant="warning">Sin publicar</Badge>
-                      ) : (
-                        <Badge variant="success">Publicada</Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    {[
-                      { label: 'Clientes', value: c._count.clientes },
-                      { label: 'Planes', value: c._count.plans },
-                      { label: 'Activas', value: c.activas },
-                    ].map((s) => (
-                      <div key={s.label} className="rounded-xl bg-muted/40 py-3">
-                        <p className="text-2xl font-bold tabular-nums text-foreground">{s.value}</p>
-                        <p className="text-xs text-muted-foreground">{s.label}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {c.pendientes > 0 && (
-                    <Link
-                      href="/superadmin/operaciones"
-                      className="mt-3 flex items-center justify-end gap-1 text-xs font-medium text-warning-foreground hover:underline"
-                    >
-                      {c.pendientes} pago{c.pendientes !== 1 ? 's' : ''} pendiente
-                      {c.pendientes !== 1 ? 's' : ''} <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  )}
-                </CardContent>
-              </Card>
+            {reales.map((c) => (
+              <TarjetaEmpresa key={c.id} c={c} />
             ))}
           </div>
+
+          {/* Empresas de práctica: aparte y etiquetadas. Sus números no suman
+              arriba, pero siguen a la vista — una empresa demo que no se ve es
+              una empresa demo que alguien deja encendida y olvida. */}
+          {demos.length > 0 && (
+            <div className="mt-6">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-h4 flex items-center gap-2 text-foreground">
+                  <FlaskConical className="h-4 w-4 text-amber-500" />
+                  Empresas de demostración
+                </h2>
+                <Link
+                  href="/superadmin/demo"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                >
+                  Administrar <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Son para entrenar al personal. Sus clientes, cobros y números no cuentan en las
+                estadísticas de la plataforma.
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                {demos.map((c) => (
+                  <TarjetaEmpresa key={c.id} c={c} />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actividad global */}

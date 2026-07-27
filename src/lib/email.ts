@@ -12,6 +12,14 @@ export interface EmailPayload {
   subject: string
   html?: string
   text?: string
+  /**
+   * Empresa que origina el correo. Si es de DEMOSTRACIÓN, no se envía nada.
+   *
+   * La comprobación vive AQUÍ y no en cada quien llama, porque el que llama es
+   * quien se olvida. Un correo de "tu membresía venció" saliendo de una empresa
+   * de práctica hacia una persona real es confuso en el mejor caso.
+   */
+  companyId?: string | null
 }
 
 export interface EmailResult {
@@ -20,6 +28,13 @@ export interface EmailResult {
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
+  if (payload.companyId) {
+    const { esEmpresaDemo } = await import('@/modules/demo')
+    if (await esEmpresaDemo(payload.companyId)) {
+      return { sent: false, reason: 'empresa de demostración: no se envían correos' }
+    }
+  }
+
   const apiKey = process.env.RESEND_API_KEY
   const from = process.env.EMAIL_FROM ?? 'MembeGo <onboarding@resend.dev>'
 

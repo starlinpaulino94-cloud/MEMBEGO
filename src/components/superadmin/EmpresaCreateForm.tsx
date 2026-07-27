@@ -39,10 +39,20 @@ function SubmitBtn() {
   )
 }
 
+/**
+ * `demo` no es una casilla dentro del formulario, es una PANTALLA distinta que
+ * usa el mismo formulario. Marcar una empresa como de práctica cambia cómo se
+ * comporta hacia afuera (no cobra con tarjeta, no manda correos, no sale en la
+ * vitrina); eso no puede depender de una casilla que se marca o se desmarca
+ * sin querer entre veinte campos. Se entra por /superadmin/demo/nueva o no se
+ * entra.
+ */
 export function EmpresaCreateForm({
   categories,
+  demo = false,
 }: {
   categories: CategoryOption[]
+  demo?: boolean
 }) {
   const router = useRouter()
   const [state, action] = useActionState(crearEmpresa, init)
@@ -50,13 +60,15 @@ export function EmpresaCreateForm({
   useEffect(() => {
     if (state.success) {
       toast.success(state.message ?? 'Empresa creada.')
-      router.push('/superadmin/empresas')
+      router.push(demo ? '/superadmin/demo' : '/superadmin/empresas')
     }
     if (state.error) toast.error(state.error)
-  }, [state.success, state.error, state.message, router])
+  }, [state.success, state.error, state.message, router, demo])
 
   return (
     <form action={action} className="space-y-8">
+      {demo && <input type="hidden" name="esDemo" value="1" />}
+
       {/* Datos de la empresa */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Datos de la empresa</h3>
@@ -132,8 +144,9 @@ export function EmpresaCreateForm({
         <div>
           <h3 className="text-sm font-semibold text-foreground">Administrador de la empresa</h3>
           <p className="text-xs text-muted-foreground">
-            Se creará una cuenta con acceso al panel de la empresa. Comparte estas
-            credenciales con el responsable del negocio.
+            {demo
+              ? 'Es la cuenta con la que el personal va a practicar. Puede compartirse entre varias personas del entrenamiento: dentro no hay nada real que romper.'
+              : 'Se creará una cuenta con acceso al panel de la empresa. Comparte estas credenciales con el responsable del negocio.'}
           </p>
         </div>
         <div className="grid gap-6 sm:grid-cols-2">

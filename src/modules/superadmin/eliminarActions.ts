@@ -23,6 +23,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getRequestMeta } from '@/lib/server-utils'
+import { purgarClienteRow } from '@/modules/superadmin/purgar'
 
 export interface EliminarState {
   error?: string
@@ -35,41 +36,6 @@ async function requireSuperadmin() {
   const user = await getUser()
   if (!user || user.metadata.role !== 'SUPERADMIN') return null
   return user
-}
-
-/**
- * Borra un registro Cliente con TODAS sus dependencias restrictivas, en orden.
- * Cascadas automáticas del esquema (growth, ratings, notas, ruleta, progresos)
- * y SetNull (transacciones, eventos de invitación) no necesitan pasos aquí.
- * Devuelve conteos para la auditoría.
- */
-async function purgarClienteRow(clienteId: string) {
-  const [comprobantes, visitas, qrs, membresias, compras, referidos, refEventos, tickets, vehiculos] =
-    await prisma.$transaction([
-      prisma.comprobante.deleteMany({ where: { membership: { clienteId } } }),
-      prisma.visit.deleteMany({ where: { clienteId } }),
-      prisma.qrToken.deleteMany({ where: { clienteId } }),
-      prisma.membership.deleteMany({ where: { clienteId } }),
-      prisma.productoCompra.deleteMany({ where: { clienteId } }),
-      prisma.referido.deleteMany({
-        where: { OR: [{ referenteClienteId: clienteId }, { referidoClienteId: clienteId }] },
-      }),
-      prisma.referralEvent.deleteMany({ where: { clienteId } }),
-      prisma.supportTicket.deleteMany({ where: { clienteId } }),
-      prisma.vehiculo.deleteMany({ where: { clienteId } }),
-    ])
-  await prisma.cliente.delete({ where: { id: clienteId } })
-  return {
-    comprobantes: comprobantes.count,
-    visitas: visitas.count,
-    qrs: qrs.count,
-    membresias: membresias.count,
-    compras: compras.count,
-    referidos: referidos.count,
-    refEventos: refEventos.count,
-    tickets: tickets.count,
-    vehiculos: vehiculos.count,
-  }
 }
 
 /** Borra la fila User (con sus notificaciones) y la cuenta de Supabase Auth. */
