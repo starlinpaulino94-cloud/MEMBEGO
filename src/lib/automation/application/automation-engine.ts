@@ -26,6 +26,7 @@ import type {
   EventStore,
   VariableResolver,
 } from './ports'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface AutomationEngineDeps {
   readonly repo: AutomationRepository
@@ -162,7 +163,7 @@ export class AutomationEngine {
         subjectId,
         payload: { automationId: automation.id },
         source: automation.id,
-      }).catch(() => {})
+      }).catch(anotarFallo('automation:evento-finalizacion'))
     }
     return this.finish(run, 'SUCCESS', rulesEvaluated, actionsRun, { actions: actionsRun.length }, null, started)
   }

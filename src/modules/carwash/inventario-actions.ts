@@ -13,6 +13,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { MOV_TIPOS, calcularNuevoStock, parseCantidad, type MovTipo } from './inventario'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 const RUTA_INVENTARIO = '/admin/app/carwash/inventario'
 
@@ -171,7 +172,7 @@ export async function registrarMovimiento(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('carwash:auditLog.create'))
 
     revalidatePath(RUTA_INVENTARIO)
     return { success: `Movimiento registrado en ${resultado.nombre}.` }

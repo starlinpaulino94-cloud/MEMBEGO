@@ -8,6 +8,7 @@ import { getRequestMeta } from '@/lib/server-utils'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 // F5.1: registro self-service de empresas (B2B). La empresa se crea
 // DESPUBLICADA (isPublished: false): no aparece en el marketplace hasta
@@ -148,10 +149,10 @@ export async function registrarEmpresa(
     console.error('[registro-empresa]', e)
     // Rollback para no dejar registros huérfanos.
     if (supabaseId) {
-      await supabase.auth.admin.deleteUser(supabaseId).catch(() => {})
+      await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('registro:rollback-auth-user'))
     }
     if (companyId) {
-      await prisma.company.delete({ where: { id: companyId } }).catch(() => {})
+      await prisma.company.delete({ where: { id: companyId } }).catch(anotarFallo('registro:company.delete'))
     }
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }

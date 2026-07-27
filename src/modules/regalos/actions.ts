@@ -17,6 +17,7 @@ import {
   mensajeLimitePorCliente,
 } from '@/modules/promociones/compra'
 import { generarCodigo } from '@/lib/codes'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * Regalos P2P · Fase R1 (docs/REGALOS-P2P.md).
@@ -404,7 +405,7 @@ export async function responderRegalo(
       where: { id: regalo.id, estado: 'PENDIENTE' },
       data: { estado: 'EXPIRADO', resueltoAt: new Date() },
     })
-    if (upd.count > 0) await devolverUsos(regalo).catch(() => {})
+    if (upd.count > 0) await devolverUsos(regalo).catch(anotarFallo('regalos:regalo.updateMany'))
     revalidatePath('/cliente/regalos')
     return { error: 'Este regalo expiró y los usos volvieron a tu amigo.' }
   }
@@ -489,12 +490,12 @@ export async function responderRegalo(
   })
   if (upd.count === 0) {
     if (compraDestinoId) {
-      await prisma.productoCompra.delete({ where: { id: compraDestinoId } }).catch(() => {})
+      await prisma.productoCompra.delete({ where: { id: compraDestinoId } }).catch(anotarFallo('regalos:productoCompra.delete'))
     }
     if (membershipDestinoId) {
       await prisma.membership
         .update({ where: { id: membershipDestinoId }, data: { lavadosRestantes: { decrement: regalo.usos } } })
-        .catch(() => {})
+        .catch(anotarFallo('regalos:membership.update'))
     }
     return { error: 'Este regalo ya fue procesado.' }
   }
@@ -532,7 +533,7 @@ export async function responderRegalo(
       where: { id: regalo.id },
       data: { txRemitenteId: txRem?.id ?? null, txDestinatarioId: txDest?.id ?? null },
     })
-    .catch(() => {})
+    .catch(anotarFallo('regalos:regalo.update'))
 
   await notificarCliente(
     regalo.remitenteId,

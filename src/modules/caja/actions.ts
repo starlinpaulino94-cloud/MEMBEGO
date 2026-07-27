@@ -18,6 +18,7 @@ import {
   type ReporteEmpleadoDia,
 } from '@/modules/caja/queries'
 import { calcularArqueo, etiquetaArqueo } from '@/modules/caja/arqueo'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * Caja (POS) · acciones del turno: abrir, cerrar (con arqueo) y cobrar.
@@ -307,7 +308,7 @@ export async function registrarMovimientoCaja(
         userAgent: meta.userAgent,
       },
     })
-    .catch(() => {})
+    .catch(anotarFallo('caja:auditoria'))
 
   revalidatePath('/empleado/caja')
   const etiqueta = tipo === 'ENTRADA' ? 'Entrada' : 'Salida'
@@ -538,7 +539,7 @@ export async function cobrarOrden(
       titulo: 'Pago recibido en sucursal',
       mensaje: `Recibimos tu pago de RD$${monto.toLocaleString('es-DO')} (${detalle}). ¡Ya está activo!`,
       href: ordenTipo === 'MEMBRESIA' ? `/membresia/${ordenId}` : `/cliente/mis-promociones/${ordenId}`,
-    }).catch(() => {})
+    }).catch(anotarFallo('caja:notificacion-pago'))
   }
 
   revalidatePath('/empleado/caja')

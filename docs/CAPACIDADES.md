@@ -189,3 +189,56 @@ Restaurante y gimnasio siguen **sin app**. Sus categorías existen en el catálo
 pero no tienen entrada en `APPS_POR_CATEGORIA`, así que el launchpad dice
 "aún no tiene una aplicación especializada". Construirlas exige módulos nuevos
 grandes (mesas, cocina, rutinas) y eso está fuera del alcance de esta etapa.
+
+
+## Encender y apagar desde la terminal (`npm run cap`)
+
+El panel `/superadmin/capacidades` sigue siendo la vía normal. El script existe
+para el momento en que hay que **apagar algo en segundos** —estrenando una
+capacidad en producción, con la pista llena— sin depender de que el panel
+cargue ni de encontrar la casilla correcta con prisa.
+
+```bash
+npm run cap                          # estado de CARTOWN
+npm run cap -- estado "El Fogón"     # estado de otra empresa
+npm run cap -- on  NAVEGACION_V2     # encender
+npm run cap -- off NAVEGACION_V2     # apagar  ← la vuelta atrás
+npm run cap -- reset NAVEGACION_V2   # quitar el override (vuelve al paquete base)
+npm run cap -- on NAVEGACION_V2 --si # sin confirmación
+npm run cap -- sql on NAVEGACION_V2  # solo imprime el SQL, no conecta
+```
+
+**No duplica lógica**: importa `CAPACIDADES`, `CAPACIDAD_LABELS` y
+`capacidadesEfectivas` de `src/modules/capacidades/catalogo.ts`, así que no
+puede desincronizarse de lo que hace la app. Por eso es `.ts` y corre con tsx.
+
+**Protecciones** (todas verificadas contra PostgreSQL 16 real):
+
+- Pide confirmación antes de escribir, avisando que es producción. `--si` la salta.
+- Si el nombre coincide con **varias** empresas, aborta y las lista, en vez de
+  tocar la equivocada.
+- Rechaza capacidades y acciones que no existen, listando las válidas.
+- Relee de la base después de escribir y falla si no quedó como se esperaba.
+- Si no hay nada que cambiar, lo dice y no escribe.
+
+**Modo `sql`** para cuando no hay `DATABASE_URL` a mano: imprime la sentencia
+para pegar en el SQL Editor de Supabase.
+
+### Detalle: por qué el SQL usa `||` y no `jsonb_set`
+
+`jsonb_set(capacidades, '{overrides,X}', ...)` **no crea el objeto intermedio**.
+Si la fila todavía no tiene la clave `overrides` —el caso de cualquier empresa
+que nunca haya tenido un override— el `UPDATE` reporta éxito y **no cambia
+nada**. Es un no-op silencioso, el peor tipo de fallo.
+
+La versión que usa el script fusiona con `||`, que crea `overrides` si falta y
+conserva `categoria` y los demás overrides:
+
+```sql
+UPDATE companies
+   SET capacidades = COALESCE(capacidades, '{}'::jsonb)
+     || jsonb_build_object('overrides',
+          COALESCE(capacidades->'overrides', '{}'::jsonb)
+          || jsonb_build_object('NAVEGACION_V2', true))
+ WHERE name ILIKE '%CARTOWN%';
+```

@@ -68,6 +68,8 @@ hábitos del equipo de pista.
 4. Anotar cada fricción real (no suposiciones) en una lista.
 5. Si la fricción es alta: apagar la capacidad (vuelve todo al instante, sin
    desplegar) y corregir antes de reintentar.
+   *Para apagar en segundos sin abrir el panel: `npm run cap -- off
+   NAVEGACION_V2` (ver docs/CAPACIDADES.md).*
 
 **Terminado cuando:** el equipo de pista completa un día entero de operación
 con la navegación nueva sin pedir ayuda, y la lista de fricciones está
@@ -197,6 +199,13 @@ indicador que vale: si hay que recordárselo, el módulo todavía estorba.
    esperada.
 3. Revisar los `catch` silenciosos del código nuevo (`.catch(() => {})`) y
    asegurar que al menos registren en consola con contexto.
+   *Cerrado: los 46 del servidor usan `anotarFallo('modulo:operacion')`
+   (`src/lib/prisma-errors.ts`), que registra con clasificación y remedio
+   (`SCHEMA_DRIFT` → «corre db-doctor») sin romper el flujo. Una regla de
+   ESLint (`no-restricted-syntax`) impide que vuelvan a colarse en
+   `src/modules`, `src/lib` y `src/app`. En la UI se dejaron intactos: ahí
+   `navigator.share().catch(() => {})` significa «el usuario canceló», y no
+   hay nada que registrar.*
 
 **Terminado cuando:** `npm run db:doctor` reporta el estado real de todas las
 migraciones manuales y un superadmin ve el aviso sin tener que entrar a la

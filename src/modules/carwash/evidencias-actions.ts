@@ -12,6 +12,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { EVIDENCIA_MOMENTOS } from './evidencias'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 const RUTA_EVIDENCIAS = '/admin/app/carwash/evidencias'
 
@@ -99,7 +100,7 @@ export async function guardarEvidencia(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('carwash:auditLog.create'))
 
     revalidatePath(RUTA_EVIDENCIAS)
     revalidatePath('/admin/app/carwash/cola')

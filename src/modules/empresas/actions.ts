@@ -6,6 +6,7 @@ import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface ActionState {
   error?: string
@@ -163,10 +164,10 @@ export async function crearEmpresa(
     // Rollback: borrar el auth user y la empresa recién creada para no dejar
     // registros huérfanos.
     if (supabaseId) {
-      await supabase.auth.admin.deleteUser(supabaseId).catch(() => {})
+      await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('empresas:rollback-auth-user'))
     }
     if (companyId) {
-      await prisma.company.delete({ where: { id: companyId } }).catch(() => {})
+      await prisma.company.delete({ where: { id: companyId } }).catch(anotarFallo('empresas:company.delete'))
     }
     return { error: 'No se pudo crear la empresa. Intenta de nuevo.' }
   }

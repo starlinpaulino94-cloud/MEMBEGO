@@ -349,6 +349,7 @@ model Company {
   productosInventario   ProductoInventario[]
   evidenciasFoto        EvidenciaFoto[]
   campanaGlobalEmpresas CampanaGlobalEmpresa[]
+  campanaPasos          CampanaPaso[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -797,6 +798,8 @@ model Cliente {
   // App Car Wash · E5.
   colaVehiculos  ColaVehiculo[]
   evidenciasFoto EvidenciaFoto[]
+
+  campanaInscripciones CampanaInscripcion[]
 
   @@unique([supabaseId, companyId])
   // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).
@@ -1315,6 +1318,11 @@ model ProductoCompra {
   id     String                @id @default(cuid())
   tipo   ProductoComercialTipo @default(PROMOCION)
   estado CompraEstado          @default(SOLICITADA)
+
+  /// Si esta compra nació de una campaña en cadena, el eslabón que la generó.
+  /// Es lo que permite, al canjearla, saber qué paso desbloquear después.
+  campanaPasoId String?
+  campanaPaso   CampanaPaso? @relation(fields: [campanaPasoId], references: [id], onDelete: SetNull)
 
   companyId   String
   company     Company    @relation(fields: [companyId], references: [id])
@@ -3236,6 +3244,12 @@ model CampanaGlobal {
   /// 'PROMOCION' | 'PLAN' — qué se genera en cada empresa (validado en código).
   tipo             String
   descripcion      String?
+  /// Imagen de portada de la campaña. Cada paso puede tener la suya propia.
+  imagenUrl        String?
+  /// 'COPIA'  = la misma oferta se replica en cada empresa (campaña simple).
+  /// 'CADENA' = cada empresa aporta un beneficio DISTINTO y canjear uno
+  ///            desbloquea el siguiente (marketing cruzado entre negocios).
+  modo             String    @default("COPIA")
   /// Plantilla con los campos del objeto a crear (título, precio, vigencia…).
   /// Se guarda como JSON para no acoplar la campaña al esquema de destino.
   plantilla        Json      @default("{}")
@@ -3251,9 +3265,65 @@ model CampanaGlobal {
   updatedAt        DateTime  @updatedAt
 
   participantes CampanaGlobalEmpresa[]
+  pasos         CampanaPaso[]
+  inscripciones CampanaInscripcion[]
 
   @@index([estado, createdAt])
   @@map("campanas_globales")
+}
+
+/// Un eslabón de una campaña en CADENA: el beneficio que aporta UNA empresa.
+///
+/// Ejemplo real: paso 1 = lavado gratis en el carwash; paso 2 = 20% en
+/// desayuno en el restaurante. El cliente recibe el paso 1 al inscribirse y,
+/// al canjearlo, se le entrega automáticamente el paso 2 en la otra empresa.
+model CampanaPaso {
+  id          String        @id @default(cuid())
+  campanaId   String
+  campana     CampanaGlobal @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Posición en la cadena, empezando en 1.
+  orden       Int
+  titulo      String
+  descripcion String?
+  /// Imagen propia del beneficio; si falta, se usa la de la campaña.
+  imagenUrl   String?
+  /// Campos del beneficio a crear (descuento, vigencia, usos…), como en
+  /// las campañas simples. Se normaliza en código al aplicar.
+  plantilla   Json          @default("{}")
+  /// Promoción REAL generada en la empresa al aplicar la campaña.
+  promocionId String?
+  error       String?
+  aplicadaAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  compras ProductoCompra[]
+
+  @@unique([campanaId, orden])
+  @@index([companyId])
+  @@map("campana_pasos")
+}
+
+/// Avance de un cliente dentro de una campaña en cadena.
+model CampanaInscripcion {
+  id           String        @id @default(cuid())
+  campanaId    String
+  campana      CampanaGlobal @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  clienteId    String
+  cliente      Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  /// Orden del paso que el cliente tiene disponible ahora mismo.
+  pasoActual   Int           @default(1)
+  /// 'EN_CURSO' | 'COMPLETADA' (validado en código).
+  estado       String        @default("EN_CURSO")
+  completadaAt DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([campanaId, clienteId])
+  @@index([clienteId])
+  @@map("campana_inscripciones")
 }
 
 /// Empresa participante de una campaña global y el rastro de lo que se le

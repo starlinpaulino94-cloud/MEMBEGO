@@ -18,6 +18,7 @@ import {
 } from '@/modules/transacciones/actions'
 import { validarConsumoCompra, registrarTransicionCompra } from '@/modules/promociones/compra'
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface VisitaReciente {
   id: string
@@ -193,7 +194,7 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
               userId: user.metadata.dbUserId ?? null,
             })
           }
-        }).catch(() => {})
+        }).catch(anotarFallo('visitas:vencimiento-membresia'))
       }
 
       return {

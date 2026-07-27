@@ -22,6 +22,7 @@ import {
   type CategoriaNegocio,
 } from './catalogo'
 import { CAPACIDADES_TAG } from './resolver'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface CapacidadesActionState {
   error?: string
@@ -83,7 +84,7 @@ export async function guardarCapacidades(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('capacidades:auditLog.create'))
 
     // El resolutor está cacheado por tag: los cambios aplican de inmediato.
     revalidateTag(CAPACIDADES_TAG, 'max')

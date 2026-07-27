@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export async function ajustarLavadosMembresia(input: {
   membershipId: string
@@ -72,7 +73,7 @@ export async function ajustarLavadosMembresia(input: {
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('superadmin:auditoria-membresia'))
 
     revalidatePath('/superadmin/membresias')
     revalidatePath('/admin/membresias')

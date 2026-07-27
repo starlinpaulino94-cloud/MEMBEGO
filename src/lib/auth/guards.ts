@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth'
 import { FULL_ADMIN_ROLES, type AppRole, type SessionUser } from '@/types'
 import { canAccessAdminSection, type AdminSection } from '@/lib/auth/permissions'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 function setSentryContext(user: SessionUser) {
   import('@sentry/nextjs')
@@ -10,7 +11,7 @@ function setSentryContext(user: SessionUser) {
       Sentry.setTag('user.role', user.metadata.role)
       if (user.metadata.companyId) Sentry.setTag('company.id', user.metadata.companyId)
     })
-    .catch(() => {})
+    .catch(anotarFallo('auth:sentry-contexto'))
 }
 
 export async function requireUser(): Promise<SessionUser> {

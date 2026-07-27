@@ -16,6 +16,7 @@ import { procesarReferidoCompletado } from '@/modules/referidos/actions'
 import { procesarConversionGrowth } from '@/modules/growth/registro'
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { periodEnd } from '@/lib/server-utils'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
 
@@ -149,14 +150,14 @@ export async function activarMembresia(
     await procesarReferidoCompletado(membership.clienteId, membership.companyId, {
       origen: 'MEMBRESIA',
       monto: montoNeto,
-    }).catch(() => {})
+    }).catch(anotarFallo('pagos:referido-completado'))
   }
   // Growth Engine 3.0: recompensas configurables del evento MEMBRESIA (incluye
   // reglas por plan específico, ej. Plan Gold → créditos). No bloquea.
   await procesarConversionGrowth(membership.clienteId, membership.companyId, {
     trigger: 'MEMBRESIA',
     planId: membership.planId,
-  }).catch(() => {})
+  }).catch(anotarFallo('pagos:conversion-growth'))
   // Campañas "Invita y Gana": si este cliente llegó por una campaña de
   // invitación, su primera membresía es un hito del embudo (nunca rompe la
   // activación).

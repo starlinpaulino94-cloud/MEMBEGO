@@ -12,6 +12,7 @@ import { sendEmail } from '@/lib/email'
 import { getAppUrl, SITE_NAME } from '@/lib/site'
 import { TERMS_VERSION } from '@/lib/legal'
 import { FULL_ADMIN_ROLES, INVITABLE_ROLES, type AppRole } from '@/types'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface InvitacionState {
   error?: string
@@ -170,7 +171,7 @@ export async function aceptarInvitacion(
   if (invitacion.expiraEn <= new Date()) {
     await prisma.invitacion
       .update({ where: { id: invitacion.id }, data: { estado: 'EXPIRADA' } })
-      .catch(() => {})
+      .catch(anotarFallo('admin:invitacion.update'))
     return { error: 'La invitación expiró. Pide una nueva.' }
   }
 
@@ -231,10 +232,10 @@ export async function aceptarInvitacion(
     // supabaseId de un usuario ya borrado) que bloquea para siempre el
     // reintento (el chequeo de "correo ya registrado" la encontraría).
     if (dbUserId) {
-      await prisma.user.delete({ where: { id: dbUserId } }).catch(() => {})
+      await prisma.user.delete({ where: { id: dbUserId } }).catch(anotarFallo('admin:user.delete'))
     }
     if (supabaseId) {
-      await admin.auth.admin.deleteUser(supabaseId).catch(() => {})
+      await admin.auth.admin.deleteUser(supabaseId).catch(anotarFallo('admin:user.delete'))
     }
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }

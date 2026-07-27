@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * Regalos P2P · Fase R2 — consultas del módulo /cliente/regalos.
@@ -98,7 +99,7 @@ export async function getRegalosCliente(clienteId: string): Promise<{
   enviados: RegaloItem[]
   pendientesRecibidos: number
 }> {
-  await expirarPendientesVencidos(clienteId).catch(() => {})
+  await expirarPendientesVencidos(clienteId).catch(anotarFallo('regalos:expirar-pendientes'))
 
   const regalos = await prisma.regalo.findMany({
     where: { OR: [{ remitenteId: clienteId }, { destinatarioId: clienteId }] },

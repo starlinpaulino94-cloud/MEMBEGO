@@ -37,7 +37,10 @@ export default async function CampanaGlobalDetallePage({
 
   const tipo = campana.tipo as CampanaTipo
   const plantilla = leerPlantilla(tipo, campana.plantilla)
-  const pendientes = campana.participantes.filter((p) => p.aplicadaAt == null).length
+  const esCadena = campana.modo === 'CADENA'
+  const pendientes = esCadena
+    ? campana.pasos.filter((p) => p.aplicadaAt == null).length
+    : campana.participantes.filter((p) => p.aplicadaAt == null).length
 
   const resumen =
     tipo === 'PLAN'
@@ -96,12 +99,61 @@ export default async function CampanaGlobalDetallePage({
         )}
       </div>
 
+      {campana.imagenUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={campana.imagenUrl}
+          alt={campana.nombre}
+          className="h-40 w-full rounded-2xl object-cover"
+        />
+      )}
+
       <CampanaGlobalAcciones
         campanaId={campana.id}
         estado={campana.estado}
         pendientes={pendientes}
       />
 
+      {esCadena && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+            La cadena, paso a paso
+          </h2>
+          {campana.pasos.map((p, i) => (
+            <div key={p.id} className="flex gap-3 rounded-2xl border border-border/70 bg-card p-4">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                {p.orden}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-foreground">{p.titulo}</p>
+                <p className="text-sm text-muted-foreground">{p.company.name}</p>
+                {p.descripcion && (
+                  <p className="mt-1 text-sm text-muted-foreground">{p.descripcion}</p>
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {i === 0
+                    ? 'El cliente lo toma por su cuenta; es la puerta de entrada.'
+                    : `Se entrega en cuanto el cliente usa el paso ${p.orden - 1} por primera vez.`}
+                </p>
+                {p.error && <p className="mt-1 text-xs text-destructive">Error: {p.error}</p>}
+              </div>
+              {p.imagenUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.imagenUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
+              )}
+              <span
+                className={`self-start rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                  p.aplicadaAt ? 'bg-success/15 text-success-foreground' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {p.aplicadaAt ? 'creada' : 'pendiente'}
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {!esCadena && (
       <section className="rounded-2xl border border-border/70 bg-card p-4">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
           Lo que se crea en cada empresa
@@ -115,6 +167,7 @@ export default async function CampanaGlobalDetallePage({
           ))}
         </dl>
       </section>
+      )}
 
       <section className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
         <table className="w-full min-w-[520px] text-sm">

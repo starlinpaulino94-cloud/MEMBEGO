@@ -136,6 +136,13 @@ export async function solicitarCompraPromocion(
       return creada
     })
 
+    // Campañas conjuntas en cadena: si esta promoción es un eslabón, la compra
+    // queda marcada como tal (y el cliente inscrito si es el primer paso).
+    // Así el cliente entra a la cadena por el flujo normal, sin pantallas
+    // extra. Fail-open: nunca invalida una compra legítima.
+    const { vincularCompraSiEsPaso } = await import('@/modules/campanas/cadena')
+    await vincularCompraSiEsPaso(compra.id, promo.id, cliente.id)
+
     // Promoción gratuita: activación directa (sin pago), QR inmediato.
     if (esGratis) {
       const meta = await getRequestMeta()

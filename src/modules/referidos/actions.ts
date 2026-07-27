@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { logReferralEvent, PUNTOS, TIPOS_EMPRESA, TIPOS_GLOBAL } from '@/lib/referidos'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { crearTransaccionAplicada } from '@/lib/transactions'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * Fase E6: conversión del referido en su PRIMERA compra confirmada — membresía
@@ -29,7 +30,7 @@ export async function procesarReferidoCompletado(
   const origen = opts.origen ?? 'MEMBRESIA'
   // Centro global MembeGo: si este cliente llegó referido desde OTRA empresa,
   // el referente gana los puntos globales de membresía (una sola vez).
-  if (origen === 'MEMBRESIA') await procesarMembresiaGlobal(clienteId).catch(() => {})
+  if (origen === 'MEMBRESIA') await procesarMembresiaGlobal(clienteId).catch(anotarFallo('referidos:puntos-globales'))
 
   try {
     const referido = await prisma.referido.findUnique({
@@ -104,7 +105,7 @@ export async function procesarReferidoCompletado(
         cliente: { nombre: referido.referenteCliente.nombre },
         referido: { clienteId, origen, monto: opts.monto ?? null },
       },
-    }).catch(() => {})
+    }).catch(anotarFallo('referidos:notificacion'))
 
     await evaluarRecompensas(referido.referenteClienteId, companyId)
   } catch (e) {

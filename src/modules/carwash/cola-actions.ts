@@ -17,6 +17,7 @@ import {
   COLA_TRANSICIONES,
   type ColaEstado,
 } from './cola'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 const RUTA_COLA = '/admin/app/carwash/cola'
 
@@ -101,7 +102,7 @@ export async function registrarEnCola(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('carwash:auditLog.create'))
 
     revalidatePath(RUTA_COLA)
     return { success: 'Vehículo agregado a la cola.' }
@@ -161,7 +162,7 @@ export async function moverCola(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('carwash:auditLog.create'))
 
     revalidatePath(RUTA_COLA)
     return { ok: true }

@@ -18,6 +18,7 @@ import {
   type HorarioSemanal,
 } from '@/modules/citas/disponibilidad'
 import { ESTADOS_ACTIVOS, getAgendaConfig } from '@/modules/citas/queries'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface CitaActionState {
   error?: string
@@ -180,7 +181,7 @@ export async function reservarCita(
       titulo: cfg.autoConfirmar ? 'Nueva cita reservada' : 'Nueva cita por confirmar',
       mensaje: `${cliente.nombre} reservó para el ${cuando}${servicio ? ` — ${servicio}` : ''}.`,
       href: `/admin/citas?fecha=${ymd}`,
-    }).catch(() => {})
+    }).catch(anotarFallo('citas:cita.update'))
 
     revalidatePath('/cliente/citas')
     revalidatePath('/admin/citas')
@@ -239,7 +240,7 @@ export async function cancelarCitaCliente(
       titulo: 'Cita cancelada por el cliente',
       mensaje: `${cita.cliente.nombre} canceló su cita del ${etiquetaDia(ymdEnTz(cita.inicio, tz), tz)}.`,
       href: `/admin/citas?fecha=${ymdEnTz(cita.inicio, tz)}`,
-    }).catch(() => {})
+    }).catch(anotarFallo('citas:cita.update'))
 
     revalidatePath('/cliente/citas')
     revalidatePath('/admin/citas')
@@ -329,7 +330,7 @@ export async function actualizarEstadoCita(
           titulo: notifCliente.titulo,
           mensaje: notifCliente.mensaje,
           href: '/cliente/citas',
-        }).catch(() => {})
+        }).catch(anotarFallo('citas:user.findUnique'))
       }
     }
 

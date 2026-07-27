@@ -85,6 +85,12 @@ export function ConfirmPromo({
                 ? 'Era el último uso: la promoción quedó consumida.'
                 : `Quedan ${state.restantes} uso${state.restantes !== 1 ? 's' : ''}. El cliente recibió un QR nuevo.`}
             </p>
+            {state.siguientePaso && (
+              <p className="mt-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary">
+                🔗 Se desbloqueó «{state.siguientePaso.titulo}» en{' '}
+                {state.siguientePaso.companyName}. Avísale al cliente: ya está en su app.
+              </p>
+            )}
           </div>
 
           <div className="rounded-xl border-2 border-success/25 bg-card p-4 space-y-2 text-sm">

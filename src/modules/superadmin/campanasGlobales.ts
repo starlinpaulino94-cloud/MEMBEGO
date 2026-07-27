@@ -141,6 +141,10 @@ export async function getCampanaGlobal(id: string) {
         include: { company: { select: { id: true, name: true, isActive: true } } },
         orderBy: { createdAt: 'asc' },
       },
+      pasos: {
+        include: { company: { select: { id: true, name: true } } },
+        orderBy: { orden: 'asc' },
+      },
     },
   })
 }

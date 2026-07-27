@@ -94,6 +94,24 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     migracion: '20260760_campanas_globales',
     afecta: 'Empresas participantes de las campañas conjuntas',
   },
+  {
+    tabla: 'campana_pasos',
+    columna: null,
+    migracion: '20260761_campanas_cadena',
+    afecta: 'Campañas en cadena entre negocios (un beneficio desbloquea otro)',
+  },
+  {
+    tabla: 'campana_inscripciones',
+    columna: null,
+    migracion: '20260761_campanas_cadena',
+    afecta: 'Avance de los clientes dentro de una campaña en cadena',
+  },
+  {
+    tabla: 'campanas_globales',
+    columna: 'modo',
+    migracion: '20260761_campanas_cadena',
+    afecta: 'Modo e imagen de las campañas conjuntas',
+  },
 ]
 
 export interface MigracionPendiente {

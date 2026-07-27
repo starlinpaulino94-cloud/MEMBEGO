@@ -21,6 +21,7 @@ import {
   type PlantillaPlan,
   type PlantillaPromocion,
 } from './campanasGlobales'
+import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface CampanaActionState {
   error?: string
@@ -48,8 +49,82 @@ export async function crearCampanaGlobal(
     const tipo = String(formData.get('tipo') ?? '').trim() as CampanaTipo
     const descripcion = String(formData.get('descripcion') ?? '').trim().slice(0, 500)
     if (!nombre) return { error: 'Ponle un nombre a la campaña.' }
-    if (!(CAMPANA_TIPOS as readonly string[]).includes(tipo)) {
+    if (formData.get('modo') !== 'CADENA' && !(CAMPANA_TIPOS as readonly string[]).includes(tipo)) {
       return { error: 'Elige qué se va a crear en cada empresa.' }
+    }
+
+    const modo = formData.get('modo') === 'CADENA' ? 'CADENA' : 'COPIA'
+    const imagenUrl = String(formData.get('imagenUrl') ?? '').trim() || null
+
+    // ── Campaña EN CADENA: cada empresa aporta un beneficio distinto ────────
+    if (modo === 'CADENA') {
+      // Los pasos llegan como arrays paralelos (paso_companyId[], paso_titulo[]…).
+      const companies = formData.getAll('paso_companyId').map(String)
+      const titulos = formData.getAll('paso_titulo').map((v) => String(v).trim())
+      const descs = formData.getAll('paso_descripcion').map((v) => String(v).trim())
+      const imgs = formData.getAll('paso_imagenUrl').map((v) => String(v).trim())
+      const descuentos = formData.getAll('paso_descuento').map((v) => String(v).trim())
+      const usos = formData.getAll('paso_usos').map((v) => String(v).trim())
+
+      const pasos = companies
+        .map((companyId, i) => ({
+          companyId,
+          orden: i + 1,
+          titulo: titulos[i] || `Paso ${i + 1}`,
+          descripcion: descs[i] || null,
+          imagenUrl: imgs[i] || null,
+          plantilla: {
+            titulo: titulos[i] || `Paso ${i + 1}`,
+            descripcion: descs[i] || '',
+            tipo: 'general',
+            descuento: Number(descuentos[i]) || null,
+            imagenUrl: imgs[i] || imagenUrl,
+            esComprable: false,
+            usosPorCompra: Number(usos[i]) || 1,
+          },
+        }))
+        .filter((p) => p.companyId)
+
+      if (pasos.length < 2) {
+        return {
+          error:
+            'Una campaña en cadena necesita al menos 2 empresas: el beneficio de la primera desbloquea el de la siguiente.',
+        }
+      }
+      const empresasUnicas = new Set(pasos.map((p) => p.companyId))
+      if (empresasUnicas.size !== pasos.length) {
+        return { error: 'Cada empresa puede aparecer una sola vez en la cadena.' }
+      }
+
+      await prisma.campanaGlobal.create({
+        data: {
+          nombre,
+          tipo: 'PROMOCION',
+          modo: 'CADENA',
+          imagenUrl,
+          descripcion: descripcion || null,
+          plantilla: {},
+          todasLasEmpresas: false,
+          creadaPorId: user.metadata.dbUserId ?? null,
+          participantes: { create: pasos.map((p) => ({ companyId: p.companyId })) },
+          pasos: {
+            create: pasos.map((p) => ({
+              companyId: p.companyId,
+              orden: p.orden,
+              titulo: p.titulo,
+              descripcion: p.descripcion,
+              imagenUrl: p.imagenUrl,
+              plantilla: p.plantilla,
+            })),
+          },
+        },
+        select: { id: true },
+      })
+
+      revalidatePath(RUTA)
+      return {
+        success: `Cadena creada en borrador con ${pasos.length} eslabones. Revísala y aplícala cuando estés listo.`,
+      }
     }
 
     const todas = formData.get('todasLasEmpresas') === 'on'
@@ -101,6 +176,8 @@ export async function crearCampanaGlobal(
       data: {
         nombre,
         tipo,
+        modo: 'COPIA',
+        imagenUrl,
         descripcion: descripcion || null,
         plantilla,
         todasLasEmpresas: todas,
@@ -143,6 +220,65 @@ export async function aplicarCampanaGlobal(
     if (!campana) return { error: 'Campaña no encontrada.' }
     if (campana.estado === 'ARCHIVADA') {
       return { error: 'Esta campaña está archivada.' }
+    }
+
+    // ── Cadena: cada eslabón genera SU promoción en SU empresa ─────────────
+    if (campana.modo === 'CADENA') {
+      const pasos = await prisma.campanaPaso.findMany({
+        where: { campanaId, aplicadaAt: null },
+        orderBy: { orden: 'asc' },
+      })
+      let creadasC = 0
+      let fallosC = 0
+      for (const paso of pasos) {
+        try {
+          const t = leerPlantilla('PROMOCION', paso.plantilla) as PlantillaPromocion
+          const promo = await prisma.promocion.create({
+            data: {
+              companyId: paso.companyId,
+              titulo: paso.titulo || t.titulo,
+              descripcion: paso.descripcion ?? t.descripcion,
+              tipo: t.tipo,
+              descuento: t.descuento ?? null,
+              imagenUrl: paso.imagenUrl ?? t.imagenUrl ?? campana.imagenUrl,
+              vigenciaHasta: t.vigenciaHasta ? new Date(t.vigenciaHasta) : null,
+              esComprable: false,
+              precio: null,
+              usosPorCompra: t.usosPorCompra ?? 1,
+              // Solo el PRIMER eslabón se ofrece al público: los siguientes
+              // llegan al cliente por la cadena, no se toman por su cuenta.
+              visibilidad: paso.orden === 1 ? 'publica' : 'privada',
+              activo: true,
+            },
+            select: { id: true },
+          })
+          await prisma.campanaPaso.update({
+            where: { id: paso.id },
+            data: { promocionId: promo.id, aplicadaAt: new Date(), error: null },
+          })
+          await prisma.campanaGlobalEmpresa.updateMany({
+            where: { campanaId, companyId: paso.companyId },
+            data: { promocionId: promo.id, aplicadaAt: new Date(), error: null },
+          })
+          creadasC++
+        } catch (e) {
+          fallosC++
+          console.error('[campanas globales] paso', paso.orden, e)
+          await prisma.campanaPaso
+            .update({
+              where: { id: paso.id },
+              data: { error: e instanceof Error ? e.message.slice(0, 300) : 'Error desconocido' },
+            })
+            .catch(anotarFallo('superadmin:campanaPaso.update'))
+        }
+      }
+      await prisma.campanaGlobal.update({
+        where: { id: campanaId },
+        data: { estado: 'APLICADA', aplicadaAt: new Date() },
+      })
+      revalidatePath(RUTA)
+      revalidatePath(`${RUTA}/${campanaId}`)
+      return { ok: true, creadas: creadasC, fallos: fallosC }
     }
 
     const tipo = campana.tipo as CampanaTipo
@@ -226,7 +362,7 @@ export async function aplicarCampanaGlobal(
             where: { id: p.id },
             data: { error: e instanceof Error ? e.message.slice(0, 300) : 'Error desconocido' },
           })
-          .catch(() => {})
+          .catch(anotarFallo('superadmin:campanaGlobalEmpresa.update'))
       }
     }
 
@@ -248,7 +384,7 @@ export async function aplicarCampanaGlobal(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('superadmin:auditLog.create'))
 
     revalidatePath(RUTA)
     revalidatePath(`${RUTA}/${campanaId}`)
@@ -274,7 +410,14 @@ export async function archivarCampanaGlobal(
       where: { campanaId },
       select: { promocionId: true, planId: true },
     })
-    const promos = participantes.map((p) => p.promocionId).filter((x): x is string => !!x)
+    const pasos = await prisma.campanaPaso.findMany({
+      where: { campanaId },
+      select: { promocionId: true },
+    })
+    const promos = [
+      ...participantes.map((p) => p.promocionId),
+      ...pasos.map((p) => p.promocionId),
+    ].filter((x): x is string => !!x)
     const planes = participantes.map((p) => p.planId).filter((x): x is string => !!x)
 
     if (promos.length > 0) {
@@ -310,7 +453,7 @@ export async function archivarCampanaGlobal(
           ...meta,
         },
       })
-      .catch(() => {})
+      .catch(anotarFallo('superadmin:auditoria-campana'))
 
     revalidatePath(RUTA)
     revalidatePath(`${RUTA}/${campanaId}`)
