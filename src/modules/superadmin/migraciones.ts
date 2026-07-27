@@ -107,6 +107,24 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
     afecta: 'Avance de los clientes dentro de una campaña en cadena',
   },
   {
+    tabla: 'tipos_vehiculo',
+    columna: null,
+    migracion: '20260762_carwash_fase1',
+    afecta: 'Catálogo de la pista: tipos de vehículo y precios por tipo',
+  },
+  {
+    tabla: 'servicios',
+    columna: null,
+    migracion: '20260762_carwash_fase1',
+    afecta: 'Servicios vendibles del car wash',
+  },
+  {
+    tabla: 'bahias',
+    columna: null,
+    migracion: '20260762_carwash_fase1',
+    afecta: 'Bahías y la cabina de pista',
+  },
+  {
     tabla: 'campanas_globales',
     columna: 'modo',
     migracion: '20260761_campanas_cadena',

@@ -164,6 +164,7 @@ model User {
   transicionesCompra        ProductoCompraTransicion[]
   // App Car Wash · E5.
   colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
+  colaAtendida              ColaVehiculo[]             @relation("ColaAtendidaPor")
   campanasGlobales          CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
   movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
   evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
@@ -350,6 +351,9 @@ model Company {
   evidenciasFoto        EvidenciaFoto[]
   campanaGlobalEmpresas CampanaGlobalEmpresa[]
   campanaPasos          CampanaPaso[]
+  tipoVehiculos         TipoVehiculo[]
+  servicios             Servicio[]
+  bahias                Bahia[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -378,6 +382,7 @@ model Sucursal {
   comprasPago     ProductoCompra[] @relation("CompraSucursalPago")
   citas           Cita[]
   colaVehiculos   ColaVehiculo[]
+  bahias          Bahia[]
 
   @@index([companyId])
   @@map("sucursales")
@@ -1220,6 +1225,10 @@ model Vehiculo {
 
   visits Visit[]
   citas  Cita[]
+
+  /// Fase 1 · el tipo se recuerda para no volver a preguntarlo cada visita.
+  tipoVehiculoId String?
+  tipoVehiculo   TipoVehiculo? @relation(fields: [tipoVehiculoId], references: [id], onDelete: SetNull)
 
   // App Car Wash · E5.
   colaEntradas ColaVehiculo[]
@@ -3129,30 +3138,40 @@ model OfertaUso {
 /// → LISTO → ENTREGADO, o CANCELADO. Puede ligarse a un cliente/vehículo
 /// registrado o capturarse "al vuelo" solo con placa/descripción.
 model ColaVehiculo {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   companyId       String
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sucursalId      String?
-  sucursal        Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  sucursal        Sucursal?     @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
   clienteId       String?
-  cliente         Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  cliente         Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
   vehiculoId      String?
-  vehiculo        Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  vehiculo        Vehiculo?     @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
   /// Para vehículos sin registrar: placa y descripción libres.
   placa           String?
   descripcion     String?
   servicio        String?
   notaInterna     String?
-  estado          String    @default("EN_ESPERA")
+  estado          String        @default("EN_ESPERA")
   inicioAt        DateTime?
   listoAt         DateTime?
   entregadoAt     DateTime?
   registradaPorId String?
-  registradaPor   User?     @relation("ColaRegistradaPor", fields: [registradaPorId], references: [id], onDelete: SetNull)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  registradaPor   User?         @relation("ColaRegistradaPor", fields: [registradaPorId], references: [id], onDelete: SetNull)
+  /// Fase 1 · quién trabajó el vehículo (base de comisiones y productividad).
+  atendidoPorId   String?
+  atendidoPor     User?         @relation("ColaAtendidaPor", fields: [atendidoPorId], references: [id], onDelete: SetNull)
+  /// Fase 1 · puesto de trabajo asignado.
+  bahiaId         String?
+  bahia           Bahia?        @relation(fields: [bahiaId], references: [id], onDelete: SetNull)
+  /// Fase 1 · tipo de vehículo (define el precio de cada servicio).
+  tipoVehiculoId  String?
+  tipoVehiculo    TipoVehiculo? @relation(fields: [tipoVehiculoId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   evidencias EvidenciaFoto[]
+  servicios  ColaServicio[]
 
   // Tablero del día por estado.
   @@index([companyId, estado, createdAt])
@@ -3346,4 +3365,124 @@ model CampanaGlobalEmpresa {
   @@unique([campanaId, companyId])
   @@index([companyId])
   @@map("campana_global_empresas")
+}
+
+// ─── App Car Wash · Fase 1 · Catálogo del oficio ─────────────────────────────
+
+/// Tipo de vehículo (sedán, SUV pequeña, jeepeta, camioneta…).
+///
+/// POR QUÉ EXISTE: sin esta dimensión, la única forma de decir "esto cuesta
+/// distinto según el carro" era duplicar el plan y escribirlo en el nombre —
+/// de ahí los "PLAN SILVER (SUV PEQ)". El precio de un servicio se define por
+/// servicio × tipo de vehículo, no repitiendo el servicio.
+model TipoVehiculo {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre    String
+  /// Menor = primero en los selectores.
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  precios      ServicioPrecio[]
+  vehiculos    Vehiculo[]
+  colaEntradas ColaVehiculo[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo, orden])
+  @@map("tipos_vehiculo")
+}
+
+/// Servicio vendible suelto (lavado básico, detallado, pulido, tapicería).
+///
+/// NO reemplaza a `Promocion` ni a `Plan`: el servicio es LO QUE SE VENDE;
+/// la promoción es un descuento sobre eso, y el plan es la forma recurrente
+/// de pagarlo. Antes de esto el negocio solo podía vender planes y promos,
+/// que es como facturar sin catálogo.
+model Servicio {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  /// Agrupador libre para la pantalla de cobro ("Lavado", "Detallado"…).
+  categoria   String?
+  /// Minutos estimados. Alimenta el tiempo esperado en pista.
+  duracionMin Int      @default(30)
+  /// true = es un extra que se suma a un servicio principal (cera, motor).
+  esAdicional Boolean  @default(false)
+  orden       Int      @default(0)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  precios ServicioPrecio[]
+  lineas  ColaServicio[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo, orden])
+  @@map("servicios")
+}
+
+/// Precio de un servicio para un tipo de vehículo concreto.
+/// Sin fila para un par (servicio, tipo) = ese servicio no aplica a ese tipo.
+model ServicioPrecio {
+  id             String       @id @default(cuid())
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  tipoVehiculoId String
+  tipoVehiculo   TipoVehiculo @relation(fields: [tipoVehiculoId], references: [id], onDelete: Cascade)
+  precio         Decimal      @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([servicioId, tipoVehiculoId])
+  @@index([tipoVehiculoId])
+  @@map("servicio_precios")
+}
+
+/// Puesto de trabajo dentro de una sucursal (bahía 1, bahía 2, área de
+/// detallado). Es lo que convierte la cola en una cabina: la pregunta
+/// operativa central de una pista es CUÁL ESTÁ LIBRE.
+model Bahia {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId String?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  nombre     String
+  orden      Int       @default(0)
+  activa     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  colaEntradas ColaVehiculo[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa, orden])
+  @@map("bahias")
+}
+
+/// Línea de servicio de un vehículo en pista: QUÉ se le está haciendo.
+///
+/// La entrada en cola (`ColaVehiculo`) es la orden de servicio; estas son sus
+/// líneas. El precio se CONGELA al agregarlo, para que un cambio de tarifa no
+/// reescriba el historial.
+model ColaServicio {
+  id         String       @id @default(cuid())
+  colaId     String
+  cola       ColaVehiculo @relation(fields: [colaId], references: [id], onDelete: Cascade)
+  servicioId String
+  servicio   Servicio     @relation(fields: [servicioId], references: [id])
+  /// Copia del nombre al momento de agregarlo (sobrevive a renombres).
+  nombre     String
+  precio     Decimal      @db.Decimal(10, 2)
+  cantidad   Int          @default(1)
+  createdAt  DateTime     @default(now())
+
+  @@index([colaId])
+  @@index([servicioId])
+  @@map("cola_servicios")
 }

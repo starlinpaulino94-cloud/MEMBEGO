@@ -113,6 +113,12 @@ export const APPS_POR_CATEGORIA: Partial<Record<CategoriaNegocio, AplicacionNego
       'La operación de la pista: escáner, citas, seguimiento de lavados, vehículos, sucursales y caja.',
     icon: 'Car',
     modulos: [
+      {
+        label: 'Catálogo de la pista',
+        descripcion: 'Servicios, precios por vehículo y bahías',
+        icon: 'Sparkles',
+        href: '/admin/app/carwash/catalogo',
+      },
       ESCANER,
       CITAS,
       SEGUIMIENTO,

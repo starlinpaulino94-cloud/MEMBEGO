@@ -270,14 +270,34 @@ Lo que cambia respecto de hoy:
 
 Ordenado por lo que desbloquea más con menos.
 
-## Fase 1 · La base que falta (lo que arregla el 60%)
+## Fase 1 · La base que falta — ENTREGADA
 
-| Entregable | Por qué primero |
+| Entregable | Estado |
 |---|---|
-| `TipoVehiculo` + `Servicio` + `ServicioPrecio` | Quita los `(SUV PEQ)` de los nombres, habilita cobrar bien y medir margen. Todo lo demás depende de esto. |
-| `Bahia` + asignación en la cola | Convierte la cola en la cabina de la pantalla principal. |
-| `OrdenServicio` (qué se le hizo, quién, cuánto tardó) | Sin esto no hay datos de operación, solo de caja. |
-| Nueva portada tipo cabina | Es lo que hace que se sienta otro sistema. |
+| `TipoVehiculo` + `Servicio` + `ServicioPrecio` | ✅ Migración `20260762_carwash_fase1` |
+| `Bahia` + asignación en la cola | ✅ `asignarBahia()` con guarda de bahía ocupada |
+| Orden de servicio | ✅ `ColaServicio` — se extendió `ColaVehiculo` en vez de crear un modelo paralelo: la entrada en cola YA era la orden (tiene estados y tiempos), duplicarla habría partido el historial en dos |
+| Portada tipo cabina | ✅ `src/components/carwash/Pista.tsx` |
+| Configuración del catálogo | ✅ `/admin/app/carwash/catalogo` |
+
+**Decisiones tomadas al construir** (eran las preguntas abiertas de la Parte 5):
+
+1. **Servicio y Promoción conviven.** `Servicio` es lo que se vende; `Promocion`
+   sigue siendo el descuento sobre eso. No se tocó nada de promociones.
+2. **Los planes existentes NO se migraron.** Renombrar "PLAN SILVER (SUV PEQ)"
+   tocaría membresías vivas con clientes pagando. El precio por tipo se estrena
+   en los servicios; unificar los planes es una migración de datos aparte, que
+   debe decidirse con el negocio delante.
+3. **Precio vacío = no aplica.** Si un servicio no tiene tarifa para un tipo de
+   vehículo, no se ofrece para ese tipo. Evita tener que marcar exclusiones.
+4. **El precio se congela en la línea** (`ColaServicio.precio` y `.nombre`): un
+   cambio de tarifa mañana no reescribe lo que se cobró ayer.
+5. **Una bahía atiende un vehículo a la vez.** Asignar a una bahía ocupada
+   devuelve error con el nombre del ocupante, en vez de pisarlo en silencio.
+
+**Todo es aditivo y tolerante:** si la migración no está aplicada, la cabina
+devuelve `null` y la portada cae al tablero genérico de siempre. Una empresa
+sin catálogo configurado sigue operando exactamente como antes.
 
 ## Fase 2 · Lo que da dinero
 

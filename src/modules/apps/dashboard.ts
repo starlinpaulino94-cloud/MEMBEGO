@@ -28,6 +28,8 @@ export interface OperacionReciente {
 export interface DashboardOperativo {
   /** YMD del día en la zona horaria del negocio. */
   hoy: string
+  /** Inicio del día en la zona de la empresa (lo reusa la cabina de pista). */
+  inicioDia: Date
   citas: Awaited<ReturnType<typeof getCitasDia>>
   citasActivas: number
   canjesHoy: number
@@ -116,6 +118,8 @@ export async function getDashboardOperativo(
 
   return {
     hoy,
+    /** Inicio del día en la zona de la empresa (lo reusa la cabina de pista). */
+    inicioDia,
     citas,
     citasActivas: citas.filter((c) => CITA_ACTIVA.includes(c.estado)).length,
     canjesHoy,
