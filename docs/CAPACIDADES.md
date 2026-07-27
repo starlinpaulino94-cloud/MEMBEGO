@@ -222,7 +222,38 @@ puede desincronizarse de lo que hace la app. Por eso es `.ts` y corre con tsx.
 - Si no hay nada que cambiar, lo dice y no escribe.
 
 **Modo `sql`** para cuando no hay `DATABASE_URL` a mano: imprime la sentencia
-para pegar en el SQL Editor de Supabase.
+para pegar en el SQL Editor de Supabase. Es la vía natural si administras la
+base desde Supabase y no quieres montar un entorno local.
+
+### Las tres sentencias listas para Supabase
+
+```sql
+-- VER el estado actual
+SELECT name, type, capacidades FROM companies WHERE name ILIKE '%CARTOWN%';
+
+-- ENCENDER
+UPDATE companies
+   SET capacidades = COALESCE(capacidades, '{}'::jsonb)
+     || jsonb_build_object('overrides',
+          COALESCE(capacidades->'overrides', '{}'::jsonb)
+          || jsonb_build_object('NAVEGACION_V2', true))
+ WHERE name ILIKE '%CARTOWN%';
+
+-- APAGAR (la vuelta atrás: cambia true por false)
+UPDATE companies
+   SET capacidades = COALESCE(capacidades, '{}'::jsonb)
+     || jsonb_build_object('overrides',
+          COALESCE(capacidades->'overrides', '{}'::jsonb)
+          || jsonb_build_object('NAVEGACION_V2', false))
+ WHERE name ILIKE '%CARTOWN%';
+
+-- VERIFICAR (correr siempre después)
+SELECT name, capacidades->'overrides' AS overrides
+  FROM companies WHERE name ILIKE '%CARTOWN%';
+```
+
+El cambio es **inmediato**: no hay que desplegar. La app lee `capacidades` en
+cada request.
 
 ### Detalle: por qué el SQL usa `||` y no `jsonb_set`
 
