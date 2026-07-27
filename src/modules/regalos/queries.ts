@@ -9,6 +9,36 @@ import { anotarFallo } from '@/lib/prisma-errors'
  * al remitente. Así el sistema es correcto sin infraestructura extra.
  */
 
+/**
+ * PENDIENTE significa DOS COSAS DISTINTAS, y confundirlas es lo que hacía
+ * incomprensible el módulo:
+ *
+ *  · 'RESPUESTA' — el regalo ya está pagado (o no cuesta nada: son usos que el
+ *    remitente ya tenía) y solo falta que el destinatario lo acepte o lo
+ *    rechace. Aquí sí hay botones de Aceptar / Rechazar.
+ *
+ *  · 'PAGO' — el regalo lo está PAGANDO el remitente. El destinatario no tiene
+ *    nada que decidir: cuando el pago se confirme, el beneficio le llega solo.
+ *    Mostrarle "Aceptar" aquí no solo confunde: `responderRegalo` no sabe
+ *    entregar este tipo y devolvía "contenido no válido".
+ *
+ * De ahí salía el "solo me aparece Cancelar": el remitente veía su propio
+ * regalo pendiente sin ninguna pista de que lo pendiente era SU pago.
+ */
+export type EsperaRegalo = 'RESPUESTA' | 'PAGO'
+
+/** Cómo completar el pago de un regalo que lo requiere. */
+export interface PagoDelRegalo {
+  /** Referencia para cobrar en caja o citar en la transferencia. */
+  referencia: string | null
+  /** A dónde va el REMITENTE a completar el pago. */
+  href: string | null
+  /** Estado del pago en el flujo normal (PENDIENTE_PAGO, EN_VALIDACION…). */
+  estado: string | null
+  /** true = el pago ya se confirmó y el beneficio se entregó. */
+  pagado: boolean
+}
+
 export interface RegaloItem {
   id: string
   tipo: string
@@ -18,9 +48,84 @@ export interface RegaloItem {
   beneficio: string
   /** Nombre enmascarado de la otra parte. */
   contraparte: string
+  /** Qué falta para que el regalo se complete. Solo con estado PENDIENTE. */
+  espera: EsperaRegalo | null
+  /** Solo cuando `espera === 'PAGO'`. */
+  pago: PagoDelRegalo | null
   expiraAt: Date
   createdAt: Date
   resueltoAt: Date | null
+}
+
+/** Los regalos que el remitente paga; el destinatario no decide nada. */
+const TIPOS_CON_PAGO = new Set(['REGALO_COMPRA', 'REGALO_MEMBRESIA'])
+
+export function esperaDe(tipo: string, estado: string): EsperaRegalo | null {
+  if (estado !== 'PENDIENTE') return null
+  return TIPOS_CON_PAGO.has(tipo) ? 'PAGO' : 'RESPUESTA'
+}
+
+/**
+ * Resuelve, en dos consultas para toda la lista, dónde está el pago de cada
+ * regalo que lo requiere. Se hace en lote a propósito: hacerlo por fila daría
+ * una consulta por regalo.
+ */
+async function resolverPagos(
+  regalos: { id: string; tipo: string; estado: string; compraDestinoId: string | null; membershipDestinoId: string | null }[]
+): Promise<Map<string, PagoDelRegalo>> {
+  const mapa = new Map<string, PagoDelRegalo>()
+  const conPago = regalos.filter((r) => esperaDe(r.tipo, r.estado) === 'PAGO')
+  if (conPago.length === 0) return mapa
+
+  const compraIds = conPago.map((r) => r.compraDestinoId).filter((x): x is string => !!x)
+  const memIds = conPago.map((r) => r.membershipDestinoId).filter((x): x is string => !!x)
+
+  const [compras, membresias] = await Promise.all([
+    compraIds.length
+      ? prisma.productoCompra
+          .findMany({
+            where: { id: { in: compraIds } },
+            select: { id: true, estado: true, referencia: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([]),
+    memIds.length
+      ? prisma.membership
+          .findMany({
+            where: { id: { in: memIds } },
+            select: { id: true, estado: true, referencia: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([]),
+  ])
+
+  const porCompra = new Map(compras.map((c) => [c.id, c]))
+  const porMembresia = new Map(membresias.map((m) => [m.id, m]))
+
+  for (const r of conPago) {
+    if (r.compraDestinoId) {
+      const c = porCompra.get(r.compraDestinoId)
+      mapa.set(r.id, {
+        referencia: c?.referencia ?? null,
+        // La compra vive en la wallet del REMITENTE hasta que se paga: ahí
+        // están las cuentas y el formulario de comprobante.
+        href: `/cliente/mis-promociones/${r.compraDestinoId}`,
+        estado: c?.estado ?? null,
+        pagado: c?.estado === 'ACTIVA',
+      })
+    } else if (r.membershipDestinoId) {
+      const m = porMembresia.get(r.membershipDestinoId)
+      mapa.set(r.id, {
+        referencia: m?.referencia ?? null,
+        // La membresía es del AMIGO, así que el remitente no puede abrirla:
+        // paga en caja citando la referencia. Sin href, con referencia.
+        href: null,
+        estado: m?.estado ?? null,
+        pagado: m?.estado === 'ACTIVA',
+      })
+    }
+  }
+  return mapa
 }
 
 function enmascarar(nombre: string): string {
@@ -111,6 +216,8 @@ export async function getRegalosCliente(clienteId: string): Promise<{
     take: 60,
   })
 
+  const pagos = await resolverPagos(regalos)
+
   const items = await Promise.all(
     regalos.map(async (r) => ({
       raw: r,
@@ -127,6 +234,8 @@ export async function getRegalosCliente(clienteId: string): Promise<{
               ? enmascarar(r.destinatario.nombre)
               : (r.destinatarioContacto ?? '—')
             : enmascarar(r.remitente.nombre),
+        espera: esperaDe(r.tipo, r.estado),
+        pago: pagos.get(r.id) ?? null,
         expiraAt: r.expiraAt,
         createdAt: r.createdAt,
         resueltoAt: r.resueltoAt,
@@ -139,7 +248,10 @@ export async function getRegalosCliente(clienteId: string): Promise<{
   return {
     recibidos,
     enviados,
-    pendientesRecibidos: recibidos.filter((i) => i.estado === 'PENDIENTE').length,
+    // Solo los que REQUIEREN una decisión suya. Un regalo que su amigo está
+    // pagando no es una tarea pendiente del destinatario, y contarlo como tal
+    // pone un contador rojo sobre algo en lo que no puede hacer nada.
+    pendientesRecibidos: recibidos.filter((i) => i.espera === 'RESPUESTA').length,
   }
 }
 
@@ -285,6 +397,10 @@ export interface RegaloAdminItem {
   destinatario: string
   /** true si el receptor todavía no tiene cuenta (destinatarioContacto). */
   sinCuenta: boolean
+  /** Qué falta: que el destinatario responda, o que entre el pago. */
+  espera: EsperaRegalo | null
+  /** Referencia y estado del cobro, cuando `espera === 'PAGO'`. */
+  pago: PagoDelRegalo | null
   mensaje: string | null
   createdAt: Date
   expiraAt: Date
@@ -349,8 +465,11 @@ export async function getRegalosAdmin(
   const aceptados = conteo('ACEPTADO')
   const resueltosSinCancelar = aceptados + conteo('RECHAZADO') + conteo('EXPIRADO')
 
+  const visibles = regalos.slice(0, TAKE)
+  const pagos = await resolverPagos(visibles)
+
   const items = await Promise.all(
-    regalos.slice(0, TAKE).map(async (r) => ({
+    visibles.map(async (r) => ({
       id: r.id,
       tipo: r.tipo,
       estado: r.estado,
@@ -359,6 +478,8 @@ export async function getRegalosAdmin(
       remitente: r.remitente.nombre,
       destinatario: r.destinatario?.nombre ?? r.destinatarioContacto ?? '—',
       sinCuenta: !r.destinatarioId,
+      espera: esperaDe(r.tipo, r.estado),
+      pago: pagos.get(r.id) ?? null,
       mensaje: r.mensaje,
       createdAt: r.createdAt,
       expiraAt: r.expiraAt,

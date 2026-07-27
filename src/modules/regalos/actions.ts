@@ -680,6 +680,18 @@ export async function regalarPromocion(
       return creada
     })
 
+    // Al destinatario se le avisa YA, no al confirmarse el pago. Enterarse de
+    // que alguien te está regalando algo es la mitad de la gracia del regalo;
+    // callarlo hasta que entre el dinero convierte una sorpresa en una
+    // notificación administrativa. Se dice explícitamente que no tiene que
+    // hacer nada, para que no busque un botón de aceptar que no existe.
+    await notificarCliente(
+      destinatario.id,
+      '🎁 Te están regalando algo',
+      `${user.email ? 'Un amigo' : 'Alguien'} te regaló "${promo.titulo}". Te llegará en cuanto se confirme el pago; no tienes que hacer nada.`,
+      '/cliente/regalos'
+    )
+
     revalidatePath('/cliente/regalos')
     revalidatePath('/cliente/mis-promociones')
     return {
@@ -789,6 +801,16 @@ export async function regalarMembresia(
       mensaje: `Un cliente regalará el plan ${plan.nombre} a ${destinatario.nombre}. Referencia ${referencia}: cóbrala en caja o confírmala al recibir la transferencia.`,
       href: '/admin/pagos',
     })
+
+    // Igual que en las promociones regaladas: el destinatario se entera al
+    // instante, y se le dice que no tiene nada que hacer. La referencia NO se
+    // le manda: es para que pague el remitente, no él.
+    await notificarCliente(
+      destinatario.id,
+      '🎁 Te están regalando una membresía',
+      `Alguien te regaló el plan ${plan.nombre}. Se activará en cuanto se confirme el pago; no tienes que hacer nada.`,
+      '/cliente/regalos'
+    )
 
     revalidatePath('/cliente/regalos')
     return {
