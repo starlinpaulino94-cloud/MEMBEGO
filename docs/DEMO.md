@@ -20,7 +20,7 @@ concreto:
 |---|---|---|---|
 | 1 | **Pasarela de pago real (CardNET)** | Es el único punto donde el dinero de alguien se mueve de verdad. Una tarjeta cobrada en un entrenamiento es un cobro que hay que devolver. | `src/modules/pagos/metodosDisponibles.ts` |
 | 2 | **Correos salientes** | Un "tu membresía venció" llegando a una persona real desde una empresa inventada es confuso en el mejor caso y dañino en el peor. | `src/lib/email.ts` (guard por `companyId`) |
-| 3 | **Vitrina pública** | Un cliente real no puede tropezarse con la empresa de práctica y creer que le va a lavar el carro. | `src/modules/marketplace/queries.ts` |
+| 3 | **Todo lo que ofrece empresas** | Un cliente real no puede tropezarse con la empresa de práctica y creer que le va a lavar el carro. | ver "Quién la ve" abajo |
 | 4 | **Métricas de plataforma** | Si los 40 clientes inventados de un entrenamiento suman a "clientes totales", el número deja de servir — y nadie se entera de que dejó de servir. | `src/app/(superadmin)/superadmin/dashboard/page.tsx` |
 
 ### Lo que NO se corta, a propósito
@@ -30,6 +30,43 @@ concreto:
   es justo lo que se entrena.
 - **Notificaciones internas (campanita)**: son parte de lo que el personal tiene
   que aprender a ver, y no salen de la aplicación.
+
+## Quién la ve: la línea entre ofrecer y tener
+
+La regla, en una frase: **a una empresa de práctica solo se llega por su enlace
+de registro.** Nadie más la ve, en ninguna pantalla.
+
+La línea que separa los dos lados no es "público vs. privado", es **ofrecer vs.
+tener**:
+
+- **OFRECER** — la vitrina pública, el explorar, las promociones destacadas,
+  las nuevas, las que vencen pronto, las empresas recomendadas, el modo marca
+  única. En todas ellas quien mira no pidió ver esa empresa: se la estamos
+  poniendo delante nosotros. Ahí va `SIN_DEMO` (`src/modules/demo/index.ts`),
+  y una empresa de práctica no aparece jamás.
+- **TENER** — sus empresas, sus membresías, sus promociones, su QR, su menú.
+  Quien entró por el enlace es cliente de esa empresa y adentro tiene que verlo
+  todo. Esas consultas se acotan por `companyId` (que ya es la prueba de que la
+  empresa es suya) y **no** llevan el filtro.
+
+Puntos concretos donde se aplica:
+
+| Superficie | Archivo | Qué pasa |
+|---|---|---|
+| Vitrina pública, perfil `/empresas/<slug>`, destacadas, recientes, estadísticas | `modules/marketplace/queries.ts` | No aparece. El perfil devuelve 404 aunque se tenga la URL. |
+| Feed del cliente: destacadas, nuevas, expiran, recomendadas | `modules/social/queries.ts` (`promoVigente`, `baseWhere`) | No aparece. |
+| Empresas que sigo | `modules/social/queries.ts` (`getMisEmpresas`) | No aparece. |
+| Botón "Seguir" | `modules/social/actions.ts` | Rechazado: seguirla la metería en el feed de alguien que nunca pidió verla. |
+| Modo marca única | `modules/marketplace/marcaUnica.ts` | No cuenta: crear una empresa de práctica no puede cambiarle la portada al negocio real. |
+| **Sus propias promociones** | `modules/social/queries.ts` (`promoDeMisEmpresas`), `marketplace/queries.ts` (`getClientePromociones`) | **Sí las ve.** Sección "De tus empresas". |
+| **Su menú de Promociones** | `modules/cliente/navDisponible.ts` | **Sí aparece.** |
+
+Dos correcciones de paso, que afectan también a empresas reales: la sección del
+feed antes se llamaba "De empresas que sigues" y solo miraba a quién sigues;
+ahora es "De tus empresas" e incluye aquellas donde eres cliente, las sigas o
+no. Y el menú de Promociones del cliente ya no exige que el negocio esté
+publicado en la vitrina — una empresa que aún no se publicó también tiene
+clientes, y les escondía el módulo.
 
 ## El aviso
 

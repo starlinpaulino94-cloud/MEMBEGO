@@ -65,11 +65,15 @@ export async function toggleSeguirEmpresa(
   try {
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      select: { isActive: true, isPublished: true },
+      select: { isActive: true, isPublished: true, esDemo: true },
     })
     if (!company || !company.isActive || !company.isPublished) {
       return { error: 'Empresa no disponible.' }
     }
+    // Una empresa de práctica no se sigue: seguirla la metería en el feed y en
+    // "mis empresas" de alguien que nunca pidió verla. Al entrenamiento se
+    // entra por el enlace de registro, que es otra cosa.
+    if (company.esDemo) return { error: 'Empresa no disponible.' }
 
     const existing = await prisma.companyFollow.findUnique({
       where: { userId_companyId: { userId, companyId } },

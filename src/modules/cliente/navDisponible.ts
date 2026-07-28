@@ -23,6 +23,13 @@ export async function getNavOcultoCliente(
   try {
     const [promos, beneficios, regalos, ruletaPremios, growth] = await Promise.all([
       // Promociones: activas y vigentes de la empresa (públicas o privadas).
+      //
+      // Sin `isPublished`: esto cuenta las promociones de la empresa DE ESTE
+      // cliente, no las de la vitrina. Exigir que el negocio estuviera
+      // publicado le escondía el menú de Promociones a los clientes de una
+      // empresa que aún no se publicó — y a los de una empresa de práctica,
+      // que nunca se publica. `isActive` sí se mantiene: una empresa apagada
+      // no tiene nada que ofrecer.
       prisma.promocion.count({
         where: {
           companyId,
@@ -30,7 +37,7 @@ export async function getNavOcultoCliente(
           archivada: false,
           vigenciaDesde: { lte: now },
           OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-          company: { isPublished: true, isActive: true },
+          company: { isActive: true },
         },
       }),
       // Mis beneficios: compras de promociones del cliente (cualquier estado).
