@@ -51,6 +51,35 @@ export async function notificarAdmins(
 }
 
 /**
+ * ENVÍO MASIVO: SE ENCOLA, NO SE HACE AQUÍ (auditoría · C-07).
+ *
+ * Antes estas funciones leían TODOS los destinatarios de la empresa y hacían un
+ * único `createMany` dentro del request. Con 50.000 clientes eso es un INSERT
+ * de 50.000 filas en una función serverless con límite de tiempo y memoria,
+ * bloqueando la respuesta al administrador que pulsó el botón — y dejando la
+ * notificación a medias si se agotaba el tiempo.
+ *
+ * Ahora se encola el PRIMER LOTE y se devuelve al instante. El ejecutor procesa
+ * mil destinatarios y, si quedan más, se encadena a sí mismo. El administrador
+ * ve la pantalla responder en milisegundos pase lo que pase.
+ *
+ * Sin QStash configurado el trabajo se ejecuta en línea (ver `encolar`): más
+ * lento, pero nunca se pierde el envío en silencio.
+ */
+async function encolarFanOut(
+  companyId: string,
+  audiencia: 'clientes' | 'seguidores',
+  payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
+) {
+  try {
+    const { encolar } = await import('@/modules/jobs/cola')
+    await encolar({ tipo: 'notificar', companyId, audiencia, payload, desde: 0 })
+  } catch (e) {
+    console.error('[notificacion] no se pudo encolar el envío', audiencia, e)
+  }
+}
+
+/**
  * Notifica a todo CLIENTE con cuenta en la empresa (cualquier fila cliente
  * con ese companyId, soporte multi-empresa).
  */
@@ -58,25 +87,7 @@ export async function notificarClientesEmpresa(
   companyId: string,
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
 ) {
-  try {
-    const clientes = await prisma.cliente.findMany({
-      where: { companyId },
-      select: { supabaseId: true },
-    })
-    if (clientes.length === 0) return
-
-    const users = await prisma.user.findMany({
-      where: { supabaseId: { in: clientes.map((c) => c.supabaseId) } },
-      select: { id: true },
-    })
-    if (users.length === 0) return
-
-    await prisma.notificacion.createMany({
-      data: users.map((u) => ({ userId: u.id, ...payload })),
-    })
-  } catch (e) {
-    console.error('[notificacion] notificarClientesEmpresa error', e)
-  }
+  await encolarFanOut(companyId, 'clientes', payload)
 }
 
 /**
@@ -88,17 +99,5 @@ export async function notificarSeguidoresEmpresa(
   companyId: string,
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
 ) {
-  try {
-    const seguidores = await prisma.companyFollow.findMany({
-      where: { companyId },
-      select: { userId: true },
-    })
-    if (seguidores.length === 0) return
-
-    await prisma.notificacion.createMany({
-      data: seguidores.map((s) => ({ userId: s.userId, ...payload })),
-    })
-  } catch (e) {
-    console.error('[notificacion] notificarSeguidoresEmpresa error', e)
-  }
+  await encolarFanOut(companyId, 'seguidores', payload)
 }

@@ -1506,6 +1506,17 @@ model Visit {
   @@index([fechaVisita])
   @@index([vehiculoId])
   @@index([sucursalId])
+  /// Auditoría de producción · A-05. `visits` es la tabla que más crece: una
+  /// fila por escaneo, del orden de millones al mes con el volumen previsto.
+  ///
+  /// No tiene `companyId` —se llega por la membresía—, así que TODO reporte de
+  /// empresa por rango de fechas entra por `membershipId` y filtra por
+  /// `fechaVisita`. Con índices sueltos, PostgreSQL usa uno y descarta filas
+  /// leyendo la tabla; con el compuesto resuelve las dos condiciones de una
+  /// pasada. Lo mismo para el historial de un cliente, que es la consulta más
+  /// frecuente del portal.
+  @@index([membershipId, fechaVisita])
+  @@index([clienteId, fechaVisita])
   @@map("visits")
 }
 

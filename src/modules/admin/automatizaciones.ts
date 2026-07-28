@@ -169,24 +169,49 @@ export async function ejecutarAutomatizacionesEmpresa(
   return { cumpleanos, porVencer, inactivos }
 }
 
-/** Ejecuta las automatizaciones para todas las empresas activas (cron). */
-export async function ejecutarAutomatizacionesGlobal(): Promise<
-  { companyId: string; resultado: ResultadoAutomatizaciones }[]
-> {
+export interface RepartoAutomatizaciones {
+  empresas: number
+  encoladas: number
+  enLinea: number
+}
+
+/**
+ * REPARTE las automatizaciones: un trabajo por empresa (auditoría · C-06).
+ *
+ * Antes esto era un bucle `for` con `await` por empresa dentro del cron, que
+ * tiene 60 segundos. Con mil empresas a ~200 ms cada una son 200 segundos: la
+ * función se cortaba a la mitad y **las empresas restantes no se procesaban
+ * nunca**. Sin error visible: el `catch` de dentro solo escribía en consola y
+ * el cron devolvía 200 como si todo hubiera ido bien. Cumpleaños, avisos de
+ * vencimiento y recuperación de inactivos simplemente dejaban de existir para
+ * la mayoría del negocio.
+ *
+ * Ahora el cron solo lee la lista y encola. Cada empresa se procesa en su
+ * propia invocación, con su propio presupuesto de tiempo y con reintentos si
+ * falla. El cron termina en un segundo aunque haya diez mil empresas.
+ *
+ * Las empresas de DEMOSTRACIÓN quedan fuera: sus automatizaciones no le sirven
+ * a nadie y gastarían cuota de la cola.
+ */
+export async function ejecutarAutomatizacionesGlobal(): Promise<RepartoAutomatizaciones> {
   const companies = await prisma.company.findMany({
-    where: { isActive: true },
+    where: { isActive: true, esDemo: false },
     select: { id: true },
-  })
-  const resultados = []
+  }).catch(() => prisma.company.findMany({ where: { isActive: true }, select: { id: true } }))
+
+  const { encolar } = await import('@/modules/jobs/cola')
+  let encoladas = 0
+  let enLinea = 0
   for (const c of companies) {
     try {
-      resultados.push({
-        companyId: c.id,
-        resultado: await ejecutarAutomatizacionesEmpresa(c.id),
-      })
+      const via = await encolar({ tipo: 'automatizaciones', companyId: c.id })
+      if (via === 'cola') encoladas++
+      else enLinea++
     } catch (e) {
-      console.error('[automatizaciones] empresa', c.id, e)
+      // Que una empresa no se pueda encolar no puede impedir que se encolen
+      // las demás: ese era justo el fallo del bucle anterior.
+      console.error('[automatizaciones] no se pudo encolar', c.id, e)
     }
   }
-  return resultados
+  return { empresas: companies.length, encoladas, enLinea }
 }

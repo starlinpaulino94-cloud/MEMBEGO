@@ -72,9 +72,11 @@ export function ClientesTable({ data }: { data: ClienteRow[] }) {
     <DataTable
       columns={columns as unknown as ColumnDef<Record<string, unknown>, unknown>[]}
       data={data as unknown as Record<string, unknown>[]}
-      searchPlaceholder="Buscar por nombre o correo..."
-      searchKey="nombre"
-      pageSize={10}
+      // Sin buscador propio: la búsqueda vive en el SERVIDOR (auditoría ·
+      // M-07). El de la tabla solo filtraba las filas ya cargadas, así que un
+      // cliente que no estuviera en la página actual no aparecía nunca — y la
+      // pantalla no daba ninguna pista de por qué.
+      pageSize={25}
       exportable
       exportFilename="clientes.csv"
     />
