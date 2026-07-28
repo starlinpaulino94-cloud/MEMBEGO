@@ -5,6 +5,7 @@ import { useActionState, useEffect, useRef, useState } from 'react'
 import { Loader2, Upload, Camera, CheckCircle2, AlertCircle, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { pedirSubidaComprobante } from '@/modules/storage/comprobantes'
 import {
   enviarComprobante,
   type ComprobanteState,
@@ -74,16 +75,26 @@ export function ComprobanteForm({ membershipId, metodosPago }: Props) {
 
     setUploading(true)
     try {
-      const supabase = createClient()
+      // La ruta y el permiso los decide el SERVIDOR (auditoría · C-01). El
+      // navegador solo dice qué extensión trae y recibe un token que sirve
+      // para esa ruta y para ninguna otra.
       const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `comprobantes/${membershipId}-${Date.now()}.${ext}`
+      const permiso = await pedirSubidaComprobante('membresia', membershipId, ext)
+      if (permiso.error || !permiso.subida) {
+        toast.error(permiso.error ?? 'No se pudo preparar la subida.')
+        setPreviewUrl(null)
+        return
+      }
+
+      const supabase = createClient()
       const { error } = await supabase.storage
         .from('comprobantes')
-        .upload(path, file, { upsert: true })
+        .uploadToSignedUrl(permiso.subida.path, permiso.subida.token, file)
       if (error) throw error
 
-      const { data } = supabase.storage.from('comprobantes').getPublicUrl(path)
-      setComprobanteUrl(data.publicUrl)
+      // Se guarda la RUTA, no una URL pública: el bucket es privado y cada
+      // lectura se firma en el momento, previa comprobación de permiso.
+      setComprobanteUrl(permiso.subida.path)
       setFileName(file.name)
       toast.success('Archivo cargado. Revísalo antes de enviar.')
     } catch {

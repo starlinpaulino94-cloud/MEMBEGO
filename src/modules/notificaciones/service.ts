@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { NotifTipo } from '@prisma/client'
+import { FULL_ADMIN_ROLES } from '@/types'
 
 // Helpers internos de notificación. IMPORTANTE: este archivo NO lleva
 // 'use server' — así estas funciones no quedan expuestas como endpoints
@@ -19,14 +20,25 @@ export async function crearNotificacion(data: {
   }
 }
 
-/** Notifica a todos los usuarios ADMIN_EMPRESA de una empresa. */
+/**
+ * Notifica a los administradores PLENOS de una empresa.
+ *
+ * Antes filtraba `role: 'ADMIN_EMPRESA'`, que es el rol LEGACY (así está
+ * marcado en el esquema). Los administradores que crea `crearEmpresa` nacen
+ * como `ADMINISTRADOR`, así que ninguna empresa dada de alta por el flujo
+ * actual recibía un solo aviso: ni pago pendiente, ni comprobante subido, ni
+ * nada. El fallo no daba error — simplemente la campanita nunca sonaba.
+ *
+ * `FULL_ADMIN_ROLES` incluye el legacy, así que las empresas antiguas siguen
+ * recibiendo lo suyo.
+ */
 export async function notificarAdmins(
   companyId: string,
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
 ) {
   try {
     const admins = await prisma.user.findMany({
-      where: { companyId, role: 'ADMIN_EMPRESA' },
+      where: { companyId, role: { in: FULL_ADMIN_ROLES } },
       select: { id: true },
     })
     if (admins.length === 0) return

@@ -16,7 +16,6 @@ import {
   Ban,
   CalendarX,
   CheckCircle2,
-  Clock,
   CreditCard,
   FileClock,
   Hourglass,

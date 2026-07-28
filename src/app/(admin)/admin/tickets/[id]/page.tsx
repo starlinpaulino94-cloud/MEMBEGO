@@ -1,3 +1,4 @@
+import { urlAdjuntoTicket } from '@/modules/storage/comprobantes'
 import Link from 'next/link'
 import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
@@ -51,7 +52,10 @@ export default async function TicketDetailPage({
           clienteNombre: ticket.cliente.nombre,
           clienteEmail: ticket.cliente.email,
           empresaNombre: ticket.company.name,
-          adjuntoUrl: ticket.adjuntoUrl,
+          // URL firmada de 5 minutos: el bucket es privado (auditoría · C-01)
+          // y el permiso se comprueba antes de firmar. El componente de
+          // cliente recibe un enlace ya autorizado, no una ruta.
+          adjuntoUrl: await urlAdjuntoTicket(ticket.id, ticket.adjuntoUrl),
           creado: fmt(ticket.createdAt),
         }}
         mensajes={ticket.mensajes.map((m) => ({

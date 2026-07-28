@@ -6,7 +6,7 @@ import { useFormStatus } from 'react-dom'
 import { Loader2, Send, Upload, X, FileText, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { uniqueFileName } from '@/lib/storage'
+import { pedirSubidaComprobante } from '@/modules/storage/comprobantes'
 import { crearTicket, type ActionState } from '@/modules/soporte/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -105,16 +105,23 @@ export function ReportarProblemaForm() {
 
     setUploading(true)
     try {
-      const supabase = createClient()
+      // El adjunto de soporte va al mismo bucket privado y sigue la misma
+      // regla (auditoría · C-01): la ruta la genera el servidor y queda atada
+      // a quien reporta. El ticket todavía no existe en este punto, así que la
+      // entidad es la propia persona.
       const ext = file.name.split('.').pop() ?? 'jpg'
-      // Mismo prefijo que los comprobantes (política de bucket ya probada).
-      const path = `comprobantes/soporte-${uniqueFileName(ext)}`
+      const permiso = await pedirSubidaComprobante('soporte', 'yo', ext)
+      if (permiso.error || !permiso.subida) {
+        toast.error(permiso.error ?? 'No se pudo preparar la subida.')
+        clearAdjunto()
+        return
+      }
+      const supabase = createClient()
       const { error } = await supabase.storage
         .from('comprobantes')
-        .upload(path, file, { upsert: true })
+        .uploadToSignedUrl(permiso.subida.path, permiso.subida.token, file)
       if (error) throw error
-      const { data } = supabase.storage.from('comprobantes').getPublicUrl(path)
-      setAdjuntoUrl(data.publicUrl)
+      setAdjuntoUrl(permiso.subida.path)
       setFileName(file.name)
       toast.success('Archivo adjuntado.')
     } catch {

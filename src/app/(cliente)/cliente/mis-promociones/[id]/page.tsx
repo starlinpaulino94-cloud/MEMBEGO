@@ -1,3 +1,4 @@
+import { ComprobanteLink } from '@/components/pagos/ComprobanteLink'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
@@ -7,7 +8,6 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  FileText,
   CalendarDays,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -357,16 +357,13 @@ export default async function MiCompraPage({
                 La empresa está validando tu pago. Te notificaremos al aprobarse y
                 aquí aparecerá tu QR.
               </p>
-              {compra.comprobanteUrl && (
-                <a
-                  href={compra.comprobanteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1.5 text-primary hover:underline"
-                >
-                  <FileText className="h-3.5 w-3.5" /> Ver comprobante enviado
-                </a>
-              )}
+              <ComprobanteLink
+                tipo="compra"
+                id={compra.id}
+                valor={compra.comprobanteUrl}
+                etiqueta="Ver comprobante enviado"
+                className="mt-2 inline-flex items-center gap-1.5 text-primary hover:underline"
+              />
               <div className="mt-3">
                 <CancelarCompraButton compraId={compra.id} />
               </div>

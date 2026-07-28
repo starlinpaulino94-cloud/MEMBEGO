@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { iniciarSesion } from '@/modules/auth/loginActions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
@@ -19,60 +19,17 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { isGoogleAuthEnabled } from '@/lib/auth/googleAuth'
-import { safeInternalPath } from '@/lib/utils'
-import { ROLE_HOME, type AppRole } from '@/types'
 
 /**
- * Traduce los errores de Supabase a mensajes en español accionables. Nunca
- * mostrar el texto crudo en inglés al usuario (primera impresión del producto).
+ * El formulario ya NO comprueba credenciales aquí (auditoría · C-05).
+ *
+ * Antes llamaba a `supabase.auth.signInWithPassword` desde el navegador, con
+ * un contador de intentos en memoria de la pestaña. Ese contador no defendía
+ * nada: se reinicia con recargar, y desaparece en una ventana de incógnito.
+ * Ahora el intento va a `iniciarSesion` (server action), que aplica el
+ * limitador distribuido por IP y por correo antes de tocar Supabase, y
+ * devuelve un mensaje ya traducido y uniforme.
  */
-function mensajeDeError(message: string, status?: number): string {
-  const m = message.toLowerCase()
-  if (m.includes('invalid login credentials')) {
-    return 'Correo o contraseña incorrectos. Revísalos e intenta de nuevo.'
-  }
-  if (m.includes('email not confirmed')) {
-    return 'Aún no has confirmado tu correo. Abre el enlace que te enviamos (revisa spam) y vuelve a intentar.'
-  }
-  if (m.includes('too many requests') || status === 429) {
-    return 'Demasiados intentos. Espera unos minutos antes de volver a intentar.'
-  }
-  if (m.includes('network') || m.includes('fetch')) {
-    return 'No pudimos conectar. Verifica tu conexión a internet e intenta de nuevo.'
-  }
-  if (status === 400 || m.includes('invalid')) {
-    return 'No se pudo iniciar sesión. Verifica tus datos e intenta de nuevo.'
-  }
-  return 'No se pudo iniciar sesión. Intenta de nuevo en unos momentos.'
-}
-
-// Simple client-side rate limiting cache
-const loginAttempts = new Map<string, { count: number; resetAt: number }>()
-
-function checkLoginRateLimit(email: string): boolean {
-  const now = Date.now()
-  const entry = loginAttempts.get(email)
-
-  // Poda de entradas expiradas: el Map vive lo que viva la pestaña y antes
-  // solo crecía (un email nuevo por intento quedaba para siempre).
-  for (const [key, value] of loginAttempts) {
-    if (now > value.resetAt) loginAttempts.delete(key)
-  }
-
-  if (!entry || now > entry.resetAt) {
-    // New or expired window (15 minutes)
-    loginAttempts.set(email, { count: 1, resetAt: now + 15 * 60 * 1000 })
-    return true
-  }
-
-  // Within existing window
-  if (entry.count < 5) { // 5 attempts per 15 minutes
-    entry.count++
-    return true
-  }
-
-  return false
-}
 
 export function LoginForm({
   audience = 'cliente',
@@ -91,41 +48,26 @@ export function LoginForm({
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    if (!checkLoginRateLimit(email)) {
-      setError('Demasiados intentos de acceso. Intenta de nuevo en 15 minutos.')
-      return
-    }
-
     setLoading(true)
 
-    // try/catch obligatorio: `createClient()` LANZA si faltan las variables
-    // NEXT_PUBLIC_SUPABASE_* (p. ej. un preview de Vercel sin envs marcadas
-    // para Preview). Sin él, la excepción escapaba del handler y el botón se
-    // quedaba "cargando" para siempre sin mostrar ningún error.
-    try {
-      const supabase = createClient()
-      const { data, error: signInError } = await supabase.auth.signInWithPassword(
-        { email, password }
-      )
+    const datos = new FormData()
+    datos.set('email', email)
+    datos.set('password', password)
+    datos.set('redirect', searchParams.get('redirect') ?? '')
 
-      if (signInError) {
-        setError(mensajeDeError(signInError.message, signInError.status))
+    try {
+      const resultado = await iniciarSesion({}, datos)
+      if (resultado.error || !resultado.redirect) {
+        setError(resultado.error ?? 'No se pudo iniciar sesión.')
         setLoading(false)
         return
       }
-
-      const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
-      const redirect = safeInternalPath(searchParams.get('redirect'), ROLE_HOME[role])
-      router.replace(redirect)
+      // La sesión ya está en las cookies (la escribió la acción). Solo queda
+      // navegar y refrescar para que el servidor la vea.
+      router.replace(resultado.redirect)
       router.refresh()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : ''
-      setError(
-        message.includes('Missing env var')
-          ? `Este entorno no está configurado (${message.replace('Missing env var: ', 'falta ')}). Configura las variables de Supabase para este entorno en Vercel.`
-          : 'No se pudo iniciar sesión. Intenta de nuevo en unos momentos.'
-      )
+    } catch {
+      setError('No se pudo iniciar sesión. Intenta de nuevo en unos momentos.')
       setLoading(false)
     }
   }, [email, password, searchParams, router])
