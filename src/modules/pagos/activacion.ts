@@ -17,6 +17,7 @@ import { procesarConversionGrowth } from '@/modules/growth/registro'
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { periodEnd } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
 
@@ -83,6 +84,7 @@ export async function activarMembresia(
       data: {
         clienteId: membership.clienteId,
         membresiaId: membership.id,
+        token: nuevoTokenQr(), expiraAt: vencimientoQr(),
       },
     })
 

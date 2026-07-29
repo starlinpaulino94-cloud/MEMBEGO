@@ -36,6 +36,20 @@ function hasSupabaseAuthCookie(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
+  // Nonce por petición para la CSP (auditoría · A-04).
+  //
+  // Se EMITE ya, pero la CSP todavía lleva `'unsafe-inline'` (ver la nota en
+  // next.config.ts). Tenerlo disponible es lo que permite dar el último paso
+  // —cambiar `'unsafe-inline'` por `'nonce-…'`— cuando se pueda verificar en
+  // navegador que ni la hidratación de Next ni el escáner se rompen. Emitirlo
+  // ahora no cuesta nada y evita que ese día haya que tocar el proxy bajo
+  // presión.
+  //
+  // `crypto.randomUUID` y no un contador: un nonce predecible es un nonce
+  // inútil, porque un XSS podría incluirlo en el script que inyecta.
+  const nonce = crypto.randomUUID().replace(/-/g, '')
+  request.headers.set('x-nonce', nonce)
+
   let response = NextResponse.next({ request })
   const path = request.nextUrl.pathname
   const matched = matchProtected(path)

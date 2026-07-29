@@ -16,6 +16,7 @@ import { crearTransaccionAplicada } from '@/lib/transactions'
 import type { TicketPayload } from '@/modules/transacciones/actions'
 import { registrarTransicionCompra, validarConsumoCompra } from '@/modules/promociones/compra'
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 export interface CanjeState {
   error?: string
@@ -149,7 +150,7 @@ export async function confirmarCanjePromocion(
       } else {
         // Quedan usos: regenerar QR (mismo patrón single-use de membresías).
         const nuevoQr = await tx.qrToken.create({
-          data: { clienteId: compra.clienteId, compraId: compra.id },
+          data: { clienteId: compra.clienteId, compraId: compra.id, token: nuevoTokenQr(), expiraAt: vencimientoQr() },
         })
         await tx.auditLog.create({
           data: {

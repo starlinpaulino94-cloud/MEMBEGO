@@ -1459,8 +1459,21 @@ model QrToken {
   // FASE E5: QR de una compra de promoción (excluyente con membresiaId).
   compraId         String?
   compra           ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: Cascade)
-  token            String          @unique @default(cuid())
+  /// Auditoría de producción · A-02. Ya NO se genera con `cuid()`: cuid está
+  /// hecho para no colisionar, no para no adivinarse (marca de tiempo +
+  /// contador + huella de máquina). Un token QR es una credencial al portador
+  /// —vale un lavado, se manda por WhatsApp— así que se genera con 24 bytes de
+  /// `randomBytes` en la aplicación. Ver `src/modules/qr/token.ts`.
+  ///
+  /// Sin `@default`: obligar a pasarlo explícitamente hace que un `create`
+  /// nuevo que lo olvide falle en compilación, no en producción.
+  token            String          @unique
   activo           Boolean         @default(true)
+  /// Cuándo deja de ser canjeable. Antes un token vivía para siempre hasta
+  /// usarse: un QR compartido hace ocho meses seguía valiendo. Nulo = emitido
+  /// antes de que existiera la caducidad; esos se tratan como vigentes para no
+  /// dejar a los clientes actuales con un código que ayer funcionaba.
+  expiraAt         DateTime?
   // Compartir el QR (p. ej. por WhatsApp) no consume el token —sigue siendo de
   // un solo uso— pero sí queda registrado: cuántas veces y cuándo la última.
   compartidoCount  Int             @default(0)
@@ -1472,6 +1485,7 @@ model QrToken {
   @@index([clienteId, activo])
   @@index([membresiaId])
   @@index([compraId])
+  @@index([expiraAt])
   @@map("qr_tokens")
 }
 

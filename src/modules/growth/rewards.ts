@@ -18,6 +18,7 @@ import {
   registrarTransicionCompra,
 } from '@/modules/promociones/compra'
 import { logReferralEvent } from '@/lib/referidos'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 type Tx = Prisma.TransactionClient
 
@@ -263,7 +264,9 @@ async function crearBeneficioCompra(
     hacia: 'ACTIVA',
     motivo,
   })
-  await tx.qrToken.create({ data: { clienteId, compraId: compra.id } })
+  await tx.qrToken.create({
+    data: { clienteId, compraId: compra.id, token: nuevoTokenQr(), expiraAt: vencimientoQr() },
+  })
   return compra.id
 }
 

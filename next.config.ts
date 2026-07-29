@@ -64,11 +64,25 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              // 'unsafe-inline'/'unsafe-eval' los requieren el runtime inline de
-              // Next.js y el decodificador wasm de html5-qrcode. Endurecerlos a
-              // CSP basada en nonce es un cambio mayor que necesita pruebas en
-              // navegador (scanner + hidratación) y se dejó como paso futuro.
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
+              // Auditoría de producción · A-04. `'unsafe-eval'` se retiró y se
+              // sustituyó por `'wasm-unsafe-eval'`.
+              //
+              // Lo único que necesitaba evaluación dinámica era el decodificador
+              // wasm del escáner (html5-qrcode). `'unsafe-eval'` habilitaba ESO
+              // y, de paso, `eval()` y `new Function()` sobre cualquier cadena:
+              // justo la primitiva que convierte un XSS en ejecución de código
+              // arbitrario. `'wasm-unsafe-eval'` permite compilar WebAssembly y
+              // nada más, que es lo que el escáner realmente pide.
+              //
+              // `'unsafe-inline'` SE QUEDA, y conviene decir por qué en vez de
+              // fingir que está resuelto: el runtime de Next.js inyecta scripts
+              // inline para la hidratación. Quitarlo exige CSP por nonce en
+              // TODAS las respuestas —el `proxy` ya emite el nonce, ver
+              // `src/proxy.ts`— y verificar en navegador que ni la hidratación
+              // ni el escáner se rompen. Está preparado, no activado: activarlo
+              // sin esa prueba deja la aplicación en blanco, y una pantalla en
+              // blanco no es más segura.
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data:",

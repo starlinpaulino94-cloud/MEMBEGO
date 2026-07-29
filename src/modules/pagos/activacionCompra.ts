@@ -18,6 +18,7 @@ import {
   calcularVencimientoBeneficio,
   registrarTransicionCompra,
 } from '@/modules/promociones/compra'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
 
@@ -102,7 +103,7 @@ export async function activarCompraPromocion(
 
       // QR único de la compra — el MISMO sistema que las membresías.
       const qr = await tx.qrToken.create({
-        data: { clienteId: compra.clienteId, compraId: compra.id },
+        data: { clienteId: compra.clienteId, compraId: compra.id, token: nuevoTokenQr(), expiraAt: vencimientoQr() },
       })
 
       await tx.auditLog.createMany({

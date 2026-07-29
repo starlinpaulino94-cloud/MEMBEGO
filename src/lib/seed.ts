@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { prisma } from './prisma'
 import { SEED_COMPANIES } from './data/companies'
 import { BUSINESS_CATEGORIES } from './data/categories'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 /**
  * Seed idempotente de MembeGo: empresas, sucursal, métodos de pago, planes y
@@ -327,6 +328,7 @@ export async function runSeed(): Promise<SeedResult> {
             data: {
               clienteId: cliente.id,
               membresiaId: membership.id,
+              token: nuevoTokenQr(), expiraAt: vencimientoQr(),
               activo: true,
             },
           })
