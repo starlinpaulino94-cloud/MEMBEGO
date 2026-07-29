@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
+import { limpiarEvento, limpiarMiga } from '@/modules/observabilidad/sentryLimpieza'
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -29,22 +30,16 @@ Sentry.init({
     }),
   ],
 
+  // Fase 6 · misma política que el servidor, escrita una sola vez.
   beforeSend(event) {
-    if (event.request?.headers) {
-      delete event.request.headers['Authorization']
-      delete event.request.headers['Cookie']
-    }
-    return event
+    return limpiarEvento(event)
   },
 
+  // Antes solo se limpiaban las migas de `fetch` cuya URL contuviera '/auth/'
+  // o 'token'. Las de NAVEGACIÓN no se tocaban, y son justo las que llevan
+  // `?pase=` y `?code=` en la barra de direcciones.
   beforeBreadcrumb(breadcrumb) {
-    if (breadcrumb.category === 'fetch' && breadcrumb.data?.url) {
-      const url = breadcrumb.data.url as string
-      if (url.includes('/auth/') || url.includes('token')) {
-        breadcrumb.data.url = url.split('?')[0] + '?[FILTERED]'
-      }
-    }
-    return breadcrumb
+    return limpiarMiga(breadcrumb)
   },
 
   ignoreErrors: [

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { verificarFirma } from '@/lib/jobs/qstash'
 import { ejecutarTrabajo } from '@/modules/jobs/ejecutor'
 import type { CargaTrabajo } from '@/modules/jobs/tipos'
+import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export const dynamic = 'force-dynamic'
 // 300 s: los trabajos son lotes acotados, pero un lote de 1.000 filas sobre una
@@ -27,6 +28,10 @@ export const maxDuration = 300
  * ejecuta nada: prefiero que la cola no funcione a que funcione sin firmar.
  */
 export async function POST(request: NextRequest) {
+  // Fase 6 · el SLO de "los trabajos se ejecutan" se calcula con estos eventos.
+  // Ver docs/OBSERVABILIDAD.md.
+  const t0 = Date.now()
+
   if (!process.env.QSTASH_CURRENT_SIGNING_KEY) {
     return NextResponse.json(
       { error: 'Cola no configurada en este entorno.' },
@@ -37,6 +42,10 @@ export async function POST(request: NextRequest) {
   const cuerpoCrudo = await request.text()
   const firma = request.headers.get('upstash-signature')
   if (!verificarFirma(firma, cuerpoCrudo)) {
+    // Se registra porque un pico de firmas rechazadas es una de dos cosas, y
+    // las dos hay que saberlas: una rotación de claves a medio aplicar, o
+    // alguien probando el endpoint desde fuera.
+    registrarEvento({ dominio: 'cola', accion: 'trabajo', ok: false, motivo: 'firma_invalida' })
     return NextResponse.json({ error: 'Firma no válida.' }, { status: 401 })
   }
 
@@ -56,8 +65,25 @@ export async function POST(request: NextRequest) {
 
   try {
     const resultado = await ejecutarTrabajo(carga)
+    registrarEvento({
+      dominio: 'cola',
+      accion: 'trabajo',
+      ok: true,
+      ms: Date.now() - t0,
+      companyId: carga.companyId ?? null,
+      extra: { tipo: carga.tipo },
+    })
     return NextResponse.json({ ok: true, ...resultado })
   } catch (e) {
+    registrarEvento({
+      dominio: 'cola',
+      accion: 'trabajo',
+      ok: false,
+      ms: Date.now() - t0,
+      companyId: carga.companyId ?? null,
+      motivo: 'ejecucion_fallida',
+      extra: { tipo: carga.tipo },
+    })
     console.error('[jobs] fallo ejecutando', carga.tipo, e)
     // 500 a propósito: QStash reintentará. Los trabajos son idempotentes, así
     // que repetir es seguro y perder el trabajo no lo es.

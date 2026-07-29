@@ -49,6 +49,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { loginLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { ROLE_HOME, type AppRole } from '@/types'
+import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export interface LoginState {
   error?: string
@@ -85,6 +86,11 @@ export async function iniciarSesion(
     loginLimiter(`email:${email}`),
   ])
   if (!okIp || !okEmail) {
+    // El pico de este evento es la señal de un ataque de fuerza bruta EN CURSO,
+    // y es la única forma de distinguirlo de "hoy la gente olvidó su clave".
+    // Nunca lleva el correo: solo cuántos y desde dónde no se puede reconstruir
+    // (ver src/modules/observabilidad/eventos.ts).
+    registrarEvento({ dominio: 'auth', accion: 'login', ok: false, motivo: 'limite_alcanzado' })
     return {
       error: 'Demasiados intentos de acceso. Espera unos minutos y vuelve a intentarlo.',
     }
@@ -107,8 +113,11 @@ export async function iniciarSesion(
       if (error.message.toLowerCase().includes('email not confirmed')) {
         return { error: 'Confirma tu correo antes de entrar. Te enviamos un enlace al registrarte.' }
       }
+      registrarEvento({ dominio: 'auth', accion: 'login', ok: false, motivo: 'credenciales' })
       return { error: CREDENCIALES }
     }
+
+    registrarEvento({ dominio: 'auth', accion: 'login', ok: true })
 
     const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
     return { redirect: destinoSeguro(redirectPedido, ROLE_HOME[role] ?? '/') }

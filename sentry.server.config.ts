@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
+import { limpiarEvento } from './src/modules/observabilidad/sentryLimpieza'
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
@@ -12,12 +13,10 @@ Sentry.init({
     Sentry.prismaIntegration(),
   ],
 
+  // Fase 6 · la política de limpieza vive en un solo sitio para que servidor y
+  // navegador no se desincronicen. Ver src/modules/observabilidad/sentryLimpieza.ts.
   beforeSend(event) {
-    if (event.request?.headers) {
-      delete event.request.headers['authorization']
-      delete event.request.headers['cookie']
-    }
-    return event
+    return limpiarEvento(event)
   },
 
   ignoreErrors: [

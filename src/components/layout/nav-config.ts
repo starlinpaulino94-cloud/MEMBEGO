@@ -1,4 +1,5 @@
 import {
+  Activity,
   WalletCards,
   LayoutDashboard,
   Users,
@@ -225,6 +226,7 @@ const SUPERADMIN_NAV: NavGroup[] = [
       { href: '/superadmin/operaciones', label: 'Operaciones', icon: ClipboardList },
       { href: '/superadmin/campanas', label: 'Campañas conjuntas', icon: Megaphone },
       { href: '/superadmin/capacidades', label: 'Capacidades', icon: SlidersHorizontal },
+      { href: '/superadmin/observabilidad', label: 'Observabilidad', icon: Activity },
       { href: '/superadmin/auditoria', label: 'Auditoría', icon: History },
       { href: '/superadmin/reportes', label: 'Reportes globales', icon: BarChart3 },
     ],

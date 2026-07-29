@@ -17,6 +17,7 @@ import type { TicketPayload } from '@/modules/transacciones/actions'
 import { registrarTransicionCompra, validarConsumoCompra } from '@/modules/promociones/compra'
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
+import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export interface CanjeState {
   error?: string
@@ -38,6 +39,35 @@ export async function confirmarCanjePromocion(
   formData: FormData
 ): Promise<CanjeState> {
   const t0 = Date.now()
+
+  /**
+   * Empresa del canje, para el evento de observabilidad (Fase 6). Se guarda
+   * fuera del `try` porque el `catch` también tiene que poder decir a QUIÉN le
+   * falló: un canje roto en una empresa concreta y uno roto en todas son dos
+   * incidentes muy distintos, y el log es lo único que los distingue.
+   */
+  let empresaEvento: string | null = null
+
+  /**
+   * Emite el evento del canje.
+   *
+   * `ok` significa "el canje se completó". Los rechazos de NEGOCIO —QR ya
+   * usado, sin usos, promoción vencida— salen con `ok: false` y su `motivo`,
+   * pero NO cuentan como fallo del sistema: el SLI de `docs/OBSERVABILIDAD.md`
+   * solo suma como error los `motivo: error_interno`. Un QR ya usado es el
+   * sistema funcionando bien.
+   */
+  const evento = (ok: boolean, motivo?: string, extra?: Record<string, number | boolean>) =>
+    registrarEvento({
+      dominio: 'escaneo',
+      accion: 'canje',
+      ok,
+      ms: Date.now() - t0,
+      companyId: empresaEvento,
+      motivo,
+      extra,
+    })
+
   try {
     const user = await getUser()
     if (!user || !SCANNER_ROLES.includes(user.metadata.role)) {
@@ -83,7 +113,11 @@ export async function confirmarCanjePromocion(
         },
       },
     })
-    if (!compra || !compra.promocion) return { error: 'Compra no encontrada.' }
+    if (!compra || !compra.promocion) {
+      evento(false, 'compra_no_encontrada')
+      return { error: 'Compra no encontrada.' }
+    }
+    empresaEvento = compra.companyId
     if (
       user.metadata.role !== 'SUPERADMIN' &&
       user.metadata.companyId &&
@@ -295,6 +329,8 @@ export async function confirmarCanjePromocion(
       },
     }
 
+    evento(true, undefined, { interno, consumida: result.consumida })
+
     return {
       success: true,
       restantes: result.restantes,
@@ -307,11 +343,16 @@ export async function confirmarCanjePromocion(
     }
   } catch (e) {
     if (e instanceof Error && e.message === 'QR_YA_USADO') {
+      evento(false, 'qr_ya_usado')
       return { error: 'Este QR ya fue utilizado. Pide al cliente su QR actualizado.' }
     }
     if (e instanceof Error && e.message === 'SIN_USOS') {
+      evento(false, 'sin_usos')
       return { error: 'No quedan usos disponibles en esta promoción.' }
     }
+    // El único motivo que cuenta como fallo del SLO. Ver el comentario de
+    // `evento` arriba y el SLI en docs/OBSERVABILIDAD.md.
+    evento(false, 'error_interno')
     console.error('[promociones] confirmarCanjePromocion:', e)
     return { error: 'Error interno al confirmar el canje. Intenta de nuevo.' }
   }

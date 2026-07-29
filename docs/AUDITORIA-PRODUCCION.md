@@ -260,6 +260,21 @@ la aplicación se ve perfecta y nadie puede entrar. El verificador lo comprueba 
   allá de lo que Sentry infiere.
 - **Impacto:** una degradación del pool de conexiones se detecta cuando los usuarios se quejan.
 
+**Estado tras la Fase 6 — parcialmente cerrado.** Lo que se hizo:
+
+- **Eventos estructurados** (`src/modules/observabilidad/eventos.ts`), conectados al canje, la cola,
+  el login y las consultas lentas de Prisma. Los logs dejan de ser prosa y pasan a poder contarse.
+- **Métricas** de negocio y de sistema en `/api/metricas` (JSON y Prometheus) y en
+  `/superadmin/observabilidad`. Incluyen la saturación del pool, que es este mismo hallazgo visto
+  **antes** de que los usuarios se quejen.
+- **SLO con presupuesto de error** (`src/modules/observabilidad/slo.ts`), con la aritmética probada.
+- **Limpieza de datos personales antes de Sentry**, que faltaba: la URL, `event.user` y las migas de
+  navegación seguían llevando el pase de mantenimiento, tokens y correos.
+
+Lo que **sigue abierto**: nada de esto alerta solo —las alertas hay que crearlas en el monitor, y
+están escritas una a una en `docs/OBSERVABILIDAD.md` § 5—; los SLO no están medidos porque no hay un
+mes de datos; el flujo de pago no emite eventos; y las trazas no cruzan la cola de QStash.
+
 ---
 
 ## 3. Hallazgos MEDIOS
@@ -459,10 +474,16 @@ de lo que se ve en muchas empresas de ese tamaño.
 Sigue sin cubrirse, y es la carencia mayor: **no hay respaldo de Supabase Storage**. Los comprobantes
 de pago y las fotos de evidencia no se pueden recuperar. `docs/RECUPERACION.md` § 8.
 
-### Fase 6 — Observabilidad · 1-2 semanas
-23. Métricas de negocio y de sistema con alertas (latencia p95, errores, saturación del pool).
-24. SLO definidos con presupuesto de error.
-25. Tracing distribuido completo; dashboards por dominio.
+### Fase 6 — Observabilidad · 1-2 semanas — **hecha, con excepciones**
+23. ⚠️ Métricas de negocio y de sistema. → `/api/metricas` + `/superadmin/observabilidad` +
+    eventos estructurados. **Las alertas NO existen todavía**: el código emite y expone, pero
+    avisar depende de crear los monitores. Cuáles y con qué umbral: `docs/OBSERVABILIDAD.md` § 5.
+24. ✅ SLO con presupuesto de error. → `src/modules/observabilidad/slo.ts`, 24 pruebas. Son una
+    **propuesta**: no hay un mes de datos para saber si se cumplen.
+25. ⚠️ Tracing y dashboards. → Sentry ya da trazas al 20% con las consultas dentro, y el panel del
+    superadmin cubre los dominios. **Las trazas no cruzan la cola de QStash**: cuando una
+    notificación masiva falla, la traza de quien la encoló y la del trabajo que la ejecutó son dos
+    trazas sin relación.
 
 ### Fase 7 — Optimización final · continuo
 26. E2E del recorrido completo del cliente.
