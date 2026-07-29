@@ -16,6 +16,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "test": "tsx --test tests/*.test.ts",
     "certificar:referidos": "tsx --tsconfig tsconfig.json scripts/certificar-referidos.ts",
+    "respaldo:verificar": "node scripts/verificar-respaldo.mjs",
     "db:doctor": "node scripts/db-doctor.mjs",
     "db:doctor:sql": "node scripts/db-doctor.mjs --sql",
     "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts"

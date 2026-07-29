@@ -79,3 +79,32 @@ select count(*) from pg_policies
 Y en la aplicación: subir un comprobante nuevo, verlo desde el cliente, verlo
 desde el panel de la empresa, y comprobar que pegar esa URL en una ventana de
 incógnito **caduca a los cinco minutos**.
+
+---
+
+## Simulacro de restauración (Fase 5)
+
+`.github/workflows/respaldo-verificacion.yml` corre cada lunes a las 08:00 de
+Santo Domingo: vuelca producción, la restaura en un PostgreSQL desechable y
+comprueba que lo restaurado sirve — incluidas las **credenciales**, que un
+volcado del esquema `public` no incluye.
+
+Usa el mismo secreto que el despliegue de migraciones, `MIGRATIONS_DATABASE_URL`
+(la DIRECT_URL), y solo lo lee. El volcado **no se guarda** en ningún sitio:
+lleva datos personales de clientes reales y los artefactos de Actions no son el
+sitio para eso. El razonamiento completo está en la cabecera del flujo.
+
+A mano: Actions → *Simulacro de restauración* → *Run workflow*, o
+`npm run respaldo:verificar` con `RESPALDO_ORIGEN` y `RESPALDO_DESTINO`.
+
+Plan de recuperación, RPO/RTO y qué sigue sin cubrirse: `docs/RECUPERACION.md`.
+Qué hacer cuando algo se rompe: `docs/runbooks/`.
+
+## Variables nuevas de la Fase 5
+
+| Variable | Para qué |
+|---|---|
+| `MODO_MANTENIMIENTO` | Cierra la aplicación entera. Paso 0 de toda restauración |
+| `MANTENIMIENTO_PASE` | Deja entrar a quien opera mientras está cerrada. **Distinto de `BOOTSTRAP_SECRET`** |
+
+Ambas documentadas en `.env.example` y en `docs/runbooks/modo-mantenimiento.md`.

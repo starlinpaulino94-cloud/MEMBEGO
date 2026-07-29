@@ -235,6 +235,24 @@ miles de escaneos QR/min · miles de pagos y notificaciones simultáneos.
 - **No verificable desde aquí:** el plan de Supabase determina la retención de backups (Free: 0-7 días;
   Pro: PITR opcional). Necesito saber el plan contratado.
 
+**Estado tras la Fase 5 — parcialmente cerrado.** Lo que se hizo:
+
+- `docs/RECUPERACION.md`: qué hay que restaurar (son **cuatro** sistemas, no uno), RPO/RTO propuestos
+  por escenario, procedimiento paso a paso y bitácora de simulacros.
+- `scripts/verificar-respaldo.mjs` + `.github/workflows/respaldo-verificacion.yml`: simulacro de
+  restauración **semanal y automático**, que además mide el RPO real en vez de suponerlo.
+- `docs/runbooks/` (8 runbooks) y el modo mantenimiento (`src/modules/mantenimiento`), sin el cual
+  ninguna restauración es limpia.
+
+Lo que **sigue abierto** y no depende del código: activar PITR, respaldar Supabase Storage, tener una
+copia fuera de Supabase, y restaurar a mano un respaldo real del proveedor al menos una vez. Detalle
+y razones en `docs/RECUPERACION.md` § 8.
+
+Un hallazgo nuevo, encontrado al escribir esa fase: **un volcado del esquema `public` no incluye
+`auth`**, donde viven las credenciales de Supabase Auth a las que apunta `User.supabaseId`
+(`prisma/schema.prisma:132`). Restaurar solo `public` devuelve todos los datos y ni una contraseña:
+la aplicación se ve perfecta y nadie puede entrar. El verificador lo comprueba explícitamente.
+
 ### A-09 · Observabilidad incompleta
 
 - **Evidencia:** Sentry configurado (`tracesSampleRate: 0.2`, `prismaIntegration`), `/api/health`
@@ -423,10 +441,23 @@ de lo que se ve en muchas empresas de ese tamaño.
 18. Ajuste del pool según los resultados; evaluar réplica de lectura para reportes.
 19. Revisión de N+1 con el `prismaIntegration` de Sentry en un entorno de carga.
 
-### Fase 5 — Infraestructura · 2-3 semanas
-20. Backups verificados con restauración probada; definir RPO/RTO.
-21. PITR en Supabase; plan de recuperación escrito y ensayado.
-22. Runbooks de incidentes y rotación de guardia.
+### Fase 5 — Infraestructura · 2-3 semanas — **hecha, con excepciones**
+20. ✅ Backups verificados con restauración probada; RPO/RTO definidos.
+    → `scripts/verificar-respaldo.mjs` (simulacro semanal automático, mide el RPO real),
+    `docs/RECUPERACION.md` § 3. Los RPO/RTO son una **propuesta** pendiente de que el dueño
+    la acepte o la corrija.
+21. ⚠️ PITR en Supabase; plan de recuperación escrito y ensayado.
+    → El plan está escrito (`docs/RECUPERACION.md`). **PITR no está activado** —depende del plan
+    contratado— y **no se ha ensayado** una restauración real: la bitácora del § 7 está vacía a
+    propósito para que se vea.
+22. ✅ Runbooks de incidentes. → `docs/runbooks/` (8) + modo mantenimiento
+    (`src/modules/mantenimiento`, 13 pruebas).
+    ❌ **Rotación de guardia: no existe y no puede existir hoy.** Hay una persona. Lo que sí se puede
+    montar —monitor de uptime externo y un segundo par de manos con acceso— está en
+    `docs/RECUPERACION.md` § 6.
+
+Sigue sin cubrirse, y es la carencia mayor: **no hay respaldo de Supabase Storage**. Los comprobantes
+de pago y las fotos de evidencia no se pueden recuperar. `docs/RECUPERACION.md` § 8.
 
 ### Fase 6 — Observabilidad · 1-2 semanas
 23. Métricas de negocio y de sistema con alertas (latencia p95, errores, saturación del pool).
