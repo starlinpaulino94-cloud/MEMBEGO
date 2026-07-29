@@ -485,11 +485,27 @@ de pago y las fotos de evidencia no se pueden recuperar. `docs/RECUPERACION.md` 
     notificación masiva falla, la traza de quien la encoló y la del trabajo que la ejecutó son dos
     trazas sin relación.
 
-### Fase 7 — Optimización final · continuo
-26. E2E del recorrido completo del cliente.
-27. Dividir archivos de 900+ líneas y el schema por dominios.
-28. PWA con cola offline para el scanner de pista.
-29. Revisión de bundle y presupuestos de rendimiento.
+### Fase 7 — Optimización final · continuo — **hecha, con excepciones**
+26. ⚠️ E2E del recorrido del cliente. → 28 pruebas Playwright (móvil + escritorio)
+    contra la aplicación real con base real, verdes. Cubren el recorrido **público**.
+    El autenticado —registro, compra, pago, QR, canje— **no**: necesita un proyecto
+    de Supabase de pruebas. Qué falta exactamente: `docs/PRUEBAS-E2E.md` § 4.
+27. ❌ Dividir archivos de 900+ líneas y el schema. → **No se hizo, a propósito.**
+    Cinco de los siete archivos grandes son bibliotecas de contenido, no lógica.
+    El `schema.prisma` sí merece dividirse y va en su propio cambio con su lista
+    de verificación, porque de él dependen todos los despliegues.
+    Medición y razones: `docs/RENDIMIENTO.md` § 2.
+28. ✅ PWA con cola sin conexión para el escáner. →
+    `src/modules/scanner/colaOffline.ts` (23 pruebas), service worker con red
+    primero e interruptor de emergencia, manifiesto instalable con acceso directo
+    al escáner. Cierra el fallo más caro del sistema: el lavado que se hace y no
+    se registra. `docs/OFFLINE-PWA.md`.
+29. ✅ Presupuestos de rendimiento. → `npm run presupuesto`, en el CI. Tres techos
+    medidos sobre el estado real (entrada compartida 820 KB / 1.000 KB).
+    `docs/RENDIMIENTO.md` § 1.
+
+Sigue sin medirse: los scripts de k6 nunca se han ejecutado, y no hay Lighthouse
+ni Core Web Vitals en CI — los presupuestos miden bytes, no experiencia.
 
 ---
 

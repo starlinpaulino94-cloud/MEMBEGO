@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useCallback, useEffect, useState } from 'react'
 import {
   Loader2,
   XCircle,
@@ -35,6 +35,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { desdeFormData } from '@/modules/scanner/colaOffline'
+import type { ColaOffline } from '@/components/scanner/useColaOffline'
+
+type EncolarVisita = ColaOffline['encolar']
+
+/** El estado del formulario más el caso "quedó pendiente de enviar". */
+type EstadoConCola = ConfirmState & { encolada?: boolean }
 
 interface Sucursal {
   id: string
@@ -64,7 +71,7 @@ const SERVICIOS_GENERICOS = [
   'Otro beneficio',
 ]
 
-const initial: ConfirmState = {}
+const initial: EstadoConCola = {}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
@@ -95,17 +102,55 @@ export function ConfirmVisit({
   sucursales = [],
   onDone,
   onScanNext,
+  encolar,
 }: {
   cliente: ClienteLookup
   sucursales?: Sucursal[]
   onDone: () => void
   /** Vuelve directo a la cámara para el siguiente cliente (loop sin fricción). */
   onScanNext?: () => void
+  /**
+   * Guarda la visita para reenviarla cuando vuelva la red (Fase 7 · punto 28).
+   * Opcional: sin ella el componente se comporta como antes.
+   */
+  encolar?: EncolarVisita
 }) {
   const [servicio, setServicio] = useState('')
   const [vehiculoId, setVehiculoId] = useState('')
   const [sucursalId, setSucursalId] = useState('')
-  const [state, formAction, pending] = useActionState(confirmarVisita, initial)
+  /**
+   * La acción, envuelta para que un fallo de RED no se pierda.
+   *
+   * `confirmarVisita` es una server action: cuando no hay conexión, la llamada
+   * revienta con una excepción de red que no llega al estado del formulario
+   * —sube por el árbol y la recoge el ErrorBoundary del escáner—. El resultado
+   * para el empleado era una pantalla de error con un coche esperando.
+   *
+   * Aquí se atrapa esa excepción, la visita se guarda en el dispositivo y se
+   * devuelve un estado propio: la operación NO se anuncia como registrada
+   * (sería mentira), se anuncia como pendiente. Los errores de NEGOCIO que sí
+   * devuelve el servidor —QR usado, sin permisos— siguen su camino intacto:
+   * esos no mejoran reintentando.
+   */
+  const accion = useCallback(
+    async (previo: EstadoConCola, formData: FormData): Promise<EstadoConCola> => {
+      try {
+        return await confirmarVisita(previo, formData)
+      } catch (e) {
+        if (!encolar) throw e
+        const guardada = encolar({
+          tipo: 'visita',
+          datos: desdeFormData(formData),
+          etiqueta: cliente.nombre ?? undefined,
+        })
+        if (!guardada) throw e
+        return { encolada: true }
+      }
+    },
+    [encolar, cliente.nombre]
+  )
+
+  const [state, formAction, pending] = useActionState<EstadoConCola, FormData>(accion, initial)
 
   // Defensa contra payloads incompletos (bundle viejo en el teléfono + acción
   // nueva en el servidor, o viceversa): nunca dejar que un campo faltante
@@ -129,7 +174,15 @@ export function ConfirmVisit({
   useEffect(() => {
     if (state.success) toast.success('Uso registrado.')
     if (state.error) toast.error(state.error)
-  }, [state.success, state.error])
+    // Nunca "registrado": la visita todavía no existe en el servidor. Decirle
+    // al empleado que sí quedó registrada sería la peor mentira posible aquí,
+    // porque dejaría de vigilarla.
+    if (state.encolada) {
+      toast.info('Sin conexión. La visita se enviará sola en cuanto vuelva la red.')
+      if (onScanNext) onScanNext()
+      else onDone()
+    }
+  }, [state.success, state.error, state.encolada, onScanNext, onDone])
 
   if (state.success && state.visitId) {
     return (

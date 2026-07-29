@@ -1,0 +1,99 @@
+# PRUEBAS DE EXTREMO A EXTREMO (auditoría · Fase 7, punto 26).
+#
+# Levanta la aplicación de verdad contra un PostgreSQL de verdad y la recorre
+# con un navegador de verdad. Es la única capa de pruebas del proyecto que
+# ejecuta el código como lo ejecuta un usuario: las 164 pruebas de `npm test`
+# son sobre funciones puras y no han abierto una página nunca.
+#
+# Va en su propio flujo y no dentro de ci.yml porque tarda varios minutos
+# (instalar navegador + build + arrancar) y no debería alargar el ciclo de
+# cada push. Se ejecuta en los PR y al mezclar en main.
+#
+# ALCANCE: recorrido PÚBLICO. Lo que falta —registro, compra, pago, QR, canje—
+# necesita un proyecto de Supabase de pruebas; está explicado en
+# docs/PRUEBAS-E2E.md § "Lo que falta".
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recorrido-publico:
+    name: Recorrido público
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # PostgreSQL real, no una simulación. La mitad de los fallos que estas
+      # pruebas encuentran son consultas que nunca se ejecutaron contra una
+      # base vacía.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: e2e
+          POSTGRES_DB: membego_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:e2e@localhost:5432/membego_e2e
+      DIRECT_URL: postgresql://postgres:e2e@localhost:5432/membego_e2e
+      # Valores de relleno: el recorrido público no toca Supabase. Tienen que
+      # existir porque el build los exige.
+      NEXT_PUBLIC_SUPABASE_URL: https://e2e.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: e2e-anon
+      SUPABASE_SERVICE_ROLE_KEY: e2e-service
+      NEXT_PUBLIC_APP_URL: http://localhost:3210
+      E2E_BASE_URL: http://localhost:3210
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Navegador
+        run: npx playwright install --with-deps chromium
+
+      # `db push` y no `migrate deploy`: la base de pruebas nace vacía en cada
+      # ejecución y lo que interesa es el esquema que el código ESPERA, no el
+      # historial de cómo se llegó a él.
+      - name: Esquema
+        run: npx prisma db push --skip-generate --accept-data-loss
+
+      - name: Build
+        run: npm run build
+
+      - name: Arrancar la aplicación
+        run: |
+          npx next start -p 3210 &
+          npx wait-on --timeout 90000 http://localhost:3210/api/health
+
+      - name: Recorrido
+        run: npx playwright test
+
+      # El informe solo se sube cuando algo falló: en verde no lo mira nadie y
+      # ocupa espacio de artefactos. La traza incluye capturas y peticiones,
+      # que es justo lo que hace falta para entender un fallo intermitente.
+      - name: Informe (solo si falla)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/ThemeProvider'
+import { RegistrarSW } from '@/components/system/RegistrarSW'
 import { SITE_NAME, SITE_DESCRIPTION, getAppUrl } from '@/lib/site'
 import './globals.css'
 
@@ -127,6 +128,8 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <StructuredData />
+          {/* Fase 7 · el escáner de pista tiene que poder ABRIR sin red. */}
+          <RegistrarSW />
           {children}
           <Toaster richColors position="top-center" />
         </ThemeProvider>

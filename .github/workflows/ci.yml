@@ -60,6 +60,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Presupuestos de rendimiento (Fase 7 · punto 29). El JavaScript de una
+      # aplicación solo crece, y nunca por una decisión: crece por cien
+      # decisiones pequeñas que nadie mide. Esto no prohíbe crecer; prohíbe
+      # crecer sin darse cuenta. Ver scripts/presupuesto-bundle.mjs.
+      - name: Presupuestos de bundle
+        run: npm run presupuesto
 
   dependencias:
     name: Vulnerabilidades en dependencias

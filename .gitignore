@@ -85,3 +85,9 @@ bun.lockb
 mini-services/
 skills/
 examples/
+
+# Pruebas de extremo a extremo (Playwright)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
