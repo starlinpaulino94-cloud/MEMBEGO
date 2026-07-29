@@ -85,6 +85,26 @@ jobs:
   esquema:
     name: Esquema de base de datos
     runs-on: ubuntu-latest
+
+    # PostgreSQL de verdad, y no el `DATABASE_URL` de relleno del resto de los
+    # trabajos: `migrate diff --from-migrations` necesita una base SOMBRA donde
+    # replicar el historial completo para compararlo con el esquema. Sin ella
+    # el paso no puede hacer su trabajo — que es justamente lo que pasaba
+    # cuando llevaba `continue-on-error: true`.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: sombra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -94,17 +114,27 @@ jobs:
       - run: npm ci
       - name: Validar el esquema
         run: npx prisma validate
-      # Detecta el fallo clásico: alguien edita el schema y olvida escribir la
+      # Detecta el fallo clásico: alguien edita el esquema y olvida escribir la
       # migración. El deploy iría adelantado a la base y —por la tolerancia
       # fail-open del código— fallaría en silencio.
+      #
+      # ESTA COMPROBACIÓN LLEVABA `continue-on-error: true` Y ERA DECORATIVA.
+      # No podía funcionar: el historial de migraciones no se podía reproducir
+      # desde cero (le faltaba el principio), así que este paso fallaba SIEMPRE
+      # por un motivo que no tenía nada que ver con lo que pretendía vigilar.
+      # Un check que falla siempre y no bloquea nada es peor que no tenerlo:
+      # ocupa un sitio en la lista y da la sensación de que algo se está
+      # comprobando.
+      #
+      # Arreglado el historial (0_genesis + reparación + reconciliación), ahora
+      # dice la verdad y BLOQUEA. Ver docs/RENDIMIENTO.md § 2.
       - name: Migración pendiente sin escribir
         run: |
           npx prisma migrate diff \
             --from-migrations prisma/migrations \
             --to-schema-datamodel prisma/schema \
-            --shadow-database-url "$DATABASE_URL" \
+            --shadow-database-url "postgresql://postgres:ci@localhost:5432/sombra" \
             --exit-code && echo "Sin diferencias." || {
               echo "::error::El esquema (prisma/schema/) tiene cambios sin migración. Crea la migración antes de mezclar."
               exit 1
             }
-        continue-on-error: true

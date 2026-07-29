@@ -81,6 +81,13 @@ miles de escaneos QR/min · miles de pagos y notificaciones simultáneos.
 - **Solución:** `prisma migrate deploy` en el pipeline, antes del despliegue de la app, con la
   conexión `DIRECT_URL`. Bloquear el deploy si la migración falla.
 
+**Estado tras las Fases 1 y 7 — cerrado.** `deploy-migraciones.yml` aplica las migraciones antes de
+desplegar (Fase 1). Y después de la Fase 7 el historial **se puede reproducir desde cero**: le
+faltaba el principio, tres tablas y dos migraciones extraviadas en `scripts/`. Con eso arreglado, el
+trabajo `esquema` del CI perdió su `continue-on-error: true` —era un check decorativo que fallaba
+siempre— y ahora bloquea de verdad cuando alguien edita el esquema sin escribir la migración.
+Detalle en `docs/RENDIMIENTO.md` § 2 y el procedimiento de producción en `docs/DEVOPS.md`.
+
 ### C-04 · `/api/stats` es un endpoint público sin caché que hace cuatro conteos completos
 
 - **Gravedad:** CRÍTICO · **Probabilidad:** ALTA · **Prioridad:** P0

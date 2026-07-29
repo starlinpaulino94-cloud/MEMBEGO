@@ -13,6 +13,9 @@ Este documento aclara los caminos soportados.
 ```
 prisma/
 ├── schema/                  # Fuente de verdad del modelo de datos (un archivo por dominio)
+├── migrations/              # Historial COMPLETO y reproducible desde cero (74)
+│   ├── 0_genesis/           # El esquema que existía antes de la 1ª migración
+│   └── 20260770_reconciliacion/  # Alinea la base con el esquema. Idempotente
 ├── baseline/
 │   └── full_schema.sql      # Esquema COMPLETO actual, generado desde prisma/schema/
 ├── migrations/              # Migraciones incrementales que corre `migrate deploy`

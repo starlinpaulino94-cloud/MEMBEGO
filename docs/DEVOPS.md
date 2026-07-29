@@ -108,3 +108,86 @@ Qué hacer cuando algo se rompe: `docs/runbooks/`.
 | `MANTENIMIENTO_PASE` | Deja entrar a quien opera mientras está cerrada. **Distinto de `BOOTSTRAP_SECRET`** |
 
 Ambas documentadas en `.env.example` y en `docs/runbooks/modo-mantenimiento.md`.
+
+---
+
+## El historial de migraciones (arreglado) y qué hay que hacer UNA vez
+
+### Qué estaba roto
+
+Las 69 migraciones **no se podían reproducir desde cero**. Faltaba el
+principio: ninguna creaba `users`, `companies`, `clientes` ni `memberships`
+—el esquema inicial se hizo con `db push`—, tres tablas del módulo de
+invitaciones se crearon a mano y nunca tuvieron migración, y dos migraciones
+vivían en `scripts/` en vez de `prisma/migrations/`.
+
+Consecuencias: no se podía levantar un entorno nuevo replicando el historial,
+y el trabajo `esquema` del CI llevaba `continue-on-error: true` porque fallaba
+siempre — un check decorativo que ocupaba sitio y no comprobaba nada.
+
+### Qué se hizo
+
+| Migración | Qué es |
+|---|---|
+| `0_genesis` | El esquema de 20 modelos que existía antes de la primera migración, sacado del propio git (commit `a39508b^`) |
+| `20260713b_invitaciones_campanas` | Las 3 tablas de "Invita y Gana" que se crearon a mano. Idempotente |
+| `20260745_*`, `20260746_*` | Promovidas desde `scripts/`, donde estaban perdidas |
+| `20260770_reconciliacion` | Alinea la base con el esquema: 37 claves foráneas, 21 columnas, 12 índices renombrados, 3 borrados. Idempotente |
+
+Además, `20260768_visitas_indices` dejó de usar `CONCURRENTLY` (no puede correr
+dentro de una transacción, y Prisma envuelve cada migración en una). La versión
+con `CONCURRENTLY`, que es la que hay que usar en producción, está en
+`prisma/migrations_manual/2026-07-visitas-indices-concurrently.sql`.
+
+Resultado, verificado: **74 migraciones, 0 fallos desde una base vacía, y
+`migrate diff --from-migrations` responde "No difference detected"**.
+
+### EL PASO QUE TE TOCA — una sola vez, antes del próximo deploy a `main`
+
+Producción tiene todos los cambios pero Prisma no lo sabe: se aplicaron en el
+SQL Editor, que no escribe en `_prisma_migrations`. Sin este paso,
+`migrate deploy` intentaría crear tablas que ya existen, fallaría, y **el
+despliegue quedaría bloqueado**.
+
+```bash
+export DATABASE_URL="<la DIRECT_URL de Supabase, puerto 5432>"
+
+# 1. Comprobar que la base está de verdad al día. Si esto se queja, PARA:
+#    marcar migraciones como aplicadas cuando falta algo esconde el agujero.
+npm run db:doctor
+
+# 2. Ver qué se marcaría. No cambia nada.
+npm run migraciones:baseline
+
+# 3. Hacerlo. Solo inserta filas en _prisma_migrations; no toca datos.
+npm run migraciones:baseline -- --aplicar
+
+# 4. Los índices de `visits` con CONCURRENTLY, en el SQL Editor de Supabase,
+#    UNA SENTENCIA A LA VEZ:
+#    prisma/migrations_manual/2026-07-visitas-indices-concurrently.sql
+
+# 5. Aplicar lo único que queda de verdad: la reconciliación.
+npx prisma migrate deploy
+
+# 6. Confirmar.
+npx prisma migrate status   # "Database schema is up to date!"
+npm run db:doctor
+```
+
+**Sobre el paso 5:** la reconciliación borra y vuelve a crear 37 claves
+foráneas para dejarlas con la regla `ON DELETE` que declara el esquema. Durante
+los milisegundos que dura cada par, esa integridad referencial no está vigente.
+No es para hacerlo un sábado a mediodía; cualquier momento tranquilo sirve.
+
+**Si algo sale mal en el paso 3:** se deshace borrando las filas que insertó.
+```sql
+delete from _prisma_migrations where migration_name = '<nombre>';
+```
+
+### Por qué existe `prisma.config.ts`
+
+`package.json#prisma` está deprecado, y —más importante— al pasar el esquema a
+carpeta Prisma empezó a buscar las migraciones en `prisma/schema/migrations/`.
+`migrate deploy` decía "No migration found" y no aplicaba nada: el fallo C-03
+de la auditoría reintroducido por la puerta de atrás, y en silencio.
+`prisma.config.ts` declara las dos rutas por separado.

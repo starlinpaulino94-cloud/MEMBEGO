@@ -145,29 +145,28 @@ Y después, todo lo demás en verde: `tsc`, `eslint`, 187 pruebas, `next build`,
 - `scripts/db-doctor.mjs` → concatena los `.prisma` de la carpeta en vez de leer
   un archivo.
 
-#### Un hallazgo que salió por el camino
+#### El hallazgo que salió por el camino — ya está arreglado
 
-`prisma migrate diff --from-migrations` **falla en este repositorio**, y fallaba
-igual antes de dividir nada:
+Al dividir el esquema apareció que `prisma migrate diff --from-migrations`
+**fallaba en este repositorio**, y fallaba igual antes de dividir nada. Se
+arregló en el commit siguiente. Lo que se encontró:
 
-```
-Migration `20260705_add_multi_membership_support` failed to apply cleanly
-to the shadow database. The underlying table for model `memberships` does not exist.
-```
+| Problema | Detalle |
+|---|---|
+| El historial no tenía principio | Ninguna migración creaba `users`, `companies`, `clientes` ni `memberships`: el esquema inicial se hizo con `db push` y las migraciones empezaron después |
+| Tres tablas sin migración | `campanas_invitacion`, `invitacion_progresos` e `invitacion_eventos` se crearon a mano |
+| Dos migraciones extraviadas | `20260745` y `20260746` vivían en `scripts/`, no en `prisma/migrations/` |
+| 110 diferencias de forma | Claves foráneas con otra regla `ON DELETE`, `updatedAt` con `DEFAULT` de más, `VARCHAR(n)` donde el esquema dice `String`, índices con nombre `idx_*` |
+| `CONCURRENTLY` irreplicable | `20260768_visitas_indices` no puede correr dentro de una transacción, y Prisma envuelve cada migración en una |
 
-El historial de migraciones no se puede reproducir desde cero. Es la
-consecuencia esperable de aplicarlas a mano en el SQL Editor durante meses —
-alguna asume un estado que otra creó fuera del historial— y explica por qué el
-trabajo `esquema` del CI lleva `continue-on-error: true`.
+Se cerró con `0_genesis` (sacado del propio git: el esquema del commit anterior
+a la primera migración), una migración de reparación, las dos promovidas, y
+`20260770_reconciliacion`. Verificado: **74 migraciones, 0 fallos desde vacío,
+"No difference detected"**. El trabajo `esquema` del CI perdió su
+`continue-on-error` y ahora bloquea de verdad.
 
-No es urgente: la base de producción está bien y `db push` desde el esquema
-produce el resultado correcto. Pero significa que **hoy no se puede levantar un
-entorno nuevo replicando las migraciones**, solo empujando el esquema. Si algún
-día hace falta (un entorno de pruebas de verdad, o el simulacro de restauración
-del § 5 de `docs/RECUPERACION.md`), habrá que consolidar el historial en una
-migración base. No se hizo aquí porque es otro cambio, y arreglar dos cosas a la
-vez en el archivo del que depende cada despliegue es exactamente lo que este
-mismo documento decía que no había que hacer.
+El procedimiento de una sola vez que hay que ejecutar en producción está en
+`docs/DEVOPS.md`.
 
 ---
 

@@ -10,26 +10,28 @@
 -- resto de filas leyéndolas; con el compuesto resuelve las dos condiciones en
 -- una sola pasada del índice.
 --
--- ADITIVA: solo añade índices. CONCURRENTLY para no bloquear escrituras
--- mientras se construyen — importante si la tabla ya tiene volumen.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- POR QUÉ AQUÍ NO DICE `CONCURRENTLY`
 --
--- OJO: `CREATE INDEX CONCURRENTLY` NO puede correr dentro de una transacción.
--- En el SQL Editor de Supabase ejecuta cada sentencia POR SEPARADO (una, y
--- cuando termine, la otra). Si da "cannot run inside a transaction block", es
--- justo eso.
+-- Lo decía, y hacía que el historial de migraciones no se pudiera reproducir:
+-- `CREATE INDEX CONCURRENTLY` no puede ejecutarse dentro de una transacción, y
+-- Prisma envuelve cada migración en una. `prisma migrate diff --from-migrations`
+-- fallaba justo aquí, así que el CI no podía comprobar si el esquema tenía
+-- cambios sin migración.
+--
+-- La versión con `CONCURRENTLY` sigue existiendo, en
+-- `prisma/migrations_manual/2026-07-visitas-indices-concurrently.sql`, y es la
+-- que hay que ejecutar EN PRODUCCIÓN **antes** que esta migración: crear el
+-- índice sin `CONCURRENTLY` sobre millones de filas bloquea las escrituras de
+-- `visits` durante minutos, y eso es el escáner de la pista sin registrar nada.
+--
+-- Sobre una base vacía —CI, entorno nuevo, base de pruebas— es instantáneo.
+-- Y si los índices ya están (porque se corrió el archivo manual), el
+-- `IF NOT EXISTS` hace que esto no haga nada.
+-- ─────────────────────────────────────────────────────────────────────────────
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "visits_membershipId_fechaVisita_idx"
+CREATE INDEX IF NOT EXISTS "visits_membershipId_fechaVisita_idx"
   ON "visits" ("membershipId", "fechaVisita");
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "visits_clienteId_fechaVisita_idx"
+CREATE INDEX IF NOT EXISTS "visits_clienteId_fechaVisita_idx"
   ON "visits" ("clienteId", "fechaVisita");
-
--- ── Verificación ───────────────────────────────────────────────────────────
--- Ambas filas deben decir true. Un índice en estado "invalid" (por una
--- construcción concurrente interrumpida) hay que borrarlo y rehacerlo.
-SELECT indexname, indisvalid
-  FROM pg_indexes
-  JOIN pg_class ON pg_class.relname = pg_indexes.indexname
-  JOIN pg_index ON pg_index.indexrelid = pg_class.oid
- WHERE tablename = 'visits'
-   AND indexname IN ('visits_membershipId_fechaVisita_idx', 'visits_clienteId_fechaVisita_idx');
