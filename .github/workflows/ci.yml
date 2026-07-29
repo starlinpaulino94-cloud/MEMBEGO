@@ -138,3 +138,49 @@ jobs:
               echo "::error::El esquema (prisma/schema/) tiene cambios sin migración. Crea la migración antes de mezclar."
               exit 1
             }
+
+      # ── Aislamiento entre empresas (auditoría · A-01) ──────────────────────
+      #
+      # Las políticas de RLS se DEDUCEN del esquema: 80 tablas por su columna
+      # `companyId` y 29 más siguiendo claves foráneas. Nadie las ha leído una
+      # por una, así que comprobar que existen no dice nada. Lo que se comprueba
+      # aquí es el comportamiento: se levanta la base entera, se siembran dos
+      # empresas y se mira si una ve a la otra.
+      #
+      # Corre en CI y no solo a mano porque el riesgo es una tabla NUEVA: se
+      # añade un modelo sin `companyId` y sin clave foránea al inquilino, y el
+      # agujero entra con un cambio que por lo demás está bien.
+      - name: Aislamiento entre empresas (RLS)
+        env:
+          DATABASE_URL: postgresql://postgres:ci@localhost:5432/sombra
+          DIRECT_URL: postgresql://postgres:ci@localhost:5432/sombra
+        run: |
+          # Base limpia con el esquema actual. `db push` y no `migrate deploy`:
+          # aquí interesa el esquema de HOY, no reproducir el historial — de eso
+          # ya se encarga el paso anterior.
+          npx prisma db push --skip-generate --accept-data-loss
+          npx prisma generate
+
+          # Los roles de Supabase no existen en un postgres pelado. Se crean
+          # para que la Capa 1 pueda revocarles los permisos de verdad, en vez
+          # de saltárselo con un "el rol no existe aquí".
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            create role anon nologin;
+            create role authenticated nologin;
+            grant usage on schema public to anon, authenticated;
+            grant all on all tables in schema public to anon, authenticated;"
+
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f prisma/migrations/20260771_rls_barrera_publica/migration.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v clave=ci \
+            -f prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql
+
+          # Capa 1: nada de `public` debe quedar al alcance de la clave anónima.
+          exp=$(psql "$DATABASE_URL" -Atc "select count(*) from information_schema.role_table_grants where table_schema='public' and grantee in ('anon','authenticated')")
+          if [ "$exp" != "0" ]; then
+            echo "::error::$exp tabla(s) siguen alcanzables por la clave anónima (anon/authenticated)."
+            exit 1
+          fi
+
+          # Capa 2: el aislamiento, comprobado sembrando datos reales.
+          npm run rls:probar

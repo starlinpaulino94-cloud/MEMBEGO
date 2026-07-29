@@ -23,7 +23,8 @@
     "migraciones:baseline": "node scripts/baseline-migraciones.mjs",
     "db:doctor": "node scripts/db-doctor.mjs",
     "db:doctor:sql": "node scripts/db-doctor.mjs --sql",
-    "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts"
+    "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts",
+    "rls:probar": "node scripts/probar-rls.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

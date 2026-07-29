@@ -49,8 +49,19 @@ Supabase (buckets y políticas RLS), que Prisma no gestiona. Se aplican en el
 SQL Editor. Hoy son:
 
 - `2026-07-storage-buckets.sql` — creación de los tres buckets.
-- `2026-07-comprobantes-privado.sql` — **pendiente de aplicar**: cierra el
-  bucket de comprobantes (auditoría · C-01). Ver abajo.
+- `2026-07-comprobantes-privado.sql` — cierra el bucket de comprobantes
+  (auditoría · C-01). **Aplicado**: verificado con `comprobantes.public = false`
+  y 0 políticas sobre ese bucket, que es el resultado esperado — sin política,
+  RLS deniega, y solo pasa `service_role`.
+- `2026-07-rls-capa2-aislamiento.sql` — **NO aplicar todavía**. Crea el rol
+  `membego_app` y las políticas de aislamiento por empresa. Está montado y
+  probado, pero encenderlo exige antes migrar las consultas a `conEmpresa()`.
+  Léete `docs/RLS.md` § 4 entero antes de tocarlo.
+
+  La Capa 1 de RLS, en cambio, **sí va sola**: es
+  `prisma/migrations/20260771_rls_barrera_publica/`, una migración normal que
+  se aplica con `migrate deploy`. Cierra el acceso de la clave anónima a
+  `public` — que era el agujero grave. `docs/RLS.md` § 3.
 
 ## Orden de despliegue de la Fase 1
 

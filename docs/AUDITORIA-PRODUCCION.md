@@ -181,6 +181,36 @@ Detalle en `docs/RENDIMIENTO.md` § 2 y el procedimiento de producción en `docs
 - **No verificado exhaustivamente:** revisar las ~150 consultas una a una excede esta auditoría. Es
   el trabajo que recomiendo antes del lanzamiento.
 
+**Estado tras la Fase 3 — reclasificado a CRÍTICO, y parcialmente cerrado.**
+
+Al montar el banco de pruebas apareció algo que esta auditoría no vio: Supabase concede por defecto
+todos los privilegios sobre `public` a los roles `anon` y `authenticated`, y expone PostgREST. La
+clave `anon` **viaja en el bundle del navegador**. Sin RLS, cualquiera que la copie del código fuente
+puede hacer `GET /rest/v1/clientes?select=*` y descargarse la tabla entera, de todas las empresas,
+sin explotar nada. Reproducido en un PostgreSQL 16 con los roles y grants por defecto de Supabase:
+`set role anon; select * from clientes;` devolvió las filas de las dos empresas sembradas.
+
+Lo que se hizo:
+
+- ✅ **Capa 1 — puerta pública cerrada.** `20260771_rls_barrera_publica`: RLS en las 112 tablas,
+  privilegios de `anon`/`authenticated` retirados y privilegios POR DEFECTO corregidos para que las
+  tablas futuras no nazcan abiertas. Se puede aplicar sin riesgo porque MembeGo no usa PostgREST
+  (verificado: cero `.from('<tabla>')` y cero `.rpc(` en `src/`). Lleva una guarda que **aborta** la
+  migración si el rol que migra no puede saltarse RLS.
+- ⚠️ **Capa 2 — aislamiento real: montada, probada y APAGADA.**
+  `migrations_manual/2026-07-rls-capa2-aislamiento.sql` crea un rol sin `BYPASSRLS` y deduce las
+  políticas del esquema: 80 tablas por su `companyId`, 28 más siguiendo claves foráneas, 3 con regla
+  propia. **112 de 112 cubiertas.** `src/lib/tenant.ts` aporta `conEmpresa()`/`sinEmpresa()`.
+  Se entrega apagada porque encenderla exige que las **765 consultas** declaren su empresa, y una
+  Capa 2 a medias no protege de nada mientras aparenta que sí. Camino de encendido en `docs/RLS.md` § 4.
+- ✅ **Prueba automática de aislamiento por tenant** (lo que pedía el punto 12):
+  `npm run rls:probar`, 6 comprobaciones sobre datos sembrados, en CI. Se verificó que **puede
+  fallar**: saboteando una política a `using (true)` caen 5 de 6.
+
+Sigue abierto: la Capa 2 no está encendida en producción, y la válvula `app.omnisciente` la puede
+abrir la propia aplicación — no defiende de un servidor comprometido, solo de un `where` olvidado.
+`docs/RLS.md` § 6.
+
 ### A-02 · Tokens QR generados con `cuid()`, no con aleatoriedad criptográfica
 
 - **Evidencia:** `prisma/schema.prisma`, modelo `QrToken`: `token String @unique @default(cuid())`.
@@ -452,7 +482,12 @@ de lo que se ve en muchas empresas de ese tamaño.
 11. Contadores materializados para las métricas de la landing y del dashboard.
 
 ### Fase 3 — Seguridad · 2-4 semanas
-12. A-01 RLS en PostgreSQL como segunda barrera + test automático de aislamiento por tenant.
+12. ⚠️ A-01 RLS en PostgreSQL como segunda barrera + test automático de aislamiento por tenant.
+    · **Capa 1 (puerta pública): HECHA.** Y resultó ser lo urgente: la clave `anon` que va en el
+      navegador leía `public` entera. `20260771_rls_barrera_publica`.
+    · **Capa 2 (aislamiento por empresa): montada y probada, APAGADA.** 112 de 112 tablas con
+      política; encenderla exige migrar 765 consultas a `conEmpresa()`. `docs/RLS.md` § 4.
+    · **Test de aislamiento: HECHO.** `npm run rls:probar`, en CI, y verificado que puede fallar.
 13. A-02 Tokens QR con `gen_random_bytes` + caducidad temporal.
 14. A-04 CSP con nonce, sin `unsafe-eval`.
 15. M-05 Validación de subidas en el servidor.

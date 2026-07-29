@@ -1,0 +1,303 @@
+-- ============================================================================
+-- RLS · CAPA 2 — aislamiento real entre empresas   (auditoría · A-01)
+-- ============================================================================
+--
+-- ESTO NO SE APLICA SOLO. Léelo entero antes de correrlo, y lee docs/RLS.md.
+-- No está en `prisma/migrations/` a propósito: crea un rol con contraseña y
+-- cambia por qué usuario se conecta la aplicación. Eso no va en un archivo
+-- versionado ni se dispara solo en un despliegue.
+--
+-- ────────────────────────────────────────────────────────────────────────────
+-- QUÉ PROBLEMA RESUELVE, Y POR QUÉ LA CAPA 1 NO BASTA
+--
+-- La Capa 1 (`20260771_rls_barrera_publica`) le quitó a `anon` el acceso a
+-- `public`. Eso cierra la puerta de PostgREST, que era la grave.
+--
+-- Pero NO protege contra el fallo que más veces ocurre de verdad: alguien
+-- escribe una consulta nueva y se le olvida el `where companyId`. Prisma se
+-- conecta como `postgres`, que en Supabase tiene el atributo BYPASSRLS: se
+-- salta RLS por completo. Con la Capa 1 puesta, esa consulta seguiría
+-- devolviendo los clientes de todas las empresas.
+--
+-- Para que RLS proteja de eso hacen falta dos cosas, y las dos duelen:
+--
+--   1. Que la aplicación se conecte con un rol que NO se salte RLS.
+--   2. Que cada consulta diga en qué empresa está trabajando.
+--
+-- El (2) es lo caro: PostgreSQL no sabe quién es el usuario de la aplicación.
+-- Hay que decírselo en cada transacción con `SET LOCAL app.company_id`. En
+-- MembeGo eso son 765 puntos de consulta. Por eso esta capa se entrega
+-- montada y probada, pero APAGADA: se enciende con `conEmpresa()` módulo a
+-- módulo, no de golpe. Ver `src/lib/tenant.ts` y docs/RLS.md § 4.
+--
+-- ────────────────────────────────────────────────────────────────────────────
+-- CÓMO SE DECIDE QUÉ POLÍTICA LLEVA CADA TABLA
+--
+-- No hay una lista escrita a mano de 112 tablas: se deduce del esquema, y por
+-- eso no se desincroniza.
+--
+--   NIVEL 0 · la tabla tiene columna `companyId`  → política directa.
+--             Son 80 de 112.
+--   NIVEL N · la tabla no la tiene, pero una de sus claves foráneas apunta a
+--             una tabla ya cubierta → política por EXISTS a través de esa
+--             clave. Se repite hasta que no se cubre ninguna más.
+--             Ejemplo: `visits` no tiene `companyId`, pero tiene `clienteId`,
+--             y `clientes` sí lo tiene.
+--   SIN RUTA· lo que quede sin camino fiable se INFORMA por pantalla y se
+--             queda accesible solo en modo omnisciente. No se inventa una
+--             regla: una política mal puesta es peor que ninguna, porque
+--             parece que protege.
+--
+-- Solo se usan claves foráneas NOT NULL. Con una nullable, las filas
+-- huérfanas quedarían fuera de toda empresa y habría que decidir si se ven o
+-- no; se prefiere informarlo antes que elegir en silencio.
+--
+-- ────────────────────────────────────────────────────────────────────────────
+-- LA VÁLVULA DE ESCAPE, Y SU LÍMITE HONESTO
+--
+-- Muchísimo de MembeGo cruza empresas por diseño y con razón: el marketplace
+-- público, el panel del superadmin, el cron que recorre todas las empresas.
+-- Para eso está `app.omnisciente = 'on'`.
+--
+-- Esa válvula la puede abrir la propia aplicación. Es decir: esto NO defiende
+-- de un servidor comprometido —quien ejecute código en el servidor puede
+-- abrirla— y no pretende hacerlo. Defiende de un `where` olvidado, que es el
+-- fallo que de verdad pasa. Un `where` olvidado nunca escribe
+-- `app.omnisciente`.
+--
+-- Si algún día quieres la versión fuerte, se cambia la válvula por un SEGUNDO
+-- ROL (`membego_admin`) con su propia cadena de conexión, y entonces el código
+-- de inquilino no puede alcanzarla ni queriendo. Cuesta dos clientes de Prisma.
+-- ============================================================================
+
+
+-- ── 1. El rol de la aplicación ──────────────────────────────────────────────
+--
+-- NOBYPASSRLS es todo el punto de esta capa. Si este rol se saltara RLS, todo
+-- lo demás sería decorado.
+--
+-- CAMBIA LA CONTRASEÑA antes de correr esto. Y no la guardes en el repositorio.
+\set clave 'CAMBIA-ESTA-CLAVE'
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'membego_app') THEN
+    CREATE ROLE membego_app LOGIN NOBYPASSRLS;
+    RAISE NOTICE 'Rol membego_app creado.';
+  ELSE
+    ALTER ROLE membego_app NOBYPASSRLS;
+    RAISE NOTICE 'Rol membego_app ya existía; se reafirma NOBYPASSRLS.';
+  END IF;
+END $$;
+
+ALTER ROLE membego_app PASSWORD :'clave';
+
+GRANT USAGE ON SCHEMA public TO membego_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO membego_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO membego_app;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO membego_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO membego_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO membego_app;
+
+-- `_prisma_migrations` no: migrar es cosa del rol de despliegue, no de la app.
+-- Va guardado porque en una base creada con `db push` esa tabla no existe.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='_prisma_migrations') THEN
+    REVOKE ALL ON TABLE public._prisma_migrations FROM membego_app;
+  END IF;
+END $$;
+
+
+-- ── 2. Las políticas, deducidas del esquema ─────────────────────────────────
+DO $$
+DECLARE
+  cubiertas  text[] := ARRAY[]::text[];
+  ronda      integer := 0;
+  nuevas     integer;
+  t          record;
+  fk         record;
+  sin_ruta   text[] := ARRAY[]::text[];
+  cond       text;
+BEGIN
+  -- Se parte de cero para poder recorrer el archivo las veces que haga falta.
+  -- Se callan los avisos de "no existe, se omite": en la primera pasada son
+  -- 112 líneas de ruido que tapan el resumen del final, que es lo que hay que
+  -- leer.
+  SET LOCAL client_min_messages = warning;
+  FOR t IN
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', t.tablename);
+  END LOOP;
+  RESET client_min_messages;
+
+  -- ── Nivel 0: la tabla lleva `companyId` encima ────────────────────────────
+  FOR t IN
+    SELECT c.relname AS tabla
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'companyId' AND a.attnum > 0
+     WHERE n.nspname = 'public' AND c.relkind = 'r'
+     ORDER BY c.relname
+  LOOP
+    cond := '(current_setting(''app.omnisciente'', true) = ''on'''
+         || ' OR "companyId" = current_setting(''app.company_id'', true))';
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.%I FOR ALL TO membego_app USING (%s) WITH CHECK (%s)',
+      t.tabla, cond, cond);
+    cubiertas := cubiertas || t.tabla;
+  END LOOP;
+
+  RAISE NOTICE 'Nivel 0 — tablas con companyId propio: %', cardinality(cubiertas);
+
+  -- `companies` es la tabla de empresas: su propia clave ES el inquilino.
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='companies') THEN
+    cond := '(current_setting(''app.omnisciente'', true) = ''on'''
+         || ' OR id = current_setting(''app.company_id'', true))';
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.companies FOR ALL TO membego_app USING (%s) WITH CHECK (%s)',
+      cond, cond);
+    -- El `::text` no es adorno: sin él PostgreSQL elige `array || array` e
+    -- intenta leer 'companies' como literal de array.
+    cubiertas := cubiertas || 'companies'::text;
+    RAISE NOTICE 'companies cubierta por su propia clave primaria.';
+  END IF;
+
+  -- ── Niveles 1..N: se llega al inquilino por una clave foránea NOT NULL ────
+  LOOP
+    ronda  := ronda + 1;
+    nuevas := 0;
+
+    FOR fk IN
+      SELECT hija.relname   AS tabla,
+             att.attname    AS columna,
+             madre.relname  AS padre,
+             pk.attname     AS columna_padre
+        FROM pg_constraint con
+        JOIN pg_class  hija  ON hija.oid  = con.conrelid
+        JOIN pg_class  madre ON madre.oid = con.confrelid
+        JOIN pg_namespace n  ON n.oid     = hija.relnamespace
+        JOIN pg_attribute att ON att.attrelid = con.conrelid  AND att.attnum = con.conkey[1]
+        JOIN pg_attribute pk  ON pk.attrelid  = con.confrelid AND pk.attnum  = con.confkey[1]
+       WHERE con.contype = 'f'
+         AND n.nspname = 'public'
+         AND cardinality(con.conkey) = 1     -- solo claves de una columna
+         AND att.attnotnull                  -- solo NOT NULL: ver la nota de arriba
+         AND NOT (hija.relname  = ANY (cubiertas))
+         AND      madre.relname = ANY (cubiertas)
+         AND hija.relname <> madre.relname   -- nada de autorreferencias
+       ORDER BY hija.relname, att.attname
+    LOOP
+      CONTINUE WHEN fk.tabla = ANY (cubiertas);   -- ya cubierta en esta ronda
+
+      cond := format(
+        '(current_setting(''app.omnisciente'', true) = ''on'' OR EXISTS ('
+        || 'SELECT 1 FROM public.%I p WHERE p.%I = public.%I.%I))',
+        fk.padre, fk.columna_padre, fk.tabla, fk.columna);
+
+      EXECUTE format(
+        'CREATE POLICY membego_inquilino ON public.%I FOR ALL TO membego_app USING (%s) WITH CHECK (%s)',
+        fk.tabla, cond, cond);
+
+      cubiertas := cubiertas || fk.tabla;
+      nuevas    := nuevas + 1;
+    END LOOP;
+
+    RAISE NOTICE 'Ronda % — cubiertas por clave foránea: %', ronda, nuevas;
+    EXIT WHEN nuevas = 0 OR ronda > 10;
+  END LOOP;
+
+  -- ── Las que no tienen inquilino porque no les toca ────────────────────────
+  --
+  -- Tres tablas se quedaron sin camino, y las tres se miraron una por una. No
+  -- se dejan denegadas: si lo estuvieran, el listado de categorías saldría
+  -- vacío y el POS no podría numerar un ticket.
+  --
+  -- `business_categories` y `campanas_globales` son CATÁLOGOS GLOBALES: los
+  -- administra MembeGo y los lee todo el mundo. Lectura para cualquier
+  -- inquilino; escritura solo en modo omnisciente (el panel del superadmin).
+  FOREACH cond IN ARRAY ARRAY['business_categories', 'campanas_globales'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_catalogo_lee ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_catalogo_escribe ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_catalogo_lee ON public.%I FOR SELECT TO membego_app USING (true)', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_catalogo_escribe ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Catálogos globales: lectura abierta, escritura solo omnisciente.';
+
+  -- `transaction_counters` es (id, seq) y nada más: contadores atómicos. Su
+  -- `id` es un ámbito, no un dato — `TX:<fecha>` es global y `TICKET:<empresa>`
+  -- es de una empresa (ver `nextCounter` en transaction-service.ts).
+  --
+  -- Abrirla entera dejaría que una empresa leyera cuántos tickets lleva otra.
+  -- Es poco, pero es innecesario: la regla puede ser exacta.
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='transaction_counters') THEN
+    cond := '(current_setting(''app.omnisciente'', true) = ''on'''
+         || ' OR id LIKE ''TX:%'''
+         || ' OR id = ''TICKET:'' || current_setting(''app.company_id'', true))';
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.transaction_counters FOR ALL TO membego_app '
+      || 'USING (%s) WITH CHECK (%s)', cond, cond);
+    cubiertas := cubiertas || 'transaction_counters'::text;
+    RAISE NOTICE 'transaction_counters: ámbito global TX:* + TICKET del propio inquilino.';
+  END IF;
+
+  -- ── Lo que quedó fuera ────────────────────────────────────────────────────
+  --
+  -- Sin política, RLS deniega. Aquí no debería quedar nada: si aparece algo, es
+  -- una tabla NUEVA sin camino al inquilino, y hay que decidirlo a mano igual
+  -- que se decidieron las tres de arriba. No se inventa una regla por defecto:
+  -- una política mal puesta es peor que ninguna, porque parece que protege.
+  SELECT array_agg(tablename ORDER BY tablename) INTO sin_ruta
+    FROM pg_tables
+   WHERE schemaname = 'public'
+     AND tablename <> '_prisma_migrations'
+     AND NOT (tablename = ANY (cubiertas));
+
+  RAISE NOTICE '────────────────────────────────────────────────';
+  RAISE NOTICE 'Cubiertas por política de inquilino: % de %',
+    cardinality(cubiertas),
+    (SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'_prisma_migrations');
+  RAISE NOTICE 'SIN ruta al inquilino (solo omnisciente): %',
+    COALESCE(array_to_string(sin_ruta, ', '), 'ninguna');
+  RAISE NOTICE '────────────────────────────────────────────────';
+  RAISE NOTICE 'Revisa esa lista. Si ahí aparece una tabla con datos de una';
+  RAISE NOTICE 'empresa concreta, le falta camino y hay que dárselo a mano.';
+END $$;
+
+
+-- ============================================================================
+-- VERIFICACIÓN — el aislamiento, comprobado y no supuesto.
+--
+--   -- Con la empresa c1 puesta, no debe verse ni una fila de c2.
+--   set role membego_app;
+--   set local app.company_id = 'c1';
+--   select count(*) from clientes;                       -- solo las de c1
+--   select count(*) from clientes where "companyId"='c2'; -- tiene que dar 0
+--   reset role;
+--
+-- La versión automática de esto es `npm run rls:probar`, que siembra dos
+-- empresas y falla si una ve a la otra. Corre en CI.
+--
+-- ────────────────────────────────────────────────────────────────────────────
+-- MARCHA ATRÁS:
+--
+--   do $$ declare t record; begin
+--     for t in select tablename from pg_tables where schemaname='public' loop
+--       execute format('drop policy if exists membego_inquilino on public.%I', t.tablename);
+--     end loop;
+--   end $$;
+--   -- y devuelve DATABASE_URL al rol `postgres`.
+--
+-- Volver la cadena de conexión a `postgres` basta para desactivar la Capa 2
+-- entera sin borrar nada: ese rol se salta RLS.
+-- ============================================================================
