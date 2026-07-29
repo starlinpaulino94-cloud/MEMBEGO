@@ -1,0 +1,401 @@
+// ──────────────────────────────────────────────────────────────────────────
+// IDENTIDAD, EMPRESAS Y AUDITORÍA
+//
+// Quién es quién y a qué empresa pertenece. `User.supabaseId` apunta al
+// esquema `auth` de Supabase, que Prisma NO gestiona — ver
+// docs/RECUPERACION.md § 2.1: un volcado de `public` no trae credenciales.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum AppRole {
+  SUPERADMIN
+  ADMIN_EMPRESA // legacy: admin de empresa (se mantiene por usuarios existentes)
+  EMPLEADO
+  CLIENTE
+  // Roles de equipo de empresa (deben coincidir con AppRole en src/types).
+  ADMINISTRADOR
+  GERENTE
+  CAJERO
+  RECEPCION
+  MARKETING // difusión: promociones, campañas, publicaciones, audiencia, notificaciones
+  SUPERVISOR // operación: dashboard/reportes, clientes, validar pagos, scanner
+}
+
+enum NotifTipo {
+  PAGO_APROBADO
+  PAGO_RECHAZADO
+  NUEVO_COMPROBANTE
+  MEMBRESIA_POR_VENCER
+  MEMBRESIA_ACTIVADA
+  PROMOCION_NUEVA
+  RECOMPENSA_REFERIDO
+  SISTEMA
+  TICKET_NUEVO
+  TICKET_RESPUESTA
+  TICKET_ACTUALIZADO
+  // Módulo de Citas.
+  CITA_NUEVA
+  CITA_CONFIRMADA
+  CITA_CANCELADA
+}
+
+enum AuditAccion {
+  VISITA_CONFIRMADA
+  PAGO_APROBADO
+  PAGO_RECHAZADO
+  MEMBRESIA_CANCELADA
+  MEMBRESIA_RENOVADA
+  QR_GENERADO
+  QR_USADO
+  QR_COMPARTIDO
+  CAJA_ABIERTA
+  CAJA_CERRADA
+  CAJA_MOVIMIENTO
+  COBRO_REGISTRADO
+  COMPROBANTE_IMPRESO
+  TRANSACCION_ANULADA
+  REFERIDO_COMPLETADO
+  RECOMPENSA_OTORGADA
+  NOTA_INTERNA
+  PLANTILLA_RECIBO_ACTUALIZADA
+  CUENTA_ELIMINADA
+  /// Una empresa pasó a ser (o dejó de ser) de demostración.
+  EMPRESA_DEMO_CAMBIADA
+  /// Se borraron los datos de práctica de una empresa de demostración.
+  EMPRESA_DEMO_REINICIADA
+}
+
+// ─────────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────────
+
+model User {
+  id                 String    @id @default(cuid())
+  supabaseId         String    @unique
+  email              String    @unique
+  name               String
+  role               AppRole   @default(CLIENTE)
+  companyId          String?
+  company            Company?  @relation(fields: [companyId], references: [id])
+  // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
+  // y opt-in de comunicaciones de marketing, con la versión y el momento.
+  termsAcceptedAt    DateTime?
+  termsVersion       String?
+  marketingConsent   Boolean   @default(false)
+  marketingConsentAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  memberships     Membership[]
+  visits          Visit[]             @relation("EmpleadoVisits")
+  auditLogs       AuditLog[]
+  comprobantes    Comprobante[]
+  notificaciones  Notificacion[]
+  follows         CompanyFollow[]
+  promosGuardadas PromocionGuardada[]
+  notasCliente    ClienteNota[]
+  intereses       UserInteres[]
+  empresasAcceso  UserCompanyAccess[]
+
+  // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
+  transaccionesComoEmpleado Transaction[]              @relation("TransactionEmpleado")
+  cajasAbiertas             CajaSesion[]               @relation("CajaAbiertaPor")
+  cajasCerradas             CajaSesion[]               @relation("CajaCerradaPor")
+  transicionesTransaccion   TransactionTransicion[]
+  impresionesRecibo         ReceiptImpresion[]
+  citasAtendidas            Cita[]                     @relation("CitaAtendidaPor")
+  ofertasCreadas            OfertaPrivada[]            @relation("OfertaCreadaPor")
+  ofertaUsosRegistrados     OfertaUso[]                @relation("OfertaUsoRegistradoPor")
+  comprasAprobadas          ProductoCompra[]           @relation("CompraAprobadaPor")
+  transicionesCompra        ProductoCompraTransicion[]
+  // App Car Wash · E5.
+  colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
+  colaAtendida              ColaVehiculo[]             @relation("ColaAtendidaPor")
+  campanasGlobales          CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
+  movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
+  evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
+  // App Car Wash · Fase 2.
+  comisiones                Comision[]                 @relation("ComisionLavador")
+  incidenciasReportadas     Incidencia[]               @relation("IncidenciaReportadaPor")
+  incidenciasAsignadas      Incidencia[]               @relation("IncidenciaResponsable")
+  // App Car Wash · Fase 3.
+  ordenesCompra             OrdenCompra[]              @relation("OrdenCompraCreadaPor")
+  mantenimientos            Mantenimiento[]            @relation("MantenimientoPor")
+  turnos                    Turno[]                    @relation("TurnoEmpleado")
+  turnosCerrados            Turno[]                    @relation("TurnoCerradoPor")
+
+  @@index([companyId])
+  @@map("users")
+}
+
+/// Acceso multi-empresa para usuarios de staff: un mismo administrador puede
+/// gestionar VARIAS empresas. `User.companyId` sigue siendo la empresa ACTIVA
+/// (la que ve en su panel); esta tabla define a cuáles puede cambiar.
+model UserCompanyAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@map("user_company_access")
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  type        String // "carwash" | "restaurante"
+  description String?
+  logoUrl     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  email     String?
+  telefono  String?
+  direccion String?
+  ciudad    String?
+  categoria String?
+  website   String?
+
+  /// EMPRESA DE DEMOSTRACIÓN: existe para entrenar al personal, no para
+  /// operar. Todo lo que ocurre dentro es de mentira — sus clientes, sus
+  /// cobros y sus números. Ver `src/modules/demo/index.ts`: esa marca es la
+  /// que corta la pasarela de pago real, los correos salientes, la vitrina
+  /// pública y las métricas de la plataforma.
+  esDemo Boolean @default(false)
+
+  // FASE 2: Marketplace fields
+  isPublished           Boolean  @default(true)
+  isFeatured            Boolean  @default(false)
+  featuredOrder         Int?
+  bannerUrl             String?
+  galleryImages         String[] @default([])
+  provincia             String?
+  pais                  String?
+  // F5/Onboarding: datos legales y de ubicación precisa (paso 2-3 del wizard).
+  razonSocial           String?
+  codigoPostal          String?
+  latitud               Float?
+  longitud              Float?
+  zonaCobertura         String? // texto libre: barrios/zonas atendidas o radio
+  // F5/Onboarding paso 4: configuración regional y de marca. Preferencia por
+  // empresa aplicada al FORMATEAR (moneda/fecha); no traduce la UI ni convierte
+  // divisas (Decisión 4 del plan de onboarding).
+  moneda                String   @default("DOP") // ISO 4217: DOP, USD, EUR…
+  zonaHoraria           String   @default("America/Santo_Domingo") // IANA
+  idioma                String   @default("es-DO") // locale BCP 47
+  // Fase E7: método de escaneo predeterminado del escáner ("camara" | "lector").
+  // El operador puede cambiarlo en pantalla sin recargar; esto es solo el valor
+  // inicial que la empresa configura.
+  escanerModo           String   @default("camara")
+  colorPrimario         String? // hex de marca, ej. "#0ea5e9"
+  // Engagement Engine · Fase 7: personalización del motor por empresa.
+  // JSON: { color?, gamificacion?, pruebaSocial?, campanas?, carruseles? }.
+  // Ausente/null = todo activado y color = colorPrimario.
+  engagementConfig      Json?
+  politicaCancelacion   String?
+  politicaPrivacidad    String?
+  terminosEmpresa       String?
+  whatsapp              String?
+  instagram             String?
+  facebook              String?
+  tiktok                String?
+  googleMapsUrl         String?
+  // F4.1: horario de atención mostrado en el perfil público (texto libre,
+  // ej. "Lun-Vie 8:00-18:00 · Sáb 9:00-14:00").
+  horario               String?
+  totalMembersCount     Int      @default(0)
+  activePromotionsCount Int      @default(0)
+  averageRating         Decimal? @db.Decimal(3, 2)
+
+  // O-13: beneficio de bienvenida financiado por la EMPRESA (opt-in). Se
+  // aplica UNA sola vez, en la primera activación de membresía del cliente
+  // en esta empresa. PORCENTAJE = % sobre el precio del plan; MONTO = importe
+  // fijo (nunca supera el precio del plan).
+  bienvenidaActiva Boolean  @default(false)
+  bienvenidaTipo   String   @default("PORCENTAJE") // PORCENTAJE | MONTO
+  bienvenidaValor  Decimal? @db.Decimal(10, 2)
+
+  // Regalos P2P (docs/REGALOS-P2P.md §3.4). JSON: { permitirTransferencias?,
+  // permitirRegalos?, maxTransferenciasMes?, vigenciaHoras? }. null = defaults.
+  regalosConfig Json?
+
+  // Plataforma modular (docs/ESTRATEGIA-PLATAFORMA.md · E1). JSON:
+  // { categoria?, overrides?: { CAPACIDAD: boolean } }. null = paquete base
+  // de su categoría (fail-open: nada de lo actual desaparece).
+  capacidades Json?
+
+  // Seguimiento de beneficios gratis (docs/SEGUIMIENTO-BENEFICIOS.md · S3).
+  // JSON: { umbralPorVencerDias?, recordatorioAuto?, recordatorioDiasAntes?,
+  // recordatorioFrecuenciaDias?, plantillaMensaje?, promosExcluidas? }.
+  // null = defaults del módulo.
+  seguimientoConfig Json?
+
+  users                  User[]
+  plans                  Plan[]
+  clientes               Cliente[]
+  memberships            Membership[]
+  sucursales             Sucursal[]
+  cajaSesiones           CajaSesion[]
+  metodosPago            MetodoPago[]
+  auditLogs              AuditLog[]
+  promociones            Promocion[]
+  referidos              Referido[]
+  reglasRecompensa       ReglaRecompensa[]
+  whatsappConfig         WhatsAppConfig?
+  faqs                   FaqItem[]
+  tickets                SupportTicket[]
+  categories             CompanyToCategory[]
+  ratings                CompanyRating[]
+  referralEvents         ReferralEvent[]
+  followers              CompanyFollow[]
+  posts                  CompanyPost[]
+  campanas               Campana[]
+  invitaciones           Invitacion[]
+  accesosStaff           UserCompanyAccess[]
+  // Benefit Engine (Fase C). Relaciones inversas; ningún flujo las consume aún.
+  benefits               Benefit[]
+  // Referral Engine (Fase D). Relaciones inversas; ningún flujo las consume aún.
+  referralPrograms       ReferralProgram[]
+  // Automation Engine (Fase E1). Relaciones inversas; ningún flujo las consume aún.
+  automations            Automation[]
+  // Motor Universal de Reglas (Fase 1). Relaciones inversas; no cambian el
+  // comportamiento actual: ninguna función existente las consulta todavía.
+  ruleGroups             RuleGroup[]
+  rules                  Rule[]
+  ruleExecLogs           RuleExecutionLog[]
+  // Framework Universal de Promociones (Fase 4). Relaciones inversas; ningún
+  // flujo existente las consulta.
+  promotions             Promotion[]
+  promotionAudits        PromotionAudit[]
+  // Business Data Dictionary (Fase 6). Variables específicas de empresa.
+  dictionaryVariables    DataDictionaryVariable[]
+  // Membership Engine universal (Fase A). Independiente del modelo Membership
+  // legacy (Car Wash). Ningún flujo existente lo consulta.
+  membershipPlans        MembershipPlan[]
+  membershipInstances    MembershipInstance[]
+  // Benefit Transformation Engine (Fase E1.7).
+  benefitTransformations BenefitTransformation[]
+  transformationPolicies TransformationPolicy[]
+
+  transacciones      Transaction[]
+  receiptTemplate    ReceiptTemplate?
+  compras            ProductoCompra[]
+  // Growth Engine: Campañas de Invitación ("Invita y Gana").
+  campanasInvitacion CampanaInvitacion[]
+
+  // Growth Engine 3.0 (sistema viral de referidos).
+  growthLinks  GrowthLink[]
+  growthConfig GrowthConfig?
+  growthRules  GrowthRule[]
+
+  // Engagement Engine · Fase 2 (Motor de Campañas de marketing).
+  marketingCampaigns MarketingCampaign[]
+  // Engagement Engine · Fase 6B (Ruleta de premios).
+  ruletaPremios      RuletaPremio[]
+  ruletaJugadas      RuletaJugada[]
+
+  // Módulo de Citas.
+  agendaConfig   AgendaConfig?
+  citas          Cita[]
+  ofertaPrivadas OfertaPrivada[]
+  regalos        Regalo[]
+  giftCards      GiftCard[]
+
+  // App Car Wash · E5.
+  colaVehiculos         ColaVehiculo[]
+  productosInventario   ProductoInventario[]
+  evidenciasFoto        EvidenciaFoto[]
+  campanaGlobalEmpresas CampanaGlobalEmpresa[]
+  campanaPasos          CampanaPaso[]
+  tipoVehiculos         TipoVehiculo[]
+  servicios             Servicio[]
+  bahias                Bahia[]
+  pagoIntentos          PagoIntento[]
+  cuentasCorporativas   CuentaCorporativa[]
+  comisiones            Comision[]
+  incidencias           Incidencia[]
+  proveedores           Proveedor[]
+  ordenesCompra         OrdenCompra[]
+  activos               Activo[]
+  turnos                Turno[]
+
+  @@index([isPublished, isFeatured])
+  @@index([ciudad, provincia])
+  @@index([type])
+  @@index([createdAt])
+  @@map("companies")
+}
+
+// Sucursales físicas de una empresa
+model Sucursal {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  nombre    String
+  direccion String?
+  telefono  String?
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  visits Visit[]
+
+  transacciones Transaction[]
+
+  cajaSesiones    CajaSesion[]
+  membershipsPago Membership[]     @relation("MembershipSucursalPago")
+  comprasPago     ProductoCompra[] @relation("CompraSucursalPago")
+  citas           Cita[]
+  colaVehiculos   ColaVehiculo[]
+  bahias          Bahia[]
+
+  @@index([companyId])
+  @@map("sucursales")
+}
+
+// Registro de auditoría inmutable — insert only, nunca se actualiza ni elimina
+model AuditLog {
+  id          String      @id @default(cuid())
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id])
+  userId      String? // quien realizó la acción
+  user        User?       @relation(fields: [userId], references: [id])
+  accion      AuditAccion
+  entidadTipo String // "Visit", "Membership", "QrToken", etc.
+  entidadId   String
+  payload     Json        @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([accion])
+  @@index([entidadTipo, entidadId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notificacion {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tipo      NotifTipo
+  titulo    String
+  mensaje   String
+  href      String? // ruta a la que lleva al hacer clic
+  leida     Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@index([userId, leida])
+  @@index([userId, createdAt])
+  @@map("notificaciones")
+}

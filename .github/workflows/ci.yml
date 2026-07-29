@@ -92,7 +92,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Validar schema.prisma
+      - name: Validar el esquema
         run: npx prisma validate
       # Detecta el fallo clásico: alguien edita el schema y olvida escribir la
       # migración. El deploy iría adelantado a la base y —por la tolerancia
@@ -101,10 +101,10 @@ jobs:
         run: |
           npx prisma migrate diff \
             --from-migrations prisma/migrations \
-            --to-schema-datamodel prisma/schema.prisma \
+            --to-schema-datamodel prisma/schema \
             --shadow-database-url "$DATABASE_URL" \
             --exit-code && echo "Sin diferencias." || {
-              echo "::error::El schema.prisma tiene cambios sin migración. Crea la migración antes de mezclar."
+              echo "::error::El esquema (prisma/schema/) tiene cambios sin migración. Crea la migración antes de mezclar."
               exit 1
             }
         continue-on-error: true

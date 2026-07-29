@@ -1,0 +1,651 @@
+// ──────────────────────────────────────────────────────────────────────────
+// APLICACIÓN DE CAR WASH
+//
+// Operación de pista: cola de vehículos, inventario, evidencias, tarifas,
+// bahías, cuentas corporativas, comisiones, incidencias, compras, activos y
+// turnos. Todo esto vive detrás de capacidades por empresa
+// (src/modules/capacidades/): una empresa que no es car wash no lo ve.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─── App Car Wash · E5: cola, inventario y evidencia fotográfica ─────────────
+
+/// Vehículo dentro del flujo operativo del día (pista). Estados (String
+/// validado en código — src/modules/carwash/cola.ts): EN_ESPERA → EN_SERVICIO
+/// → LISTO → ENTREGADO, o CANCELADO. Puede ligarse a un cliente/vehículo
+/// registrado o capturarse "al vuelo" solo con placa/descripción.
+model ColaVehiculo {
+  id              String        @id @default(cuid())
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId      String?
+  sucursal        Sucursal?     @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  clienteId       String?
+  cliente         Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculoId      String?
+  vehiculo        Vehiculo?     @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  /// Para vehículos sin registrar: placa y descripción libres.
+  placa           String?
+  descripcion     String?
+  servicio        String?
+  notaInterna     String?
+  estado          String        @default("EN_ESPERA")
+  inicioAt        DateTime?
+  listoAt         DateTime?
+  entregadoAt     DateTime?
+  registradaPorId String?
+  registradaPor   User?         @relation("ColaRegistradaPor", fields: [registradaPorId], references: [id], onDelete: SetNull)
+  /// Fase 1 · quién trabajó el vehículo (base de comisiones y productividad).
+  atendidoPorId   String?
+  atendidoPor     User?         @relation("ColaAtendidaPor", fields: [atendidoPorId], references: [id], onDelete: SetNull)
+  /// Fase 1 · puesto de trabajo asignado.
+  bahiaId         String?
+  bahia           Bahia?        @relation(fields: [bahiaId], references: [id], onDelete: SetNull)
+  /// Fase 1 · tipo de vehículo (define el precio de cada servicio).
+  tipoVehiculoId  String?
+  tipoVehiculo    TipoVehiculo? @relation(fields: [tipoVehiculoId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  evidencias EvidenciaFoto[]
+  servicios  ColaServicio[]
+
+  // App Car Wash · Fase 2.
+  cargos      CargoCuenta[]
+  comisiones  Comision[]
+  incidencias Incidencia[]  @relation("IncidenciaCola")
+  /// Si esta entrada ES el rehacer de un trabajo mal hecho, la incidencia que
+  /// lo ordenó. Permite medir cuántas horas de pista se van en repetir.
+  rehaceDe    Incidencia[]  @relation("IncidenciaRewash")
+
+  // Tablero del día por estado.
+  @@index([companyId, estado, createdAt])
+  @@map("cola_vehiculos")
+}
+
+/// Producto/insumo del negocio (químicos, ceras, toallas…). El stock SOLO se
+/// mueve con MovimientoInventario (rastro completo); borrar = activo:false.
+model ProductoInventario {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  categoria   String?
+  unidad      String   @default("unidad")
+  stock       Decimal  @default(0) @db.Decimal(12, 2)
+  /// Umbral de alerta: stock <= stockMinimo = "stock bajo".
+  stockMinimo Decimal  @default(0) @db.Decimal(12, 2)
+  costo       Decimal? @db.Decimal(12, 2)
+  activo      Boolean  @default(true)
+  notas       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  movimientos MovimientoInventario[]
+
+  // App Car Wash · Fase 3.
+  /// Proveedor habitual. Solo sugiere al armar una orden; no obliga.
+  proveedorId String?
+  proveedor   Proveedor?         @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  lineasOrden OrdenCompraLinea[]
+
+  @@index([companyId, activo])
+  @@map("productos_inventario")
+}
+
+/// Movimiento de stock: ENTRADA | SALIDA | AJUSTE (String validado en código).
+/// `stockResultante` congela el stock después del movimiento (auditoría).
+model MovimientoInventario {
+  id              String             @id @default(cuid())
+  productoId      String
+  producto        ProductoInventario @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  companyId       String
+  tipo            String
+  cantidad        Decimal            @db.Decimal(12, 2)
+  stockResultante Decimal            @db.Decimal(12, 2)
+  motivo          String?
+  registradoPorId String?
+  registradoPor   User?              @relation("MovInventarioPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  /// Fase 3 · si esta ENTRADA vino de recibir una orden de compra, cuál.
+  /// Es lo que permite responder "¿esta caja de shampoo de dónde salió?".
+  ordenCompraId   String?
+  ordenCompra     OrdenCompra?       @relation(fields: [ordenCompraId], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+
+  @@index([productoId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("movimientos_inventario")
+}
+
+/// Foto de evidencia del vehículo: ANTES | DESPUES (String validado en
+/// código). Se liga a una entrada de la cola cuando existe, o solo a la placa.
+model EvidenciaFoto {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  colaId      String?
+  cola        ColaVehiculo? @relation(fields: [colaId], references: [id], onDelete: SetNull)
+  clienteId   String?
+  cliente     Cliente?      @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculoId  String?
+  vehiculo    Vehiculo?     @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  placa       String?
+  momento     String
+  url         String
+  nota        String?
+  subidaPorId String?
+  subidaPor   User?         @relation("EvidenciaSubidaPor", fields: [subidaPorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([colaId])
+  @@map("evidencias_foto")
+}
+
+// ─── App Car Wash · Fase 1 · Catálogo del oficio ─────────────────────────────
+
+/// Tipo de vehículo (sedán, SUV pequeña, jeepeta, camioneta…).
+///
+/// POR QUÉ EXISTE: sin esta dimensión, la única forma de decir "esto cuesta
+/// distinto según el carro" era duplicar el plan y escribirlo en el nombre —
+/// de ahí los "PLAN SILVER (SUV PEQ)". El precio de un servicio se define por
+/// servicio × tipo de vehículo, no repitiendo el servicio.
+model TipoVehiculo {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre    String
+  /// Menor = primero en los selectores.
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  precios      ServicioPrecio[]
+  vehiculos    Vehiculo[]
+  colaEntradas ColaVehiculo[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo, orden])
+  @@map("tipos_vehiculo")
+}
+
+/// Servicio vendible suelto (lavado básico, detallado, pulido, tapicería).
+///
+/// NO reemplaza a `Promocion` ni a `Plan`: el servicio es LO QUE SE VENDE;
+/// la promoción es un descuento sobre eso, y el plan es la forma recurrente
+/// de pagarlo. Antes de esto el negocio solo podía vender planes y promos,
+/// que es como facturar sin catálogo.
+model Servicio {
+  id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  /// Agrupador libre para la pantalla de cobro ("Lavado", "Detallado"…).
+  categoria   String?
+  /// Minutos estimados. Alimenta el tiempo esperado en pista.
+  duracionMin Int     @default(30)
+  /// true = es un extra que se suma a un servicio principal (cera, motor).
+  esAdicional Boolean @default(false)
+  orden       Int     @default(0)
+  activo      Boolean @default(true)
+
+  /// Fase 2 · comisión del lavador por este servicio. Si hay porcentaje se usa
+  /// ese (sobre el precio cobrado); si no, el monto fijo por unidad. Ambos
+  /// nulos = este servicio no paga comisión.
+  comisionPorcentaje Decimal? @db.Decimal(5, 2)
+  comisionMonto      Decimal? @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  precios ServicioPrecio[]
+  lineas  ColaServicio[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo, orden])
+  @@map("servicios")
+}
+
+/// Precio de un servicio para un tipo de vehículo concreto.
+/// Sin fila para un par (servicio, tipo) = ese servicio no aplica a ese tipo.
+model ServicioPrecio {
+  id             String       @id @default(cuid())
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  tipoVehiculoId String
+  tipoVehiculo   TipoVehiculo @relation(fields: [tipoVehiculoId], references: [id], onDelete: Cascade)
+  precio         Decimal      @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([servicioId, tipoVehiculoId])
+  @@index([tipoVehiculoId])
+  @@map("servicio_precios")
+}
+
+/// Puesto de trabajo dentro de una sucursal (bahía 1, bahía 2, área de
+/// detallado). Es lo que convierte la cola en una cabina: la pregunta
+/// operativa central de una pista es CUÁL ESTÁ LIBRE.
+model Bahia {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId String?
+  sucursal   Sucursal? @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  nombre     String
+  orden      Int       @default(0)
+  activa     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  colaEntradas ColaVehiculo[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa, orden])
+  @@map("bahias")
+}
+
+/// Línea de servicio de un vehículo en pista: QUÉ se le está haciendo.
+///
+/// La entrada en cola (`ColaVehiculo`) es la orden de servicio; estas son sus
+/// líneas. El precio se CONGELA al agregarlo, para que un cambio de tarifa no
+/// reescriba el historial.
+model ColaServicio {
+  id         String       @id @default(cuid())
+  colaId     String
+  cola       ColaVehiculo @relation(fields: [colaId], references: [id], onDelete: Cascade)
+  servicioId String
+  servicio   Servicio     @relation(fields: [servicioId], references: [id])
+  /// Copia del nombre al momento de agregarlo (sobrevive a renombres).
+  nombre     String
+  precio     Decimal      @db.Decimal(10, 2)
+  cantidad   Int          @default(1)
+  createdAt  DateTime     @default(now())
+
+  @@index([colaId])
+  @@index([servicioId])
+  @@map("cola_servicios")
+}
+
+// ─── App Car Wash · Fase 2 ───────────────────────────────────────────────────
+
+/// Cuenta corporativa (flota): una empresa que manda sus vehículos y paga
+/// después, no en el momento.
+///
+/// POR QUÉ ES UN MODELO Y NO UN CLIENTE MÁS: un `Cliente` es una persona con
+/// membresía, QR y beneficios. Una flota es lo contrario — no acumula puntos,
+/// no canjea promociones, y lo que necesita es que sus 40 camionetas se cobren
+/// juntas a fin de mes contra un solo RNC. Meterla en `Cliente` habría obligado
+/// a llenar de excepciones el módulo de membresías.
+model CuentaCorporativa {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  nombre   String
+  rnc      String?
+  contacto String?
+  telefono String?
+  email    String?
+
+  /// Tope de deuda sin pagar. 0 o null = sin tope (se avisa, no se bloquea).
+  limiteCredito Decimal? @db.Decimal(12, 2)
+  /// Días de crédito acordados. Solo informativo: alimenta el aviso de mora.
+  diasCredito   Int      @default(30)
+
+  notas     String?
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehiculos CuentaVehiculo[]
+  cargos    CargoCuenta[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
+  @@map("cuentas_corporativas")
+}
+
+/// Vehículo autorizado de una flota, identificado POR PLACA.
+///
+/// La placa es la llave y no el `Vehiculo` registrado, porque el chofer que
+/// llega no siempre está en el sistema: lo que el encargado tiene delante es
+/// una placa. Si además existe la ficha del vehículo se enlaza, pero no es
+/// obligatorio — exigirlo convertiría cada visita de flota en un alta.
+model CuentaVehiculo {
+  id         String            @id @default(cuid())
+  cuentaId   String
+  cuenta     CuentaCorporativa @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  /// Normalizada en mayúsculas y sin espacios al guardar (ver cuentas.ts).
+  placa      String
+  alias      String?
+  vehiculoId String?
+  vehiculo   Vehiculo?         @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  activo     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+
+  @@unique([cuentaId, placa])
+  @@index([placa])
+  @@map("cuenta_vehiculos")
+}
+
+/// Un consumo cargado a la cuenta en vez de cobrado en caja.
+///
+/// El monto se CONGELA aquí: es lo que se le va a facturar a la flota, y no
+/// puede cambiar porque mañana alguien edite una tarifa.
+model CargoCuenta {
+  id       String            @id @default(cuid())
+  cuentaId String
+  cuenta   CuentaCorporativa @relation(fields: [cuentaId], references: [id], onDelete: Cascade)
+  colaId   String?
+  cola     ColaVehiculo?     @relation(fields: [colaId], references: [id], onDelete: SetNull)
+
+  placa    String?
+  concepto String
+  monto    Decimal @db.Decimal(12, 2)
+
+  /// 'PENDIENTE' → 'FACTURADO' → 'PAGADO'. También 'ANULADO'.
+  estado      String    @default("PENDIENTE")
+  /// Identificador del corte con el que se facturó (agrupa el estado de cuenta).
+  corteRef    String?
+  facturadoAt DateTime?
+  pagadoAt    DateTime?
+
+  notas     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cuentaId, estado, createdAt])
+  @@index([corteRef])
+  @@index([colaId])
+  @@map("cargos_cuenta")
+}
+
+/// Comisión devengada por un lavador al ENTREGAR un vehículo.
+///
+/// SE CONGELA AL ENTREGAR, no se calcula al consultar. Si se calculara sobre
+/// las tarifas de hoy, subir la comisión de un servicio reescribiría lo que ya
+/// se le debía a la gente por trabajos de la semana pasada — y eso se nota en
+/// la nómina, no en un log.
+///
+/// `@@unique([colaId, userId])` es el seguro contra el doble pago: entregar dos
+/// veces el mismo vehículo (doble clic, reintento) no devenga dos comisiones.
+model Comision {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  colaId    String
+  cola      ColaVehiculo @relation(fields: [colaId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation("ComisionLavador", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Total de los servicios sobre el que se calculó.
+  base    Decimal @db.Decimal(12, 2)
+  monto   Decimal @db.Decimal(12, 2)
+  /// Desglose legible de cómo salió el número ("Lavado full 10% = RD$120").
+  detalle String?
+
+  /// 'PENDIENTE' | 'PAGADA' | 'ANULADA'.
+  estado   String    @default("PENDIENTE")
+  /// Identificador del lote de pago (agrupa el corte de nómina).
+  loteRef  String?
+  pagadaAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([colaId, userId])
+  @@index([companyId, estado, createdAt])
+  @@index([userId, estado])
+  @@map("comisiones")
+}
+
+/// Algo salió mal: un daño, una queja, un faltante, o un trabajo que hay que
+/// repetir (rewash).
+///
+/// El rewash es el dato que ningún car wash mide y todos pagan: cada repetición
+/// es una bahía ocupada gratis. Por eso `rewashColaId` enlaza la entrada en cola
+/// creada para rehacer el trabajo — así el costo del error se puede ver en
+/// minutos de pista, no solo en quejas.
+model Incidencia {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  colaId       String?
+  cola         ColaVehiculo? @relation("IncidenciaCola", fields: [colaId], references: [id], onDelete: SetNull)
+  /// Entrada de cola creada para REHACER el trabajo, si hubo rewash.
+  rewashColaId String?
+  rewashCola   ColaVehiculo? @relation("IncidenciaRewash", fields: [rewashColaId], references: [id], onDelete: SetNull)
+
+  clienteId  String?
+  cliente    Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  vehiculoId String?
+  vehiculo   Vehiculo? @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  placa      String?
+
+  /// 'REWASH' | 'DANO' | 'QUEJA' | 'FALTANTE' | 'OTRO'.
+  tipo        String
+  /// 'BAJA' | 'MEDIA' | 'ALTA'.
+  gravedad    String   @default("MEDIA")
+  descripcion String
+  /// Lo que le costó al negocio (reposición, descuento, servicio regalado).
+  costo       Decimal? @db.Decimal(12, 2)
+
+  /// 'ABIERTA' | 'EN_PROCESO' | 'RESUELTA'.
+  estado     String    @default("ABIERTA")
+  resolucion String?
+  resueltaAt DateTime?
+
+  reportadaPorId String?
+  reportadaPor   User?   @relation("IncidenciaReportadaPor", fields: [reportadaPorId], references: [id], onDelete: SetNull)
+  responsableId  String?
+  responsable    User?   @relation("IncidenciaResponsable", fields: [responsableId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, estado, createdAt])
+  @@index([companyId, tipo, createdAt])
+  @@index([colaId])
+  @@map("incidencias")
+}
+
+// ─── App Car Wash · Fase 3 ───────────────────────────────────────────────────
+
+/// A quién se le compra. Deliberadamente mínimo: nombre, contacto y condiciones.
+/// Un proveedor de un car wash de barrio no necesita ficha fiscal completa —
+/// necesita que alguien sepa a quién llamar cuando se acabó el shampoo.
+model Proveedor {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  nombre      String
+  rnc         String?
+  contacto    String?
+  telefono    String?
+  email       String?
+  /// Días de crédito que da el proveedor. Informativo.
+  diasCredito Int      @default(0)
+  notas       String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ordenes   OrdenCompra[]
+  productos ProductoInventario[]
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activo])
+  @@map("proveedores")
+}
+
+/// Una compra a un proveedor. BORRADOR → PEDIDA → RECIBIDA (o CANCELADA).
+///
+/// POR QUÉ IMPORTA EL ESTADO "PEDIDA": entre pedir y recibir pasan días, y en
+/// ese hueco el encargado no sabe si el shampoo ya viene en camino o si nadie
+/// lo pidió. Sin ese estado, la única forma de saberlo es preguntar.
+///
+/// RECIBIR ES LO QUE MUEVE EL STOCK: al marcar la orden como recibida se genera
+/// un MovimientoInventario de ENTRADA por cada línea. El stock nunca se toca a
+/// mano desde aquí — sigue habiendo un solo camino hacia el inventario.
+model OrdenCompra {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  proveedorId String
+  proveedor   Proveedor @relation(fields: [proveedorId], references: [id])
+
+  /// Correlativo legible para hablar con el proveedor ("la OC-000042").
+  numero String
+
+  /// 'BORRADOR' | 'PEDIDA' | 'RECIBIDA' | 'CANCELADA'.
+  estado String @default("BORRADOR")
+
+  /// Total congelado al recibir. Antes de eso se calcula de las líneas.
+  total Decimal? @db.Decimal(12, 2)
+
+  notas      String?
+  pedidaAt   DateTime?
+  recibidaAt DateTime?
+
+  creadaPorId String?
+  creadaPor   User?   @relation("OrdenCompraCreadaPor", fields: [creadaPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineas      OrdenCompraLinea[]
+  movimientos MovimientoInventario[]
+
+  @@unique([companyId, numero])
+  @@index([companyId, estado, createdAt])
+  @@map("ordenes_compra")
+}
+
+/// Línea de una orden: qué producto, cuánto y a qué costo.
+///
+/// `cantidadRecibida` existe aparte de `cantidad` porque el proveedor entrega
+/// incompleto más a menudo de lo que uno quisiera. Si solo hubiera una columna,
+/// recibir 8 de 10 obligaría a mentir en el pedido o a inventar un ajuste.
+model OrdenCompraLinea {
+  id      String      @id @default(cuid())
+  ordenId String
+  orden   OrdenCompra @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  productoId String
+  producto   ProductoInventario @relation(fields: [productoId], references: [id])
+  /// Copia del nombre al pedir: sobrevive a que renombren el producto.
+  nombre     String
+
+  cantidad         Decimal  @db.Decimal(12, 2)
+  cantidadRecibida Decimal? @db.Decimal(12, 2)
+  costoUnitario    Decimal  @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([ordenId])
+  @@index([productoId])
+  @@map("orden_compra_lineas")
+}
+
+/// Un equipo del que depende la pista: hidrolavadora, aspiradora, compresor.
+///
+/// LO QUE MIDE ESTE MODELO NO ES EL EQUIPO, ES LA PISTA PARADA. Un car wash con
+/// dos hidrolavadoras y una dañada trabaja al 50% — y eso hoy no se ve en
+/// ningún número. `estado` es lo que convierte "se dañó la máquina" en un dato.
+model Activo {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  nombre    String
+  /// Agrupador libre: "Hidrolavadora", "Aspiradora", "Compresor".
+  categoria String?
+  marca     String?
+  modelo    String?
+  serie     String?
+  ubicacion String?
+
+  /// 'OPERATIVO' | 'EN_MANTENIMIENTO' | 'DANADO' | 'BAJA'.
+  estado String @default("OPERATIVO")
+
+  fechaCompra          DateTime?
+  costo                Decimal?  @db.Decimal(12, 2)
+  /// Cada cuántos días toca mantenimiento preventivo. 0 = no programado.
+  frecuenciaDias       Int       @default(0)
+  /// Se recalcula al registrar un mantenimiento. Con esto el panel puede
+  /// avisar ANTES de que el equipo falle, que es el punto entero.
+  proximoMantenimiento DateTime?
+
+  notas     String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mantenimientos Mantenimiento[]
+
+  @@index([companyId, activo, estado])
+  @@map("activos")
+}
+
+/// Un mantenimiento hecho a un equipo (preventivo o correctivo).
+model Mantenimiento {
+  id       String @id @default(cuid())
+  activoId String
+  activo   Activo @relation(fields: [activoId], references: [id], onDelete: Cascade)
+
+  /// 'PREVENTIVO' | 'CORRECTIVO'.
+  tipo        String
+  descripcion String
+  costo       Decimal? @db.Decimal(12, 2)
+  /// Cuánto tiempo estuvo el equipo fuera de servicio. El costo real de una
+  /// avería no es la factura del técnico: son las horas de pista perdidas.
+  horasParado Decimal? @db.Decimal(8, 2)
+
+  realizadoAt DateTime @default(now())
+  hechoPorId  String?
+  hechoPor    User?    @relation("MantenimientoPor", fields: [hechoPorId], references: [id], onDelete: SetNull)
+  proveedor   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([activoId, realizadoAt])
+  @@map("mantenimientos")
+}
+
+/// Un turno trabajado: entrada, salida y lo que costó.
+///
+/// PARA QUÉ SIRVE DE VERDAD: cruzado con los vehículos entregados da el COSTO
+/// LABORAL POR LAVADO, que es el número que dice si el precio de lista tiene
+/// sentido. Sin turnos, ese número no existe y el precio se pone a ojo.
+///
+/// `salidaAt` nulo = turno abierto. Es el estado normal durante la jornada, no
+/// un error: la fila se crea al marcar entrada y se cierra al marcar salida.
+model Turno {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation("TurnoEmpleado", fields: [userId], references: [id], onDelete: Cascade)
+
+  entradaAt DateTime  @default(now())
+  salidaAt  DateTime?
+
+  /// Costo por hora al momento del turno. Se CONGELA: subir el sueldo mañana
+  /// no puede reescribir lo que costó la semana pasada.
+  costoHora Decimal? @db.Decimal(10, 2)
+  notas     String?
+
+  cerradoPorId String?
+  cerradoPor   User?   @relation("TurnoCerradoPor", fields: [cerradoPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, entradaAt])
+  @@index([userId, salidaAt])
+  @@map("turnos")
+}

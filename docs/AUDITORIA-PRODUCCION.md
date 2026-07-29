@@ -16,7 +16,7 @@ miles de escaneos QR/min · miles de pagos y notificaciones simultáneos.
 |---|---|
 | Next.js App Router | ✅ Next 16, `src/proxy.ts` (el middleware se llama `proxy` en Next 16), `build: next build --webpack` |
 | React / TypeScript | ✅ `tsconfig.json`, 129.356 líneas TS/TSX en `src/` |
-| PostgreSQL + Prisma | ✅ `prisma/schema.prisma` (4.003 líneas, 112 modelos, 214 `@@index`, 31 `@@unique`) |
+| PostgreSQL + Prisma | ✅ 112 modelos, 214 `@@index`, 31 `@@unique`. Eran 4.003 líneas en `prisma/schema.prisma`; desde la Fase 7 están repartidas en `prisma/schema/` por dominio |
 | Supabase | ✅ Auth (`@supabase/ssr`), Storage (14 puntos de subida), **sin Realtime**, **sin RLS** |
 | Tailwind | ✅ + monorepo parcial `packages/ui` (`transpilePackages: ['@membego/ui']`) |
 | Vercel | ✅ `vercel.json` (1 cron) |
@@ -282,7 +282,7 @@ mes de datos; el flujo de pago no emite eventos; y las trazas no cruzan la cola 
 | Id | Hallazgo | Evidencia | Solución |
 |---|---|---|---|
 | M-01 | Archivos de acciones de 900+ líneas | `referidos/actions.ts` (972), `regalos/actions.ts` (964), `admin/actions.ts` (917) | Dividir por caso de uso |
-| M-02 | Schema de 4.003 líneas y 112 modelos en un archivo | `prisma/schema.prisma` | `prismaSchemaFolder` (soportado en Prisma 6) |
+| M-02 | ~~Schema de 4.003 líneas y 112 modelos en un archivo~~ **RESUELTO** | Ahora `prisma/schema/`, 14 archivos por dominio. Se demostró que `db push` produce una base byte a byte idéntica. `docs/RENDIMIENTO.md` § 2 | — |
 | M-03 | `getSession()` en el proxy para decidir redirecciones | `src/proxy.ts:105-118` | Aceptable y **documentado**: la autorización real usa `getUser()` en cada página y acción. Se registra como riesgo asumido, no como fallo |
 | M-04 | Sin PWA / offline | No hay `manifest.json` ni service worker | El scanner en pista con mala señal se beneficiaría de cola offline |
 | M-05 | Validación de subidas solo en el cliente | `ComprobanteForm.tsx:56-67` valida tipo y tamaño en el navegador | Validar en el servidor o en la política de Storage |
@@ -490,11 +490,14 @@ de pago y las fotos de evidencia no se pueden recuperar. `docs/RECUPERACION.md` 
     contra la aplicación real con base real, verdes. Cubren el recorrido **público**.
     El autenticado —registro, compra, pago, QR, canje— **no**: necesita un proyecto
     de Supabase de pruebas. Qué falta exactamente: `docs/PRUEBAS-E2E.md` § 4.
-27. ❌ Dividir archivos de 900+ líneas y el schema. → **No se hizo, a propósito.**
-    Cinco de los siete archivos grandes son bibliotecas de contenido, no lógica.
-    El `schema.prisma` sí merece dividirse y va en su propio cambio con su lista
-    de verificación, porque de él dependen todos los despliegues.
-    Medición y razones: `docs/RENDIMIENTO.md` § 2.
+27. ⚠️ Dividir archivos de 900+ líneas y el schema.
+    · **El esquema: HECHO.** `prisma/schema.prisma` (4.003 líneas, 112 modelos)
+      pasó a `prisma/schema/`, 14 archivos por dominio, en su propio cambio.
+      Demostrado inocuo en cuatro niveles, el concluyente: `db push` de una y otra
+      versión sobre dos bases vacías produce 2.953 líneas de DDL idénticas.
+    · **Los archivos de 900+ líneas: NO, a propósito.** Cinco de los siete son
+      bibliotecas de contenido, no lógica; un archivo de 950 líneas de datos es
+      una lista, no complejidad. Medición y razones en `docs/RENDIMIENTO.md` § 2.
 28. ✅ PWA con cola sin conexión para el escáner. →
     `src/modules/scanner/colaOffline.ts` (23 pruebas), service worker con red
     primero e interruptor de emergencia, manifiesto instalable con acceso directo

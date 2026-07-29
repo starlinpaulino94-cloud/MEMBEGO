@@ -43,8 +43,8 @@ mitad del incidente.
 
 ### 2.1 · Por qué el esquema `auth` es el que más duele
 
-`User.supabaseId` (`prisma/schema.prisma:132`) apunta a `auth.users`, un
-esquema que **Prisma no gestiona**: no aparece en `schema.prisma`, no lo tocan
+`User.supabaseId` (`prisma/schema/identidad.prisma`) apunta a `auth.users`, un
+esquema que **Prisma no gestiona**: no aparece en `prisma/schema/`, no lo tocan
 las migraciones y no entra en un volcado que solo pida `public`.
 
 El resultado de restaurar sin él es particularmente cruel: la aplicación se ve

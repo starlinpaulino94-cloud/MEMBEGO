@@ -25,6 +25,7 @@
     "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts"
   },
   "prisma": {
+    "schema": "prisma/schema",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

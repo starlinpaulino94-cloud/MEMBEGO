@@ -1,0 +1,267 @@
+// ──────────────────────────────────────────────────────────────────────────
+// PROMOCIONES, COMPRAS Y PUBLICACIONES
+//
+// La promoción como beneficio y como producto comprable, más el contenido
+// que una empresa publica en su perfil.
+// ──────────────────────────────────────────────────────────────────────────
+
+// FASE E8 · Tipo de Beneficio Digital. Concepto unificado: promociones,
+// membresías, cupones, bonos, gift cards y entradas comparten el mismo ciclo
+// (adquirir → QR → canjear). Añadir un tipo nuevo NO requiere rediseñar.
+enum BeneficioTipo {
+  PROMOTION
+  MEMBERSHIP
+  COUPON
+  VOUCHER
+  GIFT
+  EVENT
+}
+
+// Promociones publicadas por una empresa, visibles para sus clientes
+// (incluyendo clientes afiliados a varias empresas, vía Cliente.companyId).
+model Promocion {
+  id            String    @id @default(cuid())
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id])
+  titulo        String
+  descripcion   String
+  imagenUrl     String?
+  vigenciaDesde DateTime  @default(now())
+  vigenciaHasta DateTime?
+  activo        Boolean   @default(true)
+  publicadaEn   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Share Engine: textos propios al compartir (JSON { ogTitulo?, ogDescripcion? }).
+  // null = usar titulo/descripcion de la promoción.
+  shareConfig Json?
+
+  // FASE 2: Marketplace fields
+  slug          String?
+  tipo          String   @default("general") // ver PROMO_TIPOS en src/lib/promociones.ts
+  descuento     Int? // % o monto fijo según tipo
+  codigo        String? // Código cupón
+  isFeatured    Boolean  @default(false)
+  featuredOrder Int?
+  viewCount     Int      @default(0)
+  shareCount    Int      @default(0)
+  tags          String[] @default([])
+
+  // F4.2: Promociones 2.0
+  visibilidad String   @default("publica") // "publica" (todo MembeGo) | "privada" (solo miembros)
+  maxCanjes   Int? // límite de canjes (null = ilimitado)
+  campanaId   String?
+  campana     Campana? @relation(fields: [campanaId], references: [id], onDelete: SetNull)
+  canjes      Int      @default(0)
+  prioridad   Int      @default(0) // mayor = primero en los listados
+  archivada   Boolean  @default(false)
+
+  // FASE E5: la promoción como producto comercial comprable.
+  // - Ventana de adquisición = vigenciaDesde/vigenciaHasta (ya existentes).
+  // - Vigencia del beneficio: días desde la activación O fecha fija; ambos
+  //   null = sin vencimiento. El Rule Engine valida ambas ventanas.
+  esComprable            Boolean       @default(false)
+  precio                 Decimal?      @db.Decimal(10, 2) // 0 = gratis (activación directa)
+  usosPorCompra          Int           @default(1)
+  // Cuántas veces puede un mismo cliente adquirir esta promoción en total.
+  // null = sin límite. 1 = un solo uso por cliente (ej: "primer lavado gratis").
+  // Cuenta toda adquisición entregada (activa, usada o vencida), no solo las
+  // vivas: una vez consumida, no se puede volver a adquirir.
+  limitePorCliente       Int?
+  beneficioVigenciaDias  Int?
+  beneficioVigenciaHasta DateTime?
+  // Restricciones de consumo (0=domingo … 6=sábado; vacío = todos los días).
+  diasPermitidos         Int[]         @default([])
+  horaDesde              String? // "HH:MM"
+  horaHasta              String? // "HH:MM"
+  // Imágenes subidas al storage del proyecto (galería futura; [0] = principal).
+  imagenes               String[]      @default([])
+  // FASE E8 · Beneficio Digital: toda promoción es un beneficio con un TIPO.
+  // Hoy se usa PROMOTION; la arquitectura queda lista para cupones, gift cards,
+  // bonos y entradas a eventos sin rediseño (solo se añaden reglas del tipo).
+  beneficioTipo          BeneficioTipo @default(PROMOTION)
+
+  compras     ProductoCompra[]
+  guardadaPor PromocionGuardada[]
+
+  // Growth Engine 3.0: beneficio ofrecido en una landing o entregado por regla.
+  growthLinks          GrowthLink[] @relation("GrowthLinkBeneficio")
+  growthRulesBeneficio GrowthRule[] @relation("GrowthRuleBeneficio")
+
+  // Engagement Engine · Fase 6B: promoción como premio de la ruleta.
+  ruletaPremios RuletaPremio[]
+
+  @@index([companyId, activo])
+  @@index([isFeatured, vigenciaHasta])
+  @@index([tipo])
+  @@index([createdAt])
+  // Feed público de promociones: filtra sin companyId por estado de
+  // publicación; sin este índice cada carga del feed escanea la tabla.
+  @@index([activo, archivada, visibilidad, publicadaEn])
+  @@map("promociones")
+}
+
+// ─────────────────────────────────────────────
+// FASE E5 · PRODUCTOS COMERCIALES (compras)
+// Ciclo de compra unificado: hoy lo usan las promociones; las membresías
+// comparten el mismo flujo conceptual (solicitud → pago → validación →
+// activación → QR → consumo) y podrán migrar a esta tabla sin rediseño.
+// ─────────────────────────────────────────────
+
+enum ProductoComercialTipo {
+  PROMOCION
+  MEMBRESIA // reservado: unificación futura del ciclo de membresías
+}
+
+enum CompraEstado {
+  SOLICITADA // el cliente pidió el producto
+  PENDIENTE_PAGO // esperando la transferencia del cliente
+  EN_VALIDACION // comprobante enviado, esperando al admin
+  APROBADA // pago validado (transitorio antes de activar)
+  ACTIVA // beneficio disponible, QR emitido
+  RECHAZADA // pago rechazado (puede reintentar)
+  CONSUMIDA // sin usos restantes
+  EXPIRADA // venció sin consumirse por completo
+  CANCELADA // cancelada por el cliente o el admin
+}
+
+model ProductoCompra {
+  id     String                @id @default(cuid())
+  tipo   ProductoComercialTipo @default(PROMOCION)
+  estado CompraEstado          @default(SOLICITADA)
+
+  pagoIntentos PagoIntento[]
+
+  /// Si esta compra nació de una campaña en cadena, el eslabón que la generó.
+  /// Es lo que permite, al canjearla, saber qué paso desbloquear después.
+  campanaPasoId String?
+  campanaPaso   CampanaPaso? @relation(fields: [campanaPasoId], references: [id], onDelete: SetNull)
+
+  companyId   String
+  company     Company    @relation(fields: [companyId], references: [id])
+  clienteId   String
+  cliente     Cliente    @relation(fields: [clienteId], references: [id])
+  promocionId String?
+  promocion   Promocion? @relation(fields: [promocionId], references: [id])
+
+  // Pago (transferencia hoy; el puerto de pagos permite pasarelas futuras)
+  metodoPagoId       String?
+  metodoPago         MetodoPago? @relation(fields: [metodoPagoId], references: [id])
+  precioCongelado    Decimal?    @db.Decimal(10, 2) // precio al solicitar
+  montoPagado        Decimal?    @db.Decimal(10, 2)
+  pagoConfirmado     Boolean     @default(false)
+  comprobanteUrl     String?
+  comprobanteNota    String?
+  transferenciaFecha DateTime? // fecha/hora declarada de la transferencia
+  rechazadoReason    String?
+  adminNota          String?
+  aprobadaPorId      String?
+  aprobadaPor        User?       @relation("CompraAprobadaPor", fields: [aprobadaPorId], references: [id])
+  // Pago presencial (POS): referencia única + sucursal elegida.
+  referencia         String?     @unique
+  sucursalPagoId     String?
+  sucursalPago       Sucursal?   @relation("CompraSucursalPago", fields: [sucursalPagoId], references: [id])
+
+  // Regalos P2P: si la compra fue un regalo, quién la recibe (pagador ≠
+  // beneficiario). null = compra normal para uno mismo.
+  beneficiarioClienteId String?
+
+  // Beneficio activo
+  usosIncluidos    Int       @default(1)
+  usosRestantes    Int       @default(0)
+  fechaActivacion  DateTime?
+  fechaVencimiento DateTime? // null = sin vencimiento
+  consumidaAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transiciones ProductoCompraTransicion[]
+  qrTokens     QrToken[]
+  // Citas agendadas para canjear esta recompensa (cita antes del QR).
+  citas        Cita[]                     @relation("CitaCompra")
+
+  @@index([companyId, estado])
+  @@index([clienteId, estado])
+  @@index([promocionId, estado])
+  @@index([companyId, createdAt])
+  @@map("producto_compras")
+}
+
+// Bitácora inmutable de estados de una compra (quién, cuándo, por qué).
+model ProductoCompraTransicion {
+  id        String         @id @default(cuid())
+  compraId  String
+  compra    ProductoCompra @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  desde     CompraEstado?
+  hacia     CompraEstado
+  motivo    String?
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id])
+  createdAt DateTime       @default(now())
+
+  @@index([compraId, createdAt])
+  @@map("producto_compra_transiciones")
+}
+
+// F3.3: Publicaciones de empresa — eventos, noticias y beneficios permanentes.
+// Un solo modelo flexible: fechaEvento/lugar solo aplican a EVENTO.
+enum PostTipo {
+  EVENTO
+  NOTICIA
+  BENEFICIO
+}
+
+model CompanyPost {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tipo        PostTipo
+  titulo      String
+  contenido   String
+  imagenUrl   String?
+  fechaEvento DateTime? // solo EVENTO
+  lugar       String? // solo EVENTO
+  campanaId   String?
+  campana     Campana?  @relation(fields: [campanaId], references: [id], onDelete: SetNull)
+  activo      Boolean   @default(true)
+  publicadaEn DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([companyId, tipo, activo])
+  @@index([tipo, fechaEvento])
+  @@map("company_posts")
+}
+
+// ⚠️ DESAMBIGUACIÓN: hay TRES modelos "campaña" con propósitos distintos
+// (ver docs/GUIA_LENGUAJE_MEMBEGO.md §1.4):
+//   1. Campana            → agrupador de promociones/posts (/admin/campanas).
+//   2. CampanaInvitacion  → programa "Invita y Gana" (/admin/invitaciones).
+//   3. MarketingCampaign  → banners vivos del Home (/admin/marketing).
+//
+// F4.6: campañas — agrupan promociones y publicaciones bajo un mismo
+// paraguas (ej. "Black Friday") para medirlas en conjunto.
+model Campana {
+  id          String    @id @default(cuid())
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  fechaInicio DateTime?
+  fechaFin    DateTime?
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  promociones Promocion[]
+  posts       CompanyPost[]
+
+  // Growth Engine 3.0: enlaces y reglas ligados a esta campaña.
+  growthLinks GrowthLink[]
+  growthRules GrowthRule[]
+
+  @@index([companyId, activo])
+  @@map("campanas")
+}

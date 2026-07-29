@@ -1,0 +1,47 @@
+// ──────────────────────────────────────────────────────────────────────────
+// GENERADOR Y ORIGEN DE DATOS  ·  ÍNDICE DEL ESQUEMA
+//
+// El único archivo que NO contiene modelos. Prisma lee toda la carpeta
+// `prisma/schema/` como UN SOLO esquema: el reparto de bloques entre archivos
+// no cambia absolutamente nada de lo que se genera ni de lo que llega a la
+// base de datos. Es una decisión de legibilidad, no de comportamiento — y está
+// demostrado: al dividirlo se comprobó que `prisma db push` desde la carpeta
+// produce una base byte a byte idéntica a la que producía el archivo único.
+//
+// Antes esto era un solo `schema.prisma` de 4.003 líneas y 112 modelos.
+//
+// DÓNDE ESTÁ CADA COSA
+//
+//   identidad     Usuarios, empresas, sucursales, auditoría, notificaciones.
+//   clientes      El cliente final de una empresa, sus vehículos y sus notas.
+//   membresias    Membresías, planes, QR y visitas. El núcleo del producto.
+//   promociones   Promociones como beneficio y como producto comprable.
+//   marketplace   Categorías, reseñas y capa social (seguir, guardar).
+//   referidos     Referidos, crecimiento e invitaciones.
+//   caja          Sesiones de caja, transacciones, tickets, regalos.
+//   motores       Maquinaria genérica: reglas, promociones universales,
+//                 diccionario de datos, beneficios, automatizaciones.
+//   campanas      Campañas de marketing, ruleta y ofertas privadas.
+//   citas         Agenda y reservas.
+//   soporte       Tickets, FAQ y WhatsApp.
+//   carwash       Operación de pista (detrás de capacidades por empresa).
+//   pagos         Rastro de los cobros por pasarela.
+//
+// AL AÑADIR UN MODELO: va al archivo de su dominio. Si no encaja en ninguno,
+// eso es una señal de que hace falta un dominio nuevo — no de que da igual
+// dónde ponerlo.
+//
+// CUIDADO AL MOVER ESTA CARPETA: `package.json#prisma.schema` apunta aquí, y
+// también lo hacen `.github/workflows/ci.yml` (trabajo `esquema`) y
+// `scripts/db-doctor.mjs`.
+// ──────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}

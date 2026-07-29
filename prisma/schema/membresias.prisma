@@ -1,0 +1,234 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MEMBRESÍAS, PLANES, QR Y VISITAS
+//
+// El núcleo del producto: qué compró el cliente, con qué QR lo demuestra y
+// qué usos ha consumido.
+// ──────────────────────────────────────────────────────────────────────────
+
+enum MembershipEstado {
+  PENDIENTE // solicitada, sin pago
+  PENDIENTE_PAGO // comprobante enviado, esperando validación
+  RECHAZADA // pago rechazado por admin
+  ACTIVA
+  VENCIDA
+  CANCELADA
+}
+
+enum MetodoPagoTipo {
+  TRANSFERENCIA
+  PRESENCIAL
+}
+
+// Métodos de pago configurables por empresa (sin tocar código)
+model MetodoPago {
+  id            String         @id @default(cuid())
+  companyId     String
+  company       Company        @relation(fields: [companyId], references: [id])
+  tipo          MetodoPagoTipo
+  nombre        String // "Banco Popular", "Pago en sucursal"
+  titular       String?
+  numeroCuenta  String?
+  tipoCuenta    String? // "Ahorro", "Corriente"
+  instrucciones String? // texto libre para mostrar al cliente
+  activo        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  memberships Membership[]
+  compras     ProductoCompra[]
+
+  @@index([companyId])
+  @@map("metodos_pago")
+}
+
+model Plan {
+  id               String   @id @default(cuid())
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+  nombre           String
+  precio           Decimal  @db.Decimal(10, 2)
+  lavadosIncluidos Int      @default(0)
+  esIlimitado      Boolean  @default(false)
+  descripcion      String?
+  beneficios       String[]
+  vigenciaDias     Int      @default(30) // duración del período
+  condiciones      String? // texto de condiciones/restricciones
+  activo           Boolean  @default(true)
+  // F4.3: presentación del plan en tarjetas públicas y del panel.
+  color            String? // hex o token, ej. "#0ea5e9"
+  orden            Int      @default(0) // menor = primero
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  memberships            Membership[]
+  membershipsSolicitadas Membership[] @relation("PlanSolicitado")
+
+  @@index([companyId])
+  @@map("plans")
+}
+
+model Membership {
+  id                    String           @id @default(cuid())
+  clienteId             String
+  cliente               Cliente          @relation(fields: [clienteId], references: [id])
+  companyId             String
+  company               Company          @relation(fields: [companyId], references: [id])
+  planId                String
+  plan                  Plan             @relation(fields: [planId], references: [id])
+  // Cambio de plan solicitado por el cliente mientras la membresía sigue ACTIVA.
+  // El admin lo aprueba (con el comprobante) y se aplica; hasta entonces el plan
+  // vigente no cambia. null = sin cambio pendiente.
+  planIdSolicitado      String?
+  planSolicitado        Plan?            @relation("PlanSolicitado", fields: [planIdSolicitado], references: [id])
+  userId                String? // empleado/admin que la creó
+  user                  User?            @relation(fields: [userId], references: [id])
+  metodoPagoId          String? // método de pago seleccionado
+  metodoPago            MetodoPago?      @relation(fields: [metodoPagoId], references: [id])
+  // Pago presencial (POS): referencia única que el cliente muestra en caja y
+  // sucursal elegida para pagar. Null en pagos por transferencia.
+  referencia            String?          @unique
+  sucursalPagoId        String?
+  sucursalPago          Sucursal?        @relation("MembershipSucursalPago", fields: [sucursalPagoId], references: [id])
+  estado                MembershipEstado @default(PENDIENTE)
+  // Pago
+  comprobanteUrl        String? // URL del comprobante subido (Supabase Storage)
+  comprobanteNota       String? // nota del cliente al enviar comprobante
+  rechazadoReason       String? // motivo de rechazo por admin
+  adminNota             String? // nota interna del admin, no visible al cliente
+  pagoConfirmado        Boolean          @default(false)
+  montoPagado           Decimal?         @db.Decimal(10, 2)
+  // O-13: descuento de bienvenida congelado al solicitar el plan (null = sin
+  // descuento). Solo se aplica si la membresía nunca se activó (fechaInicio null).
+  descuentoBienvenida   Decimal?         @db.Decimal(10, 2)
+  // Regalos P2P: si la membresía fue un regalo, quién la recibe.
+  beneficiarioClienteId String?
+
+  // Período activo
+  fechaInicio      DateTime?
+  fechaVencimiento DateTime?
+  lavadosRestantes Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  visits       Visit[]
+  comprobantes Comprobante[]
+  pagoIntentos PagoIntento[]
+  qrTokens     QrToken[]
+
+  transacciones Transaction[]
+
+  @@unique([clienteId, companyId])
+  @@index([estado])
+  @@index([clienteId])
+  @@index([companyId])
+  // Conteos por plan (reportes, borrado seguro de planes).
+  @@index([planId])
+  // Patrón caliente de dashboards y automatizaciones: membresías de una
+  // empresa por estado y vencimiento (activas, por vencer, pendientes).
+  @@index([companyId, estado, fechaVencimiento])
+  @@map("memberships")
+}
+
+// QR de acceso de un producto activo: membresía O compra de promoción (E5).
+// Exactamente el mismo sistema de un solo uso con regeneración para ambos.
+model QrToken {
+  id               String          @id @default(cuid())
+  clienteId        String
+  cliente          Cliente         @relation(fields: [clienteId], references: [id])
+  membresiaId      String?
+  membership       Membership?     @relation(fields: [membresiaId], references: [id], onDelete: Cascade)
+  // FASE E5: QR de una compra de promoción (excluyente con membresiaId).
+  compraId         String?
+  compra           ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  /// Auditoría de producción · A-02. Ya NO se genera con `cuid()`: cuid está
+  /// hecho para no colisionar, no para no adivinarse (marca de tiempo +
+  /// contador + huella de máquina). Un token QR es una credencial al portador
+  /// —vale un lavado, se manda por WhatsApp— así que se genera con 24 bytes de
+  /// `randomBytes` en la aplicación. Ver `src/modules/qr/token.ts`.
+  ///
+  /// Sin `@default`: obligar a pasarlo explícitamente hace que un `create`
+  /// nuevo que lo olvide falle en compilación, no en producción.
+  token            String          @unique
+  activo           Boolean         @default(true)
+  /// Cuándo deja de ser canjeable. Antes un token vivía para siempre hasta
+  /// usarse: un QR compartido hace ocho meses seguía valiendo. Nulo = emitido
+  /// antes de que existiera la caducidad; esos se tratan como vigentes para no
+  /// dejar a los clientes actuales con un código que ayer funcionaba.
+  expiraAt         DateTime?
+  // Compartir el QR (p. ej. por WhatsApp) no consume el token —sigue siendo de
+  // un solo uso— pero sí queda registrado: cuántas veces y cuándo la última.
+  compartidoCount  Int             @default(0)
+  ultimoCompartido DateTime?
+  createdAt        DateTime        @default(now())
+
+  transaccionUso Transaction? @relation("TransactionQrUsado")
+
+  @@index([clienteId, activo])
+  @@index([membresiaId])
+  @@index([compraId])
+  @@index([expiraAt])
+  @@map("qr_tokens")
+}
+
+model Visit {
+  id           String     @id @default(cuid())
+  clienteId    String
+  cliente      Cliente    @relation(fields: [clienteId], references: [id])
+  vehiculoId   String?
+  vehiculo     Vehiculo?  @relation(fields: [vehiculoId], references: [id])
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id])
+  sucursalId   String?
+  sucursal     Sucursal?  @relation(fields: [sucursalId], references: [id])
+  empleadoId   String?
+  empleado     User?      @relation("EmpleadoVisits", fields: [empleadoId], references: [id])
+  servicio     String
+  descontado   Boolean    @default(false)
+  fechaVisita  DateTime   @default(now())
+  notas        String?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime   @default(now())
+
+  comprobante Comprobante?
+
+  // Postgres no indexa FKs automáticamente. Visitas se consultan por cliente,
+  // por membresía y por fecha (historial, reportes, "clientes frecuentes").
+  transaccion Transaction?
+
+  @@index([clienteId])
+  @@index([membershipId])
+  @@index([fechaVisita])
+  @@index([vehiculoId])
+  @@index([sucursalId])
+  /// Auditoría de producción · A-05. `visits` es la tabla que más crece: una
+  /// fila por escaneo, del orden de millones al mes con el volumen previsto.
+  ///
+  /// No tiene `companyId` —se llega por la membresía—, así que TODO reporte de
+  /// empresa por rango de fechas entra por `membershipId` y filtra por
+  /// `fechaVisita`. Con índices sueltos, PostgreSQL usa uno y descarta filas
+  /// leyendo la tabla; con el compuesto resuelve las dos condiciones de una
+  /// pasada. Lo mismo para el historial de un cliente, que es la consulta más
+  /// frecuente del portal.
+  @@index([membershipId, fechaVisita])
+  @@index([clienteId, fechaVisita])
+  @@map("visits")
+}
+
+// Comprobante generado al confirmar visita. Registra impresiones.
+model Comprobante {
+  id              String     @id @default(cuid())
+  visitId         String     @unique
+  visit           Visit      @relation(fields: [visitId], references: [id])
+  membershipId    String
+  membership      Membership @relation(fields: [membershipId], references: [id])
+  numero          String     @unique // número secuencial legible (ej. "COMP-000123")
+  impresiones     Int        @default(0)
+  ultimaImpresion DateTime?
+  creadoPorId     String?
+  creadoPor       User?      @relation(fields: [creadoPorId], references: [id])
+  createdAt       DateTime   @default(now())
+
+  @@index([membershipId])
+  @@map("comprobantes")
+}

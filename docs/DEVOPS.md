@@ -21,7 +21,7 @@ aparecían vacíos. Ya pasó con `companies.capacidades`.
 | `verificar` | `tsc --noEmit`, `eslint --max-warnings=0`, `npm test` |
 | `construir` | `next build` completo |
 | `dependencias` | `npm audit --omit=dev --audit-level=high` |
-| `esquema` | `prisma validate` + detecta cambios en `schema.prisma` sin migración |
+| `esquema` | `prisma validate` + detecta cambios en `prisma/schema/` sin migración |
 
 ### `.github/workflows/deploy-migraciones.yml` — al mezclar en `main`
 

@@ -84,44 +84,90 @@ que ya toca cuarenta archivos.
 **Decisión: no se dividieron.** Cambiar la forma de código que funciona, sin una
 pregunta concreta que responder, es riesgo sin beneficio medible.
 
-### El `schema.prisma` de 4.003 líneas
+### El esquema: de 4.003 líneas en un archivo a 14 por dominio — **hecho**
 
-Este sí duele de verdad: 112 modelos en un archivo es incómodo de navegar todos
-los días. Prisma 6 admite dividirlo en `prisma/schema/` por dominios, y el
-esquema ya trae las secciones marcadas por su autor (`// FASE 2: MARKETPLACE`,
-`// Caja (POS)`, etc.), así que la división saldría de la organización que ya
-existe y no de una inventada.
+Este sí dolía de verdad: 112 modelos y 53 enums en un solo archivo es incómodo
+de navegar todos los días. Ahora está en `prisma/schema/`, un archivo por
+dominio, con el índice al principio de `base.prisma`.
 
-**Tampoco se hizo aquí, y por una razón concreta:** ese archivo es del que
-depende cada despliegue y cada migración. Mezclar su reorganización con una PWA,
-una cola sin conexión, pruebas E2E y presupuestos de bundle produce un diff que
-nadie puede revisar — y "nadie puede revisarlo" es exactamente cómo se cuela un
-cambio sutil de esquema.
+| Archivo | Bloques | Qué contiene |
+|---|---|---|
+| `base` | 2 | Generador, origen de datos y el índice |
+| `identidad` | 9 | Usuarios, empresas, sucursales, auditoría |
+| `clientes` | 6 | El cliente final, vehículos, notas |
+| `membresias` | 8 | Membresías, planes, QR, visitas |
+| `promociones` | 9 | Promociones y compras |
+| `marketplace` | 5 | Categorías, reseñas, capa social |
+| `referidos` | 23 | Referidos, crecimiento, invitaciones |
+| `caja` | 17 | Caja, transacciones, tickets, regalos |
+| `motores` | 42 | Reglas, promociones universales, beneficios, automatizaciones |
+| `campanas` | 15 | Campañas, ruleta, ofertas privadas |
+| `citas` | 3 | Agenda y reservas |
+| `soporte` | 7 | Tickets, FAQ, WhatsApp |
+| `carwash` | 20 | Operación de pista |
+| `pagos` | 1 | Pasarela |
 
-Va en su propio cambio, y es demostrable que no altera nada. La lista de
-comprobación que lo haría seguro:
+La división salió de las secciones que el propio esquema ya tenía marcadas
+(`// FASE 2: MARKETPLACE`, `// Caja (POS)`…), no de una organización inventada.
+
+#### Cómo se demostró que no cambia nada
+
+Un cambio en este archivo lo paga cada despliegue y cada migración, así que no
+basta con que compile. Se comprobó en cuatro niveles, de menos a más
+concluyente:
 
 ```bash
-npx prisma validate                      # el esquema sigue siendo válido
-npx prisma generate                      # el cliente se genera igual
+# 1. Ningún bloque perdido, duplicado ni alterado (167 bloques, comparados
+#    tras normalizar espacios y comentarios).
+# 2. El esquema sigue siendo válido y el cliente se genera igual.
+npx prisma validate && npx prisma generate
 
-# LA PRUEBA QUE IMPORTA: no debe haber ninguna diferencia entre las
-# migraciones existentes y el esquema dividido. Si sale algo, la división
-# cambió el modelo de datos.
+# 3. Diff del modelo de datos ANTIGUO contra el NUEVO. Salida esperada:
+#    "This is an empty migration" — cero diferencias.
 npx prisma migrate diff \
-  --from-migrations prisma/migrations \
-  --to-schema-datamodel prisma/schema \
-  --shadow-database-url "$DATABASE_URL" --exit-code
+  --from-schema-datamodel <schema.prisma original> \
+  --to-schema-datamodel prisma/schema --script
 
-npx tsc --noEmit && npm run build && npm test && npm run e2e
+# 4. LA PRUEBA QUE ZANJA EL ASUNTO: `db push` de cada versión sobre dos bases
+#    vacías distintas y `pg_dump --schema-only` de ambas. Resultado: 2.953
+#    líneas de DDL idénticas en las dos, salvo los dos tokens aleatorios que
+#    pg_dump genera en cada invocación.
 ```
 
-Y hay que acordarse de dos sitios que apuntan a la ruta vieja:
-`.github/workflows/ci.yml` (el trabajo `esquema`) y `scripts/db-doctor.mjs`
-(`SCHEMA_PATH`).
+Y después, todo lo demás en verde: `tsc`, `eslint`, 187 pruebas, `next build`,
+28 E2E y `npm run db:doctor` (112 modelos, 53 enums, sin desfase).
 
-**Recomendación:** hacerlo, pero solo. Es de las pocas mejoras de esta fase que
-se paga sola en tiempo de desarrollo.
+#### Lo que hubo que tocar además
+
+- `package.json` → `prisma.schema: "prisma/schema"`. **Prisma 6.19 no detecta
+  la carpeta solo**; sin esta línea dice "schema not found".
+- `.github/workflows/ci.yml`, trabajo `esquema` → `--to-schema-datamodel prisma/schema`.
+- `scripts/db-doctor.mjs` → concatena los `.prisma` de la carpeta en vez de leer
+  un archivo.
+
+#### Un hallazgo que salió por el camino
+
+`prisma migrate diff --from-migrations` **falla en este repositorio**, y fallaba
+igual antes de dividir nada:
+
+```
+Migration `20260705_add_multi_membership_support` failed to apply cleanly
+to the shadow database. The underlying table for model `memberships` does not exist.
+```
+
+El historial de migraciones no se puede reproducir desde cero. Es la
+consecuencia esperable de aplicarlas a mano en el SQL Editor durante meses —
+alguna asume un estado que otra creó fuera del historial— y explica por qué el
+trabajo `esquema` del CI lleva `continue-on-error: true`.
+
+No es urgente: la base de producción está bien y `db push` desde el esquema
+produce el resultado correcto. Pero significa que **hoy no se puede levantar un
+entorno nuevo replicando las migraciones**, solo empujando el esquema. Si algún
+día hace falta (un entorno de pruebas de verdad, o el simulacro de restauración
+del § 5 de `docs/RECUPERACION.md`), habrá que consolidar el historial en una
+migración base. No se hizo aquí porque es otro cambio, y arreglar dos cosas a la
+vez en el archivo del que depende cada despliegue es exactamente lo que este
+mismo documento decía que no había que hacer.
 
 ---
 

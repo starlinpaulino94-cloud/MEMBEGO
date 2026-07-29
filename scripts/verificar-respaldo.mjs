@@ -23,7 +23,7 @@
  *  1. Que el volcado se puede restaurar. Lo obvio.
  *
  *  2. Que `auth.users` viajó con los datos. Esto es lo que casi nadie mira y
- *     es el fallo más caro: `User.supabaseId` (prisma/schema.prisma:132)
+ *     es el fallo más caro: `User.supabaseId` (prisma/schema/identidad.prisma)
  *     apunta al esquema `auth` de Supabase, que Prisma NO gestiona. Un volcado
  *     de `public` restaura las 100.000 fichas de cliente intactas… y ni una
  *     sola contraseña. Todo el mundo existe y nadie puede entrar.

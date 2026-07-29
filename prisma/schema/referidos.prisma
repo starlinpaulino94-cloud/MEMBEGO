@@ -1,0 +1,432 @@
+// ──────────────────────────────────────────────────────────────────────────
+// REFERIDOS, CRECIMIENTO E INVITACIONES
+//
+// Todo lo que trae clientes nuevos a través de clientes actuales.
+// ──────────────────────────────────────────────────────────────────────────
+
+enum ReferidoEstado {
+  PENDIENTE
+  COMPLETADO
+}
+
+enum CondicionRecompensa {
+  N_REFERIDOS_COMPLETADOS
+}
+
+enum TipoRecompensa {
+  LAVADOS_GRATIS
+  DESCUENTO_PORCENTAJE
+  DESCUENTO_MONTO
+}
+
+// Evento del programa de referidos: cada acción del embudo (compartir, clic,
+// registro, membresía) con sus puntos. Base de estadísticas, niveles y ranking.
+// Diseñado para extenderse (campañas, afiliados) vía canal/meta sin migrar.
+// ⚠️ Embudo PARALELO a InvitacionEventoTipo (mismos hitos, otros nombres).
+// Equivalencias (ReferralEventTipo ↔ InvitacionEventoTipo):
+//   SHARE↔COMPARTIDA · CLICK↔ENLACE_ABIERTO · LANDING_VIEW↔LANDING_VISTA ·
+//   REGISTRO_INICIADO↔REGISTRO_INICIADO · REGISTRO↔REGISTRO_COMPLETADO ·
+//   MEMBRESIA↔MEMBRESIA_ADQUIRIDA · PRIMER_USO↔PRIMER_CANJE · RECOMPENSA↔PREMIO_RECLAMADO.
+// Unificarlos en un solo enum es una tarea mayor (migración de datos en dos
+// subsistemas); documentado en docs/GUIA_LENGUAJE_MEMBEGO.md.
+enum ReferralEventTipo {
+  LINK // Fase E6: enlace de referido generado (código corto emitido)
+  SHARE // el referente compartió su enlace
+  CLICK // alguien abrió /r/[code]
+  LANDING_VIEW // Growth Engine 3.0: la landing del referido fue vista
+  REGISTRO_INICIADO // Fase E6: landing de registro cargada con atribución
+  REGISTRO // un referido creó cuenta
+  VERIFICADO // Fase E6: el referido confirmó su correo
+  MEMBRESIA // el referido activó membresía
+  COMPRA // Fase E6: primera compra confirmada (membresía o promoción E5)
+  PRIMER_USO // Growth Engine 3.0: el referido canjeó su beneficio por 1ª vez
+  RECOMPENSA // Fase E6: recompensa entregada al referente
+  FRAUDE // Fase E6: intento bloqueado o referido marcado sospechoso
+  // Centro global MembeGo: el referido se unió a OTRA empresa de la plataforma.
+  // companyId = empresa del referente; meta.targetCompanyId = empresa destino.
+  REGISTRO_GLOBAL
+  MEMBRESIA_GLOBAL
+}
+
+model ReferralEvent {
+  id                String            @id @default(cuid())
+  companyId         String
+  company           Company           @relation(fields: [companyId], references: [id])
+  clienteId         String // referente dueño del enlace
+  cliente           Cliente           @relation("ReferralEvents", fields: [clienteId], references: [id])
+  tipo              ReferralEventTipo
+  puntos            Int               @default(0)
+  canal             String? // native | whatsapp | copy | qr | telegram | ...
+  // Fase E6 · Attribution Tracking: identificador anónimo del visitante,
+  // sembrado en el clic (cookie) y propagado hasta el registro. Permite
+  // visitas ÚNICAS reales y reconstruir el recorrido completo por persona.
+  visitorId         String?
+  // Fase E6: referido al que pertenece el evento (cuando ya existe cuenta).
+  referidoClienteId String?
+  // Growth Engine 3.0: enlace de invitación concreto que originó el evento.
+  growthLinkId      String?
+  growthLink        GrowthLink?       @relation(fields: [growthLinkId], references: [id], onDelete: SetNull)
+  meta              Json              @default("{}") // dispositivo, campaña, ip hash...
+  createdAt         DateTime          @default(now())
+
+  @@index([clienteId, companyId])
+  @@index([companyId, tipo, createdAt])
+  @@index([companyId, tipo, visitorId])
+  @@index([referidoClienteId])
+  @@index([growthLinkId, tipo])
+  @@map("referral_events")
+}
+
+// Referido: vínculo entre quien invita y quien se registró con su código.
+model Referido {
+  id                  String             @id @default(cuid())
+  companyId           String
+  company             Company            @relation(fields: [companyId], references: [id])
+  referenteClienteId  String
+  referenteCliente    Cliente            @relation("Referente", fields: [referenteClienteId], references: [id])
+  referidoClienteId   String             @unique
+  referidoCliente     Cliente            @relation("Referido", fields: [referidoClienteId], references: [id])
+  estado              ReferidoEstado     @default(PENDIENTE)
+  recompensaAplicada  Boolean            @default(false)
+  // Anti-fraude: registro atribuido pero con huella repetida (misma red/
+  // dispositivo del referente o de otro referido reciente). Se conserva el
+  // vínculo para auditoría, pero NO cuenta en el embudo ni otorga puntos.
+  sospechoso          Boolean            @default(false)
+  campanaInvitacionId String?
+  campanaInvitacion   CampanaInvitacion? @relation(fields: [campanaInvitacionId], references: [id])
+  createdAt           DateTime           @default(now())
+  completadoEn        DateTime?
+
+  @@index([companyId, referenteClienteId])
+  @@index([companyId, sospechoso])
+  @@index([campanaInvitacionId])
+  @@map("referidos")
+}
+
+// Fase E6: recompensa REAL del programa de referidos, con estado propio.
+// Reemplaza el booleano recompensaAplicada como fuente de verdad: cada umbral
+// alcanzado genera una fila (>= sin pérdidas), auditable y sin doble entrega.
+enum ReferralRecompensaEstado {
+  PENDIENTE // otorgada pero de entrega manual (descuentos) o esperando entrega
+  ENTREGADA // efecto aplicado (p. ej. usos sumados a la membresía)
+  RECHAZADA // anulada por el admin (p. ej. fraude posterior)
+}
+
+model ReferralRecompensa {
+  id                   String                   @id @default(cuid())
+  companyId            String
+  referenteClienteId   String
+  reglaId              String
+  regla                ReglaRecompensa          @relation(fields: [reglaId], references: [id])
+  estado               ReferralRecompensaEstado @default(PENDIENTE)
+  tipo                 TipoRecompensa
+  valor                Int
+  descripcion          String
+  // Umbral de referidos completados que la disparó (auditoría del cálculo).
+  umbral               Int
+  completadosAlOtorgar Int
+  entregadaAt          DateTime?
+  motivoRechazo        String?
+  createdAt            DateTime                 @default(now())
+
+  // Una recompensa por regla por referente: el umbral >= no duplica entregas.
+  @@unique([referenteClienteId, reglaId])
+  @@index([companyId, estado])
+  @@index([referenteClienteId])
+  @@map("referral_recompensas")
+}
+
+// Regla de recompensa 100% configurable desde el panel admin: sin valores
+// fijos en código. El admin define cuándo y qué recompensa otorgar.
+model ReglaRecompensa {
+  id              String              @id @default(cuid())
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id])
+  nombre          String
+  condicion       CondicionRecompensa
+  valorCondicion  Int // ej: 3 referidos completados
+  tipoRecompensa  TipoRecompensa
+  valorRecompensa Decimal             @db.Decimal(10, 2) // lavados, % o monto según tipo
+  activo          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  recompensas ReferralRecompensa[]
+
+  @@index([companyId, activo])
+  @@map("reglas_recompensa")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GROWTH ENGINE 3.0 · Sistema viral de referidos
+// Módulo de crecimiento sobre el motor de eventos EN VIVO (ReferralEvent /
+// Referido). Cada enlace compartido es una campaña de adquisición (GrowthLink)
+// con su propia landing, expiración y embudo. Las recompensas NO están
+// codificadas: reglas configurables por evento (GrowthRule) que se ENTREGAN
+// como Beneficios Digitales de E8 (ProductoCompra con QR), puntos o créditos.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Disparadores de una regla de recompensa (eventos reales del embudo).
+enum GrowthTrigger {
+  LINK_ABIERTO // el invitado abrió la landing / hizo clic
+  REGISTRO // el invitado completó el registro
+  VERIFICADO // el invitado verificó su correo
+  MEMBRESIA // el invitado adquirió una membresía
+  COMPRA // el invitado hizo una compra (promoción o plan)
+  PRIMER_USO // el invitado canjeó su beneficio por primera vez
+  N_REFERIDOS // umbral de referidos completados (campañas)
+}
+
+/// Qué recompensa entrega una regla. BENEFICIO usa el Motor de Beneficios
+/// Digitales (E8): otorga una Promoción como ProductoCompra activo con QR.
+enum GrowthRewardTipo {
+  PUNTOS
+  CREDITOS
+  BENEFICIO // Beneficio Digital (Promoción E8) entregado como ProductoCompra
+  LAVADOS_GRATIS // compat E6: incrementa usos de la membresía activa
+  DESCUENTO_PORCENTAJE
+  DESCUENTO_MONTO
+}
+
+/// A quién se le entrega la recompensa de una regla.
+enum GrowthBeneficiario {
+  REFERENTE // quien invita
+  REFERIDO // el invitado
+  AMBOS
+}
+
+enum GrowthRewardEstado {
+  PENDIENTE // otorgada; espera entrega (manual) o activación del beneficio
+  ENTREGADA // efecto aplicado (beneficio activo, puntos/créditos sumados)
+  RECHAZADA // anulada (fraude posterior u otra razón)
+}
+
+/// Un enlace de invitación concreto. A diferencia del código único del cliente
+/// (legacy), cada GrowthLink tiene su beneficio, expiración y embudo propios.
+model GrowthLink {
+  id            String     @id @default(cuid())
+  code          String     @unique // código corto para /r/[code]
+  companyId     String
+  company       Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId     String // referente dueño del enlace
+  cliente       Cliente    @relation("GrowthLinks", fields: [clienteId], references: [id], onDelete: Cascade)
+  // Beneficio ofrecido en la landing (Beneficio Digital E8). Opcional.
+  promocionId   String?
+  promocion     Promocion? @relation("GrowthLinkBeneficio", fields: [promocionId], references: [id], onDelete: SetNull)
+  campanaId     String?
+  campana       Campana?   @relation(fields: [campanaId], references: [id], onDelete: SetNull)
+  titulo        String?
+  mensaje       String?
+  canal         String? // canal con el que se generó/compartió
+  duracionHoras Int? // duración configurable (1, 6, 12, 24, 72, 168…)
+  expiresAt     DateTime? // instante exacto de expiración (verificado en servidor)
+  activo        Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  eventos     ReferralEvent[]
+  recompensas GrowthReward[]
+
+  @@index([companyId, clienteId])
+  @@index([campanaId])
+  @@map("growth_links")
+}
+
+/// Configuración del programa de crecimiento por empresa (req #12). Cada
+/// empresa decide qué premia y la duración por defecto de sus enlaces.
+model GrowthConfig {
+  id                   String   @id @default(cuid())
+  companyId            String   @unique
+  company              Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  landingActiva        Boolean  @default(true) // mostrar landing antes del registro
+  duracionHorasDefault Int      @default(24) // expiración por defecto de enlaces
+  premiaClic           Boolean  @default(false)
+  premiaRegistro       Boolean  @default(true)
+  premiaMembresia      Boolean  @default(true)
+  premiaCompra         Boolean  @default(true)
+  premiaRenovacion     Boolean  @default(false)
+  config               Json     @default("{}") // extensible sin migrar
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("growth_configs")
+}
+
+/// Regla de recompensa 100% configurable por evento (req #9). Sin valores fijos
+/// en código: el admin define trigger, condición, beneficiario y recompensa.
+model GrowthRule {
+  id                    String             @id @default(cuid())
+  companyId             String
+  company               Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  campanaId             String?
+  campana               Campana?           @relation(fields: [campanaId], references: [id], onDelete: SetNull)
+  nombre                String
+  trigger               GrowthTrigger
+  valorCondicion        Int                @default(1) // ej. N_REFERIDOS => umbral
+  planId                String? // condición: solo si compró este plan (ej. Gold)
+  beneficiario          GrowthBeneficiario @default(REFERENTE)
+  recompensaTipo        GrowthRewardTipo
+  recompensaValor       Decimal            @default(0) @db.Decimal(10, 2)
+  // Beneficio Digital (Promoción) a otorgar cuando recompensaTipo = BENEFICIO.
+  recompensaPromocionId String?
+  recompensaPromocion   Promocion?         @relation("GrowthRuleBeneficio", fields: [recompensaPromocionId], references: [id], onDelete: SetNull)
+  activo                Boolean            @default(true)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  recompensas GrowthReward[]
+
+  @@index([companyId, activo])
+  @@index([companyId, trigger, activo])
+  @@map("growth_rules")
+}
+
+/// Recompensa REAL otorgada por el Growth Engine, con estado propio y entrega
+/// idempotente. Cuando el tipo es BENEFICIO, `productoCompraId` referencia el
+/// ProductoCompra (E8) generado como beneficio activo con QR.
+model GrowthReward {
+  id               String             @id @default(cuid())
+  companyId        String
+  ruleId           String
+  rule             GrowthRule         @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  clienteId        String // beneficiario (referente o referido)
+  cliente          Cliente            @relation("GrowthRewards", fields: [clienteId], references: [id], onDelete: Cascade)
+  growthLinkId     String?
+  growthLink       GrowthLink?        @relation(fields: [growthLinkId], references: [id], onDelete: SetNull)
+  referidoId       String? // vínculo Referido que la disparó (auditoría)
+  trigger          GrowthTrigger
+  tipo             GrowthRewardTipo
+  valor            Decimal            @db.Decimal(10, 2)
+  descripcion      String
+  estado           GrowthRewardEstado @default(PENDIENTE)
+  productoCompraId String? // scalar: beneficio E8 entregado (si aplica)
+  entregadaAt      DateTime?
+  motivoRechazo    String?
+  // Idempotencia: una recompensa por disparador único (regla+cliente+evento).
+  dedupeKey        String             @unique
+  createdAt        DateTime           @default(now())
+
+  @@index([companyId, estado])
+  @@index([clienteId])
+  @@index([growthLinkId])
+  @@map("growth_rewards")
+}
+
+/// Saldo de puntos y créditos del programa (wallet) por empresa y cliente.
+model GrowthWallet {
+  id        String   @id @default(cuid())
+  companyId String
+  clienteId String
+  cliente   Cliente  @relation("GrowthWallet", fields: [clienteId], references: [id], onDelete: Cascade)
+  puntos    Int      @default(0)
+  creditos  Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, clienteId])
+  @@index([companyId])
+  @@map("growth_wallets")
+}
+
+// ---------------------------------------------------------------------------
+// Growth Engine — Campañas de Invitación ("Invita y Gana")
+// ---------------------------------------------------------------------------
+
+enum CampanaInvitacionEstado {
+  BORRADOR
+  ACTIVA
+  PAUSADA
+  FINALIZADA
+}
+
+enum InvitacionEventoTipo {
+  COMPARTIDA
+  ENLACE_ABIERTO
+  LANDING_VISTA
+  REGISTRO_INICIADO
+  REGISTRO_COMPLETADO
+  PREMIO_RECLAMADO
+  MEMBRESIA_ADQUIRIDA
+  PRIMER_CANJE
+  CONVERSION_FINAL
+}
+
+// Campaña "Invita y Gana" (uno de los 3 modelos "campaña"; ver Campana arriba).
+model CampanaInvitacion {
+  id                 String                  @id @default(cuid())
+  companyId          String
+  company            Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  slug               String                  @unique
+  nombre             String
+  titulo             String
+  descripcion        String                  @db.Text
+  textoLanding       String?                 @db.Text
+  imagenUrl          String?
+  bannerUrl          String?
+  metaRegistros      Int
+  beneficioInvitante Json
+  beneficioInvitado  Json
+  fechaInicio        DateTime
+  fechaFin           DateTime
+  maxPremios         Int?
+  premiosOtorgados   Int                     @default(0)
+  estado             CampanaInvitacionEstado @default(BORRADOR)
+  colorPrimario      String?
+  colorSecundario    String?
+  orden              Int                     @default(0)
+  // Si es true, el enlace muestra la página de presentación (banner/hero) antes
+  // del formulario. Si es false (por defecto), lleva directo al registro.
+  usarBanner         Boolean                 @default(false)
+  // Textos editables del módulo "Invita y Gana" del cliente (subtítulo,
+  // etiquetas, mensaje de compartir, títulos, nombres de estadísticas, etc.).
+  // Ausente = se usan los textos por defecto (ver src/lib/invitaContenido.ts).
+  contenido          Json?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  progresos InvitacionProgreso[]
+  eventos   InvitacionEvento[]
+  referidos Referido[]
+
+  @@index([companyId, estado])
+  @@index([estado, fechaFin])
+  @@map("campanas_invitacion")
+}
+
+model InvitacionProgreso {
+  id                   String            @id @default(cuid())
+  campanaId            String
+  campana              CampanaInvitacion @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  clienteId            String
+  cliente              Cliente           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  companyId            String
+  registrosCompletados Int               @default(0)
+  metaAlcanzada        Boolean           @default(false)
+  premioReclamado      Boolean           @default(false)
+  benefitGrantId       String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@unique([campanaId, clienteId])
+  @@index([clienteId])
+  @@map("invitacion_progresos")
+}
+
+model InvitacionEvento {
+  id          String               @id @default(cuid())
+  campanaId   String
+  campana     CampanaInvitacion    @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  clienteId   String?
+  cliente     Cliente?             @relation(fields: [clienteId], references: [id])
+  companyId   String
+  tipo        InvitacionEventoTipo
+  canal       String?
+  dispositivo String?
+  ipHash      String?
+  meta        Json                 @default("{}")
+  createdAt   DateTime             @default(now())
+
+  @@index([campanaId, tipo])
+  @@index([campanaId, clienteId])
+  @@map("invitacion_eventos")
+}

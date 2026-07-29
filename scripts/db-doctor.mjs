@@ -6,7 +6,7 @@
  * el SQL Editor de Supabase. Si se despliega código nuevo sin correr su SQL,
  * Prisma consulta columnas/tablas que no existen y las páginas mueren con
  * "No pudimos cargar tu información" (ya pasó: hotfix 2026-07-14, perfil del
- * cliente, etc.). Este script compara `prisma/schema.prisma` (lo que el código
+ * cliente, etc.). Este script compara `prisma/schema/` (lo que el código
  * ESPERA) contra la base de datos real (lo que HAY) y lista exactamente qué
  * falta y qué migración lo crea.
  *
@@ -16,7 +16,7 @@
  *                                el SQL Editor de Supabase (no necesita acceso
  *                                local a la BD). Devuelve una tabla con lo que FALTA.
  *
- * CUÁNDO CORRERLO: antes y después de cada deploy que toque prisma/schema.prisma
+ * CUÁNDO CORRERLO: antes y después de cada deploy que toque prisma/schema/
  * o agregue carpetas en prisma/migrations/.
  */
 
@@ -25,9 +25,33 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SCHEMA_PATH = join(ROOT, 'prisma', 'schema.prisma')
+const SCHEMA_DIR = join(ROOT, 'prisma', 'schema')
 
-// ── 1) Parseo del schema.prisma ─────────────────────────────────────────────
+/**
+ * El esquema vive REPARTIDO en `prisma/schema/*.prisma` (un archivo por
+ * dominio). Prisma lee la carpeta entera como un solo esquema, y aquí se hace
+ * lo mismo: se concatenan los archivos y se parsea el resultado.
+ *
+ * El orden alfabético es indiferente —los bloques son independientes entre
+ * sí— pero se ordena de todas formas para que dos ejecuciones sobre el mismo
+ * código produzcan exactamente la misma salida.
+ */
+function leerEsquema() {
+  if (!existsSync(SCHEMA_DIR)) {
+    console.error(`No existe ${SCHEMA_DIR}. ¿Se movió el esquema?`)
+    process.exit(1)
+  }
+  const archivos = readdirSync(SCHEMA_DIR)
+    .filter((f) => f.endsWith('.prisma'))
+    .sort()
+  if (archivos.length === 0) {
+    console.error(`${SCHEMA_DIR} no contiene ningún .prisma`)
+    process.exit(1)
+  }
+  return archivos.map((f) => readFileSync(join(SCHEMA_DIR, f), 'utf8')).join('\n')
+}
+
+// ── 1) Parseo del esquema ───────────────────────────────────────────────────
 
 const SCALARS = new Set([
   'String', 'Boolean', 'Int', 'BigInt', 'Float', 'Decimal', 'DateTime', 'Json', 'Bytes',
@@ -110,7 +134,7 @@ function emitSql({ models, enums }) {
   const enumVals = [...enums.entries()].flatMap(([name, values]) =>
     values.map((v) => `('${name}','${v}')`)
   )
-  console.log(`-- DB DOCTOR (generado desde prisma/schema.prisma — solo lectura)
+  console.log(`-- DB DOCTOR (generado desde prisma/schema/ — solo lectura)
 -- Pega TODO en el SQL Editor de Supabase. Devuelve SOLO lo que FALTA:
 -- si el resultado está vacío, la BD está al día con el código.
 WITH columnas_esperadas(tabla, columna) AS (VALUES
@@ -219,7 +243,7 @@ async function runConnected({ models, enums }) {
 
 // ── main ────────────────────────────────────────────────────────────────────
 
-const parsed = parseSchema(readFileSync(SCHEMA_PATH, 'utf8'))
+const parsed = parseSchema(leerEsquema())
 if (process.argv.includes('--sql')) {
   emitSql(parsed)
 } else {

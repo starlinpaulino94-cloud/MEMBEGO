@@ -1,0 +1,347 @@
+// ──────────────────────────────────────────────────────────────────────────
+// CAJA, COBROS Y COMPROBANTES
+//
+// El dinero que entra: sesiones de caja, transacciones oficiales, tickets,
+// regalos y tarjetas de regalo.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─── Caja (POS) ──────────────────────────────────────────────────────────────
+
+enum CajaSesionEstado {
+  ABIERTA
+  CERRADA
+}
+
+/// Movimiento de efectivo dentro de un turno (fuera de cobros): entradas
+/// (aporte de fondo) y salidas (retiro, gasto, pago a proveedor).
+enum MovimientoCajaTipo {
+  ENTRADA
+  SALIDA
+}
+
+/// Regalos P2P (docs/REGALOS-P2P.md): qué se envía.
+enum RegaloTipo {
+  TRANSFERENCIA_USOS // mover usos de una compra/membresía propia
+  REGALO_COMPRA // comprar una promoción PARA otro usuario
+  REGALO_MEMBRESIA // regalar un plan (paga el remitente)
+}
+
+/// Ciclo de vida del regalo: nunca se aplica solo — el receptor lo acepta.
+enum RegaloEstado {
+  PENDIENTE
+  ACEPTADO
+  RECHAZADO
+  EXPIRADO
+  CANCELADO // cancelado por el remitente (o el admin) antes de aceptarse
+}
+
+/// Forma en que se recibió un cobro presencial. OTRO deja la puerta abierta a
+/// tarjetas/pasarelas futuras sin tocar el enum de nuevo.
+enum MetodoCobroTipo {
+  EFECTIVO
+  TRANSFERENCIA
+  OTRO
+}
+
+/// Sesión de caja de una sucursal (turno): apertura → cobros → cierre con
+/// arqueo. No se permite cobrar sin una sesión ABIERTA en la sucursal. El
+/// registro es permanente: nunca se elimina, solo se cierra.
+model CajaSesion {
+  id         String           @id @default(cuid())
+  companyId  String
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId String
+  sucursal   Sucursal         @relation(fields: [sucursalId], references: [id])
+  estado     CajaSesionEstado @default(ABIERTA)
+
+  /// Responsable del turno (quien abre la caja).
+  abiertaPorId String
+  abiertaPor   User    @relation("CajaAbiertaPor", fields: [abiertaPorId], references: [id])
+  cerradaPorId String?
+  cerradaPor   User?   @relation("CajaCerradaPor", fields: [cerradaPorId], references: [id])
+  /// Turno legible ("Mañana", "Tarde", "Noche") — opcional.
+  turno        String?
+
+  balanceInicial  Decimal  @default(0) @db.Decimal(10, 2)
+  /// Efectivo contado al cerrar.
+  balanceFinal    Decimal? @db.Decimal(10, 2)
+  /// Congelado al cerrar: inicial + cobros en EFECTIVO de la sesión.
+  balanceEsperado Decimal? @db.Decimal(10, 2)
+  /// Congelada al cerrar: final − esperado (faltante/sobrante).
+  diferencia      Decimal? @db.Decimal(10, 2)
+  observaciones   String?
+
+  abiertaAt DateTime  @default(now())
+  cerradaAt DateTime?
+
+  cobros      Transaction[]
+  movimientos MovimientoCaja[]
+
+  @@index([sucursalId, estado])
+  @@index([companyId, abiertaAt])
+  @@map("caja_sesiones")
+}
+
+/// Movimiento de efectivo intra-turno (G9): entrada/salida que no es un cobro.
+/// Afecta el arqueo (esperado = inicial + cobros efectivo + entradas − salidas).
+/// `registradoPor` guarda el nombre del empleado (documento), no su correo.
+model MovimientoCaja {
+  id              String             @id @default(cuid())
+  companyId       String
+  cajaSesionId    String
+  cajaSesion      CajaSesion         @relation(fields: [cajaSesionId], references: [id], onDelete: Cascade)
+  tipo            MovimientoCajaTipo
+  monto           Decimal            @db.Decimal(10, 2)
+  concepto        String
+  registradoPorId String?
+  registradoPor   String?
+  createdAt       DateTime           @default(now())
+
+  @@index([cajaSesionId])
+  @@index([companyId, createdAt])
+  @@map("movimientos_caja")
+}
+
+/// Regalo P2P (docs/REGALOS-P2P.md): el "sobre" que un cliente envía a otro.
+/// Al aceptarse usa la maquinaria existente (wallet ProductoCompra, flujo de
+/// pagos, Transaction Engine) para mover o crear el beneficio; este modelo
+/// solo guarda las partes, el contenido y el resultado. Mismo companyId
+/// siempre (los usos son de una empresa). Nada se elimina: estados finales.
+model Regalo {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tipo      RegaloTipo
+  estado    RegaloEstado @default(PENDIENTE)
+
+  // Partes. destinatarioId null = receptor aún sin cuenta (se reclama al
+  // registrarse vía destinatarioContacto).
+  remitenteId          String
+  remitente            Cliente  @relation("RegalosEnviados", fields: [remitenteId], references: [id], onDelete: Cascade)
+  destinatarioId       String?
+  destinatario         Cliente? @relation("RegalosRecibidos", fields: [destinatarioId], references: [id])
+  destinatarioContacto String? // tel/correo si aún no está en MembeGo
+
+  // Contenido (según tipo). Ids planos: se resuelven al mostrar/aceptar.
+  compraOrigenId     String? // TRANSFERENCIA_USOS desde la wallet
+  membershipOrigenId String? // TRANSFERENCIA_USOS desde lavados del plan
+  promocionId        String? // REGALO_COMPRA
+  planId             String? // REGALO_MEMBRESIA
+  usos               Int     @default(1)
+  mensaje            String? // dedicatoria visible para el receptor
+
+  // Resultado al aceptar (para trazabilidad y reimpresión de comprobantes).
+  compraDestinoId     String?
+  membershipDestinoId String?
+  txRemitenteId       String?
+  txDestinatarioId    String?
+
+  expiraAt   DateTime
+  createdAt  DateTime  @default(now())
+  resueltoAt DateTime?
+
+  @@index([destinatarioId, estado])
+  @@index([remitenteId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("regalos")
+}
+
+// Gift cards de monto abierto (Regalos P2P · extensión de R4): un cliente
+// paga un monto libre y el destinatario lo consume en el negocio mostrando el
+// código. El dinero entra como venta al confirmarse el pago; los consumos son
+// comprobantes de entrega (sin doble ingreso). No expiran.
+enum GiftCardEstado {
+  PENDIENTE_PAGO // creada, esperando que el comprador pague (código = referencia)
+  ACTIVA // pago confirmado: el saldo se puede consumir
+  AGOTADA // saldo en cero
+  CANCELADA // anulada por el negocio antes del pago
+}
+
+model GiftCard {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Código único GC-XXXXXX: referencia de pago Y llave de consumo.
+  codigo String         @unique
+  estado GiftCardEstado @default(PENDIENTE_PAGO)
+
+  /// Valor pagado y saldo restante por consumir.
+  monto Decimal @db.Decimal(10, 2)
+  saldo Decimal @db.Decimal(10, 2)
+
+  // Partes (ids planos, como Regalo). destinatarioClienteId null = receptor
+  // sin cuenta aún (se reclama al registrarse vía destinatarioContacto).
+  compradorClienteId    String
+  destinatarioClienteId String?
+  destinatarioContacto  String?
+  mensaje               String?
+
+  /// Cobro confirmado: método y Transaction SALE del ingreso.
+  metodoCobro MetodoCobroTipo?
+  txVentaId   String?
+
+  createdAt  DateTime  @default(now())
+  activadaAt DateTime?
+  resueltoAt DateTime? // agotada o cancelada
+
+  @@index([companyId, estado, createdAt])
+  @@index([destinatarioClienteId, estado])
+  @@index([compradorClienteId, createdAt])
+  @@map("gift_cards")
+}
+
+// ─────────────────────────────────────────────
+// FASE E4 · TRANSACTION & RECEIPT ENGINE
+// Toda operación (redención de membresía, promoción, beneficio, recompensa,
+// cupón, puntos, referido, venta futura…) genera una TRANSACCIÓN oficial con
+// ID único (TX-YYYYMMDD-NNNNNN), estados con historial de transiciones,
+// auditoría completa y comprobante reimprimible. Universal: sin lógica de
+// industria (la especificidad vive en snapshot/config JSON y plantillas).
+// ─────────────────────────────────────────────
+
+enum TransactionTipo {
+  MEMBERSHIP_REDEMPTION // uso de membresía (visita)
+  PROMOTION_USE
+  BENEFIT_USE
+  REWARD_REDEMPTION
+  COUPON_USE
+  POINTS_SPEND
+  REFERRAL
+  SALE // ventas futuras
+  PURCHASE // compras futuras
+  OTHER
+}
+
+enum TransactionEstado {
+  PENDING
+  VALIDATING
+  APPROVED
+  APPLIED
+  CANCELLED
+  REVERTED
+  EXPIRED
+  ERROR
+}
+
+model Transaction {
+  id           String            @id @default(cuid())
+  /// ID oficial único e irrepetible: TX-YYYYMMDD-NNNNNN. Se imprime en el
+  /// ticket, se codifica en el QR de la transacción y sirve para consultas.
+  codigo       String            @unique
+  /// Número de ticket secuencial por empresa (TCK-000123).
+  ticketNumero String
+  tipo         TransactionTipo
+  estado       TransactionEstado @default(PENDING)
+
+  companyId    String
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sucursalId   String?
+  sucursal     Sucursal?        @relation(fields: [sucursalId], references: [id])
+  clienteId    String?
+  cliente      Cliente?         @relation(fields: [clienteId], references: [id])
+  empleadoId   String?
+  empleado     User?            @relation("TransactionEmpleado", fields: [empleadoId], references: [id])
+  /// Caja/terminal (texto libre; con gestión de cajas se usa cajaSesionId).
+  caja         String?
+  /// Sesión de caja en la que se registró el cobro (POS).
+  cajaSesionId String?
+  cajaSesion   CajaSesion?      @relation(fields: [cajaSesionId], references: [id])
+  /// Monto cobrado y forma de cobro (para arqueo y reportes de ventas).
+  monto        Decimal?         @db.Decimal(10, 2)
+  metodoCobro  MetodoCobroTipo?
+
+  membershipId   String?
+  membership     Membership? @relation(fields: [membershipId], references: [id])
+  visitId        String?     @unique
+  visit          Visit?      @relation(fields: [visitId], references: [id])
+  /// QR de un solo uso que se consumió para crear esta transacción: permite
+  /// que re-escanear un QR usado muestre el historial completo de la operación.
+  qrTokenUsadoId String?     @unique
+  qrTokenUsado   QrToken?    @relation("TransactionQrUsado", fields: [qrTokenUsadoId], references: [id])
+
+  /// Etiquetas congeladas al momento de la operación (cliente, vehículo,
+  /// servicio, promoción, beneficio, membresía, plan, empleado, sucursal…):
+  /// el historial no cambia aunque cambien los datos maestros.
+  snapshot     Json    @default("{}")
+  /// Auditoría técnica: ip, userAgent, dispositivo, navegador.
+  auditoria    Json    @default("{}")
+  /// Resultado legible u observaciones del operador.
+  resultado    String?
+  errorDetalle String?
+  /// Duración de la operación (ms) para métricas de tiempo de atención.
+  executionMs  Int?
+
+  createdAt   DateTime  @default(now())
+  appliedAt   DateTime?
+  cancelledAt DateTime?
+  revertedAt  DateTime?
+
+  transiciones TransactionTransicion[]
+  impresiones  ReceiptImpresion[]
+
+  @@index([companyId, estado])
+  @@index([companyId, createdAt])
+  @@index([clienteId, createdAt])
+  @@index([empleadoId])
+  @@index([cajaSesionId])
+  @@map("transactions")
+}
+
+/// Historial inmutable de cambios de estado de una transacción.
+model TransactionTransicion {
+  id            String             @id @default(cuid())
+  transactionId String
+  transaction   Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  desde         TransactionEstado?
+  hacia         TransactionEstado
+  motivo        String?
+  userId        String?
+  user          User?              @relation(fields: [userId], references: [id])
+  createdAt     DateTime           @default(now())
+
+  @@index([transactionId, createdAt])
+  @@map("transaction_transitions")
+}
+
+/// Contadores atómicos para IDs secuenciales (TX por día, ticket por empresa).
+/// id = scope, ej. "TX:20260711" o "TICKET:companyId". Se incrementa con
+/// INSERT ... ON CONFLICT DO UPDATE ... RETURNING (una sola sentencia atómica).
+model TransactionCounter {
+  id  String @id
+  seq Int    @default(0)
+
+  @@map("transaction_counters")
+}
+
+/// Cada impresión/reimpresión de comprobante queda auditada.
+model ReceiptImpresion {
+  id            String      @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  empleadoId    String?
+  empleado      User?       @relation(fields: [empleadoId], references: [id])
+  /// false = impresión original; true = COPIA.
+  esCopia       Boolean     @default(false)
+  /// Nº de impresión de esta transacción (1 = original, 2+ = copias).
+  numero        Int
+  motivo        String?
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@map("receipt_prints")
+}
+
+/// Plantilla de comprobante por empresa (Receipt Engine): personalización de
+/// encabezado, pie, bloques, campos opcionales y ancho de papel SIN tocar
+/// código. `config` sigue el contrato ReceiptTemplateConfig de src/lib/receipts.
+model ReceiptTemplate {
+  id        String   @id @default(cuid())
+  companyId String   @unique
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("receipt_templates")
+}
