@@ -42,11 +42,35 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # Sin el secreto, Prisma falla con un error críptico ("DIRECT_URL resolved
+      # to an empty string"). Este paso lo dice claro y apunta a la causa real.
+      - name: Comprobar que el secreto está configurado
+        env:
+          URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "::error::Falta el secreto MIGRATIONS_DATABASE_URL (la DIRECT_URL de Supabase, puerto 5432)."
+            echo "Configúralo en Settings → Secrets → Actions. Ver docs/DEVOPS.md."
+            exit 1
+          fi
+
       - name: Aplicar migraciones pendientes
         env:
           DATABASE_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
           DIRECT_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
-        run: npx prisma migrate deploy
+        # Si `migrate deploy` falla, casi siempre es porque la base todavía NO se
+        # ha "baselinado": producción tiene todas las tablas (se aplicaron por el
+        # SQL Editor) pero `_prisma_migrations` está vacía, así que Prisma intenta
+        # recrear tablas que ya existen y falla en la primera. El baseline es un
+        # paso MANUAL de una sola vez, documentado en docs/DEVOPS.md. Este flujo
+        # NO lo automatiza a propósito: marcar migraciones como aplicadas sin
+        # correrlas es una operación delicada que no debe pasar sola en cada push.
+        run: |
+          if ! npx prisma migrate deploy; then
+            echo '::error::migrate deploy falló. Si es el PRIMER despliegue contra esta base, falta el baseline de una sola vez: corre "npm run migraciones:baseline -- --aplicar" con la DIRECT_URL ANTES de este flujo. Procedimiento completo en docs/DEVOPS.md.'
+            exit 1
+          fi
 
       - name: Desplegar en Vercel
         if: success()
