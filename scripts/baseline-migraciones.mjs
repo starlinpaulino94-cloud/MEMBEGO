@@ -58,7 +58,13 @@ const DIR = join(ROOT, 'prisma', 'migrations')
  * Al añadir una migración de reconciliación futura, va aquí. La regla: si su
  * SQL es idempotente Y corrige algo que la base todavía no tiene, no se marca.
  */
-const EJECUTAR_DE_VERDAD = ['20260770_reconciliacion']
+const EJECUTAR_DE_VERDAD = [
+  '20260770_reconciliacion',
+  // RLS · Capa 1. Si se marcara sin ejecutar, Prisma daría el historial por
+  // completo y la clave anónima seguiría leyendo `public` entera — con el
+  // agravante de que `migrate status` diría que todo está al día.
+  '20260771_rls_barrera_publica',
+]
 
 const C = { ok: '\x1b[32m', mal: '\x1b[31m', avi: '\x1b[33m', dim: '\x1b[2m', off: '\x1b[0m' }
 const aplicar = process.argv.includes('--aplicar')
