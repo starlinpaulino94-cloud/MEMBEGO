@@ -88,9 +88,15 @@ const nextConfig: NextConfig = {
               "font-src 'self' data:",
               // api.github.com se eliminó: no se usa en la app.
               "connect-src 'self' https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io",
+              // cardnet.com.do: el reto 3DS del banco se pinta en un iframe y el
+              // formulario que lo abre hace POST a la pasarela. Sin estas dos
+              // reglas, el navegador bloquea la pantalla del banco. Solo afecta a
+              // CARTOWN (única empresa con la pasarela); para las demás, nunca se
+              // carga ese iframe. Ver docs/PAGOS-CARDNET.md.
+              "frame-src 'self' https://*.cardnet.com.do",
               "frame-ancestors 'none'",
               "base-uri 'self'",
-              "form-action 'self'",
+              "form-action 'self' https://*.cardnet.com.do",
               "object-src 'none'",
             ].join('; '),
           },

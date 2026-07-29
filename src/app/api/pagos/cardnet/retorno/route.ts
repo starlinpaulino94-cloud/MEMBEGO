@@ -1,132 +1,83 @@
-import { NextResponse, type NextRequest } from 'next/server'
-import { getCardnetConfig, verificarTransaccionCardnet } from '@/lib/payments/cardnet'
-import {
-  buscarIntentoPorReferencia,
-  confirmarIntento,
-} from '@/modules/pagos/intentos'
+import { type NextRequest } from 'next/server'
 import { logErrorBd } from '@/lib/prisma-errors'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * RETORNO DE CARDNET — a donde vuelve el cliente después de pagar.
+ * RETORNO DEL RETO 3DS — puente entre la pantalla del banco y nuestra página.
  *
- * LA REGLA QUE ORDENA TODO ESTE ARCHIVO: lo que llega aquí NO decide nada.
- * Esta petición viaja por el navegador del cliente; cualquiera puede fabricar
- * una con `aprobado=true`. De todo lo que llega se toma UN solo dato —el
- * identificador de la sesión— y con él se le pregunta a CardNET,
- * servidor a servidor, si esa transacción se aprobó de verdad. La respuesta de
- * esa segunda llamada es la única que activa productos.
+ * CardNET deja al cliente aquí DESPUÉS del reto (OTP del banco). Este retorno
+ * ocurre DENTRO de un iframe: la página de compra (la "ventana padre") sigue
+ * viva con los datos de tarjeta EN MEMORIA. El trabajo de esta ruta es uno
+ * solo: avisarle a esa ventana padre "el reto terminó, sigue" con
+ * `postMessage`.
  *
- * Acepta GET y POST porque la modalidad "con pantalla" devuelve por POST, pero
- * el cliente puede acabar recargando la página (GET). Los dos caminos son
- * idempotentes: `confirmarIntento` activa una sola vez.
+ * NO cobra aquí. El cobro lo hace la ventana padre llamando a
+ * `/api/pagos/cardnet/completar` con la tarjeta que guardó — porque el cobro
+ * necesita el PAN/CVV, y este servidor no los tiene ni los quiere tener.
  *
- * PENDIENTE-CARDNET: los nombres de los parámetros del retorno salen del manual
- * de integración. `SESION_CANDIDATOS` recoge las variantes más probables para
- * que, cuando llegue el manual, el ajuste sea de una línea; si ninguno aparece,
- * la ruta lo dice claro en vez de adivinar.
+ * En el momento de este retorno el iframe ya volvió a NUESTRO dominio (CardNET
+ * redirige aquí), así que es del mismo origen que la ventana padre y el
+ * `postMessage` con nuestro origen funciona.
+ *
+ * Acepta GET y POST porque la pasarela puede volver por cualquiera de los dos.
+ * Lo único que se lee es el `rd` que pusimos al iniciar (nuestro id de intento),
+ * para que la ventana padre confirme que es su propio pago.
  */
 
-const SESION_CANDIDATOS = ['session', 'SESSION', 'sessionId', 'session-id', 'SESSION-ID']
-
-function leerSesion(params: URLSearchParams | FormData): string | null {
-  for (const clave of SESION_CANDIDATOS) {
-    const valor = params.get(clave)
-    if (typeof valor === 'string' && valor.trim()) return valor.trim()
+function leer(params: URLSearchParams | FormData, claves: string[]): string {
+  for (const c of claves) {
+    const v = params.get(c)
+    if (typeof v === 'string' && v.trim()) return v.trim()
   }
-  return null
+  return ''
 }
 
-/** Manda al cliente a una pantalla que entiende, nunca a un JSON crudo. */
-function redirigir(req: NextRequest, destino: string, params: Record<string, string>) {
-  const url = new URL(destino, req.nextUrl.origin)
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  // 303: convierte el POST de CardNET en un GET del navegador. Sin esto, el
-  // cliente que recarga reenvía el POST y ve el diálogo de reenvío del
-  // formulario.
-  return NextResponse.redirect(url, 303)
+function paginaPuente(rd: string, threeDS: string): Response {
+  // El origen al que se envía el mensaje es el nuestro: la ventana padre
+  // comprueba `event.origin` antes de creerle. El script es mínimo y no toca
+  // datos sensibles (no hay tarjeta aquí).
+  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? ''
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Procesando…</title></head>
+<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#334">
+<p>Verificando con tu banco…</p>
+<script>
+(function(){
+  var msg = { tipo: 'cardnet-reto-listo', rd: ${JSON.stringify(rd)}, threeDSServerTransID: ${JSON.stringify(threeDS)} };
+  var destino = ${JSON.stringify(base || '*')};
+  try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, destino); } catch (e) {}
+  // Si por alguna razón esto NO está en un iframe (el cliente abrió el reto en
+  // una pestaña), lo mandamos a su historial de pagos, que refleja el estado.
+  setTimeout(function(){ if (window.top === window.self) { window.location.href = '/cliente/pagos'; } }, 800);
+})();
+</script>
+</body></html>`
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
 }
 
-async function manejar(req: NextRequest, sesion: string | null, crudoEntrada: unknown) {
-  if (!sesion) {
-    logErrorBd('pagos:cardnet:retorno:sinSesion', new Error('Retorno sin identificador de sesión'), {
-      recibido: crudoEntrada,
-    })
-    return redirigir(req, '/cliente/pagos', { pago: 'error' })
-  }
+const RD = ['rd', 'RD']
+const TDS = ['threeDSServerTransID', 'threeDsServerTransId', 'transId', 'TransID']
 
-  const config = getCardnetConfig()
-  if (!config) {
-    logErrorBd('pagos:cardnet:retorno:sinConfig', new Error('CardNET no configurado'), { sesion })
-    return redirigir(req, '/cliente/pagos', { pago: 'error' })
-  }
-
-  const intento = await buscarIntentoPorReferencia(sesion)
-  if (!intento) {
-    // Sesión desconocida: o es de otro entorno, o alguien está probando URLs.
-    // No se activa nada y no se revela si la referencia existe.
-    logErrorBd('pagos:cardnet:retorno:intentoDesconocido', new Error('Sesión sin intento'), { sesion })
-    return redirigir(req, '/cliente/pagos', { pago: 'error' })
-  }
-
-  let verificado
-  try {
-    verificado = await verificarTransaccionCardnet(config, sesion)
-  } catch (e) {
-    // Incluye el caso PENDIENTE-CARDNET (integración sin terminar) y las caídas
-    // de red. En ninguno se activa: si no se pudo confirmar el cobro, no se
-    // entrega el producto. El intento queda para revisión manual.
-    logErrorBd('pagos:cardnet:retorno:verificacion', e, { intentoId: intento.id, sesion })
-    return redirigir(req, '/cliente/pagos', { pago: 'pendiente' })
-  }
-
-  const res = await confirmarIntento(intento.id, {
-    aprobada: verificado.aprobada,
-    autorizacion: verificado.autorizacion,
-    motivo: verificado.motivo,
-    crudo: verificado.crudo,
-  })
-
-  if (!res.ok) {
-    return redirigir(req, '/cliente/pagos', { pago: 'rechazado' })
-  }
-
-  // Aprobado: se lleva al cliente a lo que acaba de comprar.
-  if (res.compraId) {
-    return redirigir(req, `/cliente/mis-promociones/${res.compraId}`, { pago: 'ok' })
-  }
-  if (res.membershipId) {
-    return redirigir(req, '/cliente/membresia', { pago: 'ok' })
-  }
-  return redirigir(req, '/cliente/pagos', { pago: 'ok' })
+export async function GET(req: NextRequest) {
+  const p = req.nextUrl.searchParams
+  return paginaPuente(leer(p, RD), leer(p, TDS))
 }
 
 export async function POST(req: NextRequest) {
-  let sesion: string | null = null
-  let crudo: unknown = null
   try {
     const tipo = req.headers.get('content-type') ?? ''
     if (tipo.includes('application/json')) {
       const cuerpo = (await req.json()) as Record<string, unknown>
-      crudo = cuerpo
-      const params = new URLSearchParams()
-      for (const [k, v] of Object.entries(cuerpo)) params.set(k, String(v))
-      sesion = leerSesion(params)
-    } else {
-      const form = await req.formData()
-      crudo = Object.fromEntries(form.entries())
-      sesion = leerSesion(form)
+      const p = new URLSearchParams()
+      for (const [k, v] of Object.entries(cuerpo)) p.set(k, String(v))
+      return paginaPuente(leer(p, RD), leer(p, TDS))
     }
+    const form = await req.formData()
+    return paginaPuente(leer(form, RD), leer(form, TDS))
   } catch (e) {
-    logErrorBd('pagos:cardnet:retorno:cuerpoIlegible', e)
+    logErrorBd('pagos:cardnet:retorno:cuerpo', e)
+    // Aun sin poder leer el cuerpo, la ventana padre tiene sus propios handles;
+    // se le avisa igual para que intente completar.
+    return paginaPuente('', '')
   }
-  // Algunas integraciones mandan la sesión en la query aunque el método sea POST.
-  sesion ??= leerSesion(req.nextUrl.searchParams)
-  return manejar(req, sesion, crudo)
-}
-
-export async function GET(req: NextRequest) {
-  const sesion = leerSesion(req.nextUrl.searchParams)
-  return manejar(req, sesion, Object.fromEntries(req.nextUrl.searchParams.entries()))
 }
