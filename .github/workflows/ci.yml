@@ -1,0 +1,186 @@
+# Puerta automática antes de producción (auditoría · C-02).
+#
+# Antes de este archivo no existía `.github/`: los 113 tests, el chequeo de
+# tipos, el linter y el build solo se ejecutaban si alguien se acordaba. Un
+# error de tipado o un test roto llegaba a producción sin encontrarse con nada.
+#
+# Estos cuatro trabajos deben marcarse como REQUIRED CHECKS en la protección de
+# la rama por defecto; si no, siguen siendo informativos y el agujero continúa
+# abierto. Ver docs/DEVOPS.md.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Un push nuevo cancela la ejecución anterior de la misma rama: no tiene
+# sentido pagar minutos por validar un commit que ya quedó atrás.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `prisma generate` (postinstall) y `next build` necesitan estas variables
+  # aunque no se conecten a nada. Son valores de relleno: el CI no toca ninguna
+  # base ni ningún servicio real.
+  DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+  DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+  NEXT_PUBLIC_SUPABASE_URL: https://ci.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+  SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verificar:
+    name: Tipos, linter y pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tipos
+        run: npx tsc --noEmit
+      - name: Linter
+        run: npx eslint src tests --max-warnings=0
+      - name: Pruebas
+        run: npm test
+
+  construir:
+    name: Build de producción
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Presupuestos de rendimiento (Fase 7 · punto 29). El JavaScript de una
+      # aplicación solo crece, y nunca por una decisión: crece por cien
+      # decisiones pequeñas que nadie mide. Esto no prohíbe crecer; prohíbe
+      # crecer sin darse cuenta. Ver scripts/presupuesto-bundle.mjs.
+      - name: Presupuestos de bundle
+        run: npm run presupuesto
+
+  dependencias:
+    name: Vulnerabilidades en dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Solo dependencias de PRODUCCIÓN: las de desarrollo no se despliegan, y
+      # bloquear el CI por una vulnerabilidad de ESLint no protege a nadie.
+      - name: npm audit (producción)
+        run: npm audit --omit=dev --audit-level=high
+
+  esquema:
+    name: Esquema de base de datos
+    runs-on: ubuntu-latest
+
+    # PostgreSQL de verdad, y no el `DATABASE_URL` de relleno del resto de los
+    # trabajos: `migrate diff --from-migrations` necesita una base SOMBRA donde
+    # replicar el historial completo para compararlo con el esquema. Sin ella
+    # el paso no puede hacer su trabajo — que es justamente lo que pasaba
+    # cuando llevaba `continue-on-error: true`.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: sombra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validar el esquema
+        run: npx prisma validate
+      # Detecta el fallo clásico: alguien edita el esquema y olvida escribir la
+      # migración. El deploy iría adelantado a la base y —por la tolerancia
+      # fail-open del código— fallaría en silencio.
+      #
+      # ESTA COMPROBACIÓN LLEVABA `continue-on-error: true` Y ERA DECORATIVA.
+      # No podía funcionar: el historial de migraciones no se podía reproducir
+      # desde cero (le faltaba el principio), así que este paso fallaba SIEMPRE
+      # por un motivo que no tenía nada que ver con lo que pretendía vigilar.
+      # Un check que falla siempre y no bloquea nada es peor que no tenerlo:
+      # ocupa un sitio en la lista y da la sensación de que algo se está
+      # comprobando.
+      #
+      # Arreglado el historial (0_genesis + reparación + reconciliación), ahora
+      # dice la verdad y BLOQUEA. Ver docs/RENDIMIENTO.md § 2.
+      - name: Migración pendiente sin escribir
+        run: |
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema \
+            --shadow-database-url "postgresql://postgres:ci@localhost:5432/sombra" \
+            --exit-code && echo "Sin diferencias." || {
+              echo "::error::El esquema (prisma/schema/) tiene cambios sin migración. Crea la migración antes de mezclar."
+              exit 1
+            }
+
+      # ── Aislamiento entre empresas (auditoría · A-01) ──────────────────────
+      #
+      # Las políticas de RLS se DEDUCEN del esquema: 80 tablas por su columna
+      # `companyId` y 29 más siguiendo claves foráneas. Nadie las ha leído una
+      # por una, así que comprobar que existen no dice nada. Lo que se comprueba
+      # aquí es el comportamiento: se levanta la base entera, se siembran dos
+      # empresas y se mira si una ve a la otra.
+      #
+      # Corre en CI y no solo a mano porque el riesgo es una tabla NUEVA: se
+      # añade un modelo sin `companyId` y sin clave foránea al inquilino, y el
+      # agujero entra con un cambio que por lo demás está bien.
+      - name: Aislamiento entre empresas (RLS)
+        env:
+          DATABASE_URL: postgresql://postgres:ci@localhost:5432/sombra
+          DIRECT_URL: postgresql://postgres:ci@localhost:5432/sombra
+        run: |
+          # Base limpia con el esquema actual. `db push` y no `migrate deploy`:
+          # aquí interesa el esquema de HOY, no reproducir el historial — de eso
+          # ya se encarga el paso anterior.
+          npx prisma db push --skip-generate --accept-data-loss
+          npx prisma generate
+
+          # Los roles de Supabase no existen en un postgres pelado. Se crean
+          # para que la Capa 1 pueda revocarles los permisos de verdad, en vez
+          # de saltárselo con un "el rol no existe aquí".
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            create role anon nologin;
+            create role authenticated nologin;
+            grant usage on schema public to anon, authenticated;
+            grant all on all tables in schema public to anon, authenticated;"
+
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f prisma/migrations/20260771_rls_barrera_publica/migration.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v clave=ci \
+            -f prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql
+
+          # Capa 1: nada de `public` debe quedar al alcance de la clave anónima.
+          exp=$(psql "$DATABASE_URL" -Atc "select count(*) from information_schema.role_table_grants where table_schema='public' and grantee in ('anon','authenticated')")
+          if [ "$exp" != "0" ]; then
+            echo "::error::$exp tabla(s) siguen alcanzables por la clave anónima (anon/authenticated)."
+            exit 1
+          fi
+
+          # Capa 2: el aislamiento, comprobado sembrando datos reales.
+          npm run rls:probar

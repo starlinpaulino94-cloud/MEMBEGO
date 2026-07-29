@@ -115,7 +115,7 @@ export default async function PromocionesDisponiblesPage() {
 
   const sinPromos =
     feed != null &&
-    feed.seguidas.length === 0 &&
+    feed.misEmpresas.length === 0 &&
     feed.destacadas.length === 0 &&
     feed.nuevas.length === 0 &&
     feed.expiranPronto.length === 0 &&
@@ -170,15 +170,15 @@ export default async function PromocionesDisponiblesPage() {
             guardadasIds={guardadasIds}
           />
 
-          {/* Empresas que sigo */}
+          {/* Mis empresas: donde soy cliente + las que sigo */}
           <SeccionPromos
             icon={Star}
             iconBg="bg-warning/12"
             iconClass="fill-amber-400 text-warning-foreground"
-            titulo="De empresas que sigues"
-            descripcion="Tus empresas favoritas aparecen primero."
-            count={feed.seguidas.length}
-            promociones={feed.seguidas}
+            titulo="De tus empresas"
+            descripcion="Donde eres cliente y las que sigues. Tus favoritas primero."
+            count={feed.misEmpresas.length}
+            promociones={feed.misEmpresas}
             guardadasIds={guardadasIds}
           />
 

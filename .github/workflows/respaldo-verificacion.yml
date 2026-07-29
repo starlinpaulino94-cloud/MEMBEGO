@@ -1,0 +1,110 @@
+# SIMULACRO DE RESTAURACIÓN SEMANAL (auditoría · A-08, Fase 5).
+#
+# El hallazgo A-08 no era "no hay respaldos" — Supabase los hace. Era que nadie
+# había restaurado uno nunca. Un respaldo sin restaurar es una hipótesis, y la
+# forma habitual de que deje de serlo es un desastre.
+#
+# Este flujo convierte el simulacro en algo que pasa solo todos los lunes:
+# levanta un PostgreSQL desechable, vuelca producción dentro, y comprueba que
+# lo que quedó sirve de verdad (datos + CREDENCIALES + esquema al día).
+# Si falla, avisa el lunes por la mañana en vez del día del incendio.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# DECISIÓN IMPORTANTE: EL VOLCADO NO SE GUARDA
+#
+# Sería cómodo subirlo como artefacto del flujo y tener así una copia fuera de
+# Supabase. NO se hace, y es a propósito: ese archivo contiene los datos
+# personales de todos los clientes —nombres, teléfonos, correos, historial de
+# consumo— y los artefactos de Actions los puede descargar cualquiera con
+# acceso de lectura al repositorio, se guardan 90 días por defecto y no están
+# cifrados con una clave nuestra. Sería mover la base de datos completa a un
+# sitio con menos control que el original.
+#
+# La copia fuera de Supabase hace falta igual (docs/RECUPERACION.md § "Perder
+# el proyecto entero"), pero tiene que ir a almacenamiento cifrado y con
+# control de acceso propio, no a un artefacto de CI.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# REQUIERE el secreto `MIGRATIONS_DATABASE_URL` (la DIRECT_URL de Supabase,
+# puerto 5432). Es el mismo que usa deploy-migraciones.yml. Solo se LEE.
+name: Simulacro de restauración
+
+on:
+  schedule:
+    # Lunes 12:00 UTC = 08:00 en Santo Domingo (UTC-4). A esa hora hay quien
+    # lo mire; un fallo a las 3 de la mañana se lee dos días después.
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: simulacro-restauracion
+  cancel-in-progress: false
+
+jobs:
+  restaurar:
+    name: Volcar, restaurar y verificar
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      # La base desechable donde se restaura. Vive y muere con el trabajo: no
+      # hay forma de que este flujo escriba en nada permanente.
+      destino:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: simulacro
+          POSTGRES_DB: restauracion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # El cliente que trae ubuntu-latest puede ser más viejo que el servidor
+      # de Supabase, y pg_dump se niega a volcar una base de versión superior.
+      # Se instala el 17 desde el repositorio oficial de PostgreSQL.
+      - name: Cliente de PostgreSQL 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Simulacro
+        env:
+          RESPALDO_ORIGEN: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+          RESPALDO_DESTINO: postgresql://postgres:simulacro@localhost:5432/restauracion
+        run: |
+          if [ -z "$RESPALDO_ORIGEN" ]; then
+            echo "::error::Falta el secreto MIGRATIONS_DATABASE_URL. Ver docs/DEVOPS.md."
+            exit 1
+          fi
+          node scripts/verificar-respaldo.mjs
+
+      # El volcado se borra solo al terminar el script, pero si algo se cortó a
+      # medias el archivo temporal podría seguir en el disco del runner. El
+      # runner es efímero; esto es cinturón sobre tirantes.
+      - name: No dejar rastro del volcado
+        if: always()
+        run: rm -rf /tmp/membego-respaldo-*
+
+      - name: Qué hacer si esto falló
+        if: failure()
+        run: |
+          echo "::warning::El simulacro de restauración falló. No lo dejes para el lunes que viene:"
+          echo "::warning::el respaldo de producción puede no servir. Ver docs/RECUPERACION.md"
+          echo "::warning::y docs/runbooks/restaurar-datos-borrados.md."

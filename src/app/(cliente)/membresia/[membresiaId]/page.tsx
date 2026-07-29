@@ -21,7 +21,7 @@ import { QRShareCard } from '@/components/qr/QRShareCard'
 import { OpcionesPago } from '@/components/membresia/OpcionesPago'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney } from '@/lib/format'
-import { ofrecerTransferencia } from '@/modules/pagos/metodosDisponibles'
+import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
 
 export const metadata = {
   title: 'Detalles de Membresía',
@@ -148,6 +148,12 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
   const transferenciaActiva =
     needsPayment &&
     (await ofrecerTransferencia(membership.cliente.companyId, comprometidaConTransferencia))
+
+  // Tarjeta (CardNET): disponible si la empresa la tiene encendida, configurada
+  // y no es demo. `getMetodosParaCompraNueva` ya encapsula esa regla.
+  const tarjetaDisponible =
+    needsPayment &&
+    (await getMetodosParaCompraNueva(membership.cliente.companyId)).disponibles.includes('CARDNET')
 
   const [metodosPago, sucursales] = needsPayment
     ? await Promise.all([
@@ -286,6 +292,8 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
                 }
                 referencia={membership.referencia}
                 transferenciaDisponible={transferenciaActiva}
+                tarjetaDisponible={tarjetaDisponible}
+                montoTexto={`RD$${montoAPagar.toLocaleString('es-DO')}`}
               />
             </div>
           </section>

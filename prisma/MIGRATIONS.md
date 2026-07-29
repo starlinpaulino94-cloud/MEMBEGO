@@ -12,9 +12,12 @@ Este documento aclara los caminos soportados.
 
 ```
 prisma/
-├── schema.prisma            # Fuente de verdad del modelo de datos
+├── schema/                  # Fuente de verdad del modelo de datos (un archivo por dominio)
+├── migrations/              # Historial COMPLETO y reproducible desde cero (74)
+│   ├── 0_genesis/           # El esquema que existía antes de la 1ª migración
+│   └── 20260770_reconciliacion/  # Alinea la base con el esquema. Idempotente
 ├── baseline/
-│   └── full_schema.sql      # Esquema COMPLETO actual, generado desde schema.prisma
+│   └── full_schema.sql      # Esquema COMPLETO actual, generado desde prisma/schema/
 ├── migrations/              # Migraciones incrementales que corre `migrate deploy`
 │   ├── 20260705_add_multi_membership_support/
 │   ├── 20260706_add_marketplace_fase2/
@@ -26,7 +29,7 @@ prisma/
 - **`baseline/full_schema.sql`**: crea TODO el esquema actual (enums, tablas,
   índices, claves foráneas). Se regenera con:
   ```bash
-  npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/baseline/full_schema.sql
+  npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema --script > prisma/baseline/full_schema.sql
   ```
 - **`legacy_sql/`**: scripts que se ejecutaron manualmente en su momento para
   construir el esquema. **Ya no se usan**; se conservan solo como historia. No
@@ -38,7 +41,7 @@ prisma/
 
 Opción rápida (desarrollo):
 ```bash
-bun run db:push        # aplica schema.prisma directamente
+bun run db:push        # aplica prisma/schema/ directamente
 bun run db:seed        # datos de prueba
 ```
 

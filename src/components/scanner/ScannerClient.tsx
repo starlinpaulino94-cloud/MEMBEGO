@@ -30,6 +30,11 @@ import { ConfirmPromo } from '@/components/scanner/ConfirmPromo'
 import { TransaccionRecord } from '@/components/scanner/TransaccionRecord'
 import { ScannerErrorBoundary } from '@/components/scanner/ScannerErrorBoundary'
 import { useHidScanner } from '@/components/scanner/useHidScanner'
+import { useColaOffline } from '@/components/scanner/useColaOffline'
+import { IndicadorCola } from '@/components/scanner/IndicadorCola'
+import { aFormData, type Pendiente } from '@/modules/scanner/colaOffline'
+import { confirmarVisita } from '@/modules/visitas/actions'
+import { confirmarCanjePromocion } from '@/modules/promociones/canjeActions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -321,6 +326,24 @@ export function ScannerClient({
     else toast.success('Predeterminado de la empresa actualizado.')
   }
 
+  /**
+   * COLA SIN CONEXIÓN (Fase 7 · punto 28).
+   *
+   * Vive aquí, en el componente que está montado durante toda la sesión del
+   * escáner, y no dentro de ConfirmVisit/ConfirmPromo: esos se desmontan en
+   * cuanto el empleado pasa al siguiente coche, y con ellos se iría el bucle
+   * de reenvío. Además, dos instancias del hook escribirían sobre el mismo
+   * `localStorage` y se pisarían.
+   */
+  const cola = useColaOffline(
+    useCallback(async (p: Pendiente) => {
+      const fd = aFormData(p)
+      return p.tipo === 'canje'
+        ? confirmarCanjePromocion({}, fd)
+        : confirmarVisita({}, fd)
+    }, [])
+  )
+
   // ── Pantallas de resultado (mismas que antes) ───────────────────────────────
   if (txRecord) {
     return (
@@ -337,7 +360,8 @@ export function ScannerClient({
     return (
       <ScannerErrorBoundary onReset={reset}>
         <Card className="border-border/60 shadow-card-hover animate-scale-in">
-          <CardContent className="p-6">
+          <CardContent className="space-y-4 p-6">
+            <IndicadorCola cola={cola} />
             <ConfirmPromo compra={promoCompra} sucursales={sucursales} onDone={reset} onScanNext={scanNext} />
           </CardContent>
         </Card>
@@ -348,8 +372,9 @@ export function ScannerClient({
     return (
       <ScannerErrorBoundary onReset={reset}>
         <Card className="border-border/60 shadow-card-hover animate-scale-in">
-          <CardContent className="p-6">
-            <ConfirmVisit cliente={cliente} sucursales={sucursales} onDone={reset} onScanNext={scanNext} />
+          <CardContent className="space-y-4 p-6">
+            <IndicadorCola cola={cola} />
+            <ConfirmVisit cliente={cliente} sucursales={sucursales} onDone={reset} onScanNext={scanNext} encolar={cola.encolar} />
           </CardContent>
         </Card>
       </ScannerErrorBoundary>
@@ -358,6 +383,8 @@ export function ScannerClient({
 
   return (
     <div className="space-y-4 animate-fade-up">
+      <IndicadorCola cola={cola} />
+
       {errorState && (
         <ErrorScreen errorCode={errorState.code} errorMessage={errorState.message} onScanNext={scanNext} onClose={reset} />
       )}

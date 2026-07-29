@@ -1,0 +1,87 @@
+// ──────────────────────────────────────────────────────────────────────────
+// AGENDA Y CITAS
+//
+// Reservas del cliente. Ver docs/CITAS.md.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─── Módulo de Citas ─────────────────────────────────────────────────────────
+
+enum CitaEstado {
+  PENDIENTE // reservada; la empresa aún debe confirmarla (autoConfirmar=false)
+  CONFIRMADA
+  COMPLETADA
+  CANCELADA
+  NO_ASISTIO
+}
+
+// ─── Módulo de Citas ─────────────────────────────────────────────────────────
+
+/// Configuración de la agenda de citas por empresa: límites por turno (hora) y
+/// por día, duración del turno, horario semanal y reglas de reserva.
+model AgendaConfig {
+  id                String   @id @default(cuid())
+  companyId         String   @unique
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// El módulo se enciende explícitamente desde el panel.
+  activa            Boolean  @default(false)
+  /// Duración de cada turno en minutos (los horarios se dividen en turnos).
+  duracionMin       Int      @default(30)
+  /// LÍMITE POR HORA/TURNO: citas simultáneas máximas en un mismo turno.
+  maxPorSlot        Int      @default(1)
+  /// LÍMITE POR DÍA: citas máximas del día (0 = sin límite diario).
+  maxPorDia         Int      @default(0)
+  /// Horas mínimas de anticipación para reservar.
+  anticipacionHoras Int      @default(1)
+  /// Hasta cuántos días hacia adelante se puede reservar.
+  ventanaDias       Int      @default(14)
+  /// true = la cita nace CONFIRMADA; false = nace PENDIENTE y el panel aprueba.
+  autoConfirmar     Boolean  @default(true)
+  /// Instrucciones que ve el cliente al reservar (opcional).
+  notas             String?
+  /// Horario semanal: { "1": [{"desde":"08:00","hasta":"18:00"}], ... }
+  /// Clave = día de semana (0=domingo … 6=sábado) en la zona horaria de la
+  /// empresa; días ausentes = cerrado. Validado en código (src/modules/citas).
+  horarios          Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("agenda_configs")
+}
+
+/// Cita reservada por un cliente. `inicio` se guarda en UTC; el turno se
+/// calcula y se muestra en la zona horaria de la empresa.
+model Cita {
+  id                String          @id @default(cuid())
+  companyId         String
+  company           Company         @relation(fields: [companyId], references: [id])
+  clienteId         String
+  cliente           Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  sucursalId        String?
+  sucursal          Sucursal?       @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  vehiculoId        String?
+  vehiculo          Vehiculo?       @relation(fields: [vehiculoId], references: [id], onDelete: SetNull)
+  inicio            DateTime
+  duracionMin       Int
+  /// Qué viene a hacer (texto libre del cliente o del negocio).
+  servicio          String?
+  notaCliente       String?
+  notaInterna       String?
+  estado            CitaEstado      @default(CONFIRMADA)
+  /// 'CLIENTE' | 'NEGOCIO' cuando estado = CANCELADA.
+  canceladaPor      String?
+  motivoCancelacion String?
+  atendidaPorId     String?
+  atendidaPor       User?           @relation("CitaAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: SetNull)
+  /// Recompensa gratis que el cliente viene a canjear: su QR se habilita al
+  /// agendar esta cita (docs/SEGUIMIENTO-BENEFICIOS.md · cita antes del QR).
+  compraId          String?
+  compra            ProductoCompra? @relation("CitaCompra", fields: [compraId], references: [id], onDelete: SetNull)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Agenda del día por empresa y "mis citas" del cliente.
+  @@index([companyId, inicio])
+  @@index([clienteId, inicio])
+  @@index([compraId])
+  @@map("citas")
+}

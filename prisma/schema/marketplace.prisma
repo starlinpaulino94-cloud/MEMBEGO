@@ -1,0 +1,93 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MARKETPLACE PÚBLICO
+//
+// Lo que hace que una empresa sea descubrible: categorías, reseñas y la capa
+// social (seguir, guardar).
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// FASE 2: MARKETPLACE
+// ─────────────────────────────────────────────
+
+model BusinessCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  icon        String?
+  description String?
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  companies   CompanyToCategory[]
+  interesados UserInteres[]
+
+  @@index([active, order])
+  @@map("business_categories")
+}
+
+model CompanyToCategory {
+  id         String           @id @default(cuid())
+  companyId  String
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   BusinessCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+
+  @@unique([companyId, categoryId])
+  @@index([companyId])
+  @@index([categoryId])
+  @@map("company_to_categories")
+}
+
+model CompanyRating {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  rating    Int // 1-5
+  comment   String?
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, clienteId])
+  @@index([companyId])
+  @@index([rating])
+  @@map("company_ratings")
+}
+
+// ─── FASE 3: Capa social del marketplace ────────────────────────────────────
+// Seguir empresas: el cliente (User, cross-empresa) sigue negocios para
+// recibir sus promociones y novedades. esFavorita las prioriza en toda la app.
+model CompanyFollow {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  esFavorita Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@index([userId, esFavorita])
+  @@map("company_follows")
+}
+
+// Promociones guardadas por el cliente ("Mis promociones guardadas").
+model PromocionGuardada {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promocionId String
+  promocion   Promocion @relation(fields: [promocionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, promocionId])
+  @@index([userId, createdAt])
+  @@index([promocionId])
+  @@map("promociones_guardadas")
+}

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
+import { SIN_DEMO } from '@/modules/demo'
 
 // ─── FASE 3: capa social — seguir empresas y guardar promociones ────────────
 
@@ -23,7 +24,10 @@ export interface EmpresaSeguida {
 /** Empresas que sigue el usuario, favoritas primero. */
 export async function getMisEmpresas(dbUserId: string): Promise<EmpresaSeguida[]> {
   const follows = await prisma.companyFollow.findMany({
-    where: { userId: dbUserId, company: { isActive: true, isPublished: true } },
+    // Seguir una empresa de práctica ya está bloqueado en la acción, pero el
+    // filtro va también aquí: si alguna vez se marca como demo una empresa que
+    // ya tenía seguidores, esos seguidores dejan de verla en el acto.
+    where: { userId: dbUserId, company: { isActive: true, isPublished: true, ...SIN_DEMO } },
     orderBy: [{ esFavorita: 'desc' }, { createdAt: 'desc' }],
     select: {
       id: true,
@@ -130,7 +134,15 @@ const PROMO_SELECT = {
   },
 } as const
 
-/** Condición de promoción vigente y visible públicamente. */
+/**
+ * Condición de promoción vigente y visible públicamente.
+ *
+ * `esDemo: false` es lo que impide que una promoción de una empresa de
+ * práctica aparezca en las secciones de DESCUBRIMIENTO (destacadas, nuevas,
+ * las que vencen, recomendadas). Ahí el cliente no pidió ver esa empresa: se
+ * la estamos ofreciendo nosotros, y ofrecerle un negocio que no existe le hace
+ * perder el viaje.
+ */
 function promoVigente(now: Date) {
   return {
     activo: true,
@@ -138,19 +150,40 @@ function promoVigente(now: Date) {
     visibilidad: 'publica',
     vigenciaDesde: { lte: now },
     OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-    company: { isPublished: true, isActive: true },
+    company: { isPublished: true, isActive: true, ...SIN_DEMO },
   }
 }
 
-/** Como promoVigente, pero sin restringir visibilidad (para miembros). */
-function promoVigenteMiembro(now: Date) {
-  const { visibilidad: _v, ...rest } = promoVigente(now)
-  return rest
+/**
+ * Promociones de las empresas PROPIAS de la persona: las que sigue y aquellas
+ * donde tiene ficha de cliente.
+ *
+ * Aquí NO se exige `isPublished` ni se excluyen las de práctica, y es
+ * deliberado: quien es cliente de una empresa tiene que ver sus promociones
+ * aunque el negocio todavía no se haya publicado en la vitrina — y quien entró
+ * por el enlace de la empresa de práctica es cliente de ella. Sin esta
+ * excepción, el entrenamiento enseñaría una pantalla de promociones vacía.
+ *
+ * El acotado real lo pone quien llama, con `companyId: { in: ... }`: solo
+ * llegan aquí empresas que ya se comprobó que son suyas.
+ */
+function promoDeMisEmpresas(now: Date) {
+  return {
+    activo: true,
+    archivada: false,
+    vigenciaDesde: { lte: now },
+    OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+    company: { isActive: true },
+  }
 }
 
 export interface PromoFeed {
-  /** Promos de empresas que el usuario sigue (favoritas primero). */
-  seguidas: PromotionPublic[]
+  /**
+   * Promos de las empresas PROPIAS: las que sigue y aquellas donde es cliente
+   * (favoritas primero). Incluye las que aún no están publicadas y las de
+   * práctica — si son suyas, las ve.
+   */
+  misEmpresas: PromotionPublic[]
   /** Destacadas del marketplace (sin repetir las de arriba). */
   destacadas: PromotionPublic[]
   /** Publicadas en los últimos 14 días (sin repetir). */
@@ -198,14 +231,22 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
       ).map((c) => c.companyId)
     : []
 
-  const [seguidasRaw, destacadasRaw, nuevasRaw, expiranRaw, empresasRecomendadas] =
+  const misEmpresasIds = [...new Set([...seguidasIds, ...miembroIds])]
+
+  const [misRaw, destacadasRaw, nuevasRaw, expiranRaw, empresasRecomendadas] =
     await Promise.all([
-      seguidasIds.length > 0
+      // MIS EMPRESAS: las que sigo + aquellas donde soy cliente. Las segundas
+      // se incluyen aunque no las siga porque son suyas de verdad — y porque
+      // es el único camino por el que un cliente de una empresa de práctica (o
+      // de una que aún no se publicó) ve sus propias promociones.
+      misEmpresasIds.length > 0
         ? prisma.promocion.findMany({
             where: {
-              ...promoVigenteMiembro(now),
-              companyId: { in: seguidasIds },
-              // Públicas de las seguidas + privadas solo donde es miembro.
+              ...promoDeMisEmpresas(now),
+              companyId: { in: misEmpresasIds },
+              // Públicas de cualquiera de las mías + privadas solo donde soy
+              // cliente: una promo privada es para los miembros, no para
+              // cualquiera que le dio a seguir.
               AND: [
                 {
                   OR: [
@@ -246,15 +287,15 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
       getEmpresasRecomendadas(dbUserId, seguidasIds, 4),
     ])
 
-  // Favoritas primero dentro de "seguidas".
-  const seguidas = [...seguidasRaw].sort((a, b) => {
+  // Favoritas primero dentro de "mis empresas".
+  const misEmpresas = [...misRaw].sort((a, b) => {
     const favA = favoritasIds.has(a.company.id) ? 1 : 0
     const favB = favoritasIds.has(b.company.id) ? 1 : 0
     return favB - favA
   }) as PromotionPublic[]
 
   // Deduplicación por prioridad de sección.
-  const vistos = new Set(seguidas.map((p) => p.id))
+  const vistos = new Set(misEmpresas.map((p) => p.id))
   const dedupe = (rows: typeof destacadasRaw, limit: number) => {
     const out: PromotionPublic[] = []
     for (const p of rows) {
@@ -283,7 +324,7 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
       : []
   const recomendadas = dedupe(recomendadasRaw, 6)
 
-  return { seguidas, destacadas, nuevas, expiranPronto, recomendadas, empresasRecomendadas }
+  return { misEmpresas, destacadas, nuevas, expiranPronto, recomendadas, empresasRecomendadas }
 }
 
 /**
@@ -328,6 +369,9 @@ async function getEmpresasRecomendadas(
     const baseWhere = {
       isPublished: true,
       isActive: true,
+      // Recomendar es ofrecer. Una empresa de práctica nunca se le ofrece a
+      // nadie: se llega a ella por su enlace de registro o no se llega.
+      ...SIN_DEMO,
       ...(seguidasIds.length > 0 && { id: { notIn: seguidasIds } }),
     }
 

@@ -5,6 +5,14 @@ import { sessionCookieDomain } from '@/lib/site'
 import { ROLE_HOME, ROUTE_PROTECTION, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
 import { adminSectionForPath, canAccessAdminSection } from '@/lib/auth/permissions'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
+import {
+  COOKIE_MANTENIMIENTO,
+  HORAS_PASE,
+  PARAM_MANTENIMIENTO,
+  decidirMantenimiento,
+  esRutaDeApi,
+  htmlMantenimiento,
+} from '@/modules/mantenimiento'
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions }
 
@@ -36,10 +44,78 @@ function hasSupabaseAuthCookie(request: NextRequest) {
 }
 
 export async function proxy(request: NextRequest) {
+  // Nonce por petición para la CSP (auditoría · A-04).
+  //
+  // Se EMITE ya, pero la CSP todavía lleva `'unsafe-inline'` (ver la nota en
+  // next.config.ts). Tenerlo disponible es lo que permite dar el último paso
+  // —cambiar `'unsafe-inline'` por `'nonce-…'`— cuando se pueda verificar en
+  // navegador que ni la hidratación de Next ni el escáner se rompen. Emitirlo
+  // ahora no cuesta nada y evita que ese día haya que tocar el proxy bajo
+  // presión.
+  //
+  // `crypto.randomUUID` y no un contador: un nonce predecible es un nonce
+  // inútil, porque un XSS podría incluirlo en el script que inyecta.
+  const nonce = crypto.randomUUID().replace(/-/g, '')
+  request.headers.set('x-nonce', nonce)
+
   let response = NextResponse.next({ request })
   const path = request.nextUrl.pathname
   const matched = matchProtected(path)
   const isLoginPage = path === '/login' || path === '/acceso'
+
+  // MODO MANTENIMIENTO (auditoría · A-08, Fase 5) — lo PRIMERO que se decide.
+  //
+  // Va antes de Supabase, antes de la cookie de canal y antes de cualquier
+  // consulta, porque el momento en que se enciende es justo aquel en que no se
+  // puede confiar en la base: restauración en curso, migración a medias,
+  // esquema desfasado. Todo lo que haya después de esta comprobación es código
+  // que puede fallar; esto no.
+  //
+  // Ver docs/RECUPERACION.md y docs/runbooks/modo-mantenimiento.md.
+  const mantenimiento = decidirMantenimiento({
+    modo: process.env.MODO_MANTENIMIENTO,
+    pase: process.env.MANTENIMIENTO_PASE,
+    path,
+    cookie: request.cookies.get(COOKIE_MANTENIMIENTO)?.value,
+    parametro: request.nextUrl.searchParams.get(PARAM_MANTENIMIENTO),
+  })
+
+  if (mantenimiento === 'bloquear') {
+    // 503 y no 200: los buscadores no desindexan por un 503, y QStash y
+    // cualquier otro cliente automático reintentan con espera creciente en vez
+    // de dar el trabajo por hecho.
+    const cabeceras = {
+      'Retry-After': '300',
+      'Cache-Control': 'no-store',
+    }
+    return esRutaDeApi(path)
+      ? NextResponse.json(
+          { error: 'mantenimiento', mensaje: 'Servicio en mantenimiento.' },
+          { status: 503, headers: cabeceras }
+        )
+      : new NextResponse(htmlMantenimiento(), {
+          status: 503,
+          headers: { ...cabeceras, 'Content-Type': 'text/html; charset=utf-8' },
+        })
+  }
+
+  if (mantenimiento === 'abrir') {
+    // El pase venía en la URL. Se guarda en cookie y se redirige a la MISMA
+    // ruta sin el parámetro: así el pase no queda en el historial del
+    // navegador, ni en el Referer que se envía al navegar a otro sitio, ni en
+    // los enlaces que se copien y peguen desde la barra de direcciones.
+    const limpia = request.nextUrl.clone()
+    limpia.searchParams.delete(PARAM_MANTENIMIENTO)
+    const redirect = NextResponse.redirect(limpia)
+    redirect.cookies.set(COOKIE_MANTENIMIENTO, process.env.MANTENIMIENTO_PASE!.trim(), {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: HORAS_PASE * 60 * 60,
+    })
+    return redirect
+  }
 
   // Atribución de marketing (docs/ADQUISICION.md): si el visitante llega con
   // ?src=facebook (o utm_source), se siembra la cookie de canal ANTES de que

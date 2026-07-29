@@ -31,15 +31,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const resultados = await ejecutarAutomatizacionesGlobal()
-    const totales = resultados.reduce(
-      (acc, r) => ({
-        cumpleanos: acc.cumpleanos + r.resultado.cumpleanos,
-        porVencer: acc.porVencer + r.resultado.porVencer,
-        inactivos: acc.inactivos + r.resultado.inactivos,
-      }),
-      { cumpleanos: 0, porVencer: 0, inactivos: 0 }
-    )
+    // El cron ya NO ejecuta las automatizaciones: solo las REPARTE, una por
+    // empresa, a la cola (auditoría · C-06). Por eso aquí no hay totales de
+    // cumpleaños ni de vencimientos — cada empresa los produce en su propia
+    // invocación. Lo que sí se devuelve es cuántas se encolaron, que es el
+    // número que delata si algo dejó de repartirse.
+    const reparto = await ejecutarAutomatizacionesGlobal()
     const regalos = await mantenimientoRegalos().catch((e) => {
       console.error('[cron-automatizaciones] regalos', e)
       return { expirados: 0, recordatorios: 0 }
@@ -51,8 +48,7 @@ export async function GET(request: NextRequest) {
     })
     return NextResponse.json({
       ok: true,
-      empresas: resultados.length,
-      totales,
+      reparto,
       regalos,
       seguimiento,
     })

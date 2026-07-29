@@ -1,13 +1,14 @@
 'use client'
 
 import { useActionState, useEffect, useState } from 'react'
-import { Landmark, Store, CheckCircle2, Loader2, MapPin } from 'lucide-react'
+import { Landmark, Store, CheckCircle2, Loader2, MapPin, CreditCard } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   avisarPagoPresencial,
   type PresencialState,
 } from '@/modules/membresia/actions'
 import { ComprobanteForm } from '@/components/membresia/ComprobanteForm'
+import { PagoTarjetaCardnet } from '@/components/membresia/PagoTarjetaCardnet'
 import { Button } from '@/components/ui/button'
 import { cn } from '@membego/ui/cn'
 
@@ -50,7 +51,13 @@ interface Props {
    * se ofrece" (no debe aparecer).
    */
   transferenciaDisponible: boolean
+  /** true = la empresa (CARTOWN) tiene la pasarela de tarjeta activa. */
+  tarjetaDisponible: boolean
+  /** Monto a mostrar en el botón de pago con tarjeta (ej. "RD$500"). */
+  montoTexto: string
 }
+
+type Opcion = 'tarjeta' | 'transferencia' | 'presencial'
 
 const initial: PresencialState = {}
 
@@ -69,10 +76,26 @@ export function OpcionesPago({
   avisoPresencialEnviado,
   referencia,
   transferenciaDisponible,
+  tarjetaDisponible,
+  montoTexto,
 }: Props) {
-  const [opcion, setOpcion] = useState<'transferencia' | 'presencial'>(
-    avisoPresencialEnviado || !transferenciaDisponible ? 'presencial' : 'transferencia'
-  )
+  // Las opciones que existen para esta membresía, en orden de preferencia.
+  // Presencial (efectivo en sucursal) SIEMPRE está. Tarjeta y transferencia
+  // aparecen si están disponibles.
+  const opciones: { key: Opcion; icon: typeof Landmark; titulo: string; detalle: string }[] = [
+    ...(tarjetaDisponible
+      ? [{ key: 'tarjeta' as const, icon: CreditCard, titulo: 'Tarjeta', detalle: 'Paga ahora con tu tarjeta y actívalo al instante' }]
+      : []),
+    ...(transferenciaDisponible
+      ? [{ key: 'transferencia' as const, icon: Landmark, titulo: 'Transferencia', detalle: 'Paga desde tu banco y sube el comprobante' }]
+      : []),
+    { key: 'presencial' as const, icon: Store, titulo: 'En la sucursal', detalle: 'Paga en efectivo al visitar el local' },
+  ]
+
+  // Por defecto: tarjeta si está; si no, la primera disponible. Si el cliente
+  // ya avisó que pagará presencial, se respeta esa elección.
+  const inicial: Opcion = avisoPresencialEnviado ? 'presencial' : opciones[0].key
+  const [opcion, setOpcion] = useState<Opcion>(inicial)
   const [state, formAction, pending] = useActionState(avisarPagoPresencial, initial)
 
   useEffect(() => {
@@ -86,17 +109,12 @@ export function OpcionesPago({
 
   return (
     <div className="space-y-5">
-      {/* Selector de forma de pago */}
-      {transferenciaDisponible && (
+      {/* Selector de forma de pago: se muestra si hay más de una opción */}
+      {opciones.length > 1 && (
       <div>
         <h3 className="text-sm font-medium text-foreground">¿Cómo prefieres pagar?</h3>
-        <div className="mt-2 grid grid-cols-2 gap-3">
-          {(
-            [
-              { key: 'transferencia', icon: Landmark, titulo: 'Transferencia', detalle: 'Paga desde tu banco y sube el comprobante' },
-              { key: 'presencial', icon: Store, titulo: 'En la sucursal', detalle: 'Paga en persona al visitar el local' },
-            ] as const
-          ).map(({ key, icon: Icon, titulo, detalle }) => (
+        <div className={cn('mt-2 grid gap-3', opciones.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+          {opciones.map(({ key, icon: Icon, titulo, detalle }) => (
             <button
               key={key}
               type="button"
@@ -121,7 +139,13 @@ export function OpcionesPago({
       </div>
       )}
 
-      {opcion === 'transferencia' ? (
+      {opcion === 'tarjeta' ? (
+        <PagoTarjetaCardnet
+          membershipId={membershipId}
+          montoTexto={montoTexto}
+          urlExito="/cliente/membresia?pago=ok"
+        />
+      ) : opcion === 'transferencia' ? (
         <div className="space-y-5">
           {transferencias.length > 0 ? (
             <div className="space-y-2">

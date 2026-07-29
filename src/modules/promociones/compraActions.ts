@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
+import { rutaValida } from '@/modules/storage/comprobantes'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { getPaymentProvider } from '@/lib/payments'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
@@ -183,16 +184,10 @@ export async function enviarComprobanteCompra(
     if (!compraId) return { error: 'Compra no especificada.' }
     if (!comprobanteUrl) return { error: 'Adjunta el comprobante de la transferencia.' }
 
-    // La URL debe pertenecer al bucket de comprobantes de esta plataforma.
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const expectedPrefix = `${supabaseUrl}/storage/v1/object/public/comprobantes/`
-    if (!supabaseUrl || !comprobanteUrl.startsWith(expectedPrefix)) {
-      return { error: 'URL del comprobante no válida.' }
-    }
-    const url = new URL(comprobanteUrl)
-    const validExt = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp']
-    if (!validExt.some((ext) => url.pathname.toLowerCase().endsWith(ext))) {
-      return { error: 'Formato de archivo no permitido.' }
+    // Ruta dentro del bucket privado, no URL pública (auditoría · C-01), y
+    // tiene que ser la de ESTA compra.
+    if (!(await rutaValida('compra', compraId, comprobanteUrl))) {
+      return { error: 'El comprobante adjunto no corresponde a esta compra.' }
     }
 
     // Fecha/hora declarada de la transferencia (opcional pero recomendada).

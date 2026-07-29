@@ -1,7 +1,7 @@
 'use client'
 
 import { useTransition } from 'react'
-import { Play, Pause, CheckCircle2, Loader2 } from 'lucide-react'
+import { Play, Pause, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cambiarEstadoCampana } from '@/modules/invitaciones/adminActions'
 import { Button } from '@/components/ui/button'

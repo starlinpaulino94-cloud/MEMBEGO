@@ -1,0 +1,317 @@
+// ──────────────────────────────────────────────────────────────────────────
+// CAMPAÑAS, RULETA Y OFERTAS PRIVADAS
+//
+// Acciones de marketing con principio y fin.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────
+// Engagement Engine · Fase 2 — Motor de Campañas de marketing.
+// Campañas que aparecen VIVAS en el Home del cliente (banner + contador +
+// CTA), con ventana de fechas y, para Happy Hour / fin de semana, ventana
+// horaria y días de la semana. Un mismo motor para cualquier tipo de negocio.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum MarketingCampaignTipo {
+  FLASH_SALE // oferta relámpago con contador
+  OFERTA_DIA // cambia cada día
+  FIN_DE_SEMANA // solo viernes a domingo
+  HAPPY_HOUR // ventana horaria diaria (p. ej. 2pm–4pm)
+  PRIMERA_COMPRA // solo quien aún no ha comprado
+  BIENVENIDA // al registrarse
+  REGRESO // sin visitar hace +30 días
+  CUMPLEANOS // cupón de cumpleaños
+  POR_VENCER // recordatorio de beneficio por vencer
+  PERSONALIZADA // genérica
+}
+
+enum MarketingCampaignEstado {
+  BORRADOR
+  ACTIVA
+  PAUSADA
+  FINALIZADA
+}
+
+// Banner vivo del Home (uno de los 3 modelos "campaña"; ver Campana arriba).
+model MarketingCampaign {
+  id        String                  @id @default(cuid())
+  companyId String
+  company   Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tipo      MarketingCampaignTipo   @default(FLASH_SALE)
+  estado    MarketingCampaignEstado @default(BORRADOR)
+
+  titulo          String
+  descripcion     String  @db.Text
+  imagenUrl       String?
+  bannerUrl       String?
+  ctaTexto        String? // "Aprovecha ahora"
+  ctaHref         String? // ruta interna, p. ej. /cliente/promociones
+  colorPrimario   String?
+  colorSecundario String?
+
+  fechaInicio DateTime
+  fechaFin    DateTime
+
+  // Happy Hour / fin de semana: ventana horaria (minutos desde medianoche,
+  // hora local RD) y días activos (0=Dom … 6=Sáb; vacío = todos los días).
+  horaInicioMin Int?
+  horaFinMin    Int?
+  diasSemana    Int[]
+
+  prioridad     Int     @default(0)
+  destacada     Boolean @default(false)
+  // Urgencia/stock: cupones disponibles (null = ilimitado).
+  maxReclamos   Int?
+  reclamosCount Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, estado, fechaInicio, fechaFin])
+  @@index([estado, fechaFin])
+  @@map("marketing_campaigns")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Engagement Engine · Fase 6B — Ruleta de premios (gasta puntos ganados).
+// ─────────────────────────────────────────────────────────────────────────
+
+enum RuletaPremioTipo {
+  PROMOCION // entrega una promoción como beneficio (ProductoCompra + QR)
+  NADA // segmento "sigue participando" (no otorga premio)
+}
+
+model RuletaPremio {
+  id           String           @id @default(cuid())
+  companyId    String
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre       String
+  tipo         RuletaPremioTipo @default(PROMOCION)
+  promocionId  String?
+  promocion    Promocion?       @relation(fields: [promocionId], references: [id])
+  probabilidad Int              @default(1) // peso relativo (mayor = más probable)
+  color        String?
+  activo       Boolean          @default(true)
+  orden        Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  jugadas RuletaJugada[]
+
+  @@index([companyId, activo])
+  @@map("ruleta_premios")
+}
+
+model RuletaJugada {
+  id               String        @id @default(cuid())
+  companyId        String
+  company          Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId        String
+  cliente          Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  costoPuntos      Int
+  premioId         String?
+  premio           RuletaPremio? @relation(fields: [premioId], references: [id])
+  premioNombre     String
+  gano             Boolean       @default(false)
+  productoCompraId String?
+  createdAt        DateTime      @default(now())
+
+  @@index([companyId, clienteId])
+  @@index([clienteId, createdAt])
+  @@map("ruleta_jugadas")
+}
+
+// ─── Ofertas VIP (regalos privados por lista cerrada) ────────────────────────
+
+enum OfertaPeriodo {
+  SEMANAL // el cupo de usos se reinicia cada semana
+  MENSUAL // el cupo se reinicia cada mes calendario
+  TOTAL // cupo único para toda la vigencia
+}
+
+enum OfertaPrivadaEstado {
+  ACTIVA
+  PAUSADA
+  FINALIZADA
+}
+
+/// Oferta/regalo PRIVADO: no se publica en el marketplace ni en promociones;
+/// existe solo para los clientes invitados (lista cerrada). Se comparte por
+/// link con código; quien no está en la lista ve "tu cuenta no aplica".
+model OfertaPrivada {
+  id             String              @id @default(cuid())
+  companyId      String
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Código corto del link /oferta/[codigo] (no adivinable).
+  codigo         String              @unique
+  titulo         String
+  descripcion    String?
+  /// Usos permitidos por período (ej. 12 lavados al mes).
+  usosPorPeriodo Int                 @default(1)
+  periodo        OfertaPeriodo       @default(MENSUAL)
+  /// Fin de la vigencia (ej. un año); null = sin fecha de fin.
+  vigenciaHasta  DateTime?
+  estado         OfertaPrivadaEstado @default(ACTIVA)
+  creadaPorId    String?
+  creadaPor      User?               @relation("OfertaCreadaPor", fields: [creadaPorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  invitados OfertaInvitado[]
+
+  @@index([companyId, estado])
+  @@map("ofertas_privadas")
+}
+
+/// Cliente invitado a una oferta privada. `reclamadaAt` = cuándo la aceptó.
+model OfertaInvitado {
+  id          String        @id @default(cuid())
+  ofertaId    String
+  oferta      OfertaPrivada @relation(fields: [ofertaId], references: [id], onDelete: Cascade)
+  clienteId   String
+  cliente     Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  reclamadaAt DateTime?
+  createdAt   DateTime      @default(now())
+
+  usos OfertaUso[]
+
+  @@unique([ofertaId, clienteId])
+  @@index([clienteId])
+  @@map("oferta_invitados")
+}
+
+/// Uso canjeado de la oferta (cuenta contra el cupo del período). Lo registra
+/// el staff del negocio; historial permanente.
+model OfertaUso {
+  id              String         @id @default(cuid())
+  invitadoId      String
+  invitado        OfertaInvitado @relation(fields: [invitadoId], references: [id], onDelete: Cascade)
+  companyId       String
+  registradoPorId String?
+  registradoPor   User?          @relation("OfertaUsoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  nota            String?
+  createdAt       DateTime       @default(now())
+
+  @@index([invitadoId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("oferta_usos")
+}
+
+// ─── Campañas globales (superadmin · marketing conjunto entre empresas) ──────
+
+/// Campaña que el SUPERADMIN define una vez y se REPARTE a varias empresas.
+///
+/// Decisión de arquitectura: la campaña NO es una promoción/plan con varias
+/// empresas dueñas — eso rompería el multi-tenant (todo el sistema asume UNA
+/// empresa por fila: canje, caja, reportes, permisos). En su lugar, aplicar la
+/// campaña GENERA una promoción o un plan REAL dentro de cada empresa
+/// participante. Cada empresa lo ve como suyo y todos los motores existentes
+/// funcionan sin tocar una línea.
+model CampanaGlobal {
+  id               String    @id @default(cuid())
+  nombre           String
+  /// 'PROMOCION' | 'PLAN' — qué se genera en cada empresa (validado en código).
+  tipo             String
+  descripcion      String?
+  /// Imagen de portada de la campaña. Cada paso puede tener la suya propia.
+  imagenUrl        String?
+  /// 'COPIA'  = la misma oferta se replica en cada empresa (campaña simple).
+  /// 'CADENA' = cada empresa aporta un beneficio DISTINTO y canjear uno
+  ///            desbloquea el siguiente (marketing cruzado entre negocios).
+  modo             String    @default("COPIA")
+  /// Plantilla con los campos del objeto a crear (título, precio, vigencia…).
+  /// Se guarda como JSON para no acoplar la campaña al esquema de destino.
+  plantilla        Json      @default("{}")
+  /// 'BORRADOR' | 'APLICADA' | 'ARCHIVADA' (validado en código).
+  estado           String    @default("BORRADOR")
+  /// true = alcanza a TODAS las empresas activas (incluidas las futuras que se
+  /// agreguen con "volver a aplicar"); false = solo las elegidas a mano.
+  todasLasEmpresas Boolean   @default(false)
+  creadaPorId      String?
+  creadaPor        User?     @relation("CampanaGlobalCreadaPor", fields: [creadaPorId], references: [id], onDelete: SetNull)
+  aplicadaAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  participantes CampanaGlobalEmpresa[]
+  pasos         CampanaPaso[]
+  inscripciones CampanaInscripcion[]
+
+  @@index([estado, createdAt])
+  @@map("campanas_globales")
+}
+
+/// Un eslabón de una campaña en CADENA: el beneficio que aporta UNA empresa.
+///
+/// Ejemplo real: paso 1 = lavado gratis en el carwash; paso 2 = 20% en
+/// desayuno en el restaurante. El cliente recibe el paso 1 al inscribirse y,
+/// al canjearlo, se le entrega automáticamente el paso 2 en la otra empresa.
+model CampanaPaso {
+  id          String        @id @default(cuid())
+  campanaId   String
+  campana     CampanaGlobal @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Posición en la cadena, empezando en 1.
+  orden       Int
+  titulo      String
+  descripcion String?
+  /// Imagen propia del beneficio; si falta, se usa la de la campaña.
+  imagenUrl   String?
+  /// Campos del beneficio a crear (descuento, vigencia, usos…), como en
+  /// las campañas simples. Se normaliza en código al aplicar.
+  plantilla   Json          @default("{}")
+  /// Promoción REAL generada en la empresa al aplicar la campaña.
+  promocionId String?
+  error       String?
+  aplicadaAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  compras ProductoCompra[]
+
+  @@unique([campanaId, orden])
+  @@index([companyId])
+  @@map("campana_pasos")
+}
+
+/// Avance de un cliente dentro de una campaña en cadena.
+model CampanaInscripcion {
+  id           String        @id @default(cuid())
+  campanaId    String
+  campana      CampanaGlobal @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  clienteId    String
+  cliente      Cliente       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  /// Orden del paso que el cliente tiene disponible ahora mismo.
+  pasoActual   Int           @default(1)
+  /// 'EN_CURSO' | 'COMPLETADA' (validado en código).
+  estado       String        @default("EN_CURSO")
+  completadaAt DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([campanaId, clienteId])
+  @@index([clienteId])
+  @@map("campana_inscripciones")
+}
+
+/// Empresa participante de una campaña global y el rastro de lo que se le
+/// generó. `promocionId`/`planId` permiten ver, editar o revertir lo aplicado
+/// sin adivinar cuál fila salió de la campaña.
+model CampanaGlobalEmpresa {
+  id          String        @id @default(cuid())
+  campanaId   String
+  campana     CampanaGlobal @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Fila creada en la empresa (una de las dos, según el tipo de campaña).
+  promocionId String?
+  planId      String?
+  /// Mensaje de error si la generación falló para esta empresa concreta.
+  error       String?
+  aplicadaAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([campanaId, companyId])
+  @@index([companyId])
+  @@map("campana_global_empresas")
+}

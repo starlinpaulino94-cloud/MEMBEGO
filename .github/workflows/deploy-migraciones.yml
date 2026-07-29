@@ -1,0 +1,61 @@
+# Migraciones de base de datos automáticas al desplegar (auditoría · C-03).
+#
+# Hasta ahora las 68 migraciones se aplicaban A MANO copiándolas en el SQL
+# Editor de Supabase. Eso deja dos fallos posibles y ninguno da error visible:
+# el deploy puede ir ADELANTADO a la base (el código busca columnas que no
+# existen y, por la tolerancia fail-open, los módulos aparecen vacíos en vez de
+# romperse), o alguien puede olvidarse de una migración durante días. Ya pasó
+# con `companies.capacidades`.
+#
+# Este flujo aplica las migraciones ANTES de que el nuevo código reciba
+# tráfico. Si fallan, no se despliega.
+#
+# REQUIERE dos secretos en el repositorio:
+#   · MIGRATIONS_DATABASE_URL — la DIRECT_URL de Supabase (puerto 5432, sin
+#     pgbouncer). El pooler no sirve para migrar: `prisma migrate deploy`
+#     necesita sentencias DDL en una conexión directa.
+#   · VERCEL_DEPLOY_HOOK_URL   — el hook de despliegue del proyecto en Vercel.
+#
+# Las migraciones de `prisma/migrations_manual/` (buckets de Storage, políticas
+# RLS) NO van aquí: tocan el esquema `storage` de Supabase, que Prisma no
+# gestiona. Se siguen aplicando a mano y están documentadas en docs/DEVOPS.md.
+name: Migrar y desplegar
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    name: prisma migrate deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Aplicar migraciones pendientes
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Desplegar en Vercel
+        if: success()
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::VERCEL_DEPLOY_HOOK_URL sin configurar; se omite el despliegue."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Despliegue disparado."

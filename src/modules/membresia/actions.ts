@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { formSubmitLimiter } from '@/lib/rate-limit'
+import { rutaValida } from '@/modules/storage/comprobantes'
 import { calcularDescuentoBienvenida } from '@/lib/bienvenida'
 import { generarCodigo } from '@/lib/codes'
 
@@ -177,27 +178,13 @@ export async function enviarComprobante(
   if (!membershipId) return { error: 'Membresía no especificada.' }
   if (!comprobanteUrl) return { error: 'Adjunta el comprobante de pago.' }
 
-  // Verificar que la URL pertenezca al bucket de Supabase de esta plataforma.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const expectedPrefix = `${supabaseUrl}/storage/v1/object/public/comprobantes/`
-
-  // Validar URL: debe pertenecer a Supabase y tener extensión válida
-  if (!supabaseUrl || !comprobanteUrl.startsWith(expectedPrefix)) {
-    return { error: 'URL del comprobante no válida.' }
-  }
-
-  // Validar que la URL tenga una extensión de archivo válida
-  const url = new URL(comprobanteUrl)
-  const pathname = url.pathname
-  const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp']
-  const hasValidExt = validExtensions.some(ext => pathname.toLowerCase().endsWith(ext))
-  if (!hasValidExt) {
-    return { error: 'Formato de archivo no permitido.' }
-  }
-
-  // Validar que la URL no contenga parámetros sospechosos
-  if (url.search.includes('delete') || url.search.includes('token')) {
-    return { error: 'URL del comprobante no válida.' }
+  // El campo ya NO es una URL pública, es la RUTA dentro del bucket privado
+  // que generó el servidor al firmar la subida (auditoría · C-01). Se
+  // comprueba que corresponda a ESTA membresía: si no, alguien pidió una
+  // subida legítima para lo suyo y luego intentó declararla como comprobante
+  // de otro pago.
+  if (!(await rutaValida('membresia', membershipId, comprobanteUrl))) {
+    return { error: 'El comprobante adjunto no corresponde a este pago.' }
   }
 
   const membership = await prisma.membership.findUnique({

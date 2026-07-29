@@ -16,12 +16,15 @@
     "db:seed": "tsx prisma/seed.ts",
     "test": "tsx --test tests/*.test.ts",
     "certificar:referidos": "tsx --tsconfig tsconfig.json scripts/certificar-referidos.ts",
+    "respaldo:verificar": "node scripts/verificar-respaldo.mjs",
+    "presupuesto": "node scripts/presupuesto-bundle.mjs",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "migraciones:baseline": "node scripts/baseline-migraciones.mjs",
     "db:doctor": "node scripts/db-doctor.mjs",
     "db:doctor:sql": "node scripts/db-doctor.mjs --sql",
-    "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts",
+    "rls:probar": "node scripts/probar-rls.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
@@ -77,7 +80,7 @@
     "react-hook-form": "^7.60.0",
     "react-resizable-panels": "^3.0.3",
     "recharts": "^2.15.4",
-    "sharp": "^0.34.3",
+    "sharp": "^0.35.3",
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
@@ -86,6 +89,7 @@
     "zod": "^4.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
     "@types/qrcode": "^1.5.6",
@@ -97,6 +101,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.1.0"
+  },
+  "overrides": {
+    "sharp": "^0.35.3",
+    "postcss": "^8.5.18"
   }
 }

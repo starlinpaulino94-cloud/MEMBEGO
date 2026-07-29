@@ -1,0 +1,920 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MOTORES UNIVERSALES (REGLAS, PROMOCIONES, BENEFICIOS, AUTOMATIZACIONES)
+//
+// La maquinaria genérica sobre la que se construyen las funcionalidades de
+// negocio. Estos modelos no los usa una pantalla concreta: los usan los
+// motores de src/lib/{rule-engine,promotions,benefits,automation,…}.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// FASE 1 (REDISEÑO DEL NÚCLEO): MOTOR UNIVERSAL DE REGLAS
+// ─────────────────────────────────────────────
+// Infraestructura genérica y multi-tenant para el futuro Rule Engine. NO
+// contiene lógica de promociones, membresías, QR ni cupones: solo el modelo
+// de datos de reglas configurables. Ningún flujo actual lee estas tablas.
+
+/// Ciclo de vida de una regla (independiente del interruptor `activo`).
+enum RuleStatus {
+  DRAFT // en edición, nunca se evalúa
+  PUBLISHED // publicada; se evalúa si además `activo` = true y está en ventana de vigencia
+  ARCHIVED // retirada; se conserva como historial, nunca se evalúa
+}
+
+/// Cómo se combinan las condiciones de una regla (modo plano, Fase 1). Cuando
+/// la regla usa grupos (Fase 2) este campo se ignora en favor del árbol.
+enum RuleMatchType {
+  ALL // AND: todas las condiciones deben cumplirse
+  ANY // OR: basta con que se cumpla una condición
+}
+
+/// Operador lógico de un grupo de condiciones (Fase 2). Permite construir
+/// árboles booleanos de profundidad ilimitada.
+enum RuleLogicalOperator {
+  AND // todas las condiciones/hijos deben cumplirse
+  OR // al menos uno debe cumplirse
+  NOT // negación del conjunto de hijos (NOT del AND de los hijos)
+  XOR // exactamente uno de los hijos debe cumplirse
+}
+
+/// Agrupa reglas por dominio funcional (ej. "Validación QR", "Membresías",
+/// "Beneficios"). Puramente organizativo; el motor puede filtrar por `key`.
+model RuleGroup {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key         String // identificador estable legible por máquina, ej. "qr_validation"
+  nombre      String
+  descripcion String?
+  orden       Int      @default(0)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rules Rule[]
+
+  @@unique([companyId, key])
+  @@index([companyId, activo])
+  @@map("rule_groups")
+}
+
+/// Regla configurable. El motor la evalúa contra un RuleContext y, si se
+/// cumple, dispara sus acciones. No conoce el negocio: campos y valores son
+/// genéricos (dot-paths + JSON).
+model Rule {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  groupId     String?
+  group       RuleGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  nombre      String
+  descripcion String?
+  status      RuleStatus    @default(DRAFT)
+  activo      Boolean       @default(true) // interruptor de encendido, independiente del ciclo de vida
+  prioridad   Int           @default(0) // mayor = se evalúa primero
+  version     Int           @default(1) // se incrementa en cada cambio (base para versionado)
+  matchType   RuleMatchType @default(ALL)
+  validoDesde DateTime? // ventana de vigencia opcional (null = sin límite inferior)
+  validoHasta DateTime? // null = sin límite superior
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  conditions      RuleCondition[]
+  conditionGroups RuleConditionGroup[]
+  actions         RuleAction[]
+  logs            RuleExecutionLog[]
+  // Fase 4: reglas reutilizadas por promociones (sin duplicar).
+  promotionRules  PromotionRule[]
+
+  // Consulta caliente del motor: reglas de una empresa evaluables por estado.
+  @@index([companyId, status, activo])
+  @@index([groupId])
+  @@index([companyId, prioridad])
+  @@map("rules")
+}
+
+/// Condición atómica de una regla. `campo` es un dot-path dentro del contexto
+/// (ej. "cliente.puntos"), `operador` es la clave de un operador del registro
+/// extensible (ej. "gte") y `valor` es el valor esperado en JSON.
+model RuleCondition {
+  id            String              @id @default(cuid())
+  ruleId        String
+  rule          Rule                @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  // Fase 2: grupo al que pertenece la condición dentro del árbol booleano.
+  // null = cuelga directamente de la raíz de la regla (modo plano de Fase 1).
+  groupId       String?
+  group         RuleConditionGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  campo         String // dot-path dentro del RuleContext, ej. "cliente.membresiaActiva"
+  operador      String // id del operador en el registro, ej. "eq", "gte", "in"
+  valor         Json                @default("null") // valor esperado (comparación)
+  tipoValor     String              @default("STRING") // legacy Fase 1: guía de coerción del valor JSON
+  // Fase 2: tipo de condición (registro extensible, ej. "field") y tipo de dato
+  // evaluado (TEXT|NUMBER|DATE|TIME|BOOLEAN|LIST|OBJECT|ENUM|JSON) para validar
+  // compatibilidad operador↔dato.
+  conditionType String              @default("field")
+  dataType      String              @default("TEXT")
+  orden         Int                 @default(0)
+  createdAt     DateTime            @default(now())
+
+  @@index([ruleId, orden])
+  @@index([groupId])
+  @@map("rule_conditions")
+}
+
+/// Grupo de condiciones (Fase 2). Nodo interno del árbol booleano de una regla:
+/// combina sus condiciones e hijos con un RuleLogicalOperator. Se auto-referencia
+/// (`parentId`) para anidar sin límite. Un grupo sin `parentId` es una raíz.
+model RuleConditionGroup {
+  id        String               @id @default(cuid())
+  ruleId    String
+  rule      Rule                 @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    RuleConditionGroup?  @relation("RuleGroupTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  RuleConditionGroup[] @relation("RuleGroupTree")
+  operator  RuleLogicalOperator  @default(AND)
+  orden     Int                  @default(0)
+  createdAt DateTime             @default(now())
+
+  conditions RuleCondition[]
+
+  @@index([ruleId])
+  @@index([parentId])
+  @@map("rule_condition_groups")
+}
+
+/// Acción a ejecutar cuando la regla se cumple. En esta fase SOLO se almacena
+/// la estructura: no hay handlers reales registrados. `tipo` es la clave de un
+/// handler del registro extensible; `params` su configuración en JSON.
+model RuleAction {
+  id            String   @id @default(cuid())
+  ruleId        String
+  rule          Rule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  tipo          String // clave del handler en el registro, ej. "grant_benefit" (aún sin implementar)
+  params        Json     @default("{}")
+  orden         Int      @default(0) // prioridad/orden de ejecución (menor = antes)
+  // Fase 3: configuración de la acción por DATOS (no por código).
+  obligatoria   Boolean  @default(true) // true = su fallo marca la ejecución como fallida
+  maxReintentos Int      @default(0) // reintentos ante error (0 = un solo intento)
+  activa        Boolean  @default(true) // interruptor: si false, se omite (SKIPPED)
+  version       Int      @default(1) // versión de la configuración de la acción
+  createdAt     DateTime @default(now())
+
+  @@index([ruleId, orden])
+  @@map("rule_actions")
+}
+
+/// Registro de auditoría de cada evaluación del motor. Estructura preparada
+/// para observabilidad; el motor la persiste solo si se le inyecta un sink
+/// Prisma (por defecto usa un sink no-op).
+model RuleExecutionLog {
+  id         String   @id @default(cuid())
+  ruleId     String?
+  rule       Rule?    @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  matched    Boolean // si la regla se cumplió
+  resultado  Json     @default("{}") // resumen de acciones/resultado
+  contexto   Json     @default("{}") // snapshot (posiblemente saneado) del contexto
+  duracionMs Int      @default(0)
+  error      String? // mensaje si la evaluación/ejecución falló
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([ruleId])
+  @@map("rule_execution_logs")
+}
+
+// ─────────────────────────────────────────────
+// FASE 4: FRAMEWORK UNIVERSAL DE PROMOCIONES
+// ─────────────────────────────────────────────
+// Una promoción es una entidad CONFIGURABLE sin lógica programada: compone
+// información general + reglas (Rule Engine) + acciones (Action Engine) +
+// restricciones + ciclo de vida + versionado + auditoría. Es independiente de
+// la industria y del modelo `Promocion` (marketplace) existente, que NO se
+// toca. Multi-tenant: todo cuelga de companyId. Ningún flujo la consume aún.
+
+/// Ciclo de vida de una promoción. Extensible.
+enum PromotionStatus {
+  DRAFT // borrador
+  PENDING // pendiente de revisión/aprobación
+  SCHEDULED // programada (con fecha futura)
+  ACTIVE // activa
+  PAUSED // pausada temporalmente
+  SUSPENDED // suspendida (por incidencia/decisión)
+  ENDED // finalizada (fin natural)
+  ARCHIVED // archivada (histórico)
+  CANCELLED // cancelada
+}
+
+/// Definición general y ADMINISTRATIVA de una promoción. Sin lógica: la lógica
+/// vive en las reglas (Rule Engine) y las acciones (Action Engine) asociadas.
+model Promotion {
+  id           String          @id @default(cuid())
+  companyId    String
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre       String
+  descripcion  String?
+  categoria    String? // etiqueta libre de organización, NUNCA tipo de industria
+  status       PromotionStatus @default(DRAFT)
+  prioridad    Int             @default(0) // mayor = más prioritaria ante conflictos
+  inicioEn     DateTime? // ventana de vigencia (programación)
+  finEn        DateTime?
+  config       Json            @default("{}") // configuración flexible (parámetros arbitrarios)
+  metadata     Json            @default("{}") // metadatos libres
+  version      Int             @default(1) // versión actual
+  creadoPorId  String? // usuario que la creó
+  editadoPorId String? // último usuario que la modificó
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  rules        PromotionRule[]
+  actions      PromotionAction[]
+  restrictions PromotionRestriction[]
+  versions     PromotionVersion[]
+  audits       PromotionAudit[]
+
+  @@index([companyId, status])
+  @@index([companyId, prioridad])
+  @@index([companyId, status, inicioEn, finEn])
+  @@map("promotions")
+}
+
+/// Mapeo promoción→regla (Rule Engine). Reutiliza reglas SIN duplicarlas.
+model PromotionRule {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  ruleId      String
+  rule        Rule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  orden       Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@unique([promotionId, ruleId]) // no duplicar la misma regla en una promoción
+  @@index([ruleId])
+  @@map("promotion_rules")
+}
+
+/// Mapeo promoción→acción (Action Engine). La promoción NUNCA ejecuta acciones
+/// directamente: aporta la configuración que el Action Engine ejecutará.
+model PromotionAction {
+  id            String    @id @default(cuid())
+  promotionId   String
+  promotion     Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  tipo          String // clave del catálogo del Action Engine
+  params        Json      @default("{}")
+  orden         Int       @default(0)
+  obligatoria   Boolean   @default(true)
+  maxReintentos Int       @default(0)
+  activa        Boolean   @default(true)
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+
+  @@index([promotionId, orden])
+  @@map("promotion_actions")
+}
+
+/// Restricción universal de una promoción (config, sin validación programada
+/// todavía). `tipo` proviene de un catálogo (MAX_USES_TOTAL, PER_CLIENT, …).
+model PromotionRestriction {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  tipo        String // clave del catálogo de restricciones
+  valor       Int? // límite numérico cuando aplica (usos, cantidad…)
+  config      Json      @default("{}") // parámetros adicionales (ventana, ámbito…)
+  activa      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@index([promotionId])
+  @@map("promotion_restrictions")
+}
+
+/// Instantánea inmutable de una versión de la promoción. Nunca se borra: es el
+/// historial de versionado.
+model PromotionVersion {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  version     Int
+  snapshot    Json // definición completa congelada en esa versión
+  resumen     String? // resumen del cambio
+  creadoPorId String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([promotionId, version])
+  @@index([promotionId])
+  @@map("promotion_versions")
+}
+
+/// Auditoría completa: quién, qué, cuándo, estado anterior/nuevo y diff.
+model PromotionAudit {
+  id             String           @id @default(cuid())
+  promotionId    String
+  promotion      Promotion        @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  companyId      String
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId         String?
+  accion         String // CREATED | UPDATED | STATUS_CHANGED | VERSIONED | ARCHIVED | ...
+  estadoAnterior PromotionStatus?
+  estadoNuevo    PromotionStatus?
+  cambios        Json             @default("{}") // diff de campos modificados
+  createdAt      DateTime         @default(now())
+
+  @@index([promotionId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("promotion_audits")
+}
+
+// ─────────────────────────────────────────────
+// FASE 6: BUSINESS DATA DICTIONARY (DICCIONARIO UNIVERSAL DE DATOS)
+// ─────────────────────────────────────────────
+// Fuente OFICIAL de todas las variables de negocio que pueden usar reglas,
+// promociones, membresías, QR, etc. El catálogo ESTÁNDAR vive en código
+// (src/lib/dictionary/domain/catalog.ts); estas tablas persisten las variables
+// CUSTOM/por-empresa registradas en runtime. Sin lógica de negocio. Ningún flujo
+// de la app las consume todavía.
+
+/// Estado de una variable del diccionario.
+enum DictionaryVariableStatus {
+  ACTIVE // disponible para usarse
+  DEPRECATED // en desuso; se resuelve pero no debería usarse en variables nuevas
+  DISABLED // desactivada; no se resuelve
+}
+
+/// Definición centralizada de una variable de negocio. NUNCA depende de nombres
+/// de columnas del ORM: `contextPath` apunta al Modelo Universal de Contexto.
+model DataDictionaryVariable {
+  id           String                   @id @default(cuid())
+  companyId    String? // null = variable GLOBAL/estándar; con valor = específica de empresa
+  company      Company?                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key          String // nombre técnico, ej. "cliente.puntos"
+  displayName  String // nombre visible
+  description  String?
+  semanticType String // tipo semántico (TEXT|INTEGER|MONEY|PERCENT|…) → mapea a DataType del Rule Engine
+  category     String // categoría (Cliente, Empresa, Sistema…)
+  subcategory  String?
+  ownerModule  String? // módulo propietario
+  source       String                   @default("CONTEXT") // CONTEXT | CALCULATED | CONSTANT | EXTERNAL
+  contextPath  String? // ruta en el Context Model, ej. "cliente.puntos"
+  format       String?
+  unit         String?
+  aliases      String[]                 @default([]) // nombres alternativos que resuelven a esta variable
+  status       DictionaryVariableStatus @default(ACTIVE)
+  version      Int                      @default(1)
+  validation   Json                     @default("{}") // reglas de validación (rango, patrón, valores…)
+  i18n         Json                     @default("{}") // { es: {name,description,help}, en: {...} }
+  calculated   Json? // descriptor de variable calculada (kind + inputs); null si no lo es
+  metadata     Json                     @default("{}")
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  versions DataDictionaryVariableVersion[]
+
+  @@unique([companyId, key]) // única por empresa (y una global por key con companyId null)
+  @@index([companyId, category])
+  @@index([category])
+  @@index([status])
+  @@map("data_dictionary_variables")
+}
+
+/// Instantánea de versión de una variable (historial inmutable).
+model DataDictionaryVariableVersion {
+  id         String                 @id @default(cuid())
+  variableId String
+  variable   DataDictionaryVariable @relation(fields: [variableId], references: [id], onDelete: Cascade)
+  version    Int
+  snapshot   Json
+  createdAt  DateTime               @default(now())
+
+  @@unique([variableId, version])
+  @@index([variableId])
+  @@map("data_dictionary_variable_versions")
+}
+
+// ─────────────────────────────────────────────
+// FASE A: MEMBERSHIP ENGINE UNIVERSAL
+// ─────────────────────────────────────────────
+// Motor universal de membresías: modela CUALQUIER modelo comercial (los 20 de la
+// Membership Strategy Library) por CONFIGURACIÓN, no por código. Independiente de
+// la industria y del modelo `Membership` (Car Wash) existente, que NO se toca.
+// Reutiliza Rule/Action/Context/Dictionary/BEL para reglas de uso y automatización.
+
+/// Modelo comercial de la membresía (los 20 de la biblioteca de estrategias).
+enum MembershipPlanType {
+  UNLIMITED
+  CREDITS
+  HYBRID
+  TIER
+  FAMILY
+  FLEET
+  CORPORATE
+  SEASONAL
+  PREMIUM
+  MAINTENANCE
+  PAY_PER_VISIT
+  LOYALTY
+  PREPAID
+  VIP
+  REWARDS
+  TRIAL
+  STUDENT
+  DRIVER
+  SUBSCRIPTION_BOX
+  CUSTOM
+}
+
+/// Periodicidad de cobro/renovación.
+enum MembershipPeriodicity {
+  NONE
+  ONE_TIME
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+  SEASONAL
+}
+
+/// Estado de una membresía de un suscriptor concreto.
+enum MembershipInstanceStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  SUSPENDED
+  EXPIRED
+  CANCELLED
+}
+
+/// Definición (plantilla instanciada) de un plan de membresía de una empresa.
+/// Toda la configuración específica vive en `config` (JSON): servicios incluidos,
+/// límites, beneficios, reglas de uso, renovación, segmentos, restricciones,
+/// métricas y automatizaciones. Nunca columnas por caso.
+model MembershipPlan {
+  id           String                @id @default(cuid())
+  companyId    String
+  company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre       String
+  descripcion  String?
+  tipo         MembershipPlanType
+  precio       Decimal               @db.Decimal(10, 2)
+  moneda       String                @default("DOP")
+  periodicidad MembershipPeriodicity @default(MONTHLY)
+  duracionDias Int? // null = ligado a periodicidad
+  creditos     Int? // para CREDITS/HYBRID (null = no aplica)
+  ilimitado    Boolean               @default(false) // para UNLIMITED/tiers unlimited
+  templateKey  String? // plantilla de industria de la que nació (ej. "carwash.unlimited")
+  config       Json                  @default("{}") // configuración flexible (ver dominio)
+  status       String                @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  version      Int                   @default(1)
+  metadata     Json                  @default("{}")
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  instances MembershipInstance[]
+
+  @@index([companyId, tipo])
+  @@index([companyId, status])
+  @@map("membership_plans")
+}
+
+/// Membresía de un suscriptor (cliente, familia, empresa/flota…). El suscriptor
+/// se referencia de forma genérica (`subscriberId`/`subscriberKind`) para no
+/// acoplar el motor a una entidad concreta.
+model MembershipInstance {
+  id                String                   @id @default(cuid())
+  companyId         String
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId            String
+  plan              MembershipPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  subscriberId      String // ref. genérica al titular
+  subscriberKind    String                   @default("CLIENT") // CLIENT | COMPANY | USER
+  status            MembershipInstanceStatus @default(PENDING)
+  inicioEn          DateTime?
+  finEn             DateTime?
+  renuevaEn         DateTime?
+  autoRenovar       Boolean                  @default(false)
+  creditosRestantes Int?
+  vehiculos         Json                     @default("[]") // family/fleet: lista de vehículos
+  config            Json                     @default("{}") // overrides/snapshot
+  metadata          Json                     @default("{}")
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  usage MembershipUsage[]
+
+  @@index([companyId, status])
+  @@index([planId])
+  @@index([subscriberId])
+  @@map("membership_instances")
+}
+
+/// Registro de uso (Usage Tracking): cada consumo de un servicio/beneficio.
+model MembershipUsage {
+  id         String             @id @default(cuid())
+  companyId  String // scalar (sin relación) para filtrar por empresa
+  instanceId String
+  instance   MembershipInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  servicio   String // ej. "lavado_exterior", "detailing"
+  cantidad   Int                @default(1)
+  vehiculo   String? // placa/id de vehículo cuando aplica
+  usadoEn    DateTime           @default(now())
+  meta       Json               @default("{}")
+
+  @@index([instanceId, usadoEn])
+  @@index([companyId, usadoEn])
+  @@map("membership_usage")
+}
+
+// ─────────────────────────────────────────────
+// FASE C · BENEFIT ENGINE (Benefits & Rewards Library)
+// Un beneficio es una ENTIDAD independiente y editable que cualquier módulo
+// (membresías, promociones, referidos, puntos, gamificación, campañas,
+// automatizaciones) puede seleccionar, modificar o crear. Todo lo específico
+// vive en `config` (JSON): valor, servicio, reglas, restricciones,
+// disponibilidad y módulos donde puede usarse. Ningún flujo existente lo
+// consume todavía.
+// ─────────────────────────────────────────────
+
+/// Los 10 tipos base de beneficio (el detalle —% vs monto, servicio, etc.—
+/// vive en `config`). CUSTOM habilita beneficios creados por la empresa.
+enum BenefitType {
+  SERVICE_FREE // servicio gratis (lavado, aspirado, cera…)
+  DISCOUNT // descuento (% o monto fijo, según config)
+  UPGRADE // mejora de servicio (básico→premium)
+  PRODUCT // producto físico
+  POINTS // puntos de lealtad
+  CREDIT // crédito/saldo interno (wallet)
+  TIME // tiempo (mes gratis, visita extra, precio congelado)
+  EXPERIENCE // experiencia (evento, servicio personalizado)
+  ACCESS // acceso exclusivo (línea rápida, área VIP)
+  CUSTOM // beneficio personalizado de la empresa
+}
+
+/// Estado de un beneficio entregado a un suscriptor (ciclo de canje).
+enum BenefitGrantStatus {
+  GRANTED // entregado, disponible para canjear
+  REDEEMED // canjeado/utilizado
+  EXPIRED // venció sin usarse
+  REVOKED // revocado por la empresa
+}
+
+/// Catálogo de beneficios de una empresa (plantilla instanciada o creado a
+/// mano). Reutilizable por todos los módulos. `costoReal` vs `valorPercibido`
+/// permiten calcular rentabilidad/ROI.
+model Benefit {
+  id             String      @id @default(cuid())
+  companyId      String
+  company        Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code           String? // ej. "CAR-001" cuando nace de una plantilla
+  nombre         String
+  descripcion    String?
+  categoria      String // categoría de la biblioteca (SERVICE, DISCOUNT, VIP…)
+  tipo           BenefitType
+  valorPercibido Decimal?    @db.Decimal(10, 2) // lo que el cliente cree que vale
+  costoReal      Decimal?    @db.Decimal(10, 2) // lo que le cuesta al negocio
+  templateKey    String? // plantilla de industria de la que nació
+  config         Json        @default("{}") // valor, servicio, reglas, restricciones, disponibilidad, módulos
+  status         String      @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  metadata       Json        @default("{}")
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  grants                  BenefitGrant[]
+  // Benefit Transformation Engine (Fase E1.7). Relaciones inversas.
+  transformationsAsSource BenefitTransformation[] @relation("TransformationSource")
+  transformationsAsTarget BenefitTransformation[] @relation("TransformationTarget")
+
+  @@index([companyId, status])
+  @@index([companyId, categoria])
+  @@index([companyId, tipo])
+  @@map("benefits")
+}
+
+/// Beneficio entregado a un suscriptor desde un módulo concreto. Es la fuente
+/// de las métricas del Benefit Engine (entregados, utilizados, costo real, ROI).
+model BenefitGrant {
+  id             String             @id @default(cuid())
+  companyId      String // scalar (sin relación) para filtrar por empresa
+  benefitId      String
+  benefit        Benefit            @relation(fields: [benefitId], references: [id], onDelete: Cascade)
+  subscriberId   String // ref. genérica al titular (cliente/usuario/empresa)
+  subscriberKind String             @default("CLIENT")
+  sourceModule   String // membership | promotion | referral | points | gamification | campaign | automation
+  status         BenefitGrantStatus @default(GRANTED)
+  grantedAt      DateTime           @default(now())
+  redeemedAt     DateTime?
+  expiresAt      DateTime?
+  meta           Json               @default("{}")
+
+  @@index([companyId, status])
+  @@index([benefitId, status])
+  @@index([subscriberId])
+  @@index([companyId, sourceModule])
+  @@map("benefit_grants")
+}
+
+// ─────────────────────────────────────────────
+// FASE E1.7 · BENEFIT TRANSFORMATION ENGINE
+// Motor universal de transformación de beneficios: upgrade, downgrade, exchange,
+// replacement, customization, split, merge. Historial inmutable, resolución
+// automática de fondeo (puntos, créditos, cupones, promociones, pago) y
+// políticas configurables por empresa. Sin lógica de industria.
+// ─────────────────────────────────────────────
+
+enum TransformationType {
+  UPGRADE // mejora (básico → premium)
+  DOWNGRADE // rebaja (premium → básico)
+  EXCHANGE // intercambio (A → B + C)
+  REPLACEMENT // reemplazo autorizado
+  CUSTOMIZATION // personalización antes de consumir
+  SPLIT // dividir un beneficio en varios (arquitectura preparada)
+  MERGE // combinar varios en uno (arquitectura preparada)
+}
+
+enum TransformationStatus {
+  REQUESTED // cliente lo solicitó
+  RESOLVING // calculando mejor forma de fondear
+  RESOLVED // resolución encontrada, esperando acción
+  PENDING_APPROVAL // requiere aprobación administrativa
+  APPROVED // aprobado, pendiente de ejecución/pago
+  PENDING_PAYMENT // esperando pago de diferencia
+  EXECUTING // ejecutando la transformación
+  COMPLETED // completada exitosamente
+  REJECTED // rechazada por admin
+  CANCELLED // cancelada por cliente
+  FAILED // falló durante ejecución
+}
+
+/// Registro inmutable de una transformación de beneficio. Cada operación genera
+/// un registro independiente: nunca se sobrescribe el beneficio original.
+model BenefitTransformation {
+  id             String               @id @default(cuid())
+  companyId      String
+  company        Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subscriberId   String
+  subscriberKind String               @default("CLIENT")
+  type           TransformationType
+  status         TransformationStatus @default(REQUESTED)
+
+  // Beneficio origen
+  sourceBenefitId String
+  sourceBenefit   Benefit @relation("TransformationSource", fields: [sourceBenefitId], references: [id])
+  sourceGrantId   String?
+
+  // Beneficio destino (null hasta que se resuelva)
+  targetBenefitId String?
+  targetBenefit   Benefit? @relation("TransformationTarget", fields: [targetBenefitId], references: [id])
+  targetGrantId   String?
+
+  // Economía
+  sourceValue      Decimal? @db.Decimal(10, 2)
+  targetValue      Decimal? @db.Decimal(10, 2)
+  differenceAmount Decimal? @db.Decimal(10, 2) // diferencia bruta
+  resolvedAmount   Decimal? @db.Decimal(10, 2) // monto final tras aplicar fondeos
+
+  // Resolución: detalle de qué fuentes se usaron (puntos, créditos, promos…)
+  resolution       Json      @default("{}")
+  // Política que autorizó la transformación
+  policyId         String?
+  requiresApproval Boolean   @default(false)
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+
+  // Contexto
+  sucursalId    String?
+  requestedById String?
+  config        Json    @default("{}")
+  metadata      Json    @default("{}")
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([companyId, status])
+  @@index([companyId, type])
+  @@index([subscriberId])
+  @@index([sourceBenefitId])
+  @@index([targetBenefitId])
+  @@map("benefit_transformations")
+}
+
+/// Política de transformación configurable por empresa. Define qué
+/// transformaciones están permitidas, con qué restricciones y métodos de fondeo.
+model TransformationPolicy {
+  id          String             @id @default(cuid())
+  companyId   String
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  tipo        TransformationType
+  activa      Boolean            @default(true)
+  prioridad   Int                @default(0)
+  config      Json               @default("{}") // TransformationPolicyConfig
+  metadata    Json               @default("{}")
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([companyId, tipo, activa])
+  @@map("transformation_policies")
+}
+
+// ─────────────────────────────────────────────
+// FASE D · REFERRAL ENGINE (Referral Strategy Library)
+// Motor universal de programas de recomendación 100% configurables. Reutiliza
+// el Benefit Engine (Fase C) para las recompensas, sin duplicar lógica. Todo lo
+// específico (reglas, recompensas, escalado, límites, condiciones, segmentos,
+// estados, tipos de enlace, antifraude, métricas) vive en `config` (JSON).
+// Coexiste con el sistema de referidos EN VIVO (Referido/ReferralEvent) sin
+// tocarlo. Ningún flujo existente consume estas tablas todavía.
+// ─────────────────────────────────────────────
+
+/// Los 10 modelos de programa de referidos del Documento Maestro 4.
+enum ReferralModel {
+  CLASSIC // ambos participan; negocios pequeños
+  REFERRER_ONLY // solo gana quien invita
+  REFERRED_ONLY // solo gana el nuevo cliente (captación)
+  BOTH // ambos ganan (el más usado)
+  PROGRESSIVE // recompensa escalonada por cantidad de referidos
+  AMBASSADOR // embajadores con beneficios permanentes
+  INFLUENCER // alcance; no requiere compras frecuentes
+  CORPORATE // una empresa recomienda a otra
+  EMPLOYEE // empleados generan clientes
+  TEAM // sucursales/equipos compiten
+}
+
+/// Estado de un participante (quien invita) dentro de un programa.
+enum ReferralParticipantStatus {
+  ACTIVE
+  PAUSED
+  BLOCKED
+}
+
+/// Programa de referidos configurable de una empresa. `type` fija el modelo;
+/// el resto de la estrategia vive en `config`.
+model ReferralProgram {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre      String
+  objetivo    String? // captación, retención, alcance, corporativo…
+  type        ReferralModel
+  templateKey String? // plantilla de industria de la que nació
+  config      Json          @default("{}") // reglas, recompensas, escalado, límites, condiciones, segmentos, estados, enlaces, antifraude, métricas
+  status      String        @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  metadata    Json          @default("{}")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  participants ReferralParticipant[]
+  referrals    ReferralReferral[]
+
+  @@index([companyId, status])
+  @@index([companyId, type])
+  @@map("referral_programs")
+}
+
+/// Un participante inscrito en un programa (quien invita): su código/enlace,
+/// contadores y nivel de escalado. El titular se referencia de forma genérica.
+model ReferralParticipant {
+  id             String                    @id @default(cuid())
+  companyId      String
+  programId      String
+  program        ReferralProgram           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  referrerId     String // ref. genérica (cliente/usuario/empresa/sucursal)
+  referrerKind   String                    @default("CLIENT")
+  code           String // código único del participante dentro del programa
+  status         ReferralParticipantStatus @default(ACTIVE)
+  level          Int                       @default(0) // nivel de escalado alcanzado
+  referralsCount Int                       @default(0) // referidos registrados
+  convertedCount Int                       @default(0) // referidos que convirtieron
+  metadata       Json                      @default("{}")
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  referrals ReferralReferral[]
+
+  @@unique([programId, code])
+  @@index([companyId, programId])
+  @@index([referrerId])
+  @@map("referral_participants")
+}
+
+/// Un referido concreto y su recorrido por el flujo configurable de estados.
+/// La recompensa se libera en el estado que la empresa decida (config.rewardState).
+model ReferralReferral {
+  id             String              @id @default(cuid())
+  companyId      String
+  programId      String
+  program        ReferralProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participantId  String
+  participant    ReferralParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  referredId     String? // ref. genérica al invitado (null hasta que se registra)
+  referredKind   String              @default("CLIENT")
+  state          String              @default("INVITED") // estado actual del flujo configurable
+  history        Json                @default("[]") // [{state, at}] recorrido
+  suspicious     Boolean             @default(false) // antifraude
+  fraudReasons   Json                @default("[]") // códigos de reglas disparadas
+  rewardReleased Boolean             @default(false)
+  rewardGrantId  String? // id del BenefitGrant liberado (Fase C)
+  invitedAt      DateTime            @default(now())
+  meta           Json                @default("{}")
+
+  @@index([companyId, programId, state])
+  @@index([participantId, state])
+  @@index([referredId])
+  @@map("referral_referrals")
+}
+
+// ─────────────────────────────────────────────
+// FASE E1 · AUTOMATION ENGINE (Automation Strategy Library)
+// Motor UNIVERSAL de automatizaciones. Una automatización nunca contiene lógica
+// fija: se compone de piezas reutilizables (trigger + condiciones + acciones +
+// esperas + variables + eventos). Reutiliza OBLIGATORIAMENTE el Rule Engine
+// (decisiones) y el Action Engine (acciones); no ejecuta nada por su cuenta.
+// Toda la estrategia vive en `config` (JSON). Multi-tenant por companyId.
+// Ningún flujo de la app consume estas tablas todavía.
+// ─────────────────────────────────────────────
+
+/// Estado de una ejecución (run) de automatización.
+enum AutomationRunStatus {
+  RUNNING
+  WAITING // pausada en una espera (se reanuda luego)
+  SUCCESS
+  FAILED
+  SKIPPED // no aplicaba (horario/límite/condición inicial)
+}
+
+/// Una automatización configurable de una empresa. Trigger + pasos (condiciones
+/// + acciones + esperas) + límites/horarios/canales viven en `config`. Puede
+/// nacer de una plantilla (`templateKey`) y encadenar otras automatizaciones.
+model Automation {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nombre       String
+  descripcion  String?
+  objetivo     String? // captación, onboarding, frecuencia, recuperación…
+  templateKey  String? // plantilla universal de la que nació
+  /// Tipo de disparador (EVENT | SCHEDULE | SEGMENT_ENTER | DATE | MANUAL…).
+  triggerType  String
+  /// Para EVENT: tipo de evento que la dispara (ej. "cliente.visita").
+  triggerEvent String?
+  config       Json     @default("{}") // trigger, pasos, variables, límites, horarios, días, canales, encadenado, prioridad
+  status       String   @default("DRAFT") // DRAFT | PUBLISHED | PAUSED | ARCHIVED
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  runs AutomationRun[]
+
+  @@index([companyId, status])
+  @@index([companyId, triggerType])
+  @@index([companyId, triggerEvent])
+  @@map("automations")
+}
+
+/// Registro/auditoría de una ejecución: hora, trigger, reglas evaluadas,
+/// acciones ejecutadas, resultado, errores y tiempo. Toda ejecución auditable.
+model AutomationRun {
+  id             String              @id @default(cuid())
+  companyId      String
+  automationId   String
+  automation     Automation          @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  status         AutomationRunStatus @default(RUNNING)
+  /// Sujeto impactado (cliente/usuario/empresa), ref. genérica.
+  subjectId      String?
+  subjectKind    String?
+  triggeredBy    String? // trigger/evento que la originó
+  rulesEvaluated Json                @default("[]") // [{expr, passed}]
+  actionsRun     Json                @default("[]") // [{type, ok, detail}]
+  result         Json                @default("{}")
+  error          String?
+  durationMs     Int?
+  startedAt      DateTime            @default(now())
+  finishedAt     DateTime?
+  meta           Json                @default("{}")
+
+  @@index([companyId, automationId, status])
+  @@index([companyId, startedAt])
+  @@index([subjectId])
+  @@map("automation_runs")
+}
+
+/// Bus de eventos: toda acción importante genera un evento que otras
+/// automatizaciones pueden consumir (encadenado). `processed` evita reprocesar.
+model AutomationEvent {
+  id          String   @id @default(cuid())
+  companyId   String
+  type        String // ej. "cliente.registrado", "cliente.visita", "cliente.subio_nivel"
+  subjectId   String?
+  subjectKind String?  @default("CLIENT")
+  payload     Json     @default("{}")
+  source      String? // automationId/módulo que lo emitió
+  processed   Boolean  @default(false)
+  occurredAt  DateTime @default(now())
+
+  @@index([companyId, type, processed])
+  @@index([companyId, occurredAt])
+  @@index([subjectId])
+  @@map("automation_events")
+}

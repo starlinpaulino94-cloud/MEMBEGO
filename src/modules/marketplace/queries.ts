@@ -147,6 +147,7 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
         isFeatured: true,
         isPublished: true,
         isActive: true,
+        esDemo: true,
         createdAt: true,
         categories: {
           select: {
@@ -159,6 +160,10 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
     })
 
     if (!company || !company.isPublished || !company.isActive) return null
+    // Explícito y no derivado de `isPublished`: el perfil público de una
+    // empresa de práctica no existe ni con la URL en la mano. Al enlace de
+    // registro (/registro/<slug>) sí se llega — es otra ruta y es la única.
+    if (company.esDemo) return null
 
     return {
       ...company,
@@ -278,7 +283,12 @@ export async function getClientePromociones(
         archivada: false,
         vigenciaDesde: { lte: now },
         OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-        company: { isPublished: true, isActive: true, esDemo: false },
+        // Sin `isPublished` ni `esDemo`: estas son las promociones de las
+        // empresas DE ESTA PERSONA (el `companyId in` de arriba sale de sus
+        // fichas de cliente). Quien es cliente ve lo suyo aunque el negocio no
+        // esté publicado, y quien entró por el enlace de la empresa de
+        // práctica es cliente de ella.
+        company: { isActive: true },
       },
       select: {
         id: true,

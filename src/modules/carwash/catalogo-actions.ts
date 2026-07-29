@@ -137,20 +137,47 @@ export async function guardarServicio(
       where: { companyId },
       select: { id: true },
     })
+    // Auditoría de producción · Fase 4. Antes era un `await` por tipo de
+    // vehículo dentro del bucle: con ocho tipos, ocho viajes de ida y vuelta a
+    // la base en serie, cada uno pagando la latencia completa. No es
+    // catastrófico porque los tipos son pocos y acotados, pero es gratis
+    // arreglarlo y el patrón se copia.
+    //
+    // Va en UNA transacción, además, porque guardar la mitad de las tarifas de
+    // un servicio es peor que no guardar ninguna: el precio de un tipo de
+    // vehículo quedaría del formulario nuevo y el de otro del viejo, y nadie
+    // lo notaría hasta cobrar de menos.
+    const sinPrecio: string[] = []
+    const conPrecio: { tipoVehiculoId: string; precio: number }[] = []
     for (const t of tipos) {
       const precio = numero(formData.get(`precio_${t.id}`))
-      if (precio === null) {
-        await prisma.servicioPrecio
-          .deleteMany({ where: { servicioId, tipoVehiculoId: t.id } })
-          .catch(anotarFallo('carwash:servicioPrecio.deleteMany'))
-        continue
-      }
-      await prisma.servicioPrecio.upsert({
-        where: { servicioId_tipoVehiculoId: { servicioId, tipoVehiculoId: t.id } },
-        create: { servicioId, tipoVehiculoId: t.id, precio },
-        update: { precio },
-      })
+      if (precio === null) sinPrecio.push(t.id)
+      else conPrecio.push({ tipoVehiculoId: t.id, precio })
     }
+
+    await prisma
+      .$transaction([
+        ...(sinPrecio.length
+          ? [
+              prisma.servicioPrecio.deleteMany({
+                where: { servicioId, tipoVehiculoId: { in: sinPrecio } },
+              }),
+            ]
+          : []),
+        ...conPrecio.map((c) =>
+          prisma.servicioPrecio.upsert({
+            where: {
+              servicioId_tipoVehiculoId: {
+                servicioId,
+                tipoVehiculoId: c.tipoVehiculoId,
+              },
+            },
+            create: { servicioId, tipoVehiculoId: c.tipoVehiculoId, precio: c.precio },
+            update: { precio: c.precio },
+          })
+        ),
+      ])
+      .catch(anotarFallo('carwash:servicioPrecio.guardar'))
 
     revalidatePath(RUTA)
     return { success: id ? 'Servicio actualizado.' : `Servicio "${nombre}" agregado.` }

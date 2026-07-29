@@ -1,0 +1,182 @@
+// ──────────────────────────────────────────────────────────────────────────
+// CLIENTES Y SUS DATOS
+//
+// El cliente final de una empresa. Distinto de `User`: un mismo `User` puede
+// ser cliente de varias empresas, y cada relación es un `Cliente`.
+// ──────────────────────────────────────────────────────────────────────────
+
+enum InvitacionEstado {
+  PENDIENTE
+  ACEPTADA
+  CANCELADA
+  EXPIRADA
+}
+
+// Invitación de un miembro al equipo de una empresa (Onboarding Fase 2C).
+// El invitado abre el enlace del correo, crea su cuenta y se une con el rol
+// asignado. No bloquea la publicación (el equipo puede armarse más tarde).
+model Invitacion {
+  id          String           @id @default(cuid())
+  companyId   String
+  company     Company          @relation(fields: [companyId], references: [id])
+  email       String
+  rol         AppRole
+  token       String           @unique @default(cuid())
+  estado      InvitacionEstado @default(PENDIENTE)
+  invitadoPor String? // userId de quien invitó
+  expiraEn    DateTime
+  aceptadaEn  DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([companyId, estado])
+  @@index([email])
+  @@map("invitaciones")
+}
+
+model Cliente {
+  id                 String    @id @default(cuid())
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id])
+  /// Identidad en Supabase Auth. Para los clientes de MOSTRADOR (`esLocal`)
+  /// lleva el prefijo `local:` — Supabase solo emite UUID, así que un id con
+  /// ese prefijo JAMÁS puede venir de una sesión real y ese cliente no puede
+  /// iniciar sesión ni por accidente.
+  supabaseId         String
+  nombre             String
+  telefono           String?
+  /// Vacío en los clientes de mostrador. `sendEmail` ya descarta destinatarios
+  /// inválidos, así que un correo vacío no intenta enviar nada.
+  email              String
+  /// Cliente de MOSTRADOR: vino a lavar sin tener cuenta en la plataforma.
+  /// Se le registra igual para que su historial exista y no haya que llevarlo
+  /// en un cuaderno aparte. Puede vincularse después a una cuenta real.
+  esLocal            Boolean   @default(false)
+  fechaNacimiento    DateTime?
+  avatarUrl          String?
+  // F5/Onboarding paso 2 (B2C): perfil ampliado del cliente.
+  ciudad             String?
+  genero             String? // "M" | "F" | "otro" | null (opcional)
+  idioma             String? // locale preferido, ej. "es-DO"
+  notifPromos        Boolean   @default(true) // recibir promociones
+  notifRecordatorios Boolean   @default(true) // recordatorios (vencimiento, etc.)
+  // Atribución de marketing (docs/ADQUISICION.md): canal por el que llegó el
+  // cliente (facebook, instagram, tarjeta, …), capturado con la cookie mg_canal
+  // ANTES del registro (enlaces /?src=canal). null = directo / desconocido.
+  canalOrigen        String?
+  codigoReferido     String    @unique @default(cuid())
+  // Código corto legible para el enlace /r/XXXXXX (se genera al visitar el
+  // panel de referidos; null hasta entonces).
+  codigoCorto        String?   @unique
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  vehiculos       Vehiculo[]
+  memberships     Membership[]
+  qrTokens        QrToken[] // vacío hasta que tenga membresía activa
+  visits          Visit[]
+  referidosHechos Referido[]      @relation("Referente")
+  referidoComo    Referido[]      @relation("Referido")
+  referralEvents  ReferralEvent[] @relation("ReferralEvents")
+  tickets         SupportTicket[]
+  ratings         CompanyRating[]
+  notas           ClienteNota[]
+
+  transacciones       Transaction[]
+  compras             ProductoCompra[]
+  // Growth Engine: progreso y eventos de campañas de invitación.
+  invitacionProgresos InvitacionProgreso[]
+  invitacionEventos   InvitacionEvento[]
+
+  // Growth Engine 3.0.
+  growthLinks   GrowthLink[]   @relation("GrowthLinks")
+  growthRewards GrowthReward[] @relation("GrowthRewards")
+  growthWallets GrowthWallet[] @relation("GrowthWallet")
+
+  // Engagement Engine · Fase 6B (Ruleta de premios).
+  ruletaJugadas RuletaJugada[]
+
+  // Módulo de Citas.
+  citas           Cita[]
+  ofertaInvitados OfertaInvitado[]
+
+  // Regalos P2P.
+  regalosEnviados  Regalo[] @relation("RegalosEnviados")
+  regalosRecibidos Regalo[] @relation("RegalosRecibidos")
+
+  // App Car Wash · E5.
+  colaVehiculos  ColaVehiculo[]
+  evidenciasFoto EvidenciaFoto[]
+  // App Car Wash · Fase 2.
+  incidencias    Incidencia[]
+
+  campanaInscripciones CampanaInscripcion[]
+  pagoIntentos         PagoIntento[]
+
+  @@unique([supabaseId, companyId])
+  // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).
+  // El unique (supabaseId, companyId) no cubre búsquedas por companyId solo.
+  @@index([companyId])
+  // Atribución de marketing: agrupación de registros por canal.
+  @@index([companyId, canalOrigen])
+  @@map("clientes")
+}
+
+model Vehiculo {
+  id        String   @id @default(cuid())
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  marca     String
+  modelo    String
+  anio      Int
+  color     String
+  placa     String?
+  createdAt DateTime @default(now())
+
+  visits Visit[]
+  citas  Cita[]
+
+  /// Fase 1 · el tipo se recuerda para no volver a preguntarlo cada visita.
+  tipoVehiculoId String?
+  tipoVehiculo   TipoVehiculo? @relation(fields: [tipoVehiculoId], references: [id], onDelete: SetNull)
+
+  // App Car Wash · E5.
+  colaEntradas ColaVehiculo[]
+  evidencias   EvidenciaFoto[]
+
+  // App Car Wash · Fase 2.
+  cuentaVehiculos CuentaVehiculo[]
+  incidencias     Incidencia[]
+
+  @@index([clienteId])
+  @@map("vehiculos")
+}
+
+// F4.4: notas internas del CRM — múltiples por cliente, con autor y fecha.
+// Solo visibles para el equipo de la empresa (nunca para el cliente).
+model ClienteNota {
+  id        String   @id @default(cuid())
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  autorId   String?
+  autor     User?    @relation(fields: [autorId], references: [id], onDelete: SetNull)
+  texto     String
+  createdAt DateTime @default(now())
+
+  @@index([clienteId, createdAt])
+  @@map("cliente_notas")
+}
+
+// F5.2: intereses del cliente (categorías favoritas, cross-empresa).
+// Alimentan las recomendaciones del feed y el onboarding B2C.
+model UserInteres {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   BusinessCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+
+  @@unique([userId, categoryId])
+  @@index([categoryId])
+  @@map("user_intereses")
+}

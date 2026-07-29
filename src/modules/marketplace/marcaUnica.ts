@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
+import { SIN_DEMO } from '@/modules/demo'
 
 /**
  * Modo MARCA ÚNICA.
@@ -32,8 +33,11 @@ export interface EmpresaPrincipal {
 export const esMarcaUnica = unstable_cache(
   async (): Promise<boolean> => {
     try {
+      // Sin las de práctica: crear una empresa de entrenamiento no puede
+      // sacar a la plataforma del modo marca única y cambiarle la portada al
+      // negocio real.
       const total = await prisma.company.count({
-        where: { isActive: true, isPublished: true },
+        where: { isActive: true, isPublished: true, ...SIN_DEMO },
       })
       return total <= 1
     } catch (e) {
@@ -49,7 +53,7 @@ export const getEmpresaPrincipal = unstable_cache(
   async (): Promise<EmpresaPrincipal | null> => {
     try {
       const company = await prisma.company.findFirst({
-        where: { isActive: true, isPublished: true },
+        where: { isActive: true, isPublished: true, ...SIN_DEMO },
         orderBy: [
           { isFeatured: 'desc' },
           { featuredOrder: 'asc' },

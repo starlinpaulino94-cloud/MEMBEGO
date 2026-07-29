@@ -1,6 +1,7 @@
+import { AdjuntoTicketLink } from '@/components/pagos/ComprobanteLink'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Paperclip } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { getTicketDetail } from '@/modules/soporte/queries'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,16 +54,7 @@ export default async function ClienteTicketPage({
           </div>
         </CardHeader>
         <CardContent>
-          {ticket.adjuntoUrl && (
-            <a
-              href={ticket.adjuntoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-sm text-primary hover:bg-muted/50"
-            >
-              <Paperclip className="h-4 w-4" /> Ver adjunto
-            </a>
-          )}
+          <AdjuntoTicketLink ticketId={ticket.id} valor={ticket.adjuntoUrl} />
           <ClienteTicketConversacion
             ticketId={ticket.id}
             cerrado={ticket.estado === 'CERRADO'}

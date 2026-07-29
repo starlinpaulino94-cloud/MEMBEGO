@@ -1,8 +1,8 @@
+import { urlComprobante } from '@/modules/storage/comprobantes'
+import { ComprobanteLink } from '@/components/pagos/ComprobanteLink'
 import Link from 'next/link'
 import {
   CreditCard,
-  ExternalLink,
-  FileText,
   ArrowRightLeft,
   XCircle,
   ArrowLeft,
@@ -127,7 +127,20 @@ export default async function PagosPage({
     console.error('[cliente-pagos]', e)
   }
 
-  const { membership: m, historial } = data
+  const { membership: m, historial: historialCrudo } = data
+
+  // El bucket de comprobantes es privado (auditoría · C-01): lo que se guarda
+  // es la ruta, no una URL. Aquí se firma cada una —5 minutos, previa
+  // comprobación de permiso— antes de pasársela al visor, que es un componente
+  // de cliente y no puede firmar nada por su cuenta.
+  const historial = m
+    ? await Promise.all(
+        historialCrudo.map(async (item) => ({
+          ...item,
+          comprobanteUrl: await urlComprobante('membresia', m.id, item.comprobanteUrl),
+        }))
+      )
+    : historialCrudo
   const necesitaPago = m ? NECESITA_PAGO.includes(m.estado) : false
   const cambioPendiente = !!m?.planSolicitadoNombre
 
@@ -230,18 +243,12 @@ export default async function PagosPage({
                 />
               </div>
 
-              {m.comprobanteUrl && (
-                <a
-                  href={m.comprobanteUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mb-4 inline-flex items-center gap-2 rounded-xl border border-border/70 px-3.5 py-2 text-sm text-primary transition hover:bg-muted"
-                >
-                  <FileText className="h-4 w-4" />
-                  Ver comprobante
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+              <ComprobanteLink
+                tipo="membresia"
+                id={m.id}
+                valor={m.comprobanteUrl}
+                className="mb-4 inline-flex items-center gap-2 rounded-xl border border-border/70 px-3.5 py-2 text-sm text-primary transition hover:bg-muted"
+              />
 
               {m.estado === 'RECHAZADA' && m.rechazadoReason && (
                 <div className="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 p-3.5 text-sm text-destructive">

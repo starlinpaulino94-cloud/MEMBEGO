@@ -6,7 +6,7 @@
  * el SQL Editor de Supabase. Si se despliega código nuevo sin correr su SQL,
  * Prisma consulta columnas/tablas que no existen y las páginas mueren con
  * "No pudimos cargar tu información" (ya pasó: hotfix 2026-07-14, perfil del
- * cliente, etc.). Este script compara `prisma/schema.prisma` (lo que el código
+ * cliente, etc.). Este script compara `prisma/schema/` (lo que el código
  * ESPERA) contra la base de datos real (lo que HAY) y lista exactamente qué
  * falta y qué migración lo crea.
  *
@@ -16,7 +16,7 @@
  *                                el SQL Editor de Supabase (no necesita acceso
  *                                local a la BD). Devuelve una tabla con lo que FALTA.
  *
- * CUÁNDO CORRERLO: antes y después de cada deploy que toque prisma/schema.prisma
+ * CUÁNDO CORRERLO: antes y después de cada deploy que toque prisma/schema/
  * o agregue carpetas en prisma/migrations/.
  */
 
@@ -25,9 +25,33 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SCHEMA_PATH = join(ROOT, 'prisma', 'schema.prisma')
+const SCHEMA_DIR = join(ROOT, 'prisma', 'schema')
 
-// ── 1) Parseo del schema.prisma ─────────────────────────────────────────────
+/**
+ * El esquema vive REPARTIDO en `prisma/schema/*.prisma` (un archivo por
+ * dominio). Prisma lee la carpeta entera como un solo esquema, y aquí se hace
+ * lo mismo: se concatenan los archivos y se parsea el resultado.
+ *
+ * El orden alfabético es indiferente —los bloques son independientes entre
+ * sí— pero se ordena de todas formas para que dos ejecuciones sobre el mismo
+ * código produzcan exactamente la misma salida.
+ */
+function leerEsquema() {
+  if (!existsSync(SCHEMA_DIR)) {
+    console.error(`No existe ${SCHEMA_DIR}. ¿Se movió el esquema?`)
+    process.exit(1)
+  }
+  const archivos = readdirSync(SCHEMA_DIR)
+    .filter((f) => f.endsWith('.prisma'))
+    .sort()
+  if (archivos.length === 0) {
+    console.error(`${SCHEMA_DIR} no contiene ningún .prisma`)
+    process.exit(1)
+  }
+  return archivos.map((f) => readFileSync(join(SCHEMA_DIR, f), 'utf8')).join('\n')
+}
+
+// ── 1) Parseo del esquema ───────────────────────────────────────────────────
 
 const SCALARS = new Set([
   'String', 'Boolean', 'Int', 'BigInt', 'Float', 'Decimal', 'DateTime', 'Json', 'Bytes',
@@ -110,7 +134,7 @@ function emitSql({ models, enums }) {
   const enumVals = [...enums.entries()].flatMap(([name, values]) =>
     values.map((v) => `('${name}','${v}')`)
   )
-  console.log(`-- DB DOCTOR (generado desde prisma/schema.prisma — solo lectura)
+  console.log(`-- DB DOCTOR (generado desde prisma/schema/ — solo lectura)
 -- Pega TODO en el SQL Editor de Supabase. Devuelve SOLO lo que FALTA:
 -- si el resultado está vacío, la BD está al día con el código.
 WITH columnas_esperadas(tabla, columna) AS (VALUES
@@ -200,6 +224,7 @@ async function runConnected({ models, enums }) {
 
     if (problemas.length === 0) {
       console.log(`✓ Esquema al día: ${models.length} modelos y ${enums.size} enums verificados contra la BD. Nada pendiente.`)
+      await revisarRls(prisma)
       return
     }
 
@@ -217,9 +242,68 @@ async function runConnected({ models, enums }) {
   }
 }
 
+// ── 5) Cobertura de RLS ─────────────────────────────────────────────────────
+
+/**
+ * Avisa si alguna tabla de `public` quedó sin RLS o sigue alcanzable por la
+ * clave anónima.
+ *
+ * Por qué vive aquí: la migración `20260771_rls_barrera_publica` cubre las
+ * tablas que existían el día que se aplicó. Una tabla creada después NO nace
+ * con RLS, y nadie se entera —no rompe nada, solo deja la puerta entornada—.
+ * Ese es exactamente el tipo de agujero que vuelve solo meses después, así que
+ * lo vigila el mismo comando que ya se corre en cada despliegue.
+ *
+ * Avisa, no falla: la corrección es volver a aplicar la migración, y bloquear
+ * `db:doctor` por esto convertiría una advertencia útil en un estorbo.
+ */
+async function revisarRls(prisma) {
+  const [sinRls, expuestas] = await Promise.all([
+    prisma.$queryRawUnsafe(
+      `SELECT c.relname AS tabla
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+          AND c.relname <> '_prisma_migrations'
+          AND NOT c.relrowsecurity
+        ORDER BY c.relname`
+    ),
+    prisma.$queryRawUnsafe(
+      `SELECT DISTINCT table_name AS tabla
+         FROM information_schema.role_table_grants
+        WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated')
+        ORDER BY table_name`
+    ),
+  ])
+
+  if (sinRls.length === 0 && expuestas.length === 0) {
+    console.log('✓ RLS: todas las tablas protegidas y ninguna alcanzable por la clave anónima.')
+    return
+  }
+
+  if (expuestas.length > 0) {
+    console.warn(
+      `\n⚠ ${expuestas.length} tabla(s) siguen alcanzables por 'anon'/'authenticated'.\n` +
+        `  Esa clave viaja en el navegador: son legibles desde fuera vía PostgREST.\n` +
+        `  ${expuestas.slice(0, 8).map((r) => r.tabla).join(', ')}` +
+        (expuestas.length > 8 ? `, … y ${expuestas.length - 8} más` : '')
+    )
+  }
+  if (sinRls.length > 0) {
+    console.warn(
+      `\n⚠ ${sinRls.length} tabla(s) de public sin RLS (probablemente creadas después):\n` +
+        `  ${sinRls.slice(0, 8).map((r) => r.tabla).join(', ')}` +
+        (sinRls.length > 8 ? `, … y ${sinRls.length - 8} más` : '')
+    )
+  }
+  console.warn(
+    `\n  Remedio: vuelve a aplicar prisma/migrations/20260771_rls_barrera_publica/migration.sql\n` +
+      `  (es idempotente). Detalle en docs/RLS.md.`
+  )
+}
+
 // ── main ────────────────────────────────────────────────────────────────────
 
-const parsed = parseSchema(readFileSync(SCHEMA_PATH, 'utf8'))
+const parsed = parseSchema(leerEsquema())
 if (process.argv.includes('--sql')) {
   emitSql(parsed)
 } else {

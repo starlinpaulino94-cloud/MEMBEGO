@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { FileUp, Loader2, SendHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { pedirSubidaComprobante } from '@/modules/storage/comprobantes'
 import { enviarComprobanteCompra, type CompraState } from '@/modules/promociones/compraActions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,13 +68,22 @@ export function ComprobanteCompraForm({
     }
     setUploading(true)
     try {
-      const supabase = createClient()
+      // Ruta y permiso los decide el servidor (auditoría · C-01): el token
+      // recibido solo sirve para esa ruta, así que no hay forma de escribir
+      // encima del comprobante de otra persona.
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `compras/${compraId}-${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('comprobantes').upload(path, file, { upsert: true })
+      const permiso = await pedirSubidaComprobante('compra', compraId, ext)
+      if (permiso.error || !permiso.subida) {
+        toast.error(permiso.error ?? 'No se pudo preparar la subida.')
+        return
+      }
+      const supabase = createClient()
+      const { error } = await supabase.storage
+        .from('comprobantes')
+        .uploadToSignedUrl(permiso.subida.path, permiso.subida.token, file)
       if (error) throw error
-      const { data } = supabase.storage.from('comprobantes').getPublicUrl(path)
-      setComprobanteUrl(data.publicUrl)
+      // Se guarda la RUTA: el bucket es privado y cada lectura se firma.
+      setComprobanteUrl(permiso.subida.path)
       setFileName(file.name)
       toast.success('Comprobante adjuntado.')
     } catch (e) {

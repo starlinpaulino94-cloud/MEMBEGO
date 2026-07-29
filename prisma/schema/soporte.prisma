@@ -1,0 +1,100 @@
+// ──────────────────────────────────────────────────────────────────────────
+// SOPORTE, FAQ Y WHATSAPP
+//
+// Los canales por los que un cliente pide ayuda.
+// ──────────────────────────────────────────────────────────────────────────
+
+enum TicketEstado {
+  NUEVO
+  EN_PROCESO
+  ESPERANDO_CLIENTE
+  RESUELTO
+  CERRADO
+}
+
+enum TicketCategoria {
+  PAGO
+  MEMBRESIA
+  BENEFICIOS
+  APP
+  OTRO
+}
+
+enum TicketAutor {
+  CLIENTE
+  ADMIN
+  SISTEMA
+}
+
+// Configuración de Comunicación y Soporte por empresa, 100% editable desde el
+// panel. Conserva el nombre de tabla `whatsapp_config` por compatibilidad.
+model WhatsAppConfig {
+  id               String   @id @default(cuid())
+  companyId        String   @unique
+  company          Company  @relation(fields: [companyId], references: [id])
+  codigoPais       String   @default("+1") // ej: +52
+  numero           String // solo dígitos nacionales, ej: 5512345678
+  mensajePlantilla String   @default("Hola, quisiera más información.")
+  activo           Boolean  @default(true) // mostrar botón de WhatsApp al cliente
+  correoSoporte    String? // correo de soporte, ej: soporte@empresa.com
+  horaInicio       String? // "09:00"
+  horaCierre       String? // "18:00"
+  diasLaborales    String? // CSV de índices de día 0..6 (0=Dom), ej: "1,2,3,4,5"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("whatsapp_config")
+}
+
+// Preguntas frecuentes administrables por empresa, visibles en el Centro de Ayuda.
+model FaqItem {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  pregunta  String
+  respuesta String
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, activo])
+  @@map("faq_items")
+}
+
+// Tickets de soporte creados por clientes y gestionados por administradores.
+model SupportTicket {
+  id         String          @id @default(cuid())
+  companyId  String
+  company    Company         @relation(fields: [companyId], references: [id])
+  clienteId  String
+  cliente    Cliente         @relation(fields: [clienteId], references: [id])
+  asunto     String
+  categoria  TicketCategoria @default(OTRO)
+  estado     TicketEstado    @default(NUEVO)
+  adjuntoUrl String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  mensajes TicketMensaje[]
+
+  @@index([companyId, estado])
+  @@index([clienteId])
+  @@map("support_tickets")
+}
+
+// Mensajes/eventos de un ticket: conversación cliente↔admin, notas internas
+// (solo visibles para admin) y eventos de sistema (cambios de estado).
+model TicketMensaje {
+  id            String        @id @default(cuid())
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  autorTipo     TicketAutor
+  autorNombre   String
+  cuerpo        String
+  esNotaInterna Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_mensajes")
+}

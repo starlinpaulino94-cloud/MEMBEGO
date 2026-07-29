@@ -198,6 +198,15 @@ const OBJETOS_ESPERADOS: ObjetoEsperado[] = [
   },
 ]
 
+/**
+ * Índices que NO se detectan con `OBJETOS_ESPERADOS` (esa lista mira columnas y
+ * tablas, no índices). La migración 20260768 añade dos índices compuestos a
+ * `visits`; si faltan, la aplicación funciona igual pero los reportes por rango
+ * de fechas degradan a medida que crece la tabla. Es rendimiento, no
+ * corrección, así que no se avisa en el panel — se comprueba con
+ * `npm run db:doctor`.
+ */
+
 export interface MigracionPendiente {
   migracion: string
   /** Lo que falta, en lenguaje de negocio. */

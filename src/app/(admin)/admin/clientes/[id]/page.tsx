@@ -1,3 +1,4 @@
+import { ComprobantePreview } from '@/components/pagos/ComprobanteLink'
 import Link from 'next/link'
 import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
@@ -223,25 +224,11 @@ export default async function ClienteDetailPage({
                     {membership.comprobanteNota && (
                       <p className="text-sm text-muted-foreground italic">"{membership.comprobanteNota}"</p>
                     )}
-                    {/\.(jpe?g|png|webp)$/i.test(membership.comprobanteUrl) ? (
-                      <a href={membership.comprobanteUrl} target="_blank" rel="noopener noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={membership.comprobanteUrl}
-                          alt="Comprobante"
-                          className="max-h-48 rounded-lg border object-contain"
-                        />
-                      </a>
-                    ) : (
-                      <a
-                        href={membership.comprobanteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary underline"
-                      >
-                        Ver comprobante (PDF)
-                      </a>
-                    )}
+                    <ComprobantePreview
+                      tipo="membresia"
+                      id={membership.id}
+                      valor={membership.comprobanteUrl}
+                    />
                   </div>
                 )}
 

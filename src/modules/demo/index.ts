@@ -35,7 +35,23 @@ import { prisma } from '@/lib/prisma'
  * ────────────────────────────────────────────────────────────────────────────
  */
 
-/** Filtro para excluir lo de demo de cualquier consulta de plataforma. */
+/**
+ * LA REGLA DE QUIÉN VE UNA EMPRESA DE PRÁCTICA: solo quien se registró por su
+ * enlace.
+ *
+ * `SIN_DEMO` se mezcla en el `where` de todo lo que DESCUBRE empresas o
+ * promociones —la vitrina pública, el explorar del cliente, las
+ * recomendaciones, las destacadas, las nuevas, el modo marca única— porque en
+ * todas ellas el que mira no pidió ver esa empresa: se la estamos ofreciendo
+ * nosotros. Ofrecerle un car wash que no existe es, en el mejor de los casos,
+ * hacerle perder el viaje.
+ *
+ * Y NO se pone en lo que la persona YA TIENE: sus empresas, sus membresías,
+ * sus promociones, su QR. Quien entró por el enlace de la empresa de práctica
+ * es cliente de ella y adentro tiene que verlo todo; si no, el entrenamiento
+ * enseñaría pantallas vacías. Esas consultas se acotan por `companyId`, que ya
+ * es la prueba de que la empresa es suya.
+ */
 export const SIN_DEMO = { esDemo: false } as const
 
 /**

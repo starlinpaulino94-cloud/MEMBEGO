@@ -19,6 +19,7 @@ import {
 import { validarConsumoCompra, registrarTransicionCompra } from '@/modules/promociones/compra'
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { nuevoTokenQr, qrVencido, vencimientoQr } from '@/modules/qr/token'
 
 export interface VisitaReciente {
   id: string
@@ -134,6 +135,19 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
         },
       },
     })
+
+    // Caducidad (auditoría · A-02). Va ANTES de cualquier otra comprobación
+    // de estado para que el mensaje sea el correcto: decirle al empleado
+    // "membresía sin usos" cuando el problema es un QR de hace ocho meses lo
+    // manda a resolver algo que no está roto.
+    if (qr && qrVencido(qr.expiraAt)) {
+      await logScanInvalido(user.metadata.dbUserId, clean, 'QR_VENCIDO')
+      return {
+        error:
+          'Este código QR ya venció. Pídele al cliente que abra su membresía en la app para generar uno nuevo.',
+        errorCode: 'QR_NOT_FOUND',
+      }
+    }
 
     if (!qr) {
       await logScanInvalido(user.metadata.dbUserId, clean, 'QR_NOT_FOUND')
@@ -555,6 +569,7 @@ export async function confirmarVisita(
           data: {
             clienteId: membership.clienteId,
             membresiaId: membership.id,
+            token: nuevoTokenQr(), expiraAt: vencimientoQr(),
           },
         })
         nuevoQrId = nuevoQr.id
