@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, Loader2, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react'
+import { CreditCard, Loader2, CheckCircle2, ShieldCheck, AlertCircle, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 
@@ -311,60 +311,65 @@ export function PagoTokenCardnet({
 
   if (estado === 'aprobado') {
     return (
-      <div className="rounded-2xl border border-success/25 bg-success/10 p-5 text-center">
-        <CheckCircle2 className="mx-auto h-8 w-8 text-success" aria-hidden />
-        <p className="mt-2 font-semibold text-success">¡Pago aprobado!</p>
+      <div className="rounded-2xl border border-success/25 bg-success/10 p-6 text-center">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/15">
+          <CheckCircle2 className="h-8 w-8 text-success" aria-hidden />
+        </span>
+        <p className="mt-3 text-lg font-bold text-success">¡Pago aprobado!</p>
         <p className="mt-1 text-sm text-foreground">Tu membresía quedó activa.</p>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
-        <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-          Pago 100% seguro y encriptado
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Tus datos se ingresan en una ventana bancaria segura. Tu número de
-          tarjeta nunca se guarda en nuestra plataforma.
-        </p>
-      </div>
+  const ocupado = estado === 'cargando' || estado === 'capturando' || estado === 'cobrando'
 
+  return (
+    <div className="space-y-4">
       {estado === 'error' && mensaje && (
         <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
         </p>
       )}
 
-      {/* Fase 2: renovación automática. Solo aparece antes de pagar. */}
+      {/* Fase 2: renovación automática, con interruptor. Solo antes de pagar. */}
       {(estado === 'listo' || estado === 'error') && (
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border/60 bg-card p-3">
-          <input
-            type="checkbox"
-            checked={guardar}
-            onChange={(e) => setGuardar(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-          />
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-primary/30">
           <span className="text-sm">
-            <span className="font-medium text-foreground">Guardar mi tarjeta para renovar automáticamente</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Se guarda de forma segura y encriptada. Podrás quitarla cuando quieras.
+            <span className="font-semibold text-foreground">Renovación automática</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+              Guarda tu tarjeta de forma encriptada y renueva sola cada período.
+              Puedes quitarla cuando quieras.
             </span>
+          </span>
+          <span className="relative inline-flex shrink-0">
+            <input
+              type="checkbox"
+              checked={guardar}
+              onChange={(e) => setGuardar(e.target.checked)}
+              className="peer sr-only"
+            />
+            <span
+              className="block h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40"
+              aria-hidden
+            />
+            <span
+              className="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"
+              aria-hidden
+            />
           </span>
         </label>
       )}
 
       <Button
         type="button"
+        variant="premium"
         onClick={() => void abrirCaptura()}
-        disabled={estado === 'cargando' || estado === 'capturando' || estado === 'cobrando'}
-        className="w-full py-6 text-base font-semibold"
+        disabled={ocupado}
+        className="w-full rounded-2xl py-7 text-base font-semibold"
       >
         {estado === 'cargando' ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando pasarela…
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Preparando pago seguro…
           </>
         ) : estado === 'cobrando' ? (
           <>
@@ -376,14 +381,30 @@ export function PagoTokenCardnet({
           </>
         ) : estado === 'error' ? (
           <>
-            <CreditCard className="mr-2 h-4 w-4" /> Reintentar pago con tarjeta
+            <CreditCard className="mr-2 h-5 w-5" /> Reintentar pago
           </>
         ) : (
           <>
-            <CreditCard className="mr-2 h-4 w-4" /> Pagar {montoTexto} con tarjeta
+            <Lock className="mr-2 h-4 w-4" /> Pagar {montoTexto}
           </>
         )}
       </Button>
+
+      {/* Sellos de confianza: discretos, debajo del CTA. */}
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] font-medium text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+          Encriptación bancaria
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Lock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+          Ventana de pago segura
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <CreditCard className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+          Nunca guardamos tu número
+        </span>
+      </div>
     </div>
   )
 }

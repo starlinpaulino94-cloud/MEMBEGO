@@ -252,27 +252,38 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
               </p>
             </div>
 
-            <div className="rounded-xl bg-muted/50 p-4">
+            {/* Resumen del cobro: tarjeta oscura estilo app bancaria. */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-brand p-5 text-white shadow-glow">
+              <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-white/10 blur-2xl" aria-hidden />
+              <div className="pointer-events-none absolute -bottom-16 -left-8 h-32 w-32 rounded-full bg-black/10 blur-2xl" aria-hidden />
               {descuentoBienvenida > 0 && (
-                <>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="relative mb-3 space-y-1.5 border-b border-white/20 pb-3">
+                  <div className="flex items-center justify-between text-sm text-white/80">
                     <span>Plan {planAPagar?.nombre}</span>
                     <span>{formatMoney(Number(planAPagar?.precio ?? 0), company)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                  <div className="flex items-center justify-between text-sm font-medium text-white">
                     <span className="inline-flex items-center gap-1.5">
                       <Gift className="h-4 w-4" /> Descuento de bienvenida
                     </span>
                     <span>-{formatMoney(descuentoBienvenida, company)}</span>
                   </div>
-                  <div className="my-2 border-t border-border/60" />
-                </>
+                </div>
               )}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Monto a pagar</span>
-                <span className="text-2xl font-bold tracking-tight text-foreground">
-                  {formatMoney(montoAPagar, company)}
-                </span>
+              <div className="relative flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                    Total a pagar
+                  </p>
+                  <p className="mt-1 text-4xl font-bold tracking-tight">
+                    {formatMoney(montoAPagar, company)}
+                  </p>
+                </div>
+                {descuentoBienvenida <= 0 && (
+                  <p className="max-w-[40%] truncate text-right text-sm font-medium text-white/80">
+                    {planAPagar?.nombre}
+                  </p>
+                )}
               </div>
             </div>
 
