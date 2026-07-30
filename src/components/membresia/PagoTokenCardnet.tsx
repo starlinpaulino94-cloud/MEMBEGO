@@ -89,7 +89,6 @@ export function PagoTokenCardnet({
   membershipId,
   montoTexto,
   publicKey,
-  captureUrl,
   scriptUrl,
   urlExito,
 }: Props) {
@@ -208,15 +207,44 @@ export function PagoTokenCardnet({
     }
   }, [scriptUrl, publicKey, cobrar])
 
-  // Abre el iframe de captura de tarjeta de CardNET.
-  const abrirCaptura = useCallback(() => {
+  // Abre el iframe de captura de CardNET. Primero pide al servidor una SESIÓN
+  // válida (CaptureURL + UniqueID reales); no se puede abrir con un id inventado.
+  const abrirCaptura = useCallback(async () => {
     const sdk = window.PWCheckout
     if (!sdk) {
       setEstado('error')
       setMensaje('La pasarela no está lista. Recarga la página.')
       return
     }
-    const uniqueId = `UI_${crypto.randomUUID()}`
+    setEstado('capturando')
+    setMensaje(null)
+
+    let sesion: { captureUrl: string; uniqueId: string; publicKey: string }
+    try {
+      const resp = await fetch('/api/pagos/cardnet-token/sesion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = (await resp.json().catch(() => ({}))) as {
+        ok?: boolean
+        captureUrl?: string
+        uniqueId?: string
+        publicKey?: string
+        error?: string
+      }
+      if (!data.ok || !data.captureUrl || !data.uniqueId) {
+        setEstado('error')
+        setMensaje(data.error ?? 'No se pudo iniciar la ventana de pago. Intenta de nuevo.')
+        return
+      }
+      sesion = { captureUrl: data.captureUrl, uniqueId: data.uniqueId, publicKey: data.publicKey || publicKey }
+    } catch {
+      setEstado('error')
+      setMensaje('No se pudo iniciar la ventana de pago. Revisa tu conexión.')
+      return
+    }
+
     sdk.SetProperties({
       name: 'CARTOWN Wash & Detailing',
       email: '',
@@ -228,16 +256,14 @@ export function PagoTokenCardnet({
       autoSubmit: 'false',
       empty: 'false',
     })
-    setEstado('capturando')
-    setMensaje(null)
-    const url = `${captureUrl}?key=${encodeURIComponent(publicKey)}&session_id=${uniqueId}`
+    const url = `${sesion.captureUrl}?key=${encodeURIComponent(sesion.publicKey)}&session_id=${encodeURIComponent(sesion.uniqueId)}`
     const abrir = sdk.OpenIframeCustom ?? sdk.OpenIframe
-    if (abrir) abrir(url, uniqueId)
+    if (abrir) abrir(url, sesion.uniqueId)
     else {
       setEstado('error')
       setMensaje('La pasarela no expone el método de apertura esperado.')
     }
-  }, [captureUrl, publicKey, montoTexto])
+  }, [publicKey, montoTexto])
 
   if (estado === 'aprobado') {
     return (
@@ -288,7 +314,7 @@ export function PagoTokenCardnet({
 
       <Button
         type="button"
-        onClick={abrirCaptura}
+        onClick={() => void abrirCaptura()}
         disabled={estado === 'cargando' || estado === 'capturando' || estado === 'cobrando'}
         className="w-full py-6 text-base font-semibold"
       >
