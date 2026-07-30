@@ -4,6 +4,7 @@ import {
   urlsTokens,
   montoEnteroMenor,
   interpretarCompraToken,
+  desenvolverRespuesta,
   sinSensibles,
 } from '../src/lib/payments/cardnet-tokens-core'
 
@@ -50,6 +51,40 @@ test('interpretarCompraToken NO aprueba ante respuesta ambigua o vacía', () => 
   assert.equal(interpretarCompraToken(null).aprobada, false)
   // Da un mensaje para el cliente, no técnico.
   assert.ok((interpretarCompraToken({ ResponseCode: '51' }).motivo ?? '').length > 0)
+})
+
+test('desenvolverRespuesta saca los datos de { Response, Errors } (forma real del QA)', () => {
+  // Forma observada en vivo contra el ambiente de prueba.
+  const { datos, errores } = desenvolverRespuesta({
+    Response: {
+      CustomerId: 111924,
+      CaptureURL: 'https://labservicios.cardnet.com.do/servicios/tokens/v1/Capture',
+      UniqueID: 'UI_xxx',
+    },
+    Errors: [{ ErrorCode: 'CS005', Message: 'Email ya registrado' }],
+  })
+  assert.equal(datos.CustomerId, 111924)
+  assert.equal(datos.UniqueID, 'UI_xxx')
+  assert.equal(errores.length, 1)
+  assert.equal(errores[0].codigo, 'CS005')
+})
+
+test('interpretarCompraToken con errores del proveedor NUNCA aprueba', () => {
+  const r = interpretarCompraToken({
+    Response: { Approved: true, AuthorizationCode: 'A1' },
+    Errors: [{ ErrorCode: 'TK004', Message: 'Sesión inválida' }],
+  })
+  assert.equal(r.aprobada, false)
+  assert.equal(r.motivo, 'Sesión inválida')
+})
+
+test('interpretarCompraToken aprueba una respuesta envuelta y limpia', () => {
+  const r = interpretarCompraToken({
+    Response: { Transaction: { AuthorizationCode: '00551Z', ResponseCode: '00' } },
+    Errors: [],
+  })
+  assert.equal(r.aprobada, true)
+  assert.equal(r.autorizacion, '00551Z')
 })
 
 test('sinSensibles enmascara tokens y datos de tarjeta', () => {

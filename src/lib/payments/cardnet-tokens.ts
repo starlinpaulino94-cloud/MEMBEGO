@@ -4,6 +4,7 @@ import {
   apiCandidatos,
   montoEnteroMenor,
   interpretarCompraToken,
+  desenvolverRespuesta,
   sinSensibles,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
@@ -296,9 +297,13 @@ export async function crearSesionCaptura(input: {
     Enable: 'true',
   })
   if (!ok) return null
+  // La respuesta viene envuelta en { Response: {...}, Errors: [...] }. Un
+  // CS005 ("Email ya registrado") NO es fallo: el proveedor devuelve igual el
+  // customer y un UniqueID fresco para la sesión.
+  const { datos } = desenvolverRespuesta(json)
   const s = (...ks: string[]) => {
     for (const k of ks) {
-      const v = json[k]
+      const v = datos[k]
       if (typeof v === 'string' && v) return v
       if (typeof v === 'number') return String(v)
     }
@@ -308,7 +313,8 @@ export async function crearSesionCaptura(input: {
   const uniqueId = s('UniqueID', 'UniqueId', 'uniqueId')
   const customerId = s('CustomerId', 'customerId', 'Id', 'id')
   if (!captureUrl || !uniqueId) return null
-  return { captureUrl, uniqueId, customerId }
+  // El CaptureURL llega sin barra final; el formato documentado la lleva.
+  return { captureUrl: captureUrl.endsWith('/') ? captureUrl : `${captureUrl}/`, uniqueId, customerId }
 }
 
 /**
@@ -327,9 +333,10 @@ export async function crearClienteCardnet(input: {
     Enable: 'true',
   })
   if (!ok) return null
-  // VERIFICAR-QA: el nombre del campo del id puede variar (CustomerId/Id).
-  const id =
-    (json.CustomerId ?? json.customerId ?? json.Id ?? json.id ?? '') as string | number
+  const { datos } = desenvolverRespuesta(json)
+  const id = (datos.CustomerId ?? datos.customerId ?? datos.Id ?? datos.id ?? '') as
+    | string
+    | number
   const customerId = String(id).trim()
   return customerId ? { customerId } : null
 }

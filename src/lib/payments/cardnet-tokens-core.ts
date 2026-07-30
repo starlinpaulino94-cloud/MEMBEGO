@@ -75,6 +75,30 @@ export function montoEnteroMenor(pesos: number): number {
   return Math.round(pesos * 100)
 }
 
+/**
+ * Las respuestas de la API de tokens vienen ENVUELTAS: `{ Response: {...},
+ * Errors: [...] }` (confirmado contra el ambiente de prueba en vivo). Este
+ * helper desenvuelve los datos y normaliza los errores.
+ */
+export function desenvolverRespuesta(json: Record<string, unknown>): {
+  datos: Record<string, unknown>
+  errores: { codigo: string; mensaje: string }[]
+} {
+  const datos = (
+    json.Response && typeof json.Response === 'object' ? json.Response : json
+  ) as Record<string, unknown>
+  const crudos = Array.isArray(json.Errors)
+    ? json.Errors
+    : Array.isArray(datos.Errors)
+      ? (datos.Errors as unknown[])
+      : []
+  const errores = crudos.map((e) => {
+    const o = (e ?? {}) as Record<string, unknown>
+    return { codigo: String(o.ErrorCode ?? ''), mensaje: String(o.Message ?? '') }
+  })
+  return { datos, errores }
+}
+
 /** Respuesta interpretada de un cobro por token. */
 export interface ResultadoCompraToken {
   aprobada: boolean
@@ -92,28 +116,49 @@ export interface ResultadoCompraToken {
  * nunca activar producto por una respuesta ambigua es la postura segura.
  */
 export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
-  const r = (resp ?? {}) as Record<string, unknown>
+  const raw = (resp ?? {}) as Record<string, unknown>
+  // Las respuestas reales vienen envueltas en { Response, Errors } (confirmado
+  // en vivo); las pruebas y variantes viejas pueden venir planas.
+  const { datos: r, errores } = desenvolverRespuesta(raw)
+  const tx = (r.Transaction && typeof r.Transaction === 'object' ? r.Transaction : {}) as Record<
+    string,
+    unknown
+  >
 
   const s = (v: unknown) => (v == null ? '' : String(v)).trim()
   // Distintos nombres posibles del código de respuesta según la versión.
   const codigo =
-    s(r.ResponseCode) || s(r.IsoCode) || s(r.IsoResponseCode) || s(r['response-code'])
+    s(r.ResponseCode) ||
+    s(tx.ResponseCode) ||
+    s(r.IsoCode) ||
+    s(r.IsoResponseCode) ||
+    s(r['response-code'])
   const aprobadaBool = r.Approved === true || r.approved === true || r.IsApproved === true
   const codigoOk = codigo === '00' || codigo === '000'
-  const aprobada = aprobadaBool || codigoOk
 
   const autorizacion =
     s(r.AuthorizationCode) ||
+    s(tx.AuthorizationCode) ||
     s(r.Authorization) ||
     s(r['approval-code']) ||
     s(r.RRN) ||
     null
 
+  // Con errores del proveedor NUNCA se aprueba, diga lo que diga el resto.
+  const aprobada =
+    errores.length === 0 && (aprobadaBool || codigoOk || Boolean(autorizacion))
+
+  const motivo = aprobada
+    ? null
+    : errores.length > 0 && errores[0].mensaje
+      ? errores[0].mensaje
+      : mensajeCompra(codigo, r)
+
   return {
     aprobada,
     autorizacion: autorizacion || null,
     codigo: codigo || (aprobada ? '00' : ''),
-    motivo: aprobada ? null : mensajeCompra(codigo, r),
+    motivo,
   }
 }
 
