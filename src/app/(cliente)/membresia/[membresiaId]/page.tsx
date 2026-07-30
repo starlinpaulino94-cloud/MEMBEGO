@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { QRShareCard } from '@/components/qr/QRShareCard'
 import { OpcionesPago } from '@/components/membresia/OpcionesPago'
+import { CancelarPagoBoton } from '@/components/membresia/CancelarPagoBoton'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
@@ -316,6 +317,11 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
                     : null
                 }
               />
+            </div>
+
+            {/* El cliente puede desistir del pago si cambió de opinión. */}
+            <div className="mt-5 border-t border-border/60 pt-4">
+              <CancelarPagoBoton membershipId={membership.id} esCambioPlan={isChangePending} />
             </div>
           </section>
         )}

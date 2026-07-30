@@ -350,3 +350,83 @@ export async function avisarPagoPresencial(
   revalidatePath(`/membresia/${membershipId}`)
   return { success: true, referencia }
 }
+
+export interface CancelarPagoState {
+  error?: string
+  success?: boolean
+  /** true = se canceló un cambio de plan; la membresía sigue activa. */
+  eraCambioDePlan?: boolean
+}
+
+/**
+ * El cliente cancela un pago pendiente que ya no quiere hacer.
+ *
+ * Dos casos, según en qué esté la membresía:
+ *  · Membresía nueva esperando pago (PENDIENTE / PENDIENTE_PAGO / RECHAZADA):
+ *    se marca CANCELADA. No se borra — `seleccionarPlan` la puede reabrir si el
+ *    cliente cambia de opinión.
+ *  · Membresía ACTIVA con un cambio de plan pendiente: se cancela SOLO el
+ *    cambio (la membresía vigente no se toca).
+ *
+ * Nunca cancela una membresía ya activa "a secas": pagar y disfrutar el período
+ * son cosas distintas; anular lo segundo no es "cancelar un pago".
+ */
+export async function cancelarPago(
+  _prev: CancelarPagoState,
+  formData: FormData
+): Promise<CancelarPagoState> {
+  const user = await getUser()
+  if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
+    return { error: 'No autorizado.' }
+  }
+  if (!(await formSubmitLimiter(user.metadata.clienteId))) {
+    return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
+  }
+
+  const membershipId = String(formData.get('membershipId') ?? '').trim()
+  if (!membershipId) return { error: 'Membresía no especificada.' }
+
+  const membership = await prisma.membership.findUnique({
+    where: { id: membershipId },
+    select: { id: true, clienteId: true, estado: true, planIdSolicitado: true },
+  })
+  if (!membership) return { error: 'Membresía no encontrada.' }
+  if (membership.clienteId !== user.metadata.clienteId) return { error: 'No autorizado.' }
+
+  const esCambioDePlan =
+    membership.estado === 'ACTIVA' && membership.planIdSolicitado != null
+
+  if (esCambioDePlan) {
+    // Solo se descarta el cambio; el plan vigente y su período no se tocan.
+    await prisma.membership.update({
+      where: { id: membershipId },
+      data: {
+        planIdSolicitado: null,
+        comprobanteUrl: null,
+        comprobanteNota: null,
+        metodoPagoId: null,
+      },
+    })
+    revalidatePath('/mis-membresias')
+    revalidatePath(`/membresia/${membershipId}`)
+    return { success: true, eraCambioDePlan: true }
+  }
+
+  if (!['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'].includes(membership.estado)) {
+    return { error: 'Esta membresía no tiene un pago pendiente para cancelar.' }
+  }
+
+  await prisma.membership.update({
+    where: { id: membershipId },
+    data: {
+      estado: 'CANCELADA',
+      comprobanteUrl: null,
+      comprobanteNota: null,
+      metodoPagoId: null,
+      rechazadoReason: null,
+    },
+  })
+  revalidatePath('/mis-membresias')
+  revalidatePath(`/membresia/${membershipId}`)
+  return { success: true, eraCambioDePlan: false }
+}
