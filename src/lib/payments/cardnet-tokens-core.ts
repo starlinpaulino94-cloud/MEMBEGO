@@ -45,6 +45,28 @@ export function urlsTokens(ambiente: AmbienteTokens): {
 }
 
 /**
+ * Bases CANDIDATAS de la API REST, en orden de preferencia. Los documentos de
+ * CardNET se contradicen entre sí (el Postman dice `labservicios`, el manual
+ * dice `lab`, el widget vive en `gtp-seglan`), así que el servidor prueba en
+ * orden y se queda con el primero que responda de verdad. `CARDNET_TOKENS_API_BASE`
+ * (env) permite fijarlo a mano cuando CardNET confirme el definitivo.
+ */
+export function apiCandidatos(ambiente: AmbienteTokens): string[] {
+  const fijo = process.env.CARDNET_TOKENS_API_BASE?.trim()
+  if (fijo) return [fijo.replace(/\/$/, '')]
+  return ambiente === 'produccion'
+    ? [
+        'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api',
+        'https://servicios.cardnet.com.do/servicios/tokens/v1/api',
+      ]
+    : [
+        'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api',
+        'https://labservicios.cardnet.com.do/servicios/tokens/v1/api',
+        'https://lab.cardnet.com.do/servicios/tokens/v1/api',
+      ]
+}
+
+/**
  * Monto en la unidad menor (centavos) como ENTERO, que es lo que espera el
  * campo `Amount` del Purchase de CardNET (10000 = RD$100.00). Se redondea para
  * no arrastrar errores de coma flotante.
