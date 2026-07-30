@@ -151,9 +151,16 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
 
   // Tarjeta (CardNET): disponible si la empresa la tiene encendida, configurada
   // y no es demo. `getMetodosParaCompraNueva` ya encapsula esa regla.
-  const tarjetaDisponible =
-    needsPayment &&
-    (await getMetodosParaCompraNueva(membership.cliente.companyId)).disponibles.includes('CARDNET')
+  //
+  // Fail-safe: si esta consulta fallara por cualquier motivo, la tarjeta
+  // simplemente no se ofrece — NUNCA tumba la página de la membresía. Una
+  // opción de pago que no carga no puede impedir ver el resto (mismo criterio
+  // que `ofrecerTransferencia`, que también degrada con gracia).
+  const tarjetaDisponible = needsPayment
+    ? await getMetodosParaCompraNueva(membership.cliente.companyId)
+        .then((m) => m.disponibles.includes('CARDNET'))
+        .catch(() => false)
+    : false
 
   const [metodosPago, sucursales] = needsPayment
     ? await Promise.all([
