@@ -243,6 +243,7 @@ model Company {
   plans                  Plan[]
   clientes               Cliente[]
   memberships            Membership[]
+  tarjetasTokenizadas    TarjetaTokenizada[]
   sucursales             Sucursal[]
   cajaSesiones           CajaSesion[]
   metodosPago            MetodoPago[]

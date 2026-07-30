@@ -168,3 +168,109 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     crudo: sinSensibles(json),
   }
 }
+
+// ── Fase 2: tarjeta guardada (cobros recurrentes) ───────────────────────────
+//
+// Estas tres llamadas salen del Postman de tokenización de CardNET. El header
+// de autorización es la LLAVE PRIVADA (secreto de servidor).
+
+/** Hace un POST autenticado a la API de tokens. Devuelve {ok, json}. */
+async function postTokens(
+  path: string,
+  cuerpo: Record<string, unknown> | null
+): Promise<{ ok: boolean; json: Record<string, unknown> }> {
+  const cfg = getTokensConfig()
+  if (!cfg) return { ok: false, json: {} }
+  const { api } = urlsTokens(cfg.ambiente)
+  try {
+    const resp = await fetch(`${api}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${cfg.privateKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+      signal: AbortSignal.timeout(30_000),
+    })
+    const json = (await resp.json().catch(() => ({}))) as Record<string, unknown>
+    return { ok: resp.ok, json }
+  } catch {
+    return { ok: false, json: {} }
+  }
+}
+
+/**
+ * Crea (o registra) un Customer en CardNET. Devuelve el CustomerId con el que
+ * luego se asocia el perfil de pago. `POST /api/Customer`.
+ */
+export async function crearClienteCardnet(input: {
+  email: string
+  nombre?: string
+  apellido?: string
+}): Promise<{ customerId: string } | null> {
+  const { ok, json } = await postTokens('/Customer', {
+    Email: input.email,
+    ...(input.nombre ? { FirstName: input.nombre } : {}),
+    ...(input.apellido ? { LastName: input.apellido } : {}),
+    Enable: 'true',
+  })
+  if (!ok) return null
+  // VERIFICAR-QA: el nombre del campo del id puede variar (CustomerId/Id).
+  const id =
+    (json.CustomerId ?? json.customerId ?? json.Id ?? json.id ?? '') as string | number
+  const customerId = String(id).trim()
+  return customerId ? { customerId } : null
+}
+
+/**
+ * Cobra una CREDENCIAL GUARDADA (renovación recurrente). Reutiliza el mismo
+ * Purchase, pero con las referencias almacenadas en vez de un token de un solo
+ * uso.
+ *
+ * VERIFICAR-QA (importante): la forma exacta de referenciar la tarjeta
+ * archivada en el Purchase solo se confirma con CardNET. Se envían todas las
+ * referencias que tengamos (token/CustomerId/PaymentProfileId) y se marca la
+ * transacción como recurrente. Cuando QA revele el contrato real, se ajusta
+ * SOLO este cuerpo — el resto del flujo (activación, idempotencia) no cambia.
+ */
+export async function cobrarConCredencialGuardada(input: {
+  customerId: string
+  paymentProfileId?: string | null
+  token?: string | null
+  pesos: number
+  orden: string
+  clienteIp: string
+}): Promise<CobrarConTokenSalida> {
+  const cuerpo: Record<string, unknown> = {
+    ...(input.token ? { TrxToken: input.token } : {}),
+    CustomerId: input.customerId,
+    ...(input.paymentProfileId ? { PaymentProfileId: input.paymentProfileId } : {}),
+    Order: input.orden,
+    Amount: montoEnteroMenor(input.pesos),
+    Tip: 0,
+    Currency: MONEDA_DOP_TOKENS,
+    Capture: true,
+    CustomerIP: input.clienteIp,
+    // Marca de credencial archivada / recurrente (nombres del ZTRANS).
+    Environment: 'Ecommerce_COF',
+    DataDo: { Tax: '0', Invoice: input.orden },
+  }
+  const { ok, json } = await postTokens('/Purchase', cuerpo)
+  const interpretado = interpretarCompraToken(json)
+  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: sinSensibles(json) }
+}
+
+/**
+ * Borra un perfil de pago guardado (el cliente quita su tarjeta).
+ * `POST /api/Customer/{id}/PaymentProfileDelete`.
+ */
+export async function borrarPerfilCardnet(input: {
+  customerId: string
+  paymentProfileId: string
+}): Promise<boolean> {
+  const { ok } = await postTokens(`/Customer/${encodeURIComponent(input.customerId)}/PaymentProfileDelete`, {
+    PaymentProfileId: input.paymentProfileId,
+  })
+  return ok
+}

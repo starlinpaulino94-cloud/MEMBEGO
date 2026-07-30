@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/automatizaciones",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/renovaciones-tarjeta",
+      "schedule": "0 12 * * *"
     }
   ]
 }
