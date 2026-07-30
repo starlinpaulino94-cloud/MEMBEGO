@@ -280,11 +280,11 @@ export function PagoTokenCardnet({
       <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
         <p className="flex items-center gap-2 text-sm font-medium text-foreground">
           <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-          Pago seguro procesado por CardNET
+          Pago 100% seguro y encriptado
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Tus datos de tarjeta se ingresan directamente en la ventana de CardNET.
-          {' '}CARTOWN y MembeGo nunca ven ni guardan tu número de tarjeta.
+          Tus datos se ingresan en una ventana bancaria segura. Tu número de
+          tarjeta nunca se guarda en nuestra plataforma.
         </p>
       </div>
 
@@ -306,7 +306,7 @@ export function PagoTokenCardnet({
           <span className="text-sm">
             <span className="font-medium text-foreground">Guardar mi tarjeta para renovar automáticamente</span>
             <span className="mt-0.5 block text-xs text-muted-foreground">
-              La tarjeta se guarda de forma segura en CardNET. Podrás quitarla cuando quieras.
+              Se guarda de forma segura y encriptada. Podrás quitarla cuando quieras.
             </span>
           </span>
         </label>

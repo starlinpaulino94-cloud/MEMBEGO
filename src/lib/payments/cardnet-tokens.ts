@@ -182,13 +182,13 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
 // Estas tres llamadas salen del Postman de tokenización de CardNET. El header
 // de autorización es la LLAVE PRIVADA (secreto de servidor).
 
-/** Hace un POST autenticado a la API de tokens. Devuelve {ok, json}. */
+/** Hace un POST autenticado a la API de tokens. Devuelve {ok, status, json}. */
 async function postTokens(
   path: string,
   cuerpo: Record<string, unknown> | null
-): Promise<{ ok: boolean; json: Record<string, unknown> }> {
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   const cfg = getTokensConfig()
-  if (!cfg) return { ok: false, json: {} }
+  if (!cfg) return { ok: false, status: 0, json: {} }
   const { api } = urlsTokens(cfg.ambiente)
   try {
     const resp = await fetch(`${api}${path}`, {
@@ -201,11 +201,40 @@ async function postTokens(
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,
       signal: AbortSignal.timeout(30_000),
     })
-    const json = (await resp.json().catch(() => ({}))) as Record<string, unknown>
-    return { ok: resp.ok, json }
-  } catch {
-    return { ok: false, json: {} }
+    const texto = await resp.text().catch(() => '')
+    let json: Record<string, unknown>
+    try {
+      json = JSON.parse(texto) as Record<string, unknown>
+    } catch {
+      // Respuesta no-JSON (HTML de error, texto plano): conservarla acotada
+      // para diagnóstico — sin ella, un fallo del proveedor es invisible.
+      json = texto ? { _texto: texto.slice(0, 500) } : {}
+    }
+    return { ok: resp.ok, status: resp.status, json }
+  } catch (e) {
+    return { ok: false, status: 0, json: { _error: e instanceof Error ? e.message : 'fetch' } }
   }
+}
+
+/**
+ * DIAGNÓSTICO: intenta crear un Customer y devuelve el status HTTP y la
+ * respuesta cruda (sin datos sensibles). No expone llaves. Lo usa el endpoint
+ * de estado para revelar POR QUÉ el proveedor rechaza la sesión, en vez de
+ * adivinar desde un error genérico.
+ */
+export async function probarSesionTokens(): Promise<{
+  ok: boolean
+  status: number
+  url: string
+  respuesta: Record<string, unknown>
+}> {
+  const cfg = getTokensConfig()
+  const url = cfg ? `${urlsTokens(cfg.ambiente).api}/customer` : '(sin configurar)'
+  const { ok, status, json } = await postTokens('/customer', {
+    Email: 'diagnostico@membego.com',
+    Enable: 'true',
+  })
+  return { ok, status, url, respuesta: sinSensibles(json) }
 }
 
 /**
