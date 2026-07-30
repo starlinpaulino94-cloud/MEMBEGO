@@ -121,29 +121,50 @@ export function OpcionesPago({
       {/* Selector de forma de pago: se muestra si hay más de una opción */}
       {opciones.length > 1 && (
       <div>
-        <h3 className="text-sm font-medium text-foreground">¿Cómo prefieres pagar?</h3>
-        <div className={cn('mt-2 grid gap-3', opciones.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
-          {opciones.map(({ key, icon: Icon, titulo, detalle }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setOpcion(key)}
-              aria-pressed={opcion === key}
-              className={cn(
-                'rounded-2xl border p-4 text-left transition',
-                opcion === key
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'border-border/70 bg-card hover:border-primary/40'
-              )}
-            >
-              <Icon
-                className={cn('h-5 w-5', opcion === key ? 'text-primary' : 'text-muted-foreground')}
-                aria-hidden
-              />
-              <p className="mt-2 text-sm font-semibold text-foreground">{titulo}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{detalle}</p>
-            </button>
-          ))}
+        <h3 className="text-sm font-semibold text-foreground">¿Cómo prefieres pagar?</h3>
+        <div className={cn('mt-3 grid gap-3', opciones.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+          {opciones.map(({ key, icon: Icon, titulo, detalle }) => {
+            const activa = opcion === key
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setOpcion(key)}
+                aria-pressed={activa}
+                className={cn(
+                  'group relative rounded-2xl border p-4 text-left transition-all duration-200',
+                  activa
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary'
+                    : 'border-border/60 bg-card hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md'
+                )}
+              >
+                {/* Marca de selección */}
+                <span
+                  className={cn(
+                    'absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full transition-all duration-200',
+                    activa
+                      ? 'scale-100 bg-primary text-primary-foreground opacity-100'
+                      : 'scale-75 opacity-0'
+                  )}
+                  aria-hidden
+                >
+                  <CheckCircle2 className="h-5 w-5" />
+                </span>
+                <span
+                  className={cn(
+                    'flex h-11 w-11 items-center justify-center rounded-xl transition-colors',
+                    activa
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'
+                  )}
+                >
+                  <Icon className="h-5 w-5" aria-hidden />
+                </span>
+                <p className="mt-3 text-sm font-semibold text-foreground">{titulo}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{detalle}</p>
+              </button>
+            )
+          })}
         </div>
       </div>
       )}
