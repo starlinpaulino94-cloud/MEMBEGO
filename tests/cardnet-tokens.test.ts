@@ -14,15 +14,15 @@ import {
  * token nunca queda en claro en un log.
  */
 
-test('urlsTokens usa los hosts correctos por ambiente', () => {
+test('urlsTokens usa los hosts de GTP/Seglan por ambiente', () => {
   const qa = urlsTokens('pruebas')
-  assert.equal(qa.api, 'https://labservicios.cardnet.com.do/servicios/tokens/v1/api')
-  assert.equal(qa.capture, 'https://labservicios.cardnet.com.do/servicios/tokens/v1/Capture/')
-  assert.ok(qa.script.endsWith('/Scripts/PWCheckout.js'))
+  assert.equal(qa.api, 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api')
+  assert.equal(qa.capture, 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/Capture/')
+  assert.equal(qa.script, 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/Scripts/PWCheckout.js')
 
   const prod = urlsTokens('produccion')
-  assert.equal(prod.api, 'https://servicios.cardnet.com.do/servicios/tokens/v1/api')
-  assert.equal(prod.capture, 'https://servicios.cardnet.com.do/servicios/tokens/v1/Capture/')
+  assert.equal(prod.api, 'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api')
+  assert.ok(prod.script.startsWith('https://tr-tsp.gtp-seglan.com/'))
 })
 
 test('montoEnteroMenor da centavos como entero (10000 = RD$100)', () => {
