@@ -316,6 +316,7 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
                       }
                     : null
                 }
+                logoUrl={company.logoUrl}
               />
             </div>
 

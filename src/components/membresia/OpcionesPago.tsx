@@ -60,6 +60,8 @@ interface Props {
    * No incluye la llave privada. Solo llega cuando `tarjetaDisponible`.
    */
   tokensConfig?: { publicKey: string; captureUrl: string; scriptUrl: string } | null
+  /** Logo de la empresa para la cabecera de la ventana de pago. */
+  logoUrl?: string | null
 }
 
 type Opcion = 'tarjeta' | 'transferencia' | 'presencial'
@@ -84,6 +86,7 @@ export function OpcionesPago({
   tarjetaDisponible,
   montoTexto,
   tokensConfig,
+  logoUrl,
 }: Props) {
   // Las opciones que existen para esta membresía, en orden de preferencia.
   // Presencial (efectivo en sucursal) SIEMPRE está. Tarjeta y transferencia
@@ -152,6 +155,8 @@ export function OpcionesPago({
           publicKey={tokensConfig.publicKey}
           captureUrl={tokensConfig.captureUrl}
           scriptUrl={tokensConfig.scriptUrl}
+          companyName={companyName}
+          logoUrl={logoUrl}
         />
       ) : opcion === 'transferencia' ? (
         <div className="space-y-5">

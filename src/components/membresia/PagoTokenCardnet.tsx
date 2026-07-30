@@ -37,13 +37,27 @@ interface Props {
   membershipId: string
   /** Texto del monto para el botón (ej. "RD$1,600"). */
   montoTexto: string
-  /** Config PÚBLICA de CardNET (no incluye la llave privada). */
+  /** Config PÚBLICA de la pasarela (no incluye la llave privada). */
   publicKey: string
   captureUrl: string
   scriptUrl: string
+  /** Marca que ve el cliente dentro de la ventana de pago. */
+  companyName?: string
+  /** Logo (URL absoluta) que la ventana de pago muestra en su cabecera. */
+  logoUrl?: string | null
   /** A dónde ir cuando el pago aprueba. */
   urlExito?: string
 }
+
+interface SesionCaptura {
+  captureUrl: string
+  uniqueId: string
+  publicKey: string
+  creadaEn: number
+}
+
+// Una sesión pre-creada se considera fresca por 4 minutos; después se pide otra.
+const SESION_TTL_MS = 4 * 60 * 1000
 
 type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'aprobado' | 'error'
 
@@ -90,6 +104,8 @@ export function PagoTokenCardnet({
   montoTexto,
   publicKey,
   scriptUrl,
+  companyName,
+  logoUrl,
   urlExito,
 }: Props) {
   const router = useRouter()
@@ -97,6 +113,8 @@ export function PagoTokenCardnet({
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [guardar, setGuardar] = useState(false)
   const cobrandoRef = useRef(false)
+  // Sesión pre-creada en segundo plano para que el clic abra al instante.
+  const sesionRef = useRef<SesionCaptura | null>(null)
   // Último payload de tokenCreated: de aquí salen las referencias para guardar.
   const tokenDataRef = useRef<unknown>(null)
   const guardarRef = useRef(false)
@@ -207,19 +225,9 @@ export function PagoTokenCardnet({
     }
   }, [scriptUrl, publicKey, cobrar])
 
-  // Abre el iframe de captura de CardNET. Primero pide al servidor una SESIÓN
-  // válida (CaptureURL + UniqueID reales); no se puede abrir con un id inventado.
-  const abrirCaptura = useCallback(async () => {
-    const sdk = window.PWCheckout
-    if (!sdk) {
-      setEstado('error')
-      setMensaje('La pasarela no está lista. Recarga la página.')
-      return
-    }
-    setEstado('capturando')
-    setMensaje(null)
-
-    let sesion: { captureUrl: string; uniqueId: string; publicKey: string }
+  // Pide al servidor una sesión de captura válida (CaptureURL + UniqueID
+  // reales del proveedor; con un id inventado la ventana no abre).
+  const pedirSesion = useCallback(async (): Promise<SesionCaptura | null> => {
     try {
       const resp = await fetch('/api/pagos/cardnet-token/sesion', {
         method: 'POST',
@@ -231,25 +239,61 @@ export function PagoTokenCardnet({
         captureUrl?: string
         uniqueId?: string
         publicKey?: string
-        error?: string
       }
-      if (!data.ok || !data.captureUrl || !data.uniqueId) {
-        setEstado('error')
-        setMensaje(data.error ?? 'No se pudo iniciar la ventana de pago. Intenta de nuevo.')
-        return
+      if (!data.ok || !data.captureUrl || !data.uniqueId) return null
+      return {
+        captureUrl: data.captureUrl,
+        uniqueId: data.uniqueId,
+        publicKey: data.publicKey || publicKey,
+        creadaEn: Date.now(),
       }
-      sesion = { captureUrl: data.captureUrl, uniqueId: data.uniqueId, publicKey: data.publicKey || publicKey }
     } catch {
+      return null
+    }
+  }, [publicKey])
+
+  // PRE-CREA la sesión en segundo plano apenas la pasarela está lista: así el
+  // clic en "Pagar" abre la ventana al instante en vez de esperar al proveedor.
+  useEffect(() => {
+    if ((estado !== 'listo' && estado !== 'error') || sesionRef.current) return
+    let cancelado = false
+    void pedirSesion().then((s) => {
+      if (!cancelado && s) sesionRef.current = s
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [estado, pedirSesion])
+
+  // Abre la ventana de pago: usa la sesión pre-creada si sigue fresca; si no,
+  // pide una nueva en el momento.
+  const abrirCaptura = useCallback(async () => {
+    const sdk = window.PWCheckout
+    if (!sdk) {
       setEstado('error')
-      setMensaje('No se pudo iniciar la ventana de pago. Revisa tu conexión.')
+      setMensaje('La pasarela no está lista. Recarga la página.')
+      return
+    }
+    setEstado('capturando')
+    setMensaje(null)
+
+    let sesion = sesionRef.current
+    sesionRef.current = null // una sesión se usa una sola vez
+    if (!sesion || Date.now() - sesion.creadaEn > SESION_TTL_MS) {
+      sesion = await pedirSesion()
+    }
+    if (!sesion) {
+      setEstado('error')
+      setMensaje('No se pudo iniciar la ventana de pago. Intenta de nuevo.')
       return
     }
 
     sdk.SetProperties({
-      name: 'CARTOWN Wash & Detailing',
+      name: companyName ?? 'Pago seguro',
       email: '',
+      ...(logoUrl ? { image: logoUrl } : {}),
       button_label: `Pagar ${montoTexto}`,
-      description: 'Membresía CARTOWN',
+      description: companyName ? `Membresía ${companyName}` : 'Membresía',
       currency: 'DOP',
       lang: 'ESP',
       checkout_card: 1,
@@ -263,7 +307,7 @@ export function PagoTokenCardnet({
       setEstado('error')
       setMensaje('La pasarela no expone el método de apertura esperado.')
     }
-  }, [publicKey, montoTexto])
+  }, [pedirSesion, companyName, logoUrl, montoTexto])
 
   if (estado === 'aprobado') {
     return (
