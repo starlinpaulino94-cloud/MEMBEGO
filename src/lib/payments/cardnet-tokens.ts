@@ -54,6 +54,16 @@ export function cardnetTokensConfigurado(): boolean {
   return getTokensConfig() !== null
 }
 
+/**
+ * Header de autenticación de CardNET. El manual (§2.4) es explícito: la API Key
+ * va como el "username" de HTTP Basic, SIN password. O sea `Basic
+ * base64(key + ":")`, NO la llave en crudo. (El Postman ponía la llave cruda,
+ * pero devolvía errores; el manual manda.)
+ */
+function basicAuth(privateKey: string): string {
+  return `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}`
+}
+
 /** Datos NO secretos que el navegador necesita para abrir el iframe. */
 export interface TokensPublicConfig {
   publicKey: string
@@ -134,9 +144,7 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     const resp = await fetch(`${api}/Purchase`, {
       method: 'POST',
       headers: {
-        // La llave privada es el valor Basic tal cual (así en el Postman de
-        // CardNET), no un base64(user:pass).
-        Authorization: `Basic ${cfg.privateKey}`,
+        Authorization: basicAuth(cfg.privateKey),
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
@@ -186,7 +194,7 @@ async function postTokens(
     const resp = await fetch(`${api}${path}`, {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${cfg.privateKey}`,
+        Authorization: basicAuth(cfg.privateKey),
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
@@ -198,6 +206,40 @@ async function postTokens(
   } catch {
     return { ok: false, json: {} }
   }
+}
+
+/**
+ * SESIÓN DE CAPTURA (paso previo OBLIGATORIO a abrir el iframe).
+ *
+ * El manual de tokenización (§4) es claro: NO se puede abrir el iframe con un
+ * `session_id` inventado — eso da `TK004 INVALID_SESSION_IDENTIFIER` (el 500
+ * que veíamos). Hay que crear un Customer en el servidor; CardNET devuelve un
+ * `CaptureURL` y un `UniqueID` válidos, y con ESOS se abre el iframe.
+ *
+ * Devuelve lo que el navegador necesita (CaptureURL + UniqueID). NUNCA la llave
+ * privada. VERIFICAR-QA: la grafía exacta de los campos de respuesta.
+ */
+export async function crearSesionCaptura(input: {
+  email: string
+}): Promise<{ captureUrl: string; uniqueId: string; customerId: string } | null> {
+  const { ok, json } = await postTokens('/customer', {
+    Email: input.email,
+    Enable: 'true',
+  })
+  if (!ok) return null
+  const s = (...ks: string[]) => {
+    for (const k of ks) {
+      const v = json[k]
+      if (typeof v === 'string' && v) return v
+      if (typeof v === 'number') return String(v)
+    }
+    return ''
+  }
+  const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
+  const uniqueId = s('UniqueID', 'UniqueId', 'uniqueId')
+  const customerId = s('CustomerId', 'customerId', 'Id', 'id')
+  if (!captureUrl || !uniqueId) return null
+  return { captureUrl, uniqueId, customerId }
 }
 
 /**
