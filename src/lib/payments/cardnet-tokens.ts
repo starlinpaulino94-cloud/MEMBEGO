@@ -1,6 +1,7 @@
 import 'server-only'
 import {
   urlsTokens,
+  apiCandidatos,
   montoEnteroMenor,
   interpretarCompraToken,
   sinSensibles,
@@ -55,13 +56,18 @@ export function cardnetTokensConfigurado(): boolean {
 }
 
 /**
- * Header de autenticación de CardNET. El manual (§2.4) es explícito: la API Key
- * va como el "username" de HTTP Basic, SIN password. O sea `Basic
- * base64(key + ":")`, NO la llave en crudo. (El Postman ponía la llave cruda,
- * pero devolvía errores; el manual manda.)
+ * Formatos posibles del header de autenticación. Los documentos de CardNET se
+ * contradicen: el Postman manda la llave CRUDA tras "Basic", el manual (§2.4)
+ * dice que va como "username" de HTTP Basic (base64(key:)). El servidor prueba
+ * en orden y se queda con el que el proveedor acepte (el 401 dice literalmente
+ * "or is incorrectly formatted", así que el formato importa).
  */
-function basicAuth(privateKey: string): string {
-  return `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}`
+function variantesAuth(privateKey: string): { nombre: string; valor: string }[] {
+  return [
+    { nombre: 'cruda', valor: `Basic ${privateKey}` },
+    { nombre: 'basic-user', valor: `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}` },
+    { nombre: 'base64-simple', valor: `Basic ${Buffer.from(privateKey).toString('base64')}` },
+  ]
 }
 
 /** Datos NO secretos que el navegador necesita para abrir el iframe. */
@@ -123,7 +129,6 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     }
   }
 
-  const { api } = urlsTokens(cfg.ambiente)
   const cuerpo: Record<string, unknown> = {
     TrxToken: input.trxToken,
     Order: input.orden,
@@ -138,32 +143,14 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     },
   }
 
-  let json: Record<string, unknown> = {}
-  let ok = false
-  try {
-    const resp = await fetch(`${api}/Purchase`, {
-      method: 'POST',
-      headers: {
-        Authorization: basicAuth(cfg.privateKey),
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(cuerpo),
-      // Un cobro no debe colgarse indefinidamente.
-      signal: AbortSignal.timeout(30_000),
-    })
-    ok = resp.ok
-    json = (await resp.json().catch(() => ({}))) as Record<string, unknown>
-    if (!resp.ok && Object.keys(json).length === 0) {
-      json = { ResponseMessage: `HTTP ${resp.status}` }
-    }
-  } catch {
+  const { ok, status, json } = await postTokens('/Purchase', cuerpo)
+  if (status === 0) {
     return {
       aprobada: false,
       autorizacion: null,
       codigo: '',
       motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.',
-      crudo: {},
+      crudo: sinSensibles(json),
     }
   }
 
@@ -182,30 +169,112 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
 // Estas tres llamadas salen del Postman de tokenización de CardNET. El header
 // de autorización es la LLAVE PRIVADA (secreto de servidor).
 
-/** Hace un POST autenticado a la API de tokens. Devuelve {ok, json}. */
-async function postTokens(
+/** POST crudo contra UNA base con UN header de auth. Devuelve {ok, status, json}. */
+async function postBase(
+  base: string,
   path: string,
-  cuerpo: Record<string, unknown> | null
-): Promise<{ ok: boolean; json: Record<string, unknown> }> {
-  const cfg = getTokensConfig()
-  if (!cfg) return { ok: false, json: {} }
-  const { api } = urlsTokens(cfg.ambiente)
+  cuerpo: Record<string, unknown> | null,
+  authValor: string
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   try {
-    const resp = await fetch(`${api}${path}`, {
+    const resp = await fetch(`${base}${path}`, {
       method: 'POST',
       headers: {
-        Authorization: basicAuth(cfg.privateKey),
+        Authorization: authValor,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(20_000),
     })
-    const json = (await resp.json().catch(() => ({}))) as Record<string, unknown>
-    return { ok: resp.ok, json }
-  } catch {
-    return { ok: false, json: {} }
+    const texto = await resp.text().catch(() => '')
+    let json: Record<string, unknown>
+    try {
+      json = JSON.parse(texto) as Record<string, unknown>
+    } catch {
+      // Respuesta no-JSON (HTML de error, texto plano): conservarla acotada
+      // para diagnóstico — sin ella, un fallo del proveedor es invisible.
+      json = texto ? { _texto: texto.slice(0, 500) } : {}
+    }
+    return { ok: resp.ok, status: resp.status, json }
+  } catch (e) {
+    return { ok: false, status: 0, json: { _error: e instanceof Error ? e.message : 'fetch' } }
   }
+}
+
+// Base y formato de auth que ya funcionaron en esta instancia: las llamadas
+// siguientes van directo, sin re-probar candidatos.
+let baseConfirmada: string | null = null
+let authConfirmada: string | null = null
+
+/**
+ * POST autenticado a la API de tokens. Prueba las bases candidatas (un 404 o
+ * fallo de red pasa a la siguiente) y, dentro del host vivo, los formatos de
+ * auth (un 401 pasa al siguiente formato). El primero que logra 2xx queda
+ * fijado para el resto de la vida de la instancia.
+ */
+async function postTokens(
+  path: string,
+  cuerpo: Record<string, unknown> | null
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const cfg = getTokensConfig()
+  if (!cfg) return { ok: false, status: 0, json: {} }
+
+  if (baseConfirmada && authConfirmada) {
+    return postBase(baseConfirmada, path, cuerpo, authConfirmada)
+  }
+
+  let mejor: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
+  for (const base of apiCandidatos(cfg.ambiente)) {
+    for (const auth of variantesAuth(cfg.privateKey)) {
+      const r = await postBase(base, path, cuerpo, auth.valor)
+      if (r.ok) {
+        baseConfirmada = base
+        authConfirmada = auth.valor
+        return r
+      }
+      // Host muerto o ruta inexistente: no tiene sentido probar más formatos aquí.
+      if (r.status === 0 || r.status === 404) break
+      if (!mejor) mejor = r
+      // Otro error que no es de auth (400, 500): el formato no es el problema.
+      if (r.status !== 401 && r.status !== 403) break
+    }
+  }
+  return mejor ?? { ok: false, status: 0, json: { _error: 'ningún host respondió' } }
+}
+
+/**
+ * DIAGNÓSTICO: intenta crear un Customer contra cada base candidata y cada
+ * formato de auth, y devuelve status + respuesta (sin datos sensibles) de cada
+ * intento. No expone llaves. Si TODOS dan 401, la llave no pertenece a la
+ * cuenta y hay que reclamarla a CardNET.
+ */
+export async function probarSesionTokens(): Promise<
+  { url: string; formato: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+> {
+  const cfg = getTokensConfig()
+  if (!cfg) return []
+  const resultados = []
+  for (const base of apiCandidatos(cfg.ambiente)) {
+    for (const auth of variantesAuth(cfg.privateKey)) {
+      const r = await postBase(
+        base,
+        '/customer',
+        { Email: 'diagnostico@membego.com', Enable: 'true' },
+        auth.valor
+      )
+      resultados.push({
+        url: `${base}/customer`,
+        formato: auth.nombre,
+        ok: r.ok,
+        status: r.status,
+        respuesta: sinSensibles(r.json),
+      })
+      // Host muerto/ruta inexistente: pasar al siguiente host.
+      if (r.status === 0 || r.status === 404) break
+    }
+  }
+  return resultados
 }
 
 /**
