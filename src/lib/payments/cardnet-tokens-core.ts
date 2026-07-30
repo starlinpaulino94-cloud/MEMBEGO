@@ -13,11 +13,17 @@
 export type AmbienteTokens = 'pruebas' | 'produccion'
 
 /**
- * URLs del servicio de tokens por ambiente. Salen de los documentos de CardNET
- * (Formulario_Registro_Tarjeta.html y el Postman de Tokenización):
- *   · QA:   labservicios.cardnet.com.do
- *   · Prod: servicios.cardnet.com.do
- * En ambos, la ruta base es /servicios/tokens/v1.
+ * URLs del servicio de tokens por ambiente.
+ *
+ * El widget de CardNET (PWCheckout.js) es del middleware GTP/Seglan y EXIGE que
+ * el script se cargue desde su propio dominio (`gtp-seglan.com`) — si se sirve
+ * desde otro host, el propio script lo rechaza. El host se confirmó por el
+ * mensaje del widget en QA:
+ *   · QA:   tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1
+ *   · Prod: tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1   (VERIFICAR-QA con CardNET)
+ *
+ * (El Postman traía `labservicios.cardnet.com.do/servicios/tokens/v1`, un host
+ * viejo que devuelve 500. No usar.)
  */
 export function urlsTokens(ambiente: AmbienteTokens): {
   /** Base de la API REST (Customer, Purchase, …). Lleva Authorization: Basic. */
@@ -29,8 +35,8 @@ export function urlsTokens(ambiente: AmbienteTokens): {
 } {
   const base =
     ambiente === 'produccion'
-      ? 'https://servicios.cardnet.com.do/servicios/tokens/v1'
-      : 'https://labservicios.cardnet.com.do/servicios/tokens/v1'
+      ? 'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1'
+      : 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1'
   return {
     api: `${base}/api`,
     capture: `${base}/Capture/`,

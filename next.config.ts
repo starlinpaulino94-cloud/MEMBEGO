@@ -82,24 +82,29 @@ const nextConfig: NextConfig = {
               // ni el escáner se rompen. Está preparado, no activado: activarlo
               // sin esa prueba deja la aplicación en blanco, y una pantalla en
               // blanco no es más segura.
-              // *.cardnet.com.do: el checkout hospedado carga su script
-              // PWCheckout.js desde el dominio de CardNET. Solo afecta a CARTOWN
-              // (única empresa con la pasarela). Ver docs/PAGOS-CARDNET.md.
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://*.cardnet.com.do",
-              "style-src 'self' 'unsafe-inline'",
+              // *.gtp-seglan.com / *.cardnet.com.do: el checkout hospedado de
+              // CardNET (widget PWCheckout.js del middleware GTP/Seglan) carga
+              // su script, abre su iframe y crea un worker (blob:) desde ese
+              // dominio. Solo afecta a CARTOWN (única empresa con la pasarela).
+              // Ver docs/PAGOS-CARDNET.md.
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://*.cardnet.com.do https://*.gtp-seglan.com",
+              // El widget crea un Web Worker desde un blob:; sin worker-src la
+              // CSP cae a script-src (que no lleva blob:) y lo bloquea.
+              "worker-src 'self' blob:",
+              "style-src 'self' 'unsafe-inline' https://*.gtp-seglan.com",
               "img-src 'self' data: https: blob:",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://*.gtp-seglan.com",
               // api.github.com se eliminó: no se usa en la app.
-              "connect-src 'self' https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://*.cardnet.com.do",
+              "connect-src 'self' https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://*.cardnet.com.do https://*.gtp-seglan.com",
               // cardnet.com.do: el reto 3DS del banco se pinta en un iframe y el
               // formulario que lo abre hace POST a la pasarela. Sin estas dos
               // reglas, el navegador bloquea la pantalla del banco. Solo afecta a
               // CARTOWN (única empresa con la pasarela); para las demás, nunca se
               // carga ese iframe. Ver docs/PAGOS-CARDNET.md.
-              "frame-src 'self' https://*.cardnet.com.do",
+              "frame-src 'self' https://*.cardnet.com.do https://*.gtp-seglan.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
-              "form-action 'self' https://*.cardnet.com.do",
+              "form-action 'self' https://*.cardnet.com.do https://*.gtp-seglan.com",
               "object-src 'none'",
             ].join('; '),
           },
