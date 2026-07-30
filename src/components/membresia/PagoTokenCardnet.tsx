@@ -59,6 +59,32 @@ function tokenDe(data: unknown): string {
   return ''
 }
 
+/**
+ * Referencias REUTILIZABLES para guardar la tarjeta (Fase 2). Salen del mismo
+ * payload de `tokenCreated`. VERIFICAR-QA: los nombres exactos se confirman con
+ * CardNET; se cubren las grafías probables. Nunca incluye datos de tarjeta.
+ */
+function refsGuardado(data: unknown): {
+  customerId: string | null
+  paymentProfileId: string | null
+  token: string | null
+  marca: string | null
+  ultimos4: string | null
+} {
+  const o = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+  const g = (...ks: string[]) => {
+    for (const k of ks) if (typeof o[k] === 'string' && o[k]) return o[k] as string
+    return null
+  }
+  return {
+    customerId: g('CustomerId', 'customerId'),
+    paymentProfileId: g('PaymentProfileId', 'paymentProfileId', 'ProfileId'),
+    token: g('Token', 'token', 'TrxToken', 'PWToken'),
+    marca: g('Brand', 'CardBrand', 'marca'),
+    ultimos4: g('Last4', 'LastFour', 'ultimos4'),
+  }
+}
+
 export function PagoTokenCardnet({
   membershipId,
   montoTexto,
@@ -70,7 +96,30 @@ export function PagoTokenCardnet({
   const router = useRouter()
   const [estado, setEstado] = useState<Estado>('cargando')
   const [mensaje, setMensaje] = useState<string | null>(null)
+  const [guardar, setGuardar] = useState(false)
   const cobrandoRef = useRef(false)
+  // Último payload de tokenCreated: de aquí salen las referencias para guardar.
+  const tokenDataRef = useRef<unknown>(null)
+  const guardarRef = useRef(false)
+  useEffect(() => {
+    guardarRef.current = guardar
+  }, [guardar])
+
+  // Guarda la tarjeta (Fase 2) tras un cobro aprobado, si el cliente lo pidió.
+  const guardarTarjeta = useCallback(async () => {
+    const refs = refsGuardado(tokenDataRef.current)
+    if (!refs.customerId && !refs.paymentProfileId && !refs.token) return
+    try {
+      await fetch('/api/pagos/cardnet-token/guardar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ membershipId, ...refs }),
+      })
+    } catch {
+      // No es crítico para el cobro (que ya aprobó): si falla, el cliente
+      // simplemente no queda con renovación automática. No se le alarma.
+    }
+  }, [membershipId])
 
   // Cobra en nuestro servidor con el token que devolvió el iframe.
   const cobrar = useCallback(
@@ -87,6 +136,7 @@ export function PagoTokenCardnet({
         })
         const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
         if (data.estado === 'aprobado') {
+          if (guardarRef.current) await guardarTarjeta()
           setEstado('aprobado')
           toast.success('¡Pago aprobado! Tu membresía está activa.')
           if (urlExito) router.push(urlExito)
@@ -102,7 +152,7 @@ export function PagoTokenCardnet({
         cobrandoRef.current = false
       }
     },
-    [membershipId, router, urlExito]
+    [membershipId, router, urlExito, guardarTarjeta]
   )
 
   // Carga el script de CardNET una sola vez y engancha el callback del token.
@@ -113,6 +163,7 @@ export function PagoTokenCardnet({
       const sdk = window.PWCheckout
       if (!sdk) return false
       sdk.Bind('tokenCreated', (data: unknown) => {
+        tokenDataRef.current = data
         const t = tokenDe(data)
         if (t) void cobrar(t)
         else {
@@ -215,6 +266,24 @@ export function PagoTokenCardnet({
         <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
         </p>
+      )}
+
+      {/* Fase 2: renovación automática. Solo aparece antes de pagar. */}
+      {(estado === 'listo' || estado === 'error') && (
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border/60 bg-card p-3">
+          <input
+            type="checkbox"
+            checked={guardar}
+            onChange={(e) => setGuardar(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+          />
+          <span className="text-sm">
+            <span className="font-medium text-foreground">Guardar mi tarjeta para renovar automáticamente</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              La tarjeta se guarda de forma segura en CardNET. Podrás quitarla cuando quieras.
+            </span>
+          </span>
+        </label>
       )}
 
       <Button

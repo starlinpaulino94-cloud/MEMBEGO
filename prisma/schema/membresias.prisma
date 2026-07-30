@@ -103,6 +103,13 @@ model Membership {
   // Regalos P2P: si la membresía fue un regalo, quién la recibe.
   beneficiarioClienteId String?
 
+  // Fase 2 CardNET: renovación automática con tarjeta guardada. `autoRenovar`
+  // lo enciende el cliente al pagar y guardar su tarjeta; el cron de renovación
+  // cobra la `tarjetaTokenizada` cuando la membresía está por vencer.
+  autoRenovar          Boolean            @default(false)
+  tarjetaTokenizadaId  String?
+  tarjetaTokenizada    TarjetaTokenizada? @relation(fields: [tarjetaTokenizadaId], references: [id], onDelete: SetNull)
+
   // Período activo
   fechaInicio      DateTime?
   fechaVencimiento DateTime?
@@ -127,6 +134,41 @@ model Membership {
   // empresa por estado y vencimiento (activas, por vencer, pendientes).
   @@index([companyId, estado, fechaVencimiento])
   @@map("memberships")
+}
+
+/// Fase 2 CardNET (tokenización HOSPEDADA): tarjeta guardada para cobros
+/// recurrentes de membresías. NO guarda el número de tarjeta — solo las
+/// referencias que devuelve CardNET (customer + perfil de pago) y datos de
+/// exhibición (marca y últimos 4). El cobro se hace server-to-server contra
+/// CardNET con esas referencias; la tarjeta vive únicamente en CardNET.
+model TarjetaTokenizada {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// Referencias de CardNET (NO son datos de tarjeta).
+  customerId       String
+  paymentProfileId String?
+  /// Token reutilizable de la credencial archivada, si el proveedor lo entrega.
+  token            String?
+
+  /// Solo para mostrar "•••• 1234 · Visa · 12/27". Nunca el PAN completo.
+  marca      String?
+  ultimos4   String?
+  vencMes    Int?
+  vencAnio   Int?
+
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+
+  @@index([clienteId, activa])
+  @@index([companyId])
+  @@map("tarjetas_tokenizadas")
 }
 
 // QR de acceso de un producto activo: membresía O compra de promoción (E5).
