@@ -85,7 +85,7 @@ const MONEDA_DOP = '214'
  * Cuánto se cobra por este objetivo, leído de la base. Devuelve null si el
  * objetivo no existe, no es de la empresa, o no está en un estado cobrable.
  */
-async function montoDeObjetivo(
+export async function montoDeObjetivo(
   obj: ObjetivoPago
 ): Promise<{ pesos: number; descripcion: string } | null> {
   if (obj.membershipId) {

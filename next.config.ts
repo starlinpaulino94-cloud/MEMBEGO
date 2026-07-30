@@ -82,12 +82,15 @@ const nextConfig: NextConfig = {
               // ni el escáner se rompen. Está preparado, no activado: activarlo
               // sin esa prueba deja la aplicación en blanco, y una pantalla en
               // blanco no es más segura.
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+              // *.cardnet.com.do: el checkout hospedado carga su script
+              // PWCheckout.js desde el dominio de CardNET. Solo afecta a CARTOWN
+              // (única empresa con la pasarela). Ver docs/PAGOS-CARDNET.md.
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://*.cardnet.com.do",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data:",
               // api.github.com se eliminó: no se usa en la app.
-              "connect-src 'self' https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io",
+              "connect-src 'self' https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://*.cardnet.com.do",
               // cardnet.com.do: el reto 3DS del banco se pinta en un iframe y el
               // formulario que lo abre hace POST a la pasarela. Sin estas dos
               // reglas, el navegador bloquea la pantalla del banco. Solo afecta a

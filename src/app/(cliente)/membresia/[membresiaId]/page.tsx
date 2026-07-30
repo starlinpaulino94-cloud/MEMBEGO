@@ -22,6 +22,7 @@ import { OpcionesPago } from '@/components/membresia/OpcionesPago'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
+import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
 
 export const metadata = {
   title: 'Detalles de Membresía',
@@ -162,6 +163,10 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
         .catch(() => false)
     : false
 
+  // Config PÚBLICA de la pasarela hospedada (llave pública + URLs del iframe).
+  // Nunca incluye la llave privada. Solo se calcula si la tarjeta está activa.
+  const tokensConfig = tarjetaDisponible ? getTokensPublicConfig() : null
+
   const [metodosPago, sucursales] = needsPayment
     ? await Promise.all([
         prisma.metodoPago.findMany({
@@ -301,6 +306,15 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
                 transferenciaDisponible={transferenciaActiva}
                 tarjetaDisponible={tarjetaDisponible}
                 montoTexto={`RD$${montoAPagar.toLocaleString('es-DO')}`}
+                tokensConfig={
+                  tokensConfig
+                    ? {
+                        publicKey: tokensConfig.publicKey,
+                        captureUrl: tokensConfig.captureUrl,
+                        scriptUrl: tokensConfig.scriptUrl,
+                      }
+                    : null
+                }
               />
             </div>
           </section>

@@ -8,7 +8,7 @@ import {
   type PresencialState,
 } from '@/modules/membresia/actions'
 import { ComprobanteForm } from '@/components/membresia/ComprobanteForm'
-import { PagoTarjetaCardnet } from '@/components/membresia/PagoTarjetaCardnet'
+import { PagoTokenCardnet } from '@/components/membresia/PagoTokenCardnet'
 import { Button } from '@/components/ui/button'
 import { cn } from '@membego/ui/cn'
 
@@ -55,6 +55,11 @@ interface Props {
   tarjetaDisponible: boolean
   /** Monto a mostrar en el botón de pago con tarjeta (ej. "RD$500"). */
   montoTexto: string
+  /**
+   * Config PÚBLICA de la pasarela hospedada de CardNET (llave pública + URLs).
+   * No incluye la llave privada. Solo llega cuando `tarjetaDisponible`.
+   */
+  tokensConfig?: { publicKey: string; captureUrl: string; scriptUrl: string } | null
 }
 
 type Opcion = 'tarjeta' | 'transferencia' | 'presencial'
@@ -78,6 +83,7 @@ export function OpcionesPago({
   transferenciaDisponible,
   tarjetaDisponible,
   montoTexto,
+  tokensConfig,
 }: Props) {
   // Las opciones que existen para esta membresía, en orden de preferencia.
   // Presencial (efectivo en sucursal) SIEMPRE está. Tarjeta y transferencia
@@ -139,11 +145,13 @@ export function OpcionesPago({
       </div>
       )}
 
-      {opcion === 'tarjeta' ? (
-        <PagoTarjetaCardnet
+      {opcion === 'tarjeta' && tokensConfig ? (
+        <PagoTokenCardnet
           membershipId={membershipId}
           montoTexto={montoTexto}
-          urlExito="/cliente/membresia?pago=ok"
+          publicKey={tokensConfig.publicKey}
+          captureUrl={tokensConfig.captureUrl}
+          scriptUrl={tokensConfig.scriptUrl}
         />
       ) : opcion === 'transferencia' ? (
         <div className="space-y-5">
