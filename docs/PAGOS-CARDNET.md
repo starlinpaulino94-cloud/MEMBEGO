@@ -1,87 +1,69 @@
-# Pago con tarjeta — CardNET (integración directa 3DS)
+# Pago con tarjeta — CardNET (tokenización HOSPEDADA)
 
-Cobro con tarjeta para las membresías y compras de **CARTOWN** (y solo CARTOWN).
-Convive con el pago en efectivo en sucursal, que no cambia.
+Cobro con tarjeta para las membresías de **CARTOWN** (y solo CARTOWN). Convive
+con el pago en efectivo en sucursal, que no cambia.
 
 ---
 
-## 1. La decisión que hay detrás, y lo que asumes
+## 1. El modelo, y por qué es el seguro
 
-CardNET en República Dominicana **solo ofrece integración directa**: el número
-de tarjeta y el CVV pasan por el servidor de MembeGo camino a CardNET. No hay
-página hospedada. El dueño de CARTOWN eligió este camino **a conciencia**,
-sabiendo que pone al comercio en el alcance PCI-DSS más exigente (**SAQ D**).
+CardNET captura la tarjeta en **su propia página** (un iframe servido por
+`*.cardnet.com.do`). El cliente digita el número **en CardNET**, y a nosotros
+solo nos llega un **token**. **El número de tarjeta nunca pasa por el servidor
+de MembeGo.** Ese es el modelo de **menor alcance PCI (SAQ A)**: no se puede
+filtrar de nuestra base lo que nunca la toca.
 
-### Lo que el código garantiza (la parte que sí se puede resolver con software)
+> Antes existió una integración DIRECTA (SAQ D, la tarjeta pasaba por nuestro
+> servidor). Se descartó a favor de esta. El código directo se conserva en
+> pausa (`cardnet-core.ts` / `cardnet.ts` / `cardnet3ds.ts` y sus rutas) pero
+> **no se usa**; el flujo activo es el de tokens.
 
-- **La tarjeta nunca se guarda.** Ni el PAN ni el CVV se escriben en la base de
-  datos, ni en `localStorage`/`sessionStorage`, ni en la URL. Existen solo en
-  memoria: en el navegador mientras el cliente paga, y en el servidor el
-  instante que dura la llamada a CardNET.
-- **La tarjeta nunca se registra.** Ningún `console`/Sentry de la capa de pago
-  escribe PAN ni CVV. Todo lo que se loguea pasa por `sinTarjeta()`, que
-  enmascara el PAN a los últimos 4 y borra el CVV. Hay pruebas que lo fijan
-  (`tests/cardnet.test.ts`).
-- **`import 'server-only'`** impide que la capa de pago llegue al navegador.
+### Lo que el código garantiza
+
+- **La tarjeta nunca llega al servidor.** Solo el token. No hay PAN ni CVV en
+  ninguna parte de MembeGo.
+- **La llave privada es un secreto de servidor.** Va en `Authorization: Basic`
+  desde el servidor, nunca al navegador, nunca a la base, nunca a un log
+  (`sinSensibles()` enmascara tokens en la evidencia).
 - **El monto sale de la base, nunca del navegador.** El cliente dice QUÉ paga
-  (una membresía/compra por id); cuánto se cobra lo lee el servidor.
-- **Solo CARTOWN cobra.** Se exige la capacidad `PAGO_CARDNET` encendida y que
-  no sea empresa demo — comprobado en la orquestación, no solo en la UI.
+  (una membresía por id); cuánto se cobra lo lee el servidor (`montoDeObjetivo`).
+- **Solo CARTOWN cobra.** Capacidad `PAGO_CARDNET` encendida + no ser empresa
+  demo — comprobado en la orquestación, no solo en la UI.
+- **Idempotencia.** La activación (`confirmarIntento`) ocurre una sola vez
+  aunque el cliente recargue o haga doble clic.
 
-### Lo que sigue siendo tuyo (no lo arregla el código)
+### Lo que sigue siendo tuyo
 
-- Firmar el **autocuestionario SAQ** anual ante tu adquiriente.
-- Los **escaneos ASV trimestrales**, si CardNET los exige a tu nivel (Nivel 4).
-- Mantener el servidor parcheado y con acceso restringido.
-- La responsabilidad última ante una filtración. La mitigación más fuerte —no
-  almacenar nada— ya está: no puede filtrarse de una base lo que nunca se
-  guardó.
+- Firmar el **autocuestionario SAQ A** anual ante tu adquiriente (mucho más
+  liviano que el SAQ D).
+- Mantener el servidor parcheado y las llaves fuera de todo lo versionado.
 
 ---
 
 ## 2. Cómo funciona un cobro
 
-Son **dos APIs de CardNET** con credenciales distintas: el **servidor 3DS**
-(autentica al tarjetahabiente) y la **API de pagos** (cobra).
-
 ```
-Cliente escribe la tarjeta en la pantalla de compra (CARTOWN)
+Cliente (pantalla de compra CARTOWN) → clic "Pagar RD$X con tarjeta"
         │
-        ▼  POST /api/pagos/cardnet/iniciar   (la tarjeta viaja aquí)
-  autenticar3DS ──► ¿el banco pide reto?
-        │                     │
-   NO (frictionless)      SÍ (challenge)
-        │                     │
-        │           el navegador abre la pantalla del banco EN UN IFRAME
-        │           (la página de compra sigue viva con la tarjeta en memoria)
-        │                     │
-        │           el banco termina → /api/pagos/cardnet/retorno (dentro del
-        │           iframe) hace postMessage a la ventana padre
-        │                     │
-        │             POST /api/pagos/cardnet/completar  (la tarjeta otra vez)
-        ▼                     ▼
-  consultarEstado3DS  →  crearIdempotencyKey  →  procesarVenta
+        ▼  se abre el IFRAME de CardNET (con la LLAVE PÚBLICA)
+   el cliente digita la tarjeta EN CARDNET
         │
-        ▼
-  response-code 00 → confirmarIntento activa el producto (una sola vez)
+        ▼  CardNET devuelve un TOKEN al navegador (callback tokenCreated)
+   el navegador manda SOLO el token → POST /api/pagos/cardnet-token/cobrar
+        │
+        ▼  el servidor cobra: POST /api/Purchase con el token + LLAVE PRIVADA
+   response aprobado → confirmarIntento activa la membresía (una sola vez)
 ```
-
-Por qué el reto va en un **iframe** y no como redirección completa: para no
-perder la tarjeta que el navegador tiene en memoria mientras el cliente hace el
-OTP. Guardarla en disco (storage) para sobrevivir a una redirección sería
-justo lo que PCI prohíbe.
 
 ### Las piezas en el código
 
 | Archivo | Qué es |
 |---|---|
-| `src/lib/payments/cardnet-core.ts` | Lógica pura: firmas, formatos, redacción, códigos. Testeable. |
-| `src/lib/payments/cardnet.ts` | Capa de servidor: config del entorno + las llamadas HTTP. |
-| `src/modules/pagos/cardnet3ds.ts` | Orquestación: monto desde la base, intentos, activación, guardas. |
-| `src/app/api/pagos/cardnet/iniciar` | Recibe la tarjeta, autentica, cobra o devuelve el reto. |
-| `src/app/api/pagos/cardnet/completar` | Cobra después del reto. |
-| `src/app/api/pagos/cardnet/retorno` | Puente del reto: avisa a la ventana padre. |
-| `src/components/membresia/PagoTarjetaCardnet.tsx` | Formulario de tarjeta + manejo del reto en iframe. |
+| `src/lib/payments/cardnet-tokens-core.ts` | Lógica pura: URLs por ambiente, monto en centavos, interpretación de la respuesta, redacción. Testeable. |
+| `src/lib/payments/cardnet-tokens.ts` | Capa de servidor: config (llaves) + el `Purchase`. `server-only`. |
+| `src/modules/pagos/cardnetToken.ts` | Orquestación: monto desde la base, guardas, activación idempotente. |
+| `src/app/api/pagos/cardnet-token/cobrar` | Recibe el token, cobra, activa. |
+| `src/components/membresia/PagoTokenCardnet.tsx` | Abre el iframe de CardNET y maneja el token. Nunca toca la tarjeta. |
 
 ---
 
@@ -90,68 +72,56 @@ justo lo que PCI prohíbe.
 ### Variables de entorno (en Vercel, nunca en el repositorio)
 
 ```
-CARDNET_MERCHANT_ID       # API de pagos
-CARDNET_TERMINAL_ID       # API de pagos
-CARDNET_INTEGRATOR_CODE   # servidor 3DS
-CARDNET_API_KEY           # servidor 3DS — SECRETO
-CARDNET_AMBIENTE          # 'pruebas' | 'produccion'
+CARDNET_TOKENS_PUBLIC_KEY    # va al navegador (abre el iframe)
+CARDNET_TOKENS_PRIVATE_KEY   # SECRETO — cobra en el servidor
+CARDNET_TOKENS_AMBIENTE      # 'pruebas' | 'produccion'
 ```
 
-Los de QA (para probar) están en `.env.example`. Los de producción los entrega
-tu ejecutivo de cuenta de CardNET — te dará DOS juegos: merchant/terminal para
-pagos e integratorCode/apiKey para 3DS.
+Los de QA (juego CON autenticación 3DS) están en `.env.example`. Los de
+producción los entrega tu ejecutivo de cuenta de CardNET.
 
 ### Encender la pasarela para CARTOWN
 
-Enciende la capacidad `PAGO_CARDNET` para la empresa CARTOWN desde el
-superadmin. Sin capacidad, o sin las cuatro variables, la opción de tarjeta
-no aparece y el cliente solo ve "pagar en sucursal".
+Enciende la capacidad `PAGO_CARDNET` para CARTOWN desde el superadmin
+(`/superadmin/capacidades`). Sin capacidad, o sin las dos llaves, la opción de
+tarjeta no aparece y el cliente solo ve "pagar en sucursal".
 
 ---
 
 ## 4. Checklist de certificación — VERIFICAR contra el QA de CardNET
 
-Las **firmas** están verificadas contra los ejemplos de la guía (hay pruebas
-que reproducen los hashes exactos). Pero hay cosas que solo se confirman
-llamando al ambiente de QA con las tarjetas de prueba. **Antes de ir a
-producción**, corre un cobro de prueba de punta a punta y confirma:
+Hay cosas que solo se confirman con un cobro real de prueba. **Antes de ir a
+producción**, corre un cobro de punta a punta en QA y confirma:
 
-- [ ] **El monto del 3DS.** Se envía en centavos (`purchaseAmount` = pesos×100,
-      `purchaseExponent: "2"`). Si el QA espera el monto con decimales, cambia
-      `montoMenor()` en `cardnet-core.ts`. (Está marcado `VERIFICAR-QA`.)
-- [ ] **El endpoint de idempotency.** Se usa `/idenpotency-keys` (la grafía del
-      Postman). Si responde 404, prueba `/idempotency-keys` (la de la guía).
-- [ ] **El nombre del campo AVV.** Se envía `tds_avv` (el de los ejemplos de
-      venta). La tabla de parámetros lo llama `tds_aav`; si la venta se rechaza
-      por campo faltante, es esto.
-- [ ] **`tds_mode`.** En QA se envía `2`; en producción `1` (autenticando con el
-      servidor de CardNET). Ya está atado al ambiente; confírmalo.
-- [ ] **Los nombres del retorno del reto.** `retorno/route.ts` lee `rd` y
-      `threeDSServerTransID`. Si tu QA devuelve el reto con otros nombres,
-      amplía las listas `RD`/`TDS`.
-- [ ] **Tarjetas de prueba** (de la guía): `5555555555555557` venc. `12/22`
-      CVV `123`. Clave del reto: `123456`.
+- [ ] **El iframe abre y devuelve el token.** El callback se llama `tokenCreated`
+      y el método para abrir es `OpenIframeCustom`. Si tu QA usa otros nombres,
+      amplía `PagoTokenCardnet.tsx` (está marcado `VERIFICAR-QA`).
+- [ ] **La forma del token.** `tokenDe()` busca `Token`/`TrxToken`/`PWToken`. Si
+      viene con otro nombre, agrégalo.
+- [ ] **La respuesta del Purchase.** `interpretarCompraToken()` aprueba con
+      `Approved:true` o `ResponseCode:'00'`. Si tu QA marca el aprobado de otra
+      forma, ajústalo. Ante la duda NO aprueba — es lo seguro.
+- [ ] **El monto.** El `Amount` va en centavos ENTEROS (`Amount = pesos×100`).
+      Si tu QA espera decimales, cambia `montoEnteroMenor()`.
+- [ ] **Tarjeta de prueba** (la de CardNET) y clave del reto 3DS.
 
-Cuando los seis queden confirmados, es cuando el cobro está listo para
-producción — no antes.
+Cuando queden confirmados, el cobro está listo para producción — no antes.
 
 ---
 
-## 5. Cuando un pago no cuadra
+## 5. Lo que NO cambió
 
-El runbook `docs/runbooks/pagos-cardnet.md` sigue vigente: explica cómo
-diagnosticar un `PagoIntento` atascado, la idempotencia (`activadoAt`) y la
-conciliación contra el panel de comercio de CardNET. **El cierre de lote es
-automático a las 7:00 PM**; una anulación (`anularVenta`) solo procede antes de
-esa hora.
+- **Pago en efectivo en la sucursal**: intacto, siempre disponible.
+- **Transferencia**: sigue donde esté encendida (se apaga por capacidad).
+- **Otras empresas**: nunca ven la opción de tarjeta.
 
 ---
 
-## 6. Lo que NO cambió
+## 6. Fase 2 (pendiente): cobros recurrentes
 
-- **Pago en efectivo en la sucursal**: intacto. El cliente elige sucursal,
-  recibe su referencia y paga en la Caja. Siempre está disponible, para todas
-  las empresas.
-- **Transferencia**: sigue como estaba donde esté encendida.
-- **Otras empresas**: nunca ven la opción de tarjeta. La pasarela es solo de
-  CARTOWN, por capacidad.
+Esta fase (cobro único) NO guarda el token. Para membresías con renovación
+automática mensual, la Fase 2 guardará el `Customer`/token de CardNET y una
+automatización mandará el `Purchase` cada período — la lógica de recurrencia es
+nuestra (así lo confirmó CardNET). Endpoints ya conocidos del Postman de
+tokenización: `POST /api/Customer`, `POST /api/Customer/{id}/activate`,
+`POST /api/Customer/{id}/PaymentProfileDelete`.
