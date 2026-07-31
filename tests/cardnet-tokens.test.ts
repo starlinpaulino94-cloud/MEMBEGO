@@ -99,3 +99,42 @@ test('sinSensibles enmascara tokens y datos de tarjeta', () => {
   assert.ok(!String(anidado.CardNumber).includes('4111'))
   assert.equal(anidado.ok, 'visible')
 })
+
+test('extraerPerfiles saca token y referencias de PaymentProfiles (camino confirmado por CardNET)', async () => {
+  const { extraerPerfiles } = await import('../src/lib/payments/cardnet-tokens-core')
+  const perfiles = extraerPerfiles({
+    Response: {
+      CustomerId: 111924,
+      Email: 'cliente@x.com',
+      PaymentProfiles: [
+        {
+          PaymentProfileId: 5551,
+          Token: 'CT__viejoToken_aaaaaaaaaaaaaaaa',
+          Brand: 'VISA',
+          CardNumber: '411111******1111',
+        },
+        {
+          PaymentProfileId: 5552,
+          Token: 'CT__nuevoToken_bbbbbbbbbbbbbbbb',
+          Brand: 'MASTERCARD',
+          LastFour: '4444',
+        },
+      ],
+    },
+    Errors: [],
+  })
+  assert.equal(perfiles.length, 2)
+  assert.equal(perfiles[0].paymentProfileId, '5551')
+  assert.equal(perfiles[0].ultimos4, '1111') // sacado del número enmascarado
+  const ultimo = perfiles[perfiles.length - 1]
+  assert.equal(ultimo.token, 'CT__nuevoToken_bbbbbbbbbbbbbbbb')
+  assert.equal(ultimo.marca, 'MASTERCARD')
+  assert.equal(ultimo.ultimos4, '4444')
+})
+
+test('extraerPerfiles con respuesta sin perfiles o malformada devuelve []', async () => {
+  const { extraerPerfiles } = await import('../src/lib/payments/cardnet-tokens-core')
+  assert.deepEqual(extraerPerfiles({ Response: { CustomerId: 1 } }), [])
+  assert.deepEqual(extraerPerfiles({}), [])
+  assert.deepEqual(extraerPerfiles({ Response: { PaymentProfiles: 'no-array' } }), [])
+})

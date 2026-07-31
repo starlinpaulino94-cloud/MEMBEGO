@@ -4,6 +4,7 @@ import { paymentLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import {
   getTokensPublicConfig,
   crearSesionCaptura,
+  consultarPerfilesPago,
   cardnetTokensConfigurado,
 } from '@/lib/payments/cardnet-tokens'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
@@ -52,11 +53,18 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       )
     }
+    // Línea base para la confirmación por perfil: cuántas tarjetas tenía el
+    // Customer ANTES de abrir la ventana. Solo se cobrará un perfil agregado
+    // después de este punto — cerrar la ventana sin terminar no cobra nada.
+    const conteoPerfiles = sesion.customerId
+      ? (await consultarPerfilesPago(sesion.customerId).catch(() => [])).length
+      : 0
     return NextResponse.json({
       ok: true,
       captureUrl: sesion.captureUrl,
       uniqueId: sesion.uniqueId,
       publicKey: pub.publicKey,
+      conteoPerfiles,
     })
   } catch (e) {
     logErrorBd('pagos:cardnet-token:sesion', e, { clienteId: user.metadata.clienteId })

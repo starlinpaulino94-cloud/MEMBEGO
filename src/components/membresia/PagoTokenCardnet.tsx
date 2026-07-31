@@ -54,6 +54,8 @@ interface SesionCaptura {
   uniqueId: string
   publicKey: string
   creadaEn: number
+  /** Tarjetas que el proveedor ya tenía ANTES de abrir esta ventana. */
+  conteoPerfiles: number
 }
 
 // Una sesión pre-creada se considera fresca por 4 minutos; después se pide otra.
@@ -153,6 +155,10 @@ export function PagoTokenCardnet({
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [guardar, setGuardar] = useState(false)
   const cobrandoRef = useRef(false)
+  // Confirmación por servidor en curso (no solapar sondeos).
+  const confirmandoRef = useRef(false)
+  // Tarjetas que ya existían al abrir la ventana (línea base del sondeo).
+  const conteoAntesRef = useRef(0)
   // Sesión pre-creada en segundo plano para que el clic abra al instante.
   const sesionRef = useRef<SesionCaptura | null>(null)
   // Último payload de tokenCreated: de aquí salen las referencias para guardar.
@@ -289,6 +295,7 @@ export function PagoTokenCardnet({
         captureUrl?: string
         uniqueId?: string
         publicKey?: string
+        conteoPerfiles?: number
       }
       if (!data.ok || !data.captureUrl || !data.uniqueId) return null
       return {
@@ -296,6 +303,7 @@ export function PagoTokenCardnet({
         uniqueId: data.uniqueId,
         publicKey: data.publicKey || publicKey,
         creadaEn: Date.now(),
+        conteoPerfiles: typeof data.conteoPerfiles === 'number' ? data.conteoPerfiles : 0,
       }
     } catch {
       return null
@@ -314,6 +322,63 @@ export function PagoTokenCardnet({
       cancelado = true
     }
   }, [estado, pedirSesion])
+
+  /**
+   * CONFIRMACIÓN POR SERVIDOR (el camino OFICIAL del proveedor): el servidor
+   * consulta si ya hay una tarjeta recién registrada y cobra con ella — el
+   * navegador no necesita recibir ningún token. Devuelve true si el asunto
+   * quedó resuelto (aprobado, rechazado o ya no hay nada pendiente).
+   */
+  const confirmarEnServidor = useCallback(async (): Promise<boolean> => {
+    if (cobrandoRef.current || confirmandoRef.current) return false
+    confirmandoRef.current = true
+    try {
+      const resp = await fetch('/api/pagos/cardnet-token/confirmar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          membershipId,
+          guardar: guardarRef.current,
+          conteoAntes: conteoAntesRef.current,
+        }),
+      })
+      const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+      if (data.estado === 'aprobado') {
+        setEstado('aprobado')
+        toast.success('¡Pago aprobado! Tu membresía está activa.')
+        if (urlExito) router.push(urlExito)
+        else router.refresh()
+        return true
+      }
+      if (data.estado === 'rechazado') {
+        setEstado('error')
+        setMensaje(data.motivo ?? 'La tarjeta fue rechazada.')
+        return true
+      }
+      if (data.estado === 'sin_pendiente') {
+        // Otro canal ya cobró (u otra pestaña): la página se pone al día.
+        setEstado('listo')
+        router.refresh()
+        return true
+      }
+      // sin_tarjeta / en_proceso / error transitorio: seguir esperando.
+      return false
+    } catch {
+      return false
+    } finally {
+      confirmandoRef.current = false
+    }
+  }, [membershipId, router, urlExito])
+
+  // Mientras la ventana del proveedor está abierta, el servidor consulta cada
+  // pocos segundos si la tarjeta ya quedó registrada, y cobra en cuanto sí.
+  useEffect(() => {
+    if (estado !== 'capturando') return
+    const intervalo = setInterval(() => {
+      void confirmarEnServidor()
+    }, 5000)
+    return () => clearInterval(intervalo)
+  }, [estado, confirmarEnServidor])
 
   // Lee el token del input oculto PWToken (si el widget lo dejó ahí) y cobra.
   const cobrarDelFormulario = useCallback(() => {
@@ -419,18 +484,23 @@ export function PagoTokenCardnet({
       if (!ventanaVista) return // todavía no terminó de abrir
       clearInterval(chequeo)
       liberar = setTimeout(() => {
-        if (!cobrandoRef.current) {
-          setEstado((e) => (e === 'capturando' ? 'listo' : e))
-          setMensaje(null)
-          toast('Se cerró la ventana de pago sin completar el cobro. Puedes intentarlo de nuevo.')
-        }
-      }, 3000)
+        void (async () => {
+          // Última oportunidad: la ventana se cerró — quizá porque el cliente
+          // TERMINÓ. Se le pregunta al proveedor antes de rendirse.
+          const resuelto = await confirmarEnServidor()
+          if (!resuelto && !cobrandoRef.current) {
+            setEstado((e) => (e === 'capturando' ? 'listo' : e))
+            setMensaje(null)
+            toast('Se cerró la ventana de pago sin completar el cobro. Puedes intentarlo de nuevo.')
+          }
+        })()
+      }, 2500)
     }, 700)
     return () => {
       clearInterval(chequeo)
       if (liberar) clearTimeout(liberar)
     }
-  }, [estado])
+  }, [estado, confirmarEnServidor])
 
   // La ventana del proveedor a veces se dibuja más alta que la pantalla y el
   // botón de pagar queda fuera de alcance (sin scroll). Mientras está abierta,
@@ -506,6 +576,7 @@ export function PagoTokenCardnet({
       setMensaje('No se pudo iniciar la ventana de pago. Intenta de nuevo.')
       return
     }
+    conteoAntesRef.current = sesion.conteoPerfiles
 
     sdk.SetProperties({
       name: companyName ?? 'Pago seguro',
