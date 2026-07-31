@@ -1,24 +1,17 @@
 import { prisma } from '@/lib/prisma'
+import type { ConteoSegmentos, SegmentoValue } from '@/modules/admin/segmentos-def'
 
 // F4.5: segmentación inteligente de clientes por empresa. Los segmentos se
 // calculan al vuelo (sin tablas nuevas) y devuelven userIds notificables.
 // Módulo interno sin 'use server' — no expone endpoints.
+//
+// OJO: este archivo importa Prisma, así que es SOLO de servidor. Las
+// definiciones compartibles con el navegador (catálogo de segmentos, tipos)
+// viven en ./segmentos-def — un componente cliente que importe de AQUÍ
+// arrastra Prisma al navegador y revienta la página.
 
-export const SEGMENTOS = [
-  { value: 'seguidores', label: 'Seguidores de la empresa' },
-  { value: 'todos', label: 'Todos mis clientes' },
-  { value: 'activos', label: 'Clientes con membresía activa' },
-  { value: 'por_vencer', label: 'Membresías por vencer (7 días)' },
-  { value: 'nuevos', label: 'Clientes nuevos (últimos 30 días)' },
-  { value: 'inactivos', label: 'Sin visitas en 30 días' },
-  { value: 'plan', label: 'Por plan específico…' },
-] as const
-
-export type SegmentoValue = (typeof SEGMENTOS)[number]['value']
-
-export function esSegmentoValido(s: string): s is SegmentoValue {
-  return SEGMENTOS.some((x) => x.value === s)
-}
+export { SEGMENTOS, esSegmentoValido } from '@/modules/admin/segmentos-def'
+export type { SegmentoValue, ConteoSegmentos } from '@/modules/admin/segmentos-def'
 
 /** Mapea clientes (supabaseId) a userIds notificables. */
 async function userIdsDeClientes(supabaseIds: string[]): Promise<string[]> {
@@ -106,15 +99,6 @@ export async function resolverSegmento(
       return userIdsDeClientes(rows.map((r) => r.supabaseId))
     }
   }
-}
-
-export interface ConteoSegmentos {
-  seguidores: number
-  todos: number
-  activos: number
-  por_vencer: number
-  nuevos: number
-  inactivos: number
 }
 
 /** Conteos de cada segmento para mostrar en el formulario. */
