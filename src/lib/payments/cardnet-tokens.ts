@@ -264,10 +264,30 @@ async function postTokens(
  * server-to-server para cobrar sin depender del callback del navegador.
  */
 export async function consultarPerfilesPago(customerId: string): Promise<PerfilPagoCardnet[]> {
-  if (!customerId) return []
+  return (await consultarClienteCardnet(customerId)).perfiles
+}
+
+/**
+ * Consulta COMPLETA del Customer: email + perfiles. Es un GET puro — a
+ * diferencia del POST /customer, NO genera una sesión nueva, así que es
+ * seguro llamarla mientras la ventana de captura está abierta (un POST con
+ * el mismo email invalida el UniqueID de la ventana y la mata con
+ * INTERNAL_SERVER_ERROR).
+ */
+export async function consultarClienteCardnet(
+  customerId: string
+): Promise<{ email: string | null; perfiles: PerfilPagoCardnet[] }> {
+  if (!customerId) return { email: null, perfiles: [] }
   const { ok, json } = await llamarTokens('GET', `/Customer/${encodeURIComponent(customerId)}`, null)
-  if (!ok) return []
-  return extraerPerfiles(json)
+  if (!ok) return { email: null, perfiles: [] }
+  const { datos } = desenvolverRespuesta(json)
+  const email =
+    typeof datos.Email === 'string' && datos.Email
+      ? datos.Email
+      : typeof datos.email === 'string' && datos.email
+        ? datos.email
+        : null
+  return { email, perfiles: extraerPerfiles(json) }
 }
 
 /**

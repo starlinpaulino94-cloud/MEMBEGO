@@ -8,7 +8,7 @@ import {
   cardnetTokensConfigurado,
   cobrarConToken,
   crearClienteCardnet,
-  consultarPerfilesPago,
+  consultarClienteCardnet,
 } from '@/lib/payments/cardnet-tokens'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
@@ -154,6 +154,14 @@ export async function cobrarPendienteConPerfil(input: {
   clienteIp: string
   userAgent?: string | null
   conteoAntes?: number | null
+  /**
+   * CustomerId de la sesión de captura, si el navegador lo trae. Con él la
+   * consulta es un GET puro — CRÍTICO mientras la ventana está abierta: un
+   * POST /customer con el mismo email genera un UniqueID nuevo e INVALIDA la
+   * sesión de la ventana (la mata con INTERNAL_SERVER_ERROR). El valor no se
+   * confía a ciegas: el Email del Customer debe coincidir con el del usuario.
+   */
+  customerId?: string | null
 }): Promise<ConfirmacionPerfilResultado> {
   if (!(await puedeCobrarToken(input.objetivo.companyId))) {
     return { estado: 'error', motivo: 'El pago con tarjeta no está disponible.' }
@@ -179,10 +187,28 @@ export async function cobrarPendienteConPerfil(input: {
   const monto = await montoDeObjetivo(input.objetivo)
   if (!monto || monto.pesos <= 0) return { estado: 'sin_pendiente' }
 
-  const cliente = await crearClienteCardnet({ email: input.emailCliente })
-  if (!cliente) return { estado: 'error', motivo: 'No se pudo consultar la pasarela.' }
-
-  const perfiles = await consultarPerfilesPago(cliente.customerId)
+  // Resolver el Customer SIN tocar la sesión de la ventana abierta: con el
+  // customerId de la sesión se consulta por GET y se verifica la pertenencia
+  // por email. Solo si no llegó (caso raro) se cae al POST /customer — que es
+  // seguro únicamente cuando la ventana ya se cerró.
+  let customerId = input.customerId?.trim() || null
+  let perfiles: Awaited<ReturnType<typeof consultarClienteCardnet>>['perfiles']
+  if (customerId) {
+    const consulta = await consultarClienteCardnet(customerId)
+    const emailCoincide =
+      !!consulta.email &&
+      consulta.email.trim().toLowerCase() === input.emailCliente.trim().toLowerCase()
+    if (!emailCoincide) {
+      // Customer ajeno o consulta fallida: no se cobra nada con él.
+      return { estado: 'sin_tarjeta' }
+    }
+    perfiles = consulta.perfiles
+  } else {
+    const cliente = await crearClienteCardnet({ email: input.emailCliente })
+    if (!cliente) return { estado: 'error', motivo: 'No se pudo consultar la pasarela.' }
+    customerId = cliente.customerId
+    perfiles = (await consultarClienteCardnet(customerId)).perfiles
+  }
   const conteoAntes = Math.max(0, input.conteoAntes ?? 0)
   // Sin perfil NUEVO todavía: el cliente sigue digitando (o cerró sin terminar).
   if (perfiles.length === 0 || perfiles.length <= conteoAntes) {
@@ -202,7 +228,7 @@ export async function cobrarPendienteConPerfil(input: {
     return {
       ...res,
       perfil: {
-        customerId: cliente.customerId,
+        customerId,
         paymentProfileId: perfil.paymentProfileId,
         token: perfil.token,
         marca: perfil.marca,

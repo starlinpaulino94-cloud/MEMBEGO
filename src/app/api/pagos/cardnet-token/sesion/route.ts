@@ -65,6 +65,10 @@ export async function POST(req: NextRequest) {
       uniqueId: sesion.uniqueId,
       publicKey: pub.publicKey,
       conteoPerfiles,
+      // Para la confirmación por GET (un POST /customer durante la captura
+      // invalidaría la sesión de la ventana). No es un secreto: el servidor
+      // verifica la pertenencia por email antes de usarlo.
+      customerId: sesion.customerId || null,
     })
   } catch (e) {
     logErrorBd('pagos:cardnet-token:sesion', e, { clienteId: user.metadata.clienteId })
