@@ -44,6 +44,38 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json({ ...base, correoPrueba: { destinatario: user.email, ...resultado } })
   }
+  // ?perfiles=1: crea/consulta el Customer del usuario logueado y muestra QUÉ
+  // devuelve el proveedor al consultarlo (forma real de PaymentProfiles, si el
+  // Email viene y cómo, y qué logra extraer nuestro parser). Sin sensibles.
+  if (req.nextUrl.searchParams.get('perfiles') === '1' && base.configurado) {
+    const { crearClienteCardnet, consultarClienteCardnet, consultarClienteDiagnostico } =
+      await import('@/lib/payments/cardnet-tokens')
+    const email = user.email || ''
+    const cliente = await crearClienteCardnet({ email })
+    if (!cliente) {
+      return NextResponse.json({ ...base, perfiles: { error: 'No se pudo registrar/consultar el Customer.' } })
+    }
+    const [consulta, crudo] = await Promise.all([
+      consultarClienteCardnet(cliente.customerId),
+      consultarClienteDiagnostico(cliente.customerId),
+    ])
+    return NextResponse.json({
+      ...base,
+      perfiles: {
+        customerId: cliente.customerId,
+        emailDelCustomer: consulta.email,
+        emailCoincide: (consulta.email ?? '').trim().toLowerCase() === email.trim().toLowerCase(),
+        totalExtraidos: consulta.perfiles.length,
+        extraidos: consulta.perfiles.map((p) => ({
+          paymentProfileId: p.paymentProfileId,
+          tieneToken: Boolean(p.token),
+          marca: p.marca,
+          ultimos4: p.ultimos4,
+        })),
+        consultaCruda: crudo,
+      },
+    })
+  }
   if (req.nextUrl.searchParams.get('probar') !== '1' || !base.configurado) {
     return NextResponse.json(base)
   }

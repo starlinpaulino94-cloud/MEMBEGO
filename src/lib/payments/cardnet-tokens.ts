@@ -326,6 +326,18 @@ export async function probarSesionTokens(): Promise<
 }
 
 /**
+ * DIAGNÓSTICO de la consulta del Customer: status HTTP + respuesta cruda SIN
+ * datos sensibles (los tokens quedan enmascarados pero las CLAVES se ven, que
+ * es lo que hace falta para confirmar la forma real de `PaymentProfiles`).
+ */
+export async function consultarClienteDiagnostico(
+  customerId: string
+): Promise<{ ok: boolean; status: number; respuesta: Record<string, unknown> }> {
+  const r = await llamarTokens('GET', `/Customer/${encodeURIComponent(customerId)}`, null)
+  return { ok: r.ok, status: r.status, respuesta: sinSensibles(r.json) }
+}
+
+/**
  * SESIÓN DE CAPTURA (paso previo OBLIGATORIO a abrir el iframe).
  *
  * El manual de tokenización (§4) es claro: NO se puede abrir el iframe con un
