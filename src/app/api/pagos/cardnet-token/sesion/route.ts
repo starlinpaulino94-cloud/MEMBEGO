@@ -44,21 +44,33 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const sesion = await crearSesionCaptura({
-      email: user.email || `${user.metadata.clienteId}@membego.local`,
-    })
+    const email = user.email || `${user.metadata.clienteId}@membego.local`
+
+    // ORDEN CRÍTICO. El proveedor invalida el UniqueID vigente con CUALQUIER
+    // operación posterior sobre el mismo Customer (un nuevo registro seguro;
+    // posiblemente también la consulta). Por eso:
+    //  1) un registro inicial solo para conocer el customerId,
+    //  2) la línea base de perfiles (GET) con ese id,
+    //  3) el registro DEFINITIVO al final — su UniqueID es el que abre la
+    //     ventana, y después de este punto NO se vuelve a tocar al proveedor
+    //     hasta que la ventana se cierre (la confirmación corre recién ahí).
+    const previa = await crearSesionCaptura({ email })
+    if (!previa) {
+      return NextResponse.json(
+        { ok: false, error: 'No se pudo iniciar la ventana de pago. Intenta de nuevo.' },
+        { status: 502 }
+      )
+    }
+    const conteoPerfiles = previa.customerId
+      ? (await consultarPerfilesPago(previa.customerId).catch(() => [])).length
+      : 0
+    const sesion = await crearSesionCaptura({ email })
     if (!sesion) {
       return NextResponse.json(
         { ok: false, error: 'No se pudo iniciar la ventana de pago. Intenta de nuevo.' },
         { status: 502 }
       )
     }
-    // Línea base para la confirmación por perfil: cuántas tarjetas tenía el
-    // Customer ANTES de abrir la ventana. Solo se cobrará un perfil agregado
-    // después de este punto — cerrar la ventana sin terminar no cobra nada.
-    const conteoPerfiles = sesion.customerId
-      ? (await consultarPerfilesPago(sesion.customerId).catch(() => [])).length
-      : 0
     return NextResponse.json({
       ok: true,
       captureUrl: sesion.captureUrl,
