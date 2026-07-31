@@ -377,15 +377,10 @@ export function PagoTokenCardnet({
     }
   }, [membershipId, router, urlExito])
 
-  // Mientras la ventana del proveedor está abierta, el servidor consulta cada
-  // pocos segundos si la tarjeta ya quedó registrada, y cobra en cuanto sí.
-  useEffect(() => {
-    if (estado !== 'capturando') return
-    const intervalo = setInterval(() => {
-      void confirmarEnServidor()
-    }, 5000)
-    return () => clearInterval(intervalo)
-  }, [estado, confirmarEnServidor])
+  // OJO: NO se consulta al proveedor mientras la ventana está abierta —
+  // cualquier operación sobre el Customer invalida el UniqueID de la ventana
+  // y la mata con INTERNAL_SERVER_ERROR. La confirmación corre únicamente
+  // cuando la ventana se cierra (efecto de cierre, más abajo).
 
   // Lee el token del input oculto PWToken (si el widget lo dejó ahí) y cobra.
   const cobrarDelFormulario = useCallback(() => {
@@ -472,13 +467,15 @@ export function PagoTokenCardnet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Si la ventana del proveedor se cerró y en unos segundos no llegó ningún
-  // token, se libera la pantalla en vez de quedarse "cargando" para siempre.
-  // Sin token NO hubo cobro, así que es seguro ofrecer reintentar.
+  // CIERRE DE LA VENTANA: aquí (y solo aquí) se confirma contra el proveedor.
+  // La ventana se cierra sola tras "Agregar", así que el cierre es la señal de
+  // que probablemente hay una tarjeta nueva. El registro del proveedor puede
+  // tardar unos segundos, así que se consulta varias veces antes de rendirse.
+  // Si no aparece nada, se libera la pantalla: sin tarjeta nueva NO hubo cobro.
   useEffect(() => {
     if (estado !== 'capturando') return
     let ventanaVista = false
-    let liberar: ReturnType<typeof setTimeout> | null = null
+    let cancelado = false
     const chequeo = setInterval(() => {
       const f = document.querySelector<HTMLIFrameElement>(
         'iframe[src*="gtp-seglan"], iframe[src*="cardnet"]'
@@ -490,22 +487,22 @@ export function PagoTokenCardnet({
       }
       if (!ventanaVista) return // todavía no terminó de abrir
       clearInterval(chequeo)
-      liberar = setTimeout(() => {
-        void (async () => {
-          // Última oportunidad: la ventana se cerró — quizá porque el cliente
-          // TERMINÓ. Se le pregunta al proveedor antes de rendirse.
-          const resuelto = await confirmarEnServidor()
-          if (!resuelto && !cobrandoRef.current) {
-            setEstado((e) => (e === 'capturando' ? 'listo' : e))
-            setMensaje(null)
-            toast('Se cerró la ventana de pago sin completar el cobro. Puedes intentarlo de nuevo.')
-          }
-        })()
-      }, 2500)
+      void (async () => {
+        for (let intento = 0; intento < 5; intento++) {
+          await new Promise((r) => setTimeout(r, 2500))
+          if (cancelado || cobrandoRef.current) return
+          if (await confirmarEnServidor()) return
+        }
+        if (!cancelado && !cobrandoRef.current) {
+          setEstado((e) => (e === 'capturando' ? 'listo' : e))
+          setMensaje(null)
+          toast('Se cerró la ventana de pago sin completar el cobro. Puedes intentarlo de nuevo.')
+        }
+      })()
     }, 700)
     return () => {
+      cancelado = true
       clearInterval(chequeo)
-      if (liberar) clearTimeout(liberar)
     }
   }, [estado, confirmarEnServidor])
 
