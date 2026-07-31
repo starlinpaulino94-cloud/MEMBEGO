@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/renovaciones-tarjeta",
       "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/cron/integraciones",
-      "schedule": "0 * * * *"
     }
   ]
 }
