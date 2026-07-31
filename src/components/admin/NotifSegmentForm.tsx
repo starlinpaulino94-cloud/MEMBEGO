@@ -7,7 +7,7 @@ import {
   enviarNotificacionSegmento,
   type NotifSegmentState,
 } from '@/modules/admin/notifSegmentActions'
-import { SEGMENTOS, type ConteoSegmentos } from '@/modules/admin/segmentos'
+import { SEGMENTOS, type ConteoSegmentos } from '@/modules/admin/segmentos-def'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

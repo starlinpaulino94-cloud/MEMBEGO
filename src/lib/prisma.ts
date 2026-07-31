@@ -96,13 +96,35 @@ function crearCliente() {
  * Es decir: la mentira del tipo se limita a un método inexistente que nadie
  * llama, y se paga una vez, aquí, con este comentario al lado.
  */
-export const prisma: PrismaClient =
-  globalForPrisma.prisma ?? (crearCliente() as unknown as PrismaClient)
+// CONSTRUCCIÓN PEREZOSA (y por qué no es opcional): construir el cliente al
+// importar el módulo significa que cualquier componente cliente que — por
+// error — importe un módulo de servidor arrastra esta línea al navegador y
+// TODA la página muere con "PrismaClient is unable to run in this browser
+// environment" (así se cayó /admin/notificaciones). Con el Proxy, importar
+// este módulo es gratis en cualquier entorno; el cliente real solo se
+// construye en la primera CONSULTA, que únicamente ocurre en el servidor.
+// Se reutiliza vía globalThis también en producción: si el bundler evalúa
+// este módulo más de una vez (chunks/workers), cada evaluación abriría un
+// pool de conexiones propio contra el pooler de Supabase.
+function obtenerCliente(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = crearCliente() as unknown as PrismaClient
+  }
+  return globalForPrisma.prisma
+}
 
-// Reutilizar el cliente también en producción: si el bundler evalúa este
-// módulo más de una vez (chunks/workers), cada evaluación abriría un pool
-// de conexiones propio contra el pooler de Supabase.
-globalForPrisma.prisma = prisma
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_objetivo, prop) {
+    const real = obtenerCliente()
+    const valor = Reflect.get(real, prop)
+    return typeof valor === 'function'
+      ? (valor as (...args: unknown[]) => unknown).bind(real)
+      : valor
+  },
+  has(_objetivo, prop) {
+    return Reflect.has(obtenerCliente(), prop)
+  },
+})
 
 // Guardia de configuración (una vez por proceso): en serverless (Vercel),
 // conectar al puerto DIRECTO de Postgres agota las conexiones de Supabase

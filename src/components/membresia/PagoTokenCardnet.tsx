@@ -65,13 +65,39 @@ const FORM_ID = 'membego_pago_form'
 
 type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'aprobado' | 'error'
 
-/** Extrae el token del payload de `tokenCreated`, sea string u objeto. */
-function tokenDe(data: unknown): string {
-  if (typeof data === 'string') return data
-  if (data && typeof data === 'object') {
+const CLAVES_TOKEN = ['Token', 'token', 'TrxToken', 'trxToken', 'PWToken'] as const
+// Anidaciones típicas donde los proveedores esconden el payload real.
+const CLAVES_ANIDADAS = ['data', 'Data', 'detail', 'payload', 'Response', 'response'] as const
+
+/**
+ * Extrae el token del payload de `tokenCreated`, sea string, JSON en string,
+ * objeto plano u objeto anidado (hasta 3 niveles). El proveedor no documenta
+ * la forma exacta, así que se buscan todas las variantes conocidas.
+ */
+function tokenDe(data: unknown, nivel = 0): string {
+  if (typeof data === 'string') {
+    const s = data.trim()
+    if ((s.startsWith('{') || s.startsWith('[')) && nivel < 3) {
+      try {
+        return tokenDe(JSON.parse(s), nivel + 1)
+      } catch {
+        return ''
+      }
+    }
+    // En el primer nivel (callback directo del SDK) un string ES el token.
+    return nivel === 0 ? s : ''
+  }
+  if (data && typeof data === 'object' && nivel < 4) {
     const o = data as Record<string, unknown>
-    for (const k of ['Token', 'token', 'TrxToken', 'trxToken', 'PWToken']) {
-      if (typeof o[k] === 'string') return o[k] as string
+    for (const k of CLAVES_TOKEN) {
+      const v = o[k]
+      if (typeof v === 'string' && v.trim().length > 8) return v.trim()
+    }
+    for (const k of CLAVES_ANIDADAS) {
+      if (o[k]) {
+        const t = tokenDe(o[k], nivel + 1)
+        if (t) return t
+      }
     }
   }
   return ''
@@ -90,8 +116,18 @@ function refsGuardado(data: unknown): {
   ultimos4: string | null
 } {
   const o = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+  // El payload puede venir plano o envuelto (Response/data/…): se busca en ambos.
+  const capas = [o, ...CLAVES_ANIDADAS.map((k) => o[k])].filter(
+    (c): c is Record<string, unknown> => Boolean(c) && typeof c === 'object'
+  )
   const g = (...ks: string[]) => {
-    for (const k of ks) if (typeof o[k] === 'string' && o[k]) return o[k] as string
+    for (const capa of capas) {
+      for (const k of ks) {
+        const v = capa[k]
+        if (typeof v === 'string' && v) return v
+        if (typeof v === 'number') return String(v)
+      }
+    }
     return null
   }
   return {
@@ -183,7 +219,7 @@ export function PagoTokenCardnet({
     function enganchar() {
       const sdk = window.PWCheckout
       if (!sdk) return false
-      sdk.Bind('tokenCreated', (data: unknown) => {
+      const manejarToken = (data: unknown) => {
         tokenDataRef.current = data
         const t = tokenDe(data)
         if (t) void cobrar(t)
@@ -191,7 +227,17 @@ export function PagoTokenCardnet({
           setEstado('error')
           setMensaje('No se recibió la tarjeta. Intenta de nuevo.')
         }
-      })
+      }
+      // El nombre documentado es `tokenCreated`; se cubren grafías alternas
+      // por si el widget del proveedor usa otra. Un nombre no soportado no
+      // debe tumbar el enganche del resto.
+      for (const evento of ['tokenCreated', 'TokenCreated', 'token_created']) {
+        try {
+          sdk.Bind(evento, manejarToken)
+        } catch {
+          // nombre de evento no soportado por esta versión del widget
+        }
+      }
       if (!cancelado) setEstado('listo')
       return true
     }
@@ -269,22 +315,122 @@ export function PagoTokenCardnet({
     }
   }, [estado, pedirSesion])
 
+  // Lee el token del input oculto PWToken (si el widget lo dejó ahí) y cobra.
+  const cobrarDelFormulario = useCallback(() => {
+    const input = document.querySelector<HTMLInputElement>(`#${FORM_ID} input[name="PWToken"]`)
+    const t = input?.value?.trim()
+    if (input && t && !cobrandoRef.current) {
+      input.value = ''
+      void cobrar(t)
+      return true
+    }
+    return false
+  }, [cobrar])
+
   // PLAN B mientras la ventana está abierta: si el callback del widget no
   // dispara (o cambia de nombre), el token igual aparece en el input oculto
   // PWToken — se vigila y se cobra con él. `cobrandoRef` evita el doble cobro
   // si ambos caminos llegan.
   useEffect(() => {
     if (estado !== 'capturando') return
-    const intervalo = setInterval(() => {
-      const input = document.querySelector<HTMLInputElement>(`#${FORM_ID} input[name="PWToken"]`)
-      const t = input?.value?.trim()
-      if (input && t && !cobrandoRef.current) {
-        input.value = ''
+    const intervalo = setInterval(cobrarDelFormulario, 500)
+    return () => clearInterval(intervalo)
+  }, [estado, cobrarDelFormulario])
+
+  // PLAN C: algunos widgets "envían" el formulario al terminar en vez de (o
+  // además de) disparar el callback. Un submit nativo navegaría la página y
+  // perdería el token — se intercepta (tanto el evento como el método
+  // programático .submit()) para cobrar aquí mismo.
+  useEffect(() => {
+    const form = document.getElementById(FORM_ID) as HTMLFormElement | null
+    if (!form) return
+    const alEnviar = (e: Event) => {
+      e.preventDefault()
+      cobrarDelFormulario()
+    }
+    form.addEventListener('submit', alEnviar)
+    const originalSubmit = form.submit.bind(form)
+    ;(form as unknown as { submit: () => void }).submit = () => {
+      cobrarDelFormulario()
+    }
+    return () => {
+      form.removeEventListener('submit', alEnviar)
+      ;(form as unknown as { submit: () => void }).submit = originalSubmit
+    }
+  }, [cobrarDelFormulario])
+
+  // PLAN D: escuchar los mensajes que la ventana del proveedor manda a la
+  // página (postMessage). Si en alguno viene el token, se cobra con él.
+  useEffect(() => {
+    const alMensaje = (ev: MessageEvent) => {
+      if (!/gtp-seglan\.com|cardnet\.com\.do/i.test(ev.origin)) return
+      if (cobrandoRef.current) return
+      const d: unknown = ev.data
+      let t = ''
+      if (typeof d === 'string') {
+        // Solo strings con forma de token o de JSON; el widget también manda
+        // mensajes internos (resize, etc.) que no hay que confundir.
+        const s = d.trim()
+        if (s.startsWith('{') || s.startsWith('[')) t = tokenDe(s, 0)
+        else if (/^[A-Za-z0-9]{2,10}__?[A-Za-z0-9_-]{16,}$/.test(s)) t = s
+      } else {
+        t = tokenDe(d)
+      }
+      if (t) {
+        tokenDataRef.current = typeof d === 'string' ? { Token: t } : d
         void cobrar(t)
       }
-    }, 500)
-    return () => clearInterval(intervalo)
-  }, [estado, cobrar])
+    }
+    window.addEventListener('message', alMensaje)
+    return () => window.removeEventListener('message', alMensaje)
+  }, [cobrar])
+
+  // PLAN E: si a pesar de todo el formulario llegó a navegar (recarga con
+  // ?PWToken=... en la URL), se rescata el token al montar y se cobra.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('PWToken')?.trim()
+    if (t && !cobrandoRef.current) {
+      params.delete('PWToken')
+      const query = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''))
+      void cobrar(t)
+    }
+    // Solo al montar: el token en URL es residuo de una navegación previa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Si la ventana del proveedor se cerró y en unos segundos no llegó ningún
+  // token, se libera la pantalla en vez de quedarse "cargando" para siempre.
+  // Sin token NO hubo cobro, así que es seguro ofrecer reintentar.
+  useEffect(() => {
+    if (estado !== 'capturando') return
+    let ventanaVista = false
+    let liberar: ReturnType<typeof setTimeout> | null = null
+    const chequeo = setInterval(() => {
+      const f = document.querySelector<HTMLIFrameElement>(
+        'iframe[src*="gtp-seglan"], iframe[src*="cardnet"]'
+      )
+      const visible = Boolean(f) && (f as HTMLIFrameElement).getBoundingClientRect().width > 10
+      if (visible) {
+        ventanaVista = true
+        return
+      }
+      if (!ventanaVista) return // todavía no terminó de abrir
+      clearInterval(chequeo)
+      liberar = setTimeout(() => {
+        if (!cobrandoRef.current) {
+          setEstado((e) => (e === 'capturando' ? 'listo' : e))
+          setMensaje(null)
+          toast('Se cerró la ventana de pago sin completar el cobro. Puedes intentarlo de nuevo.')
+        }
+      }, 3000)
+    }, 700)
+    return () => {
+      clearInterval(chequeo)
+      if (liberar) clearTimeout(liberar)
+    }
+  }, [estado])
 
   // La ventana del proveedor a veces se dibuja más alta que la pantalla y el
   // botón de pagar queda fuera de alcance (sin scroll). Mientras está abierta,
