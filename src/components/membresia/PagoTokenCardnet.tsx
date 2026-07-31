@@ -59,6 +59,10 @@ interface SesionCaptura {
 // Una sesión pre-creada se considera fresca por 4 minutos; después se pide otra.
 const SESION_TTL_MS = 4 * 60 * 1000
 
+// Formulario oculto donde el widget del proveedor inserta el token (manual
+// §3.2: `form_id` es obligatorio; el input debe llamarse PWToken).
+const FORM_ID = 'membego_pago_form'
+
 type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'aprobado' | 'error'
 
 /** Extrae el token del payload de `tokenCreated`, sea string u objeto. */
@@ -265,6 +269,23 @@ export function PagoTokenCardnet({
     }
   }, [estado, pedirSesion])
 
+  // PLAN B mientras la ventana está abierta: si el callback del widget no
+  // dispara (o cambia de nombre), el token igual aparece en el input oculto
+  // PWToken — se vigila y se cobra con él. `cobrandoRef` evita el doble cobro
+  // si ambos caminos llegan.
+  useEffect(() => {
+    if (estado !== 'capturando') return
+    const intervalo = setInterval(() => {
+      const input = document.querySelector<HTMLInputElement>(`#${FORM_ID} input[name="PWToken"]`)
+      const t = input?.value?.trim()
+      if (input && t && !cobrandoRef.current) {
+        input.value = ''
+        void cobrar(t)
+      }
+    }, 500)
+    return () => clearInterval(intervalo)
+  }, [estado, cobrar])
+
   // Abre la ventana de pago: usa la sesión pre-creada si sigue fresca; si no,
   // pide una nueva en el momento.
   const abrirCaptura = useCallback(async () => {
@@ -296,6 +317,10 @@ export function PagoTokenCardnet({
       description: companyName ? `Membresía ${companyName}` : 'Membresía',
       currency: 'DOP',
       lang: 'ESP',
+      // OBLIGATORIO según el manual (§3.2): el widget inserta el token en el
+      // input oculto PWToken de este formulario. Sin form_id, el token nunca
+      // llega a la página y el flujo se queda esperando para siempre.
+      form_id: FORM_ID,
       checkout_card: 1,
       autoSubmit: 'false',
       empty: 'false',
@@ -325,6 +350,11 @@ export function PagoTokenCardnet({
 
   return (
     <div className="space-y-4">
+      {/* El widget del proveedor inserta aquí el token (manual §3.2). */}
+      <form id={FORM_ID} className="hidden" aria-hidden>
+        <input type="hidden" name="PWToken" id="PWToken" />
+      </form>
+
       {estado === 'error' && mensaje && (
         <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
@@ -389,6 +419,21 @@ export function PagoTokenCardnet({
           </>
         )}
       </Button>
+
+      {/* Salida de emergencia: si el cliente cerró la ventana del proveedor,
+          la pantalla no se queda colgada. */}
+      {estado === 'capturando' && (
+        <button
+          type="button"
+          onClick={() => {
+            setEstado('listo')
+            setMensaje(null)
+          }}
+          className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          ¿Cerraste la ventana de pago? Volver a intentar
+        </button>
+      )}
 
       {/* Sellos de confianza: discretos, debajo del CTA. */}
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] font-medium text-muted-foreground">

@@ -170,6 +170,19 @@ export async function activarMembresia(
   const { resolverRegaloPagado } = await import('@/modules/regalos/entrega')
   await resolverRegaloPagado({ membershipId })
 
+  // Recibo por correo al cliente: sale por CUALQUIER vía de pago (tarjeta,
+  // transferencia aprobada, sucursal) porque este es el punto único. Nunca
+  // rompe la activación.
+  const { enviarConfirmacionPago } = await import('@/modules/pagos/correoConfirmacion')
+  await enviarConfirmacionPago({
+    companyId: membership.companyId,
+    clienteId: membership.clienteId,
+    planNombre: membership.plan.nombre,
+    monto: montoNeto,
+    motivo: 'activacion',
+    vigenteHasta: periodEnd(now, vigenciaDias),
+  }).catch(anotarFallo('pagos:correo-confirmacion'))
+
   return {
     ok: true,
     clienteId: membership.clienteId,

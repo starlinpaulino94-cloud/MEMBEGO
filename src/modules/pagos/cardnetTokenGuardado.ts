@@ -239,6 +239,17 @@ export async function renovarMembresiaPorTarjeta(
     return { estado: 'error', motivo: 'Cobrado, pero la extensión falló. Revisar a mano.' }
   }
 
+  // Recibo por correo al cliente (best-effort; el cobro ya está hecho).
+  const { enviarConfirmacionPago } = await import('@/modules/pagos/correoConfirmacion')
+  await enviarConfirmacionPago({
+    companyId: m.companyId,
+    clienteId: m.clienteId,
+    planNombre: m.plan.nombre,
+    monto: pesos,
+    motivo: 'renovacion',
+    vigenteHasta: nuevaVigencia,
+  }).catch(anotarFallo('pagos:renovacion:correo', { membershipId }))
+
   return { estado: 'renovada', nuevaVigencia }
 }
 
