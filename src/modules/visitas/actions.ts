@@ -101,8 +101,21 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
       return { error: 'Demasiadas búsquedas. Espera un momento e intenta de nuevo.', errorCode: 'RATE_LIMITED' }
     }
 
-    const clean = token.trim()
+    // Los lectores físicos "escriben" el código como teclado: espacios/saltos
+    // colados y símbolos cambiados por la distribución (ES vs EN) son lo normal,
+    // no la excepción.
+    const clean = token.trim().replace(/\s+/g, '')
     if (!clean) return { error: 'El código QR está vacío.', errorCode: 'QR_NOT_FOUND' }
+
+    // El QR de "Mi ID MembeGo" (@código, para regalos) no es el de visitas:
+    // guiar al empleado en vez de un "no existe" seco.
+    if (clean.startsWith('@')) {
+      return {
+        error:
+          'Ese QR es el ID de regalos del cliente, no el de su membresía. Pídele que abra su membresía (el botón de QR del centro) y muestre ese código.',
+        errorCode: 'QR_NOT_FOUND',
+      }
+    }
 
     // Fase E4: el QR impreso en el ticket codifica el Transaction ID (TX-…).
     // Escanearlo consulta el historial oficial de esa operación.
@@ -112,29 +125,40 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
       return { error: res.error ?? 'Transacción no encontrada.', errorCode: 'QR_NOT_FOUND' }
     }
 
-    const qr = await prisma.qrToken.findUnique({
-      where: { token: clean },
-      include: {
-        cliente: {
-          include: {
-            company: true,
-            vehiculos: true,
-            visits: { orderBy: { fechaVisita: 'desc' }, take: 5 },
-            _count: { select: { visits: true } },
+    // Tolerancia al lector físico con distribución de teclado cambiada: los
+    // tokens son base64url (letras, números, "-" y "_"); un lector en EN sobre
+    // Windows en ES teclea "-"→"'" y "_"→"?". Si la búsqueda exacta falla, se
+    // intenta UNA variante corregida (mapeo determinista, sin adivinar).
+    const corregido = clean.replace(/'/g, '-').replace(/[?¿]/g, '_').replace(/´/g, '-')
+    const candidatos = corregido !== clean ? [clean, corregido] : [clean]
+
+    let qr = null
+    for (const candidato of candidatos) {
+      qr = await prisma.qrToken.findUnique({
+        where: { token: candidato },
+        include: {
+          cliente: {
+            include: {
+              company: true,
+              vehiculos: true,
+              visits: { orderBy: { fechaVisita: 'desc' }, take: 5 },
+              _count: { select: { visits: true } },
+            },
+          },
+          membership: {
+            include: { plan: true },
+          },
+          // Fase E5: el mismo QR puede pertenecer a una compra de promoción.
+          compra: {
+            include: {
+              promocion: true,
+              company: { select: { name: true, zonaHoraria: true } },
+            },
           },
         },
-        membership: {
-          include: { plan: true },
-        },
-        // Fase E5: el mismo QR puede pertenecer a una compra de promoción.
-        compra: {
-          include: {
-            promocion: true,
-            company: { select: { name: true, zonaHoraria: true } },
-          },
-        },
-      },
-    })
+      })
+      if (qr) break
+    }
 
     // Caducidad (auditoría · A-02). Va ANTES de cualquier otra comprobación
     // de estado para que el mensaje sea el correcto: decirle al empleado
@@ -151,7 +175,11 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
 
     if (!qr) {
       await logScanInvalido(user.metadata.dbUserId, clean, 'QR_NOT_FOUND')
-      return { error: 'Este código QR no existe. Verifica que sea correcto.', errorCode: 'QR_NOT_FOUND' }
+      return {
+        error:
+          'Este código QR no existe. Verifica que sea el QR de la membresía del cliente. Si usas lector físico y falla seguido, prueba con la cámara: algunos lectores cambian símbolos según el idioma del teclado.',
+        errorCode: 'QR_NOT_FOUND',
+      }
     }
 
     if (!qr.activo) {
