@@ -552,35 +552,29 @@ export function PagoTokenCardnet({
       )
       frames.forEach((f) => {
         f.setAttribute('scrolling', 'yes')
-        // Si el iframe ocupa casi todo el ancho es un overlay de pantalla
-        // completa; si no, es la tarjeta modal y se centra acotada.
-        const esCompleto = f.getBoundingClientRect().width >= window.innerWidth * 0.9
-        if (esCompleto) {
-          Object.assign(f.style, {
-            position: 'fixed',
-            inset: '0',
-            width: '100vw',
-            height: '100dvh',
-            maxHeight: '100dvh',
-            border: '0',
-            zIndex: '2147483000',
-          })
-        } else {
-          Object.assign(f.style, {
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 'min(96vw, 430px)',
-            height: 'min(92dvh, 780px)',
-            maxHeight: '92dvh',
-            border: '0',
-            borderRadius: '16px',
-            background: '#fff',
-            boxShadow: '0 24px 64px rgba(0,0,0,.35)',
-            zIndex: '2147483000',
-          })
-        }
+        // Un solo modo para TODOS los tamaños: tarjeta modal centrada y
+        // acotada al viewport. (Antes había un modo "pantalla completa" para
+        // anchos casi totales; al alternar entre modos, el translate de
+        // centrado quedaba pegado y en móvil corría la ventana media pantalla
+        // a la izquierda/arriba.)
+        Object.assign(f.style, {
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          right: 'auto',
+          bottom: 'auto',
+          margin: '0',
+          transform: 'translate(-50%, -50%)',
+          width: 'min(96vw, 430px)',
+          maxWidth: '96vw',
+          height: 'min(92dvh, 780px)',
+          maxHeight: '92dvh',
+          border: '0',
+          borderRadius: '16px',
+          background: '#fff',
+          boxShadow: '0 24px 64px rgba(0,0,0,.35)',
+          zIndex: '2147483000',
+        })
       })
     }
     ajustar()

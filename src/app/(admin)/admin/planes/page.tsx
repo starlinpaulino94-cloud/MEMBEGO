@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { DeletePlanButton } from '@/components/admin/DeletePlanButton'
+import { PlanPausarBoton } from '@/components/admin/PlanPausarBoton'
 import { BienvenidaConfigForm } from '@/components/admin/BienvenidaConfigForm'
 import { CompartirOfertaButton } from '@/components/admin/CompartirOfertaButton'
 
@@ -189,6 +190,11 @@ export default async function PlanesPage() {
                     {plan._count.memberships} membresías
                   </p>
                   <div className="flex items-center gap-1">
+                    <PlanPausarBoton
+                      planId={plan.id}
+                      activo={plan.activo}
+                      nombre={plan.nombre}
+                    />
                     <Link href={`/admin/planes/${plan.id}/editar`}>
                       <Button size="icon" variant="ghost" title="Editar" aria-label="Editar">
                         <Pencil className="h-4 w-4 text-muted-foreground" />
