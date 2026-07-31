@@ -5,10 +5,12 @@ import {
   montoEnteroMenor,
   interpretarCompraToken,
   desenvolverRespuesta,
+  extraerPerfiles,
   sinSensibles,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
+  type PerfilPagoCardnet,
 } from '@/lib/payments/cardnet-tokens-core'
 
 export {
@@ -18,6 +20,7 @@ export {
   sinSensibles,
   type AmbienteTokens,
   type ResultadoCompraToken,
+  type PerfilPagoCardnet,
 }
 
 /**
@@ -170,8 +173,9 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
 // Estas tres llamadas salen del Postman de tokenización de CardNET. El header
 // de autorización es la LLAVE PRIVADA (secreto de servidor).
 
-/** POST crudo contra UNA base con UN header de auth. Devuelve {ok, status, json}. */
-async function postBase(
+/** Llamada cruda contra UNA base con UN header de auth. Devuelve {ok, status, json}. */
+async function llamadaBase(
+  metodo: 'GET' | 'POST',
   base: string,
   path: string,
   cuerpo: Record<string, unknown> | null,
@@ -179,13 +183,13 @@ async function postBase(
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   try {
     const resp = await fetch(`${base}${path}`, {
-      method: 'POST',
+      method: metodo,
       headers: {
         Authorization: authValor,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+      body: metodo === 'POST' && cuerpo ? JSON.stringify(cuerpo) : undefined,
       signal: AbortSignal.timeout(20_000),
     })
     const texto = await resp.text().catch(() => '')
@@ -214,7 +218,8 @@ let authConfirmada: string | null = null
  * auth (un 401 pasa al siguiente formato). El primero que logra 2xx queda
  * fijado para el resto de la vida de la instancia.
  */
-async function postTokens(
+async function llamarTokens(
+  metodo: 'GET' | 'POST',
   path: string,
   cuerpo: Record<string, unknown> | null
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
@@ -222,13 +227,13 @@ async function postTokens(
   if (!cfg) return { ok: false, status: 0, json: {} }
 
   if (baseConfirmada && authConfirmada) {
-    return postBase(baseConfirmada, path, cuerpo, authConfirmada)
+    return llamadaBase(metodo, baseConfirmada, path, cuerpo, authConfirmada)
   }
 
   let mejor: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
   for (const base of apiCandidatos(cfg.ambiente)) {
     for (const auth of variantesAuth(cfg.privateKey)) {
-      const r = await postBase(base, path, cuerpo, auth.valor)
+      const r = await llamadaBase(metodo, base, path, cuerpo, auth.valor)
       if (r.ok) {
         baseConfirmada = base
         authConfirmada = auth.valor
@@ -242,6 +247,27 @@ async function postTokens(
     }
   }
   return mejor ?? { ok: false, status: 0, json: { _error: 'ningún host respondió' } }
+}
+
+async function postTokens(
+  path: string,
+  cuerpo: Record<string, unknown> | null
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  return llamarTokens('POST', path, cuerpo)
+}
+
+/**
+ * PERFILES DE PAGO del Customer (`GET /Customer/{id}`).
+ *
+ * CONFIRMADO POR CARDNET: tras la captura hospedada, el token de la tarjeta
+ * queda en `PaymentProfiles` dentro de la consulta del cliente. Es el camino
+ * server-to-server para cobrar sin depender del callback del navegador.
+ */
+export async function consultarPerfilesPago(customerId: string): Promise<PerfilPagoCardnet[]> {
+  if (!customerId) return []
+  const { ok, json } = await llamarTokens('GET', `/Customer/${encodeURIComponent(customerId)}`, null)
+  if (!ok) return []
+  return extraerPerfiles(json)
 }
 
 /**
@@ -258,7 +284,8 @@ export async function probarSesionTokens(): Promise<
   const resultados = []
   for (const base of apiCandidatos(cfg.ambiente)) {
     for (const auth of variantesAuth(cfg.privateKey)) {
-      const r = await postBase(
+      const r = await llamadaBase(
+        'POST',
         base,
         '/customer',
         { Email: 'diagnostico@membego.com', Enable: 'true' },

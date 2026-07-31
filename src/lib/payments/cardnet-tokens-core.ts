@@ -212,3 +212,50 @@ export function sinSensibles(obj: Record<string, unknown>): Record<string, unkno
 
 /** Código de moneda de la República Dominicana para el Purchase. */
 export const MONEDA_DOP_TOKENS = 'DOP'
+
+/**
+ * PERFIL DE PAGO (tarjeta registrada) dentro de la consulta del Customer.
+ *
+ * CONFIRMADO POR CARDNET: "al consultar el cliente hay un objeto en el JSON
+ * llamado PaymentProfiles donde puede encontrar el token". Este es el camino
+ * OFICIAL para obtener el token tras la captura hospedada — el servidor
+ * consulta al proveedor, sin depender de que el navegador reciba nada.
+ */
+export interface PerfilPagoCardnet {
+  paymentProfileId: string | null
+  token: string | null
+  marca: string | null
+  ultimos4: string | null
+}
+
+/** Saca los perfiles de pago de la respuesta de `GET /Customer/{id}`. */
+export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardnet[] {
+  const { datos } = desenvolverRespuesta(json)
+  const crudos = datos.PaymentProfiles ?? datos.paymentProfiles ?? datos.Profiles
+  if (!Array.isArray(crudos)) return []
+  return crudos
+    .filter((p): p is Record<string, unknown> => Boolean(p) && typeof p === 'object')
+    .map((p) => {
+      const s = (...ks: string[]) => {
+        for (const k of ks) {
+          const v = p[k]
+          if (typeof v === 'string' && v.trim()) return v.trim()
+          if (typeof v === 'number') return String(v)
+        }
+        return null
+      }
+      // Los últimos 4 pueden venir como campo propio o dentro del número
+      // enmascarado (p. ej. "411111******1111").
+      const enmascarado = s('CardNumber', 'MaskedNumber', 'Number', 'CardMasked')
+      const ultimos4 =
+        s('LastFour', 'Last4', 'last4') ??
+        (enmascarado ? enmascarado.replace(/[^0-9]/g, '').slice(-4) || null : null)
+      return {
+        paymentProfileId: s('PaymentProfileId', 'ProfileId', 'Id', 'id'),
+        token: s('Token', 'TrxToken', 'PWToken', 'token'),
+        marca: s('Brand', 'CardBrand', 'CardType', 'Franchise'),
+        ultimos4,
+      }
+    })
+    .filter((p) => Boolean(p.token || p.paymentProfileId))
+}
