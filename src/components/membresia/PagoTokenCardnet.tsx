@@ -202,6 +202,7 @@ export function PagoTokenCardnet({
           body: JSON.stringify({ membershipId, trxToken }),
         })
         const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+        console.info('[pago] resultado del cobro:', data.estado ?? resp.status, data.motivo ?? '')
         if (data.estado === 'aprobado') {
           if (guardarRef.current) await guardarTarjeta()
           setEstado('aprobado')
@@ -232,6 +233,8 @@ export function PagoTokenCardnet({
       const manejarToken = (data: unknown) => {
         tokenDataRef.current = data
         const t = tokenDe(data)
+        // Rastro de diagnóstico (nunca el token en sí).
+        console.info('[pago] callback del widget:', t ? 'token recibido' : 'sin token', typeof data)
         if (t) void cobrar(t)
         else {
           setEstado('error')
@@ -350,6 +353,7 @@ export function PagoTokenCardnet({
         }),
       })
       const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+      console.info('[pago] confirmación en servidor:', data.estado ?? resp.status, data.motivo ?? '')
       if (data.estado === 'aprobado') {
         setEstado('aprobado')
         toast.success('¡Pago aprobado! Tu membresía está activa.')
@@ -388,6 +392,7 @@ export function PagoTokenCardnet({
     const t = input?.value?.trim()
     if (input && t && !cobrandoRef.current) {
       input.value = ''
+      console.info('[pago] token encontrado en el formulario oculto')
       void cobrar(t)
       return true
     }
@@ -445,6 +450,7 @@ export function PagoTokenCardnet({
       }
       if (t) {
         tokenDataRef.current = typeof d === 'string' ? { Token: t } : d
+        console.info('[pago] token recibido por mensaje de la ventana')
         void cobrar(t)
       }
     }
