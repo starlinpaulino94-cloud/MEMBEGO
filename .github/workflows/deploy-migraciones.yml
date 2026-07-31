@@ -44,18 +44,25 @@ jobs:
       - run: npm ci
 
       # Sin el secreto, Prisma falla con un error críptico ("DIRECT_URL resolved
-      # to an empty string"). Este paso lo dice claro y apunta a la causa real.
+      # to an empty string"). Mientras el secreto no esté configurado, las
+      # migraciones se aplican A MANO en el SQL Editor de Supabase (el flujo
+      # vigente hoy) y este job se marca como omitido con un aviso — un check
+      # rojo permanente entrena a ignorar los checks, que es peor que no
+      # tenerlo. Al configurar el secreto, la automatización se enciende sola.
       - name: Comprobar que el secreto está configurado
+        id: secreto
         env:
           URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
         run: |
           if [ -z "$URL" ]; then
-            echo "::error::Falta el secreto MIGRATIONS_DATABASE_URL (la DIRECT_URL de Supabase, puerto 5432)."
-            echo "Configúralo en Settings → Secrets → Actions. Ver docs/DEVOPS.md."
-            exit 1
+            echo "::warning::MIGRATIONS_DATABASE_URL no está configurado: las migraciones se aplican a mano (docs/DEVOPS.md). Configura el secreto en Settings → Secrets → Actions para activar la migración automática."
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Aplicar migraciones pendientes
+        if: steps.secreto.outputs.configurado == 'true'
         env:
           DATABASE_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
           DIRECT_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
@@ -73,7 +80,7 @@ jobs:
           fi
 
       - name: Desplegar en Vercel
-        if: success()
+        if: success() && steps.secreto.outputs.configurado == 'true'
         env:
           HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |

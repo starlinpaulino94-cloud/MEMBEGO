@@ -46,11 +46,21 @@ export async function GET(request: NextRequest) {
       console.error('[cron-automatizaciones] seguimiento', e)
       return { recordatorios: 0 }
     })
+    // Integraciones: reintenta los webhooks pendientes hacia los sistemas
+    // satélite. Va aquí (y no en un cron propio) porque el plan de Vercel
+    // limita la cantidad de crons; el primer intento de cada evento es
+    // inmediato — esto solo barre los que fallaron.
+    const { reintentarPendientes } = await import('@/modules/integraciones/despacho')
+    const integraciones = await reintentarPendientes().catch((e) => {
+      console.error('[cron-automatizaciones] integraciones', e)
+      return { enviados: 0, fallidos: 0 }
+    })
     return NextResponse.json({
       ok: true,
       reparto,
       regalos,
       seguimiento,
+      integraciones,
     })
   } catch (e) {
     console.error('[cron-automatizaciones]', e)
