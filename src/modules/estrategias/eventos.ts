@@ -57,6 +57,17 @@ export async function emitirEventoEstrategia(evento: EventoEstrategia): Promise<
       subjectId: evento.subjectId ?? null,
       payload: evento.payload,
     })
+
+    // 3. Reenviar a los sistemas satélite conectados (car wash, etc.): mismo
+    // punto único, mismo contrato best-effort — un satélite caído jamás rompe
+    // el flujo de negocio (el outbox + cron se encargan de reintentar).
+    const { reenviarEventoASistemas } = await import('@/modules/integraciones/despacho')
+    await reenviarEventoASistemas({
+      companyId: evento.companyId,
+      tipo: evento.type,
+      subjectId: evento.subjectId ?? null,
+      payload: evento.payload,
+    })
   } catch (e) {
     // El bus nunca rompe el flujo de negocio que emitió el evento.
     console.error(`[estrategias] evento ${evento.type} falló`, e)

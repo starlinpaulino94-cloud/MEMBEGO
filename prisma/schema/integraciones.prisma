@@ -1,0 +1,62 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEGRACIONES: sistemas satélite conectados a MembeGo.
+//
+// MembeGo es el hub de identidad y fidelización; cada sistema especializado
+// (car wash, barbería, gym…) se registra aquí y recibe: (1) SSO para que los
+// empleados entren con su cuenta de MembeGo, y (2) webhooks FIRMADOS con los
+// eventos de negocio que le competen — siempre acotados a UNA empresa.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SistemaConectado {
+  id     String @id @default(cuid())
+  /// Identificador estable en URLs (ej. "carwash").
+  slug   String @unique
+  nombre String
+
+  /// Categoría de negocio que atiende (CAR_WASH, BARBERIA, …). Solo las
+  /// empresas de esta categoría generan eventos hacia este sistema.
+  categoria String
+
+  /// Raíz del sistema satélite (ej. https://carwash.membego.com). El SSO
+  /// redirige a `{urlBase}/sso/membego?token=...`.
+  urlBase String
+
+  /// Destino de los webhooks (POST JSON firmado). Null = solo SSO.
+  urlWebhook String?
+
+  /// Secreto COMPARTIDO con el satélite: firma los webhooks y los tokens SSO
+  /// (HMAC-SHA256). Se genera al registrar el sistema y se copia una vez al
+  /// .env del satélite. Nunca viaja en requests.
+  secreto String
+
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  eventos EventoSaliente[]
+
+  @@map("sistemas_conectados")
+}
+
+/// Outbox de webhooks: cada evento que debe llegar a un satélite queda aquí
+/// primero; el envío es un intento sobre el registro (nunca se pierde un
+/// evento porque el satélite estuviera caído — el cron lo reintenta).
+model EventoSaliente {
+  id        String           @id @default(cuid())
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  companyId String
+  tipo      String
+  payload   Json
+
+  /// PENDIENTE → ENVIADO | FALLIDO (agotó reintentos).
+  estado      String    @default("PENDIENTE")
+  intentos    Int       @default(0)
+  ultimoError String?
+  enviadoAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([estado, createdAt])
+  @@index([companyId, tipo, createdAt])
+  @@map("eventos_salientes")
+}
