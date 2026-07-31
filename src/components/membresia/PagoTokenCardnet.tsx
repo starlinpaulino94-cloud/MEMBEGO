@@ -25,6 +25,33 @@ interface PWCheckoutSDK {
   SetProperties: (props: Record<string, unknown>) => void
   OpenIframeCustom?: (url: string, uniqueId: string) => void
   OpenIframe?: (url: string, uniqueId: string) => void
+  Iframe?: { Close?: (...args: unknown[]) => unknown }
+}
+
+/**
+ * BLINDAJE CONTRA UN BUG DEL WIDGET DEL PROVEEDOR (visto en vivo): su
+ * `Iframe.Close` revienta con "Cannot read properties of null (reading
+ * 'parentNode')" cuando intenta cerrar una ventana ya cerrada. La excepción
+ * mata el manejador donde ocurre — y la ENTREGA DEL TOKEN viene justo después
+ * del Close en ese mismo manejador, así que el token se pierde dentro del
+ * widget. Envolver Close en try/catch deja que su código continúe.
+ */
+function blindarCierre(sdk: PWCheckoutSDK) {
+  const iframeObj = sdk.Iframe
+  if (!iframeObj || typeof iframeObj.Close !== 'function') return
+  const actual = iframeObj.Close as ((...args: unknown[]) => unknown) & { _blindado?: boolean }
+  if (actual._blindado) return
+  const original = actual.bind(iframeObj)
+  const seguro = ((...args: unknown[]) => {
+    try {
+      return original(...args)
+    } catch {
+      // La ventana ya no estaba: cerrar dos veces no es un error.
+      return undefined
+    }
+  }) as ((...args: unknown[]) => unknown) & { _blindado?: boolean }
+  seguro._blindado = true
+  iframeObj.Close = seguro
 }
 
 declare global {
@@ -202,6 +229,7 @@ export function PagoTokenCardnet({
           body: JSON.stringify({ membershipId, trxToken }),
         })
         const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+        console.info('[pago] resultado del cobro:', data.estado ?? resp.status, data.motivo ?? '')
         if (data.estado === 'aprobado') {
           if (guardarRef.current) await guardarTarjeta()
           setEstado('aprobado')
@@ -229,9 +257,12 @@ export function PagoTokenCardnet({
     function enganchar() {
       const sdk = window.PWCheckout
       if (!sdk) return false
+      blindarCierre(sdk)
       const manejarToken = (data: unknown) => {
         tokenDataRef.current = data
         const t = tokenDe(data)
+        // Rastro de diagnóstico (nunca el token en sí).
+        console.info('[pago] callback del widget:', t ? 'token recibido' : 'sin token', typeof data)
         if (t) void cobrar(t)
         else {
           setEstado('error')
@@ -350,6 +381,7 @@ export function PagoTokenCardnet({
         }),
       })
       const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+      console.info('[pago] confirmación en servidor:', data.estado ?? resp.status, data.motivo ?? '')
       if (data.estado === 'aprobado') {
         setEstado('aprobado')
         toast.success('¡Pago aprobado! Tu membresía está activa.')
@@ -388,6 +420,7 @@ export function PagoTokenCardnet({
     const t = input?.value?.trim()
     if (input && t && !cobrandoRef.current) {
       input.value = ''
+      console.info('[pago] token encontrado en el formulario oculto')
       void cobrar(t)
       return true
     }
@@ -445,6 +478,7 @@ export function PagoTokenCardnet({
       }
       if (t) {
         tokenDataRef.current = typeof d === 'string' ? { Token: t } : d
+        console.info('[pago] token recibido por mensaje de la ventana')
         void cobrar(t)
       }
     }
@@ -599,6 +633,9 @@ export function PagoTokenCardnet({
       autoSubmit: 'false',
       empty: 'false',
     })
+    // Reaplicar el blindaje del Close por si el widget creó su objeto Iframe
+    // después de cargar el script.
+    blindarCierre(sdk)
     const url = `${sesion.captureUrl}?key=${encodeURIComponent(sesion.publicKey)}&session_id=${encodeURIComponent(sesion.uniqueId)}`
     const abrir = sdk.OpenIframeCustom ?? sdk.OpenIframe
     if (abrir) abrir(url, sesion.uniqueId)
