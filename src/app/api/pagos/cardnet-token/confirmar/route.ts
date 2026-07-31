@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
   const compraId = typeof cuerpo.compraId === 'string' ? cuerpo.compraId : null
   const guardar = cuerpo.guardar === true
   const conteoAntes = typeof cuerpo.conteoAntes === 'number' ? cuerpo.conteoAntes : null
+  const customerId = typeof cuerpo.customerId === 'string' ? cuerpo.customerId : null
   if (!membershipId && !compraId) {
     return NextResponse.json(
       { estado: 'error', motivo: 'Falta indicar qué se paga.' },
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
       clienteIp: id,
       userAgent: req.headers.get('user-agent'),
       conteoAntes,
+      customerId,
     })
 
     // Fase 2: si el cliente pidió renovación automática, se guardan las

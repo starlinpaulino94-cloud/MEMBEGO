@@ -56,6 +56,8 @@ interface SesionCaptura {
   creadaEn: number
   /** Tarjetas que el proveedor ya tenía ANTES de abrir esta ventana. */
   conteoPerfiles: number
+  /** Customer de la sesión: la confirmación consulta por GET con él. */
+  customerId: string | null
 }
 
 // Una sesión pre-creada se considera fresca por 4 minutos; después se pide otra.
@@ -159,6 +161,8 @@ export function PagoTokenCardnet({
   const confirmandoRef = useRef(false)
   // Tarjetas que ya existían al abrir la ventana (línea base del sondeo).
   const conteoAntesRef = useRef(0)
+  // Customer de la sesión abierta: la confirmación consulta por GET con él.
+  const customerIdRef = useRef<string | null>(null)
   // Sesión pre-creada en segundo plano para que el clic abra al instante.
   const sesionRef = useRef<SesionCaptura | null>(null)
   // Último payload de tokenCreated: de aquí salen las referencias para guardar.
@@ -296,6 +300,7 @@ export function PagoTokenCardnet({
         uniqueId?: string
         publicKey?: string
         conteoPerfiles?: number
+        customerId?: string | null
       }
       if (!data.ok || !data.captureUrl || !data.uniqueId) return null
       return {
@@ -304,6 +309,7 @@ export function PagoTokenCardnet({
         publicKey: data.publicKey || publicKey,
         creadaEn: Date.now(),
         conteoPerfiles: typeof data.conteoPerfiles === 'number' ? data.conteoPerfiles : 0,
+        customerId: typeof data.customerId === 'string' ? data.customerId : null,
       }
     } catch {
       return null
@@ -340,6 +346,7 @@ export function PagoTokenCardnet({
           membershipId,
           guardar: guardarRef.current,
           conteoAntes: conteoAntesRef.current,
+          customerId: customerIdRef.current,
         }),
       })
       const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
@@ -577,6 +584,7 @@ export function PagoTokenCardnet({
       return
     }
     conteoAntesRef.current = sesion.conteoPerfiles
+    customerIdRef.current = sesion.customerId
 
     sdk.SetProperties({
       name: companyName ?? 'Pago seguro',
