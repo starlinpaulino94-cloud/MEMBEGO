@@ -122,8 +122,22 @@ export async function activarMembresia(
   // Bus de estrategias: pago aprobado = compra + membresía activa. Se emite
   // fuera de la transacción y nunca rompe la activación (el helper captura
   // sus propios errores).
-  const factsCliente = { nombre: membership.cliente.nombre, compras: esPrimera ? 1 : 2 }
-  const factsMembresia = { plan: membership.plan.nombre }
+  // Los hechos llevan también lo que los SISTEMAS SATÉLITE necesitan para
+  // sincronizar (contacto del cliente, identidad y vigencia de la membresía).
+  // Agregar claves es aditivo: las automatizaciones existentes no se afectan.
+  const factsCliente = {
+    nombre: membership.cliente.nombre,
+    compras: esPrimera ? 1 : 2,
+    email: membership.cliente.email ?? null,
+    telefono: membership.cliente.telefono ?? null,
+  }
+  const factsMembresia = {
+    plan: membership.plan.nombre,
+    id: membership.id,
+    precio: montoNeto,
+    esDePago: montoNeto > 0,
+    vigenteHasta: periodEnd(now, vigenciaDias).toISOString(),
+  }
   await emitirEventoEstrategia({
     companyId: membership.companyId,
     type: 'cliente.compro_servicio',

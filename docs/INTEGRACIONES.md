@@ -150,6 +150,47 @@ el satélite persiste y filtra todo por ese `companyId` (RLS multi-tenant).
    `companyId` + lo que el satélite necesite.
 5. Probar: MembeGo puede reenviar eventos fallidos (quedan en su outbox).
 
+## Adaptador para satélites con funciones internas ya construidas
+
+Si el satélite ya tiene su propia capa de sincronización (funciones SQL/RPC
+idempotentes, como el car wash con `membego_sync_customer`,
+`membego_grant_membership`, `membego_grant_promotion`,
+`membego_set_promotion_status`), **ese trabajo se conserva completo**: solo se
+antepone un endpoint adaptador. El flujo queda:
+
+```
+MembeGo ──POST firmado──► /api/membego/webhook (satélite)
+                              │ verifica X-Membego-Firma (MEMBEGO_SECRETO)
+                              │ idempotencia por `id`
+                              └── llama SUS funciones internas con SU
+                                  service_role key (que NUNCA sale del satélite)
+```
+
+**Regla de seguridad innegociable:** la `service_role key` del satélite jamás
+se entrega a MembeGo (ni la de MembeGo al satélite). Cada sistema usa sus
+llaves solo dentro de su propio backend; lo único compartido es el secreto
+HMAC del webhook/SSO. Así, comprometer un sistema no compromete a los demás.
+
+**Mapa evento → función interna (ejemplo car wash):**
+
+| Evento MembeGo | Función del satélite | Campos del payload |
+|---|---|---|
+| `cliente.registrado` | `membego_sync_customer` | `clienteId` → `p_membego_customer_id`, `cliente.nombre`, `cliente.email?`, `cliente.telefono?` |
+| `membresia.activada` | `membego_grant_membership` | `clienteId`, `membresia.id` → `p_membership_id`, `membresia.plan` → `p_plan_name`, `membresia.esDePago` → `p_is_paid`, `membresia.vigenteHasta` → `p_valid_until` |
+| `cliente.compro_servicio` (compra.tipo=`promocion`) | `membego_grant_promotion` | `clienteId`, `compra.monto` |
+| `cliente.visita` | (visita/canje local) | `clienteId` |
+
+Notas: `companyId` del sobre ≡ `merchant_id` del satélite. El `id` del sobre es
+la clave de idempotencia (equivale a "reintentar no duplica" de sus funciones).
+Los eventos que aún no mapeen a nada se responden 200 y se ignoran.
+
+**SSO sin OIDC completo:** el token firmado de MembeGo (§1) ya entrega lo que
+un flujo OIDC daría para este caso — identidad verificable, rol y tenant
+(`companyId` ≡ `merchant_id`) — con una fracción de la complejidad. El endpoint
+`GET /sso/membego` del satélite hace el papel del callback: verificar, mapear
+usuario, abrir sesión propia. Si algún día se necesita OIDC real, este token
+no estorba: se reemplaza el transporte sin tocar el mapeo de usuarios.
+
 ## Operación (lado MembeGo)
 
 - Outbox: tabla `eventos_salientes` (PENDIENTE → ENVIADO/FALLIDO, 8 intentos).
