@@ -133,7 +133,7 @@ async function planDeMiEmpresa(
 ) {
   const plan = await prisma.plan.findUnique({
     where: { id: planId },
-    select: { id: true, companyId: true },
+    select: { id: true, companyId: true, activo: true },
   })
   if (!plan) return null
   if (
@@ -185,6 +185,39 @@ export async function actualizarPlan(
     return { success: true }
   } catch (e) {
     console.error('[plan]', e)
+    return { error: 'Ocurrió un error. Intenta de nuevo.' }
+  }
+}
+
+/**
+ * Pausa/reanuda un plan con un clic (sin pasar por el formulario de edición).
+ * Un plan pausado desaparece del catálogo del cliente y del perfil público al
+ * instante; las membresías YA vendidas de ese plan no se tocan — siguen
+ * vigentes hasta su vencimiento.
+ */
+export async function alternarPlanActivo(
+  _prev: PlanActionState,
+  formData: FormData
+): Promise<PlanActionState> {
+  const user = await requireAdminUser()
+  if (!user) return { error: 'No autorizado.' }
+
+  const planId = String(formData.get('planId') ?? '').trim()
+  if (!planId) return { error: 'Plan no especificado.' }
+
+  try {
+    const plan = await planDeMiEmpresa(planId, user)
+    if (!plan) return { error: 'Plan no encontrado.' }
+
+    await prisma.plan.update({
+      where: { id: planId },
+      data: { activo: !plan.activo },
+    })
+
+    revalidatePlanes()
+    return { success: true }
+  } catch (e) {
+    console.error('[plan] alternar activo', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
