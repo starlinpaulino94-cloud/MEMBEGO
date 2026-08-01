@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Check, Infinity as InfinityIcon, Plus, Pencil } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DeletePlanButton } from '@/components/admin/DeletePlanButton'
+import { PlanPausarBoton } from '@/components/admin/PlanPausarBoton'
 
 export default async function SuperadminPlanesPage() {
   await requireRole('SUPERADMIN')
@@ -115,6 +116,7 @@ export default async function SuperadminPlanesPage() {
                           <Pencil className="h-3.5 w-3.5" />
                         </Link>
                       </Button>
+                      <PlanPausarBoton planId={plan.id} activo={plan.activo} nombre={plan.nombre} />
                       <DeletePlanButton planId={plan.id} memberships={plan._count.memberships} />
                     </div>
                   </div>
