@@ -66,6 +66,12 @@ enum AuditAccion {
   EMPRESA_DEMO_CAMBIADA
   /// Se borraron los datos de práctica de una empresa de demostración.
   EMPRESA_DEMO_REINICIADA
+  /// Un usuario recibió el rango de superadmin.
+  SUPERADMIN_OTORGADO
+  /// A un usuario se le retiró el rango de superadmin.
+  SUPERADMIN_RETIRADO
+  /// El superadmin generó un enlace para entrar como otro usuario.
+  ENTRAR_COMO_GENERADO
 }
 
 // ─────────────────────────────────────────────

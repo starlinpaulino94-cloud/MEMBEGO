@@ -1,0 +1,6 @@
+-- Acciones de auditoría del control de accesos del superadmin.
+-- Idempotente: ADD VALUE IF NOT EXISTS.
+
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPERADMIN_OTORGADO';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPERADMIN_RETIRADO';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ENTRAR_COMO_GENERADO';
