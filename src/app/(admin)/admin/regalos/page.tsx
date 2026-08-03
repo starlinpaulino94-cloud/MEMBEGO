@@ -16,6 +16,8 @@ import {
   TIPO_REGALO_LABEL,
   ESTADO_REGALO_LABEL,
 } from '@/modules/regalos/queries'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { CreditCard, HeartHandshake } from 'lucide-react'
 
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
@@ -65,8 +67,13 @@ export default async function RegalosAdminPage({
     new Intl.DateTimeFormat('es-DO', { timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(d)
 
   const hayFiltro = Boolean(sp.estado || sp.tipo)
-  const [{ items, kpis, truncado }, config, giftCards] = await Promise.all([
-    getRegalosAdmin(companyId, { estado: sp.estado, tipo: sp.tipo }),
+  const paginacion = leerPaginacion(sp)
+  const [{ items, kpis, totalFiltrado }, config, giftCards] = await Promise.all([
+    getRegalosAdmin(
+      companyId,
+      { estado: sp.estado, tipo: sp.tipo },
+      { saltar: paginacion.saltar, tomar: paginacion.tomar }
+    ),
     getRegalosConfig(companyId),
     getGiftCardsAdmin(companyId).catch(() => ({
       items: [],
@@ -135,11 +142,10 @@ export default async function RegalosAdminPage({
             <a href="/admin/regalos">Limpiar</a>
           </Button>
         )}
-        {truncado && (
-          <p className="ml-auto text-xs text-muted-foreground">
-            Mostrando los {items.length} más recientes.
-          </p>
-        )}
+        <p className="ml-auto text-xs text-muted-foreground">
+          {totalFiltrado.toLocaleString('es-DO')} regalo{totalFiltrado === 1 ? '' : 's'}
+          {hayFiltro ? ' con estos filtros' : ''}
+        </p>
       </Form>
 
       {items.length === 0 ? (
@@ -228,6 +234,17 @@ export default async function RegalosAdminPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Paginación: sin ella los regalos más viejos que la primera página
+          quedaban fuera del alcance del negocio. */}
+      {items.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={totalFiltrado}
+          params={sp}
+          etiqueta="regalos"
+        />
       )}
 
       {/* ── Gift cards ─────────────────────────────────────────────────────── */}

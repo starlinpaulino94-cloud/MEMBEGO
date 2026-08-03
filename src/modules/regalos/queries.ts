@@ -428,8 +428,16 @@ export interface RegaloAdminFiltro {
  */
 export async function getRegalosAdmin(
   companyId: string,
-  filtro: RegaloAdminFiltro = {}
-): Promise<{ items: RegaloAdminItem[]; kpis: RegalosAdminKpis; truncado: boolean }> {
+  filtro: RegaloAdminFiltro = {},
+  /** Ventana de la página; omitirla conserva el comportamiento anterior. */
+  ventana?: { saltar: number; tomar: number }
+): Promise<{
+  items: RegaloAdminItem[]
+  kpis: RegalosAdminKpis
+  truncado: boolean
+  /** Total real que cumple el filtro (para paginar). */
+  totalFiltrado: number
+}> {
   const estados = ['PENDIENTE', 'ACEPTADO', 'RECHAZADO', 'EXPIRADO', 'CANCELADO']
   const tipos = ['TRANSFERENCIA_USOS', 'REGALO_COMPRA', 'REGALO_MEMBRESIA']
 
@@ -442,7 +450,7 @@ export async function getRegalosAdmin(
   }
 
   const TAKE = 100
-  const [regalos, porEstado] = await Promise.all([
+  const [regalos, porEstado, totalFiltrado] = await Promise.all([
     prisma.regalo.findMany({
       where,
       include: {
@@ -450,13 +458,17 @@ export async function getRegalosAdmin(
         destinatario: { select: { nombre: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: TAKE + 1,
+      skip: ventana?.saltar ?? 0,
+      // Con ventana mandan página y tamaño (ya acotados por leerPaginacion);
+      // sin ventana se conserva el tope viejo + 1 para detectar el corte.
+      take: ventana ? ventana.tomar : TAKE + 1,
     }),
     prisma.regalo.groupBy({
       by: ['estado'],
       where: { companyId },
       _count: { _all: true },
     }),
+    prisma.regalo.count({ where }),
   ])
 
   const conteo = (estado: string) =>
@@ -465,7 +477,7 @@ export async function getRegalosAdmin(
   const aceptados = conteo('ACEPTADO')
   const resueltosSinCancelar = aceptados + conteo('RECHAZADO') + conteo('EXPIRADO')
 
-  const visibles = regalos.slice(0, TAKE)
+  const visibles = ventana ? regalos : regalos.slice(0, TAKE)
   const pagos = await resolverPagos(visibles)
 
   const items = await Promise.all(
@@ -489,7 +501,8 @@ export async function getRegalosAdmin(
 
   return {
     items,
-    truncado: regalos.length > TAKE,
+    truncado: !ventana && regalos.length > TAKE,
+    totalFiltrado,
     kpis: {
       total,
       pendientes: conteo('PENDIENTE'),
