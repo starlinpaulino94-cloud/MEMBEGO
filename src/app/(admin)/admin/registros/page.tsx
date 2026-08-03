@@ -17,6 +17,8 @@ import {
   type RegistroFiltro,
 } from '@/modules/registros/queries'
 import { FileText, Search, Download } from 'lucide-react'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +68,13 @@ export default async function RegistrosPage({
   }
   const hayFiltro = Boolean(sp.q || sp.tipo || sp.estado || sp.metodo || sp.desde || sp.hasta)
 
-  const { items, resumen, truncado } = await getRegistros(companyId, filtro, timeZone)
+  // Paginación del servidor: con el total real se puede alcanzar CUALQUIER
+  // comprobante para reimprimirlo, no solo los más recientes.
+  const paginacion = leerPaginacion(sp)
+  const { items, resumen, total } = await getRegistros(companyId, filtro, timeZone, {
+    saltar: paginacion.saltar,
+    tomar: paginacion.tomar,
+  })
 
   const fmtFecha = (iso: string) =>
     new Intl.DateTimeFormat('es-DO', {
@@ -161,9 +169,8 @@ export default async function RegistrosPage({
       {/* Acciones del reporte */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          {truncado
-            ? `Mostrando los primeros ${items.length}. Exporta para ver todo.`
-            : `${items.length} registro${items.length !== 1 ? 's' : ''}.`}
+          {total.toLocaleString('es-DO')} registro{total !== 1 ? 's' : ''}
+          {hayFiltro ? ' con estos filtros' : ''}.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm" className="gap-1.5">
@@ -246,6 +253,17 @@ export default async function RegistrosPage({
         </div>
       )}
 
+      {/* Paginación: los filtros activos viajan en cada enlace. Sin esto, los
+          comprobantes más viejos que la primera página eran inalcanzables. */}
+      {items.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={total}
+          params={sp}
+          etiqueta="registros"
+        />
+      )}
+
       {/* Reporte imprimible (aislado por @media print) */}
       {items.length > 0 && (
         <div className="registros-print hidden" aria-hidden>
@@ -260,8 +278,7 @@ export default async function RegistrosPage({
           <div className="text-black">
             <h1 className="text-lg font-bold">{empresa?.name ?? 'MembeGo'} · Reporte de registros</h1>
             <p className="text-xs">
-              Generado {fmtFecha(new Date().toISOString())}
-              {truncado ? ` · primeros ${items.length} registros` : ` · ${items.length} registros`}
+              Generado {fmtFecha(new Date().toISOString())} · {items.length} de {total} registros
             </p>
             <div className="my-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
               <span><strong>Ingresos:</strong> {fmtRD(resumen.total)}</span>

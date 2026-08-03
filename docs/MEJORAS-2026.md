@@ -73,28 +73,54 @@ scroll de fondo con el drawer abierto, y trampa de foco (accesibilidad).
 (Registros, Pagos, Comprobantes, Clientes) y revisión de formularios largos.
 No es un rediseño general.
 
-## 4. Paginación — aquí está el trabajo más valioso
+## 4. Paginación — HECHO (Fase 1)
 
-**Hallazgo principal de toda la auditoría:**
+**Diagnóstico corregido con datos.** La primera lectura decía "12 de 16 tablas
+cargan sin límite". Al revisar las consultas reales (viven en `src/modules/`,
+no en las páginas) resultó falso: casi todas tenían un tope. El problema no era
+la falta de tope sino **lo que el tope hacía**: la página avisaba "truncado" y
+las filas por debajo del corte quedaban **inalcanzables por cualquier camino**.
+Era exactamente el motivo por el que no se podían reimprimir comprobantes
+viejos.
 
-- `packages/ui/src/ui/pagination.tsx` **existe y no se usa en ningún lado**.
-- `packages/ui/src/ui/data-table.tsx` existe y lo usan 3 componentes
-  (`ClientesTable`, `EmpleadosTable`, `MembresíasTable`), pero es **client-side**:
-  recibe el arreglo completo y filtra/exporta en el navegador.
-- **12 de 16 tablas cargan sin `take`**, es decir, sin límite:
-  `adquisicion`, `carwash/inventario`, `carwash/reportes`, `audiencia`,
-  `invitaciones/[id]`, `regalos`, `registros`, `seguimiento` (y su impresión),
-  `superadmin/campanas`, `superadmin/campanas/[id]`, `superadmin/observabilidad`.
-- Solo 4 tienen límite: `carwash/vehiculos`, `facturas`, `pagos`,
-  `superadmin/membresias` — y son `take` fijo, **sin navegación de páginas**.
+**Lo construido**
 
-**Consecuencia real:** con 5.000 visitas o 20.000 registros, esas páginas
-intentan traerlo todo. Es el riesgo de rendimiento más concreto del sistema.
+- `src/lib/paginacion.ts` — núcleo puro, sin React ni Prisma:
+  `leerPaginacion` (acota `?page=-5`, `?pageSize=999999`), `resumirPaginas`
+  (corrige la página fuera de rango cuando un filtro encoge el resultado) y
+  `urlDePagina` (conserva los filtros activos; la primera página es URL limpia).
+  Acepta un **prefijo** para pantallas con varias tablas independientes.
+- `src/components/tablas/TablaPaginacion.tsx` — Server Component: la navegación
+  son enlaces reales, funciona sin JavaScript y el estado vive en la URL.
+- `tests/paginacion.test.ts` — 10 pruebas: valores por defecto, URL manipulada,
+  rango humano, página fuera de rango, cero resultados, filtros que sobreviven
+  y tablas con prefijo que no se contaminan entre sí.
 
-**Estrategia:** extender el `DataTable` existente con modo servidor
-(`page`, `pageSize`, `total` por props + estado en URL), conectar el
-`Pagination` que ya existe, y migrar tabla por tabla empezando por las de
-mayor crecimiento: Registros → Visitas/Seguimiento → Clientes → Pagos.
+**Tablas migradas**
+
+| Pantalla | Antes | Ahora |
+| --- | --- | --- |
+| Registros | 300 fijas | páginas + total real |
+| Comprobantes (facturas) | 100 fijas | páginas + búsqueda conservada |
+| Seguimiento | 200 fijas | páginas (corte en memoria, tras el filtro derivado) |
+| Regalos | 100 fijas | páginas + total del filtro |
+| Pagos | 5 colas de 100 | 5 paginaciones independientes con totales reales |
+| Superadmin · Membresías | 100 fijas | páginas + total real |
+| Campañas | sin tope | páginas |
+| Car Wash · Inventario | 300 productos / 25 movimientos | dos tablas paginadas |
+| Car Wash · Vehículos | 100 fijas | páginas |
+| Clientes | ya paginaba | sin cambios |
+
+**Qué NO se paginó y por qué.** Los paneles operativos del Car Wash
+(comisiones, turnos, incidencias) reciben un período (`desde`/`hasta`) y su
+tope (300–500) es una ventana de trabajo, no un historial abierto; con el
+volumen de un local no se alcanza. `superadmin/observabilidad` no tiene tabla
+de base de datos: pinta la lista fija de SLOs del código. Los "top N" del
+dashboard (últimos 3, últimos 8) son widgets, no tablas.
+
+**Detalle corregido de paso:** en el paginador, la URL "limpia" se resolvía
+contra la URL actual, así que volver a la primera página con el tamaño por
+defecto no hacía nada.
 
 ## 5. Plantillas de promociones
 

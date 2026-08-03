@@ -16,6 +16,8 @@ import { Gift, Search, Download, Printer } from 'lucide-react'
 import { SeguimientoAcciones } from '@/components/seguimiento/SeguimientoAcciones'
 import { SeguimientoConfigCard } from '@/components/seguimiento/SeguimientoConfigCard'
 import { getSeguimientoConfig, renderMensajeSeguimiento } from '@/modules/seguimiento/config'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,8 +80,12 @@ export default async function SeguimientoPage({
   ).toString()
 
   const config = await getSeguimientoConfig(companyId)
-  const [{ items, kpis, truncado }, promos] = await Promise.all([
-    getSeguimiento(companyId, filtro, config),
+  const paginacion = leerPaginacion(sp)
+  const [{ items, kpis, truncado, total }, promos] = await Promise.all([
+    getSeguimiento(companyId, filtro, config, 200, {
+      saltar: paginacion.saltar,
+      tomar: paginacion.tomar,
+    }),
     getPromosGratisConEntregas(companyId),
   ])
 
@@ -181,9 +187,8 @@ export default async function SeguimientoPage({
       </Form>
 
       <p className="text-xs text-muted-foreground">
-        {truncado
-          ? `Mostrando los primeros ${items.length}.`
-          : `${items.length} recompensa${items.length !== 1 ? 's' : ''}.`}
+        {total} recompensa{total !== 1 ? 's' : ''}
+        {truncado ? ' (tope de análisis alcanzado; afina los filtros)' : ''}.
       </p>
 
       {items.length === 0 ? (
@@ -281,6 +286,15 @@ export default async function SeguimientoPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={total}
+          params={sp}
+          etiqueta="recompensas"
+        />
       )}
 
       {/* Parametrización (Fase S3) */}

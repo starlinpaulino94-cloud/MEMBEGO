@@ -29,6 +29,16 @@ import { StatusBanner } from '@/components/ui/status-banner'
 import { FileText, ExternalLink, ArrowRight, Store, MessageCircle, Mail, Clock } from 'lucide-react'
 import type { MembershipEstado } from '@/types'
 
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+
+/**
+ * Las dos colas que se arman en memoria (pagos en sucursal y seguimiento) se
+ * filtran y mezclan en JS, así que no se pueden cortar en la base sin falsear
+ * los totales: se traen hasta este tope y se paginan aquí.
+ */
+const TOPE_DERIVADAS = 500
+
 export const dynamic = 'force-dynamic'
 
 function fmtDate(d: Date | null) {
@@ -69,9 +79,21 @@ interface PendienteRow {
   fechaInicio: Date | null
 }
 
-export default async function PagosPage() {
+export default async function PagosPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = companyFilter(user)
+  const sp = await searchParams
+  // Cinco colas independientes en una misma pantalla: cada una lleva su propio
+  // prefijo para que avanzar en una no mueva a las demás.
+  const pagTr = leerPaginacion(sp, 25, 'tr')
+  const pagPr = leerPaginacion(sp, 25, 'pr')
+  const pagCp = leerPaginacion(sp, 25, 'cp')
+  const pagSuc = leerPaginacion(sp, 25, 'suc')
+  const pagSeg = leerPaginacion(sp, 25, 'seg')
   const prefs = await getRegionalPrefs(companyId)
   const fmtMoney = (n: number) => formatMoney(n, prefs)
 
@@ -83,7 +105,16 @@ export default async function PagosPage() {
   // el error como [] el admin dejaría de validar pagos sin darse cuenta.
   // null = la query falló (se distingue de [] = sin resultados) para poder
   // mostrar un aviso en vez de fingir "no hay pagos pendientes".
-  const [pendientesData, cambiosData, comprasData, iniciadasData, comprasIniciadasData] = await Promise.all([
+  const [
+    pendientesData,
+    cambiosData,
+    comprasData,
+    iniciadasData,
+    comprasIniciadasData,
+    totalPendientes,
+    totalCambios,
+    totalCompras,
+  ] = await Promise.all([
     prisma.membership
       .findMany({
         where: {
@@ -107,7 +138,8 @@ export default async function PagosPage() {
           metodoPago: { select: { nombre: true } },
         },
         orderBy: { updatedAt: 'desc' },
-        take: 100,
+        skip: pagTr.saltar,
+        take: pagTr.tomar,
       })
       .catch((e) => {
         console.error('[admin-pagos] pendientes query', e)
@@ -133,7 +165,8 @@ export default async function PagosPage() {
           planSolicitado: { select: { nombre: true, precio: true } },
         },
         orderBy: { updatedAt: 'desc' },
-        take: 100,
+        skip: pagCp.saltar,
+        take: pagCp.tomar,
       })
       .catch((e) => {
         console.error('[admin-pagos] cambios query', e)
@@ -161,7 +194,8 @@ export default async function PagosPage() {
           metodoPago: { select: { nombre: true } },
         },
         orderBy: { updatedAt: 'desc' },
-        take: 100,
+        skip: pagPr.saltar,
+        take: pagPr.tomar,
       })
       .catch((e) => {
         console.error('[admin-pagos] compras query', e)
@@ -195,7 +229,7 @@ export default async function PagosPage() {
           plan: { select: { nombre: true, precio: true } },
         },
         orderBy: { updatedAt: 'asc' },
-        take: 100,
+        take: TOPE_DERIVADAS,
       })
       .catch((e) => {
         console.error('[admin-pagos] iniciadas query', e)
@@ -225,12 +259,29 @@ export default async function PagosPage() {
           promocion: { select: { titulo: true, precio: true } },
         },
         orderBy: { updatedAt: 'asc' },
-        take: 100,
+        take: TOPE_DERIVADAS,
       })
       .catch((e) => {
         console.error('[admin-pagos] compras iniciadas query', e)
         return null
       }),
+    // Totales reales de las tres colas que se paginan en la base: el número del
+    // encabezado debe ser el de TODA la cola, no el de la página visible.
+    prisma.membership
+      .count({ where: { estado: 'PENDIENTE_PAGO', ...(companyId ? { companyId } : {}) } })
+      .catch(() => 0),
+    prisma.membership
+      .count({
+        where: {
+          estado: 'ACTIVA',
+          planIdSolicitado: { not: null },
+          ...(companyId ? { companyId } : {}),
+        },
+      })
+      .catch(() => 0),
+    prisma.productoCompra
+      .count({ where: { estado: 'EN_VALIDACION', ...(companyId ? { companyId } : {}) } })
+      .catch(() => 0),
   ])
 
   const loadError =
@@ -254,15 +305,24 @@ export default async function PagosPage() {
     metodoPago: { tipo: string } | null
   }) => x.referencia != null || x.sucursalPago != null || x.metodoPago?.tipo === 'PRESENCIAL'
 
-  const enSucursal = iniciadas.filter((m) => m.estado === 'PENDIENTE' && esPresencial(m))
-  const enSucursalCompras = comprasIniciadas.filter(
+  const enSucursalTodas = iniciadas.filter((m) => m.estado === 'PENDIENTE' && esPresencial(m))
+  const enSucursalComprasTodas = comprasIniciadas.filter(
     (c) => (c.estado === 'SOLICITADA' || c.estado === 'PENDIENTE_PAGO') && esPresencial(c)
+  )
+  // Una sola numeración para las dos listas de sucursal (membresías primero).
+  const totalSucursal = enSucursalTodas.length + enSucursalComprasTodas.length
+  const enSucursal = enSucursalTodas.slice(pagSuc.saltar, pagSuc.saltar + pagSuc.tomar)
+  const restoVentana = Math.max(0, pagSuc.tomar - enSucursal.length)
+  const saltarCompras = Math.max(0, pagSuc.saltar - enSucursalTodas.length)
+  const enSucursalCompras = enSucursalComprasTodas.slice(
+    saltarCompras,
+    saltarCompras + restoVentana
   )
 
   // SEGUIMIENTO: iniciaron un pago y no lo completaron (transferencia sin
   // comprobante, solicitud sin método, o rechazado sin reintento). Unificado
   // membresías + compras, los más antiguos primero.
-  const seguimiento = [
+  const seguimientoTodo = [
     ...iniciadas
       .filter((m) => !(m.estado === 'PENDIENTE' && esPresencial(m)))
       .map((m) => ({
@@ -299,10 +359,12 @@ export default async function PagosPage() {
         fecha: c.updatedAt,
       })),
   ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime())
+  const totalSeguimiento = seguimientoTodo.length
+  const seguimiento = seguimientoTodo.slice(pagSeg.saltar, pagSeg.saltar + pagSeg.tomar)
 
   const totalPorValidar =
-    pendientes.length + compras.length + cambios.length + enSucursal.length + enSucursalCompras.length
-  const sinPendientes = totalPorValidar === 0 && seguimiento.length === 0
+    totalPendientes + totalCompras + totalCambios + totalSucursal
+  const sinPendientes = totalPorValidar === 0 && totalSeguimiento === 0
 
   return (
     <div className="space-y-6">
@@ -314,16 +376,16 @@ export default async function PagosPage() {
       )}
       <PageHeader
         title="Validación de pagos"
-        description={`${totalPorValidar} pago${totalPorValidar !== 1 ? 's' : ''} por validar · ${seguimiento.length} en seguimiento`}
+        description={`${totalPorValidar} pago${totalPorValidar !== 1 ? 's' : ''} por validar · ${totalSeguimiento} en seguimiento`}
       />
 
       {/* Resumen: todo lo que espera acción, por origen. */}
       <div className="flex flex-wrap gap-2 text-xs">
         {[
-          { label: 'En sucursal', n: enSucursal.length + enSucursalCompras.length },
-          { label: 'Transferencias', n: pendientes.length + compras.length },
-          { label: 'Cambios de plan', n: cambios.length },
-          { label: 'Sin completar', n: seguimiento.length },
+          { label: 'En sucursal', n: totalSucursal },
+          { label: 'Transferencias', n: totalPendientes + totalCompras },
+          { label: 'Cambios de plan', n: totalCambios },
+          { label: 'Sin completar', n: totalSeguimiento },
         ].map((k) => (
           <span
             key={k.label}
@@ -337,11 +399,11 @@ export default async function PagosPage() {
       {/* Pagos EN SUCURSAL por cobrar/confirmar: antes eran invisibles aquí
           (solo los veía la Caja). Confirmar desde el panel activa y factura
           igual que la caja; la referencia sirve para cobrarlo en el POS. */}
-      {(enSucursal.length > 0 || enSucursalCompras.length > 0) && (
+      {totalSucursal > 0 && (
         <div className="space-y-3">
           <h2 className="flex items-center gap-2 text-h4 text-foreground">
             <Store className="h-4 w-4 text-primary" aria-hidden />
-            Pagos en sucursal por confirmar ({enSucursal.length + enSucursalCompras.length})
+            Pagos en sucursal por confirmar ({totalSucursal})
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {enSucursal.map((m) => {
@@ -458,14 +520,21 @@ export default async function PagosPage() {
               </Card>
             ))}
           </div>
+          <TablaPaginacion
+            paginacion={pagSuc}
+            total={totalSucursal}
+            params={sp}
+            etiqueta="pagos en sucursal"
+            clave="suc"
+          />
         </div>
       )}
 
       {/* Fase E5: compras de promociones por validar */}
-      {compras.length > 0 && (
+      {totalCompras > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
-            Compras de promociones ({compras.length})
+            Compras de promociones ({totalCompras})
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {compras.map((c) => (
@@ -557,14 +626,21 @@ export default async function PagosPage() {
               </Card>
             ))}
           </div>
+          <TablaPaginacion
+            paginacion={pagPr}
+            total={totalCompras}
+            params={sp}
+            etiqueta="compras"
+            clave="pr"
+          />
         </div>
       )}
 
       {/* Cambios de plan solicitados */}
-      {cambios.length > 0 && (
+      {totalCambios > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
-            Cambios de plan solicitados ({cambios.length})
+            Cambios de plan solicitados ({totalCambios})
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {cambios.map((c) => (
@@ -649,6 +725,13 @@ export default async function PagosPage() {
               </Card>
             ))}
           </div>
+          <TablaPaginacion
+            paginacion={pagCp}
+            total={totalCambios}
+            params={sp}
+            etiqueta="cambios de plan"
+            clave="cp"
+          />
         </div>
       )}
 
@@ -662,10 +745,10 @@ export default async function PagosPage() {
         </Card>
       )}
 
-      {pendientes.length > 0 && (
+      {totalPendientes > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
-            Transferencias por validar ({pendientes.length})
+            Transferencias por validar ({totalPendientes})
           </h2>
         <div className="grid gap-6 md:grid-cols-2">
           {pendientes.map((m) => (
@@ -801,16 +884,23 @@ export default async function PagosPage() {
             </Card>
           ))}
         </div>
+          <TablaPaginacion
+            paginacion={pagTr}
+            total={totalPendientes}
+            params={sp}
+            etiqueta="transferencias"
+            clave="tr"
+          />
         </div>
       )}
 
       {/* Seguimiento: iniciaron un pago y no lo completaron. Contacto directo
           (WhatsApp/correo) para recuperar la venta; los más antiguos primero. */}
-      {seguimiento.length > 0 && (
+      {totalSeguimiento > 0 && (
         <div className="space-y-3">
           <h2 className="flex items-center gap-2 text-h4 text-foreground">
             <Clock className="h-4 w-4 text-warning" aria-hidden />
-            Seguimiento · no completaron su pago ({seguimiento.length})
+            Seguimiento · no completaron su pago ({totalSeguimiento})
           </h2>
           <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
             <table className="w-full min-w-[720px] text-sm">
@@ -879,6 +969,13 @@ export default async function PagosPage() {
               </tbody>
             </table>
           </div>
+          <TablaPaginacion
+            paginacion={pagSeg}
+            total={totalSeguimiento}
+            params={sp}
+            etiqueta="en seguimiento"
+            clave="seg"
+          />
         </div>
       )}
     </div>

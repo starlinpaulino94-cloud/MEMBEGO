@@ -20,6 +20,9 @@ import {
   CalendarDays,
 } from 'lucide-react'
 
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+
 export const dynamic = 'force-dynamic'
 
 function fmtFecha(d: Date | null) {
@@ -27,15 +30,24 @@ function fmtFecha(d: Date | null) {
   return new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'medium' }).format(new Date(d))
 }
 
-export default async function CampanasPage() {
+export default async function CampanasPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId
+  const sp = await searchParams
+  const paginacion = leerPaginacion(sp)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="tus campañas" />
   }
 
   let campanas: Awaited<ReturnType<typeof query>> = []
+  let total = 0
+  // Esta lista no tenía tope: con muchas campañas se traían todas con sus
+  // promociones anidadas en cada carga.
   async function query() {
     return prisma.campana.findMany({
       where: { companyId: companyId! },
@@ -50,10 +62,15 @@ export default async function CampanasPage() {
         _count: { select: { promociones: true, posts: true } },
       },
       orderBy: [{ activo: 'desc' }, { createdAt: 'desc' }],
+      skip: paginacion.saltar,
+      take: paginacion.tomar,
     })
   }
   try {
-    campanas = await query()
+    ;[campanas, total] = await Promise.all([
+      query(),
+      prisma.campana.count({ where: { companyId } }),
+    ])
   } catch (e) {
     console.error('[admin-campanas]', e)
   }
@@ -160,6 +177,15 @@ export default async function CampanasPage() {
             )
           })}
         </div>
+      )}
+
+      {campanas.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={total}
+          params={sp}
+          etiqueta="campañas"
+        />
       )}
     </div>
   )

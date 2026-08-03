@@ -9,6 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import Form from 'next/form'
 import { ReceiptText, Search } from 'lucide-react'
+import type { Prisma } from '@prisma/client'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,11 +76,13 @@ const FILTROS = [
 export default async function FacturasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; ver?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId as string | undefined
-  const { q = '', ver = '' } = await searchParams
+  const sp = await searchParams
+  const { q = '', ver = '' } = sp
+  const paginacion = leerPaginacion(sp)
   const term = q.trim()
   const tipos =
     ver === 'ventas'
@@ -86,29 +91,37 @@ export default async function FacturasPage({
         ? [...TIPOS_ENTREGA]
         : [...TIPOS_VENTA, ...TIPOS_ENTREGA]
 
-  const facturas = await prisma.transaction.findMany({
-    where: {
-      ...(companyId ? { companyId } : {}),
-      tipo: { in: tipos },
-      ...(term
-        ? {
-            OR: [
-              { codigo: { contains: term.toUpperCase() } },
-              { ticketNumero: { contains: term.toUpperCase() } },
-              { cliente: { nombre: { contains: term, mode: 'insensitive' } } },
-            ],
-          }
-        : {}),
-    },
-    include: {
-      cliente: { select: { nombre: true } },
-      sucursal: { select: { nombre: true } },
-      empleado: { select: { name: true } },
-      _count: { select: { impresiones: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-  })
+  const where: Prisma.TransactionWhereInput = {
+    ...(companyId ? { companyId } : {}),
+    tipo: { in: tipos },
+    ...(term
+      ? {
+          OR: [
+            { codigo: { contains: term.toUpperCase() } },
+            { ticketNumero: { contains: term.toUpperCase() } },
+            { cliente: { nombre: { contains: term, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+  }
+
+  // Paginación real: el historial de comprobantes es permanente y crece sin
+  // límite; con un tope fijo las reimpresiones viejas eran inalcanzables.
+  const [facturas, totalFacturas] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: {
+        cliente: { select: { nombre: true } },
+        sucursal: { select: { nombre: true } },
+        empleado: { select: { name: true } },
+        _count: { select: { impresiones: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: paginacion.saltar,
+      take: paginacion.tomar,
+    }),
+    prisma.transaction.count({ where }),
+  ])
 
   return (
     <div className="space-y-6">
@@ -239,6 +252,15 @@ export default async function FacturasPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {facturas.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={totalFacturas}
+          params={sp}
+          etiqueta="comprobantes"
+        />
       )}
     </div>
   )

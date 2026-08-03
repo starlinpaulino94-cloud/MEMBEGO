@@ -125,8 +125,27 @@ export async function getSeguimiento(
   companyId: string,
   filtro: SeguimientoFiltro = {},
   config: SeguimientoConfig = SEGUIMIENTO_DEFAULTS,
-  take = 200
-): Promise<{ items: SeguimientoItem[]; kpis: SeguimientoKpis; truncado: boolean }> {
+  take = 200,
+  /**
+   * Ventana de la página. Omitirla devuelve las primeras `take` filas (como
+   * antes) para los llamadores que aún no paginan.
+   *
+   * POR QUÉ SE PAGINA EN MEMORIA Y NO CON skip/take DE PRISMA: el filtro por
+   * estado (SIN_USAR / USADO / VENCIDO / POR_VENCER) opera sobre un estado
+   * DERIVADO que se calcula aquí — no existe como columna, y POR_VENCER
+   * depende además del umbral configurable de la empresa. Con `skip` en la
+   * base, el total y las páginas saldrían mal en cuanto el usuario filtrara.
+   * Se trae el conjunto acotado (`take`), se deriva, se filtra y se corta la
+   * página: totales exactos y todas las filas alcanzables dentro del tope.
+   */
+  ventana?: { saltar: number; tomar: number }
+): Promise<{
+  items: SeguimientoItem[]
+  kpis: SeguimientoKpis
+  truncado: boolean
+  /** Total tras aplicar TODOS los filtros (incluido el derivado). */
+  total: number
+}> {
   const ahora = new Date()
   const base = whereBase(companyId, config.promosExcluidas)
 
@@ -268,7 +287,13 @@ export async function getSeguimiento(
     filtradosEstado = filtradosEstado.filter((i) => i.estado === filtro.estado)
   }
 
-  return { items: filtradosEstado, kpis, truncado: compras.length > take }
+  // Página: se corta DESPUÉS del filtro derivado, así el total es el real.
+  const totalFiltrado = filtradosEstado.length
+  const items = ventana
+    ? filtradosEstado.slice(ventana.saltar, ventana.saltar + ventana.tomar)
+    : filtradosEstado
+
+  return { items, kpis, truncado: compras.length > take, total: totalFiltrado }
 }
 
 // ── Conversión por promoción (reporte imprimible · Fase S3) ─────────────────
