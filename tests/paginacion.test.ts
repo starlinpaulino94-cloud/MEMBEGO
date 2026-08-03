@@ -86,6 +86,24 @@ test('urlDePagina deja limpia la primera página y el tamaño por defecto', () =
   assert.equal(urlDePagina({}, { page: 1, pageSize: 100 }), '?pageSize=100')
 })
 
+test('con prefijo, cada tabla de la página se pagina sola', () => {
+  // Una página con dos colas: "pend" y "com". Mover una no debe mover la otra.
+  const params = { pendPage: '3', comPage: '2', q: 'ana' }
+
+  const pend = leerPaginacion(params, TAMANO_POR_DEFECTO, 'pend')
+  const com = leerPaginacion(params, TAMANO_POR_DEFECTO, 'com')
+  assert.equal(pend.pagina, 3)
+  assert.equal(com.pagina, 2)
+  // Sin prefijo no lee ninguna de las dos: no se contaminan entre sí.
+  assert.equal(leerPaginacion(params).pagina, 1)
+
+  const url = urlDePagina(params, { page: 4 }, 'pend')
+  assert.ok(url.includes('pendPage=4'), 'avanza su propia tabla')
+  assert.ok(url.includes('comPage=2'), 'la otra tabla se queda donde estaba')
+  assert.ok(url.includes('q=ana'), 'el filtro compartido sobrevive')
+  assert.ok(!url.includes('pendPage=3'))
+})
+
 test('urlDePagina no arrastra la página vieja al cambiar de tamaño', () => {
   const url = urlDePagina({ page: '7', q: 'ana' }, { page: 1, pageSize: 50 })
   assert.ok(!url.includes('page=7'), 'no debe conservar la página anterior')

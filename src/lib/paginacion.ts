@@ -28,6 +28,13 @@ export interface Paginacion {
   tomar: number
 }
 
+/** Nombres reales de los parámetros para una tabla (con o sin prefijo). */
+function clavesDe(clave: string): { claveP: string; claveT: string } {
+  return clave
+    ? { claveP: `${clave}Page`, claveT: `${clave}PageSize` }
+    : { claveP: 'page', claveT: 'pageSize' }
+}
+
 function aEntero(valor: unknown): number | null {
   if (typeof valor === 'number' && Number.isFinite(valor)) return Math.trunc(valor)
   if (typeof valor !== 'string' || !valor.trim()) return null
@@ -44,10 +51,17 @@ function aEntero(valor: unknown): number | null {
  */
 export function leerPaginacion(
   params: Record<string, string | string[] | undefined>,
-  tamanoPorDefecto: number = TAMANO_POR_DEFECTO
+  tamanoPorDefecto: number = TAMANO_POR_DEFECTO,
+  /**
+   * Prefijo de los parámetros. Una página puede tener VARIAS tablas
+   * independientes (Pagos tiene cinco colas): con `clave: 'pend'` esa tabla usa
+   * `pendPage`/`pendPageSize` y no arrastra a las demás al navegar.
+   */
+  clave = ''
 ): Paginacion {
-  const crudoPagina = Array.isArray(params.page) ? params.page[0] : params.page
-  const crudoTamano = Array.isArray(params.pageSize) ? params.pageSize[0] : params.pageSize
+  const { claveP, claveT } = clavesDe(clave)
+  const crudoPagina = Array.isArray(params[claveP]) ? params[claveP][0] : params[claveP]
+  const crudoTamano = Array.isArray(params[claveT]) ? params[claveT][0] : params[claveT]
 
   const pagina = Math.max(1, aEntero(crudoPagina) ?? 1)
   const pedido = aEntero(crudoTamano) ?? tamanoPorDefecto
@@ -107,18 +121,23 @@ export function resumirPaginas(
  */
 export function urlDePagina(
   paramsActuales: Record<string, string | string[] | undefined>,
-  cambios: { page?: number; pageSize?: number }
+  cambios: { page?: number; pageSize?: number },
+  /** Mismo prefijo usado en `leerPaginacion` cuando la página tiene varias tablas. */
+  clave = ''
 ): string {
+  const { claveP, claveT } = clavesDe(clave)
   const sp = new URLSearchParams()
-  for (const [clave, valor] of Object.entries(paramsActuales)) {
-    if (clave === 'page' || clave === 'pageSize') continue
+  for (const [k, valor] of Object.entries(paramsActuales)) {
+    // Solo se descartan las claves DE ESTA tabla: la paginación de las otras
+    // tablas de la página es un filtro más y debe sobrevivir.
+    if (k === claveP || k === claveT) continue
     const v = Array.isArray(valor) ? valor[0] : valor
-    if (v) sp.set(clave, v)
+    if (v) sp.set(k, v)
   }
   if (cambios.pageSize && cambios.pageSize !== TAMANO_POR_DEFECTO) {
-    sp.set('pageSize', String(cambios.pageSize))
+    sp.set(claveT, String(cambios.pageSize))
   }
-  if (cambios.page && cambios.page > 1) sp.set('page', String(cambios.page))
+  if (cambios.page && cambios.page > 1) sp.set(claveP, String(cambios.page))
 
   const q = sp.toString()
   return q ? `?${q}` : ''

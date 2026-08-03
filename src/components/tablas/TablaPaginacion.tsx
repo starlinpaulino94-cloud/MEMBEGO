@@ -21,6 +21,7 @@ export function TablaPaginacion({
   total,
   params,
   etiqueta = 'registros',
+  clave = '',
   className,
 }: {
   paginacion: Pick<Paginacion, 'pagina' | 'tamano'>
@@ -29,6 +30,8 @@ export function TablaPaginacion({
   /** searchParams actuales, para conservar los filtros en los enlaces. */
   params: Record<string, string | string[] | undefined>
   etiqueta?: string
+  /** Prefijo de los parámetros cuando la página tiene varias tablas. */
+  clave?: string
   className?: string
 }) {
   const r = resumirPaginas(paginacion, total)
@@ -60,14 +63,14 @@ export function TablaPaginacion({
       {!soloInforme && (
         <div className="flex items-center gap-1">
           <Salto
-            href={urlDePagina(params, { page: 1, pageSize: r.tamano })}
+            href={aRuta(urlDePagina(params, { page: 1, pageSize: r.tamano }, clave))}
             activo={r.hayAnterior}
             titulo="Primera página"
           >
             <ChevronsLeft className="h-4 w-4" aria-hidden />
           </Salto>
           <Salto
-            href={urlDePagina(params, { page: r.pagina - 1, pageSize: r.tamano })}
+            href={aRuta(urlDePagina(params, { page: r.pagina - 1, pageSize: r.tamano }, clave))}
             activo={r.hayAnterior}
             titulo="Página anterior"
           >
@@ -79,14 +82,14 @@ export function TablaPaginacion({
           </span>
 
           <Salto
-            href={urlDePagina(params, { page: r.pagina + 1, pageSize: r.tamano })}
+            href={aRuta(urlDePagina(params, { page: r.pagina + 1, pageSize: r.tamano }, clave))}
             activo={r.haySiguiente}
             titulo="Página siguiente"
           >
             <ChevronRight className="h-4 w-4" aria-hidden />
           </Salto>
           <Salto
-            href={urlDePagina(params, { page: r.totalPaginas, pageSize: r.tamano })}
+            href={aRuta(urlDePagina(params, { page: r.totalPaginas, pageSize: r.tamano }, clave))}
             activo={r.haySiguiente}
             titulo="Última página"
           >
@@ -102,7 +105,7 @@ export function TablaPaginacion({
           {TAMANOS_PAGINA.map((t) => (
             <Link
               key={t}
-              href={urlDePagina(params, { page: 1, pageSize: t })}
+              href={aRuta(urlDePagina(params, { page: 1, pageSize: t }, clave))}
               className={cn(
                 'rounded-md px-2 py-1 transition-colors',
                 t === r.tamano
@@ -119,6 +122,13 @@ export function TablaPaginacion({
     </div>
   )
 }
+
+/**
+ * La URL vacía significa "primera página, tamaño por defecto, sin filtros".
+ * Un <Link href=""> resuelve contra la URL ACTUAL y se queda con su query, así
+ * que volver al estado limpio no haría nada. '?' sí la limpia.
+ */
+const aRuta = (url: string) => url || '?'
 
 /** Botón-enlace de salto; deshabilitado se renderiza como span (no navegable). */
 function Salto({
