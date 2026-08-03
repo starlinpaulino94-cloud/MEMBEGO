@@ -156,7 +156,15 @@ export async function afiliarmeAEmpresa(
         companyId: company.id,
         type: 'cliente.registrado',
         subjectId: cliente.id,
-        payload: { cliente: { nombre: previa?.nombre ?? dbUser.name, compras: 0, visitas: 0 } },
+        payload: {
+          cliente: {
+            nombre: previa?.nombre ?? dbUser.name,
+            compras: 0,
+            visitas: 0,
+            email: user.email ?? null,
+            telefono: cliente.telefono ?? null,
+          },
+        },
       })
     }
 

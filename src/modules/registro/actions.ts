@@ -244,7 +244,17 @@ export async function registrarCliente(
         companyId: company.id,
         type: 'cliente.registrado',
         subjectId: cliente.id,
-        payload: { cliente: { nombre: cliente.nombre, compras: 0, visitas: 0 } },
+        // Contacto incluido: los sistemas satélite crean la ficha del cliente
+        // con este evento y sin teléfono no pueden llamarlo ni buscarlo.
+        payload: {
+          cliente: {
+            nombre: cliente.nombre,
+            compras: 0,
+            visitas: 0,
+            email: email ?? null,
+            telefono: telefono ?? null,
+          },
+        },
       })
 
       // Regalos P2P · R4: si alguien le envió un regalo a este correo o
@@ -387,7 +397,15 @@ export async function registrarCliente(
       companyId: company.id,
       type: 'cliente.registrado',
       subjectId: result.cliente.id,
-      payload: { cliente: { nombre: result.cliente.nombre, compras: 0, visitas: 0 } },
+      payload: {
+        cliente: {
+          nombre: result.cliente.nombre,
+          compras: 0,
+          visitas: 0,
+          email: email ?? null,
+          telefono: telefono ?? null,
+        },
+      },
     })
 
     // Regalos P2P · R4: si alguien le envió un regalo a este correo o teléfono
