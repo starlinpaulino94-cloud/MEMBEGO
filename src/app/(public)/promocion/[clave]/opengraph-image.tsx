@@ -43,9 +43,9 @@ function MembeGoMark() {
   )
 }
 
-export default async function Image({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const og = await getPromotionOg(id).catch(() => null)
+export default async function Image({ params }: { params: Promise<{ clave: string }> }) {
+  const { clave } = await params
+  const og = await getPromotionOg(clave).catch(() => null)
 
   // Con imagen oficial se entrega la imagen ORIGINAL ENTERA (sin recortes ni
   // composición, como Temu) hasta 4 MB. La tarjeta compuesta queda solo para

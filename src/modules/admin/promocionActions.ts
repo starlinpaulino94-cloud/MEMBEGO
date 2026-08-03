@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { slugDisponible } from '@/modules/promociones/slug'
 import { notificarSeguidoresEmpresa } from '@/modules/notificaciones/service'
 import { esTipoValido, esVisibilidadValida } from '@/lib/promociones'
 import {
@@ -198,6 +199,26 @@ async function guardarShareConfig(
     .catch((e) => console.error('[promocion] shareConfig:', e))
 }
 
+/**
+ * Slug público libre dentro de la empresa.
+ *
+ * Se calcula UNA VEZ, al crear (o la primera vez que se edita una promoción
+ * vieja que aún no lo tiene). Nunca se recalcula al cambiar el título: un
+ * enlace ya compartido por WhatsApp seguiría circulando y moriría.
+ */
+async function asignarSlug(companyId: string, titulo: string): Promise<string> {
+  const existentes = await prisma.promocion
+    .findMany({
+      where: { companyId, slug: { not: null } },
+      select: { slug: true },
+    })
+    .catch(() => [] as { slug: string | null }[])
+  return slugDisponible(
+    titulo,
+    existentes.map((p) => p.slug ?? '').filter(Boolean)
+  )
+}
+
 /** Valida que la campaña exista y pertenezca a la empresa. */
 async function validarCampana(
   campanaId: string | null,
@@ -226,7 +247,14 @@ function revalidatePromos() {
 async function promoDeMiEmpresa(id: string, user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>) {
   const promo = await prisma.promocion.findUnique({
     where: { id },
-    select: { id: true, companyId: true, titulo: true, activo: true, archivada: true },
+    select: {
+      id: true,
+      companyId: true,
+      titulo: true,
+      activo: true,
+      archivada: true,
+      slug: true,
+    },
   })
   if (!promo) return null
   if (
@@ -258,7 +286,24 @@ export async function crearPromocion(
   if (campanaError) return { error: campanaError }
 
   try {
-    const legacy = await prisma.promocion.create({ data: { companyId, ...parsed.data } })
+    // Carrera posible: dos personas creando la misma promoción a la vez leen
+    // los mismos slugs ocupados. El índice único es el árbitro; si choca, se
+    // desempata con una marca de tiempo en vez de fallarle al usuario.
+    const slug = await asignarSlug(companyId, parsed.data.titulo)
+    const legacy = await prisma.promocion
+      .create({ data: { companyId, ...parsed.data, slug } })
+      .catch(async (e) => {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          return prisma.promocion.create({
+            data: {
+              companyId,
+              ...parsed.data,
+              slug: `${slug.slice(0, 50)}-${Date.now().toString(36)}`,
+            },
+          })
+        }
+        throw e
+      })
     await guardarShareConfig(legacy.id, parsed.share)
 
     await syncCreate(
@@ -304,9 +349,15 @@ export async function actualizarPromocion(
     const campanaError = await validarCampana(parsed.data.campanaId, promo.companyId)
     if (campanaError) return { error: campanaError }
 
+    // El slug NO se recalcula con el título: solo se rellena si la promoción
+    // viene de antes de los enlaces con nombre y aún no tiene uno.
+    const slug = promo.slug
+      ? undefined
+      : await asignarSlug(promo.companyId, parsed.data.titulo)
+
     await prisma.promocion.update({
       where: { id },
-      data: { ...parsed.data, activo },
+      data: { ...parsed.data, activo, ...(slug ? { slug } : {}) },
     })
     await guardarShareConfig(id, parsed.share)
 
@@ -395,10 +446,12 @@ export async function duplicarPromocion(
     if (!promo) return { error: 'Promoción no encontrada.' }
 
     const original = await prisma.promocion.findUniqueOrThrow({ where: { id } })
+    const tituloCopia = `${original.titulo} (Copia)`
     const copy = await prisma.promocion.create({
       data: {
         companyId: original.companyId,
-        titulo: `${original.titulo} (Copia)`,
+        titulo: tituloCopia,
+        slug: await asignarSlug(original.companyId, tituloCopia),
         descripcion: original.descripcion,
         imagenUrl: original.imagenUrl,
         tipo: original.tipo,

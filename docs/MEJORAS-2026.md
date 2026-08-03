@@ -168,21 +168,48 @@ El kit ya aporta `promo-badge`, `promo-banner`, `flash-promotion`, `countdown`,
 `countdown` | `limitada` | `bienvenida` | `referidos`) que **componga** las
 piezas del kit ya existentes. Cero componentes nuevos de bajo nivel.
 
-## 6. Rutas públicas de promociones — hay deuda real
+## 6. Rutas públicas de promociones — HECHO (Fase 4)
 
-**Medido:**
+**Antes:** `/promocion/cmd7k2p9x0001qz3f8b2h4t1a`. Un enlace que no dice nada,
+que se corta feo en la vista previa de WhatsApp y que nadie reconoce. La
+columna `promociones.slug` existía en el esquema desde la Fase 2 del
+marketplace, vacía y sin usarse.
 
-- Existen `/promocion/[id]`, `/oferta/[codigo]`, `/promociones`,
-  `/empresas/[companySlug]` — cuatro convenciones conviviendo.
-- `/promocion/[id]` resuelve por **id interno**, no por slug.
-- `promociones.slug` **existe en el esquema** (`String?`) pero no se usa para
-  resolver la ruta.
-- Sí hay `opengraph-image.tsx` por promoción — la metadata de compartir ya
-  funciona.
+**Ahora:** `/promocion/lavado-premium-gratis`.
 
-**Trabajo:** generar slugs únicos por empresa, resolver por slug con respaldo
-por id (para no romper enlaces ya compartidos), y unificar la convención.
-**Requiere migración de datos** (backfill de slugs) — ver §Migraciones.
+**Lo construido:**
+
+- `src/modules/promociones/slug.ts` — núcleo puro: quita acentos (y convierte
+  la ñ en n, si no «Año» quedaría «ao»), descarta artículos, corta por palabra
+  completa a 60 caracteres y resuelve repeticiones con `-2`, `-3`… El sufijo
+  cuenta para el tope, así que el slug nunca crece sin control.
+- Asignación en `crearPromocion`, `duplicarPromocion` y —solo si falta— en
+  `actualizarPromocion`.
+- La ruta pasa a ser `/promocion/[clave]` y resuelve **por slug O por id** en
+  una sola consulta. Un enlace viejo con id que ya tiene slug se redirige (308)
+  a la dirección con nombre, para que las vistas previas y los contadores de
+  las redes no se repartan entre dos URLs.
+- Los botones de compartir (panel, detalle público, «mis promociones») y la
+  vista previa del editor usan ya la dirección con nombre.
+- `tests/promociones-slug.test.ts` — 10 pruebas: acentos y ñ, títulos
+  imposibles, corte por palabra, repetidos, tope con sufijo, y la distinción
+  entre un id de la base y un slug.
+
+**REGLA QUE NO SE PUEDE ROMPER:** el slug **no cambia** al editar el título.
+Un enlace compartido por WhatsApp sigue circulando meses; si el slug cambiara,
+ese enlace moriría. Se asigna una vez y se queda.
+
+**Cambio de base de datos** (migración `20260775_promociones_slug`, idempotente):
+rellena los slugs de las promociones existentes desde su título, desempata los
+repetidos por empresa y crea el índice único `(companyId, slug)`. Dos empresas
+distintas SÍ pueden tener «lavado-premium»; la misma empresa, no. Mientras el
+SQL no se corra, las promociones viejas siguen abriéndose por id — no se rompe
+nada, simplemente aún no tienen nombre bonito.
+
+**Lo que NO se unificó:** siguen existiendo `/oferta/[codigo]` (ofertas
+privadas, que se resuelven por un código secreto y no deben ser adivinables) y
+`/empresas/[slug]`. Son convenciones distintas porque resuelven cosas
+distintas; unificarlas por simetría habría roto el secreto de las ofertas.
 
 ## 7. Reportes — HECHO (Fase 5)
 

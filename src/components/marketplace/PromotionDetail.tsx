@@ -105,6 +105,7 @@ export function PromotionDetail({ mode, promotion, comprarSlot }: PromotionDetai
             <div className="flex justify-start">
               <SharePromocionMenu
                 promocionId={promotion.id}
+                slug={promotion.slug}
                 titulo={promotion.titulo}
                 companyName={promotion.company.name}
               />
