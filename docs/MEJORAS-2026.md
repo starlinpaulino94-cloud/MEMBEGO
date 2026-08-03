@@ -196,15 +196,44 @@ justamente el que no lo tiene.
 agrupación), gráficas con paleta semántica que funcione en ambos temas, y
 export reutilizando la ruta que ya existe.
 
-## 8. Reglas de recompensas
+## 8. Reglas de recompensas — HECHO (Fase 6)
 
-`ReglaRecompensaForm.tsx` vive embebido en `/admin/crecimiento/page.tsx`.
-Mover a `/admin/crecimiento/recompensas` (listado) + `/nueva` + `/[id]/editar`,
-con el mismo patrón de los demás formularios administrativos.
+**Corrección del diagnóstico:** la auditoría apuntó a `ReglaRecompensaForm.tsx`
+y a `src/modules/admin/recompensaActions.ts`, pero son de OTRO sistema (las
+reglas por N referidos de `/admin/referidos`, modelo `ReglaRecompensa`). El
+formulario embebido que había que sacar es el del Growth Engine (`GrowthRule`)
+al final de `/admin/crecimiento`. El de referidos se dejó intacto: funciona y
+ya tiene su sitio.
 
-**Validación crítica ya existente que hay que preservar:** la ejecución
-idempotente de reglas (evitar recompensas duplicadas ante reintentos) vive en
-`src/modules/admin/recompensaActions.ts` — no se toca la lógica, solo la UI.
+**Lo que se encontró al abrirlo:**
+
+1. `crearGrowthRuleAction` validaba y, si algo no cuadraba, hacía `return` sin
+   decir nada. El administrador llenaba la regla, pulsaba «Crear» y no pasaba
+   NADA: ni regla ni mensaje.
+2. **No se podía editar una regla.** Solo crear, pausar y borrar. Cambiar
+   «50 puntos» por «100» obligaba a rehacerla y perder el registro anterior.
+3. Se podía guardar una regla de tipo «beneficio digital» sin elegir el
+   beneficio: se disparaba y no entregaba nada.
+
+**Lo construido:**
+
+- `src/modules/growth/reglas.ts` — núcleo puro (sin Prisma ni React): valida,
+  normaliza y SIEMPRE devuelve un motivo legible. Ahí viven también las
+  etiquetas en español y `resumirRegla`, que antes estaban duplicadas en la
+  página.
+- `actualizarGrowthRuleAction` — nueva, con la misma barrera multiempresa que
+  las demás (una regla de otra empresa no se puede tocar ni ver).
+- Páginas: `/admin/crecimiento/recompensas` (lista con estado, editar, pausar,
+  eliminar), `/nueva` y `/[id]/editar`. `/admin/crecimiento` conserva la
+  configuración del programa y resume las reglas con enlace a su página.
+- `ReglaRecompensaForm` (cliente): oculta los campos que no aplican al tipo
+  elegido —un beneficio digital no lleva «cuánto», un disparador que no sea «N
+  referidos» no lleva umbral— y muestra los errores.
+- `tests/growth-reglas.test.ts` — 9 pruebas sobre el núcleo: cada rechazo trae
+  una frase para la persona; el beneficio sin promoción se rechaza; una promo
+  elegida por error no se arrastra al cambiar de tipo; el descuento porcentual
+  se topa en 100; el umbral solo existe en «N referidos» y se redondea (medio
+  referido no existe).
 
 ## 9. Aplicaciones — CONFLICTO QUE REQUIERE TU DECISIÓN
 

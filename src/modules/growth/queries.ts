@@ -63,6 +63,36 @@ export async function getGrowthAdminData(companyId: string): Promise<GrowthAdmin
   return { config, rules, promos, plans }
 }
 
+/** Una regla concreta para editarla, ya con la barrera de empresa aplicada. */
+export async function getGrowthRule(
+  companyId: string,
+  id: string
+): Promise<{
+  id: string
+  nombre: string
+  trigger: string
+  valorCondicion: number
+  planId: string | null
+  beneficiario: string
+  recompensaTipo: string
+  recompensaValor: number
+  recompensaPromocionId: string | null
+} | null> {
+  const r = await prisma.growthRule.findFirst({ where: { id, companyId } })
+  if (!r) return null
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    trigger: r.trigger,
+    valorCondicion: r.valorCondicion,
+    planId: r.planId,
+    beneficiario: r.beneficiario,
+    recompensaTipo: r.recompensaTipo,
+    recompensaValor: Number(r.recompensaValor),
+    recompensaPromocionId: r.recompensaPromocionId,
+  }
+}
+
 /** Promociones (Beneficios Digitales) que un cliente puede ofrecer al invitar. */
 export async function getPromosParaInvitar(
   companyId: string
