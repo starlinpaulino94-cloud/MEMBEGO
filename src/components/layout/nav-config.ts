@@ -96,7 +96,7 @@ const ADMIN_NAV: NavGroup[] = [
     label: 'Ingresos',
     items: [
       { href: '/admin/pagos', label: 'Pagos', icon: Wallet },
-      { href: '/admin/facturas', label: 'Facturas', icon: ReceiptText },
+      { href: '/admin/facturas', label: 'Comprobantes', icon: ReceiptText },
       { href: '/admin/registros', label: 'Registros', icon: FileText },
       { href: '/admin/metodos-pago', label: 'Métodos de pago', icon: Landmark },
     ],

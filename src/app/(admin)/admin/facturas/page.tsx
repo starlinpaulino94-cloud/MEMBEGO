@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { prisma } from '@/lib/prisma'
@@ -11,7 +12,7 @@ import { ReceiptText, Search } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Facturas' }
+export const metadata = { title: 'Comprobantes' }
 
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 const fmtFecha = (d: Date) =>
@@ -32,25 +33,63 @@ const ESTADO_LABEL: Record<string, string> = {
   REVERTED: 'Revertida',
 }
 
+// Tipos de comprobante que el negocio reimprime. Las VENTAS son las facturas
+// de caja; el resto son ENTREGAS sin cobro (lavado incluido en la membresía,
+// promoción, beneficio, premio…) que también necesitan su comprobante.
+const TIPOS_VENTA = ['SALE'] as const
+const TIPOS_ENTREGA = [
+  'MEMBERSHIP_REDEMPTION',
+  'PROMOTION_USE',
+  'BENEFIT_USE',
+  'REWARD_REDEMPTION',
+  'COUPON_USE',
+  'POINTS_SPEND',
+  'REFERRAL',
+] as const
+
+const TIPO_LABEL: Record<string, string> = {
+  SALE: 'Venta',
+  MEMBERSHIP_REDEMPTION: 'Uso de membresía',
+  PROMOTION_USE: 'Promoción',
+  BENEFIT_USE: 'Beneficio',
+  REWARD_REDEMPTION: 'Premio',
+  COUPON_USE: 'Cupón',
+  POINTS_SPEND: 'Canje de puntos',
+  REFERRAL: 'Referido',
+}
+
+const FILTROS = [
+  { key: '', label: 'Todo' },
+  { key: 'ventas', label: 'Ventas' },
+  { key: 'entregas', label: 'Gratis / canjes' },
+] as const
+
 /**
- * Historial permanente de facturas (ventas de caja): búsqueda por número de
- * factura, código TX, referencia o cliente; vista previa y reimpresión sin
- * generar documentos nuevos. Nada se elimina — solo cambian estados.
+ * Historial permanente de comprobantes: facturas de caja Y entregas sin cobro
+ * (lavados incluidos, promociones, beneficios, premios). Búsqueda por número,
+ * código TX o cliente; vista previa y reimpresión sin generar documentos
+ * nuevos. Nada se elimina — solo cambian estados.
  */
 export default async function FacturasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; ver?: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId as string | undefined
-  const { q = '' } = await searchParams
+  const { q = '', ver = '' } = await searchParams
   const term = q.trim()
+  const tipos =
+    ver === 'ventas'
+      ? [...TIPOS_VENTA]
+      : ver === 'entregas'
+        ? [...TIPOS_ENTREGA]
+        : [...TIPOS_VENTA, ...TIPOS_ENTREGA]
 
   const facturas = await prisma.transaction.findMany({
     where: {
       ...(companyId ? { companyId } : {}),
-      tipo: 'SALE',
+      tipo: { in: tipos },
       ...(term
         ? {
             OR: [
@@ -74,30 +113,58 @@ export default async function FacturasPage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Facturas"
-        description="Historial permanente de ventas: consulta, vista previa y reimpresión (58/80 mm, Carta o A4)."
+        title="Comprobantes"
+        description="Historial permanente de ventas Y entregas sin cobro (lavados incluidos, promociones, beneficios y premios): consulta, vista previa y reimpresión (58/80 mm, Carta o A4)."
       />
 
-      <Form action="/admin/facturas" className="flex max-w-lg gap-2">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input name="q" defaultValue={q} placeholder="Nº de factura, código TX o cliente…" className="pl-9" />
+      <div className="flex flex-wrap items-center gap-3">
+        <Form action="/admin/facturas" className="flex max-w-lg flex-1 gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input name="q" defaultValue={q} placeholder="Nº, código TX o cliente…" className="pl-9" />
+          </div>
+          {ver && <input type="hidden" name="ver" value={ver} />}
+          <Button type="submit" variant="secondary">Buscar</Button>
+        </Form>
+
+        {/* Filtro por tipo: todo / solo ventas / solo entregas sin cobro. */}
+        <div className="flex gap-1 rounded-xl border border-border/70 bg-card p-1">
+          {FILTROS.map((f) => {
+            const activo = ver === f.key
+            const params = new URLSearchParams()
+            if (term) params.set('q', term)
+            if (f.key) params.set('ver', f.key)
+            const href = `/admin/facturas${params.toString() ? `?${params}` : ''}`
+            return (
+              <Link key={f.key || 'todo'} href={href}>
+                <span
+                  className={`inline-block rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    activo
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {f.label}
+                </span>
+              </Link>
+            )
+          })}
         </div>
-        <Button type="submit" variant="secondary">Buscar</Button>
-      </Form>
+      </div>
 
       {facturas.length === 0 ? (
         <EmptyState
           icon={<ReceiptText className="h-7 w-7" />}
-          title={term ? `Sin facturas para “${term}”` : 'Aún no hay facturas'}
-          description="Cada cobro de caja genera su factura con número y código únicos, y queda aquí para siempre."
+          title={term ? `Sin comprobantes para “${term}”` : 'Aún no hay comprobantes'}
+          description="Cada cobro de caja y cada canje (lavado incluido, promoción, beneficio o premio) genera su comprobante con número y código únicos, y queda aquí para siempre."
         />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Factura</th>
+                <th className="px-4 py-3 font-semibold">Comprobante</th>
+                <th className="px-4 py-3 font-semibold">Tipo</th>
                 <th className="px-4 py-3 font-semibold">Cliente</th>
                 <th className="px-4 py-3 font-semibold">Detalle</th>
                 <th className="px-4 py-3 font-semibold">Empleado</th>
@@ -116,6 +183,17 @@ export default async function FacturasPage({
                       <p className="font-mono font-semibold text-foreground">{f.ticketNumero}</p>
                       <p className="font-mono text-xs text-muted-foreground">{f.codigo}</p>
                     </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          f.tipo === 'SALE'
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-success/15 text-success'
+                        }`}
+                      >
+                        {TIPO_LABEL[f.tipo] ?? f.tipo}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-foreground">{f.cliente?.nombre ?? '—'}</td>
                     <td className="max-w-52 px-4 py-3">
                       <p className="truncate text-foreground">{snap.detalle ?? '—'}</p>
@@ -128,7 +206,11 @@ export default async function FacturasPage({
                       {f.empleado?.name ?? snap.empleado ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                      {f.monto != null ? fmtRD(Number(f.monto)) : '—'}
+                      {f.monto != null && Number(f.monto) > 0
+                        ? fmtRD(Number(f.monto))
+                        : f.tipo === 'SALE'
+                          ? '—'
+                          : 'Gratis'}
                     </td>
                     <td className="px-4 py-3">
                       <span
