@@ -70,13 +70,29 @@ export interface ProductoInv {
   notas: string | null
 }
 
-export async function getInventario(companyId: string): Promise<ProductoInv[]> {
-  const productos = await prisma.productoInventario.findMany({
-    where: { companyId },
-    orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
-    take: 300,
-  })
-  return productos.map((p) => ({
+/**
+ * Catálogo de productos. `ventana` pagina en la base; el resumen (activos y
+ * stock bajo) se calcula sobre TODOS los productos, no sobre la página: un KPI
+ * que cambia al pasar de página no sirve para decidir compras.
+ */
+export async function getInventario(
+  companyId: string,
+  ventana?: { saltar: number; tomar: number }
+): Promise<{ items: ProductoInv[]; total: number; activos: number; bajos: number }> {
+  const [productos, resumen] = await Promise.all([
+    prisma.productoInventario.findMany({
+      where: { companyId },
+      orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
+      skip: ventana?.saltar ?? 0,
+      take: ventana ? ventana.tomar : 300,
+    }),
+    prisma.productoInventario.findMany({
+      where: { companyId },
+      select: { activo: true, stock: true, stockMinimo: true },
+    }),
+  ])
+
+  const items = productos.map((p) => ({
     id: p.id,
     nombre: p.nombre,
     categoria: p.categoria,
@@ -87,6 +103,34 @@ export async function getInventario(companyId: string): Promise<ProductoInv[]> {
     activo: p.activo,
     notas: p.notas,
   }))
+
+  const activos = resumen.filter((p) => p.activo)
+  return {
+    items,
+    total: resumen.length,
+    activos: activos.length,
+    bajos: activos.filter((p) => esStockBajo(Number(p.stock), Number(p.stockMinimo))).length,
+  }
+}
+
+/** Un producto suelto (para editar uno que no está en la página actual). */
+export async function getProductoInv(
+  companyId: string,
+  id: string
+): Promise<ProductoInv | undefined> {
+  const p = await prisma.productoInventario.findFirst({ where: { id, companyId } })
+  if (!p) return undefined
+  return {
+    id: p.id,
+    nombre: p.nombre,
+    categoria: p.categoria,
+    unidad: p.unidad,
+    stock: Number(p.stock),
+    stockMinimo: Number(p.stockMinimo),
+    costo: p.costo != null ? Number(p.costo) : null,
+    activo: p.activo,
+    notas: p.notas,
+  }
 }
 
 export interface MovimientoInv {
@@ -103,9 +147,10 @@ export interface MovimientoInv {
 
 export async function getMovimientosRecientes(
   companyId: string,
-  take = 25
-): Promise<MovimientoInv[]> {
-  const movimientos = await prisma.movimientoInventario.findMany({
+  ventana?: { saltar: number; tomar: number }
+): Promise<{ items: MovimientoInv[]; total: number }> {
+  const [movimientos, total] = await Promise.all([
+    prisma.movimientoInventario.findMany({
     where: { companyId },
     select: {
       id: true,
@@ -117,10 +162,14 @@ export async function getMovimientosRecientes(
       producto: { select: { nombre: true, unidad: true } },
       registradoPor: { select: { name: true } },
     },
-    orderBy: { createdAt: 'desc' },
-    take,
-  })
-  return movimientos.map((m) => ({
+      orderBy: { createdAt: 'desc' },
+      skip: ventana?.saltar ?? 0,
+      take: ventana ? ventana.tomar : 25,
+    }),
+    prisma.movimientoInventario.count({ where: { companyId } }),
+  ])
+
+  const items = movimientos.map((m) => ({
     id: m.id,
     producto: m.producto.nombre,
     unidad: m.producto.unidad,
@@ -131,4 +180,6 @@ export async function getMovimientosRecientes(
     registradoPor: m.registradoPor?.name ?? null,
     createdAt: m.createdAt,
   }))
+
+  return { items, total }
 }

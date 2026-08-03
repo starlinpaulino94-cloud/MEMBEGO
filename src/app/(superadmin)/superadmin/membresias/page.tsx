@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import { requireRole } from '@/lib/auth/guards'
 import { prisma } from '@/lib/prisma'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { EstadoBadge } from '@/components/EstadoBadge'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { formatDate } from '@/lib/format'
@@ -20,12 +22,15 @@ const ESTADOS = ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA', 'ACTIVA', 'VENCIDA'
 export default async function SuperadminMembresiasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; empresa?: string; q?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   await requireRole('SUPERADMIN')
-  const { estado, empresa, q } = await searchParams
+  const sp = await searchParams
+  const { estado, empresa, q } = sp
+  const paginacion = leerPaginacion(sp)
 
   let companies: { id: string; name: string }[] = []
+  let total = 0
   let membresias: {
     id: string
     estado: string
@@ -47,15 +52,18 @@ export default async function SuperadminMembresiasPage({
     console.error('[superadmin-membresias] companies', e)
   }
 
+  const where = {
+    ...(estado ? { estado: estado as MembershipEstado } : {}),
+    cliente: {
+      ...(empresa ? { companyId: empresa } : {}),
+      ...(q ? { OR: [{ nombre: { contains: q, mode: 'insensitive' as const } }, { email: { contains: q, mode: 'insensitive' as const } }] } : {}),
+    },
+  }
+
   try {
-    const data = await prisma.membership.findMany({
-      where: {
-        ...(estado ? { estado: estado as MembershipEstado } : {}),
-        cliente: {
-          ...(empresa ? { companyId: empresa } : {}),
-          ...(q ? { OR: [{ nombre: { contains: q, mode: 'insensitive' as const } }, { email: { contains: q, mode: 'insensitive' as const } }] } : {}),
-        },
-      },
+    const [data, cuenta] = await Promise.all([
+      prisma.membership.findMany({
+      where,
       select: {
         id: true,
         estado: true,
@@ -73,9 +81,13 @@ export default async function SuperadminMembresiasPage({
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
+      skip: paginacion.saltar,
+      take: paginacion.tomar,
+      }),
+      prisma.membership.count({ where }),
+    ])
     membresias = data
+    total = cuenta
   } catch (e) {
     console.error('[superadmin-membresias]', e)
   }
@@ -123,7 +135,7 @@ export default async function SuperadminMembresiasPage({
         </button>
       </form>
 
-      <p className="text-sm text-muted-foreground">{membresias.length} resultado(s)</p>
+      <p className="text-sm text-muted-foreground">{total.toLocaleString('es-DO')} resultado(s)</p>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full text-sm">
@@ -182,6 +194,15 @@ export default async function SuperadminMembresiasPage({
           </tbody>
         </table>
       </div>
+
+      {membresias.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={total}
+          params={sp}
+          etiqueta="membresías"
+        />
+      )}
     </div>
   )
 }

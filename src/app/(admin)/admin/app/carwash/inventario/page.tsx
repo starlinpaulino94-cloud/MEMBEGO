@@ -1,10 +1,13 @@
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth/guards'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { ADMIN_ROLES } from '@/types'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import {
   getInventario,
   getMovimientosRecientes,
+  getProductoInv,
   esStockBajo,
   MOV_TIPO_LABELS,
   type MovTipo,
@@ -30,11 +33,15 @@ function fmtCant(n: number) {
 export default async function InventarioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ editar?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId as string | undefined
-  const { editar } = await searchParams
+  const sp = await searchParams
+  const { editar } = sp
+  // Dos tablas en la misma pantalla: productos y su bitácora de movimientos.
+  const pagProd = leerPaginacion(sp)
+  const pagMov = leerPaginacion(sp, 25, 'mov')
   if (!companyId) {
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
@@ -61,18 +68,21 @@ export default async function InventarioPage({
     )
   }
 
-  let productos: Awaited<ReturnType<typeof getInventario>> | null = null
-  let movimientos: Awaited<ReturnType<typeof getMovimientosRecientes>> = []
+  let inventario: Awaited<ReturnType<typeof getInventario>> | null = null
+  let movimientos: Awaited<ReturnType<typeof getMovimientosRecientes>> = {
+    items: [],
+    total: 0,
+  }
   try {
-    ;[productos, movimientos] = await Promise.all([
-      getInventario(companyId),
-      getMovimientosRecientes(companyId),
+    ;[inventario, movimientos] = await Promise.all([
+      getInventario(companyId, { saltar: pagProd.saltar, tomar: pagProd.tomar }),
+      getMovimientosRecientes(companyId, { saltar: pagMov.saltar, tomar: pagMov.tomar }),
     ])
   } catch (e) {
     console.error('[inventario] cargar:', e)
   }
 
-  if (!productos) {
+  if (!inventario) {
     return (
       <div className="space-y-6">
         {volver}
@@ -85,9 +95,12 @@ export default async function InventarioPage({
     )
   }
 
-  const activos = productos.filter((p) => p.activo)
-  const bajos = activos.filter((p) => esStockBajo(p.stock, p.stockMinimo))
-  const productoEditar = editar ? productos.find((p) => p.id === editar) : undefined
+  const productos = inventario.items
+  // El producto a editar puede estar en otra página: si no está en la actual se
+  // busca aparte, para que el enlace «Editar» nunca abra un formulario vacío.
+  const productoEditar = editar
+    ? (productos.find((p) => p.id === editar) ?? (await getProductoInv(companyId, editar)))
+    : undefined
 
   return (
     <div className="space-y-6">
@@ -102,16 +115,18 @@ export default async function InventarioPage({
           <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
             Productos activos
           </dt>
-          <dd className="mt-1 text-lg font-bold tabular-nums text-foreground">{activos.length}</dd>
+          <dd className="mt-1 text-lg font-bold tabular-nums text-foreground">
+            {inventario.activos}
+          </dd>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card p-4">
           <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Stock bajo</dt>
           <dd
             className={`mt-1 text-lg font-bold tabular-nums ${
-              bajos.length > 0 ? 'text-destructive' : 'text-foreground'
+              inventario.bajos > 0 ? 'text-destructive' : 'text-foreground'
             }`}
           >
-            {bajos.length}
+            {inventario.bajos}
           </dd>
         </div>
       </dl>
@@ -190,13 +205,22 @@ export default async function InventarioPage({
         </div>
       )}
 
-      {movimientos.length > 0 && (
+      {productos.length > 0 && (
+        <TablaPaginacion
+          paginacion={pagProd}
+          total={inventario.total}
+          params={sp}
+          etiqueta="productos"
+        />
+      )}
+
+      {movimientos.items.length > 0 && (
         <section className="rounded-2xl border border-border/70 bg-card p-4">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-            Últimos movimientos
+            Movimientos
           </h2>
           <ul className="divide-y divide-border/50">
-            {movimientos.map((m) => (
+            {movimientos.items.map((m) => (
               <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium text-foreground">
@@ -218,6 +242,13 @@ export default async function InventarioPage({
               </li>
             ))}
           </ul>
+          <TablaPaginacion
+            paginacion={pagMov}
+            total={movimientos.total}
+            params={sp}
+            etiqueta="movimientos"
+            clave="mov"
+          />
         </section>
       )}
     </div>
