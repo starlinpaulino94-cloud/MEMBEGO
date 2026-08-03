@@ -79,8 +79,13 @@ export interface RegistrosResumen {
 export interface RegistrosResultado {
   items: RegistroItem[]
   resumen: RegistrosResumen
-  /** true = se alcanzó el tope de filas mostradas (hay más por exportar). */
+  /**
+   * @deprecated Ya no se trunca: la tabla es paginada y `total` permite
+   * alcanzar CUALQUIER registro. Se conserva en falso por compatibilidad.
+   */
   truncado: boolean
+  /** Total real de registros que cumplen el filtro (para paginar). */
+  total: number
   timeZone: string
 }
 
@@ -205,16 +210,22 @@ const INCLUDE = {
 export async function getRegistros(
   companyId: string | undefined,
   filtro: RegistroFiltro,
-  timeZone: string
+  timeZone: string,
+  /**
+   * Ventana de la página. Omitirla mantiene el comportamiento antiguo (primeras
+   * filas), para los llamadores que aún no paginan.
+   */
+  ventana?: { saltar: number; tomar: number }
 ): Promise<RegistrosResultado> {
   const where = construirWhere(companyId, filtro, timeZone)
 
-  const [rows, agregados] = await Promise.all([
+  const [rows, agregados, totalFilas] = await Promise.all([
     prisma.transaction.findMany({
       where,
       include: INCLUDE,
       orderBy: { createdAt: 'desc' },
-      take: MAX_TABLA + 1,
+      skip: ventana?.saltar ?? 0,
+      take: ventana ? Math.min(ventana.tomar, MAX_TABLA) : MAX_TABLA,
     }),
     // Resumen: se agregan solo las APLICADAS con monto (ingresos reales),
     // por método y por tipo, en JS sobre un conjunto acotado.
@@ -223,10 +234,11 @@ export async function getRegistros(
       select: { monto: true, metodoCobro: true, tipo: true },
       take: MAX_EXPORT,
     }),
+    // Total real del filtro: es lo que permite navegar a CUALQUIER página.
+    prisma.transaction.count({ where }),
   ])
 
-  const truncado = rows.length > MAX_TABLA
-  const items = rows.slice(0, MAX_TABLA).map(mapItem)
+  const items = rows.map(mapItem)
 
   const porMetodo = { efectivo: 0, transferencia: 0, otro: 0 }
   const tipoMap = new Map<string, { cantidad: number; total: number }>()
@@ -245,7 +257,8 @@ export async function getRegistros(
 
   return {
     items,
-    truncado,
+    truncado: false,
+    total: totalFilas,
     timeZone,
     resumen: {
       cantidad: agregados.length,
