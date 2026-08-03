@@ -3,6 +3,9 @@ import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
+import { leerPaginacion } from '@/lib/paginacion'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
@@ -22,38 +25,46 @@ export const metadata = { title: 'Vehículos' }
 export default async function VehiculosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId as string | undefined
-  const { q } = await searchParams
+  const sp = await searchParams
+  const { q } = sp
+  const paginacion = leerPaginacion(sp)
 
   if (!companyId) {
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
   const texto = (q ?? '').trim()
-  const vehiculos = await prisma.vehiculo.findMany({
-    where: {
-      cliente: { companyId },
-      ...(texto
-        ? {
-            OR: [
-              { placa: { contains: texto, mode: 'insensitive' } },
-              { marca: { contains: texto, mode: 'insensitive' } },
-              { modelo: { contains: texto, mode: 'insensitive' } },
-              { cliente: { nombre: { contains: texto, mode: 'insensitive' } } },
-            ],
-          }
-        : {}),
-    },
+  const where: Prisma.VehiculoWhereInput = {
+    cliente: { companyId },
+    ...(texto
+      ? {
+          OR: [
+            { placa: { contains: texto, mode: 'insensitive' } },
+            { marca: { contains: texto, mode: 'insensitive' } },
+            { modelo: { contains: texto, mode: 'insensitive' } },
+            { cliente: { nombre: { contains: texto, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+  }
+
+  const [vehiculos, total] = await Promise.all([
+    prisma.vehiculo.findMany({
+    where,
     include: {
       cliente: { select: { id: true, nombre: true, telefono: true } },
       _count: { select: { visits: true } },
     },
     orderBy: { createdAt: 'desc' },
-    take: 100,
-  })
+    skip: paginacion.saltar,
+    take: paginacion.tomar,
+    }),
+    prisma.vehiculo.count({ where }),
+  ])
 
   return (
     <div className="space-y-6">
@@ -135,11 +146,14 @@ export default async function VehiculosPage({
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        {vehiculos.length === 100
-          ? 'Mostrando los primeros 100 — usa el buscador para afinar.'
-          : `${vehiculos.length} vehículo${vehiculos.length !== 1 ? 's' : ''}.`}
-      </p>
+      {vehiculos.length > 0 && (
+        <TablaPaginacion
+          paginacion={paginacion}
+          total={total}
+          params={sp}
+          etiqueta="vehículos"
+        />
+      )}
     </div>
   )
 }
