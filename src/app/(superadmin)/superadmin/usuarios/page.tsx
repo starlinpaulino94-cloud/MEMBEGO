@@ -6,16 +6,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { UserCog, Users, Pencil } from 'lucide-react'
 import { ROL_STAFF_LABEL } from '@/types'
+import { EntrarComoCard } from '@/components/superadmin/EntrarComoCard'
+import { SuperadminToggle } from '@/components/superadmin/SuperadminToggle'
 
 export const dynamic = 'force-dynamic'
 
 const ROL_LABEL: Record<string, string> = {
   ...ROL_STAFF_LABEL,
   ADMIN_EMPRESA: 'Administrador (legacy)',
+  SUPERADMIN: 'Superadmin',
 }
 
 export default async function UsuariosStaffPage() {
-  await requireRole('SUPERADMIN')
+  const sesion = await requireRole('SUPERADMIN')
 
   let usuarios: {
     id: string
@@ -28,7 +31,9 @@ export default async function UsuariosStaffPage() {
   }[] = []
   try {
     usuarios = await prisma.user.findMany({
-      where: { role: { notIn: ['CLIENTE', 'SUPERADMIN'] } },
+      // Staff Y superadmins: los superadmins aparecen para poder otorgar o
+      // retirar el rango desde aquí (los clientes siguen fuera).
+      where: { role: { notIn: ['CLIENTE'] } },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
@@ -53,6 +58,8 @@ export default async function UsuariosStaffPage() {
           las empresas que puede gestionar cada uno.
         </p>
       </div>
+
+      <EntrarComoCard />
 
       {usuarios.length === 0 ? (
         <Card>
@@ -89,11 +96,21 @@ export default async function UsuariosStaffPage() {
                         <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                       </div>
                     </div>
-                    <Link href={`/superadmin/usuarios/${u.id}`}>
-                      <Button size="icon" variant="ghost" aria-label="Editar usuario">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </Link>
+                    <div className="flex items-center gap-1">
+                      {u.role !== 'SUPERADMIN' && (
+                        <Link href={`/superadmin/usuarios/${u.id}`}>
+                          <Button size="icon" variant="ghost" aria-label="Editar usuario">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      )}
+                      <SuperadminToggle
+                        userId={u.id}
+                        nombre={u.name}
+                        esSuperadmin={u.role === 'SUPERADMIN'}
+                        esYo={u.id === sesion.metadata.dbUserId}
+                      />
+                    </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-1.5">
