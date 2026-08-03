@@ -1,120 +1,281 @@
+import Link from 'next/link'
+import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter, getReportesAdmin } from '@/modules/admin/queries'
+import { companyFilter } from '@/modules/admin/queries'
+import { prisma } from '@/lib/prisma'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { getTransactionAnalytics, type TransactionAnalytics } from '@/lib/transactions'
-import { formatMoney, formatDate } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
+import { leerRango, paramsDeRango, PRESETS } from '@/modules/reportes/rango'
+import {
+  getReporte,
+  TIPO_TX_LABEL,
+  METODO_LABEL,
+  type Kpi,
+} from '@/modules/reportes/queries'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBanner } from '@/components/ui/status-banner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { ReporteChart } from '@/components/charts/ReporteChart'
+import { Download, TrendingDown, TrendingUp } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ReportesPage() {
+export const metadata = { title: 'Reportes' }
+
+/** Variación contra el periodo anterior, con su signo y su color. */
+function Variacion({ kpi, invertido = false }: { kpi: Kpi; invertido?: boolean }) {
+  if (kpi.variacion == null) {
+    return (
+      <p className="mt-1 text-xs text-muted-foreground">
+        {kpi.anterior === 0 && kpi.valor > 0 ? 'primer periodo con datos' : 'sin datos antes'}
+      </p>
+    )
+  }
+  const sube = kpi.variacion > 0
+  const bueno = invertido ? !sube : sube
+  const Icono = sube ? TrendingUp : TrendingDown
+  return (
+    <p
+      className={`mt-1 flex items-center gap-1 text-xs ${
+        kpi.variacion === 0
+          ? 'text-muted-foreground'
+          : bueno
+            ? 'text-success'
+            : 'text-destructive'
+      }`}
+    >
+      <Icono className="h-3.5 w-3.5" aria-hidden />
+      {sube ? '+' : ''}
+      {kpi.variacion}% vs. periodo anterior
+    </p>
+  )
+}
+
+export default async function ReportesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = companyFilter(user)
+  if (!companyId || companyId === '__none__') {
+    return <SinEmpresaActiva seccion="tus reportes" />
+  }
+
+  const sp = await searchParams
+  const empresa = await prisma.company
+    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+    .catch(() => null)
+  const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
+
+  const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
   const fmtMoney = (n: number) => formatMoney(n, prefs)
-  const fmtDate = (d: Date | null) => (d ? formatDate(d, prefs) : '—')
 
-  let data = {
-    ingresosMes: 0,
-    activasPorPlan: [] as { plan: string; count: number }[],
-    lavadosMes: 0,
-    clientesFrecuentes: [] as { clienteId: string; nombre: string; visitas: number }[],
-    membresiasPorVencer: [] as {
-      id: string
-      cliente: string
-      plan: string
-      fechaVencimiento: Date | null
-    }[],
-  }
-  let loadError = false
-  try {
-    data = await getReportesAdmin(companyId === '__none__' ? undefined : companyId)
-  } catch (e) {
-    console.error('[admin-reportes]', e)
-    loadError = true
-  }
+  const r = await getReporte(companyId, rango, timeZone)
 
-  // Fase E4: métricas del Transaction Engine (últimos 30 días).
-  let tx: TransactionAnalytics | null = null
-  if (companyId && companyId !== '__none__') {
-    try {
-      tx = await getTransactionAnalytics(companyId)
-    } catch (e) {
-      console.error('[admin-reportes] analytics tx:', e)
-    }
-  }
+  const tarjetas = [
+    { label: 'Ingresos de caja', kpi: r.ingresosCaja, formato: fmtMoney },
+    { label: 'Cobros de membresías', kpi: r.ingresosMembresias, formato: fmtMoney },
+    { label: 'Ventas', kpi: r.operaciones, formato: (n: number) => String(n) },
+    { label: 'Entregas sin cobro', kpi: r.entregas, formato: (n: number) => String(n) },
+    { label: 'Clientes nuevos', kpi: r.clientesNuevos, formato: (n: number) => String(n) },
+  ]
+
+  const hayActividad = r.serie.some((p) => p.ventas > 0 || p.entregas > 0)
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Reportes" description="Resumen del mes en curso" />
+      <PageHeader
+        title="Reportes"
+        description={`${rango.etiqueta} · ${rango.desdeDia} a ${rango.hastaDia} (${rango.dias} día${rango.dias === 1 ? '' : 's'})`}
+        action={
+          <Button asChild variant="secondary">
+            <a href={`/admin/reportes/export${paramsDeRango(rango)}`}>
+              <Download className="mr-2 h-4 w-4" /> Exportar CSV
+            </a>
+          </Button>
+        }
+      />
 
-      {loadError && (
-        <StatusBanner variant="destructive" title="No pudimos cargar los reportes">
-          Las cifras pueden mostrarse en cero. Recarga la página para intentarlo de nuevo.
+      {r.incompleto && (
+        <StatusBanner variant="warning" title="El reporte está incompleto">
+          Alguna consulta no respondió, así que hay cifras que pueden estar en cero
+          sin serlo. Recarga en unos segundos antes de tomar decisiones con estos
+          números.
         </StatusBanner>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Ingresos del mes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">
-              {fmtMoney(data.ingresosMes)}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Filtros: presets como enlaces (compartibles) + rango a mano. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-4">
+        <div className="flex flex-wrap gap-1">
+          {PRESETS.map((p) => {
+            const activo = rango.preset === p.clave
+            return (
+              <Link
+                key={p.clave}
+                href={`/admin/reportes?rango=${p.clave}`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  activo
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+                aria-current={activo ? 'page' : undefined}
+              >
+                {p.label}
+              </Link>
+            )
+          })}
+        </div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Usos registrados este mes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">
-              {data.lavadosMes}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Membresías activas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">
-              {data.activasPorPlan.reduce((s, p) => s + p.count, 0)}
-            </p>
-          </CardContent>
-        </Card>
+        <Form action="/admin/reportes" className="ml-auto flex flex-wrap items-end gap-2">
+          <label className="text-xs text-muted-foreground">
+            Desde
+            <Input type="date" name="desde" defaultValue={rango.desdeDia} className="mt-1 h-9" />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            Hasta
+            <Input type="date" name="hasta" defaultValue={rango.hastaDia} className="mt-1 h-9" />
+          </label>
+          <Button type="submit" variant="secondary" className="h-9">
+            Aplicar
+          </Button>
+        </Form>
       </div>
+
+      {/* KPIs con comparación contra el periodo anterior del mismo largo. */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {tarjetas.map((t) => (
+          <Card key={t.label}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t.label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="truncate text-2xl font-bold tabular-nums text-foreground">
+                {t.formato(t.kpi.valor)}
+              </p>
+              <Variacion kpi={t.kpi} />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Actividad por día</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hayActividad ? (
+            <ReporteChart data={r.serie} />
+          ) : (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Sin operaciones registradas en este periodo.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Membresías activas por plan</CardTitle>
+            <CardTitle className="text-base">Operaciones por tipo</CardTitle>
           </CardHeader>
           <CardContent>
-            {data.activasPorPlan.length === 0 ? (
+            {r.porTipo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin operaciones en el periodo.</p>
+            ) : (
+              <ul className="divide-y divide-border/50">
+                {r.porTipo.map((t) => (
+                  <li key={t.tipo} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="text-foreground">{TIPO_TX_LABEL[t.tipo] ?? t.tipo}</span>
+                    <span className="shrink-0 text-right">
+                      <span className="font-semibold tabular-nums text-foreground">
+                        {t.operaciones}
+                      </span>
+                      {t.ingresos > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {fmtMoney(t.ingresos)}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Cómo pagaron</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {r.porMetodo.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin cobros registrados en el periodo.</p>
+            ) : (
+              <ul className="divide-y divide-border/50">
+                {r.porMetodo.map((m) => (
+                  <li key={m.metodo} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="text-foreground">{METODO_LABEL[m.metodo] ?? m.metodo}</span>
+                    <span className="shrink-0 text-right">
+                      <span className="font-semibold tabular-nums text-foreground">
+                        {fmtMoney(m.ingresos)}
+                      </span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {m.operaciones} op.
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Clientes más activos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {r.topClientes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin visitas registradas.</p>
+            ) : (
+              <ul className="divide-y divide-border/50">
+                {r.topClientes.map((c) => (
+                  <li key={c.nombre} className="flex justify-between gap-3 py-2 text-sm">
+                    <span className="truncate text-foreground">{c.nombre}</span>
+                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                      {c.operaciones}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Membresías activas por plan</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Foto de hoy: no depende del periodo elegido.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {r.activasPorPlan.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin membresías activas.</p>
             ) : (
-              <ul className="divide-y">
-                {data.activasPorPlan.map((p) => (
-                  <li
-                    key={p.plan}
-                    className="flex justify-between py-2 text-sm"
-                  >
-                    <span className="text-foreground">{p.plan}</span>
-                    <span className="font-semibold text-foreground">
+              <ul className="divide-y divide-border/50">
+                {r.activasPorPlan.map((p) => (
+                  <li key={p.plan} className="flex justify-between gap-3 py-2 text-sm">
+                    <span className="truncate text-foreground">{p.plan}</span>
+                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
                       {p.count}
                     </span>
                   </li>
@@ -123,161 +284,13 @@ export default async function ReportesPage() {
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Clientes más frecuentes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.clientesFrecuentes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sin visitas registradas.</p>
-            ) : (
-              <ul className="divide-y">
-                {data.clientesFrecuentes.map((c) => (
-                  <li
-                    key={c.clienteId}
-                    className="flex justify-between py-2 text-sm"
-                  >
-                    <span className="text-foreground">{c.nombre}</span>
-                    <span className="font-semibold text-foreground">
-                      {c.visitas} visitas
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Fase E4 — Transaction Engine (últimos 30 días) */}
-      {tx && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Transacciones (últimos 30 días)</h2>
-            <p className="text-sm text-muted-foreground">
-              Registros oficiales del motor de transacciones: cada uso genera un TX-ID auditable.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Transacciones
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-foreground">{tx.total}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  ≈ {tx.promedioDiario}/día · {tx.promedioMensual}/mes
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Aplicadas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-success">{tx.aplicadas}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {tx.total > 0 ? Math.round((tx.aplicadas / tx.total) * 100) : 0}% del total
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Canceladas / revertidas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-foreground">
-                  {tx.canceladas + tx.revertidas}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {tx.errores} con error · {tx.reimpresiones} reimpresiones
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Tiempo de atención
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-foreground">
-                  {tx.tiempoPromedioMs != null ? `${(tx.tiempoPromedioMs / 1000).toFixed(1)}s` : '—'}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">promedio por operación</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            {(
-              [
-                { titulo: 'Servicios más usados', items: tx.topServicios, vacio: 'Sin servicios registrados.' },
-                { titulo: 'Empleados con más operaciones', items: tx.topEmpleados, vacio: 'Sin operaciones de empleados.' },
-                { titulo: 'Promociones más usadas', items: tx.topPromociones, vacio: 'Sin usos de promociones.' },
-                { titulo: 'Beneficios más usados', items: tx.topBeneficios, vacio: 'Sin usos de beneficios.' },
-              ] as const
-            ).map((b) =>
-              b.items.length === 0 && (b.titulo.startsWith('Promociones') || b.titulo.startsWith('Beneficios')) ? null : (
-                <Card key={b.titulo}>
-                  <CardHeader>
-                    <CardTitle>{b.titulo}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {b.items.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">{b.vacio}</p>
-                    ) : (
-                      <ul className="divide-y">
-                        {b.items.map((i) => (
-                          <li key={i.nombre} className="flex justify-between py-2 text-sm">
-                            <span className="truncate text-foreground">{i.nombre}</span>
-                            <span className="ml-3 shrink-0 font-semibold text-foreground">{i.usos}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            )}
-          </div>
-        </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Membresías por vencer (próximos 7 días)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.membresiasPorVencer.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No hay membresías por vencer.
-            </p>
-          ) : (
-            <ul className="divide-y">
-              {data.membresiasPorVencer.map((m) => (
-                <li key={m.id} className="flex justify-between py-2 text-sm">
-                  <div>
-                    <p className="font-medium text-foreground">{m.cliente}</p>
-                    <p className="text-muted-foreground">{m.plan}</p>
-                  </div>
-                  <span className="text-muted-foreground">
-                    {fmtDate(m.fechaVencimiento)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <p className="text-xs text-muted-foreground">
+        Los ingresos de caja y los cobros de membresías se muestran por separado a
+        propósito: son dinero que entra por caminos distintos y sumarlos en una
+        sola cifra impediría cuadrar el reporte con la caja del día.
+      </p>
     </div>
   )
 }

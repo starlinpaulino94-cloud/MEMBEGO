@@ -184,17 +184,47 @@ piezas del kit ya existentes. Cero componentes nuevos de bajo nivel.
 por id (para no romper enlaces ya compartidos), y unificar la convención.
 **Requiere migración de datos** (backfill de slugs) — ver §Migraciones.
 
-## 7. Reportes
+## 7. Reportes — HECHO (Fase 5)
 
-`recharts` ya es dependencia y hay 3 componentes de gráfica
-(`VisitasChart`, `BarrasEmpresas`, `MembresiasPie`). Existe exportación CSV en
-4 módulos (`registros`, `carwash/reportes`, `actividad`, `seguimiento`) — o sea
-**el patrón de export ya está resuelto y se puede reutilizar**; Reportes es
-justamente el que no lo tiene.
+**Lo que había:** una página de una sola vista, «el mes en curso», sin filtros,
+sin comparación, sin gráfica y sin exportar. Y un detalle que importa más de lo
+que parece: los cortes de mes se hacían con la hora del servidor, no con la del
+negocio. Un lavado cobrado a las 9 de la noche del día 31 en Santo Domingo se
+guarda como la 1 de la madrugada del 1 en UTC, así que caía en el mes siguiente
+y el reporte no cuadraba con la caja.
 
-**Trabajo:** KPIs con comparación de período, filtros (rango, sucursal,
-agrupación), gráficas con paleta semántica que funcione en ambos temas, y
-export reutilizando la ruta que ya existe.
+**Lo construido:**
+
+- `src/modules/reportes/rango.ts` — núcleo puro de fechas. Presets (hoy, 7 días,
+  30 días, este mes, mes pasado), rango a mano, y todos los límites en
+  **medianoche local de la empresa**. Calcula además el periodo anterior con
+  EXACTAMENTE los mismos días: comparar 30 días contra un mes de 31 inventaría
+  una caída del 3% que nunca ocurrió.
+- `src/modules/reportes/queries.ts` — KPIs con su comparación, serie diaria
+  (rellenando los días sin actividad), desglose por tipo de operación y por
+  método de cobro, clientes más activos y membresías activas por plan. Cada
+  consulta va envuelta: si una falla, el reporte se marca como **incompleto** en
+  pantalla en vez de enseñar ceros como si fueran reales.
+- `ReporteChart` — barras apiladas (ventas / entregas sin cobro) con los colores
+  del tema por clases, no hexadecimales quemados.
+- `/admin/reportes/export` — CSV con el MISMO rango que la pantalla (viaja por
+  query string), separador `;` y BOM, que es lo que Excel en español necesita
+  para no partir todo en una columna ni romper los acentos.
+- `tests/reportes-rango.test.ts` — 15 pruebas con reloj fijo: la venta nocturna
+  cae en el mes correcto, «mes pasado» acierta en febrero bisiesto y al cruzar
+  de año, la basura en la URL no rompe nada, la variación no inventa
+  porcentajes sobre cero, y el CSV cuadra su fila de TOTAL.
+
+**Decisión que se ve en pantalla:** los ingresos de caja y los cobros de
+membresías se muestran SEPARADOS. Son dinero que entra por caminos distintos
+(mostrador vs. activaciones y renovaciones) y sumarlos en una sola cifra
+impediría cuadrar el reporte contra la caja del día.
+
+**Limitación heredada, escrita para que no sorprenda:** el cobro de una
+membresía se fecha por `updatedAt` porque no hay un campo de fecha de pago
+propio. Editar una membresía vieja la mueve de periodo. Arreglarlo pide una
+columna nueva y su migración; no se hizo aquí para no mezclar cambios de
+esquema con esta fase.
 
 ## 8. Reglas de recompensas — HECHO (Fase 6)
 
