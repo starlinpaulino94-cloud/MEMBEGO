@@ -157,26 +157,26 @@ export function RuletaWheel({
             onClick={() => setResultado(null)}
           />
           <div
-            className="relative z-10 w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl"
+            className="relative z-10 w-full max-w-sm rounded-3xl bg-card p-6 text-center shadow-2xl"
             style={{ animation: reduced ? 'none' : 'celebra-pop 0.4s cubic-bezier(0.16,1,0.3,1)' }}
           >
             <style>{`@keyframes celebra-pop {0%{transform:scale(0.85);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
             <div
               className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full ${
-                resultado.gano ? 'bg-emerald-100' : 'bg-slate-100'
+                resultado.gano ? 'bg-success/15' : 'bg-muted'
               } ${reduced ? '' : 'animate-bounce'}`}
             >
               {resultado.gano ? (
-                <PartyPopper className="h-10 w-10 text-emerald-600" />
+                <PartyPopper className="h-10 w-10 text-success" />
               ) : (
-                <Gift className="h-10 w-10 text-slate-400" />
+                <Gift className="h-10 w-10 text-muted-foreground" />
               )}
             </div>
-            <h2 className="mt-4 text-2xl font-extrabold text-slate-900">
+            <h2 className="mt-4 text-2xl font-extrabold text-foreground">
               {resultado.gano ? '🎉 ¡Ganaste!' : '¡Casi!'}
             </h2>
-            <p className="mt-1.5 text-lg font-bold text-slate-800">{resultado.premioNombre}</p>
-            <p className="mt-2 text-sm text-slate-600">
+            <p className="mt-1.5 text-lg font-bold text-foreground">{resultado.premioNombre}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
               {resultado.gano
                 ? 'Tu premio ya está en tu wallet con su código QR. Preséntalo en el negocio.'
                 : 'No te desanimes, sigue participando para ganar tu premio.'}

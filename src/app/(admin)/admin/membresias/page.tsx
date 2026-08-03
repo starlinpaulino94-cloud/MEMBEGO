@@ -37,7 +37,7 @@ function FilterLink({
       className={
         active
           ? 'rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground'
-          : 'rounded-full border border-border bg-white px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted'
+          : 'rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted'
       }
     >
       {label}

@@ -119,7 +119,7 @@ export function CelebracionOverlay({
         }
       `}</style>
       <div
-        className="relative z-[120] max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 text-center shadow-2xl"
+        className="relative z-[120] max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl bg-card p-6 text-center shadow-2xl"
         style={{ animation: 'celebra-pop 0.45s cubic-bezier(0.16,1,0.3,1)' }}
         role="dialog"
         aria-modal="true"
@@ -127,8 +127,8 @@ export function CelebracionOverlay({
         <div className="mx-auto flex h-20 w-20 animate-bounce items-center justify-center rounded-full bg-emerald-100 shadow-lg">
           <PartyPopper className="h-10 w-10 text-emerald-600" />
         </div>
-        <h1 className="mt-4 text-3xl font-extrabold text-slate-900">🎉 ¡Felicidades!</h1>
-        <p className="mt-1.5 text-slate-600">
+        <h1 className="mt-4 text-3xl font-extrabold text-foreground">🎉 ¡Felicidades!</h1>
+        <p className="mt-1.5 text-muted-foreground">
           {data.pendingVerification
             ? 'Revisa tu correo y confirma tu cuenta para activar tu regalo.'
             : data.empresaName
@@ -137,14 +137,14 @@ export function CelebracionOverlay({
         </p>
 
         {/* Regalo destacado */}
-        <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
+        <div className="mt-5 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/10 p-5 shadow-sm">
           <Gift className="mx-auto mb-1.5 h-9 w-9 text-emerald-600" />
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
             Por tu registro recibiste
           </p>
-          <p className="mt-1 text-2xl font-extrabold text-slate-900">{regalo}</p>
+          <p className="mt-1 text-2xl font-extrabold text-foreground">{regalo}</p>
           {data.vigenciaDias ? (
-            <p className="mt-1 text-xs text-slate-500">Vigencia: {data.vigenciaDias} días</p>
+            <p className="mt-1 text-xs text-muted-foreground">Vigencia: {data.vigenciaDias} días</p>
           ) : null}
         </div>
 
@@ -152,7 +152,7 @@ export function CelebracionOverlay({
         {data.qrToken && (
           <div className="mt-5 flex flex-col items-center gap-2">
             <QRDisplay token={data.qrToken} size={180} />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Presenta este código QR en el negocio para usar tu beneficio.
             </p>
           </div>
@@ -160,12 +160,12 @@ export function CelebracionOverlay({
 
         {/* Invitar amigos: el momento de máxima emoción → cadena viral */}
         {data.codigoInvitacion && (
-          <div className="mt-5 rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+          <div className="mt-5 rounded-2xl border-2 border-amber-500/40 bg-amber-500/10 p-5 shadow-sm">
             <Sparkles className="mx-auto mb-1.5 h-8 w-8 text-amber-500" />
-            <h2 className="text-lg font-bold text-slate-900">Invita a tus amigos</h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <h2 className="text-lg font-bold text-foreground">Invita a tus amigos</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               Ellos también recibirán{' '}
-              <span className="font-semibold text-slate-800">{regalo}</span> al registrarse con tu
+              <span className="font-semibold text-foreground">{regalo}</span> al registrarse con tu
               enlace.
             </p>
             <Button

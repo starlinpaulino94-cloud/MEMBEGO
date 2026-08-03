@@ -38,7 +38,7 @@ export function EditarPlanForm({
   }, [state.success, router, redirectTo])
 
   return (
-    <form action={action} className="space-y-5 rounded-xl border bg-white p-6 shadow-sm">
+    <form action={action} className="space-y-5 rounded-xl border bg-card p-6 shadow-sm">
       <input type="hidden" name="planId" value={plan.id} />
 
       {state.error && (

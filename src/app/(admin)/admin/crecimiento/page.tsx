@@ -3,43 +3,17 @@ import { requireRole } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getGrowthAdminData } from '@/modules/growth/queries'
 import { GROWTH_DURACIONES } from '@/modules/growth/config'
-import {
-  guardarGrowthConfigAction,
-  crearGrowthRuleAction,
-  toggleGrowthRuleAction,
-  eliminarGrowthRuleAction,
-} from '@/modules/growth/actions'
+import { guardarGrowthConfigAction } from '@/modules/growth/actions'
+import { resumirRegla } from '@/modules/growth/reglas'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { Badge } from '@/components/ui/badge'
-import { Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRight, Gift } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
-
-const TRIGGER_LABEL: Record<string, string> = {
-  LINK_ABIERTO: 'Abre el enlace',
-  REGISTRO: 'Se registra',
-  VERIFICADO: 'Verifica correo',
-  MEMBRESIA: 'Adquiere membresía',
-  COMPRA: 'Hace una compra',
-  PRIMER_USO: 'Primer uso del beneficio',
-  N_REFERIDOS: 'Alcanza N referidos',
-}
-const TIPO_LABEL: Record<string, string> = {
-  PUNTOS: 'Puntos',
-  CREDITOS: 'Créditos (RD$)',
-  BENEFICIO: 'Beneficio Digital',
-  LAVADOS_GRATIS: 'Lavados gratis',
-  DESCUENTO_PORCENTAJE: 'Descuento %',
-  DESCUENTO_MONTO: 'Descuento RD$',
-}
-const BENEF_LABEL: Record<string, string> = {
-  REFERENTE: 'Quien invita',
-  REFERIDO: 'El invitado',
-  AMBOS: 'Ambos',
-}
 
 function Toggle({ name, checked, label }: { name: string; checked: boolean; label: string }) {
   return (
@@ -62,7 +36,7 @@ export default async function CrecimientoPage() {
     return <SinEmpresaActiva seccion="tu programa de crecimiento" />
   }
 
-  const { config, rules, promos, plans } = await getGrowthAdminData(companyId)
+  const { config, rules } = await getGrowthAdminData(companyId)
 
   return (
     <div className="space-y-6">
@@ -105,113 +79,49 @@ export default async function CrecimientoPage() {
         </CardContent>
       </Card>
 
-      {/* Reglas de recompensa */}
+      {/* Reglas de recompensa — viven en su propia página desde la Fase 6:
+          aquí solo se resumen para no repetir el trabajo en dos sitios. */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">Reglas de recompensa</CardTitle>
+          <Button asChild variant="secondary" size="sm">
+            <Link href="/admin/crecimiento/recompensas">
+              Administrar <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Link>
+          </Button>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           {rules.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Aún no hay reglas. Crea la primera abajo (ej. «Se registra → 50 puntos»).
+              Aún no hay reglas. Crea la primera (por ejemplo, «Se registra → 50
+              puntos») para que el programa entregue algo.
             </p>
           ) : (
-            <div className="divide-y divide-border/60">
-              {rules.map((r) => (
-                <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground">{r.nombre}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {TRIGGER_LABEL[r.trigger] ?? r.trigger}
-                      {r.trigger === 'N_REFERIDOS' ? ` (${r.valorCondicion})` : ''} →{' '}
-                      {r.recompensaTipo === 'BENEFICIO'
-                        ? r.recompensaPromocion ?? 'Beneficio'
-                        : `${r.recompensaValor} · ${TIPO_LABEL[r.recompensaTipo]}`}{' '}
-                      · para {BENEF_LABEL[r.beneficiario]}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={r.activo ? 'default' : 'secondary'}>{r.activo ? 'Activa' : 'Pausada'}</Badge>
-                    <form action={toggleGrowthRuleAction}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <Button type="submit" size="sm" variant="ghost">
-                        {r.activo ? 'Pausar' : 'Activar'}
-                      </Button>
-                    </form>
-                    <form action={eliminarGrowthRuleAction}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <Button type="submit" size="icon" variant="ghost" aria-label="Eliminar">
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </form>
-                  </div>
-                </div>
+            <ul className="space-y-2">
+              {rules.slice(0, 4).map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="mr-2 inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
+                      <Gift className="h-3.5 w-3.5 text-primary" aria-hidden />
+                      {r.nombre}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{resumirRegla(r)}</span>
+                  </span>
+                  <Badge variant={r.activo ? 'default' : 'secondary'}>
+                    {r.activo ? 'Activa' : 'Pausada'}
+                  </Badge>
+                </li>
               ))}
-            </div>
+              {rules.length > 4 && (
+                <li className="pt-1 text-xs text-muted-foreground">
+                  y {rules.length - 4} más…
+                </li>
+              )}
+            </ul>
           )}
-
-          {/* Nueva regla */}
-          <form action={crearGrowthRuleAction} className="grid gap-3 rounded-xl border border-border p-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Nombre de la regla</label>
-              <input name="nombre" required placeholder="Ej. Bono por registro" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Cuando el invitado…</label>
-              <select name="trigger" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                {Object.entries(TRIGGER_LABEL).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Umbral (solo N referidos)</label>
-              <input name="valorCondicion" type="number" min={1} defaultValue={1} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Recompensa</label>
-              <select name="recompensaTipo" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                {Object.entries(TIPO_LABEL).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Valor (puntos / RD$ / %)</label>
-              <input name="recompensaValor" type="number" step="0.01" min={0} defaultValue={0} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Beneficio Digital (si aplica)</label>
-              <select name="recompensaPromocionId" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" defaultValue="">
-                <option value="">—</option>
-                {promos.map((p) => (
-                  <option key={p.id} value={p.id}>{p.titulo}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Solo si compró el plan (opcional)</label>
-              <select name="planId" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" defaultValue="">
-                <option value="">Cualquiera</option>
-                {plans.map((p) => (
-                  <option key={p.id} value={p.id}>{p.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Recompensar a</label>
-              <select name="beneficiario" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                {Object.entries(BENEF_LABEL).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <Button type="submit">Crear regla</Button>
-            </div>
-          </form>
         </CardContent>
       </Card>
+
     </div>
   )
 }

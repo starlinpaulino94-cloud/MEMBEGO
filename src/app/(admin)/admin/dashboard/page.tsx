@@ -242,7 +242,7 @@ export default async function AdminDashboard() {
             {d.recomendaciones.map((r) => (
               <div
                 key={r.texto}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-3 text-sm shadow-sm"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-card p-3 text-sm shadow-sm"
               >
                 <p className="text-foreground">{r.texto}</p>
                 <Link href={r.href}>

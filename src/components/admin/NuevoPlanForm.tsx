@@ -49,7 +49,7 @@ export function NuevoPlanForm({
   }, [state.success, router, redirectTo])
 
   return (
-    <form action={action} className="space-y-5 rounded-xl border bg-white p-6 shadow-sm">
+    <form action={action} className="space-y-5 rounded-xl border bg-card p-6 shadow-sm">
       {state.error && (
         <p className="rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">{state.error}</p>
       )}
