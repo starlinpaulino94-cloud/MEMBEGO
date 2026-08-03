@@ -28,28 +28,65 @@ conflicto de negocio que exige tu decisión antes de ejecutarse**.
 
 ---
 
-## 1. Dark mode — el número asusta más de lo que debe
+## 1. Dark mode — HECHO (Fase 2)
 
-**Medido:** 158 ocurrencias de `bg-white` sin `dark:`, 8 de `text-black`,
-21 estilos inline con hexadecimal, 4 `className` con hex.
+**Dato que cambia la lectura del problema:** el tema por defecto de MembeGo ya
+es OSCURO (`ThemeProvider`, `defaultTheme="dark"`). Así que cada superficie
+blanca fija dentro de la app no era "algo que se verá mal si alguien activa el
+modo oscuro": se estaba viendo mal por defecto.
 
-**Matiz crítico que evita romper cosas:** no todos son errores. Al menos tres
-familias son *correctas* y deben conservarse:
+**El error real no es usar blanco, es mezclarlo.** De las 158 ocurrencias de
+`bg-white`, 107 llevan opacidad (`bg-white/10`, `/20`…): son velos sobre
+degradados de marca u overlays oscuros y están bien. De las sólidas, la mayoría
+son impresión (el papel es blanco), fondo de QR (el lector lo necesita), el
+botón de Google (marca) o el marco del formulario de CardNET. Lo que sí rompía
+la pantalla eran las **parejas imposibles**: una superficie blanca fija con
+texto de token (que en oscuro es casi blanco → ilegible), o una superficie de
+token con texto slate fijo (que en oscuro desaparece).
 
-1. **Impresión** (`ReceiptTicket`, `FacturaPrintDialog`, `seguimiento/imprimir`):
-   el papel es blanco. Forzar tokens de tema rompería los tickets.
-2. **Códigos QR** (`IdMembegoCard`, `WalletStack`, `CompanyQRRegistro`): un QR
-   necesita fondo blanco real para que el lector lo capte. Es funcional.
-3. **Superficies sobre gradiente de marca** (`bg-white/10`, `border-white/20`):
-   ahí el blanco es correcto porque el fondo siempre es oscuro.
+**Corregido (11 sitios, todos parejas imposibles):**
 
-**Trabajo real:** clasificar las 158 ocurrencias en esas 3 familias + las que sí
-son deuda, y migrar solo estas últimas a tokens (`card`, `background`, `muted`,
-`border`, `popover`). Los tokens **ya existen** en `globals.css` y el kit los
-usa; no hace falta ampliar el sistema, solo aplicarlo donde falta.
+| Dónde | Qué se veía |
+| --- | --- |
+| Nuevo plan / Editar plan | formulario blanco con etiquetas claras |
+| Config. de bienvenida | `<select>` blanco con texto del tema |
+| Membresías (chips de filtro) | chip blanco con texto gris claro |
+| Ficha de cliente (botón Correo) | botón blanco con texto gris claro |
+| Perfil (selector de empresa) | tarjeta blanca con texto del tema |
+| Dashboard (recomendaciones) | tarjeta blanca con texto del tema |
+| Modal de la ruleta | tarjeta blanca de premio |
+| Overlay de celebración (registro) | tarjeta blanca + degradados hacia blanco |
+| PanelError | título y texto oscuros sobre lienzo oscuro (invisible) |
+| Invitación por token | página clara suelta dentro de la app |
 
-**Riesgo:** un reemplazo masivo por regex rompería tickets y QR. Debe ser
-archivo por archivo con criterio.
+**Guardia permanente:** `tests/tema-oscuro.test.ts` recorre `src` y
+`packages/ui/src` y falla si un archivo mezcla las dos capas. La comprobación
+es por ARCHIVO a propósito: en JSX la tarjeta es un `<div>` y su texto un `<p>`
+anidado, así que mirar línea por línea deja pasar justo el caso real (se
+comprobó: la versión por línea no detectaba ninguno de los 11 errores). Los
+archivos que mezclan legítimamente están declarados con su motivo, y hay una
+prueba que verifica que la guardia sabe fallar y otra que borra exenciones que
+ya no aplican.
+
+**Se dejó a propósito con paleta clara propia:** `CampanaLanding` (landing
+pública de conversión que llega por WhatsApp) y la sección festiva de
+Invita y Gana. Son coherentes por dentro (blanco fijo con texto oscuro fijo),
+no tienen parejas imposibles y su diseño claro es intencional.
+
+## 2. Sidebar y Navbar — validado (Fase 2)
+
+Lo medido en la auditoría seguía siendo cierto: la estructura no necesitaba
+reescritura. De las tres cosas que faltaba verificar, dos ya estaban (Escape
+cierra el drawer; el scroll del fondo se bloquea) y la tercera no:
+
+- **Foco atrapado:** con el menú abierto, tabular se escapaba al contenido de
+  atrás que el diálogo dice estar tapando (`aria-modal="true"`). Ahora el foco
+  circula dentro del panel.
+- **Foco devuelto:** al cerrar vuelve al botón que lo abrió, en vez de saltar al
+  principio de la página.
+- **Menú cerrado, pero tabulable:** el drawer sigue en el árbol para poder
+  animarse, así que sus enlaces se podían enfocar con el teclado aunque
+  estuvieran fuera de pantalla. Se marca `inert` mientras está cerrado.
 
 ## 2. Sidebar y Navbar — ya cumple lo pedido
 

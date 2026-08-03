@@ -23,24 +23,24 @@ export default async function AceptarInvitacionPage({
     invitacion.expiraEn <= new Date()
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10">
+    <div className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="MembeGo" width={32} height={32} />
-          <span className="text-sm font-semibold tracking-tight text-slate-900">
+          <span className="text-sm font-semibold tracking-tight text-foreground">
             Membe<span className="text-emerald-500">Go</span>
           </span>
         </div>
 
         {invalida || !invitacion ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-            <h1 className="text-lg font-bold text-slate-900">Invitación no válida</h1>
-            <p className="mt-2 text-sm text-slate-600">
+          <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+            <h1 className="text-lg font-bold text-foreground">Invitación no válida</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               Esta invitación no existe, ya fue usada o expiró. Pide a la empresa
               que te envíe una nueva.
             </p>
-            <a href="/login" className="mt-6 inline-block text-sm text-sky-600 hover:underline">
+            <a href="/login" className="mt-6 inline-block text-sm text-primary hover:underline">
               Ir a iniciar sesión
             </a>
           </div>

@@ -141,7 +141,7 @@ export default async function ClienteDetailPage({
           {cliente.email && (
             <a
               href={`mailto:${cliente.email}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-muted"
             >
               <Mail className="h-4 w-4" /> Correo
             </a>
