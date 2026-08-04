@@ -216,10 +216,11 @@ BEGIN
   -- se dejan denegadas: si lo estuvieran, el listado de categorías saldría
   -- vacío y el POS no podría numerar un ticket.
   --
-  -- `business_categories` y `campanas_globales` son CATÁLOGOS GLOBALES: los
-  -- administra MembeGo y los lee todo el mundo. Lectura para cualquier
-  -- inquilino; escritura solo en modo omnisciente (el panel del superadmin).
-  FOREACH cond IN ARRAY ARRAY['business_categories', 'campanas_globales'] LOOP
+  -- `business_categories`, `campanas_globales` y `sistemas_conectados` son
+  -- CATÁLOGOS GLOBALES: los administra MembeGo y los lee todo el mundo
+  -- (incluido el SSO y el despacho de eventos a sistemas satélite). Lectura
+  -- para cualquier inquilino; escritura solo en modo omnisciente.
+  FOREACH cond IN ARRAY ARRAY['business_categories', 'campanas_globales', 'sistemas_conectados'] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
     EXECUTE format('DROP POLICY IF EXISTS membego_catalogo_lee ON public.%I', cond);
