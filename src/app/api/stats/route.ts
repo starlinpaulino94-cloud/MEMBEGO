@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { unstable_cache } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 
 export const dynamic = 'force-dynamic'
@@ -56,11 +56,13 @@ interface StatsPublicas {
  */
 async function filasAproximadas(tabla: string): Promise<number> {
   try {
-    const filas = await prisma.$queryRaw<{ n: number }[]>`
-      SELECT GREATEST(reltuples, 0)::bigint::int AS n
-      FROM pg_class
-      WHERE oid = to_regclass(${`public.${tabla}`})
-    `
+    const filas = await sinEmpresa('stats-reltuples', (tx) =>
+      tx.$queryRaw<{ n: number }[]>`
+        SELECT GREATEST(reltuples, 0)::bigint::int AS n
+        FROM pg_class
+        WHERE oid = to_regclass(${`public.${tabla}`})
+      `
+    )
     return filas[0]?.n ?? 0
   } catch {
     return 0
@@ -69,13 +71,15 @@ async function filasAproximadas(tabla: string): Promise<number> {
 
 const leerStats = unstable_cache(
   async (): Promise<StatsPublicas> => {
-    const [empresas, membresiasActivas, clientes, visitas] = await Promise.all([
-      prisma.company.count({ where: { isActive: true, esDemo: false } }).catch(() => 0),
-      prisma.membership.count({ where: { estado: 'ACTIVA' } }).catch(() => 0),
-      filasAproximadas('clientes'),
-      filasAproximadas('visits'),
-    ])
-    return { empresas, clientes, membresiasActivas, visitas }
+    return sinEmpresa('stats-publicas', async (tx) => {
+      const [empresas, membresiasActivas, clientes, visitas] = await Promise.all([
+        tx.company.count({ where: { isActive: true, esDemo: false } }).catch(() => 0),
+        tx.membership.count({ where: { estado: 'ACTIVA' } }).catch(() => 0),
+        filasAproximadas('clientes'),
+        filasAproximadas('visitas'),
+      ])
+      return { empresas, clientes, membresiasActivas, visitas }
+    })
   },
   ['api-stats-publicas'],
   { revalidate: 300, tags: [MARKETPLACE_TAG] }

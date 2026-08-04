@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireSection } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getSeguimiento, SEGUIMIENTO_ESTADO_LABEL } from '@/modules/seguimiento/queries'
 import { getSeguimientoConfig } from '@/modules/seguimiento/config'
 
@@ -34,10 +34,9 @@ export async function GET(request: NextRequest) {
     5000
   )
 
-  const empresa = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { zonaHoraria: true },
-  })
+  const empresa = await conEmpresa(companyId, (tx) =>
+    tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+  )
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
   const fecha = (d: Date | null) =>
     d ? new Intl.DateTimeFormat('es-DO', { timeZone, dateStyle: 'short' }).format(d) : ''

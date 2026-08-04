@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa, conEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { vincularReferido } from '@/lib/referidos-attribution'
 import { registerLimiter } from '@/lib/rate-limit'
@@ -64,7 +64,9 @@ async function fijarAppMetadata(
 /** Empresa activa por slug, o null (slug vacío, inexistente o inactiva). */
 async function empresaActiva(slug: string | null) {
   if (!slug) return null
-  const company = await prisma.company.findUnique({ where: { slug } })
+  const company = await sinEmpresa('empresa-activa-lookup', (tx) =>
+    tx.company.findUnique({ where: { slug } })
+  )
   return company && company.isActive ? company : null
 }
 
@@ -84,12 +86,16 @@ async function sanarAppMetadataSiFalta(
 
     const cliente =
       (existing.companyId
-        ? await prisma.cliente.findUnique({
-            where: {
-              supabaseId_companyId: { supabaseId, companyId: existing.companyId },
-            },
-          })
-        : null) ?? (await prisma.cliente.findFirst({ where: { supabaseId } }))
+        ? await sinEmpresa('sanar-metadata-lookup', (tx) =>
+            tx.cliente.findUnique({
+              where: {
+                supabaseId_companyId: { supabaseId, companyId: existing.companyId! },
+              },
+            })
+          )
+        : null) ?? (await sinEmpresa('sanar-metadata-fallback', (tx) =>
+            tx.cliente.findFirst({ where: { supabaseId } })
+          ))
     if (!cliente) return
 
     await fijarAppMetadata(supabaseId, existing.id, cliente.id, cliente.companyId)
@@ -122,28 +128,33 @@ async function afiliarUsuarioExistente(
     return { kind: 'ok', dest: destPorRol }
   }
 
-  let cliente = await prisma.cliente.findUnique({
-    where: { supabaseId_companyId: { supabaseId, companyId: company.id } },
-  })
+  let cliente = await conEmpresa(company.id, (tx) =>
+    tx.cliente.findUnique({
+      where: { supabaseId_companyId: { supabaseId, companyId: company.id } },
+    })
+  )
   const esAltaNueva = !cliente
 
   if (!cliente) {
-    cliente = await prisma.cliente.create({
-      data: {
-        companyId: company.id,
-        supabaseId,
-        nombre: existing.name,
-        email,
-        avatarUrl: params.avatarUrl ?? null,
-      },
-    })
-    await prisma.companyFollow
-      .upsert({
-        where: { userId_companyId: { userId: existing.id, companyId: company.id } },
-        update: {},
-        create: { userId: existing.id, companyId: company.id },
+    cliente = await conEmpresa(company.id, (tx) =>
+      tx.cliente.create({
+        data: {
+          companyId: company.id,
+          supabaseId,
+          nombre: existing.name,
+          email,
+          avatarUrl: params.avatarUrl ?? null,
+        },
       })
-      .catch((e) => console.error('[google-onboarding] auto-follow error:', e))
+    )
+    await conEmpresa(company.id, (tx) =>
+      tx.companyFollow
+        .upsert({
+          where: { userId_companyId: { userId: existing.id, companyId: company.id } },
+          update: {},
+          create: { userId: existing.id, companyId: company.id },
+        })
+    ).catch((e) => console.error('[google-onboarding] auto-follow error:', e))
   }
 
   // Siempre, aunque el Cliente ya existiera: cura metadata vacía y apunta el
@@ -180,14 +191,18 @@ export async function completeGoogleOnboarding(
 
   try {
     // ¿Ya existe una cuenta ligada a ESTE usuario de Auth?
-    const existing = await prisma.user.findUnique({ where: { supabaseId } })
+    const existing = await sinEmpresa('google-onboarding-user', (tx) =>
+      tx.user.findUnique({ where: { supabaseId } })
+    )
     if (existing) {
       return await afiliarUsuarioExistente(existing, { ...params, email })
     }
 
     // No hay User para este supabaseId. Si el correo ya pertenece a otra
     // cuenta (de contraseña), no duplicamos: que inicie sesión por ahí.
-    const byEmail = await prisma.user.findUnique({ where: { email } })
+    const byEmail = await sinEmpresa('google-onboarding-email', (tx) =>
+      tx.user.findUnique({ where: { email } })
+    )
     if (byEmail) return { kind: 'email-exists' }
 
     // Alta nueva: empresa del contexto (registro por /registro/[slug]) o, en
@@ -204,7 +219,7 @@ export async function completeGoogleOnboarding(
     if (!(await registerLimiter(ipAddress ?? 'unknown'))) return { kind: 'rate-limited' }
 
     const nombre = name || email
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await sinEmpresa('google-onboarding-create', async (tx) => {
       const now = new Date()
       const dbUser = await tx.user.create({
         data: {

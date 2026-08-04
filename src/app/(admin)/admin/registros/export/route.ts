@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getRegistrosParaExport, registrosToCsv } from '@/modules/registros/queries'
 
 export const dynamic = 'force-dynamic'
@@ -19,10 +19,9 @@ export async function GET(req: NextRequest) {
   const companyId = user.metadata.companyId as string | undefined
 
   const empresa = companyId
-    ? await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { zonaHoraria: true },
-      })
+    ? await conEmpresa(companyId, (tx) =>
+        tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      )
     : null
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
 

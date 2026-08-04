@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkBootstrapAccess } from '@/lib/bootstrap-guard'
 
@@ -86,17 +86,19 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Crear/actualizar el registro en la BD con rol SUPERADMIN
-    const dbUser = await prisma.user.upsert({
-      where: { supabaseId },
-      update: { email, name: nombre, role: 'SUPERADMIN', companyId: null },
-      create: {
-        supabaseId,
-        email,
-        name: nombre,
-        role: 'SUPERADMIN',
-        companyId: null,
-      },
-    })
+    const dbUser = await sinEmpresa('bootstrap-superadmin', (tx) =>
+      tx.user.upsert({
+        where: { supabaseId },
+        update: { email, name: nombre, role: 'SUPERADMIN', companyId: null },
+        create: {
+          supabaseId,
+          email,
+          name: nombre,
+          role: 'SUPERADMIN',
+          companyId: null,
+        },
+      })
+    )
 
     // 3. Sincronizar app_metadata (usado por el proxy y los guards)
     const { error: metaError } = await supabase.auth.admin.updateUserById(

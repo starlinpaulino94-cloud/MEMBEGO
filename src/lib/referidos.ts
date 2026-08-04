@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { generarCodigo } from '@/lib/codes'
 import type { ReferralEventTipo } from '@prisma/client'
 
@@ -127,19 +127,22 @@ export function calcularLogros(stats: {
  * vez (con reintentos ante colisión).
  */
 export async function ensureCodigoCorto(clienteId: string): Promise<string> {
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: clienteId },
-    select: { codigoCorto: true, companyId: true },
-  })
+  const cliente = await sinEmpresa('codigo-corto-lookup', (tx) =>
+    tx.cliente.findUnique({
+      where: { id: clienteId },
+      select: { codigoCorto: true, companyId: true },
+    })
+  )
   if (cliente?.codigoCorto) return cliente.codigoCorto
 
   for (let intento = 0; intento < 5; intento++) {
     const code = generarCodigo(6)
     try {
-      await prisma.cliente.update({
-        where: { id: clienteId },
-        data: { codigoCorto: code },
-      })
+      if (cliente?.companyId) {
+        await conEmpresa(cliente.companyId, (tx) =>
+          tx.cliente.update({ where: { id: clienteId }, data: { codigoCorto: code } })
+        )
+      }
       // Fase E6: la generación del enlace es la primera etapa del embudo.
       if (cliente) {
         await logReferralEvent({
@@ -177,19 +180,21 @@ export async function logReferralEvent(params: {
   puntos?: number
 }): Promise<void> {
   try {
-    await prisma.referralEvent.create({
-      data: {
-        clienteId: params.clienteId,
-        companyId: params.companyId,
-        tipo: params.tipo,
-        puntos: params.puntos ?? PUNTOS[params.tipo],
-        canal: params.canal ?? null,
-        visitorId: params.visitorId ?? null,
-        referidoClienteId: params.referidoClienteId ?? null,
-        growthLinkId: params.growthLinkId ?? null,
-        meta: (params.meta ?? {}) as object,
-      },
-    })
+    await conEmpresa(params.companyId, (tx) =>
+      tx.referralEvent.create({
+        data: {
+          clienteId: params.clienteId,
+          companyId: params.companyId,
+          tipo: params.tipo,
+          puntos: params.puntos ?? PUNTOS[params.tipo],
+          canal: params.canal ?? null,
+          visitorId: params.visitorId ?? null,
+          referidoClienteId: params.referidoClienteId ?? null,
+          growthLinkId: params.growthLinkId ?? null,
+          meta: (params.meta ?? {}) as object,
+        },
+      })
+    )
   } catch (e) {
     console.error('[referidos] logReferralEvent error:', e)
   }
