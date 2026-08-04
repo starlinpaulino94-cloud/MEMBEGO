@@ -79,6 +79,33 @@ function verificarTokenMembego(token: string, secreto: string) {
 }
 ```
 
+**Vector de prueba (para que el satélite se autoverifique sin depender de
+MembeGo):** con el secreto literal `secreto-de-prueba`, este payload produce
+exactamente este token. Si el verificador del satélite no lo acepta (poniendo el
+reloj antes de `exp`, que es el 17 de marzo de 2030), el fallo está en su
+implementación y NO en el secreto compartido.
+
+```
+secreto: secreto-de-prueba
+
+JSON:  {"sub":"623d642c-ae5f-445a-99eb-220b55eb0e1c","email":"dueno@ejemplo.com","rol":"ADMIN_EMPRESA","companyId":"cmre1hz570000jp04ad5i0roi","exp":1900000000}
+
+TOKEN: eyJzdWIiOiI2MjNkNjQyYy1hZTVmLTQ0NWEtOTllYi0yMjBiNTVlYjBlMWMiLCJlbWFpbCI6ImR1ZW5vQGVqZW1wbG8uY29tIiwicm9sIjoiQURNSU5fRU1QUkVTQSIsImNvbXBhbnlJZCI6ImNtcmUxaHo1NzAwMDBqcDA0YWQ1aTByb2kiLCJleHAiOjE5MDAwMDAwMDB9.02d8a44d97acc2b4eee1804fbb0a78b351adee9ad8018c335888fe08ac8bc326
+```
+
+Errores que producen «token inválido» aunque el secreto sea correcto:
+
+- Firmar/verificar sobre el **JSON** en vez de sobre la **cadena base64url**.
+  La firma cubre el texto `eyJzdWIi…` tal cual viaja, no el objeto decodificado.
+- Partir el token con `split('.')` y quedarse con 3 partes esperando un JWT:
+  esto **no es un JWT** (no hay cabecera). Son dos partes; usa `lastIndexOf('.')`.
+- Decodificar con `base64` estándar en vez de `base64url` (`-` y `_` en vez de
+  `+` y `/`, sin `=` de relleno).
+- Comparar la firma en mayúsculas: el hex va en **minúsculas**.
+- Leer el secreto de un `.env` con espacios o salto de línea al final: el HMAC
+  cambia entero. Compara `length` y `md5` a ambos lados, nunca el secreto.
+- Reloj del servidor atrasado/adelantado más de 90 s: todo token nace vencido.
+
 Reglas para el satélite:
 
 - El token expira en **90 segundos**: verifícalo al llegar y crea TU sesión
