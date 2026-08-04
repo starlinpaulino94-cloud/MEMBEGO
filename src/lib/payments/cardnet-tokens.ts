@@ -141,6 +141,12 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
     Capture: true,
+    // Identificador único de la compra (manual §2.6 · §7.2, String[50]).
+    // Sin él, un corte de red durante el cobro deja la duda de si pasó o no, y
+    // el reintento vuelve a cobrarle al cliente. Con él, CardNET reconoce la
+    // operación y devuelve el mismo resultado en vez de duplicar el cargo.
+    // Se usa el id del intento: es único por cobro y ya sirve para conciliar.
+    UniqueID: input.orden.slice(0, 50),
     // `getClientIdentifier` devuelve la cadena 'unknown' cuando no hay
     // `x-forwarded-for`. Mandar eso como IP al antifraude de CardNET es peor
     // que no mandar nada: un valor con formato inválido puede rechazar el

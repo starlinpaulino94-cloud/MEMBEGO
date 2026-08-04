@@ -15,23 +15,59 @@ import {
  * token nunca queda en claro en un log.
  */
 
-test('urlsTokens usa los hosts de GTP/Seglan por ambiente', () => {
+test('urlsTokens usa los hosts del MANUAL §11, no un middleware ajeno', () => {
+  // Manual técnico v1.7 §11. El §3.1 prohíbe además cargar la librería desde
+  // un host de terceros: si el SDK y la ventana de captura quedan en dominios
+  // distintos, el token no puede volver del iframe y el cobro nunca ocurre.
   const qa = urlsTokens('pruebas')
-  assert.equal(qa.api, 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api')
-  assert.equal(qa.capture, 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/Capture/')
-  assert.equal(qa.script, 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/Scripts/PWCheckout.js')
+  assert.equal(qa.api, 'https://lab.cardnet.com.do/servicios/tokens/v1/api')
+  assert.equal(qa.capture, 'https://lab.cardnet.com.do/servicios/tokens/v1/Capture/')
+  assert.equal(qa.script, 'https://lab.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js')
 
   const prod = urlsTokens('produccion')
-  assert.equal(prod.api, 'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api')
-  assert.ok(prod.script.startsWith('https://tr-tsp.gtp-seglan.com/'))
+  assert.equal(prod.api, 'https://servicios.cardnet.com.do/servicios/tokens/v1/api')
+  assert.equal(prod.script, 'https://servicios.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js')
+
+  for (const u of [qa.api, qa.capture, qa.script, prod.api, prod.capture, prod.script]) {
+    assert.ok(u.includes('cardnet.com.do'), `${u} debe servirse desde CardNET`)
+    assert.ok(!u.includes('gtp-seglan'), `${u} no puede venir de un tercero`)
+  }
 })
 
-test('montoEnteroMenor da centavos como entero (10000 = RD$100)', () => {
+test('el script SIEMPRE sale del mismo origen que la ventana de captura', async () => {
+  // Es LA invariante de esta integración. CardNET devuelve el CaptureURL en la
+  // respuesta y varía según el host consultado (lab / labservicios); derivar
+  // el script de él impide que se desalineen.
+  const { scriptDesdeCaptura } = await import('../src/lib/payments/cardnet-tokens-core')
+  assert.equal(
+    scriptDesdeCaptura('https://labservicios.cardnet.com.do/servicios/tokens/v1/Capture'),
+    'https://labservicios.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js'
+  )
+  // Con barra final (la forma que arma nuestro código) da lo mismo.
+  assert.equal(
+    scriptDesdeCaptura('https://lab.cardnet.com.do/servicios/tokens/v1/Capture/'),
+    'https://lab.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js'
+  )
+  const origen = (u: string) => new URL(u).origin
+  for (const cap of [
+    'https://lab.cardnet.com.do/servicios/tokens/v1/Capture/',
+    'https://labservicios.cardnet.com.do/servicios/tokens/v1/Capture',
+    'https://servicios.cardnet.com.do/servicios/tokens/v1/Capture/',
+  ]) {
+    assert.equal(origen(scriptDesdeCaptura(cap)), origen(cap))
+  }
+})
+
+test('el monto sigue la tabla de codificación del manual §10.4', () => {
+  // «parte entera más 2 decimales sin signos de puntuación entre ambos».
+  // Los cuatro casos son los del propio manual.
   assert.equal(montoEnteroMenor(100), 10000)
-  assert.equal(montoEnteroMenor(1600), 160000)
-  // Sin errores de coma flotante.
+  assert.equal(montoEnteroMenor(1237.52), 123752)
+  assert.equal(montoEnteroMenor(3200.5), 320050)
+  assert.equal(montoEnteroMenor(0.01), 1)
+  // Y sin arrastrar errores de coma flotante.
   assert.equal(montoEnteroMenor(19.99), 1999)
-  assert.equal(montoEnteroMenor(0.1), 10)
+  assert.equal(montoEnteroMenor(1600), 160000)
 })
 
 test('interpretarCompraToken aprueba con Approved=true', () => {
@@ -152,4 +188,61 @@ test('la IP del antifraude no se manda si no es una IP', async () => {
   assert.equal(esIpValida('   '), false)
   assert.equal(esIpValida('999.1.1.1'), false, 'octeto fuera de rango')
   assert.equal(esIpValida('no-soy-una-ip'), false)
+})
+
+test('el estado final de la transacción manda sobre cualquier otro indicio', async () => {
+  // Manual §10.6: 1 Approved · 2 Pending · 3 Preauthorized · 4 Rejected.
+  // Pending y Preauthorized NO son cobros — el dinero todavía no está. Si se
+  // tomaran por aprobados se entregaría la membresía sin haber cobrado, y eso
+  // solo se descubre cuadrando la caja a fin de mes.
+  const aprobada = interpretarCompraToken({
+    Response: { Transaction: { TransactionStatusId: 1, AuthorizationCode: '00551Z', ResponseCode: '00' } },
+    Errors: [],
+  })
+  assert.equal(aprobada.aprobada, true)
+
+  for (const [estado, etiqueta] of [
+    [2, 'Pending'],
+    [3, 'Preauthorized'],
+    [4, 'Rejected'],
+  ] as const) {
+    const r = interpretarCompraToken({
+      // Con código '00' y autorización presentes: sin mirar el estado, esto
+      // se habría aprobado.
+      Response: {
+        Transaction: { TransactionStatusId: estado, AuthorizationCode: 'A1B2C3', ResponseCode: '00' },
+      },
+      Errors: [],
+    })
+    assert.equal(r.aprobada, false, `${etiqueta} no es un cobro`)
+    assert.ok((r.motivo ?? '').length > 0, `${etiqueta} debe explicar algo al cliente`)
+  }
+})
+
+test('sin estado de transacción se cae a los indicios de siempre', async () => {
+  // No todas las respuestas traen TransactionStatusId; el camino viejo tiene
+  // que seguir funcionando o se rechazarían cobros buenos.
+  assert.equal(interpretarCompraToken({ Approved: true, AuthorizationCode: 'A1' }).aprobada, true)
+  assert.equal(interpretarCompraToken({ ResponseCode: '00', RRN: '1' }).aprobada, true)
+  assert.equal(interpretarCompraToken({ ResponseCode: '51' }).aprobada, false)
+})
+
+test('los códigos de rechazo del §9.2 se traducen a algo accionable', () => {
+  // Un cliente no puede hacer nada con «internal-response-code 99». Sí puede
+  // hacer algo con «el CVV no es correcto».
+  const casos: Array<[string, RegExp]> = [
+    ['51', /fondos/i],
+    ['54', /vencida/i],
+    ['99', /cvv|seguridad/i],
+    ['94', /ya se procesó/i],
+    ['91', /disponible/i],
+  ]
+  for (const [codigo, esperado] of casos) {
+    const r = interpretarCompraToken({ ResponseCode: codigo })
+    assert.equal(r.aprobada, false)
+    assert.match(r.motivo ?? '', esperado, `código ${codigo}`)
+  }
+  // Un código desconocido no filtra detalle técnico del emisor.
+  const raro = interpretarCompraToken({ ResponseCode: 'ZZ' })
+  assert.doesNotMatch(raro.motivo ?? '', /ZZ/)
 })

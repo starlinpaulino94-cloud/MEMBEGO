@@ -88,24 +88,47 @@ tarjeta no aparece y el cliente solo ve "pagar en sucursal".
 
 ---
 
-## 4. Checklist de certificación — VERIFICAR contra el QA de CardNET
+## 4. El contrato, confirmado contra el manual oficial
 
-Hay cosas que solo se confirman con un cobro real de prueba. **Antes de ir a
-producción**, corre un cobro de punta a punta en QA y confirma:
+Todo lo de abajo está verificado contra el **MANUAL TÉCNICO DE TOKENIZACIÓN
+v1.7**, el Postman y el HTML de ejemplo que entregó CardNET. Ya no son
+suposiciones: cada punto tiene su sección, y una prueba que lo fija.
 
-- [ ] **El iframe abre y devuelve el token.** El callback se llama `tokenCreated`
-      y el método para abrir es `OpenIframeCustom`. Si tu QA usa otros nombres,
-      amplía `PagoTokenCardnet.tsx` (está marcado `VERIFICAR-QA`).
-- [ ] **La forma del token.** `tokenDe()` busca `Token`/`TrxToken`/`PWToken`. Si
-      viene con otro nombre, agrégalo.
-- [ ] **La respuesta del Purchase.** `interpretarCompraToken()` aprueba con
-      `Approved:true` o `ResponseCode:'00'`. Si tu QA marca el aprobado de otra
-      forma, ajústalo. Ante la duda NO aprueba — es lo seguro.
-- [ ] **El monto.** El `Amount` va en centavos ENTEROS (`Amount = pesos×100`).
-      Si tu QA espera decimales, cambia `montoEnteroMenor()`.
-- [ ] **Tarjeta de prueba** (la de CardNET) y clave del reto 3DS.
+| Qué | Valor | Fuente |
+|---|---|---|
+| Base de pruebas | `https://lab.cardnet.com.do/servicios/tokens/v1` | §11.1 |
+| Base de producción | `https://servicios.cardnet.com.do/servicios/tokens/v1` | §11.2 |
+| API REST | `{base}/api/{objeto}` | §6.1 |
+| Ventana de captura | `{base}/Capture` | §11 |
+| Script del widget | `{base}/Scripts/PWCheckout.js` | §11 |
+| Autenticación | `Authorization: Basic {llavePrivada}` (cruda) | §2.4 · Postman |
+| Campo del token | **`TokenId`** | §7.1 |
+| Callback del widget | `tokenCreated` | §3.3 |
+| Abrir el iframe | `OpenIframeCustom(captureUrl + "?key=" + publicKey + "&session_id=" + uniqueId, uniqueId)` | §4.1.2.2 |
+| `Amount` | Entero, parte entera + 2 decimales sin punto (RD$100 → `10000`) | §10.4 |
+| `Currency` | `String[3]` alfanumérico ISO-4217 → `DOP` | §7.2 |
+| `UniqueID` | `String[50]` opcional — clave de idempotencia | §2.6 · §7.2 |
+| Vida del token | Un solo uso, **10 minutos** | §4.1.1 |
+| Estado de la transacción | 1 Approved · 2 Pending · 3 Preauthorized · 4 Rejected | §10.6 |
 
-Cuando queden confirmados, el cobro está listo para producción — no antes.
+### La regla que sostiene todo el flujo
+
+**El script del widget y la ventana de captura tienen que estar en el MISMO
+origen.** El token vuelve del iframe a la página por `postMessage`; si el SDK
+se sirve desde un dominio y el iframe desde otro, el token no cruza — el
+cliente digita su tarjeta, no pasa nada, y no queda rastro en ninguna parte.
+
+Por eso el script se **deriva** del `CaptureURL` que devuelve CardNET
+(`scriptDesdeCaptura()`) en vez de configurarse aparte: así no pueden
+desalinearse. El §3.1 del manual además prohíbe cargar la librería desde un
+host que no sea de CardNET.
+
+### Lo que solo confirma un cobro real
+
+- [ ] Tarjeta de prueba de CardNET **del juego que corresponda a tus llaves**
+      (hay uno CON autenticación 3DS y otro SIN), con su clave del reto.
+- [ ] Un cobro aprobado de punta a punta, con la consola del navegador abierta.
+- [ ] Que `pago_intentos.respuesta` guarde la respuesta cruda del Purchase.
 
 ---
 
