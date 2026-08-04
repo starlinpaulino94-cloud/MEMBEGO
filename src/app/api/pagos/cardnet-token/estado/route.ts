@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { cardnetTokensConfigurado, probarSesionTokens } from '@/lib/payments/cardnet-tokens'
@@ -20,6 +21,17 @@ export const dynamic = 'force-dynamic'
  * Uso: entra logueado a /api/pagos/cardnet-token/estado?probar=1 (pasarela)
  * o ?correo=1 (email) en el mismo deploy que estás probando.
  */
+/**
+ * Huella corta de un secreto: permite compararlo entre dos sitios sin llegar
+ * a mostrarlo. Con el largo y estos ocho caracteres alcanza para saber si dos
+ * llaves son la misma; no alcanza para reconstruirla.
+ */
+function huellaCorta(valor: string | undefined): string | null {
+  const v = valor?.trim()
+  if (!v) return null
+  return `${v.length} car · ${createHash('sha256').update(v).digest('hex').slice(0, 8)}`
+}
+
 export async function GET(req: NextRequest) {
   const user = await getUser()
   if (!user) {
@@ -29,6 +41,15 @@ export async function GET(req: NextRequest) {
     configurado: cardnetTokensConfigurado(),
     publicKeyPresente: Boolean(process.env.CARDNET_TOKENS_PUBLIC_KEY?.trim()),
     privateKeyPresente: Boolean(process.env.CARDNET_TOKENS_PRIVATE_KEY?.trim()),
+    // La llave PÚBLICA se muestra entera a propósito: ya viaja al navegador
+    // para abrir el iframe, así que no es un secreto. Enseñarla aquí permite
+    // comprobar de un vistazo que es la PAREJA de la privada — CardNET entrega
+    // juegos distintos (con y sin autenticación 3DS) y mezclarlos hace que la
+    // ventana de captura muera con INTERNAL_SERVER_ERROR: el session_id lo
+    // emite una cuenta y el iframe se abre con la llave de otra.
+    publicKey: process.env.CARDNET_TOKENS_PUBLIC_KEY?.trim() ?? null,
+    // De la privada, solo su huella: nunca el valor.
+    privateKeyHuella: huellaCorta(process.env.CARDNET_TOKENS_PRIVATE_KEY),
     ambiente: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
     correo: {
       resendKeyPresente: Boolean(process.env.RESEND_API_KEY?.trim()),
