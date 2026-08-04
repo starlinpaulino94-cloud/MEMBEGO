@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getGrowthConfig } from '@/modules/growth/config'
 
 /**
@@ -21,34 +21,37 @@ export async function getNavOcultoCliente(
   const now = new Date()
 
   try {
-    const [promos, beneficios, regalos, ruletaPremios, growth] = await Promise.all([
-      // Promociones: activas y vigentes de la empresa (públicas o privadas).
-      //
-      // Sin `isPublished`: esto cuenta las promociones de la empresa DE ESTE
-      // cliente, no las de la vitrina. Exigir que el negocio estuviera
-      // publicado le escondía el menú de Promociones a los clientes de una
-      // empresa que aún no se publicó — y a los de una empresa de práctica,
-      // que nunca se publica. `isActive` sí se mantiene: una empresa apagada
-      // no tiene nada que ofrecer.
-      prisma.promocion.count({
-        where: {
-          companyId,
-          activo: true,
-          archivada: false,
-          vigenciaDesde: { lte: now },
-          OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-          company: { isActive: true },
-        },
-      }),
-      // Mis beneficios: compras de promociones del cliente (cualquier estado).
-      prisma.productoCompra.count({ where: { clienteId } }),
-      // Mis beneficios: también cuentan los regalos VIP recibidos.
-      prisma.ofertaInvitado.count({ where: { clienteId } }),
-      // Ruleta: premios activos configurados por la empresa.
-      prisma.ruletaPremio.count({ where: { companyId, activo: true } }),
-      // Invita y Gana: el programa de referidos de la empresa.
-      getGrowthConfig(companyId),
-    ])
+    const [promos, beneficios, regalos, ruletaPremios] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        // Promociones: activas y vigentes de la empresa (públicas o privadas).
+        //
+        // Sin `isPublished`: esto cuenta las promociones de la empresa DE ESTE
+        // cliente, no las de la vitrina. Exigir que el negocio estuviera
+        // publicado le escondía el menú de Promociones a los clientes de una
+        // empresa que aún no se publicó — y a los de una empresa de práctica,
+        // que nunca se publica. `isActive` sí se mantiene: una empresa apagada
+        // no tiene nada que ofrecer.
+        tx.promocion.count({
+          where: {
+            companyId,
+            activo: true,
+            archivada: false,
+            vigenciaDesde: { lte: now },
+            OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+            company: { isActive: true },
+          },
+        }),
+        // Mis beneficios: compras de promociones del cliente (cualquier estado).
+        tx.productoCompra.count({ where: { clienteId } }),
+        // Mis beneficios: también cuentan los regalos VIP recibidos.
+        tx.ofertaInvitado.count({ where: { clienteId } }),
+        // Ruleta: premios activos configurados por la empresa.
+        tx.ruletaPremio.count({ where: { companyId, activo: true } }),
+      ])
+    )
+    // Invita y Gana: el programa de referidos de la empresa. Se consulta fuera
+    // de la transacción: getGrowthConfig abre su propio contexto.
+    const growth = await getGrowthConfig(companyId)
 
     const ocultos: string[] = []
     if (promos === 0) ocultos.push('/cliente/promociones')

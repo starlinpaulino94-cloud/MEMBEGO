@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -23,15 +23,17 @@ export async function getClienteCompanies() {
   // select explícito (nunca include completo): un include de `company` trae
   // TODAS sus columnas y cualquier columna aún no migrada en producción
   // rompería esta query — que corre en cada navegación del cliente.
-  return prisma.cliente.findMany({
-    where: { supabaseId: user.supabaseId },
-    select: {
-      id: true,
-      companyId: true,
-      company: { select: { id: true, name: true, logoUrl: true } },
-    },
-    orderBy: { createdAt: 'asc' },
-  })
+  return sinEmpresa('cliente: listar mis empresas (cuentas cross-tenant)', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId: user.supabaseId },
+      select: {
+        id: true,
+        companyId: true,
+        company: { select: { id: true, name: true, logoUrl: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+  )
 }
 
 /**
@@ -45,16 +47,20 @@ export async function switchCompany(companyId: string): Promise<ClienteActionSta
       return { error: 'No autorizado.' }
     }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { supabaseId_companyId: { supabaseId: user.supabaseId, companyId } },
-    })
+    const cliente = await sinEmpresa('cliente: verificar cuenta en la empresa destino', (tx) =>
+      tx.cliente.findUnique({
+        where: { supabaseId_companyId: { supabaseId: user.supabaseId, companyId } },
+      })
+    )
     if (!cliente) {
       return { error: 'No tienes una cuenta en esa empresa.' }
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { supabaseId: user.supabaseId },
-    })
+    const dbUser = await sinEmpresa('cliente: buscar mi user por supabaseId', (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: user.supabaseId },
+      })
+    )
 
     const admin = createAdminClient()
     await admin.auth.admin.updateUserById(user.supabaseId, {
@@ -103,54 +109,64 @@ export async function afiliarmeAEmpresa(
     const companySlug = String(formData.get('companySlug') ?? '').trim()
     if (!companySlug) return { error: 'Empresa no especificada.' }
 
-    const company = await prisma.company.findUnique({
-      where: { slug: companySlug },
-      select: { id: true, isActive: true },
-    })
+    const company = await sinEmpresa('cliente: buscar empresa por slug', (tx) =>
+      tx.company.findUnique({
+        where: { slug: companySlug },
+        select: { id: true, isActive: true },
+      })
+    )
     if (!company || !company.isActive) {
       return { error: 'Empresa no encontrada o no disponible.' }
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { supabaseId: user.supabaseId },
-      select: { id: true, name: true },
-    })
+    const dbUser = await sinEmpresa('cliente: buscar mi user por supabaseId', (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: user.supabaseId },
+        select: { id: true, name: true },
+      })
+    )
     if (!dbUser) return { error: 'No se encontró tu cuenta.' }
 
     // ¿Ya tiene cuenta de cliente en esta empresa? Si no, la creamos.
-    let cliente = await prisma.cliente.findUnique({
-      where: {
-        supabaseId_companyId: { supabaseId: user.supabaseId, companyId: company.id },
-      },
-      select: { id: true, telefono: true },
-    })
-
-    if (!cliente) {
-      // Reutiliza nombre/teléfono de una cuenta existente del mismo usuario.
-      const previa = await prisma.cliente.findFirst({
-        where: { supabaseId: user.supabaseId },
-        select: { nombre: true, telefono: true },
-        orderBy: { createdAt: 'asc' },
-      })
-      cliente = await prisma.cliente.create({
-        data: {
-          companyId: company.id,
-          supabaseId: user.supabaseId,
-          nombre: previa?.nombre ?? dbUser.name,
-          email: user.email,
-          telefono: previa?.telefono ?? null,
+    let cliente = await sinEmpresa('cliente: buscar cuenta en la empresa destino', (tx) =>
+      tx.cliente.findUnique({
+        where: {
+          supabaseId_companyId: { supabaseId: user.supabaseId, companyId: company.id },
         },
         select: { id: true, telefono: true },
       })
+    )
+
+    if (!cliente) {
+      // Reutiliza nombre/teléfono de una cuenta existente del mismo usuario.
+      const previa = await sinEmpresa('cliente: buscar mi cuenta más antigua', (tx) =>
+        tx.cliente.findFirst({
+          where: { supabaseId: user.supabaseId },
+          select: { nombre: true, telefono: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      )
+      cliente = await sinEmpresa('cliente: crear cuenta en la empresa destino', (tx) =>
+        tx.cliente.create({
+          data: {
+            companyId: company.id,
+            supabaseId: user.supabaseId,
+            nombre: previa?.nombre ?? dbUser.name,
+            email: user.email,
+            telefono: previa?.telefono ?? null,
+          },
+          select: { id: true, telefono: true },
+        })
+      )
 
       // Seguir la empresa (no bloquea si falla).
-      await prisma.companyFollow
-        .upsert({
+      await conEmpresa(company.id, (tx) =>
+        tx.companyFollow.upsert({
           where: { userId_companyId: { userId: dbUser.id, companyId: company.id } },
           update: {},
           create: { userId: dbUser.id, companyId: company.id },
         })
-        .catch((e) => console.error('[cliente] afiliar auto-follow error:', e))
+      ).catch((e) => console.error('[cliente] afiliar auto-follow error:', e))
 
       await emitirEventoEstrategia({
         companyId: company.id,
@@ -196,10 +212,15 @@ export async function actualizarPerfil(
 
     if (!nombre) return { error: 'El nombre es obligatorio.' }
 
-    await prisma.cliente.update({
-      where: { id: user.metadata.clienteId },
-      data: { nombre, telefono: telefono || null },
-    })
+    const companyId = user.metadata.companyId
+    if (!companyId) return { error: 'Empresa requerida.' }
+    const clienteId = user.metadata.clienteId
+    await conEmpresa(companyId, (tx) =>
+      tx.cliente.update({
+        where: { id: clienteId },
+        data: { nombre, telefono: telefono || null },
+      })
+    )
 
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')

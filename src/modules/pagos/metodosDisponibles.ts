@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { CompraEstado } from '@prisma/client'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { cardnetTokensConfigurado } from '@/lib/payments/cardnet-tokens'
@@ -106,8 +106,8 @@ export async function ofrecerTransferencia(
 
 /** Cuentas bancarias activas de la empresa. */
 export async function getCuentasTransferencia(companyId: string) {
-  return prisma.metodoPago
-    .findMany({
+  return conEmpresa(companyId, (tx) =>
+    tx.metodoPago.findMany({
       where: { companyId, activo: true, tipo: 'TRANSFERENCIA' },
       select: {
         id: true,
@@ -118,7 +118,7 @@ export async function getCuentasTransferencia(companyId: string) {
         instrucciones: true,
       },
     })
-    .catch(() => [])
+  ).catch(() => [])
 }
 
 export interface TransferenciasEnVuelo {
@@ -142,29 +142,31 @@ export async function getTransferenciasEnVuelo(
   const ESPERANDO: CompraEstado[] = ['SOLICITADA', 'PENDIENTE_PAGO', 'EN_VALIDACION']
   const COMPROMISO = [{ comprobanteUrl: { not: null } }, { metodoPagoId: { not: null } }]
 
-  const [comprasComp, comprasTotal, membComp, membTotal] = await Promise.all([
-    prisma.productoCompra
-      .count({ where: { companyId, estado: { in: ESPERANDO }, OR: COMPROMISO } })
-      .catch(() => 0),
-    prisma.productoCompra.count({ where: { companyId, estado: { in: ESPERANDO } } }).catch(() => 0),
-    prisma.membership
-      .count({
-        where: {
-          cliente: { companyId },
-          estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'] },
-          OR: COMPROMISO,
-        },
-      })
-      .catch(() => 0),
-    prisma.membership
-      .count({
-        where: {
-          cliente: { companyId },
-          estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'] },
-        },
-      })
-      .catch(() => 0),
-  ])
+  const [comprasComp, comprasTotal, membComp, membTotal] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.productoCompra
+        .count({ where: { companyId, estado: { in: ESPERANDO }, OR: COMPROMISO } })
+        .catch(() => 0),
+      tx.productoCompra.count({ where: { companyId, estado: { in: ESPERANDO } } }).catch(() => 0),
+      tx.membership
+        .count({
+          where: {
+            cliente: { companyId },
+            estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'] },
+            OR: COMPROMISO,
+          },
+        })
+        .catch(() => 0),
+      tx.membership
+        .count({
+          where: {
+            cliente: { companyId },
+            estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'] },
+          },
+        })
+        .catch(() => 0),
+    ])
+  ).catch(() => [0, 0, 0, 0])
 
   const comprometidas = comprasComp + membComp
   return {

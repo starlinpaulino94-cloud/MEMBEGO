@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
@@ -20,6 +20,9 @@ import { validarConsumoCompra, registrarTransicionCompra } from '@/modules/promo
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { nuevoTokenQr, qrVencido, vencimientoQr } from '@/modules/qr/token'
+import { primerErrorZod } from '@/lib/validacion'
+import { capturarErrorInesperado } from '@/lib/sentry'
+import { confirmarVisitaSchema } from '@/modules/visitas/schema'
 
 export interface VisitaReciente {
   id: string
@@ -134,29 +137,31 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
 
     let qr = null
     for (const candidato of candidatos) {
-      qr = await prisma.qrToken.findUnique({
-        where: { token: candidato },
-        include: {
-          cliente: {
-            include: {
-              company: true,
-              vehiculos: true,
-              visits: { orderBy: { fechaVisita: 'desc' }, take: 5 },
-              _count: { select: { visits: true } },
+      qr = await sinEmpresa('visitas: buscar QR por token (cross-tenant)', (tx) =>
+        tx.qrToken.findUnique({
+          where: { token: candidato },
+          include: {
+            cliente: {
+              include: {
+                company: true,
+                vehiculos: true,
+                visits: { orderBy: { fechaVisita: 'desc' }, take: 5 },
+                _count: { select: { visits: true } },
+              },
+            },
+            membership: {
+              include: { plan: true },
+            },
+            // Fase E5: el mismo QR puede pertenecer a una compra de promoción.
+            compra: {
+              include: {
+                promocion: true,
+                company: { select: { name: true, zonaHoraria: true } },
+              },
             },
           },
-          membership: {
-            include: { plan: true },
-          },
-          // Fase E5: el mismo QR puede pertenecer a una compra de promoción.
-          compra: {
-            include: {
-              promocion: true,
-              company: { select: { name: true, zonaHoraria: true } },
-            },
-          },
-        },
-      })
+        })
+      )
       if (qr) break
     }
 
@@ -222,7 +227,7 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
       // Vencimiento detectado al escanear: se marca EXPIRADA (lazy) y queda
       // registrado en la bitácora de transiciones.
       if (validacion.expiro) {
-        await prisma.$transaction(async (tx) => {
+        await conEmpresa(compra.companyId, async (tx) => {
           const upd = await tx.productoCompra.updateMany({
             where: { id: compra.id, estado: 'ACTIVA' },
             data: { estado: 'EXPIRADA' },
@@ -287,9 +292,11 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
     const now = new Date()
     const m = membership
 
-    const promocionesActivas = await prisma.promocion.count({
-      where: { companyId: membership.companyId, activo: true, vigenciaDesde: { lte: now }, OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }] },
-    }).catch(() => 0)
+    const promocionesActivas = await conEmpresa(membership.companyId, (tx) =>
+      tx.promocion.count({
+        where: { companyId: membership.companyId, activo: true, vigenciaDesde: { lte: now }, OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }] },
+      })
+    ).catch(() => 0)
 
     let puedeUsar = false
     let mensaje: string | undefined
@@ -399,27 +406,31 @@ export async function confirmarVisita(
       return { error: 'No tienes permisos para confirmar visitas.' }
     }
 
-    const membershipId = String(formData.get('membershipId') ?? '')
-    const servicio = String(formData.get('servicio') ?? '').trim()
-    const vehiculoId = String(formData.get('vehiculoId') ?? '').trim() || null
-    const notas = String(formData.get('notas') ?? '').trim() || null
-    const sucursalId = String(formData.get('sucursalId') ?? '').trim() || null
-    const qrTokenId = String(formData.get('qrTokenId') ?? '').trim() || null
-
-    if (!membershipId) return { error: 'No se encontró la membresía. Escanea el QR de nuevo.' }
-    if (!servicio) return { error: 'Selecciona un servicio antes de confirmar.' }
+    const parsed = confirmarVisitaSchema.safeParse({
+      membershipId: String(formData.get('membershipId') ?? ''),
+      servicio: String(formData.get('servicio') ?? ''),
+      vehiculoId: String(formData.get('vehiculoId') ?? ''),
+      notas: String(formData.get('notas') ?? ''),
+      sucursalId: String(formData.get('sucursalId') ?? ''),
+      qrTokenId: String(formData.get('qrTokenId') ?? ''),
+    })
+    if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+    const { membershipId, servicio, vehiculoId, notas, sucursalId, qrTokenId } = parsed.data
 
     const meta = await getRequestMeta()
 
     // Documento comercial: SIEMPRE el nombre del empleado, nunca su correo
     // (el correo queda solo como dato interno de auditoría).
+    const dbUserId = user.metadata.dbUserId
     const empleadoNombre =
-      (user.metadata.dbUserId
+      (dbUserId
         ? (
-            await prisma.user.findUnique({
-              where: { id: user.metadata.dbUserId },
-              select: { name: true },
-            })
+            await sinEmpresa('visitas: buscar nombre de empleado', (tx) =>
+              tx.user.findUnique({
+                where: { id: dbUserId },
+                select: { name: true },
+              })
+            )
           )?.name
         : null) ??
       user.email ??
@@ -431,22 +442,24 @@ export async function confirmarVisita(
     // round-trips dentro de la transacción. Las invariantes críticas (QR de
     // un solo uso, descuento de saldo) se protegen con updates guardados
     // dentro del núcleo atómico de abajo.
-    const membership = await prisma.membership.findUnique({
-      where: { id: membershipId },
-      include: {
-        plan: true,
-        cliente: {
-          include: {
-            company: {
-              select: {
-                name: true, direccion: true, telefono: true, website: true,
-                logoUrl: true, zonaHoraria: true,
+    const membership = await sinEmpresa('visitas: buscar membresía para confirmar', (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        include: {
+          plan: true,
+          cliente: {
+            include: {
+              company: {
+                select: {
+                  name: true, direccion: true, telefono: true, website: true,
+                  logoUrl: true, zonaHoraria: true,
+                },
               },
             },
           },
         },
-      },
-    })
+      })
+    )
     if (!membership) {
       return { error: 'La membresía no fue encontrada. Puede haber sido eliminada.' }
     }
@@ -461,9 +474,11 @@ export async function confirmarVisita(
 
     let sucursalNombre: string | null = null
     if (sucursalId) {
-      const sucursal = await prisma.sucursal.findUnique({
-        where: { id: sucursalId },
-      })
+      const sucursal = await conEmpresa(membership.companyId, (tx) =>
+        tx.sucursal.findUnique({
+          where: { id: sucursalId },
+        })
+      )
       if (!sucursal) {
         return { error: 'La sucursal no fue encontrada.' }
       }
@@ -477,7 +492,9 @@ export async function confirmarVisita(
     let vehiculoLabel: string | null = null
     let vehiculoPlaca: string | null = null
     if (vehiculoId) {
-      const v = await prisma.vehiculo.findUnique({ where: { id: vehiculoId } })
+      const v = await sinEmpresa('visitas: buscar vehículo', (tx) =>
+        tx.vehiculo.findUnique({ where: { id: vehiculoId } })
+      )
       if (v) {
         vehiculoLabel = `${v.marca} ${v.modelo}${v.anio ? ` (${v.anio})` : ''}`
         vehiculoPlaca = v.placa ?? null
@@ -499,9 +516,11 @@ export async function confirmarVisita(
 
     if (qrTokenId) {
       // Verify qrToken belongs to the correct membership
-      const qrTokenData = await prisma.qrToken.findUnique({
-        where: { id: qrTokenId },
-      })
+      const qrTokenData = await sinEmpresa('visitas: verificar qrToken', (tx) =>
+        tx.qrToken.findUnique({
+          where: { id: qrTokenId },
+        })
+      )
       if (!qrTokenData || qrTokenData.membresiaId !== membership.id) {
         return { error: 'Este código QR no es válido para esta membresía.' }
       }
@@ -524,7 +543,7 @@ export async function confirmarVisita(
       ...meta,
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await conEmpresa(membership.companyId, async (tx) => {
       if (qrTokenId) {
         const invalidado = await tx.qrToken.updateMany({
           where: { id: qrTokenId, activo: true, membresiaId: membership.id },
@@ -690,9 +709,9 @@ export async function confirmarVisita(
 
     // Bus de estrategias: la visita quedó confirmada. Se emite fuera de la
     // transacción y nunca rompe el flujo (el helper captura sus errores).
-    const totalVisitas = await prisma.visit
-      .count({ where: { clienteId: membership.clienteId } })
-      .catch(() => 0)
+    const totalVisitas = await conEmpresa(membership.companyId, (tx) =>
+      tx.visit.count({ where: { clienteId: membership.clienteId } })
+    ).catch(() => 0)
     const factsCliente = {
       nombre: membership.cliente.nombre,
       visitas: totalVisitas,
@@ -718,25 +737,27 @@ export async function confirmarVisita(
     await registrarHitoInvitacion(membership.clienteId, 'PRIMER_CANJE')
 
     // Payload del ticket (Receipt Engine): plantilla de la empresa + snapshot.
-    const [plantilla, promosActivas] = await Promise.all([
-      prisma.receiptTemplate
-        .findUnique({ where: { companyId: membership.companyId } })
-        .catch(() => null),
-      prisma.promocion
-        .findMany({
-          where: {
-            companyId: membership.companyId,
-            activo: true,
-            archivada: false,
-            vigenciaDesde: { lte: new Date() },
-            OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: new Date() } }],
-          },
-          select: { titulo: true },
-          orderBy: { prioridad: 'desc' },
-          take: 3,
-        })
-        .catch(() => []),
-    ])
+    const [plantilla, promosActivas] = await conEmpresa(membership.companyId, (tx) =>
+      Promise.all([
+        tx.receiptTemplate
+          .findUnique({ where: { companyId: membership.companyId } })
+          .catch(() => null),
+        tx.promocion
+          .findMany({
+            where: {
+              companyId: membership.companyId,
+              activo: true,
+              archivada: false,
+              vigenciaDesde: { lte: new Date() },
+              OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: new Date() } }],
+            },
+            select: { titulo: true },
+            orderBy: { prioridad: 'desc' },
+            take: 3,
+          })
+          .catch(() => []),
+      ])
+    )
     const empresa = membership.cliente.company
     const ticket: TicketPayload = {
       transactionId: result.transaccion.id,
@@ -784,7 +805,7 @@ export async function confirmarVisita(
     if (e instanceof TxError) {
       return { error: e.message }
     }
-    console.error('[visitas] confirmarVisita error:', e)
+    capturarErrorInesperado('visitas:confirmar', e)
     return { error: 'Error interno al confirmar la visita. Intenta de nuevo.' }
   }
 }
@@ -801,23 +822,30 @@ export async function registrarImpresion(visitId: string): Promise<ImpresionStat
       return { error: 'No autorizado.' }
     }
     const meta = await getRequestMeta()
-    const visit = await prisma.visit.findUnique({
-      where: { id: visitId },
-      include: { membership: { include: { cliente: true } } },
-    })
+    const visit = await sinEmpresa('visitas: buscar visita a imprimir', (tx) =>
+      tx.visit.findUnique({
+        where: { id: visitId },
+        include: { membership: { include: { cliente: true } } },
+      })
+    )
     if (!visit) return { error: 'Visita no encontrada.' }
 
-    await prisma.auditLog.create({
-      data: {
-        companyId: visit.membership?.cliente.companyId ?? null,
-        userId: user.metadata.dbUserId ?? null,
-        accion: 'COMPROBANTE_IMPRESO',
-        entidadTipo: 'Visit',
-        entidadId: visitId,
-        payload: { visitId },
-        ...meta,
-      },
-    })
+    const companyId = visit.membership?.cliente.companyId
+    const registrarAuditoria = (tx: Parameters<typeof conEmpresa>[1]) =>
+      tx.auditLog.create({
+        data: {
+          companyId: companyId ?? null,
+          userId: user.metadata.dbUserId ?? null,
+          accion: 'COMPROBANTE_IMPRESO',
+          entidadTipo: 'Visit',
+          entidadId: visitId,
+          payload: { visitId },
+          ...meta,
+        },
+      })
+    await (companyId
+      ? conEmpresa(companyId, registrarAuditoria)
+      : sinEmpresa('visitas: auditar impresión sin empresa', registrarAuditoria))
     return { success: true }
   } catch {
     return { error: 'No se pudo registrar la impresión.' }
@@ -834,16 +862,18 @@ class TxError extends Error {
 async function logScanInvalido(userId: string | undefined, token: string, reason: string) {
   try {
     const meta = await getRequestMeta()
-    await prisma.auditLog.create({
-      data: {
-        userId: userId ?? null,
-        accion: 'QR_USADO',
-        entidadTipo: 'QrToken',
-        entidadId: token.slice(0, 25),
-        payload: { reason, token: token.slice(0, 10) + '…', valido: false },
-        ...meta,
-      },
-    })
+    await sinEmpresa('visitas: auditar scan inválido', (tx) =>
+      tx.auditLog.create({
+        data: {
+          userId: userId ?? null,
+          accion: 'QR_USADO',
+          entidadTipo: 'QrToken',
+          entidadId: token.slice(0, 25),
+          payload: { reason, token: token.slice(0, 10) + '…', valido: false },
+          ...meta,
+        },
+      })
+    )
   } catch {
     // best-effort logging
   }

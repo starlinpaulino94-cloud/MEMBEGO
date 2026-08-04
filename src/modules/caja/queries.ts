@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 /**
  * Caja (POS) · consultas del turno y búsqueda de órdenes pendientes.
@@ -7,22 +7,30 @@ import { prisma } from '@/lib/prisma'
 
 /** Sesión ABIERTA de una sucursal (una como máximo por diseño). */
 export async function getCajaAbierta(sucursalId: string) {
-  return prisma.cajaSesion.findFirst({
-    where: { sucursalId, estado: 'ABIERTA' },
-    include: {
-      sucursal: { select: { id: true, nombre: true } },
-      abiertaPor: { select: { id: true, name: true } },
-    },
-    orderBy: { abiertaAt: 'desc' },
-  })
+  const sucursal = await sinEmpresa('caja: lookup de sucursal para conocer su empresa', (tx) =>
+    tx.sucursal.findUnique({ where: { id: sucursalId }, select: { companyId: true } })
+  )
+  if (!sucursal) return null
+  return conEmpresa(sucursal.companyId, (tx) =>
+    tx.cajaSesion.findFirst({
+      where: { sucursalId, estado: 'ABIERTA' },
+      include: {
+        sucursal: { select: { id: true, nombre: true } },
+        abiertaPor: { select: { id: true, name: true } },
+      },
+      orderBy: { abiertaAt: 'desc' },
+    })
+  )
 }
 
 export async function getSucursalesActivas(companyId: string) {
-  return prisma.sucursal.findMany({
-    where: { companyId, activa: true },
-    select: { id: true, nombre: true, direccion: true },
-    orderBy: { nombre: 'asc' },
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.sucursal.findMany({
+      where: { companyId, activa: true },
+      select: { id: true, nombre: true, direccion: true },
+      orderBy: { nombre: 'asc' },
+    })
+  )
 }
 
 export interface ResumenSesion {
@@ -46,20 +54,28 @@ export interface ResumenSesion {
 
 /** Ventas del turno: totales por método + últimos cobros de la sesión. */
 export async function getResumenSesion(cajaSesionId: string): Promise<ResumenSesion> {
-  const cobros = await prisma.transaction.findMany({
-    where: { cajaSesionId, estado: 'APPLIED' },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      codigo: true,
-      monto: true,
-      metodoCobro: true,
-      snapshot: true,
-      createdAt: true,
-      cliente: { select: { nombre: true } },
-      _count: { select: { impresiones: true } },
-    },
-  })
+  const sesion = await sinEmpresa('caja: lookup de sesión para conocer su empresa', (tx) =>
+    tx.cajaSesion.findUnique({ where: { id: cajaSesionId }, select: { companyId: true } })
+  )
+  if (!sesion) {
+    return { cobros: 0, totalEfectivo: 0, totalTransferencia: 0, totalOtro: 0, total: 0, ultimos: [] }
+  }
+  const cobros = await conEmpresa(sesion.companyId, (tx) =>
+    tx.transaction.findMany({
+      where: { cajaSesionId, estado: 'APPLIED' },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        codigo: true,
+        monto: true,
+        metodoCobro: true,
+        snapshot: true,
+        createdAt: true,
+        cliente: { select: { nombre: true } },
+        _count: { select: { impresiones: true } },
+      },
+    })
+  )
 
   const sum = (metodo: string) =>
     cobros
@@ -97,11 +113,17 @@ export interface MovimientosSesion {
 
 /** Movimientos de efectivo (G9) de una sesión: entradas, salidas y neto. */
 export async function getMovimientosSesion(cajaSesionId: string): Promise<MovimientosSesion> {
-  const movs = await prisma.movimientoCaja.findMany({
-    where: { cajaSesionId },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, tipo: true, concepto: true, monto: true, createdAt: true, registradoPor: true },
-  })
+  const sesion = await sinEmpresa('caja: lookup de sesión para conocer su empresa', (tx) =>
+    tx.cajaSesion.findUnique({ where: { id: cajaSesionId }, select: { companyId: true } })
+  )
+  if (!sesion) return { entrada: 0, salida: 0, neto: 0, items: [] }
+  const movs = await conEmpresa(sesion.companyId, (tx) =>
+    tx.movimientoCaja.findMany({
+      where: { cajaSesionId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, tipo: true, concepto: true, monto: true, createdAt: true, registradoPor: true },
+    })
+  )
   let entrada = 0
   let salida = 0
   for (const m of movs) {
@@ -180,41 +202,45 @@ export async function getCierreReporte(
   cajaSesionId: string,
   companyId: string
 ): Promise<CierreReporte | null> {
-  const sesion = await prisma.cajaSesion.findFirst({
-    where: { id: cajaSesionId, companyId },
-    include: {
-      sucursal: { select: { nombre: true } },
-      abiertaPor: { select: { name: true } },
-      cerradaPor: { select: { name: true } },
-      company: {
-        select: {
-          name: true,
-          logoUrl: true,
-          direccion: true,
-          telefono: true,
-          zonaHoraria: true,
+  const sesion = await conEmpresa(companyId, (tx) =>
+    tx.cajaSesion.findFirst({
+      where: { id: cajaSesionId, companyId },
+      include: {
+        sucursal: { select: { nombre: true } },
+        abiertaPor: { select: { name: true } },
+        cerradaPor: { select: { name: true } },
+        company: {
+          select: {
+            name: true,
+            logoUrl: true,
+            direccion: true,
+            telefono: true,
+            zonaHoraria: true,
+          },
         },
       },
-    },
-  })
+    })
+  )
   if (!sesion) return null
 
-  const [cobros, movimientos] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { cajaSesionId, estado: 'APPLIED' },
-      select: {
-        monto: true,
-        metodoCobro: true,
-        tipo: true,
-        empleado: { select: { name: true } },
-      },
-    }),
-    prisma.movimientoCaja.findMany({
-      where: { cajaSesionId },
-      select: { tipo: true, concepto: true, monto: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-  ])
+  const [cobros, movimientos] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.transaction.findMany({
+        where: { cajaSesionId, estado: 'APPLIED' },
+        select: {
+          monto: true,
+          metodoCobro: true,
+          tipo: true,
+          empleado: { select: { name: true } },
+        },
+      }),
+      tx.movimientoCaja.findMany({
+        where: { cajaSesionId },
+        select: { tipo: true, concepto: true, monto: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ])
+  )
 
   let movimientosEntrada = 0
   let movimientosSalida = 0
@@ -304,15 +330,17 @@ export async function getCierresRecientes(
   companyId: string,
   limit = 8
 ): Promise<CierreListItem[]> {
-  const sesiones = await prisma.cajaSesion.findMany({
-    where: { companyId, estado: 'CERRADA' },
-    orderBy: { cerradaAt: 'desc' },
-    take: limit,
-    include: {
-      sucursal: { select: { nombre: true } },
-      cerradaPor: { select: { name: true } },
-    },
-  })
+  const sesiones = await conEmpresa(companyId, (tx) =>
+    tx.cajaSesion.findMany({
+      where: { companyId, estado: 'CERRADA' },
+      orderBy: { cerradaAt: 'desc' },
+      take: limit,
+      include: {
+        sucursal: { select: { nombre: true } },
+        cerradaPor: { select: { name: true } },
+      },
+    })
+  )
   return sesiones.map((s) => ({
     id: s.id,
     sucursal: s.sucursal.nombre,
@@ -396,22 +424,26 @@ export async function getReporteEmpleadoDia(
   fecha: string,
   timeZone: string
 ): Promise<ReporteEmpleadoDia> {
-  const empresa = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { name: true, logoUrl: true, direccion: true, telefono: true },
-  })
+  const empresa = await conEmpresa(companyId, (tx) =>
+    tx.company.findUnique({
+      where: { id: companyId },
+      select: { name: true, logoUrl: true, direccion: true, telefono: true },
+    })
+  )
 
   const { gte, lt } = rangoDiaLocal(fecha, timeZone)
-  const cobros = await prisma.transaction.findMany({
-    where: {
-      companyId,
-      empleadoId,
-      estado: 'APPLIED',
-      metodoCobro: { not: null },
-      createdAt: { gte, lt },
-    },
-    select: { monto: true, metodoCobro: true, tipo: true, cajaSesionId: true },
-  })
+  const cobros = await conEmpresa(companyId, (tx) =>
+    tx.transaction.findMany({
+      where: {
+        companyId,
+        empleadoId,
+        estado: 'APPLIED',
+        metodoCobro: { not: null },
+        createdAt: { gte, lt },
+      },
+      select: { monto: true, metodoCobro: true, tipo: true, cajaSesionId: true },
+    })
+  )
 
   const porMetodo = { efectivo: 0, transferencia: 0, otro: 0 }
   const porOrigen = { caja: 0, cajaTotal: 0, panel: 0, panelTotal: 0 }
@@ -501,45 +533,47 @@ export async function buscarOrdenesPendientes(
     : {}
   const filtroReferencia = term ? { referencia: { equals: term.toUpperCase() } } : null
 
-  const [memberships, compras] = await Promise.all([
-    prisma.membership.findMany({
-      where: {
-        cliente: { companyId, ...(filtroReferencia ? {} : filtroCliente) },
-        ...(filtroReferencia
-          ? { OR: [filtroReferencia, { cliente: { companyId, ...filtroCliente } }] }
-          : {}),
-        OR: [
-          { estado: { in: [...MEMBRESIA_COBRABLE] } },
-          // Cambio de plan pendiente de pago (membresía sigue ACTIVA).
-          { estado: 'ACTIVA', planIdSolicitado: { not: null } },
-        ],
-      },
-      include: {
-        cliente: { select: { nombre: true, telefono: true, email: true } },
-        plan: { select: { nombre: true, precio: true } },
-        planSolicitado: { select: { nombre: true, precio: true } },
-        sucursalPago: { select: { nombre: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: limit,
-    }),
-    prisma.productoCompra.findMany({
-      where: {
-        companyId,
-        estado: { in: [...COMPRA_COBRABLE] },
-        ...(filtroReferencia
-          ? { OR: [filtroReferencia, { cliente: filtroCliente }] }
-          : { cliente: filtroCliente }),
-      },
-      include: {
-        cliente: { select: { nombre: true, telefono: true, email: true } },
-        promocion: { select: { titulo: true, precio: true } },
-        sucursalPago: { select: { nombre: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: limit,
-    }),
-  ])
+  const [memberships, compras] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.membership.findMany({
+        where: {
+          cliente: { companyId, ...(filtroReferencia ? {} : filtroCliente) },
+          ...(filtroReferencia
+            ? { OR: [filtroReferencia, { cliente: { companyId, ...filtroCliente } }] }
+            : {}),
+          OR: [
+            { estado: { in: [...MEMBRESIA_COBRABLE] } },
+            // Cambio de plan pendiente de pago (membresía sigue ACTIVA).
+            { estado: 'ACTIVA', planIdSolicitado: { not: null } },
+          ],
+        },
+        include: {
+          cliente: { select: { nombre: true, telefono: true, email: true } },
+          plan: { select: { nombre: true, precio: true } },
+          planSolicitado: { select: { nombre: true, precio: true } },
+          sucursalPago: { select: { nombre: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+      }),
+      tx.productoCompra.findMany({
+        where: {
+          companyId,
+          estado: { in: [...COMPRA_COBRABLE] },
+          ...(filtroReferencia
+            ? { OR: [filtroReferencia, { cliente: filtroCliente }] }
+            : { cliente: filtroCliente }),
+        },
+        include: {
+          cliente: { select: { nombre: true, telefono: true, email: true } },
+          promocion: { select: { titulo: true, precio: true } },
+          sucursalPago: { select: { nombre: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+      }),
+    ])
+  )
 
   const ordenes: OrdenPendiente[] = [
     ...memberships.map((m): OrdenPendiente => {

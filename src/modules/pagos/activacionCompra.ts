@@ -9,7 +9,7 @@
  * como Server Action permitiría activar compras sin pagar.
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { crearNotificacion } from '@/modules/notificaciones/service'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { procesarReferidoCompletado } from '@/modules/referidos/actions'
@@ -35,10 +35,14 @@ export async function activarCompraPromocion(
   meta: Meta,
   opts: { motivo?: string } = {}
 ): Promise<ActivarCompraResult> {
-  let compra = await prisma.productoCompra.findUnique({
-    where: { id: compraId },
-    include: { promocion: true, cliente: true },
-  })
+  let compra = await sinEmpresa(
+    'pagos: localizar compra de promoción por id (su empresa se deriva de la compra)',
+    (tx) =>
+      tx.productoCompra.findUnique({
+        where: { id: compraId },
+        include: { promocion: true, cliente: true },
+      })
+  )
   if (!compra) return { ok: false, error: 'Compra no encontrada.' }
   if (compra.estado === 'ACTIVA') return { ok: false, error: 'La compra ya está activa.' }
 
@@ -50,10 +54,14 @@ export async function activarCompraPromocion(
     '@/modules/regalos/entrega'
   )
   if (await entregarCompraABeneficiario(compra)) {
-    compra = await prisma.productoCompra.findUnique({
-      where: { id: compraId },
-      include: { promocion: true, cliente: true },
-    })
+    compra = await sinEmpresa(
+      'pagos: re-leer compra de promoción por id tras entregar un regalo (empresa se deriva de la compra)',
+      (tx) =>
+        tx.productoCompra.findUnique({
+          where: { id: compraId },
+          include: { promocion: true, cliente: true },
+        })
+    )
     if (!compra) return { ok: false, error: 'Compra no encontrada.' }
   }
   if (!(ESTADOS_ACTIVABLES as readonly string[]).includes(compra.estado)) {
@@ -65,8 +73,14 @@ export async function activarCompraPromocion(
   const now = new Date()
   const monto = Number(compra.precioCongelado ?? promo.precio ?? 0)
 
+  const cid = compra.companyId
+  const idCompra = compra.id
+  const estadoCompra = compra.estado
+  const clienteIdCompra = compra.clienteId
+  const usosIncluidos = compra.usosIncluidos
+
   try {
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(cid, async (tx) => {
       // Cupo atómico: `canjes` cuenta ventas activadas contra `maxCanjes`.
       // Guard en SQL para que dos aprobaciones concurrentes no sobrevendan.
       const cupo = await tx.$queryRaw<{ id: string }[]>`
@@ -79,12 +93,12 @@ export async function activarCompraPromocion(
 
       // Guard anti-doble-activación (mismo patrón que el QR de un solo uso).
       const upd = await tx.productoCompra.updateMany({
-        where: { id: compra.id, estado: compra.estado },
+        where: { id: idCompra, estado: estadoCompra },
         data: {
           estado: 'ACTIVA',
           fechaActivacion: now,
           fechaVencimiento: calcularVencimientoBeneficio(promo, now),
-          usosRestantes: compra.usosIncluidos,
+          usosRestantes: usosIncluidos,
           pagoConfirmado: true,
           montoPagado: monto,
           rechazadoReason: null,
@@ -94,8 +108,8 @@ export async function activarCompraPromocion(
       if (upd.count === 0) throw new Error('ESTADO_CAMBIADO')
 
       await registrarTransicionCompra(tx, {
-        compraId: compra.id,
-        desde: compra.estado,
+        compraId: idCompra,
+        desde: estadoCompra,
         hacia: 'ACTIVA',
         motivo: opts.motivo ?? 'Pago validado por el administrador',
         userId,
@@ -103,27 +117,27 @@ export async function activarCompraPromocion(
 
       // QR único de la compra — el MISMO sistema que las membresías.
       const qr = await tx.qrToken.create({
-        data: { clienteId: compra.clienteId, compraId: compra.id, token: nuevoTokenQr(), expiraAt: vencimientoQr() },
+        data: { clienteId: clienteIdCompra, compraId: idCompra, token: nuevoTokenQr(), expiraAt: vencimientoQr() },
       })
 
       await tx.auditLog.createMany({
         data: [
           {
-            companyId: compra.companyId,
+            companyId: cid,
             userId,
             accion: 'QR_GENERADO',
             entidadTipo: 'QrToken',
             entidadId: qr.id,
-            payload: { clienteId: compra.clienteId, compraId: compra.id, motivo: 'activacion_compra_promocion' },
+            payload: { clienteId: clienteIdCompra, compraId: idCompra, motivo: 'activacion_compra_promocion' },
             ...meta,
           },
           {
-            companyId: compra.companyId,
+            companyId: cid,
             userId,
             accion: 'PAGO_APROBADO',
             entidadTipo: 'ProductoCompra',
-            entidadId: compra.id,
-            payload: { promocionId: promo.id, clienteId: compra.clienteId, monto },
+            entidadId: idCompra,
+            payload: { promocionId: promo.id, clienteId: clienteIdCompra, monto },
             ...meta,
           },
         ],
@@ -142,9 +156,11 @@ export async function activarCompraPromocion(
 
   // Notificación al cliente + bus de estrategias (fuera de la transacción,
   // nunca rompen la activación).
-  const clienteUser = await prisma.user
-    .findUnique({ where: { supabaseId: compra.cliente.supabaseId }, select: { id: true } })
-    .catch(() => null)
+  const supabaseIdCliente = compra.cliente.supabaseId
+  const clienteUser = await sinEmpresa(
+    'pagos: localizar usuario por supabaseId para notificar al cliente',
+    (tx) => tx.user.findUnique({ where: { supabaseId: supabaseIdCliente }, select: { id: true } })
+  ).catch(() => null)
   if (clienteUser) {
     await crearNotificacion({
       userId: clienteUser.id,
@@ -167,27 +183,30 @@ export async function activarCompraPromocion(
   // Fase E6: la PRIMERA compra confirmada (de cualquier producto) convierte al
   // referido. Antes solo contaban las membresías aprobadas por el admin.
   try {
-    const [membresiasPrevias, comprasPrevias] = await Promise.all([
-      prisma.membership.count({
-        where: { clienteId: compra.clienteId, companyId: compra.companyId, pagoConfirmado: true },
-      }),
-      prisma.productoCompra.count({
-        where: {
-          clienteId: compra.clienteId,
-          companyId: compra.companyId,
-          pagoConfirmado: true,
-          id: { not: compra.id },
-        },
-      }),
-    ])
+    const [membresiasPrevias, comprasPrevias] = await conEmpresa(cid, async (tx) => {
+      const [membresias, compras] = await Promise.all([
+        tx.membership.count({
+          where: { clienteId: clienteIdCompra, companyId: cid, pagoConfirmado: true },
+        }),
+        tx.productoCompra.count({
+          where: {
+            clienteId: clienteIdCompra,
+            companyId: cid,
+            pagoConfirmado: true,
+            id: { not: idCompra },
+          },
+        }),
+      ])
+      return [membresias, compras]
+    })
     if (membresiasPrevias === 0 && comprasPrevias === 0) {
-      await procesarReferidoCompletado(compra.clienteId, compra.companyId, {
+      await procesarReferidoCompletado(clienteIdCompra, cid, {
         origen: 'COMPRA',
         monto,
       })
     }
     // Growth Engine 3.0: recompensas configurables del evento COMPRA.
-    await procesarConversionGrowth(compra.clienteId, compra.companyId, {
+    await procesarConversionGrowth(clienteIdCompra, cid, {
       trigger: 'COMPRA',
     })
   } catch (e) {

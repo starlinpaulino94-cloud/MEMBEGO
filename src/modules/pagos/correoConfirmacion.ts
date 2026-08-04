@@ -1,5 +1,5 @@
-import { prisma } from '@/lib/prisma'
-import { sendEmail } from '@/lib/email'
+import { conEmpresa } from '@/lib/tenant'
+import { encolarEmail } from '@/modules/jobs/emisiones'
 
 /**
  * CORREO DE CONFIRMACIÓN DE PAGO al cliente.
@@ -7,7 +7,9 @@ import { sendEmail } from '@/lib/email'
  * Se envía desde el punto único de activación (todas las vías: tarjeta,
  * transferencia aprobada, pago en sucursal) y desde la renovación automática.
  * Es best-effort: un fallo del correo NUNCA rompe la activación — el pago ya
- * ocurrió y eso es lo que manda. `sendEmail` ya bloquea las empresas demo.
+ * ocurrió y eso es lo que manda. Fase 4: se ENCOLA (QStash, o en línea sin
+ * cola); el worker entrega vía `sendEmail`, que conserva el bloqueo de
+ * empresas demo.
  */
 
 const TZ = 'America/Santo_Domingo'
@@ -27,19 +29,21 @@ export interface ConfirmacionPagoInput {
   vigenteHasta?: Date | null
 }
 
-/** Arma y envía el recibo. Devuelve si salió (para bitácora), nunca lanza. */
+/** Arma y encola el recibo. Devuelve si se aceptó para entrega, nunca lanza. */
 export async function enviarConfirmacionPago(input: ConfirmacionPagoInput): Promise<boolean> {
   try {
-    const [cliente, company] = await Promise.all([
-      prisma.cliente.findUnique({
-        where: { id: input.clienteId },
-        select: { nombre: true, email: true },
-      }),
-      prisma.company.findUnique({
-        where: { id: input.companyId },
-        select: { name: true, logoUrl: true },
-      }),
-    ])
+    const [cliente, company] = await conEmpresa(input.companyId, (tx) =>
+      Promise.all([
+        tx.cliente.findUnique({
+          where: { id: input.clienteId },
+          select: { nombre: true, email: true },
+        }),
+        tx.company.findUnique({
+          where: { id: input.companyId },
+          select: { name: true, logoUrl: true },
+        }),
+      ])
+    )
     if (!cliente?.email || !company) return false
 
     const fecha = new Intl.DateTimeFormat('es-DO', {
@@ -116,7 +120,7 @@ Monto pagado: ${montoTexto}
 Fecha: ${fecha}${vigencia ? `\nVigente hasta: ${vigencia}` : ''}
 Este correo es tu comprobante de pago.`
 
-    const res = await sendEmail({
+    await encolarEmail({
       to: cliente.email,
       subject:
         input.motivo === 'renovacion'
@@ -126,7 +130,7 @@ Este correo es tu comprobante de pago.`
       text: texto,
       companyId: input.companyId,
     })
-    return res.sent
+    return true
   } catch (e) {
     console.error('[pagos] correo de confirmación:', e)
     return false
