@@ -12,9 +12,9 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sinEmpresa } from '@/lib/tenant'
 import { filasDeAcceso } from '@/modules/empresas/accesos'
 
 export interface AccesoState {
@@ -48,13 +48,17 @@ export async function darAccesoAEmpresa(
     const userId = String(formData.get('userId') ?? '').trim()
     if (!companyId || !userId) return { error: 'Falta la empresa o la persona.' }
 
-    const [empresa, persona] = await Promise.all([
-      prisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true } }),
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { id: true, name: true, role: true, companyId: true },
-      }),
-    ])
+    const [empresa, persona] = await sinEmpresa(
+      'superadmin: validar empresa y usuario para dar acceso',
+      (tx) =>
+        Promise.all([
+          tx.company.findUnique({ where: { id: companyId }, select: { id: true, name: true } }),
+          tx.user.findUnique({
+            where: { id: userId },
+            select: { id: true, name: true, role: true, companyId: true },
+          }),
+        ])
+    )
     if (!empresa) return { error: 'Empresa no encontrada.' }
     if (!persona) return { error: 'Usuario no encontrado.' }
     if (persona.role === 'CLIENTE') {
@@ -67,10 +71,12 @@ export async function darAccesoAEmpresa(
     // Se escribe también la fila de su empresa de siempre: ver el comentario
     // largo en `filasDeAcceso`. Sin eso, al cambiar de empresa pierde el
     // camino de vuelta.
-    await prisma.userCompanyAccess.createMany({
-      data: filasDeAcceso(persona.id, companyId, persona.companyId),
-      skipDuplicates: true,
-    })
+    await sinEmpresa('superadmin: crear filas de acceso', (tx) =>
+      tx.userCompanyAccess.createMany({
+        data: filasDeAcceso(persona.id, companyId, persona.companyId),
+        skipDuplicates: true,
+      })
+    )
 
     revalidatePath('/superadmin/demo')
     revalidatePath('/superadmin/empresas')
@@ -107,26 +113,32 @@ export async function quitarAccesoAEmpresa(
     const userId = String(formData.get('userId') ?? '').trim()
     if (!companyId || !userId) return { error: 'Falta la empresa o la persona.' }
 
-    const persona = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, name: true, role: true, companyId: true, supabaseId: true },
-    })
+    const persona = await sinEmpresa('superadmin: buscar usuario para quitar acceso', (tx) =>
+      tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, role: true, companyId: true, supabaseId: true },
+      })
+    )
     if (!persona) return { error: 'Usuario no encontrado.' }
 
     if (persona.companyId === companyId) {
-      const otra = await prisma.userCompanyAccess.findFirst({
-        where: { userId, companyId: { not: companyId } },
-        select: { companyId: true },
-      })
+      const otra = await sinEmpresa('superadmin: buscar otra empresa de la persona', (tx) =>
+        tx.userCompanyAccess.findFirst({
+          where: { userId, companyId: { not: companyId } },
+          select: { companyId: true },
+        })
+      )
       if (!otra) {
         return {
           error: `${persona.name} tiene esta empresa como su empresa activa y no le queda ninguna otra. Asígnale primero otra empresa desde Usuarios.`,
         }
       }
-      await prisma.user.update({
-        where: { id: userId },
-        data: { companyId: otra.companyId },
-      })
+      await sinEmpresa('superadmin: mover empresa activa de la persona', (tx) =>
+        tx.user.update({
+          where: { id: userId },
+          data: { companyId: otra.companyId },
+        })
+      )
       const sb = createAdminClient()
       const { error: authError } = await sb.auth.admin.updateUserById(persona.supabaseId, {
         app_metadata: {
@@ -141,7 +153,9 @@ export async function quitarAccesoAEmpresa(
       }
     }
 
-    await prisma.userCompanyAccess.deleteMany({ where: { userId, companyId } })
+    await sinEmpresa('superadmin: borrar fila de acceso', (tx) =>
+      tx.userCompanyAccess.deleteMany({ where: { userId, companyId } })
+    )
 
     revalidatePath('/superadmin/demo')
     revalidatePath('/superadmin/empresas')

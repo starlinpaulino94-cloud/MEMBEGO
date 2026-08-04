@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 export interface SucursalState {
   error?: string
@@ -31,7 +31,9 @@ export async function crearSucursal(
   if (!nombre) return { error: 'El nombre es obligatorio.' }
 
   try {
-    await prisma.sucursal.create({ data: { companyId, nombre, direccion, telefono } })
+    await conEmpresa(companyId, (tx) =>
+      tx.sucursal.create({ data: { companyId, nombre, direccion, telefono } })
+    )
     revalidatePath('/admin/sucursales')
     return { success: true }
   } catch (e) {
@@ -56,13 +58,17 @@ export async function actualizarSucursal(
   if (!id || !nombre) return { error: 'ID y nombre son obligatorios.' }
 
   try {
-    const suc = await prisma.sucursal.findUnique({ where: { id } })
+    const suc = await sinEmpresa('sucursal por id sin conocer la empresa', (tx) =>
+      tx.sucursal.findUnique({ where: { id } })
+    )
     if (!suc) return { error: 'Sucursal no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && suc.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
 
-    await prisma.sucursal.update({ where: { id }, data: { nombre, direccion, telefono, activa } })
+    await conEmpresa(suc.companyId, (tx) =>
+      tx.sucursal.update({ where: { id }, data: { nombre, direccion, telefono, activa } })
+    )
 
     revalidatePath('/admin/sucursales')
     return { success: true }
@@ -83,17 +89,23 @@ export async function eliminarSucursal(
   if (!id) return { error: 'ID requerido.' }
 
   try {
-    const suc = await prisma.sucursal.findUnique({ where: { id } })
+    const suc = await sinEmpresa('sucursal por id sin conocer la empresa', (tx) =>
+      tx.sucursal.findUnique({ where: { id } })
+    )
     if (!suc) return { error: 'Sucursal no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && suc.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
 
-    const visitas = await prisma.visit.count({ where: { sucursalId: id } })
+    const visitas = await conEmpresa(suc.companyId, (tx) =>
+      tx.visit.count({ where: { sucursalId: id } })
+    )
     if (visitas > 0) {
-      await prisma.sucursal.update({ where: { id }, data: { activa: false } })
+      await conEmpresa(suc.companyId, (tx) =>
+        tx.sucursal.update({ where: { id }, data: { activa: false } })
+      )
     } else {
-      await prisma.sucursal.delete({ where: { id } })
+      await conEmpresa(suc.companyId, (tx) => tx.sucursal.delete({ where: { id } }))
     }
 
     revalidatePath('/admin/sucursales')

@@ -1,10 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUser } from '@/lib/auth'
 import { getAppUrl } from '@/lib/site'
+import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
@@ -46,7 +46,9 @@ export async function alternarSuperadmin(
     return { error: 'No puedes cambiar tu propio rol.' }
   }
 
-  const target = await prisma.user.findUnique({ where: { id: userId } })
+  const target = await sinEmpresa('superadmin: buscar usuario por id', (tx) =>
+    tx.user.findUnique({ where: { id: userId } })
+  )
   if (!target) return { error: 'Usuario no encontrado.' }
   if (target.role === 'CLIENTE') {
     return { error: 'Una cuenta de cliente no puede ser superadmin. Crea una cuenta de staff.' }
@@ -62,7 +64,9 @@ export async function alternarSuperadmin(
   const nuevoRol = promover ? 'SUPERADMIN' : 'ADMINISTRADOR'
 
   try {
-    await prisma.user.update({ where: { id: userId }, data: { role: nuevoRol } })
+    await sinEmpresa('superadmin: cambiar rol del usuario', (tx) =>
+      tx.user.update({ where: { id: userId }, data: { role: nuevoRol } })
+    )
 
     const admin = createAdminClient()
     const { error: authError } = await admin.auth.admin.updateUserById(target.supabaseId, {
@@ -77,18 +81,20 @@ export async function alternarSuperadmin(
       return { error: 'Se guardó el rol, pero la sesión del usuario no sincronizó. Reintenta.' }
     }
 
-    await prisma.auditLog
-      .create({
-        data: {
-          companyId: target.companyId ?? null,
-          userId: session.metadata.dbUserId || null,
-          accion: promover ? 'SUPERADMIN_OTORGADO' : 'SUPERADMIN_RETIRADO',
-          entidadTipo: 'User',
-          entidadId: target.id,
-          payload: { email: target.email, por: session.email },
-        },
-      })
-      .catch(anotarFallo('superadmin:acceso:auditoria'))
+    await sinEmpresa('superadmin: bitácora de cambio de rol', (tx) =>
+      tx.auditLog
+        .create({
+          data: {
+            companyId: target.companyId ?? null,
+            userId: session.metadata.dbUserId || null,
+            accion: promover ? 'SUPERADMIN_OTORGADO' : 'SUPERADMIN_RETIRADO',
+            entidadTipo: 'User',
+            entidadId: target.id,
+            payload: { email: target.email, por: session.email },
+          },
+        })
+        .catch(anotarFallo('superadmin:acceso:auditoria'))
+    )
 
     revalidatePath('/superadmin/usuarios')
     return { success: true }
@@ -114,10 +120,12 @@ export async function generarEnlaceEntrarComo(
   const email = String(formData.get('email') ?? '').trim().toLowerCase()
   if (!email || !email.includes('@')) return { error: 'Escribe el email del usuario.' }
 
-  const target = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, email: true, name: true, role: true, companyId: true },
-  })
+  const target = await sinEmpresa('superadmin: buscar usuario por email', (tx) =>
+    tx.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, name: true, role: true, companyId: true },
+    })
+  )
   if (!target) return { error: 'No existe ningún usuario con ese email.' }
 
   try {
@@ -136,18 +144,20 @@ export async function generarEnlaceEntrarComo(
     // home del ROL del usuario (cliente → su app, admin → su panel).
     const url = `${getAppUrl()}/confirmar?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`
 
-    await prisma.auditLog
-      .create({
-        data: {
-          companyId: target.companyId ?? null,
-          userId: session.metadata.dbUserId || null,
-          accion: 'ENTRAR_COMO_GENERADO',
-          entidadTipo: 'User',
-          entidadId: target.id,
-          payload: { email: target.email, por: session.email },
-        },
-      })
-      .catch(anotarFallo('superadmin:entrarComo:auditoria'))
+    await sinEmpresa('superadmin: bitácora de entrar como', (tx) =>
+      tx.auditLog
+        .create({
+          data: {
+            companyId: target.companyId ?? null,
+            userId: session.metadata.dbUserId || null,
+            accion: 'ENTRAR_COMO_GENERADO',
+            entidadTipo: 'User',
+            entidadId: target.id,
+            payload: { email: target.email, por: session.email },
+          },
+        })
+        .catch(anotarFallo('superadmin:entrarComo:auditoria'))
+    )
 
     return { success: true, url, destinatario: `${target.name} (${target.email})` }
   } catch (e) {

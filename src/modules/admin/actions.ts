@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -13,16 +12,29 @@ import { paymentLimiter } from '@/lib/rate-limit'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { INVITABLE_ROLES, type AppRole } from '@/types'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
-/** Ensure the membership belongs to the admin's company (superadmin = any). */
+/**
+ * Ensure the membership belongs to the admin's company (superadmin = any).
+ *
+ * La búsqueda por id se hace en modo omnisciente a propósito: todavía no se
+ * conoce la empresa del admin cuando hay que validar la pertenencia, y la
+ * comprobación de ownership es la app (el caller ya autorizó). La segunda
+ * barrera (RLS) se aplica a TODAS las demás consultas de la acción, que sí
+ * conocen `cliente.companyId`.
+ */
 async function assertOwnership(
   membershipId: string,
   user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
 ) {
-  const membership = await prisma.membership.findUnique({
-    where: { id: membershipId },
-    include: { plan: true, cliente: true },
-  })
+  const membership = await sinEmpresa(
+    'assertOwnership: buscar la membresía por id antes de conocer la empresa',
+    (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        include: { plan: true, cliente: true },
+      })
+  )
   if (!membership) return null
   // Fail-closed: un admin no-superadmin sin companyId no posee ninguna empresa.
   if (
@@ -63,18 +75,21 @@ export async function confirmarPago(
 
     const membership = await assertOwnership(membershipId, user)
     if (!membership) return { error: 'Membresía no encontrada.' }
+    const companyId = membership.cliente.companyId
 
     // Datos del cobro ANTES de activar (la activación aplica el cambio de
     // plan y limpia planIdSolicitado): plan efectivo, descuento y método.
-    const extras = await prisma.membership.findUnique({
-      where: { id: membershipId },
-      select: {
-        planSolicitado: { select: { nombre: true, precio: true } },
-        metodoPago: { select: { tipo: true, nombre: true } },
-        sucursalPago: { select: { id: true, nombre: true } },
-        comprobanteNota: true,
-      },
-    })
+    const extras = await conEmpresa(companyId, (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        select: {
+          planSolicitado: { select: { nombre: true, precio: true } },
+          metodoPago: { select: { tipo: true, nombre: true } },
+          sucursalPago: { select: { id: true, nombre: true } },
+          comprobanteNota: true,
+        },
+      })
+    )
     const esCambio = membership.estado === 'ACTIVA' && membership.planIdSolicitado != null
     const planCobrado = esCambio ? extras?.planSolicitado : membership.plan
     const descuento = membership.fechaInicio == null ? Number(membership.descuentoBienvenida ?? 0) : 0
@@ -113,10 +128,12 @@ export async function confirmarPago(
       auditoria: meta,
     })
 
-    const clienteUser = await prisma.user.findUnique({
-      where: { supabaseId: result.supabaseId },
-      select: { id: true },
-    })
+    const clienteUser = await conEmpresa(companyId, (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: result.supabaseId },
+        select: { id: true },
+      })
+    )
     if (clienteUser) {
       await crearNotificacion({
         userId: clienteUser.id,
@@ -161,53 +178,64 @@ export async function aprobarCambioPlan(
     if (!membership.planIdSolicitado) {
       return { error: 'Esta membresía no tiene un cambio de plan pendiente.' }
     }
+    const companyId = membership.cliente.companyId
+    const planIdSolicitado = membership.planIdSolicitado
 
-    const nuevoPlan = await prisma.plan.findUnique({
-      where: { id: membership.planIdSolicitado },
-    })
+    const nuevoPlan = await conEmpresa(companyId, (tx) =>
+      tx.plan.findUnique({
+        where: { id: planIdSolicitado },
+      })
+    )
     if (!nuevoPlan) return { error: 'El plan solicitado ya no existe.' }
 
     const now = new Date()
-    await prisma.membership.update({
-      where: { id: membership.id },
-      data: {
-        planId: nuevoPlan.id,
-        planIdSolicitado: null,
-        estado: 'ACTIVA',
-        pagoConfirmado: true,
-        montoPagado: nuevoPlan.precio,
-        fechaInicio: now,
-        fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
-        lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
-        rechazadoReason: null,
-      },
-    })
-
-    await prisma.auditLog.create({
-      data: {
-        companyId: membership.cliente.companyId,
-        userId: user.metadata.dbUserId ?? null,
-        accion: 'PAGO_APROBADO',
-        entidadTipo: 'Membership',
-        entidadId: membership.id,
-        payload: {
-          cambioDePlan: true,
-          planAnterior: membership.planId,
-          planNuevo: nuevoPlan.id,
-          monto: Number(nuevoPlan.precio),
+    await conEmpresa(companyId, (tx) =>
+      tx.membership.update({
+        where: { id: membership.id },
+        data: {
+          planId: nuevoPlan.id,
+          planIdSolicitado: null,
+          estado: 'ACTIVA',
+          pagoConfirmado: true,
+          montoPagado: nuevoPlan.precio,
+          fechaInicio: now,
+          fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
+          lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
+          rechazadoReason: null,
         },
-      },
-    })
+      })
+    )
+
+    await conEmpresa(companyId, (tx) =>
+      tx.auditLog.create({
+        data: {
+          companyId,
+          userId: user.metadata.dbUserId ?? null,
+          accion: 'PAGO_APROBADO',
+          entidadTipo: 'Membership',
+          entidadId: membership.id,
+          payload: {
+            cambioDePlan: true,
+            planAnterior: membership.planId,
+            planNuevo: nuevoPlan.id,
+            monto: Number(nuevoPlan.precio),
+          },
+        },
+      })
+    )
 
     // Venta oficial del cambio cobrado: ticket + factura imprimible.
-    const sucursalPago = membership.sucursalPagoId
-      ? await prisma.sucursal.findUnique({
-          where: { id: membership.sucursalPagoId },
-          select: { id: true, nombre: true },
-        })
+    const sucursalPagoId = membership.sucursalPagoId
+    const sucursalPago = sucursalPagoId
+      ? await conEmpresa(companyId, (tx) =>
+          tx.sucursal.findUnique({
+            where: { id: sucursalPagoId },
+            select: { id: true, nombre: true },
+          })
+        )
       : null
     await registrarVentaConfirmada({
-      companyId: membership.cliente.companyId,
+      companyId,
       clienteId: membership.cliente.id,
       clienteNombre: membership.cliente.nombre,
       empleadoId: user.metadata.dbUserId ?? null,
@@ -221,10 +249,12 @@ export async function aprobarCambioPlan(
       membershipId: membership.id,
     })
 
-    const clienteUser = await prisma.user.findUnique({
-      where: { supabaseId: membership.cliente.supabaseId },
-      select: { id: true },
-    })
+    const clienteUser = await conEmpresa(companyId, (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: membership.cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     if (clienteUser) {
       await crearNotificacion({
         userId: clienteUser.id,
@@ -267,52 +297,59 @@ export async function cambiarPlanDeMembresia(
     if (membership.planId === planId) {
       return { error: 'Ese ya es el plan actual de esta membresía.' }
     }
+    const companyId = membership.cliente.companyId
 
-    const nuevoPlan = await prisma.plan.findUnique({ where: { id: planId } })
+    const nuevoPlan = await conEmpresa(companyId, (tx) =>
+      tx.plan.findUnique({ where: { id: planId } })
+    )
     if (
       !nuevoPlan ||
-      nuevoPlan.companyId !== membership.cliente.companyId ||
+      nuevoPlan.companyId !== companyId ||
       !nuevoPlan.activo
     ) {
       return { error: 'El plan seleccionado no es válido para esta empresa.' }
     }
 
     const now = new Date()
-    await prisma.membership.update({
-      where: { id: membership.id },
-      data: {
-        planId: nuevoPlan.id,
-        planIdSolicitado: null,
-        estado: 'ACTIVA',
-        pagoConfirmado: true,
-        montoPagado: nuevoPlan.precio,
-        fechaInicio: now,
-        fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
-        lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
-        rechazadoReason: null,
-      },
-    })
-
-    await prisma.auditLog.create({
-      data: {
-        companyId: membership.cliente.companyId,
-        userId: user.metadata.dbUserId ?? null,
-        accion: 'PAGO_APROBADO',
-        entidadTipo: 'Membership',
-        entidadId: membership.id,
-        payload: {
-          cambioDePlan: true,
-          cambioDirectoPorAdmin: true,
-          planAnterior: membership.planId,
-          planNuevo: nuevoPlan.id,
-          monto: Number(nuevoPlan.precio),
+    await conEmpresa(companyId, (tx) =>
+      tx.membership.update({
+        where: { id: membership.id },
+        data: {
+          planId: nuevoPlan.id,
+          planIdSolicitado: null,
+          estado: 'ACTIVA',
+          pagoConfirmado: true,
+          montoPagado: nuevoPlan.precio,
+          fechaInicio: now,
+          fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
+          lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
+          rechazadoReason: null,
         },
-      },
-    })
+      })
+    )
+
+    await conEmpresa(companyId, (tx) =>
+      tx.auditLog.create({
+        data: {
+          companyId,
+          userId: user.metadata.dbUserId ?? null,
+          accion: 'PAGO_APROBADO',
+          entidadTipo: 'Membership',
+          entidadId: membership.id,
+          payload: {
+            cambioDePlan: true,
+            cambioDirectoPorAdmin: true,
+            planAnterior: membership.planId,
+            planNuevo: nuevoPlan.id,
+            monto: Number(nuevoPlan.precio),
+          },
+        },
+      })
+    )
 
     // Venta oficial del cambio aplicado: ticket + factura imprimible.
     await registrarVentaConfirmada({
-      companyId: membership.cliente.companyId,
+      companyId,
       clienteId: membership.cliente.id,
       clienteNombre: membership.cliente.nombre,
       empleadoId: user.metadata.dbUserId ?? null,
@@ -323,10 +360,12 @@ export async function cambiarPlanDeMembresia(
       membershipId: membership.id,
     })
 
-    const clienteUser = await prisma.user.findUnique({
-      where: { supabaseId: membership.cliente.supabaseId },
-      select: { id: true },
-    })
+    const clienteUser = await conEmpresa(companyId, (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: membership.cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     if (clienteUser) {
       await crearNotificacion({
         userId: clienteUser.id,
@@ -365,16 +404,21 @@ export async function rechazarCambioPlan(
     if (!membership.planIdSolicitado) {
       return { error: 'Esta membresía no tiene un cambio de plan pendiente.' }
     }
+    const companyId = membership.cliente.companyId
 
-    await prisma.membership.update({
-      where: { id: membership.id },
-      data: { planIdSolicitado: null },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.membership.update({
+        where: { id: membership.id },
+        data: { planIdSolicitado: null },
+      })
+    )
 
-    const clienteUser = await prisma.user.findUnique({
-      where: { supabaseId: membership.cliente.supabaseId },
-      select: { id: true },
-    })
+    const clienteUser = await conEmpresa(companyId, (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: membership.cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     if (clienteUser) {
       await crearNotificacion({
         userId: clienteUser.id,
@@ -406,9 +450,10 @@ export async function crearMembresia(
     const user = await requireSection('pagos')
     if (!user) return { error: 'No autorizado.' }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-    })
+    const cliente = await sinEmpresa(
+      'crearMembresia: buscar el cliente por id antes de conocer su empresa',
+      (tx) => tx.cliente.findUnique({ where: { id: clienteId } })
+    )
     if (!cliente) return { error: 'Cliente no encontrado.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -417,21 +462,26 @@ export async function crearMembresia(
     ) {
       return { error: 'No autorizado.' }
     }
+    const companyId = cliente.companyId
 
-    const plan = await prisma.plan.findUnique({ where: { id: planId } })
-    if (!plan || plan.companyId !== cliente.companyId) {
+    const plan = await conEmpresa(companyId, (tx) =>
+      tx.plan.findUnique({ where: { id: planId } })
+    )
+    if (!plan || plan.companyId !== companyId) {
       return { error: 'Plan no válido.' }
     }
 
-    await prisma.membership.create({
-      data: {
-        clienteId,
-        companyId: cliente.companyId,
-        planId,
-        estado: 'PENDIENTE',
-        lavadosRestantes: plan.esIlimitado ? 0 : plan.lavadosIncluidos,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.membership.create({
+        data: {
+          clienteId,
+          companyId,
+          planId,
+          estado: 'PENDIENTE',
+          lavadosRestantes: plan.esIlimitado ? 0 : plan.lavadosIncluidos,
+        },
+      })
+    )
 
     revalidatePath(`/admin/clientes/${clienteId}`)
     revalidatePath('/admin/clientes')
@@ -460,7 +510,7 @@ export async function cancelarMembresia(
     }
 
     const meta = await getRequestMeta()
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(membership.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membership.id },
         data: { estado: 'CANCELADA' },
@@ -508,7 +558,7 @@ export async function rechazarPago(
     const membership = await assertOwnership(membershipId, user)
     if (!membership) return { error: 'Membresía no encontrada.' }
 
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(membership.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membership.id },
         data: { estado: 'RECHAZADA', rechazadoReason: motivo },
@@ -527,10 +577,12 @@ export async function rechazarPago(
       })
     })
 
-    const clienteUserRejected = await prisma.user.findUnique({
-      where: { supabaseId: membership.cliente.supabaseId },
-      select: { id: true },
-    })
+    const clienteUserRejected = await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: membership.cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     if (clienteUserRejected) {
       await crearNotificacion({
         userId: clienteUserRejected.id,
@@ -579,7 +631,7 @@ export async function renovarMembresia(
   const monto = montoRaw ? Number(montoRaw) : Number(membership.plan.precio)
   const vigenciaDias = membership.plan.vigenciaDias ?? 30
 
-  await prisma.$transaction(async (tx) => {
+  await conEmpresa(membership.cliente.companyId, async (tx) => {
     await tx.membership.update({
       where: { id: membership.id },
       data: {
@@ -650,7 +702,10 @@ export async function crearEmpleado(
       return { error: 'La contraseña debe tener al menos 6 caracteres.' }
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } })
+    const existing = await sinEmpresa(
+      'crearEmpleado: verificar unicidad de email (el correo no pertenece a ninguna empresa)',
+      (tx) => tx.user.findUnique({ where: { email } })
+    )
     if (existing) {
       return { error: 'Ya existe un usuario con ese correo.' }
     }
@@ -675,15 +730,17 @@ export async function crearEmpleado(
 
     let dbUser
     try {
-      dbUser = await prisma.user.create({
-        data: {
-          supabaseId,
-          email,
-          name: nombre,
-          role: rolRaw,
-          companyId,
-        },
-      })
+      dbUser = await conEmpresa(companyId, (tx) =>
+        tx.user.create({
+          data: {
+            supabaseId,
+            email,
+            name: nombre,
+            role: rolRaw,
+            companyId,
+          },
+        })
+      )
     } catch (e) {
       // Roll back the auth user so we don't leave an orphan.
       await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('admin:user.create'))
@@ -717,9 +774,10 @@ export async function eliminarEmpleado(
     if (!user) return { error: 'No autorizado.' }
 
     const empleadoId = String(formData.get('empleadoId') ?? '')
-    const empleado = await prisma.user.findUnique({
-      where: { id: empleadoId },
-    })
+    const empleado = await sinEmpresa(
+      'eliminarEmpleado: buscar al miembro del equipo por id (superadmin puede ver cualquiera)',
+      (tx) => tx.user.findUnique({ where: { id: empleadoId } })
+    )
     // El equipo ahora puede tener cualquier rol invitable (no solo EMPLEADO).
     // SUPERADMIN y CLIENTE siguen fuera del alcance de esta acción.
     if (!empleado || !INVITABLE_ROLES.includes(empleado.role)) {
@@ -734,6 +792,8 @@ export async function eliminarEmpleado(
     ) {
       return { error: 'No autorizado.' }
     }
+    const companyId = empleado.companyId
+    if (!companyId) return { error: 'Miembro del equipo sin empresa.' }
 
     const supabase = createAdminClient()
     const { error: delError } = await supabase.auth.admin.deleteUser(
@@ -743,7 +803,7 @@ export async function eliminarEmpleado(
       console.error('[admin] eliminarEmpleado supabase error:', delError)
     }
 
-    await prisma.user.delete({ where: { id: empleado.id } })
+    await conEmpresa(companyId, (tx) => tx.user.delete({ where: { id: empleado.id } }))
 
     revalidatePath('/admin/empleados')
     return { success: true }
@@ -777,7 +837,7 @@ export async function solicitarNuevaEvidencia(
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(membership.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membership.id },
         data: { estado: 'RECHAZADA', rechazadoReason: motivo, comprobanteUrl: null },
@@ -796,10 +856,12 @@ export async function solicitarNuevaEvidencia(
       })
     })
 
-    const clienteUser = await prisma.user.findUnique({
-      where: { supabaseId: membership.cliente.supabaseId },
-      select: { id: true },
-    })
+    const clienteUser = await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: membership.cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     if (clienteUser) {
       await crearNotificacion({
         userId: clienteUser.id,
@@ -839,7 +901,7 @@ export async function guardarNotaInterna(
 
   const meta = await getRequestMeta()
   try {
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(membership.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membership.id },
         data: { adminNota: nota || null },
@@ -898,14 +960,16 @@ export async function guardarBienvenida(
       }
     }
 
-    await prisma.company.update({
-      where: { id: companyId },
-      data: {
-        bienvenidaActiva: activa,
-        bienvenidaTipo: tipo,
-        bienvenidaValor: valor,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: {
+          bienvenidaActiva: activa,
+          bienvenidaTipo: tipo,
+          bienvenidaValor: valor,
+        },
+      })
+    )
 
     revalidatePath('/admin/planes')
     revalidatePath('/cliente/planes')

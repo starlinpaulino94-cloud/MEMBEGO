@@ -7,9 +7,9 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireSection, type requireAdminUser } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { paymentLimiter } from '@/lib/rate-limit'
 import { crearNotificacion } from '@/modules/notificaciones/service'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
@@ -25,14 +25,16 @@ async function assertCompraOwnership(
   compraId: string,
   user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
 ) {
-  const compra = await prisma.productoCompra.findUnique({
-    where: { id: compraId },
-    include: {
-      cliente: true,
-      promocion: { select: { titulo: true, precio: true } },
-      sucursalPago: { select: { id: true, nombre: true } },
-    },
-  })
+  const compra = await sinEmpresa('compra por id sin conocer la empresa', (tx) =>
+    tx.productoCompra.findUnique({
+      where: { id: compraId },
+      include: {
+        cliente: true,
+        promocion: { select: { titulo: true, precio: true } },
+        sucursalPago: { select: { id: true, nombre: true } },
+      },
+    })
+  )
   if (!compra) return null
   if (user.metadata.role !== 'SUPERADMIN' && compra.companyId !== user.metadata.companyId) {
     return null
@@ -107,7 +109,7 @@ export async function rechazarCompra(
     }
 
     const meta = await getRequestMeta()
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(compra.companyId, async (tx) => {
       const upd = await tx.productoCompra.updateMany({
         where: { id: compra.id, estado: compra.estado },
         data: { estado: 'RECHAZADA', rechazadoReason: motivo },
@@ -133,9 +135,11 @@ export async function rechazarCompra(
       })
     })
 
-    const clienteUser = await prisma.user
-      .findUnique({ where: { supabaseId: compra.cliente.supabaseId }, select: { id: true } })
-      .catch(() => null)
+    const clienteUser = await sinEmpresa('user del cliente por supabaseId', (tx) =>
+      tx.user
+        .findUnique({ where: { supabaseId: compra.cliente.supabaseId }, select: { id: true } })
+        .catch(() => null)
+    )
     if (clienteUser) {
       await crearNotificacion({
         userId: clienteUser.id,

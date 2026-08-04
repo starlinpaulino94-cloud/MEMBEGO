@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdminUser } from '@/lib/auth/guards'
+import { sinEmpresa } from '@/lib/tenant'
 
 export interface EmpresaActivaState {
   error?: string
@@ -26,32 +26,38 @@ export async function cambiarEmpresaActiva(
   const target = String(companyId ?? '').trim()
   if (!target) return { error: 'Empresa requerida.' }
 
-  const company = await prisma.company.findUnique({
-    where: { id: target },
-    select: { id: true },
-  })
+  const company = await sinEmpresa('empresa por id al cambiar la activa', (tx) =>
+    tx.company.findUnique({
+      where: { id: target },
+      select: { id: true },
+    })
+  )
   if (!company) return { error: 'Empresa no encontrada.' }
 
   if (user.metadata.role !== 'SUPERADMIN') {
     const tieneAcceso =
       user.metadata.companyId === target ||
-      (await prisma.userCompanyAccess
-        .findUnique({
-          where: {
-            userId_companyId: { userId: user.metadata.dbUserId, companyId: target },
-          },
-          select: { id: true },
-        })
-        .then((r) => !!r)
-        .catch(() => false))
+      (await sinEmpresa('acceso multi-empresa del usuario', (tx) =>
+        tx.userCompanyAccess
+          .findUnique({
+            where: {
+              userId_companyId: { userId: user.metadata.dbUserId, companyId: target },
+            },
+            select: { id: true },
+          })
+          .then((r) => !!r)
+          .catch(() => false)
+      ))
     if (!tieneAcceso) return { error: 'No tienes acceso a esa empresa.' }
   }
 
   try {
-    await prisma.user.update({
-      where: { id: user.metadata.dbUserId },
-      data: { companyId: target },
-    })
+    await sinEmpresa('actualizar empresa activa del usuario', (tx) =>
+      tx.user.update({
+        where: { id: user.metadata.dbUserId },
+        data: { companyId: target },
+      })
+    )
 
     const admin = createAdminClient()
     const { error: authError } = await admin.auth.admin.updateUserById(

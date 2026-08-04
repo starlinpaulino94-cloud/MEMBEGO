@@ -19,10 +19,10 @@
 
 import { revalidatePath } from 'next/cache'
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getRequestMeta } from '@/lib/server-utils'
+import { sinEmpresa } from '@/lib/tenant'
 import { purgarClienteRow } from '@/modules/superadmin/purgar'
 
 export interface EliminarState {
@@ -40,13 +40,17 @@ async function requireSuperadmin() {
 
 /** Borra la fila User (con sus notificaciones) y la cuenta de Supabase Auth. */
 async function eliminarCuentaAcceso(supabaseId: string) {
-  const userRow = await prisma.user.findUnique({
-    where: { supabaseId },
-    select: { id: true },
-  })
+  const userRow = await sinEmpresa('superadmin: buscar usuario por supabaseId', (tx) =>
+    tx.user.findUnique({
+      where: { supabaseId },
+      select: { id: true },
+    })
+  )
   if (userRow) {
-    await prisma.notificacion.deleteMany({ where: { userId: userRow.id } })
-    await prisma.user.delete({ where: { id: userRow.id } })
+    await sinEmpresa('superadmin: borrar notificaciones y usuario', async (tx) => {
+      await tx.notificacion.deleteMany({ where: { userId: userRow.id } })
+      await tx.user.delete({ where: { id: userRow.id } })
+    })
   }
   const supabase = createAdminClient()
   const { error } = await supabase.auth.admin.deleteUser(supabaseId)
@@ -62,20 +66,22 @@ async function auditarEliminacion(params: {
   payload: Record<string, unknown>
 }) {
   const meta = await getRequestMeta().catch(() => ({ ipAddress: null, userAgent: null }))
-  await prisma.auditLog
-    .create({
-      data: {
-        companyId: params.companyId,
-        userId: params.userId,
-        accion: 'CUENTA_ELIMINADA',
-        entidadTipo: params.entidadTipo,
-        entidadId: params.entidadId,
-        payload: params.payload as Prisma.InputJsonValue,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-      },
-    })
-    .catch((e) => console.error('[eliminar] audit:', e))
+  await sinEmpresa('superadmin: auditar eliminación', (tx) =>
+    tx.auditLog
+      .create({
+        data: {
+          companyId: params.companyId,
+          userId: params.userId,
+          accion: 'CUENTA_ELIMINADA',
+          entidadTipo: params.entidadTipo,
+          entidadId: params.entidadId,
+          payload: params.payload as Prisma.InputJsonValue,
+          ipAddress: meta.ipAddress,
+          userAgent: meta.userAgent,
+        },
+      })
+      .catch((e) => console.error('[eliminar] audit:', e))
+  )
 }
 
 /**
@@ -96,19 +102,23 @@ export async function eliminarClienteGlobal(
     const clienteId = String(formData.get('clienteId') ?? '').trim()
     if (!clienteId) return { error: 'Cliente no especificado.' }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { id: true, nombre: true, email: true, supabaseId: true, companyId: true },
-    })
+    const cliente = await sinEmpresa('superadmin: buscar cliente por id', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { id: true, nombre: true, email: true, supabaseId: true, companyId: true },
+      })
+    )
     if (!cliente) return { error: 'Cliente no encontrado.' }
 
     const conteos = await purgarClienteRow(cliente.id)
 
     // Si la persona ya no es cliente de NINGUNA empresa, se elimina también
     // su cuenta de acceso (User + Supabase Auth).
-    const restantes = await prisma.cliente.count({
-      where: { supabaseId: cliente.supabaseId },
-    })
+    const restantes = await sinEmpresa('superadmin: contar fichas restantes del cliente', (tx) =>
+      tx.cliente.count({
+        where: { supabaseId: cliente.supabaseId },
+      })
+    )
     if (restantes === 0) await eliminarCuentaAcceso(cliente.supabaseId)
 
     await auditarEliminacion({
@@ -161,26 +171,32 @@ export async function eliminarUsuarioGlobal(
       return { error: 'No puedes eliminar tu propia cuenta.' }
     }
 
-    const objetivo = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, companyId: true, supabaseId: true },
-    })
+    const objetivo = await sinEmpresa('superadmin: buscar usuario por id', (tx) =>
+      tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, role: true, companyId: true, supabaseId: true },
+      })
+    )
     if (!objetivo) return { error: 'Usuario no encontrado.' }
     if (objetivo.role === 'SUPERADMIN') {
       return { error: 'Las cuentas SUPERADMIN no se eliminan desde aquí.' }
     }
 
     if (objetivo.role === 'CLIENTE') {
-      const fichas = await prisma.cliente.findMany({
-        where: { supabaseId: objetivo.supabaseId },
-        select: { id: true },
-      })
+      const fichas = await sinEmpresa('superadmin: fichas de cliente del usuario', (tx) =>
+        tx.cliente.findMany({
+          where: { supabaseId: objetivo.supabaseId },
+          select: { id: true },
+        })
+      )
       for (const f of fichas) await purgarClienteRow(f.id)
     } else {
       // Staff: sus sesiones de caja son registros contables permanentes.
-      const cajas = await prisma.cajaSesion.count({
-        where: { abiertaPorId: objetivo.id },
-      })
+      const cajas = await sinEmpresa('superadmin: contar cajas abiertas del staff', (tx) =>
+        tx.cajaSesion.count({
+          where: { abiertaPorId: objetivo.id },
+        })
+      )
       if (cajas > 0) {
         return {
           error:

@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import type { PostTipo } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { notificarSeguidoresEmpresa } from '@/modules/notificaciones/service'
 
 // F3.3: CRUD de publicaciones de empresa (eventos, noticias, beneficios).
@@ -62,10 +62,12 @@ async function validarCampana(
   companyId: string
 ): Promise<string | null> {
   if (!campanaId) return null
-  const campana = await prisma.campana.findUnique({
-    where: { id: campanaId },
-    select: { companyId: true },
-  })
+  const campana = await conEmpresa(companyId, (tx) =>
+    tx.campana.findUnique({
+      where: { id: campanaId },
+      select: { companyId: true },
+    })
+  )
   if (!campana || campana.companyId !== companyId) return 'Campaña inválida.'
   return null
 }
@@ -95,9 +97,11 @@ export async function crearPost(
   if (campanaError) return { error: campanaError }
 
   try {
-    await prisma.companyPost.create({
-      data: { companyId, ...parsed.data },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.companyPost.create({
+        data: { companyId, ...parsed.data },
+      })
+    )
 
     // Solo los seguidores reciben la notificación.
     await notificarSeguidoresEmpresa(companyId, {
@@ -131,10 +135,12 @@ export async function actualizarPost(
   const activo = String(formData.get('activo') ?? 'true') === 'true'
 
   try {
-    const post = await prisma.companyPost.findUnique({
-      where: { id },
-      select: { companyId: true },
-    })
+    const post = await sinEmpresa('publicación por id sin conocer la empresa', (tx) =>
+      tx.companyPost.findUnique({
+        where: { id },
+        select: { companyId: true },
+      })
+    )
     if (!post) return { error: 'Publicación no encontrada.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -146,10 +152,12 @@ export async function actualizarPost(
     const campanaError = await validarCampana(parsed.data.campanaId, post.companyId)
     if (campanaError) return { error: campanaError }
 
-    await prisma.companyPost.update({
-      where: { id },
-      data: { ...parsed.data, activo },
-    })
+    await conEmpresa(post.companyId, (tx) =>
+      tx.companyPost.update({
+        where: { id },
+        data: { ...parsed.data, activo },
+      })
+    )
 
     revalidatePosts()
     return { success: true }
@@ -170,10 +178,12 @@ export async function eliminarPost(
   if (!id) return { error: 'Publicación no especificada.' }
 
   try {
-    const post = await prisma.companyPost.findUnique({
-      where: { id },
-      select: { companyId: true },
-    })
+    const post = await sinEmpresa('publicación por id sin conocer la empresa', (tx) =>
+      tx.companyPost.findUnique({
+        where: { id },
+        select: { companyId: true },
+      })
+    )
     if (!post) return { error: 'Publicación no encontrada.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -182,7 +192,7 @@ export async function eliminarPost(
       return { error: 'No autorizado.' }
     }
 
-    await prisma.companyPost.delete({ where: { id } })
+    await conEmpresa(post.companyId, (tx) => tx.companyPost.delete({ where: { id } }))
 
     revalidatePosts()
     return { success: true }

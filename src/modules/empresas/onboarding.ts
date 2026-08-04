@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 // F5.1: checklist de onboarding de la empresa. Se calcula desde los datos
 // reales (sin columnas de estado): el progreso se "retoma" solo porque
@@ -23,26 +23,29 @@ export interface OnboardingEmpresa {
 export async function getOnboardingEmpresa(
   companyId: string
 ): Promise<OnboardingEmpresa | null> {
-  const [company, categorias, planes, promos] = await Promise.all([
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: {
-        isPublished: true,
-        logoUrl: true,
-        bannerUrl: true,
-        description: true,
-        ciudad: true,
-        direccion: true,
-        telefono: true,
-        whatsapp: true,
-      },
-    }),
-    prisma.companyToCategory.count({ where: { companyId } }),
-    prisma.plan.count({ where: { companyId, activo: true } }),
-    prisma.promocion.count({
-      where: { companyId, activo: true, archivada: false },
-    }),
-  ])
+  const [company, categorias, planes, promos] = await conEmpresa(companyId, async (tx) => {
+    const results = await Promise.all([
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: {
+          isPublished: true,
+          logoUrl: true,
+          bannerUrl: true,
+          description: true,
+          ciudad: true,
+          direccion: true,
+          telefono: true,
+          whatsapp: true,
+        },
+      }),
+      tx.companyToCategory.count({ where: { companyId } }),
+      tx.plan.count({ where: { companyId, activo: true } }),
+      tx.promocion.count({
+        where: { companyId, activo: true, archivada: false },
+      }),
+    ])
+    return results
+  })
   if (!company) return null
 
   const items: OnboardingItem[] = [

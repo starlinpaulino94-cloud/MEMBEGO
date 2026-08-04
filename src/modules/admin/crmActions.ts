@@ -1,8 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 // F4.4: notas internas del CRM. Cada empresa solo ve/edita notas de SUS
 // clientes; nunca se muestran al cliente.
@@ -17,10 +17,12 @@ async function clienteDeMiEmpresa(
   clienteId: string,
   user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
 ) {
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: clienteId },
-    select: { id: true, companyId: true },
-  })
+  const cliente = await sinEmpresa('cliente por id sin conocer la empresa', (tx) =>
+    tx.cliente.findUnique({
+      where: { id: clienteId },
+      select: { id: true, companyId: true },
+    })
+  )
   if (!cliente) return null
   if (
     user.metadata.role !== 'SUPERADMIN' &&
@@ -48,13 +50,15 @@ export async function agregarNotaCliente(
     const cliente = await clienteDeMiEmpresa(clienteId, user)
     if (!cliente) return { error: 'Cliente no encontrado.' }
 
-    await prisma.clienteNota.create({
-      data: {
-        clienteId,
-        autorId: user.metadata.dbUserId || null,
-        texto,
-      },
-    })
+    await conEmpresa(cliente.companyId, (tx) =>
+      tx.clienteNota.create({
+        data: {
+          clienteId,
+          autorId: user.metadata.dbUserId || null,
+          texto,
+        },
+      })
+    )
 
     revalidatePath(`/admin/clientes/${clienteId}`)
     return { success: true }
@@ -75,10 +79,12 @@ export async function eliminarNotaCliente(
   if (!notaId) return { error: 'Nota no especificada.' }
 
   try {
-    const nota = await prisma.clienteNota.findUnique({
-      where: { id: notaId },
-      select: { id: true, clienteId: true, cliente: { select: { companyId: true } } },
-    })
+    const nota = await sinEmpresa('nota por id sin conocer la empresa', (tx) =>
+      tx.clienteNota.findUnique({
+        where: { id: notaId },
+        select: { id: true, clienteId: true, cliente: { select: { companyId: true } } },
+      })
+    )
     if (!nota) return { error: 'Nota no encontrada.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -87,7 +93,9 @@ export async function eliminarNotaCliente(
       return { error: 'No autorizado.' }
     }
 
-    await prisma.clienteNota.delete({ where: { id: notaId } })
+    await conEmpresa(nota.cliente.companyId, (tx) =>
+      tx.clienteNota.delete({ where: { id: notaId } })
+    )
 
     revalidatePath(`/admin/clientes/${nota.clienteId}`)
     return { success: true }

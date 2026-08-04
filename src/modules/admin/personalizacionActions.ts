@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { normalizeEngagementConfig } from '@/lib/engagementConfig'
 
@@ -34,10 +34,12 @@ export async function guardarPersonalizacion(
   )
 
   try {
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { engagementConfig: cfg as never },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { engagementConfig: cfg as never },
+      })
+    )
     revalidatePath('/admin/personalizacion')
     revalidatePath('/mis-membresias')
     return { success: true }

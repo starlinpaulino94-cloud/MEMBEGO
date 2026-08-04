@@ -1,6 +1,6 @@
 import 'server-only'
 import { cache } from 'react'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { RegionalPrefs } from '@/lib/format'
 
 /**
@@ -19,10 +19,12 @@ export const getRegionalPrefs = cache(
   async (companyId: string | null | undefined): Promise<RegionalPrefs | null> => {
     if (!companyId || companyId === '__none__') return null
     try {
-      return await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { moneda: true, idioma: true, zonaHoraria: true },
-      })
+      return await conEmpresa(companyId, (tx) =>
+        tx.company.findUnique({
+          where: { id: companyId },
+          select: { moneda: true, idioma: true, zonaHoraria: true },
+        })
+      )
     } catch {
       return null
     }

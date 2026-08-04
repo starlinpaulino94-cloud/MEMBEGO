@@ -11,9 +11,9 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
+import { sinEmpresa } from '@/lib/tenant'
 import {
   CAMPANA_TIPOS,
   leerPlantilla,
@@ -42,6 +42,7 @@ export async function crearCampanaGlobal(
   formData: FormData
 ): Promise<CampanaActionState> {
   try {
+    return await sinEmpresa('superadmin: operación sobre campañas globales', async (tx) => {
     const user = await soloSuperadmin()
     if (!user) return { error: 'Solo el superadmin puede crear campañas globales.' }
 
@@ -96,7 +97,7 @@ export async function crearCampanaGlobal(
         return { error: 'Cada empresa puede aparecer una sola vez en la cadena.' }
       }
 
-      await prisma.campanaGlobal.create({
+      await tx.campanaGlobal.create({
         data: {
           nombre,
           tipo: 'PROMOCION',
@@ -132,8 +133,8 @@ export async function crearCampanaGlobal(
 
     // Empresas destino: todas las activas, o las marcadas a mano.
     const empresas = todas
-      ? await prisma.company.findMany({ where: { isActive: true }, select: { id: true } })
-      : await prisma.company.findMany({
+      ? await tx.company.findMany({ where: { isActive: true }, select: { id: true } })
+      : await tx.company.findMany({
           where: { id: { in: elegidas } },
           select: { id: true },
         })
@@ -172,7 +173,7 @@ export async function crearCampanaGlobal(
             usosPorCompra: num('p_usos') ?? 1,
           }
 
-    await prisma.campanaGlobal.create({
+    await tx.campanaGlobal.create({
       data: {
         nombre,
         tipo,
@@ -193,6 +194,7 @@ export async function crearCampanaGlobal(
     return {
       success: `Campaña creada en borrador con ${empresas.length} empresa${empresas.length !== 1 ? 's' : ''}. Revísala y aplícala cuando estés listo.`,
     }
+    })
   } catch (e) {
     console.error('[campanas globales] crear:', e)
     return {
@@ -210,10 +212,11 @@ export async function aplicarCampanaGlobal(
   campanaId: string
 ): Promise<{ ok?: true; creadas?: number; fallos?: number; error?: string }> {
   try {
+    return await sinEmpresa('superadmin: operación sobre campañas globales', async (tx) => {
     const user = await soloSuperadmin()
     if (!user) return { error: 'Solo el superadmin puede aplicar campañas.' }
 
-    const campana = await prisma.campanaGlobal.findUnique({
+    const campana = await tx.campanaGlobal.findUnique({
       where: { id: campanaId },
       include: { participantes: true },
     })
@@ -224,7 +227,7 @@ export async function aplicarCampanaGlobal(
 
     // ── Cadena: cada eslabón genera SU promoción en SU empresa ─────────────
     if (campana.modo === 'CADENA') {
-      const pasos = await prisma.campanaPaso.findMany({
+      const pasos = await tx.campanaPaso.findMany({
         where: { campanaId, aplicadaAt: null },
         orderBy: { orden: 'asc' },
       })
@@ -233,7 +236,7 @@ export async function aplicarCampanaGlobal(
       for (const paso of pasos) {
         try {
           const t = leerPlantilla('PROMOCION', paso.plantilla) as PlantillaPromocion
-          const promo = await prisma.promocion.create({
+          const promo = await tx.promocion.create({
             data: {
               companyId: paso.companyId,
               titulo: paso.titulo || t.titulo,
@@ -252,11 +255,11 @@ export async function aplicarCampanaGlobal(
             },
             select: { id: true },
           })
-          await prisma.campanaPaso.update({
+          await tx.campanaPaso.update({
             where: { id: paso.id },
             data: { promocionId: promo.id, aplicadaAt: new Date(), error: null },
           })
-          await prisma.campanaGlobalEmpresa.updateMany({
+          await tx.campanaGlobalEmpresa.updateMany({
             where: { campanaId, companyId: paso.companyId },
             data: { promocionId: promo.id, aplicadaAt: new Date(), error: null },
           })
@@ -264,7 +267,7 @@ export async function aplicarCampanaGlobal(
         } catch (e) {
           fallosC++
           console.error('[campanas globales] paso', paso.orden, e)
-          await prisma.campanaPaso
+          await tx.campanaPaso
             .update({
               where: { id: paso.id },
               data: { error: e instanceof Error ? e.message.slice(0, 300) : 'Error desconocido' },
@@ -272,7 +275,7 @@ export async function aplicarCampanaGlobal(
             .catch(anotarFallo('superadmin:campanaPaso.update'))
         }
       }
-      await prisma.campanaGlobal.update({
+      await tx.campanaGlobal.update({
         where: { id: campanaId },
         data: { estado: 'APLICADA', aplicadaAt: new Date() },
       })
@@ -286,21 +289,21 @@ export async function aplicarCampanaGlobal(
 
     // Si es "todas las empresas", incorpora las que se hayan creado después.
     if (campana.todasLasEmpresas) {
-      const activas = await prisma.company.findMany({
+      const activas = await tx.company.findMany({
         where: { isActive: true },
         select: { id: true },
       })
       const yaEstan = new Set(campana.participantes.map((p) => p.companyId))
       const nuevas = activas.filter((a) => !yaEstan.has(a.id))
       if (nuevas.length > 0) {
-        await prisma.campanaGlobalEmpresa.createMany({
+        await tx.campanaGlobalEmpresa.createMany({
           data: nuevas.map((n) => ({ campanaId, companyId: n.id })),
           skipDuplicates: true,
         })
       }
     }
 
-    const participantes = await prisma.campanaGlobalEmpresa.findMany({
+    const participantes = await tx.campanaGlobalEmpresa.findMany({
       where: { campanaId, aplicadaAt: null },
       select: { id: true, companyId: true },
     })
@@ -311,7 +314,7 @@ export async function aplicarCampanaGlobal(
       try {
         if (tipo === 'PLAN') {
           const t = plantilla as PlantillaPlan
-          const plan = await prisma.plan.create({
+          const plan = await tx.plan.create({
             data: {
               companyId: p.companyId,
               nombre: t.nombre,
@@ -326,13 +329,13 @@ export async function aplicarCampanaGlobal(
             },
             select: { id: true },
           })
-          await prisma.campanaGlobalEmpresa.update({
+          await tx.campanaGlobalEmpresa.update({
             where: { id: p.id },
             data: { planId: plan.id, aplicadaAt: new Date(), error: null },
           })
         } else {
           const t = plantilla as PlantillaPromocion
-          const promo = await prisma.promocion.create({
+          const promo = await tx.promocion.create({
             data: {
               companyId: p.companyId,
               titulo: t.titulo,
@@ -348,7 +351,7 @@ export async function aplicarCampanaGlobal(
             },
             select: { id: true },
           })
-          await prisma.campanaGlobalEmpresa.update({
+          await tx.campanaGlobalEmpresa.update({
             where: { id: p.id },
             data: { promocionId: promo.id, aplicadaAt: new Date(), error: null },
           })
@@ -357,7 +360,7 @@ export async function aplicarCampanaGlobal(
       } catch (e) {
         fallos++
         console.error('[campanas globales] aplicar a', p.companyId, e)
-        await prisma.campanaGlobalEmpresa
+        await tx.campanaGlobalEmpresa
           .update({
             where: { id: p.id },
             data: { error: e instanceof Error ? e.message.slice(0, 300) : 'Error desconocido' },
@@ -366,13 +369,13 @@ export async function aplicarCampanaGlobal(
       }
     }
 
-    await prisma.campanaGlobal.update({
+    await tx.campanaGlobal.update({
       where: { id: campanaId },
       data: { estado: 'APLICADA', aplicadaAt: new Date() },
     })
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
+    await tx.auditLog
       .create({
         data: {
           companyId: null,
@@ -389,6 +392,7 @@ export async function aplicarCampanaGlobal(
     revalidatePath(RUTA)
     revalidatePath(`${RUTA}/${campanaId}`)
     return { ok: true, creadas, fallos }
+    })
   } catch (e) {
     console.error('[campanas globales] aplicar:', e)
     return { error: 'No se pudo aplicar la campaña. Intenta de nuevo.' }
@@ -403,14 +407,15 @@ export async function archivarCampanaGlobal(
   campanaId: string
 ): Promise<{ ok?: true; error?: string }> {
   try {
+    return await sinEmpresa('superadmin: operación sobre campañas globales', async (tx) => {
     const user = await soloSuperadmin()
     if (!user) return { error: 'Solo el superadmin puede archivar campañas.' }
 
-    const participantes = await prisma.campanaGlobalEmpresa.findMany({
+    const participantes = await tx.campanaGlobalEmpresa.findMany({
       where: { campanaId },
       select: { promocionId: true, planId: true },
     })
-    const pasos = await prisma.campanaPaso.findMany({
+    const pasos = await tx.campanaPaso.findMany({
       where: { campanaId },
       select: { promocionId: true },
     })
@@ -421,23 +426,23 @@ export async function archivarCampanaGlobal(
     const planes = participantes.map((p) => p.planId).filter((x): x is string => !!x)
 
     if (promos.length > 0) {
-      await prisma.promocion
+      await tx.promocion
         .updateMany({ where: { id: { in: promos } }, data: { activo: false } })
         .catch((e) => console.error('[campanas globales] desactivar promos:', e))
     }
     if (planes.length > 0) {
-      await prisma.plan
+      await tx.plan
         .updateMany({ where: { id: { in: planes } }, data: { activo: false } })
         .catch((e) => console.error('[campanas globales] desactivar planes:', e))
     }
 
-    await prisma.campanaGlobal.update({
+    await tx.campanaGlobal.update({
       where: { id: campanaId },
       data: { estado: 'ARCHIVADA' },
     })
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
+    await tx.auditLog
       .create({
         data: {
           companyId: null,
@@ -458,6 +463,7 @@ export async function archivarCampanaGlobal(
     revalidatePath(RUTA)
     revalidatePath(`${RUTA}/${campanaId}`)
     return { ok: true }
+    })
   } catch (e) {
     console.error('[campanas globales] archivar:', e)
     return { error: 'No se pudo archivar la campaña.' }

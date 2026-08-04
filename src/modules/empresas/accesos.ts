@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import type { AppRole } from '@/types'
 
@@ -28,17 +28,19 @@ export interface AdminVinculable {
 /** Administradores existentes a los que se les puede dar acceso a una empresa. */
 export async function getAdminsVinculables(): Promise<AdminVinculable[]> {
   try {
-    const filas = await prisma.user.findMany({
-      where: { role: { in: ROLES_VINCULABLES } },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        company: { select: { name: true } },
-      },
-    })
+    const filas = await sinEmpresa('empresas: listar admins vinculables (cross-tenant)', (tx) =>
+      tx.user.findMany({
+        where: { role: { in: ROLES_VINCULABLES } },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          company: { select: { name: true } },
+        },
+      })
+    )
     return filas.map((f) => ({
       id: f.id,
       name: f.name,
@@ -63,14 +65,18 @@ export interface AccesoEmpresa {
 /** Quién tiene acceso a esta empresa (por acceso explícito o por ser su casa). */
 export async function getAccesosDeEmpresa(companyId: string): Promise<AccesoEmpresa[]> {
   try {
-    const usuarios = await prisma.user.findMany({
-      where: {
-        role: { in: ROLES_VINCULABLES },
-        OR: [{ companyId }, { empresasAcceso: { some: { companyId } } }],
-      },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, email: true, role: true, companyId: true },
-    })
+    const usuarios = await sinEmpresa(
+      'empresas: quién tiene acceso a la empresa (usuarios de otras empresas incluidos)',
+      (tx) =>
+        tx.user.findMany({
+          where: {
+            role: { in: ROLES_VINCULABLES },
+            OR: [{ companyId }, { empresasAcceso: { some: { companyId } } }],
+          },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, email: true, role: true, companyId: true },
+        })
+    )
     return usuarios.map((u) => ({
       userId: u.id,
       name: u.name,
