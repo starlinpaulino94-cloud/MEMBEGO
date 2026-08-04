@@ -159,8 +159,16 @@ export async function activarCompraPromocion(
     type: 'cliente.compro_servicio',
     subjectId: compra.clienteId,
     payload: {
-      cliente: { nombre: compra.cliente.nombre },
-      compra: { tipo: 'promocion', monto, promocion: promo.titulo },
+      cliente: {
+        nombre: compra.cliente.nombre,
+        email: compra.cliente.email ?? null,
+        telefono: compra.cliente.telefono ?? null,
+      },
+      // `promocion` (título) se mantiene para no romper las automatizaciones
+      // que ya lo leen; el objeto lleva la identidad ESTABLE, que es lo que un
+      // sistema satélite necesita para casar la oferta con su catálogo.
+      compra: { tipo: 'promocion', monto, promocion: promo.titulo, promocionId: promo.id },
+      promocion: { id: promo.id, titulo: promo.titulo, slug: promo.slug ?? null },
     },
   })
 

@@ -1,12 +1,21 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { urlAperturaSSO } from '@/modules/integraciones/sso'
+import { ROLES_APP } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-// Roles del EQUIPO que pueden abrir un sistema satélite (los clientes no:
-// ellos viven en MembeGo; el satélite es la herramienta operativa del equipo).
-const ROLES_EQUIPO = new Set(['SUPERADMIN', 'ADMIN_EMPRESA', 'GERENTE', 'RECEPCION', 'EMPLEADO'])
+/**
+ * Roles del EQUIPO que pueden abrir un sistema satélite: TODOS menos CLIENTE.
+ * Los clientes viven en MembeGo; el satélite es la herramienta del equipo.
+ *
+ * Se deriva de la lista de roles en vez de escribirla a mano: la versión
+ * escrita a mano olvidaba ADMINISTRADOR (el nombre moderno de ADMIN_EMPRESA),
+ * SUPERVISOR, CAJERO y MARKETING — o sea que al dueño de la empresa se le
+ * negaba la entrada al satélite con un 401 sin explicación. Quién puede hacer
+ * QUÉ dentro del satélite lo decide el satélite con el `rol` del token.
+ */
+const ROLES_EQUIPO = new Set<string>(ROLES_APP.filter((r) => r !== 'CLIENTE'))
 
 /**
  * SSO de salida: GET /api/integraciones/abrir/carwash → 302 al sistema

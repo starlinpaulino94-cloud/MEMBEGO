@@ -49,6 +49,30 @@ test('token SSO: ida y vuelta con el mismo secreto', () => {
   assert.equal(datos.rol, 'EMPLEADO')
 })
 
+test('el vector de prueba de la documentación sigue siendo cierto', () => {
+  // docs/INTEGRACIONES.md §1 publica este token para que el satélite pruebe su
+  // verificador sin depender de MembeGo. Si el formato cambiara y la doc no,
+  // el satélite estaría persiguiendo un fantasma: aquí se rompe primero.
+  const SECRETO_DOC = 'secreto-de-prueba'
+  const datos = {
+    sub: '623d642c-ae5f-445a-99eb-220b55eb0e1c',
+    email: 'dueno@ejemplo.com',
+    rol: 'ADMIN_EMPRESA',
+    companyId: 'cmre1hz570000jp04ad5i0roi',
+    exp: 1_900_000_000,
+  }
+  const TOKEN_DOC =
+    'eyJzdWIiOiI2MjNkNjQyYy1hZTVmLTQ0NWEtOTllYi0yMjBiNTVlYjBlMWMiLCJlbWFpbCI6ImR1ZW5vQGVqZW1wbG8uY29tIiwicm9sIjoiQURNSU5fRU1QUkVTQSIsImNvbXBhbnlJZCI6ImNtcmUxaHo1NzAwMDBqcDA0YWQ1aTByb2kiLCJleHAiOjE5MDAwMDAwMDB9.' +
+    '02d8a44d97acc2b4eee1804fbb0a78b351adee9ad8018c335888fe08ac8bc326'
+
+  assert.equal(crearTokenSSO(SECRETO_DOC, datos), TOKEN_DOC)
+  // Se verifica con un reloj anterior a `exp` para que la prueba no caduque
+  // sola en 2030 y deje a alguien depurando un fallo que no existe.
+  const leido = verificarTokenSSO(SECRETO_DOC, TOKEN_DOC, 1_800_000_000)
+  assert.ok(leido)
+  assert.equal(leido.companyId, 'cmre1hz570000jp04ad5i0roi')
+})
+
 test('token SSO: rechaza firma ajena, expiración y campos faltantes', () => {
   const exp = Math.floor(Date.now() / 1000) + 90
   const token = crearTokenSSO(SECRETO, {

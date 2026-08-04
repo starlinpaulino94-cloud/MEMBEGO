@@ -1,13 +1,15 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import { recordPromotionView } from '@/modules/marketplace/actions'
 import { getPromotionDetail, getPromotionOg } from '@/modules/marketplace/cached'
 import { PromotionDetail } from '@/components/marketplace/PromotionDetail'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
+import { rutaPublicaPromo } from '@/modules/promociones/slug'
 
 interface PromotionDetailPageProps {
-  params: Promise<{ id: string }>
+  /** Puede ser el slug («lavado-premium») o el id de siempre. */
+  params: Promise<{ clave: string }>
 }
 
 export const revalidate = 3600
@@ -18,8 +20,8 @@ export const revalidate = 3600
 export async function generateMetadata({
   params,
 }: PromotionDetailPageProps): Promise<Metadata> {
-  const { id } = await params
-  const og = await getPromotionOg(id)
+  const { clave } = await params
+  const og = await getPromotionOg(clave)
 
   if (!og) {
     return { title: `Promoción · ${SITE_NAME}` }
@@ -38,23 +40,32 @@ export async function generateMetadata({
   return shareMetadata({
     title,
     description,
-    url: `/promocion/${og.id}`,
+    // Siempre la URL canónica (con slug si lo tiene): así los "me gusta" y las
+    // vistas previas de las redes no se reparten entre dos direcciones.
+    url: rutaPublicaPromo(og),
   })
 }
 
 export default async function PromotionDetailPage({
   params,
 }: PromotionDetailPageProps) {
-  const { id } = await params
+  const { clave } = await params
 
-  const promotion = await getPromotionDetail(id)
+  const promotion = await getPromotionDetail(clave)
 
   if (!promotion) {
     notFound()
   }
 
+  // Un enlace viejo (con id) de una promoción que ya tiene slug se manda a la
+  // dirección con nombre: los enlaces que sigan circulando terminan todos en
+  // la misma URL, que es la que se comparte y la que indexan las redes.
+  if (promotion.slug && clave === promotion.id) {
+    permanentRedirect(rutaPublicaPromo(promotion))
+  }
+
   // Record view (non-blocking)
-  recordPromotionView(id).catch(console.error)
+  recordPromotionView(promotion.id).catch(console.error)
 
   return <PromotionDetail mode="public" promotion={promotion} />
 }

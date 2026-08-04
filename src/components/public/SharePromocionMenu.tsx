@@ -2,10 +2,13 @@
 
 import { recordPromotionShare } from '@/modules/marketplace/actions'
 import { landingUrlFor } from '@/lib/site'
+import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { ShareMenu } from './ShareMenu'
 
 interface SharePromocionMenuProps {
   promocionId: string
+  /** Dirección pública con nombre; sin ella se comparte el id de siempre. */
+  slug?: string | null
   titulo: string
   companyName: string
   /**
@@ -22,6 +25,7 @@ interface SharePromocionMenuProps {
  */
 export function SharePromocionMenu({
   promocionId,
+  slug,
   titulo,
   companyName,
   version,
@@ -30,7 +34,9 @@ export function SharePromocionMenu({
     <ShareMenu
       title={titulo}
       text={`${titulo} — promoción de ${companyName} en MembeGo.`}
-      path={landingUrlFor(`/promocion/${promocionId}${version ? `?v=${version}` : ''}`)}
+      path={landingUrlFor(
+        `${rutaPublicaPromo({ id: promocionId, slug })}${version ? `?v=${version}` : ''}`
+      )}
       onShared={() => {
         recordPromotionShare(promocionId).catch(console.error)
       }}

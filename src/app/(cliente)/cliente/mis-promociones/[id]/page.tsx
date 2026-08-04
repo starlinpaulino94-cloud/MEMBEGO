@@ -157,6 +157,7 @@ export default async function MiCompraPage({
         <div className="flex flex-wrap items-center gap-3">
           <SharePromocionMenu
             promocionId={promo.id}
+            slug={promo.slug}
             titulo={promo.titulo}
             companyName={compra.company.name}
             version={promo.updatedAt?.getTime() ?? null}

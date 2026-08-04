@@ -4,6 +4,7 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { prisma } from '@/lib/prisma'
+import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { PROMO_TIPO_LABEL } from '@/lib/promociones'
 import { formatDate, formatMoney } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
@@ -105,7 +106,7 @@ function PromoCard({ p, showCompany }: { p: PromoRow; showCompany: boolean }) {
 
           <div className="ml-auto flex items-center gap-1">
             <CompartirOfertaButton
-              path={`/promocion/${p.id}`}
+              path={rutaPublicaPromo(p)}
               titulo={p.titulo}
               texto={`${p.titulo} — promoción de ${p.company.name} en MembeGo.`}
               advertencia={
