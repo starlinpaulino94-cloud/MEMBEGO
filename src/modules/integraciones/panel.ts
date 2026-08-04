@@ -126,6 +126,12 @@ export interface ResultadoSonda {
  * un satélite bien hecho lo ignora y responde 200. Así la prueba nunca crea
  * datos falsos en el satélite ni se confunde con un evento real. El `id`
  * también es distinguible a simple vista en sus logs.
+ *
+ * EL `companyId` ES REAL, y eso importa: la primera versión mandaba la cadena
+ * `'ping'`, y un satélite que resuelve la empresa antes de mirar el tipo
+ * reventaba con 500 por una empresa inexistente. Ese 500 no decía nada del
+ * satélite — lo causaba la sonda. Se reutiliza la empresa del último evento
+ * encolado para ese sistema: es exactamente la que mandan los eventos reales.
  */
 export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda | { error: string }> {
   const sistema = await prisma.sistemaConectado
@@ -134,10 +140,18 @@ export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda 
   if (!sistema) return { error: 'Sistema no encontrado.' }
   if (!sistema.urlWebhook) return { error: 'Este sistema no tiene URL de webhook registrada.' }
 
+  const ultimo = await prisma.eventoSaliente
+    .findFirst({
+      where: { sistemaId },
+      orderBy: { createdAt: 'desc' },
+      select: { companyId: true },
+    })
+    .catch(() => null)
+
   const cuerpo = JSON.stringify({
     id: `ping-${Date.now()}`,
     tipo: 'membego.ping',
-    companyId: 'ping',
+    companyId: ultimo?.companyId ?? 'ping',
     payload: { prueba: true },
     emitidoEn: new Date().toISOString(),
   })
