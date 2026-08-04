@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { crearNotificacion } from '@/modules/notificaciones/service'
 import {
   renderMensajeSeguimiento,
@@ -20,40 +20,48 @@ export async function recordatoriosSeguimientoAuto(): Promise<{ recordatorios: n
   // empresa se aplica con su config.
   const ventanaMax = new Date(ahora.getTime() + 90 * 86_400_000)
 
-  const compras = await prisma.productoCompra.findMany({
-    where: {
-      tipo: 'PROMOCION',
-      promocionId: { not: null },
-      estado: 'ACTIVA',
-      usosRestantes: { gt: 0 },
-      fechaVencimiento: { gt: ahora, lte: ventanaMax },
-      OR: [{ precioCongelado: null }, { precioCongelado: { lte: 0 } }],
-    },
-    select: {
-      id: true,
-      companyId: true,
-      promocionId: true,
-      fechaVencimiento: true,
-      promocion: { select: { titulo: true } },
-      cliente: {
-        select: {
-          supabaseId: true,
-          nombre: true,
-          company: { select: { name: true, zonaHoraria: true } },
+  const compras = await sinEmpresa(
+    'seguimiento: cron barre recompensas de todas las empresas',
+    (tx) =>
+      tx.productoCompra.findMany({
+        where: {
+          tipo: 'PROMOCION',
+          promocionId: { not: null },
+          estado: 'ACTIVA',
+          usosRestantes: { gt: 0 },
+          fechaVencimiento: { gt: ahora, lte: ventanaMax },
+          OR: [{ precioCongelado: null }, { precioCongelado: { lte: 0 } }],
         },
-      },
-    },
-  })
+        select: {
+          id: true,
+          companyId: true,
+          promocionId: true,
+          fechaVencimiento: true,
+          promocion: { select: { titulo: true } },
+          cliente: {
+            select: {
+              supabaseId: true,
+              nombre: true,
+              company: { select: { name: true, zonaHoraria: true } },
+            },
+          },
+        },
+      })
+  )
   if (compras.length === 0) return { recordatorios: 0 }
 
   // Config por empresa (tolerante a la columna aún sin migrar).
   const companyIds = [...new Set(compras.map((c) => c.companyId))]
   const configs = new Map<string, SeguimientoConfig>()
   try {
-    const companies = await prisma.company.findMany({
-      where: { id: { in: companyIds } },
-      select: { id: true, seguimientoConfig: true },
-    })
+    const companies = await sinEmpresa(
+      'seguimiento: cron lee la config de varias empresas a la vez',
+      (tx) =>
+        tx.company.findMany({
+          where: { id: { in: companyIds } },
+          select: { id: true, seguimientoConfig: true },
+        })
+    )
     for (const c of companies) configs.set(c.id, resolverSeguimientoConfig(c.seguimientoConfig))
   } catch (e) {
     console.error('[seguimiento] cron config fallback a defaults', e)
@@ -77,15 +85,19 @@ export async function recordatoriosSeguimientoAuto(): Promise<{ recordatorios: n
     )
   )
   const desde = new Date(ahora.getTime() - frecuenciaMax * 86_400_000)
-  const recientes = await prisma.auditLog.findMany({
-    where: {
-      accion: 'NOTA_INTERNA',
-      entidadTipo: 'ProductoCompra',
-      entidadId: { in: candidatos.map((c) => c.id) },
-      createdAt: { gte: desde },
-    },
-    select: { entidadId: true, createdAt: true, payload: true },
-  })
+  const recientes = await sinEmpresa(
+    'seguimiento: cron deduce la auditoría de varias empresas a la vez',
+    (tx) =>
+      tx.auditLog.findMany({
+        where: {
+          accion: 'NOTA_INTERNA',
+          entidadTipo: 'ProductoCompra',
+          entidadId: { in: candidatos.map((c) => c.id) },
+          createdAt: { gte: desde },
+        },
+        select: { entidadId: true, createdAt: true, payload: true },
+      })
+  )
   const ultimoRecordatorio = new Map<string, Date>()
   for (const r of recientes) {
     const payload = (r.payload ?? {}) as { tipo?: string }
@@ -103,10 +115,14 @@ export async function recordatoriosSeguimientoAuto(): Promise<{ recordatorios: n
 
   // Cliente → cuenta de usuario (para la notificación in-app).
   const supabaseIds = [...new Set(pendientes.map((c) => c.cliente.supabaseId))]
-  const users = await prisma.user.findMany({
-    where: { supabaseId: { in: supabaseIds } },
-    select: { id: true, supabaseId: true },
-  })
+  const users = await sinEmpresa(
+    'seguimiento: cron resuelve las cuentas de usuario de los clientes (tabla global)',
+    (tx) =>
+      tx.user.findMany({
+        where: { supabaseId: { in: supabaseIds } },
+        select: { id: true, supabaseId: true },
+      })
+  )
   const userPorSupabase = new Map(users.map((u) => [u.supabaseId, u.id]))
 
   let enviados = 0
@@ -133,20 +149,22 @@ export async function recordatoriosSeguimientoAuto(): Promise<{ recordatorios: n
         }),
         href: '/cliente/mis-promociones',
       })
-      await prisma.auditLog.create({
-        data: {
-          companyId: c.companyId,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'ProductoCompra',
-          entidadId: c.id,
-          payload: {
-            tipo: 'RECORDATORIO_SEGUIMIENTO',
-            auto: true,
-            promocionId: c.promocionId,
-            cliente: c.cliente.nombre,
+      await conEmpresa(c.companyId, (tx) =>
+        tx.auditLog.create({
+          data: {
+            companyId: c.companyId,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'ProductoCompra',
+            entidadId: c.id,
+            payload: {
+              tipo: 'RECORDATORIO_SEGUIMIENTO',
+              auto: true,
+              promocionId: c.promocionId,
+              cliente: c.cliente.nombre,
+            },
           },
-        },
-      })
+        })
+      )
       enviados++
     } catch (e) {
       console.error('[seguimiento] cron recordatorio compra', c.id, e)

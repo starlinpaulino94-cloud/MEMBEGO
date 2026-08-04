@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import type {
   CompanyPublic,
   PromotionPublic,
@@ -26,79 +26,81 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
   } = filters
 
   try {
-    const companies = await prisma.company.findMany({
-      where: {
-        isPublished: true,
-        isActive: true,
-        // Las empresas de DEMOSTRACIÓN no salen en la vitrina pública: un
-        // cliente real no puede tropezarse con la de práctica.
-        esDemo: false,
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            { description: { contains: search, mode: 'insensitive' } },
-          ],
-        }),
-        ...(city && { ciudad: city }),
-        ...(country && { pais: country }),
-        ...(type && { type }),
-        ...(featured && { isFeatured: true }),
-        ...(category && {
+    const companies = await sinEmpresa('marketplace: vitrina pública', (tx) =>
+      tx.company.findMany({
+        where: {
+          isPublished: true,
+          isActive: true,
+          // Las empresas de DEMOSTRACIÓN no salen en la vitrina pública: un
+          // cliente real no puede tropezarse con la de práctica.
+          esDemo: false,
+          ...(search && {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ],
+          }),
+          ...(city && { ciudad: city }),
+          ...(country && { pais: country }),
+          ...(type && { type }),
+          ...(featured && { isFeatured: true }),
+          ...(category && {
+            categories: {
+              some: {
+                category: { slug: category },
+              },
+            },
+          }),
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          type: true,
+          description: true,
+          logoUrl: true,
+          bannerUrl: true,
+          galleryImages: true,
+          ciudad: true,
+          provincia: true,
+          pais: true,
+          telefono: true,
+          whatsapp: true,
+          email: true,
+          website: true,
+          instagram: true,
+          facebook: true,
+          tiktok: true,
+          googleMapsUrl: true,
+          horario: true,
+          totalMembersCount: true,
+          activePromotionsCount: true,
+          averageRating: true,
+          isFeatured: true,
+          createdAt: true,
           categories: {
-            some: {
-              category: { slug: category },
+            select: {
+              category: {
+                select: { slug: true },
+              },
             },
           },
-        }),
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        type: true,
-        description: true,
-        logoUrl: true,
-        bannerUrl: true,
-        galleryImages: true,
-        ciudad: true,
-        provincia: true,
-        pais: true,
-        telefono: true,
-        whatsapp: true,
-        email: true,
-        website: true,
-        instagram: true,
-        facebook: true,
-        tiktok: true,
-        googleMapsUrl: true,
-        horario: true,
-        totalMembersCount: true,
-        activePromotionsCount: true,
-        averageRating: true,
-        isFeatured: true,
-        createdAt: true,
-        categories: {
-          select: {
-            category: {
-              select: { slug: true },
-            },
+          // Plan de entrada ("desde $X/mes") para las tarjetas del Explorar.
+          plans: {
+            where: { activo: true },
+            orderBy: { precio: 'asc' },
+            take: 1,
+            select: { nombre: true, precio: true },
           },
         },
-        // Plan de entrada ("desde $X/mes") para las tarjetas del Explorar.
-        plans: {
-          where: { activo: true },
-          orderBy: { precio: 'asc' },
-          take: 1,
-          select: { nombre: true, precio: true },
-        },
-      },
-      orderBy: [
-        { isFeatured: 'desc' },
-        { createdAt: 'desc' },
-      ],
-      take: limit,
-      skip: offset,
-    })
+        orderBy: [
+          { isFeatured: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: limit,
+        skip: offset,
+      })
+    )
 
     return companies.map((c) => ({
       ...c,
@@ -118,46 +120,48 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
   if (!companySlug) return null
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { slug: companySlug },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        type: true,
-        description: true,
-        logoUrl: true,
-        bannerUrl: true,
-        galleryImages: true,
-        ciudad: true,
-        provincia: true,
-        pais: true,
-        telefono: true,
-        whatsapp: true,
-        email: true,
-        website: true,
-        instagram: true,
-        facebook: true,
-        tiktok: true,
-        googleMapsUrl: true,
-        horario: true,
-        totalMembersCount: true,
-        activePromotionsCount: true,
-        averageRating: true,
-        isFeatured: true,
-        isPublished: true,
-        isActive: true,
-        esDemo: true,
-        createdAt: true,
-        categories: {
-          select: {
-            category: {
-              select: { slug: true },
+    const company = await sinEmpresa('marketplace: vitrina pública', (tx) =>
+      tx.company.findUnique({
+        where: { slug: companySlug },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          type: true,
+          description: true,
+          logoUrl: true,
+          bannerUrl: true,
+          galleryImages: true,
+          ciudad: true,
+          provincia: true,
+          pais: true,
+          telefono: true,
+          whatsapp: true,
+          email: true,
+          website: true,
+          instagram: true,
+          facebook: true,
+          tiktok: true,
+          googleMapsUrl: true,
+          horario: true,
+          totalMembersCount: true,
+          activePromotionsCount: true,
+          averageRating: true,
+          isFeatured: true,
+          isPublished: true,
+          isActive: true,
+          esDemo: true,
+          createdAt: true,
+          categories: {
+            select: {
+              category: {
+                select: { slug: true },
+              },
             },
           },
         },
-      },
-    })
+      })
+    )
 
     if (!company || !company.isPublished || !company.isActive) return null
     // Explícito y no derivado de `isPublished`: el perfil público de una
@@ -188,67 +192,69 @@ export async function getPromotionsPublic(filters: PromotionFilters = {}): Promi
   const now = new Date()
 
   try {
-    const promotions = await prisma.promocion.findMany({
-      where: {
-        activo: true,
-        archivada: false,
-        visibilidad: 'publica',
-        vigenciaHasta: {
-          gt: now,
-        },
-        // El filtro por slug se fusiona dentro de company para no sobrescribir
-        // (y perder) las condiciones isPublished/isActive.
-        company: {
-          isPublished: true,
-          isActive: true,
-          esDemo: false,
-          ...(company && { slug: company }),
-        },
-        ...(search && {
-          OR: [
-            { titulo: { contains: search, mode: 'insensitive' } },
-            { descripcion: { contains: search, mode: 'insensitive' } },
-          ],
-        }),
-        ...(type && { tipo: type }),
-        ...(tag && {
-          tags: {
-            has: tag,
+    const promotions = await sinEmpresa('marketplace: vitrina pública', (tx) =>
+      tx.promocion.findMany({
+        where: {
+          activo: true,
+          archivada: false,
+          visibilidad: 'publica',
+          vigenciaHasta: {
+            gt: now,
           },
-        }),
-      },
-      select: {
-        id: true,
-        titulo: true,
-        slug: true,
-        descripcion: true,
-        imagenUrl: true,
-        tipo: true,
-        descuento: true,
-        codigo: true,
-        vigenciaDesde: true,
-        vigenciaHasta: true,
-        viewCount: true,
-        shareCount: true,
-        tags: true,
-        isFeatured: true,
-        createdAt: true,
-        company: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            logoUrl: true,
+          // El filtro por slug se fusiona dentro de company para no sobrescribir
+          // (y perder) las condiciones isPublished/isActive.
+          company: {
+            isPublished: true,
+            isActive: true,
+            esDemo: false,
+            ...(company && { slug: company }),
+          },
+          ...(search && {
+            OR: [
+              { titulo: { contains: search, mode: 'insensitive' } },
+              { descripcion: { contains: search, mode: 'insensitive' } },
+            ],
+          }),
+          ...(type && { tipo: type }),
+          ...(tag && {
+            tags: {
+              has: tag,
+            },
+          }),
+        },
+        select: {
+          id: true,
+          titulo: true,
+          slug: true,
+          descripcion: true,
+          imagenUrl: true,
+          tipo: true,
+          descuento: true,
+          codigo: true,
+          vigenciaDesde: true,
+          vigenciaHasta: true,
+          viewCount: true,
+          shareCount: true,
+          tags: true,
+          isFeatured: true,
+          createdAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              logoUrl: true,
+            },
           },
         },
-      },
-      orderBy: [
-        { isFeatured: 'desc' },
-        { createdAt: 'desc' },
-      ],
-      take: limit,
-      skip: offset,
-    })
+        orderBy: [
+          { isFeatured: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: limit,
+        skip: offset,
+      })
+    )
 
     return promotions as PromotionPublic[]
   } catch (error) {
@@ -267,54 +273,59 @@ export async function getClientePromociones(
   supabaseId: string
 ): Promise<PromotionPublic[]> {
   try {
-    const clientes = await prisma.cliente.findMany({
-      where: { supabaseId },
-      select: { companyId: true },
-    })
-    const companyIds = clientes.map((c) => c.companyId)
-    if (companyIds.length === 0) return []
+    return await sinEmpresa(
+      'marketplace: promociones de las empresas propias del cliente (cruza sus empresas)',
+      async (tx) => {
+        const clientes = await tx.cliente.findMany({
+          where: { supabaseId },
+          select: { companyId: true },
+        })
+        const companyIds = clientes.map((c) => c.companyId)
+        if (companyIds.length === 0) return []
 
-    const now = new Date()
-    const promotions = await prisma.promocion.findMany({
-      where: {
-        companyId: { in: companyIds },
-        activo: true,
-        // Miembro de la empresa: ve públicas Y privadas (pero no archivadas).
-        archivada: false,
-        vigenciaDesde: { lte: now },
-        OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-        // Sin `isPublished` ni `esDemo`: estas son las promociones de las
-        // empresas DE ESTA PERSONA (el `companyId in` de arriba sale de sus
-        // fichas de cliente). Quien es cliente ve lo suyo aunque el negocio no
-        // esté publicado, y quien entró por el enlace de la empresa de
-        // práctica es cliente de ella.
-        company: { isActive: true },
-      },
-      select: {
-        id: true,
-        titulo: true,
-        slug: true,
-        descripcion: true,
-        imagenUrl: true,
-        tipo: true,
-        descuento: true,
-        codigo: true,
-        vigenciaDesde: true,
-        vigenciaHasta: true,
-        viewCount: true,
-        shareCount: true,
-        tags: true,
-        isFeatured: true,
-        createdAt: true,
-        company: {
-          select: { id: true, name: true, slug: true, logoUrl: true },
-        },
-      },
-      orderBy: [{ isFeatured: 'desc' }, { publicadaEn: 'desc' }],
-      take: 100,
-    })
+        const now = new Date()
+        const promotions = await tx.promocion.findMany({
+          where: {
+            companyId: { in: companyIds },
+            activo: true,
+            // Miembro de la empresa: ve públicas Y privadas (pero no archivadas).
+            archivada: false,
+            vigenciaDesde: { lte: now },
+            OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+            // Sin `isPublished` ni `esDemo`: estas son las promociones de las
+            // empresas DE ESTA PERSONA (el `companyId in` de arriba sale de sus
+            // fichas de cliente). Quien es cliente ve lo suyo aunque el negocio no
+            // esté publicado, y quien entró por el enlace de la empresa de
+            // práctica es cliente de ella.
+            company: { isActive: true },
+          },
+          select: {
+            id: true,
+            titulo: true,
+            slug: true,
+            descripcion: true,
+            imagenUrl: true,
+            tipo: true,
+            descuento: true,
+            codigo: true,
+            vigenciaDesde: true,
+            vigenciaHasta: true,
+            viewCount: true,
+            shareCount: true,
+            tags: true,
+            isFeatured: true,
+            createdAt: true,
+            company: {
+              select: { id: true, name: true, slug: true, logoUrl: true },
+            },
+          },
+          orderBy: [{ isFeatured: 'desc' }, { publicadaEn: 'desc' }],
+          take: 100,
+        })
 
-    return promotions as PromotionPublic[]
+        return promotions as PromotionPublic[]
+      }
+    )
   } catch (error) {
     console.error('[getClientePromociones] Error:', error)
     throw error
@@ -325,52 +336,54 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
   const now = new Date()
 
   try {
-    const promotions = await prisma.promocion.findMany({
-      where: {
-        isFeatured: true,
-        activo: true,
-        archivada: false,
-        visibilidad: 'publica',
-        vigenciaHasta: {
-          gt: now,
-        },
-        company: {
-          isPublished: true,
-          isActive: true,
-          esDemo: false,
-        },
-      },
-      select: {
-        id: true,
-        titulo: true,
-        slug: true,
-        descripcion: true,
-        imagenUrl: true,
-        tipo: true,
-        descuento: true,
-        codigo: true,
-        vigenciaDesde: true,
-        vigenciaHasta: true,
-        viewCount: true,
-        shareCount: true,
-        tags: true,
-        isFeatured: true,
-        createdAt: true,
-        company: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            logoUrl: true,
+    const promotions = await sinEmpresa('marketplace: vitrina pública', (tx) =>
+      tx.promocion.findMany({
+        where: {
+          isFeatured: true,
+          activo: true,
+          archivada: false,
+          visibilidad: 'publica',
+          vigenciaHasta: {
+            gt: now,
+          },
+          company: {
+            isPublished: true,
+            isActive: true,
+            esDemo: false,
           },
         },
-      },
-      orderBy: [
-        { featuredOrder: 'asc' },
-        { createdAt: 'desc' },
-      ],
-      take: limit,
-    })
+        select: {
+          id: true,
+          titulo: true,
+          slug: true,
+          descripcion: true,
+          imagenUrl: true,
+          tipo: true,
+          descuento: true,
+          codigo: true,
+          vigenciaDesde: true,
+          vigenciaHasta: true,
+          viewCount: true,
+          shareCount: true,
+          tags: true,
+          isFeatured: true,
+          createdAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              logoUrl: true,
+            },
+          },
+        },
+        orderBy: [
+          { featuredOrder: 'asc' },
+          { createdAt: 'desc' },
+        ],
+        take: limit,
+      })
+    )
 
     return promotions as PromotionPublic[]
   } catch (error) {
@@ -385,84 +398,86 @@ export async function getPromotionDetail(promotionId: string): Promise<Promotion
   const now = new Date()
 
   try {
-    const promotion = await prisma.promocion.findUnique({
-      where: { id: promotionId },
-      select: {
-        id: true,
-        titulo: true,
-        slug: true,
-        descripcion: true,
-        imagenUrl: true,
-        tipo: true,
-        descuento: true,
-        codigo: true,
-        vigenciaDesde: true,
-        vigenciaHasta: true,
-        viewCount: true,
-        shareCount: true,
-        tags: true,
-        isFeatured: true,
-        createdAt: true,
-        company: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            logoUrl: true,
-            isPublished: true,
-            isActive: true,
+    return await sinEmpresa('marketplace: detalle público de promoción', async (tx) => {
+      const promotion = await tx.promocion.findUnique({
+        where: { id: promotionId },
+        select: {
+          id: true,
+          titulo: true,
+          slug: true,
+          descripcion: true,
+          imagenUrl: true,
+          tipo: true,
+          descuento: true,
+          codigo: true,
+          vigenciaDesde: true,
+          vigenciaHasta: true,
+          viewCount: true,
+          shareCount: true,
+          tags: true,
+          isFeatured: true,
+          createdAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              logoUrl: true,
+              isPublished: true,
+              isActive: true,
+            },
           },
+          activo: true,
+          archivada: true,
+          visibilidad: true,
+          // Fase E5: venta directa
+          esComprable: true,
+          precio: true,
+          usosPorCompra: true,
+          beneficioVigenciaDias: true,
+          beneficioVigenciaHasta: true,
+          limitePorCliente: true,
+          maxCanjes: true,
+          canjes: true,
         },
-        activo: true,
-        archivada: true,
-        visibilidad: true,
-        // Fase E5: venta directa
-        esComprable: true,
-        precio: true,
-        usosPorCompra: true,
-        beneficioVigenciaDias: true,
-        beneficioVigenciaHasta: true,
-        limitePorCliente: true,
-        maxCanjes: true,
-        canjes: true,
-      },
-    })
-
-    if (!promotion || !promotion.activo || promotion.archivada || !promotion.company) return null
-    if (!promotion.company.isPublished || !promotion.company.isActive) return null
-    if (promotion.vigenciaHasta && promotion.vigenciaHasta < now) return null
-
-    // F4.2: las privadas solo las ve un miembro de esa empresa.
-    if (promotion.visibilidad === 'privada') {
-      const { getUser } = await import('@/lib/auth')
-      const user = await getUser()
-      if (!user) return null
-      const esMiembro = await prisma.cliente.findFirst({
-        where: { supabaseId: user.supabaseId, companyId: promotion.company.id },
-        select: { id: true },
       })
-      if (!esMiembro) return null
-    }
 
-    const {
-      activo: _activo, archivada: _arch, visibilidad: _vis,
-      esComprable, precio, usosPorCompra, beneficioVigenciaDias, beneficioVigenciaHasta,
-      limitePorCliente, maxCanjes, canjes,
-      ...rest
-    } = promotion
-    // No exponer flags internos de la empresa en el payload público.
-    const { isPublished: _p, isActive: _a, ...company } = rest.company
-    const venta = esComprable
-      ? {
-          precio: Number(precio ?? 0),
-          usosPorCompra,
-          agotada: maxCanjes != null && canjes >= maxCanjes,
-          beneficioVigenciaDias,
-          beneficioVigenciaHasta,
-          limitePorCliente: limitePorCliente ?? null,
-        }
-      : null
-    return { ...rest, company, venta } as PromotionPublic
+      if (!promotion || !promotion.activo || promotion.archivada || !promotion.company) return null
+      if (!promotion.company.isPublished || !promotion.company.isActive) return null
+      if (promotion.vigenciaHasta && promotion.vigenciaHasta < now) return null
+
+      // F4.2: las privadas solo las ve un miembro de esa empresa.
+      if (promotion.visibilidad === 'privada') {
+        const { getUser } = await import('@/lib/auth')
+        const user = await getUser()
+        if (!user) return null
+        const esMiembro = await tx.cliente.findFirst({
+          where: { supabaseId: user.supabaseId, companyId: promotion.company.id },
+          select: { id: true },
+        })
+        if (!esMiembro) return null
+      }
+
+      const {
+        activo: _activo, archivada: _arch, visibilidad: _vis,
+        esComprable, precio, usosPorCompra, beneficioVigenciaDias, beneficioVigenciaHasta,
+        limitePorCliente, maxCanjes, canjes,
+        ...rest
+      } = promotion
+      // No exponer flags internos de la empresa en el payload público.
+      const { isPublished: _p, isActive: _a, ...company } = rest.company
+      const venta = esComprable
+        ? {
+            precio: Number(precio ?? 0),
+            usosPorCompra,
+            agotada: maxCanjes != null && canjes >= maxCanjes,
+            beneficioVigenciaDias,
+            beneficioVigenciaHasta,
+            limitePorCliente: limitePorCliente ?? null,
+          }
+        : null
+      return { ...rest, company, venta } as PromotionPublic
+    })
   } catch (error) {
     console.error('[getPromotionDetail] Error:', error)
     return null
@@ -490,29 +505,33 @@ export async function getPromotionOg(promotionId: string): Promise<PromotionOg |
   if (!promotionId) return null
   try {
     const now = new Date()
-    const p = await prisma.promocion.findFirst({
-      where: {
-        id: promotionId,
-        activo: true,
-        archivada: false,
-        visibilidad: 'publica',
-        company: { isPublished: true, isActive: true, esDemo: false },
-        OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-      },
-      select: {
-        id: true, titulo: true, descripcion: true, imagenUrl: true, tipo: true,
-        beneficioTipo: true, descuento: true,
-        company: { select: { name: true, logoUrl: true } },
-      },
-    })
+    const p = await sinEmpresa('marketplace: vista previa pública (Open Graph)', (tx) =>
+      tx.promocion.findFirst({
+        where: {
+          id: promotionId,
+          activo: true,
+          archivada: false,
+          visibilidad: 'publica',
+          company: { isPublished: true, isActive: true, esDemo: false },
+          OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+        },
+        select: {
+          id: true, titulo: true, descripcion: true, imagenUrl: true, tipo: true,
+          beneficioTipo: true, descuento: true,
+          company: { select: { name: true, logoUrl: true } },
+        },
+      })
+    )
     if (!p) return null
     // Textos editables al compartir. Consulta APARTE y defensiva: si la
     // columna shareConfig aún no existe (migración 20260757 pendiente), la
     // vista previa sigue funcionando con los textos base.
-    const share = await prisma.promocion
-      .findUnique({ where: { id: promotionId }, select: { shareConfig: true } })
-      .then((r) => (r?.shareConfig ?? {}) as { ogTitulo?: unknown; ogDescripcion?: unknown })
-      .catch(() => ({}) as { ogTitulo?: unknown; ogDescripcion?: unknown })
+    const share = await sinEmpresa('marketplace: textos de compartir (Open Graph)', (tx) =>
+      tx.promocion
+        .findUnique({ where: { id: promotionId }, select: { shareConfig: true } })
+        .then((r) => (r?.shareConfig ?? {}) as { ogTitulo?: unknown; ogDescripcion?: unknown })
+        .catch(() => ({}) as { ogTitulo?: unknown; ogDescripcion?: unknown })
+    )
     const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
     return {
       id: p.id, titulo: p.titulo, descripcion: p.descripcion, imagenUrl: p.imagenUrl,
@@ -546,17 +565,19 @@ export interface PlanLanding {
 export async function getPlanPublic(planId: string): Promise<PlanLanding | null> {
   if (!planId) return null
   try {
-    const plan = await prisma.plan.findUnique({
-      where: { id: planId },
-      select: {
-        id: true, nombre: true, descripcion: true, precio: true, esIlimitado: true,
-        lavadosIncluidos: true, beneficios: true, vigenciaDias: true, condiciones: true,
-        color: true, activo: true,
-        company: {
-          select: { id: true, name: true, slug: true, logoUrl: true, isPublished: true, isActive: true },
+    const plan = await sinEmpresa('marketplace: landing pública de plan', (tx) =>
+      tx.plan.findUnique({
+        where: { id: planId },
+        select: {
+          id: true, nombre: true, descripcion: true, precio: true, esIlimitado: true,
+          lavadosIncluidos: true, beneficios: true, vigenciaDias: true, condiciones: true,
+          color: true, activo: true,
+          company: {
+            select: { id: true, name: true, slug: true, logoUrl: true, isPublished: true, isActive: true },
+          },
         },
-      },
-    })
+      })
+    )
     if (!plan || !plan.activo || !plan.company) return null
     if (!plan.company.isPublished || !plan.company.isActive) return null
     const { isPublished: _p, isActive: _a, ...company } = plan.company
@@ -588,14 +609,16 @@ export interface PlanOg {
 export async function getPlanOg(planId: string): Promise<PlanOg | null> {
   if (!planId) return null
   try {
-    const plan = await prisma.plan.findUnique({
-      where: { id: planId },
-      select: {
-        id: true, nombre: true, descripcion: true, precio: true, esIlimitado: true,
-        lavadosIncluidos: true, activo: true,
-        company: { select: { name: true, logoUrl: true, isPublished: true, isActive: true } },
-      },
-    })
+    const plan = await sinEmpresa('marketplace: vista previa pública de plan (Open Graph)', (tx) =>
+      tx.plan.findUnique({
+        where: { id: planId },
+        select: {
+          id: true, nombre: true, descripcion: true, precio: true, esIlimitado: true,
+          lavadosIncluidos: true, activo: true,
+          company: { select: { name: true, logoUrl: true, isPublished: true, isActive: true } },
+        },
+      })
+    )
     if (!plan || !plan.activo || !plan.company) return null
     if (!plan.company.isPublished || !plan.company.isActive) return null
     return {
@@ -612,27 +635,29 @@ export async function getPlanOg(planId: string): Promise<PlanOg | null> {
 
 export async function getCategoriesPublic(): Promise<CategoryPublic[]> {
   try {
-    const categories = await prisma.businessCategory.findMany({
-      where: { active: true },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        icon: true,
-        description: true,
-        order: true,
-        _count: {
-          select: {
-            companies: {
-              where: {
-                company: { isPublished: true, isActive: true, esDemo: false },
+    const categories = await sinEmpresa('marketplace: catálogo global de categorías', (tx) =>
+      tx.businessCategory.findMany({
+        where: { active: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          icon: true,
+          description: true,
+          order: true,
+          _count: {
+            select: {
+              companies: {
+                where: {
+                  company: { isPublished: true, isActive: true, esDemo: false },
+                },
               },
             },
           },
         },
-      },
-      orderBy: { order: 'asc' },
-    })
+        orderBy: { order: 'asc' },
+      })
+    )
 
     return categories.map((c) => ({
       id: c.id,
@@ -653,16 +678,18 @@ export async function getCompanyStats(companySlug: string): Promise<CompanyStats
   if (!companySlug) return null
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { slug: companySlug },
-      select: {
-        totalMembersCount: true,
-        activePromotionsCount: true,
-        averageRating: true,
-        // Conteo en la BD; antes se traían todas las filas de ratings.
-        _count: { select: { ratings: true } },
-      },
-    })
+    const company = await sinEmpresa('marketplace: stats públicas de empresa', (tx) =>
+      tx.company.findUnique({
+        where: { slug: companySlug },
+        select: {
+          totalMembersCount: true,
+          activePromotionsCount: true,
+          averageRating: true,
+          // Conteo en la BD; antes se traían todas las filas de ratings.
+          _count: { select: { ratings: true } },
+        },
+      })
+    )
 
     if (!company) return null
 
@@ -706,25 +733,27 @@ export async function getPlatformStats(): Promise<PlatformStats> {
   try {
     const now = new Date()
     const [empresas, membresiasActivas, promocionesVigentes, ciudadesRows] =
-      await Promise.all([
-        prisma.company.count({ where: { isActive: true, isPublished: true, esDemo: false } }),
-        prisma.membership.count({ where: { estado: 'ACTIVA' } }),
-        prisma.promocion.count({
-          where: {
-            activo: true,
-            archivada: false,
-            visibilidad: 'publica',
-            vigenciaDesde: { lte: now },
-            OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-            company: { isPublished: true, isActive: true, esDemo: false },
-          },
-        }),
-        prisma.company.findMany({
-          where: { isActive: true, isPublished: true, ciudad: { not: null } },
-          select: { ciudad: true },
-          distinct: ['ciudad'],
-        }),
-      ])
+      await sinEmpresa('marketplace: métricas globales de la plataforma', (tx) =>
+        Promise.all([
+          tx.company.count({ where: { isActive: true, isPublished: true, esDemo: false } }),
+          tx.membership.count({ where: { estado: 'ACTIVA' } }),
+          tx.promocion.count({
+            where: {
+              activo: true,
+              archivada: false,
+              visibilidad: 'publica',
+              vigenciaDesde: { lte: now },
+              OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+              company: { isPublished: true, isActive: true, esDemo: false },
+            },
+          }),
+          tx.company.findMany({
+            where: { isActive: true, isPublished: true, ciudad: { not: null } },
+            select: { ciudad: true },
+            distinct: ['ciudad'],
+          }),
+        ])
+      )
     return {
       empresas,
       membresiasActivas,
@@ -751,14 +780,16 @@ export interface PlanPublic {
 /** Planes activos de una empresa para mostrar en su perfil público. */
 export async function getCompanyPlanesPublic(companyId: string): Promise<PlanPublic[]> {
   try {
-    const planes = await prisma.plan.findMany({
-      where: { companyId, activo: true },
-      orderBy: [{ orden: 'asc' }, { precio: 'asc' }],
-      select: {
-        id: true, nombre: true, precio: true, esIlimitado: true,
-        lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
-      },
-    })
+    const planes = await sinEmpresa('marketplace: planes públicos de empresa', (tx) =>
+      tx.plan.findMany({
+        where: { companyId, activo: true },
+        orderBy: [{ orden: 'asc' }, { precio: 'asc' }],
+        select: {
+          id: true, nombre: true, precio: true, esIlimitado: true,
+          lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
+        },
+      })
+    )
     return planes.map((p) => ({
       id: p.id,
       nombre: p.nombre,
@@ -812,31 +843,35 @@ export async function getCompanyPostsPublic(
       publicadaEn: true,
     } as const
 
-    const [beneficios, eventos, noticias] = await Promise.all([
-      prisma.companyPost.findMany({
-        where: { companyId, activo: true, tipo: 'BENEFICIO' },
-        select,
-        orderBy: { publicadaEn: 'desc' },
-        take: 12,
-      }),
-      prisma.companyPost.findMany({
-        where: {
-          companyId,
-          activo: true,
-          tipo: 'EVENTO',
-          fechaEvento: { gte: now },
-        },
-        select,
-        orderBy: { fechaEvento: 'asc' },
-        take: 12,
-      }),
-      prisma.companyPost.findMany({
-        where: { companyId, activo: true, tipo: 'NOTICIA' },
-        select,
-        orderBy: { publicadaEn: 'desc' },
-        take: 12,
-      }),
-    ])
+    const [beneficios, eventos, noticias] = await sinEmpresa(
+      'marketplace: publicaciones públicas de empresa',
+      (tx) =>
+        Promise.all([
+          tx.companyPost.findMany({
+            where: { companyId, activo: true, tipo: 'BENEFICIO' },
+            select,
+            orderBy: { publicadaEn: 'desc' },
+            take: 12,
+          }),
+          tx.companyPost.findMany({
+            where: {
+              companyId,
+              activo: true,
+              tipo: 'EVENTO',
+              fechaEvento: { gte: now },
+            },
+            select,
+            orderBy: { fechaEvento: 'asc' },
+            take: 12,
+          }),
+          tx.companyPost.findMany({
+            where: { companyId, activo: true, tipo: 'NOTICIA' },
+            select,
+            orderBy: { publicadaEn: 'desc' },
+            take: 12,
+          }),
+        ])
+    )
 
     return { beneficios, eventos, noticias }
   } catch (error) {

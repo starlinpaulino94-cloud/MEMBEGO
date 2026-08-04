@@ -7,7 +7,7 @@
  * configurables del evento REGISTRO. Nunca lanza: no debe romper el registro.
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { logReferralEvent } from '@/lib/referidos'
 import { resolverGrowthLink } from './links'
 import { evaluarRecompensasGrowth, otorgarBeneficioReferido } from './rewards'
@@ -27,12 +27,13 @@ export async function procesarRegistroGrowth(
     if (link.clienteId === referidoClienteId) return
 
     // El referido creado por vincularReferido (auditoría / antifraude).
-    const referido = await prisma.referido
-      .findUnique({
-        where: { referidoClienteId },
-        select: { id: true, sospechoso: true },
-      })
-      .catch(() => null)
+    const referido = await sinEmpresa('growth: buscar vínculo referido por id (su empresa se valida contra la del enlace)', (tx) =>
+      tx.referido
+        .findUnique({
+          where: { referidoClienteId },
+          select: { id: true, sospechoso: true },
+        })
+    ).catch(() => null)
 
     // Evento de embudo atribuido al enlace concreto.
     await logReferralEvent({
@@ -84,22 +85,24 @@ export async function procesarConversionGrowth(
   opts: { trigger: 'MEMBRESIA' | 'COMPRA'; planId?: string | null }
 ): Promise<void> {
   try {
-    const referido = await prisma.referido
-      .findUnique({
-        where: { referidoClienteId },
-        select: { id: true, referenteClienteId: true, sospechoso: true },
-      })
-      .catch(() => null)
+    const referido = await sinEmpresa('growth: buscar vínculo referido por id (empresa desconocida)', (tx) =>
+      tx.referido
+        .findUnique({
+          where: { referidoClienteId },
+          select: { id: true, referenteClienteId: true, sospechoso: true },
+        })
+    ).catch(() => null)
     if (!referido || referido.sospechoso) return
 
     // Enlace concreto que originó el registro (atribución por evento).
-    const evento = await prisma.referralEvent
-      .findFirst({
-        where: { referidoClienteId, companyId, growthLinkId: { not: null } },
-        orderBy: { createdAt: 'asc' },
-        select: { growthLinkId: true },
-      })
-      .catch(() => null)
+    const evento = await conEmpresa(companyId, (tx) =>
+      tx.referralEvent
+        .findFirst({
+          where: { referidoClienteId, companyId, growthLinkId: { not: null } },
+          orderBy: { createdAt: 'asc' },
+          select: { growthLinkId: true },
+        })
+    ).catch(() => null)
 
     await evaluarRecompensasGrowth({
       companyId,

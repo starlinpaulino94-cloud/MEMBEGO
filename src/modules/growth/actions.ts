@@ -11,7 +11,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { companyFilter } from '@/modules/admin/queries'
 import { getAppUrl } from '@/lib/site'
 import { crearGrowthLink } from './links'
@@ -50,10 +50,12 @@ export async function generarGrowthLinkAction(
 
   // Verifica que la promoción (si se eligió) sea de la empresa del cliente.
   if (promocionId) {
-    const promo = await prisma.promocion.findFirst({
-      where: { id: promocionId, companyId },
-      select: { id: true },
-    })
+    const promo = await conEmpresa(companyId, (tx) =>
+      tx.promocion.findFirst({
+        where: { id: promocionId, companyId },
+        select: { id: true },
+      })
+    )
     if (!promo) return { error: 'La promoción seleccionada no es válida.' }
   }
 
@@ -91,11 +93,13 @@ export async function guardarGrowthConfigAction(formData: FormData): Promise<voi
     premiaRenovacion: boolFrom(formData, 'premiaRenovacion'),
   }
 
-  await prisma.growthConfig.upsert({
-    where: { companyId },
-    create: { companyId, ...data },
-    update: data,
-  })
+  await conEmpresa(companyId, (tx) =>
+    tx.growthConfig.upsert({
+      where: { companyId },
+      create: { companyId, ...data },
+      update: data,
+    })
+  )
   revalidatePath('/admin/crecimiento')
 }
 
@@ -120,26 +124,30 @@ export async function crearGrowthRuleAction(formData: FormData): Promise<void> {
 
   // Si la recompensa es un Beneficio Digital, valida que la promo sea de la empresa.
   if (recompensaTipo === 'BENEFICIO' && recompensaPromocionId) {
-    const promo = await prisma.promocion.findFirst({
-      where: { id: recompensaPromocionId, companyId },
-      select: { id: true },
-    })
+    const promo = await conEmpresa(companyId, (tx) =>
+      tx.promocion.findFirst({
+        where: { id: recompensaPromocionId, companyId },
+        select: { id: true },
+      })
+    )
     if (!promo) return
   }
 
-  await prisma.growthRule.create({
-    data: {
-      companyId,
-      nombre,
-      trigger,
-      valorCondicion,
-      planId,
-      beneficiario,
-      recompensaTipo,
-      recompensaValor,
-      recompensaPromocionId: recompensaTipo === 'BENEFICIO' ? recompensaPromocionId : null,
-    },
-  })
+  await conEmpresa(companyId, (tx) =>
+    tx.growthRule.create({
+      data: {
+        companyId,
+        nombre,
+        trigger,
+        valorCondicion,
+        planId,
+        beneficiario,
+        recompensaTipo,
+        recompensaValor,
+        recompensaPromocionId: recompensaTipo === 'BENEFICIO' ? recompensaPromocionId : null,
+      },
+    })
+  )
   revalidatePath('/admin/crecimiento')
 }
 
@@ -148,10 +156,14 @@ export async function toggleGrowthRuleAction(formData: FormData): Promise<void> 
   const companyId = companyFilter(user)
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const rule = await prisma.growthRule.findUnique({ where: { id }, select: { companyId: true, activo: true } })
+  const rule = await sinEmpresa('growth: buscar regla por id (permiso de empresa se valida tras el lookup)', (tx) =>
+    tx.growthRule.findUnique({ where: { id }, select: { companyId: true, activo: true } })
+  )
   if (!rule) return
   if (companyId && rule.companyId !== companyId) return
-  await prisma.growthRule.update({ where: { id }, data: { activo: !rule.activo } })
+  await conEmpresa(rule.companyId, (tx) =>
+    tx.growthRule.update({ where: { id }, data: { activo: !rule.activo } })
+  )
   revalidatePath('/admin/crecimiento')
 }
 
@@ -160,9 +172,11 @@ export async function eliminarGrowthRuleAction(formData: FormData): Promise<void
   const companyId = companyFilter(user)
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const rule = await prisma.growthRule.findUnique({ where: { id }, select: { companyId: true } })
+  const rule = await sinEmpresa('growth: buscar regla por id (permiso de empresa se valida tras el lookup)', (tx) =>
+    tx.growthRule.findUnique({ where: { id }, select: { companyId: true } })
+  )
   if (!rule) return
   if (companyId && rule.companyId !== companyId) return
-  await prisma.growthRule.delete({ where: { id } })
+  await conEmpresa(rule.companyId, (tx) => tx.growthRule.delete({ where: { id } }))
   revalidatePath('/admin/crecimiento')
 }

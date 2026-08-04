@@ -7,7 +7,7 @@
  * commit; luego el ticket del Receipt Engine.
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { SCANNER_ROLES } from '@/types'
@@ -91,28 +91,34 @@ export async function confirmarCanjePromocion(
     const empleadoNombre =
       (user.metadata.dbUserId
         ? (
-            await prisma.user.findUnique({
-              where: { id: user.metadata.dbUserId },
-              select: { name: true },
-            })
+            await sinEmpresa('promociones: buscar nombre de empleado', (tx) =>
+              tx.user.findUnique({
+                where: { id: user.metadata.dbUserId },
+                select: { name: true },
+              })
+            )
           )?.name
         : null) ??
       user.email ??
       null
 
-    const compra = await prisma.productoCompra.findUnique({
-      where: { id: compraId },
-      include: {
-        promocion: true,
-        cliente: {
+    const compra = await sinEmpresa(
+      'promociones: lookup de compra por id para canjear (su empresa se deriva de la compra)',
+      (tx) =>
+        tx.productoCompra.findUnique({
+          where: { id: compraId },
           include: {
-            company: {
-              select: { name: true, direccion: true, telefono: true, website: true, logoUrl: true, zonaHoraria: true },
+            promocion: true,
+            cliente: {
+              include: {
+                company: {
+                  select: { name: true, direccion: true, telefono: true, website: true, logoUrl: true, zonaHoraria: true },
+                },
+              },
             },
           },
-        },
-      },
-    })
+        })
+    )
     if (!compra || !compra.promocion) {
       evento(false, 'compra_no_encontrada')
       return { error: 'Compra no encontrada.' }
@@ -140,7 +146,9 @@ export async function confirmarCanjePromocion(
 
     let sucursalNombre: string | null = null
     if (sucursalId) {
-      const suc = await prisma.sucursal.findUnique({ where: { id: sucursalId }, select: { nombre: true, companyId: true } })
+      const suc = await conEmpresa(compra.companyId, (tx) =>
+        tx.sucursal.findUnique({ where: { id: sucursalId }, select: { nombre: true, companyId: true } })
+      )
       if (!suc || suc.companyId !== compra.companyId) return { error: 'Sucursal no válida.' }
       sucursalNombre = suc.nombre
     }
@@ -148,7 +156,7 @@ export async function confirmarCanjePromocion(
     const meta = await getRequestMeta()
     const empleadoId = user.metadata.dbUserId ?? null
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await conEmpresa(compra.companyId, async (tx) => {
       // QR de un solo uso: guard atómico anti doble-canje.
       const qrUpd = await tx.qrToken.updateMany({
         where: { id: qrTokenId, activo: true, compraId: compra.id },
@@ -270,23 +278,25 @@ export async function confirmarCanjePromocion(
     }
 
     // Payload del ticket (Receipt Engine) — plantilla de la empresa.
-    const [plantilla, promosActivas] = await Promise.all([
-      prisma.receiptTemplate.findUnique({ where: { companyId: compra.companyId } }).catch(() => null),
-      prisma.promocion
-        .findMany({
-          where: {
-            companyId: compra.companyId,
-            activo: true,
-            archivada: false,
-            vigenciaDesde: { lte: new Date() },
-            OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: new Date() } }],
-          },
-          orderBy: { prioridad: 'desc' },
-          take: 3,
-          select: { titulo: true },
-        })
-        .catch(() => []),
-    ])
+    const [plantilla, promosActivas] = await conEmpresa(compra.companyId, (tx) =>
+      Promise.all([
+        tx.receiptTemplate.findUnique({ where: { companyId: compra.companyId } }).catch(() => null),
+        tx.promocion
+          .findMany({
+            where: {
+              companyId: compra.companyId,
+              activo: true,
+              archivada: false,
+              vigenciaDesde: { lte: new Date() },
+              OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: new Date() } }],
+            },
+            orderBy: { prioridad: 'desc' },
+            take: 3,
+            select: { titulo: true },
+          })
+          .catch(() => []),
+      ])
+    )
 
     const empresa = compra.cliente.company
     const ticket: TicketPayload = {

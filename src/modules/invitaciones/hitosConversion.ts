@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 /**
  * Hitos de conversión del embudo Growth Engine: cuando un cliente que llegó
@@ -20,68 +20,78 @@ export async function registrarHitoInvitacion(
   tipo: 'MEMBRESIA_ADQUIRIDA' | 'PRIMER_CANJE'
 ): Promise<void> {
   try {
-    const referido = await prisma.referido.findUnique({
-      where: { referidoClienteId: clienteId },
-      select: {
-        campanaInvitacionId: true,
-        referenteClienteId: true,
-        companyId: true,
-        sospechoso: true,
-      },
-    })
+    const referido = await sinEmpresa('invitaciones: buscar vínculo referido por id (empresa desconocida)', (tx) =>
+      tx.referido.findUnique({
+        where: { referidoClienteId: clienteId },
+        select: {
+          campanaInvitacionId: true,
+          referenteClienteId: true,
+          companyId: true,
+          sospechoso: true,
+        },
+      })
+    )
     if (!referido?.campanaInvitacionId || referido.sospechoso) return
     const campanaId = referido.campanaInvitacionId
 
-    const yaRegistrado = await prisma.invitacionEvento.findFirst({
-      where: {
-        campanaId,
-        tipo,
-        meta: { path: ['referidoClienteId'], equals: clienteId },
-      },
-      select: { id: true },
-    })
+    const yaRegistrado = await conEmpresa(referido.companyId, (tx) =>
+      tx.invitacionEvento.findFirst({
+        where: {
+          campanaId,
+          tipo,
+          meta: { path: ['referidoClienteId'], equals: clienteId },
+        },
+        select: { id: true },
+      })
+    )
     if (yaRegistrado) return
 
-    await prisma.invitacionEvento.create({
-      data: {
-        campanaId,
-        clienteId: referido.referenteClienteId,
-        companyId: referido.companyId,
-        tipo,
-        meta: { referidoClienteId: clienteId },
-      },
-    })
-
-    // CONVERSION_FINAL: membresía + primer canje = cliente convertido.
-    const otroHito = tipo === 'MEMBRESIA_ADQUIRIDA' ? 'PRIMER_CANJE' : 'MEMBRESIA_ADQUIRIDA'
-    const [tieneOtro, yaConvertido] = await Promise.all([
-      prisma.invitacionEvento.findFirst({
-        where: {
-          campanaId,
-          tipo: otroHito,
-          meta: { path: ['referidoClienteId'], equals: clienteId },
-        },
-        select: { id: true },
-      }),
-      prisma.invitacionEvento.findFirst({
-        where: {
-          campanaId,
-          tipo: 'CONVERSION_FINAL',
-          meta: { path: ['referidoClienteId'], equals: clienteId },
-        },
-        select: { id: true },
-      }),
-    ])
-    if (tieneOtro && !yaConvertido) {
-      await prisma.invitacionEvento.create({
+    await conEmpresa(referido.companyId, (tx) =>
+      tx.invitacionEvento.create({
         data: {
           campanaId,
           clienteId: referido.referenteClienteId,
           companyId: referido.companyId,
-          tipo: 'CONVERSION_FINAL',
+          tipo,
           meta: { referidoClienteId: clienteId },
         },
       })
+    )
+
+    // CONVERSION_FINAL: membresía + primer canje = cliente convertido.
+    const otroHito = tipo === 'MEMBRESIA_ADQUIRIDA' ? 'PRIMER_CANJE' : 'MEMBRESIA_ADQUIRIDA'
+    const [tieneOtro, yaConvertido] = await conEmpresa(referido.companyId, (tx) =>
+      Promise.all([
+        tx.invitacionEvento.findFirst({
+          where: {
+            campanaId,
+            tipo: otroHito,
+            meta: { path: ['referidoClienteId'], equals: clienteId },
+          },
+          select: { id: true },
+        }),
+        tx.invitacionEvento.findFirst({
+          where: {
+            campanaId,
+            tipo: 'CONVERSION_FINAL',
+            meta: { path: ['referidoClienteId'], equals: clienteId },
+          },
+          select: { id: true },
+        }),
+      ])
+    )
+    if (tieneOtro && !yaConvertido) {
+      await conEmpresa(referido.companyId, (tx) =>
+        tx.invitacionEvento.create({
+          data: {
+            campanaId,
+            clienteId: referido.referenteClienteId,
+            companyId: referido.companyId,
+            tipo: 'CONVERSION_FINAL',
+            meta: { referidoClienteId: clienteId },
+          },
+        })
+      )
     }
   } catch (e) {
     console.error('[invitaciones] registrarHitoInvitacion error:', e)

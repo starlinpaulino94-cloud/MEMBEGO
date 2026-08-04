@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { hashIp } from '@/lib/referidos'
@@ -32,38 +32,46 @@ export async function registrarShareCampana(
       return { ok: false }
     }
 
-    const campana = await prisma.campanaInvitacion.findUnique({
-      where: { id: campanaId },
-      select: { id: true, companyId: true, estado: true },
-    })
+    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa se valida contra la del cliente)', (tx) =>
+      tx.campanaInvitacion.findUnique({
+        where: { id: campanaId },
+        select: { id: true, companyId: true, estado: true },
+      })
+    )
     if (!campana || campana.estado !== 'ACTIVA') return { ok: false }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { id: true, companyId: true },
-    })
+    const cliente = await sinEmpresa('invitaciones: buscar cliente por id (empresa desconocida)', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { id: true, companyId: true },
+      })
+    )
     if (!cliente || cliente.companyId !== campana.companyId) return { ok: false }
 
-    const reciente = await prisma.invitacionEvento.findFirst({
-      where: {
-        campanaId,
-        clienteId,
-        tipo: 'COMPARTIDA',
-        createdAt: { gte: new Date(Date.now() - 60 * 1000) },
-      },
-      select: { id: true },
-    })
+    const reciente = await conEmpresa(campana.companyId, (tx) =>
+      tx.invitacionEvento.findFirst({
+        where: {
+          campanaId,
+          clienteId,
+          tipo: 'COMPARTIDA',
+          createdAt: { gte: new Date(Date.now() - 60 * 1000) },
+        },
+        select: { id: true },
+      })
+    )
     if (reciente) return { ok: true }
 
-    await prisma.invitacionEvento.create({
-      data: {
-        campanaId,
-        clienteId,
-        companyId: campana.companyId,
-        tipo: 'COMPARTIDA',
-        canal: String(canal).slice(0, 30),
-      },
-    })
+    await conEmpresa(campana.companyId, (tx) =>
+      tx.invitacionEvento.create({
+        data: {
+          campanaId,
+          clienteId,
+          companyId: campana.companyId,
+          tipo: 'COMPARTIDA',
+          canal: String(canal).slice(0, 30),
+        },
+      })
+    )
 
     return { ok: true }
   } catch (e) {
@@ -82,20 +90,24 @@ export async function registrarEventoCampana(
     const huella = hashIp(ipAddress) ?? 'anon'
     if (!(await eventoLimiter(`campevento:${huella}`))) return
 
-    const campana = await prisma.campanaInvitacion.findUnique({
-      where: { id: campanaId },
-      select: { id: true, companyId: true },
-    })
+    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa desconocida)', (tx) =>
+      tx.campanaInvitacion.findUnique({
+        where: { id: campanaId },
+        select: { id: true, companyId: true },
+      })
+    )
     if (!campana) return
 
-    await prisma.invitacionEvento.create({
-      data: {
-        campanaId,
-        companyId: campana.companyId,
-        tipo,
-        meta: (meta ?? {}) as object,
-      },
-    })
+    await conEmpresa(campana.companyId, (tx) =>
+      tx.invitacionEvento.create({
+        data: {
+          campanaId,
+          companyId: campana.companyId,
+          tipo,
+          meta: (meta ?? {}) as object,
+        },
+      })
+    )
   } catch (e) {
     console.error('[invitaciones] registrarEventoCampana error:', e)
   }

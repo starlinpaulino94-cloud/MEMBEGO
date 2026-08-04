@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { inicioPeriodo } from '@/modules/ofertas/periodo'
 
 /**
@@ -14,42 +14,48 @@ export function ofertaVigente(o: { estado: string; vigenciaHasta: Date | null })
 
 /** Listado del panel con conteos. */
 export async function getOfertasAdmin(companyId: string) {
-  return prisma.ofertaPrivada.findMany({
-    where: { companyId },
-    include: {
-      _count: { select: { invitados: true } },
-      invitados: { where: { reclamadaAt: { not: null } }, select: { id: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.ofertaPrivada.findMany({
+      where: { companyId },
+      include: {
+        _count: { select: { invitados: true } },
+        invitados: { where: { reclamadaAt: { not: null } }, select: { id: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+  )
 }
 
 /** Detalle del panel: invitados con usos del período actual y totales. */
 export async function getOfertaDetalleAdmin(companyId: string, ofertaId: string, timeZone: string) {
-  const oferta = await prisma.ofertaPrivada.findFirst({
-    where: { id: ofertaId, companyId },
-    include: {
-      invitados: {
-        include: {
-          cliente: { select: { id: true, nombre: true, email: true, telefono: true } },
-          _count: { select: { usos: true } },
+  const oferta = await conEmpresa(companyId, (tx) =>
+    tx.ofertaPrivada.findFirst({
+      where: { id: ofertaId, companyId },
+      include: {
+        invitados: {
+          include: {
+            cliente: { select: { id: true, nombre: true, email: true, telefono: true } },
+            _count: { select: { usos: true } },
+          },
+          orderBy: { createdAt: 'asc' },
         },
-        orderBy: { createdAt: 'asc' },
       },
-    },
-  })
+    })
+  )
   if (!oferta) return null
 
   const desde = inicioPeriodo(oferta.periodo, timeZone)
-  const usosPeriodo = await prisma.ofertaUso.groupBy({
-    by: ['invitadoId'],
-    where: {
-      invitado: { ofertaId: oferta.id },
-      createdAt: { gte: desde },
-    },
-    _count: { _all: true },
-  })
+  const usosPeriodo = await conEmpresa(companyId, (tx) =>
+    tx.ofertaUso.groupBy({
+      by: ['invitadoId'],
+      where: {
+        invitado: { ofertaId: oferta.id },
+        createdAt: { gte: desde },
+      },
+      _count: { _all: true },
+    })
+  )
   const porInvitado = new Map(usosPeriodo.map((u) => [u.invitadoId, u._count._all]))
 
   return {
@@ -72,16 +78,20 @@ export type EstadoOfertaCliente =
 
 /** Resolución del link /oferta/[codigo] para un cliente concreto. */
 export async function getOfertaParaCliente(codigo: string, clienteId: string | null) {
-  const oferta = await prisma.ofertaPrivada.findUnique({
-    where: { codigo },
-    include: { company: { select: { name: true, zonaHoraria: true, logoUrl: true } } },
-  })
+  const oferta = await sinEmpresa('ofertas: buscar oferta por código único global', (tx) =>
+    tx.ofertaPrivada.findUnique({
+      where: { codigo },
+      include: { company: { select: { name: true, zonaHoraria: true, logoUrl: true } } },
+    })
+  )
   if (!oferta) return null
 
   const invitado = clienteId
-    ? await prisma.ofertaInvitado.findUnique({
-        where: { ofertaId_clienteId: { ofertaId: oferta.id, clienteId } },
-      })
+    ? await conEmpresa(oferta.companyId, (tx) =>
+        tx.ofertaInvitado.findUnique({
+          where: { ofertaId_clienteId: { ofertaId: oferta.id, clienteId } },
+        })
+      )
     : null
 
   let estadoCliente: EstadoOfertaCliente
@@ -91,12 +101,14 @@ export async function getOfertaParaCliente(codigo: string, clienteId: string | n
 
   let usosPeriodo = 0
   if (invitado) {
-    usosPeriodo = await prisma.ofertaUso.count({
-      where: {
-        invitadoId: invitado.id,
-        createdAt: { gte: inicioPeriodo(oferta.periodo, oferta.company.zonaHoraria) },
-      },
-    })
+    usosPeriodo = await conEmpresa(oferta.companyId, (tx) =>
+      tx.ofertaUso.count({
+        where: {
+          invitadoId: invitado.id,
+          createdAt: { gte: inicioPeriodo(oferta.periodo, oferta.company.zonaHoraria) },
+        },
+      })
+    )
   }
 
   return { oferta, invitado, estadoCliente, usosPeriodo }
@@ -104,31 +116,51 @@ export async function getOfertaParaCliente(codigo: string, clienteId: string | n
 
 /** Regalos reclamados del cliente (para Mis beneficios). */
 export async function getRegalosCliente(clienteId: string) {
-  const invitaciones = await prisma.ofertaInvitado.findMany({
-    where: { clienteId, reclamadaAt: { not: null }, oferta: { estado: 'ACTIVA' } },
-    include: {
-      oferta: { include: { company: { select: { name: true, zonaHoraria: true } } } },
-    },
-    orderBy: { reclamadaAt: 'desc' },
-  })
+  const invitaciones = await sinEmpresa('ofertas: regalos del cliente cruzan sus empresas (panel cliente)', (tx) =>
+    tx.ofertaInvitado.findMany({
+      where: { clienteId, reclamadaAt: { not: null }, oferta: { estado: 'ACTIVA' } },
+      include: {
+        oferta: { include: { company: { select: { name: true, zonaHoraria: true } } } },
+      },
+      orderBy: { reclamadaAt: 'desc' },
+    })
+  )
   const activos = invitaciones.filter((i) => ofertaVigente(i.oferta))
 
-  return Promise.all(
-    activos.map(async (i) => ({
-      invitadoId: i.id,
-      codigo: i.oferta.codigo,
-      titulo: i.oferta.titulo,
-      usosPorPeriodo: i.oferta.usosPorPeriodo,
-      periodo: i.oferta.periodo,
-      vigenciaHasta: i.oferta.vigenciaHasta,
-      usosPeriodo: await prisma.ofertaUso.count({
+  // Usos del período vigente en UNA consulta por `inicioPeriodo` distinto
+  // (depende del periodo y la zona horaria del negocio): se agrega en la BD
+  // con groupBy por invitado. Antes era un `count` por invitado (N queries).
+  const buckets = new Map<string, { ids: string[]; desde: Date }>()
+  for (const i of activos) {
+    const desde = inicioPeriodo(i.oferta.periodo, i.oferta.company.zonaHoraria)
+    const clave = String(desde.getTime())
+    const bucket = buckets.get(clave)
+    if (bucket) bucket.ids.push(i.id)
+    else buckets.set(clave, { ids: [i.id], desde })
+  }
+
+  const usosPorInvitado = new Map<string, number>()
+  await sinEmpresa('ofertas: buckets de usos pueden abarcar varias empresas (panel cliente)', async (tx) => {
+    for (const bucket of buckets.values()) {
+      const grupos = await tx.ofertaUso.groupBy({
+        by: ['invitadoId'],
         where: {
-          invitadoId: i.id,
-          createdAt: {
-            gte: inicioPeriodo(i.oferta.periodo, i.oferta.company.zonaHoraria),
-          },
+          invitadoId: { in: bucket.ids },
+          createdAt: { gte: bucket.desde },
         },
-      }),
-    }))
-  )
+        _count: { _all: true },
+      })
+      for (const g of grupos) usosPorInvitado.set(g.invitadoId, g._count._all)
+    }
+  })
+
+  return activos.map((i) => ({
+    invitadoId: i.id,
+    codigo: i.oferta.codigo,
+    titulo: i.oferta.titulo,
+    usosPorPeriodo: i.oferta.usosPorPeriodo,
+    periodo: i.oferta.periodo,
+    vigenciaHasta: i.oferta.vigenciaHasta,
+    usosPeriodo: usosPorInvitado.get(i.id) ?? 0,
+  }))
 }

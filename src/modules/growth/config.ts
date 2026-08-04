@@ -7,7 +7,7 @@
  * sin crear filas (la fila se crea al guardar desde el panel admin).
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { GrowthConfig } from '@prisma/client'
 
 /** Duraciones ofrecidas para un enlace de invitación (req #2). */
@@ -46,7 +46,9 @@ const DEFECTOS: GrowthConfigResuelta = {
 export async function getGrowthConfig(companyId: string): Promise<GrowthConfigResuelta> {
   if (!companyId) return DEFECTOS
   try {
-    const cfg = await prisma.growthConfig.findUnique({ where: { companyId } })
+    const cfg = await conEmpresa(companyId, (tx) =>
+      tx.growthConfig.findUnique({ where: { companyId } })
+    )
     if (!cfg) return DEFECTOS
     return resolver(cfg)
   } catch (e) {

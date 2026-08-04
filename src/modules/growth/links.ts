@@ -6,7 +6,7 @@
  * propio. La expiración se calcula y VERIFICA en el servidor (req #3).
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { generarCodigo } from '@/lib/codes'
 import { getGrowthConfig } from './config'
 
@@ -43,21 +43,23 @@ export async function crearGrowthLink(
   for (let intento = 0; intento < 6; intento++) {
     const code = generarCodigo(7)
     try {
-      const link = await prisma.growthLink.create({
-        data: {
-          code,
-          clienteId: input.clienteId,
-          companyId: input.companyId,
-          promocionId: input.promocionId ?? null,
-          campanaId: input.campanaId ?? null,
-          canal: input.canal ?? null,
-          titulo: input.titulo ?? null,
-          mensaje: input.mensaje ?? null,
-          duracionHoras: horas,
-          expiresAt,
-        },
-        select: { id: true, code: true, expiresAt: true },
-      })
+      const link = await conEmpresa(input.companyId, (tx) =>
+        tx.growthLink.create({
+          data: {
+            code,
+            clienteId: input.clienteId,
+            companyId: input.companyId,
+            promocionId: input.promocionId ?? null,
+            campanaId: input.campanaId ?? null,
+            canal: input.canal ?? null,
+            titulo: input.titulo ?? null,
+            mensaje: input.mensaje ?? null,
+            duracionHoras: horas,
+            expiresAt,
+          },
+          select: { id: true, code: true, expiresAt: true },
+        })
+      )
       return link
     } catch {
       // colisión de code: reintenta
@@ -85,15 +87,16 @@ export interface GrowthLinkResuelto {
 export async function resolverGrowthLink(code: string): Promise<GrowthLinkResuelto | null> {
   const clean = code.trim().toUpperCase()
   if (!clean) return null
-  const link = await prisma.growthLink
-    .findUnique({
-      where: { code: clean },
-      select: {
-        id: true, code: true, companyId: true, clienteId: true,
-        promocionId: true, campanaId: true, expiresAt: true, activo: true,
-      },
-    })
-    .catch(() => null)
+  const link = await sinEmpresa('growth: resolver enlace por código único global', (tx) =>
+    tx.growthLink
+      .findUnique({
+        where: { code: clean },
+        select: {
+          id: true, code: true, companyId: true, clienteId: true,
+          promocionId: true, campanaId: true, expiresAt: true, activo: true,
+        },
+      })
+  ).catch(() => null)
   if (!link) return null
   const expirado = !!link.expiresAt && link.expiresAt.getTime() <= Date.now()
   return { ...link, expirado }
@@ -132,45 +135,48 @@ export interface GrowthLandingData {
 export async function getGrowthLanding(code: string): Promise<GrowthLandingData | null> {
   const clean = code.trim().toUpperCase()
   if (!clean) return null
-  const link = await prisma.growthLink
-    .findUnique({
-      where: { code: clean },
-      select: {
-        code: true, companyId: true, clienteId: true, expiresAt: true,
-        titulo: true, mensaje: true,
-        cliente: { select: { nombre: true, codigoReferido: true } },
-        company: { select: { name: true, slug: true, logoUrl: true, isActive: true } },
-        promocion: {
-          select: {
-            titulo: true, descripcion: true, imagenUrl: true, tipo: true, descuento: true,
+  const link = await sinEmpresa('growth: landing - resolver enlace por código único global', (tx) =>
+    tx.growthLink
+      .findUnique({
+        where: { code: clean },
+        select: {
+          code: true, companyId: true, clienteId: true, expiresAt: true,
+          titulo: true, mensaje: true,
+          cliente: { select: { nombre: true, codigoReferido: true } },
+          company: { select: { name: true, slug: true, logoUrl: true, isActive: true } },
+          promocion: {
+            select: {
+              titulo: true, descripcion: true, imagenUrl: true, tipo: true, descuento: true,
+            },
           },
         },
-      },
-    })
-    .catch(() => null)
+      })
+  ).catch(() => null)
   if (!link || !link.company.isActive) return null
 
   const expirado = !!link.expiresAt && link.expiresAt.getTime() <= Date.now()
 
   // Recompensa del referente: primera regla activa REGISTRO que lo beneficia.
-  const reglaReferente = await prisma.growthRule
-    .findFirst({
-      where: {
-        companyId: link.companyId,
-        trigger: 'REGISTRO',
-        activo: true,
-        beneficiario: { in: ['REFERENTE', 'AMBOS'] },
-      },
-      select: { nombre: true },
-    })
-    .catch(() => null)
+  const reglaReferente = await conEmpresa(link.companyId, (tx) =>
+    tx.growthRule
+      .findFirst({
+        where: {
+          companyId: link.companyId,
+          trigger: 'REGISTRO',
+          activo: true,
+          beneficiario: { in: ['REFERENTE', 'AMBOS'] },
+        },
+        select: { nombre: true },
+      })
+  ).catch(() => null)
 
   // Prueba social: registros atribuidos a los enlaces de este referente.
-  const yaAprovecharon = await prisma.referralEvent
-    .count({
-      where: { clienteId: link.clienteId, companyId: link.companyId, tipo: 'REGISTRO' },
-    })
-    .catch(() => 0)
+  const yaAprovecharon = await conEmpresa(link.companyId, (tx) =>
+    tx.referralEvent
+      .count({
+        where: { clienteId: link.clienteId, companyId: link.companyId, tipo: 'REGISTRO' },
+      })
+  ).catch(() => 0)
 
   return {
     code: link.code,

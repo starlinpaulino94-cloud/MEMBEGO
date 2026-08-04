@@ -7,7 +7,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
@@ -54,10 +54,14 @@ export async function solicitarCompraPromocion(
     const promocionId = String(formData.get('promocionId') ?? '')
     if (!promocionId) return { error: 'Promoción no especificada.' }
 
-    const [cliente, promo] = await Promise.all([
-      prisma.cliente.findUnique({ where: { id: user.metadata.clienteId! } }),
-      prisma.promocion.findUnique({ where: { id: promocionId } }),
-    ])
+    const [cliente, promo] = await sinEmpresa(
+      'promociones: lookup de cliente y promoción por id (pertenencia se valida después)',
+      (tx) =>
+        Promise.all([
+          tx.cliente.findUnique({ where: { id: user.metadata.clienteId! } }),
+          tx.promocion.findUnique({ where: { id: promocionId } }),
+        ])
+    )
     if (!cliente) return { error: 'Cliente no encontrado.' }
     if (!promo) return { error: 'Promoción no encontrada.' }
 
@@ -72,22 +76,26 @@ export async function solicitarCompraPromocion(
 
     // Promoción privada: solo miembros con membresía activa.
     if (promo.visibilidad === 'privada') {
-      const activa = await prisma.membership.findFirst({
-        where: { clienteId: cliente.id, companyId: promo.companyId, estado: 'ACTIVA' },
-        select: { id: true },
-      })
+      const activa = await conEmpresa(promo.companyId, (tx) =>
+        tx.membership.findFirst({
+          where: { clienteId: cliente.id, companyId: promo.companyId, estado: 'ACTIVA' },
+          select: { id: true },
+        })
+      )
       if (!activa) return { error: 'Esta promoción es exclusiva para miembros con membresía activa.' }
     }
 
     // Sin compras duplicadas vivas de la misma promoción.
-    const viva = await prisma.productoCompra.findFirst({
-      where: {
-        clienteId: cliente.id,
-        promocionId: promo.id,
-        estado: { in: [...ESTADOS_VIVOS] },
-      },
-      select: { id: true, estado: true },
-    })
+    const viva = await conEmpresa(promo.companyId, (tx) =>
+      tx.productoCompra.findFirst({
+        where: {
+          clienteId: cliente.id,
+          promocionId: promo.id,
+          estado: { in: [...ESTADOS_VIVOS] },
+        },
+        select: { id: true, estado: true },
+      })
+    )
     if (viva) {
       return viva.estado === 'ACTIVA'
         ? { error: 'Ya tienes esta promoción activa.', compraId: viva.id }
@@ -97,7 +105,9 @@ export async function solicitarCompraPromocion(
     // Límite por cliente: promociones de un solo uso (ej. "primer lavado gratis")
     // no pueden re-adquirirse aunque ya se hayan usado o vencido.
     if (promo.limitePorCliente != null) {
-      const limite = await estadoLimiteCliente(cliente.id, promo.id, promo.limitePorCliente)
+      const limite = await conEmpresa(promo.companyId, (tx) =>
+        estadoLimiteCliente(cliente.id, promo.id, promo.limitePorCliente, tx)
+      )
       if (limite.alcanzado) {
         return { error: mensajeLimitePorCliente(promo.limitePorCliente) }
       }
@@ -106,7 +116,7 @@ export async function solicitarCompraPromocion(
     const precio = Number(promo.precio ?? 0)
     const esGratis = precio <= 0
 
-    const compra = await prisma.$transaction(async (tx) => {
+    const compra = await conEmpresa(promo.companyId, async (tx) => {
       const creada = await tx.productoCompra.create({
         data: {
           tipo: 'PROMOCION',
@@ -197,10 +207,14 @@ export async function enviarComprobanteCompra(
       if (!Number.isNaN(d.getTime()) && d <= new Date()) transferenciaFecha = d
     }
 
-    const compra = await prisma.productoCompra.findUnique({
-      where: { id: compraId },
-      include: { cliente: true, promocion: { select: { titulo: true } } },
-    })
+    const compra = await sinEmpresa(
+      'promociones: lookup de compra por id para enviar comprobante (su empresa se valida después)',
+      (tx) =>
+        tx.productoCompra.findUnique({
+          where: { id: compraId },
+          include: { cliente: true, promocion: { select: { titulo: true } } },
+        })
+    )
     if (!compra) return { error: 'Compra no encontrada.' }
     if (compra.clienteId !== user.metadata.clienteId) return { error: 'No autorizado.' }
     if (!['SOLICITADA', 'PENDIENTE_PAGO', 'RECHAZADA'].includes(compra.estado)) {
@@ -209,13 +223,15 @@ export async function enviarComprobanteCompra(
 
     // Método de pago: debe ser de la misma empresa y estar activo.
     if (metodoPagoId) {
-      const metodo = await prisma.metodoPago.findUnique({ where: { id: metodoPagoId } })
+      const metodo = await conEmpresa(compra.companyId, (tx) =>
+        tx.metodoPago.findUnique({ where: { id: metodoPagoId } })
+      )
       if (!metodo || metodo.companyId !== compra.companyId || !metodo.activo) {
         return { error: 'Método de pago no válido.' }
       }
     }
 
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(compra.companyId, async (tx) => {
       await tx.productoCompra.update({
         where: { id: compra.id },
         data: {
@@ -258,7 +274,10 @@ export async function cancelarCompraCliente(compraId: string): Promise<CompraSta
     const user = await clienteAutenticado()
     if (!user) return { error: 'No autorizado.' }
 
-    const compra = await prisma.productoCompra.findUnique({ where: { id: compraId } })
+    const compra = await sinEmpresa(
+      'promociones: lookup de compra por id para cancelar (su empresa se valida después)',
+      (tx) => tx.productoCompra.findUnique({ where: { id: compraId } })
+    )
     if (!compra || compra.clienteId !== user.metadata.clienteId) {
       return { error: 'Compra no encontrada.' }
     }
@@ -266,7 +285,7 @@ export async function cancelarCompraCliente(compraId: string): Promise<CompraSta
       return { error: 'Esta compra ya no puede cancelarse.' }
     }
 
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(compra.companyId, async (tx) => {
       const upd = await tx.productoCompra.updateMany({
         where: { id: compra.id, estado: compra.estado },
         data: { estado: 'CANCELADA' },
@@ -296,10 +315,14 @@ export async function instruccionesDePago(compraId: string): Promise<{
 }> {
   const user = await clienteAutenticado()
   if (!user) return { error: 'No autorizado.' }
-  const compra = await prisma.productoCompra.findUnique({
-    where: { id: compraId },
-    include: { promocion: { select: { titulo: true } } },
-  })
+  const compra = await sinEmpresa(
+    'promociones: lookup de compra por id para instrucciones de pago (pertenencia se valida después)',
+    (tx) =>
+      tx.productoCompra.findUnique({
+        where: { id: compraId },
+        include: { promocion: { select: { titulo: true } } },
+      })
+  )
   if (!compra || compra.clienteId !== user.metadata.clienteId) {
     return { error: 'Compra no encontrada.' }
   }

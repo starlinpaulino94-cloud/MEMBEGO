@@ -18,7 +18,7 @@
 import { createPromotionService, type PromotionService } from '@/lib/promotions'
 import type { PromotionStatus } from '@/lib/promotions'
 import { RESTRICTION_TYPES } from '@/lib/promotions'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { AUTOMATION_EVENTS } from '@/lib/automation'
 
@@ -61,12 +61,14 @@ function legacyConfig(data: LegacyPromoData): Record<string, unknown> {
   }
 }
 
-async function findUniversalByLegacyId(legacyId: string) {
-  const rows = await prisma.promotion.findMany({
-    where: { metadata: { path: ['legacyId'], equals: legacyId } },
-    select: { id: true, status: true },
-    take: 1,
-  })
+async function findUniversalByLegacyId(legacyId: string, companyId: string) {
+  const rows = await conEmpresa(companyId, (tx) =>
+    tx.promotion.findMany({
+      where: { metadata: { path: ['legacyId'], equals: legacyId } },
+      select: { id: true, status: true },
+      take: 1,
+    })
+  )
   return rows[0] ?? null
 }
 
@@ -77,7 +79,7 @@ export async function syncCreate(
   userId?: string | null,
 ): Promise<void> {
   try {
-    const existing = await findUniversalByLegacyId(legacyId)
+    const existing = await findUniversalByLegacyId(legacyId, companyId)
     if (existing) return
 
     const promotion = await service().create({
@@ -129,7 +131,7 @@ export async function syncUpdate(
   userId?: string | null,
 ): Promise<void> {
   try {
-    const existing = await findUniversalByLegacyId(legacyId)
+    const existing = await findUniversalByLegacyId(legacyId, companyId)
     if (!existing) {
       await syncCreate(legacyId, companyId, data, userId)
       return
@@ -184,7 +186,7 @@ export async function syncStatusChange(
   userId?: string | null,
 ): Promise<void> {
   try {
-    const existing = await findUniversalByLegacyId(legacyId)
+    const existing = await findUniversalByLegacyId(legacyId, companyId)
     if (!existing) return
 
     const target = legacyStatus(activo, archivada)
@@ -223,7 +225,7 @@ export async function syncDelete(
   titulo: string,
 ): Promise<void> {
   try {
-    const existing = await findUniversalByLegacyId(legacyId)
+    const existing = await findUniversalByLegacyId(legacyId, companyId)
     if (!existing) return
 
     let currentStatus = existing.status
@@ -259,16 +261,18 @@ export async function syncDuplicate(
   userId?: string | null,
 ): Promise<void> {
   try {
-    const original = await findUniversalByLegacyId(originalLegacyId)
+    const original = await findUniversalByLegacyId(originalLegacyId, companyId)
 
     if (original) {
       const copy = await service().duplicate(original.id, { userId })
-      await prisma.promotion.update({
-        where: { id: copy.id },
-        data: {
-          metadata: { ...(copy.metadata as Record<string, unknown>), legacyId: newLegacyId },
-        },
-      })
+      await conEmpresa(companyId, (tx) =>
+        tx.promotion.update({
+          where: { id: copy.id },
+          data: {
+            metadata: { ...(copy.metadata as Record<string, unknown>), legacyId: newLegacyId },
+          },
+        })
+      )
       await emitirEventoEstrategia({
         companyId,
         type: AUTOMATION_EVENTS.PROMOTION_DUPLICATED,

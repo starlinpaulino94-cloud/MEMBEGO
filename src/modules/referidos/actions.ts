@@ -6,11 +6,12 @@
  */
 
 import { Prisma, type ReferralEventTipo } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { logReferralEvent, PUNTOS, TIPOS_EMPRESA, TIPOS_GLOBAL } from '@/lib/referidos'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { crearTransaccionAplicada } from '@/lib/transactions'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { encolarRecompensas } from '@/modules/jobs/emisiones'
 
 /**
  * Fase E6: conversión del referido en su PRIMERA compra confirmada — membresía
@@ -33,10 +34,12 @@ export async function procesarReferidoCompletado(
   if (origen === 'MEMBRESIA') await procesarMembresiaGlobal(clienteId).catch(anotarFallo('referidos:puntos-globales'))
 
   try {
-    const referido = await prisma.referido.findUnique({
-      where: { referidoClienteId: clienteId },
-      include: { referenteCliente: { select: { nombre: true } } },
-    })
+    const referido = await sinEmpresa('referidos: buscar vínculo por cliente referido (la empresa del vínculo se valida contra la conversión)', (tx) =>
+      tx.referido.findUnique({
+        where: { referidoClienteId: clienteId },
+        include: { referenteCliente: { select: { nombre: true } } },
+      })
+    )
     if (!referido || referido.companyId !== companyId) return
 
     if (referido.sospechoso) {
@@ -54,10 +57,12 @@ export async function procesarReferidoCompletado(
     if (referido.estado !== 'PENDIENTE') return
 
     // Guard atómico anti doble-conversión (dos activaciones concurrentes).
-    const upd = await prisma.referido.updateMany({
-      where: { id: referido.id, estado: 'PENDIENTE' },
-      data: { estado: 'COMPLETADO', completadoEn: new Date() },
-    })
+    const upd = await conEmpresa(referido.companyId, (tx) =>
+      tx.referido.updateMany({
+        where: { id: referido.id, estado: 'PENDIENTE' },
+        data: { estado: 'COMPLETADO', completadoEn: new Date() },
+      })
+    )
     if (upd.count === 0) return
 
     // Eventos reales del embudo, enlazados al referido concreto.
@@ -80,20 +85,22 @@ export async function procesarReferidoCompletado(
       })
     }
 
-    await prisma.auditLog.create({
-      data: {
-        companyId,
-        accion: 'REFERIDO_COMPLETADO',
-        entidadTipo: 'Referido',
-        entidadId: referido.id,
-        payload: {
-          referenteClienteId: referido.referenteClienteId,
-          referidoClienteId: clienteId,
-          origen,
-          ...(opts.monto != null ? { monto: opts.monto } : {}),
+    await conEmpresa(referido.companyId, (tx) =>
+      tx.auditLog.create({
+        data: {
+          companyId,
+          accion: 'REFERIDO_COMPLETADO',
+          entidadTipo: 'Referido',
+          entidadId: referido.id,
+          payload: {
+            referenteClienteId: referido.referenteClienteId,
+            referidoClienteId: clienteId,
+            origen,
+            ...(opts.monto != null ? { monto: opts.monto } : {}),
+          },
         },
-      },
-    })
+      })
+    )
 
     // Bus de estrategias: la conversión ahora SÍ se emite (antes solo existía
     // el evento de registro; el journey de automatizaciones quedaba a ciegas).
@@ -107,7 +114,17 @@ export async function procesarReferidoCompletado(
       },
     }).catch(anotarFallo('referidos:notificacion'))
 
-    await evaluarRecompensas(referido.referenteClienteId, companyId)
+    // Fase 4: las recompensas (loop pesado de reglas) salen del request. La
+    // transición COMPLETADO + eventos + auditoría ya quedaron en línea — son la
+    // fuente de verdad. El worker evalúa e idempotente el unique (referente,
+    // regla): si QStash reintenta, no se duplica nada. Se AWAIT por la misma
+    // razón que antes: sin QStash `encolar` ejecuta en línea, y el trabajo debe
+    // terminar antes de responder al usuario.
+    await encolarRecompensas({
+      companyId,
+      referenteClienteId: referido.referenteClienteId,
+      referidoId: referido.id,
+    }).catch(anotarFallo('referidos:recompensas'))
   } catch (e) {
     console.error('[referidos] procesarReferidoCompletado error:', e)
   }
@@ -120,16 +137,20 @@ export async function procesarReferidoCompletado(
 async function procesarMembresiaGlobal(referidoClienteId: string) {
   // Fase E6.1: se filtra por la COLUMNA indexada referidoClienteId (antes por
   // meta JSON → seq-scan en cada conversión de membresía). Índice: E6-A.
-  const registroGlobal = await prisma.referralEvent.findFirst({
-    where: { tipo: 'REGISTRO_GLOBAL', referidoClienteId },
-    orderBy: { createdAt: 'asc' },
-  })
+  const [registroGlobal, yaContada] = await sinEmpresa('referidos: centro global MembeGo (eventos cross-empresa)', (tx) =>
+    Promise.all([
+      tx.referralEvent.findFirst({
+        where: { tipo: 'REGISTRO_GLOBAL', referidoClienteId },
+        orderBy: { createdAt: 'asc' },
+      }),
+      tx.referralEvent.findFirst({
+        where: { tipo: 'MEMBRESIA_GLOBAL', referidoClienteId },
+        select: { id: true },
+      }),
+    ])
+  )
   if (!registroGlobal) return
 
-  const yaContada = await prisma.referralEvent.findFirst({
-    where: { tipo: 'MEMBRESIA_GLOBAL', referidoClienteId },
-    select: { id: true },
-  })
   if (yaContada) return
 
   const meta = (registroGlobal.meta ?? {}) as Record<string, unknown>
@@ -161,33 +182,44 @@ async function procesarMembresiaGlobal(referidoClienteId: string) {
  *   descuentos, o usos sin membresía activa donde aplicarlos).
  * - Cada entrega genera: transacción oficial (Transaction Engine, REFERRAL),
  *   evento RECOMPENSA, auditoría y notificación.
+ *
+ * Fase 4: se ejecuta en el worker de la cola; es IDEMPOTENTE gracias al unique
+ * (referente, regla) — un reintento salta las ya otorgadas.
  */
-async function evaluarRecompensas(referenteClienteId: string, companyId: string) {
-  const completados = await prisma.referido.count({
-    where: { companyId, referenteClienteId, estado: 'COMPLETADO', sospechoso: false },
-  })
+export async function evaluarRecompensas(referenteClienteId: string, companyId: string) {
+  const completados = await conEmpresa(companyId, (tx) =>
+    tx.referido.count({
+      where: { companyId, referenteClienteId, estado: 'COMPLETADO', sospechoso: false },
+    })
+  )
   if (completados === 0) return
 
-  const reglas = await prisma.reglaRecompensa.findMany({
-    where: {
-      companyId,
-      activo: true,
-      condicion: 'N_REFERIDOS_COMPLETADOS',
-      valorCondicion: { lte: completados },
-    },
-  })
+  const reglas = await conEmpresa(companyId, (tx) =>
+    tx.reglaRecompensa.findMany({
+      where: {
+        companyId,
+        activo: true,
+        condicion: 'N_REFERIDOS_COMPLETADOS',
+        valorCondicion: { lte: completados },
+      },
+    })
+  )
   if (reglas.length === 0) return
 
-  const referente = await prisma.cliente.findUnique({
-    where: { id: referenteClienteId },
-    include: { company: { select: { name: true, zonaHoraria: true } } },
-  })
+  const referente = await conEmpresa(companyId, (tx) =>
+    tx.cliente.findUnique({
+      where: { id: referenteClienteId },
+      include: { company: { select: { name: true, zonaHoraria: true } } },
+    })
+  )
   if (!referente) return
 
-  const referenteUser = await prisma.user.findUnique({
-    where: { supabaseId: referente.supabaseId },
-    select: { id: true },
-  })
+  const referenteUser = await sinEmpresa('referidos: buscar user por supabaseId (users son globales, no por empresa)', (tx) =>
+    tx.user.findUnique({
+      where: { supabaseId: referente.supabaseId },
+      select: { id: true },
+    })
+  )
 
   const notificacionesACrear = []
 
@@ -212,9 +244,11 @@ async function evaluarRecompensas(referenteClienteId: string, companyId: string)
     let estado: 'ENTREGADA' | 'PENDIENTE' = 'PENDIENTE'
     let mensaje = ''
     if (regla.tipoRecompensa === 'LAVADOS_GRATIS') {
-      const activa = await prisma.membership.findUnique({
-        where: { clienteId_companyId: { clienteId: referenteClienteId, companyId } },
-      })
+      const activa = await conEmpresa(companyId, (tx) =>
+        tx.membership.findUnique({
+          where: { clienteId_companyId: { clienteId: referenteClienteId, companyId } },
+        })
+      )
       if (activa && activa.estado === 'ACTIVA') {
         estado = 'ENTREGADA'
         mensaje = `¡Ganaste ${descripcion} por tus referidos! Ya se aplicaron a tu membresía.`
@@ -230,20 +264,22 @@ async function evaluarRecompensas(referenteClienteId: string, companyId: string)
     // salta sin duplicar.
     let recompensaId: string
     try {
-      const creada = await prisma.referralRecompensa.create({
-        data: {
-          companyId,
-          referenteClienteId,
-          reglaId: regla.id,
-          estado,
-          tipo: regla.tipoRecompensa,
-          valor,
-          descripcion,
-          umbral: regla.valorCondicion,
-          completadosAlOtorgar: completados,
-          entregadaAt: estado === 'ENTREGADA' ? new Date() : null,
-        },
-      })
+      const creada = await conEmpresa(companyId, (tx) =>
+        tx.referralRecompensa.create({
+          data: {
+            companyId,
+            referenteClienteId,
+            reglaId: regla.id,
+            estado,
+            tipo: regla.tipoRecompensa,
+            valor,
+            descripcion,
+            umbral: regla.valorCondicion,
+            completadosAlOtorgar: completados,
+            entregadaAt: estado === 'ENTREGADA' ? new Date() : null,
+          },
+        })
+      )
       recompensaId = creada.id
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') continue
@@ -252,28 +288,32 @@ async function evaluarRecompensas(referenteClienteId: string, companyId: string)
 
     // Efecto tangible (después de asegurar la fila: sin fila no hay efecto).
     if (estado === 'ENTREGADA') {
-      await prisma.membership.updateMany({
-        where: { clienteId: referenteClienteId, companyId, estado: 'ACTIVA' },
-        data: { lavadosRestantes: { increment: valor } },
-      })
+      await conEmpresa(companyId, (tx) =>
+        tx.membership.updateMany({
+          where: { clienteId: referenteClienteId, companyId, estado: 'ACTIVA' },
+          data: { lavadosRestantes: { increment: valor } },
+        })
+      )
     }
 
     // Transacción oficial (Transaction Engine): la recompensa es una operación
     // auditable con TX-ID, como cualquier otra del sistema.
-    await crearTransaccionAplicada(prisma, {
-      tipo: 'REFERRAL',
-      companyId,
-      clienteId: referenteClienteId,
-      snapshot: {
-        cliente: referente.nombre,
-        empresa: referente.company.name,
-        servicio: `Recompensa por referidos: ${descripcion}`,
-        restantes: undefined,
-      },
-      auditoria: { origen: 'referral_engine', reglaId: regla.id, recompensaId },
-      resultado: `Umbral: ${regla.valorCondicion} referidos completados (${completados} al otorgar)`,
-      timeZone: referente.company.zonaHoraria,
-      userId: null,
+    await conEmpresa(companyId, async (tx) => {
+      await crearTransaccionAplicada(tx, {
+        tipo: 'REFERRAL',
+        companyId,
+        clienteId: referenteClienteId,
+        snapshot: {
+          cliente: referente.nombre,
+          empresa: referente.company.name,
+          servicio: `Recompensa por referidos: ${descripcion}`,
+          restantes: undefined,
+        },
+        auditoria: { origen: 'referral_engine', reglaId: regla.id, recompensaId },
+        resultado: `Umbral: ${regla.valorCondicion} referidos completados (${completados} al otorgar)`,
+        timeZone: referente.company.zonaHoraria,
+        userId: null,
+      })
     }).catch((e) => console.error('[referidos] tx recompensa:', e))
 
     // Evento del embudo + auditoría + notificación.
@@ -283,15 +323,17 @@ async function evaluarRecompensas(referenteClienteId: string, companyId: string)
       tipo: 'RECOMPENSA',
       meta: { reglaId: regla.id, recompensaId, descripcion, estado },
     })
-    await prisma.auditLog.create({
-      data: {
-        companyId,
-        accion: 'RECOMPENSA_OTORGADA',
-        entidadTipo: 'ReferralRecompensa',
-        entidadId: recompensaId,
-        payload: { referenteClienteId, reglaId: regla.id, completados, estado, descripcion },
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.auditLog.create({
+        data: {
+          companyId,
+          accion: 'RECOMPENSA_OTORGADA',
+          entidadTipo: 'ReferralRecompensa',
+          entidadId: recompensaId,
+          payload: { referenteClienteId, reglaId: regla.id, completados, estado, descripcion },
+        },
+      })
+    )
     if (referenteUser) {
       notificacionesACrear.push({
         userId: referenteUser.id,
@@ -304,28 +346,34 @@ async function evaluarRecompensas(referenteClienteId: string, companyId: string)
   }
 
   if (notificacionesACrear.length > 0) {
-    await prisma.notificacion.createMany({
-      data: notificacionesACrear,
-    }).catch((e) => {
+    await sinEmpresa('referidos: crear notificaciones por usuario (notificaciones son por usuario, no por empresa)', (tx) =>
+      tx.notificacion.createMany({
+        data: notificacionesACrear,
+      })
+    ).catch((e) => {
       console.error('[referidos-notifications]', e)
     })
   }
 
   // Compatibilidad con vistas existentes: el booleano legacy se mantiene,
   // pero la fuente de verdad de recompensas es referral_recompensas.
-  await prisma.referido.updateMany({
-    where: { companyId, referenteClienteId, estado: 'COMPLETADO', sospechoso: false, recompensaAplicada: false },
-    data: { recompensaAplicada: true },
-  })
+  await conEmpresa(companyId, (tx) =>
+    tx.referido.updateMany({
+      where: { companyId, referenteClienteId, estado: 'COMPLETADO', sospechoso: false, recompensaAplicada: false },
+      data: { recompensaAplicada: true },
+    })
+  )
 }
 
 export async function getClienteReferidos(clienteId: string) {
-  return prisma.referido.findMany({
-    where: { referenteClienteId: clienteId },
-    include: { referidoCliente: { select: { nombre: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: 200,
-  })
+  return sinEmpresa('referidos: lista de referidos del cliente (panel de cliente, cruza sus empresas)', (tx) =>
+    tx.referido.findMany({
+      where: { referenteClienteId: clienteId },
+      include: { referidoCliente: { select: { nombre: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    })
+  )
 }
 
 export interface EtapaEmbudo {
@@ -411,7 +459,9 @@ export async function getReferidosDashboard(
 ): Promise<ReferidosDashboard> {
   // Los IDs de todas mis cuentas (para el Centro global) se resuelven primero
   // porque globalAgg depende de ellos; el resto va en un único Promise.all.
-  const misClientes = await prisma.cliente.findMany({ where: { supabaseId }, select: { id: true } })
+  const misClientes = await sinEmpresa('referidos: resolver todas las cuentas del cliente (centro global MembeGo)', (tx) =>
+    tx.cliente.findMany({ where: { supabaseId }, select: { id: true } })
+  )
   const misIds = misClientes.map((c) => c.id)
 
   const [
@@ -424,61 +474,65 @@ export async function getReferidosDashboard(
     rankingRows,
     reglas,
     misRecompensasRows,
-    globalAgg,
-  ] = await Promise.all([
-    prisma.referralEvent.groupBy({
-      by: ['tipo'],
-      where: { clienteId, companyId },
-      _count: { _all: true },
-      _sum: { puntos: true },
-    }),
-    prisma.$queryRaw<{ n: bigint }[]>(
-      Prisma.sql`SELECT count(DISTINCT "visitorId")::bigint AS n
-        FROM "referral_events"
-        WHERE "clienteId" = ${clienteId} AND "companyId" = ${companyId}
-          AND tipo = 'CLICK' AND "visitorId" IS NOT NULL`
-    ),
-    // Fuente autoritativa SIN cap: coincide con el admin y con el SQL de
-    // auditoría aun para referentes con miles de referidos.
-    prisma.referido.count({ where: { referenteClienteId: clienteId, companyId, sospechoso: false } }),
-    prisma.referido.count({
-      where: { referenteClienteId: clienteId, companyId, sospechoso: false, estado: 'COMPLETADO' },
-    }),
-    prisma.referralRecompensa.count({ where: { referenteClienteId: clienteId, companyId } }),
-    prisma.referido.findMany({
-      where: { referenteClienteId: clienteId, companyId },
-      include: { referidoCliente: { select: { nombre: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    }),
-    // Ranking por conversiones REALES: referidos legítimos por referente.
-    prisma.$queryRaw<{ referente: string; registros: bigint; membresias: bigint }[]>(
-      Prisma.sql`SELECT "referenteClienteId" AS referente,
-          count(*)::bigint AS registros,
-          count(*) FILTER (WHERE estado = 'COMPLETADO')::bigint AS membresias
-        FROM "referidos"
-        WHERE "companyId" = ${companyId} AND sospechoso = false
-        GROUP BY 1
-        ORDER BY membresias DESC, registros DESC
-        LIMIT 50`
-    ),
-    prisma.reglaRecompensa.findMany({
-      where: { companyId, activo: true },
-      orderBy: { valorCondicion: 'asc' },
-    }),
-    prisma.referralRecompensa.findMany({
-      where: { referenteClienteId: clienteId, companyId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    }),
-    // Centro global MembeGo: eventos globales de TODAS tus cuentas.
-    prisma.referralEvent.groupBy({
+  ] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.referralEvent.groupBy({
+        by: ['tipo'],
+        where: { clienteId, companyId },
+        _count: { _all: true },
+        _sum: { puntos: true },
+      }),
+      tx.$queryRaw<{ n: bigint }[]>(
+        Prisma.sql`SELECT count(DISTINCT "visitorId")::bigint AS n
+          FROM "referral_events"
+          WHERE "clienteId" = ${clienteId} AND "companyId" = ${companyId}
+            AND tipo = 'CLICK' AND "visitorId" IS NOT NULL`
+      ),
+      // Fuente autoritativa SIN cap: coincide con el admin y con el SQL de
+      // auditoría aun para referentes con miles de referidos.
+      tx.referido.count({ where: { referenteClienteId: clienteId, companyId, sospechoso: false } }),
+      tx.referido.count({
+        where: { referenteClienteId: clienteId, companyId, sospechoso: false, estado: 'COMPLETADO' },
+      }),
+      tx.referralRecompensa.count({ where: { referenteClienteId: clienteId, companyId } }),
+      tx.referido.findMany({
+        where: { referenteClienteId: clienteId, companyId },
+        include: { referidoCliente: { select: { nombre: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+      // Ranking por conversiones REALES: referidos legítimos por referente.
+      tx.$queryRaw<{ referente: string; registros: bigint; membresias: bigint }[]>(
+        Prisma.sql`SELECT "referenteClienteId" AS referente,
+            count(*)::bigint AS registros,
+            count(*) FILTER (WHERE estado = 'COMPLETADO')::bigint AS membresias
+          FROM "referidos"
+          WHERE "companyId" = ${companyId} AND sospechoso = false
+          GROUP BY 1
+          ORDER BY membresias DESC, registros DESC
+          LIMIT 50`
+      ),
+      tx.reglaRecompensa.findMany({
+        where: { companyId, activo: true },
+        orderBy: { valorCondicion: 'asc' },
+      }),
+      tx.referralRecompensa.findMany({
+        where: { referenteClienteId: clienteId, companyId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+    ])
+  )
+
+  // Centro global MembeGo: eventos globales de TODAS tus cuentas.
+  const globalAgg = await sinEmpresa('referidos: eventos globales del cliente (centro MembeGo, cruza sus empresas)', (tx) =>
+    tx.referralEvent.groupBy({
       by: ['tipo'],
       where: { clienteId: { in: misIds }, tipo: { in: TIPOS_GLOBAL } },
       _count: { _all: true },
       _sum: { puntos: true },
-    }),
-  ])
+    })
+  )
 
   const byTipo = new Map(eventos.map((e) => [e.tipo, e]))
   const count = (t: string) => byTipo.get(t as never)?._count._all ?? 0
@@ -508,17 +562,19 @@ export async function getReferidosDashboard(
 
   // Ranking (top 5 + posición propia), con nombres y puntos de gamificación.
   const top5 = rankingRows.slice(0, 5)
-  const [nombres, puntosTop] = await Promise.all([
-    prisma.cliente.findMany({
-      where: { id: { in: top5.map((t) => t.referente) } },
-      select: { id: true, nombre: true },
-    }),
-    prisma.referralEvent.groupBy({
-      by: ['clienteId'],
-      where: { companyId, clienteId: { in: top5.map((t) => t.referente) }, tipo: { in: TIPOS_EMPRESA } },
-      _sum: { puntos: true },
-    }),
-  ])
+  const [nombres, puntosTop] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.cliente.findMany({
+        where: { id: { in: top5.map((t) => t.referente) } },
+        select: { id: true, nombre: true },
+      }),
+      tx.referralEvent.groupBy({
+        by: ['clienteId'],
+        where: { companyId, clienteId: { in: top5.map((t) => t.referente) }, tipo: { in: TIPOS_EMPRESA } },
+        _sum: { puntos: true },
+      }),
+    ])
+  )
   const nombreDe = new Map(nombres.map((n) => [n.id, n.nombre]))
   const puntosDe = new Map(puntosTop.map((t) => [t.clienteId, t._sum.puntos ?? 0]))
   const ranking = top5.map((t, i) => ({
@@ -634,6 +690,12 @@ export interface EmpresaReferidosDashboard {
 export async function getEmpresaReferidosDashboard(
   companyId: string | null
 ): Promise<EmpresaReferidosDashboard> {
+  // companyId null = superadmin: toda la plataforma (omnisciente).
+  const queries = <T>(fn: (tx: Tx) => Promise<T>): Promise<T> =>
+    companyId
+      ? conEmpresa(companyId, fn)
+      : sinEmpresa('referidos: dashboard superadmin (todas las empresas)', fn)
+
   const whereRef = companyId ? { companyId } : {}
   const companySql = companyId
     ? Prisma.sql`"companyId" = ${companyId}`
@@ -657,82 +719,84 @@ export async function getEmpresaReferidosDashboard(
     rankingRows,
     activosCountRows,
     tiempoConversionRows,
-  ] = await Promise.all([
-    prisma.referralEvent.groupBy({
-      by: ['tipo'],
-      where: whereRef,
-      _count: { _all: true },
-    }),
-    prisma.$queryRaw<{ n: bigint }[]>(
-      Prisma.sql`SELECT count(DISTINCT "visitorId")::bigint AS n
-        FROM "referral_events"
-        WHERE ${companySql} AND tipo = 'CLICK' AND "visitorId" IS NOT NULL`
-    ),
-    prisma.referido.count({ where: { ...whereRef, sospechoso: false } }),
-    prisma.referido.count({ where: { ...whereRef, estado: 'COMPLETADO', sospechoso: false } }),
-    // Clientes referidos ACTIVOS: con membresía activa hoy (legítimos).
-    prisma.$queryRaw<{ n: bigint }[]>(
-      Prisma.sql`SELECT count(DISTINCT r."referidoClienteId")::bigint AS n
-        FROM "referidos" r
-        JOIN "memberships" m ON m."clienteId" = r."referidoClienteId"
-          AND m.estado = 'ACTIVA' AND m."companyId" = r."companyId"
-        WHERE ${companyId ? Prisma.sql`r."companyId" = ${companyId}` : Prisma.sql`TRUE`}
-          AND r.sospechoso = false`
-    ),
-    prisma.referralRecompensa.groupBy({
-      by: ['estado'],
-      where: whereRef,
-      _count: { _all: true },
-    }),
-    prisma.referralEvent.groupBy({
-      by: ['tipo', 'canal'],
-      where: { ...whereRef, tipo: { in: ['SHARE', 'CLICK'] } },
-      _count: { _all: true },
-    }),
-    // Canal con mayor conversión (LAST-TOUCH, sin fan-out): para cada referido
-    // LEGÍTIMO se toma UN solo clic —el último antes de su registro, del mismo
-    // visitante— y se cuenta su canal. Excluye sospechosos y respeta companyId
-    // en ambos lados (el visitorId es una cookie cross-empresa de 365 días).
-    prisma.$queryRaw<{ canal: string; n: bigint }[]>(
-      Prisma.sql`SELECT canal, count(*)::bigint AS n FROM (
-        SELECT DISTINCT ON (reg."referidoClienteId") COALESCE(c.canal, 'directo') AS canal
-        FROM "referral_events" reg
-        JOIN "referidos" rf
-          ON rf."referidoClienteId" = reg."referidoClienteId" AND rf.sospechoso = false
-          ${companyId ? Prisma.sql`AND rf."companyId" = ${companyId}` : Prisma.empty}
-        LEFT JOIN "referral_events" c
-          ON c."visitorId" = reg."visitorId" AND c.tipo = 'CLICK'
-          AND c."createdAt" <= reg."createdAt"
-          ${companyId ? Prisma.sql`AND c."companyId" = ${companyId}` : Prisma.empty}
-        WHERE ${companyId ? Prisma.sql`reg."companyId" = ${companyId}` : Prisma.sql`TRUE`}
-          AND reg.tipo = 'REGISTRO' AND reg."visitorId" IS NOT NULL
-        ORDER BY reg."referidoClienteId", c."createdAt" DESC NULLS LAST
-      ) t GROUP BY 1`
-    ),
-    // Ranking por conversiones reales (no por puntos gamificables).
-    prisma.$queryRaw<{ referente: string; registros: bigint; membresias: bigint }[]>(
-      Prisma.sql`SELECT "referenteClienteId" AS referente,
-          count(*)::bigint AS registros,
-          count(*) FILTER (WHERE estado = 'COMPLETADO')::bigint AS membresias
-        FROM "referidos"
-        WHERE ${companySql} AND sospechoso = false
-        GROUP BY 1
-        ORDER BY membresias DESC, registros DESC
-        LIMIT 10`
-    ),
-    prisma.$queryRaw<{ n: bigint }[]>(
-      Prisma.sql`SELECT count(DISTINCT "clienteId")::bigint AS n
-        FROM "referral_events"
-        WHERE ${companySql} AND "createdAt" >= ${hace30d}`
-    ),
-    // Tiempo promedio registro → conversión (días), solo legítimos completados.
-    prisma.$queryRaw<{ dias: number | null }[]>(
-      Prisma.sql`SELECT avg(EXTRACT(EPOCH FROM ("completadoEn" - "createdAt")) / 86400)::float AS dias
-        FROM "referidos"
-        WHERE ${companySql} AND estado = 'COMPLETADO' AND sospechoso = false
-          AND "completadoEn" IS NOT NULL`
-    ),
-  ])
+  ] = await queries((tx) =>
+    Promise.all([
+      tx.referralEvent.groupBy({
+        by: ['tipo'],
+        where: whereRef,
+        _count: { _all: true },
+      }),
+      tx.$queryRaw<{ n: bigint }[]>(
+        Prisma.sql`SELECT count(DISTINCT "visitorId")::bigint AS n
+          FROM "referral_events"
+          WHERE ${companySql} AND tipo = 'CLICK' AND "visitorId" IS NOT NULL`
+      ),
+      tx.referido.count({ where: { ...whereRef, sospechoso: false } }),
+      tx.referido.count({ where: { ...whereRef, estado: 'COMPLETADO', sospechoso: false } }),
+      // Clientes referidos ACTIVOS: con membresía activa hoy (legítimos).
+      tx.$queryRaw<{ n: bigint }[]>(
+        Prisma.sql`SELECT count(DISTINCT r."referidoClienteId")::bigint AS n
+          FROM "referidos" r
+          JOIN "memberships" m ON m."clienteId" = r."referidoClienteId"
+            AND m.estado = 'ACTIVA' AND m."companyId" = r."companyId"
+          WHERE ${companyId ? Prisma.sql`r."companyId" = ${companyId}` : Prisma.sql`TRUE`}
+            AND r.sospechoso = false`
+      ),
+      tx.referralRecompensa.groupBy({
+        by: ['estado'],
+        where: whereRef,
+        _count: { _all: true },
+      }),
+      tx.referralEvent.groupBy({
+        by: ['tipo', 'canal'],
+        where: { ...whereRef, tipo: { in: ['SHARE', 'CLICK'] } },
+        _count: { _all: true },
+      }),
+      // Canal con mayor conversión (LAST-TOUCH, sin fan-out): para cada referido
+      // LEGÍTIMO se toma UN solo clic —el último antes de su registro, del mismo
+      // visitante— y se cuenta su canal. Excluye sospechosos y respeta companyId
+      // en ambos lados (el visitorId es una cookie cross-empresa de 365 días).
+      tx.$queryRaw<{ canal: string; n: bigint }[]>(
+        Prisma.sql`SELECT canal, count(*)::bigint AS n FROM (
+          SELECT DISTINCT ON (reg."referidoClienteId") COALESCE(c.canal, 'directo') AS canal
+          FROM "referral_events" reg
+          JOIN "referidos" rf
+            ON rf."referidoClienteId" = reg."referidoClienteId" AND rf.sospechoso = false
+            ${companyId ? Prisma.sql`AND rf."companyId" = ${companyId}` : Prisma.empty}
+          LEFT JOIN "referral_events" c
+            ON c."visitorId" = reg."visitorId" AND c.tipo = 'CLICK'
+            AND c."createdAt" <= reg."createdAt"
+            ${companyId ? Prisma.sql`AND c."companyId" = ${companyId}` : Prisma.empty}
+          WHERE ${companyId ? Prisma.sql`reg."companyId" = ${companyId}` : Prisma.sql`TRUE`}
+            AND reg.tipo = 'REGISTRO' AND reg."visitorId" IS NOT NULL
+          ORDER BY reg."referidoClienteId", c."createdAt" DESC NULLS LAST
+        ) t GROUP BY 1`
+      ),
+      // Ranking por conversiones reales (no por puntos gamificables).
+      tx.$queryRaw<{ referente: string; registros: bigint; membresias: bigint }[]>(
+        Prisma.sql`SELECT "referenteClienteId" AS referente,
+            count(*)::bigint AS registros,
+            count(*) FILTER (WHERE estado = 'COMPLETADO')::bigint AS membresias
+          FROM "referidos"
+          WHERE ${companySql} AND sospechoso = false
+          GROUP BY 1
+          ORDER BY membresias DESC, registros DESC
+          LIMIT 10`
+      ),
+      tx.$queryRaw<{ n: bigint }[]>(
+        Prisma.sql`SELECT count(DISTINCT "clienteId")::bigint AS n
+          FROM "referral_events"
+          WHERE ${companySql} AND "createdAt" >= ${hace30d}`
+      ),
+      // Tiempo promedio registro → conversión (días), solo legítimos completados.
+      tx.$queryRaw<{ dias: number | null }[]>(
+        Prisma.sql`SELECT avg(EXTRACT(EPOCH FROM ("completadoEn" - "createdAt")) / 86400)::float AS dias
+          FROM "referidos"
+          WHERE ${companySql} AND estado = 'COMPLETADO' AND sospechoso = false
+            AND "completadoEn" IS NOT NULL`
+      ),
+    ])
+  )
 
   const countTipo = (t: string) =>
     eventosTipo.find((e) => e.tipo === t)?._count._all ?? 0
@@ -745,60 +809,62 @@ export async function getEmpresaReferidosDashboard(
 
   // Ronda 2: agregados y series.
   const [ingresosAgg, sospechosos, campanaRows, diariosRows, mensualRows, historicosCountRows, movimientos, referidosRecientesRows] =
-    await Promise.all([
-      // Ingresos atribuibles: pagos confirmados de clientes referidos LEGÍTIMOS.
-      prisma.membership.aggregate({
-        where: {
-          pagoConfirmado: true,
-          cliente: {
-            referidoComo: {
-              some: { estado: 'COMPLETADO', sospechoso: false, ...(companyId ? { companyId } : {}) },
+    await queries((tx) =>
+      Promise.all([
+        // Ingresos atribuibles: pagos confirmados de clientes referidos LEGÍTIMOS.
+        tx.membership.aggregate({
+          where: {
+            pagoConfirmado: true,
+            cliente: {
+              referidoComo: {
+                some: { estado: 'COMPLETADO', sospechoso: false, ...(companyId ? { companyId } : {}) },
+              },
             },
           },
-        },
-        _sum: { montoPagado: true },
-      }),
-      prisma.referido.count({ where: { ...whereRef, sospechoso: true } }),
-      prisma.$queryRaw<{ campana: string; n: bigint }[]>(
-        Prisma.sql`SELECT meta->>'campana' AS campana, count(*)::bigint AS n
-          FROM "referral_events"
-          WHERE ${companySql} AND tipo = 'CLICK' AND meta->>'campana' IS NOT NULL
-          GROUP BY 1 ORDER BY 2 DESC LIMIT 10`
-      ),
-      prisma.$queryRaw<{ dia: Date; n: bigint }[]>(
-        Prisma.sql`SELECT date_trunc('day', "createdAt") AS dia, count(*)::bigint AS n
-          FROM "referidos" WHERE ${companySql} AND "sospechoso" = false AND "createdAt" >= ${hace30d}
-          GROUP BY 1 ORDER BY 1`
-      ),
-      prisma.$queryRaw<{ mes: Date; registros: bigint; membresias: bigint }[]>(
-        Prisma.sql`SELECT date_trunc('month', "createdAt") AS mes,
-            count(*)::bigint AS registros,
-            count(*) FILTER (WHERE estado = 'COMPLETADO')::bigint AS membresias
-          FROM "referidos" WHERE ${companySql} AND "sospechoso" = false AND "createdAt" >= ${hace6m}
-          GROUP BY 1 ORDER BY 1`
-      ),
-      prisma.$queryRaw<{ n: bigint }[]>(
-        Prisma.sql`SELECT count(DISTINCT "clienteId")::bigint AS n
-          FROM "referral_events" WHERE ${companySql}`
-      ),
-      // Últimos movimientos del programa (eventos reales, cronológicos).
-      prisma.referralEvent.findMany({
-        where: whereRef,
-        include: { cliente: { select: { nombre: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 12,
-      }),
-      // Estado de cada referido (los sospechosos visibles, marcados).
-      prisma.referido.findMany({
-        where: whereRef,
-        include: {
-          referidoCliente: { select: { nombre: true } },
-          referenteCliente: { select: { nombre: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 25,
-      }),
-    ])
+          _sum: { montoPagado: true },
+        }),
+        tx.referido.count({ where: { ...whereRef, sospechoso: true } }),
+        tx.$queryRaw<{ campana: string; n: bigint }[]>(
+          Prisma.sql`SELECT meta->>'campana' AS campana, count(*)::bigint AS n
+            FROM "referral_events"
+            WHERE ${companySql} AND tipo = 'CLICK' AND meta->>'campana' IS NOT NULL
+            GROUP BY 1 ORDER BY 2 DESC LIMIT 10`
+        ),
+        tx.$queryRaw<{ dia: Date; n: bigint }[]>(
+          Prisma.sql`SELECT date_trunc('day', "createdAt") AS dia, count(*)::bigint AS n
+            FROM "referidos" WHERE ${companySql} AND "sospechoso" = false AND "createdAt" >= ${hace30d}
+            GROUP BY 1 ORDER BY 1`
+        ),
+        tx.$queryRaw<{ mes: Date; registros: bigint; membresias: bigint }[]>(
+          Prisma.sql`SELECT date_trunc('month', "createdAt") AS mes,
+              count(*)::bigint AS registros,
+              count(*) FILTER (WHERE estado = 'COMPLETADO')::bigint AS membresias
+            FROM "referidos" WHERE ${companySql} AND "sospechoso" = false AND "createdAt" >= ${hace6m}
+            GROUP BY 1 ORDER BY 1`
+        ),
+        tx.$queryRaw<{ n: bigint }[]>(
+          Prisma.sql`SELECT count(DISTINCT "clienteId")::bigint AS n
+            FROM "referral_events" WHERE ${companySql}`
+        ),
+        // Últimos movimientos del programa (eventos reales, cronológicos).
+        tx.referralEvent.findMany({
+          where: whereRef,
+          include: { cliente: { select: { nombre: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+        }),
+        // Estado de cada referido (los sospechosos visibles, marcados).
+        tx.referido.findMany({
+          where: whereRef,
+          include: {
+            referidoCliente: { select: { nombre: true } },
+            referenteCliente: { select: { nombre: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+        }),
+      ])
+    )
 
   const ingresosReferidos = Number(ingresosAgg._sum.montoPagado ?? 0)
   const recompensasEntregadas =
@@ -809,17 +875,19 @@ export async function getEmpresaReferidosDashboard(
 
   // Nombres y puntos de los tops (ranking ya viene por conversiones).
   const topIds = rankingRows.map((t) => t.referente)
-  const [nombres, puntosTop] = await Promise.all([
-    prisma.cliente.findMany({
-      where: { id: { in: topIds } },
-      select: { id: true, nombre: true },
-    }),
-    prisma.referralEvent.groupBy({
-      by: ['clienteId'],
-      where: { ...whereRef, clienteId: { in: topIds }, tipo: { in: TIPOS_EMPRESA } },
-      _sum: { puntos: true },
-    }),
-  ])
+  const [nombres, puntosTop] = await queries((tx) =>
+    Promise.all([
+      tx.cliente.findMany({
+        where: { id: { in: topIds } },
+        select: { id: true, nombre: true },
+      }),
+      tx.referralEvent.groupBy({
+        by: ['clienteId'],
+        where: { ...whereRef, clienteId: { in: topIds }, tipo: { in: TIPOS_EMPRESA } },
+        _sum: { puntos: true },
+      }),
+    ])
+  )
   const nombreDe = new Map(nombres.map((n) => [n.id, n.nombre]))
   const puntosDe = new Map(puntosTop.map((t) => [t.clienteId, t._sum.puntos ?? 0]))
 
@@ -946,22 +1014,26 @@ export async function getEmpresaReferidosDashboard(
  * registro, verificación, compras, recompensas) con fecha y hora. Server-only.
  */
 export async function getReferidoTimeline(referidoClienteId: string) {
-  const registro = await prisma.referralEvent.findFirst({
-    where: { tipo: 'REGISTRO', referidoClienteId },
-    select: { visitorId: true },
-  })
-  const eventos = await prisma.referralEvent.findMany({
-    where: {
-      OR: [
-        { referidoClienteId },
-        ...(registro?.visitorId
-          ? [{ visitorId: registro.visitorId, tipo: { in: ['CLICK', 'REGISTRO_INICIADO'] as ReferralEventTipo[] } }]
-          : []),
-      ],
-    },
-    orderBy: { createdAt: 'asc' },
-    take: 100,
-  })
+  const registro = await sinEmpresa('referidos: timeline - evento REGISTRO del referido', (tx) =>
+    tx.referralEvent.findFirst({
+      where: { tipo: 'REGISTRO', referidoClienteId },
+      select: { visitorId: true },
+    })
+  )
+  const eventos = await sinEmpresa('referidos: timeline - eventos del referido (cross-empresa por visitorId)', (tx) =>
+    tx.referralEvent.findMany({
+      where: {
+        OR: [
+          { referidoClienteId },
+          ...(registro?.visitorId
+            ? [{ visitorId: registro.visitorId, tipo: { in: ['CLICK', 'REGISTRO_INICIADO'] as ReferralEventTipo[] } }]
+            : []),
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    })
+  )
   return eventos.map((e) => ({
     id: e.id,
     tipo: e.tipo,

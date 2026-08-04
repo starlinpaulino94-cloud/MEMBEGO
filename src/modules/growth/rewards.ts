@@ -11,7 +11,7 @@
  * el flujo principal (registro, activación, compra).
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { Prisma, GrowthTrigger, GrowthRule, GrowthBeneficiario } from '@prisma/client'
 import {
   calcularVencimientoBeneficio,
@@ -72,9 +72,11 @@ function condicionCumple(rule: GrowthRule, input: EvaluarGrowthInput): boolean {
  */
 export async function evaluarRecompensasGrowth(input: EvaluarGrowthInput): Promise<number> {
   try {
-    const reglas = await prisma.growthRule.findMany({
-      where: { companyId: input.companyId, trigger: input.trigger, activo: true },
-    })
+    const reglas = await conEmpresa(input.companyId, (tx) =>
+      tx.growthRule.findMany({
+        where: { companyId: input.companyId, trigger: input.trigger, activo: true },
+      })
+    )
     if (reglas.length === 0) return 0
 
     let creadas = 0
@@ -110,17 +112,19 @@ async function entregarUna(
   const dedupeKey = dedupe(rule, clienteId, input)
 
   // Corta temprano si ya existe (evita trabajo y respeta el unique).
-  const existe = await prisma.growthReward.findUnique({
-    where: { dedupeKey },
-    select: { id: true },
-  })
+  const existe = await conEmpresa(input.companyId, (tx) =>
+    tx.growthReward.findUnique({
+      where: { dedupeKey },
+      select: { id: true },
+    })
+  )
   if (existe) return false
 
   const valor = Number(rule.recompensaValor)
   const descripcion = describir(rule, valor)
 
   try {
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(input.companyId, async (tx) => {
       const { estado, productoCompraId } = await aplicarEfecto(tx, rule, clienteId, input, valor)
       await tx.growthReward.create({
         data: {
@@ -282,11 +286,13 @@ export async function otorgarBeneficioReferido(input: {
   promocionId: string
 }): Promise<string | null> {
   try {
-    const yaTiene = await prisma.productoCompra.count({
-      where: { clienteId: input.clienteId, promocionId: input.promocionId },
-    })
+    const yaTiene = await conEmpresa(input.companyId, (tx) =>
+      tx.productoCompra.count({
+        where: { clienteId: input.clienteId, promocionId: input.promocionId },
+      })
+    )
     if (yaTiene > 0) return null
-    return await prisma.$transaction((tx) =>
+    return await conEmpresa(input.companyId, (tx) =>
       crearBeneficioCompra(
         tx,
         input.companyId,
@@ -314,7 +320,7 @@ export async function otorgarBeneficioDirecto(input: {
   motivo?: string
 }): Promise<string | null> {
   try {
-    return await prisma.$transaction((tx) =>
+    return await conEmpresa(input.companyId, (tx) =>
       crearBeneficioCompra(
         tx,
         input.companyId,

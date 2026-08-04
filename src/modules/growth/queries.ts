@@ -3,7 +3,7 @@
  * Server-internal (SIN 'use server').
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getGrowthConfig, type GrowthConfigResuelta } from './config'
 
 export interface GrowthRuleView {
@@ -28,24 +28,26 @@ export interface GrowthAdminData {
 
 /** Datos para el panel de configuración del programa de crecimiento. */
 export async function getGrowthAdminData(companyId: string): Promise<GrowthAdminData> {
-  const [config, rulesRaw, promos, plans] = await Promise.all([
-    getGrowthConfig(companyId),
-    prisma.growthRule.findMany({
-      where: { companyId },
-      orderBy: { createdAt: 'desc' },
-      include: { recompensaPromocion: { select: { titulo: true } } },
-    }),
-    prisma.promocion.findMany({
-      where: { companyId, activo: true, archivada: false },
-      select: { id: true, titulo: true },
-      orderBy: { titulo: 'asc' },
-    }),
-    prisma.plan.findMany({
-      where: { companyId, activo: true },
-      select: { id: true, nombre: true },
-      orderBy: { precio: 'asc' },
-    }),
-  ])
+  const config = await getGrowthConfig(companyId)
+  const [rulesRaw, promos, plans] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.growthRule.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        include: { recompensaPromocion: { select: { titulo: true } } },
+      }),
+      tx.promocion.findMany({
+        where: { companyId, activo: true, archivada: false },
+        select: { id: true, titulo: true },
+        orderBy: { titulo: 'asc' },
+      }),
+      tx.plan.findMany({
+        where: { companyId, activo: true },
+        select: { id: true, nombre: true },
+        orderBy: { precio: 'asc' },
+      }),
+    ])
+  )
 
   const rules: GrowthRuleView[] = rulesRaw.map((r) => ({
     id: r.id,
@@ -68,8 +70,8 @@ export async function getPromosParaInvitar(
   companyId: string
 ): Promise<{ id: string; titulo: string }[]> {
   const now = new Date()
-  return prisma.promocion
-    .findMany({
+  return conEmpresa(companyId, (tx) =>
+    tx.promocion.findMany({
       where: {
         companyId,
         activo: true,
@@ -80,7 +82,7 @@ export async function getPromosParaInvitar(
       orderBy: { titulo: 'asc' },
       take: 50,
     })
-    .catch(() => [])
+  ).catch(() => [])
 }
 
 export interface GrowthWalletView {
@@ -93,9 +95,9 @@ export async function getGrowthWallet(
   companyId: string,
   clienteId: string
 ): Promise<GrowthWalletView> {
-  const w = await prisma.growthWallet
-    .findUnique({ where: { companyId_clienteId: { companyId, clienteId } } })
-    .catch(() => null)
+  const w = await conEmpresa(companyId, (tx) =>
+    tx.growthWallet.findUnique({ where: { companyId_clienteId: { companyId, clienteId } } })
+  ).catch(() => null)
   return { puntos: w?.puntos ?? 0, creditos: Number(w?.creditos ?? 0) }
 }
 
@@ -115,11 +117,13 @@ export async function getGrowthFunnel(
   clienteId: string
 ): Promise<GrowthFunnelView> {
   try {
-    const grupos = await prisma.referralEvent.groupBy({
-      by: ['tipo'],
-      where: { clienteId, companyId, growthLinkId: { not: null } },
-      _count: { _all: true },
-    })
+    const grupos = await conEmpresa(companyId, (tx) =>
+      tx.referralEvent.groupBy({
+        by: ['tipo'],
+        where: { clienteId, companyId, growthLinkId: { not: null } },
+        _count: { _all: true },
+      })
+    )
     const n = (t: string) => grupos.find((g) => g.tipo === t)?._count._all ?? 0
     return {
       clicks: n('CLICK'),

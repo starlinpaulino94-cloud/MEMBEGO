@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { Prisma } from '@prisma/client'
 import { SEGUIMIENTO_DEFAULTS, type SeguimientoConfig } from '@/modules/seguimiento/config'
 
@@ -87,18 +87,22 @@ function whereBase(companyId: string, excluidas: string[] = []): Prisma.Producto
 export async function getPromosGratisConEntregas(
   companyId: string
 ): Promise<OpcionPromoGratis[]> {
-  const grupos = await prisma.productoCompra.groupBy({
-    by: ['promocionId'],
-    where: whereBase(companyId),
-    _count: { _all: true },
-  })
+  const grupos = await conEmpresa(companyId, (tx) =>
+    tx.productoCompra.groupBy({
+      by: ['promocionId'],
+      where: whereBase(companyId),
+      _count: { _all: true },
+    })
+  )
   const ids = grupos.map((g) => g.promocionId).filter((x): x is string => !!x)
   if (ids.length === 0) return []
-  const promos = await prisma.promocion.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, titulo: true },
-    orderBy: { titulo: 'asc' },
-  })
+  const promos = await conEmpresa(companyId, (tx) =>
+    tx.promocion.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, titulo: true },
+      orderBy: { titulo: 'asc' },
+    })
+  )
   return promos
 }
 
@@ -150,17 +154,19 @@ export async function getSeguimiento(
   const base = whereBase(companyId, config.promosExcluidas)
 
   // ── KPIs sobre todo el universo (sin filtro) ───────────────────────────────
-  const universo = await prisma.productoCompra.findMany({
-    where: base,
-    select: {
-      estado: true,
-      usosIncluidos: true,
-      usosRestantes: true,
-      fechaVencimiento: true,
-      consumidaAt: true,
-      createdAt: true,
-    },
-  })
+  const universo = await conEmpresa(companyId, (tx) =>
+    tx.productoCompra.findMany({
+      where: base,
+      select: {
+        estado: true,
+        usosIncluidos: true,
+        usosRestantes: true,
+        fechaVencimiento: true,
+        consumidaAt: true,
+        createdAt: true,
+      },
+    })
+  )
   let sinUsar = 0
   let usados = 0
   let vencidos = 0
@@ -208,35 +214,39 @@ export async function getSeguimiento(
     }
   }
 
-  const compras = await prisma.productoCompra.findMany({
-    where,
-    include: {
-      cliente: { select: { id: true, nombre: true, telefono: true, email: true } },
-      promocion: { select: { id: true, titulo: true } },
-      qrTokens: { where: { activo: true }, select: { id: true }, take: 1 },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: take + 1,
-  })
+  const compras = await conEmpresa(companyId, (tx) =>
+    tx.productoCompra.findMany({
+      where,
+      include: {
+        cliente: { select: { id: true, nombre: true, telefono: true, email: true } },
+        promocion: { select: { id: true, titulo: true } },
+        qrTokens: { where: { activo: true }, select: { id: true }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: take + 1,
+    })
+  )
 
   // Canje: quién y cuándo (transacción PROMOTION_USE cuyo QR pertenece a estas
   // compras). Una consulta para todas.
   const compraIds = compras.slice(0, take).map((c) => c.id)
   const canjes = compraIds.length
-    ? await prisma.transaction.findMany({
-        where: {
-          tipo: 'PROMOTION_USE',
-          estado: 'APPLIED',
-          qrTokenUsado: { compraId: { in: compraIds } },
-        },
-        select: {
-          createdAt: true,
-          snapshot: true,
-          empleado: { select: { name: true } },
-          qrTokenUsado: { select: { compraId: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
+    ? await conEmpresa(companyId, (tx) =>
+        tx.transaction.findMany({
+          where: {
+            tipo: 'PROMOTION_USE',
+            estado: 'APPLIED',
+            qrTokenUsado: { compraId: { in: compraIds } },
+          },
+          select: {
+            createdAt: true,
+            snapshot: true,
+            empleado: { select: { name: true } },
+            qrTokenUsado: { select: { compraId: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      )
     : []
   const canjePorCompra = new Map<string, { at: Date; por: string | null; interno: boolean }>()
   for (const t of canjes) {
@@ -327,18 +337,20 @@ export async function getConversionPorPromo(
       ...(filtro.hasta ? { lte: new Date(`${filtro.hasta}T23:59:59`) } : {}),
     }
   }
-  const compras = await prisma.productoCompra.findMany({
-    where,
-    select: {
-      promocionId: true,
-      estado: true,
-      usosIncluidos: true,
-      usosRestantes: true,
-      fechaVencimiento: true,
-      consumidaAt: true,
-      promocion: { select: { titulo: true } },
-    },
-  })
+  const compras = await conEmpresa(companyId, (tx) =>
+    tx.productoCompra.findMany({
+      where,
+      select: {
+        promocionId: true,
+        estado: true,
+        usosIncluidos: true,
+        usosRestantes: true,
+        fechaVencimiento: true,
+        consumidaAt: true,
+        promocion: { select: { titulo: true } },
+      },
+    })
+  )
   const porPromo = new Map<string, ConversionPromo>()
   for (const c of compras) {
     if (!c.promocionId) continue
