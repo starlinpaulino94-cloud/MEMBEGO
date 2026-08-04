@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · E5 — EVIDENCIA FOTOGRÁFICA (antes/después).
@@ -20,30 +20,32 @@ export async function getEvidencias(
   filtro: { q?: string; colaId?: string } = {}
 ) {
   const q = filtro.q?.trim()
-  return prisma.evidenciaFoto.findMany({
-    where: {
-      companyId,
-      ...(filtro.colaId ? { colaId: filtro.colaId } : {}),
-      ...(q
-        ? {
-            OR: [
-              { placa: { contains: q, mode: 'insensitive' } },
-              { cliente: { nombre: { contains: q, mode: 'insensitive' } } },
-            ],
-          }
-        : {}),
-    },
-    select: {
-      id: true,
-      momento: true,
-      url: true,
-      placa: true,
-      nota: true,
-      createdAt: true,
-      cliente: { select: { id: true, nombre: true } },
-      subidaPor: { select: { name: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 60,
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.evidenciaFoto.findMany({
+      where: {
+        companyId,
+        ...(filtro.colaId ? { colaId: filtro.colaId } : {}),
+        ...(q
+          ? {
+              OR: [
+                { placa: { contains: q, mode: 'insensitive' } },
+                { cliente: { nombre: { contains: q, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        momento: true,
+        url: true,
+        placa: true,
+        nota: true,
+        createdAt: true,
+        cliente: { select: { id: true, nombre: true } },
+        subidaPor: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 60,
+    })
+  )
 }

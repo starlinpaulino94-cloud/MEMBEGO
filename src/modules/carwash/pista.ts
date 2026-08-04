@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { COLA_ACTIVOS } from './cola'
 
 /**
@@ -96,45 +96,47 @@ export async function getEstadoPista(
   try {
     const ahora = Date.now()
 
-    const [bahias, enPista, cerradosHoy] = await Promise.all([
-      prisma.bahia.findMany({
-        where: { companyId, activa: true },
-        orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
-        select: { id: true, nombre: true },
-      }),
-      prisma.colaVehiculo.findMany({
-        where: { companyId, estado: { in: COLA_ACTIVOS } },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          placa: true,
-          descripcion: true,
-          estado: true,
-          createdAt: true,
-          inicioAt: true,
-          bahiaId: true,
-          tipoVehiculo: { select: { nombre: true } },
-          atendidoPor: { select: { name: true } },
-          cliente: { select: { nombre: true } },
-          servicios: {
-            select: {
-              nombre: true,
-              precio: true,
-              cantidad: true,
-              servicio: { select: { duracionMin: true } },
+    const [bahias, enPista, cerradosHoy] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.bahia.findMany({
+          where: { companyId, activa: true },
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          select: { id: true, nombre: true },
+        }),
+        tx.colaVehiculo.findMany({
+          where: { companyId, estado: { in: COLA_ACTIVOS } },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            placa: true,
+            descripcion: true,
+            estado: true,
+            createdAt: true,
+            inicioAt: true,
+            bahiaId: true,
+            tipoVehiculo: { select: { nombre: true } },
+            atendidoPor: { select: { name: true } },
+            cliente: { select: { nombre: true } },
+            servicios: {
+              select: {
+                nombre: true,
+                precio: true,
+                cantidad: true,
+                servicio: { select: { duracionMin: true } },
+              },
             },
           },
-        },
-      }),
-      prisma.colaVehiculo.findMany({
-        where: { companyId, estado: 'ENTREGADO', entregadoAt: { gte: inicioDia } },
-        select: {
-          inicioAt: true,
-          entregadoAt: true,
-          servicios: { select: { precio: true, cantidad: true } },
-        },
-      }),
-    ])
+        }),
+        tx.colaVehiculo.findMany({
+          where: { companyId, estado: 'ENTREGADO', entregadoAt: { gte: inicioDia } },
+          select: {
+            inicioAt: true,
+            entregadoAt: true,
+            servicios: { select: { precio: true, cantidad: true } },
+          },
+        }),
+      ])
+    )
 
     const porId = new Map(enPista.map((c) => [c.id, aVehiculo(c as FilaCola, ahora)]))
 

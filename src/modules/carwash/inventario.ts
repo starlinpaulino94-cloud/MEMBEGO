@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · E5 — INVENTARIO de productos e insumos.
@@ -79,18 +79,20 @@ export async function getInventario(
   companyId: string,
   ventana?: { saltar: number; tomar: number }
 ): Promise<{ items: ProductoInv[]; total: number; activos: number; bajos: number }> {
-  const [productos, resumen] = await Promise.all([
-    prisma.productoInventario.findMany({
-      where: { companyId },
-      orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
-      skip: ventana?.saltar ?? 0,
-      take: ventana ? ventana.tomar : 300,
-    }),
-    prisma.productoInventario.findMany({
-      where: { companyId },
-      select: { activo: true, stock: true, stockMinimo: true },
-    }),
-  ])
+  const [productos, resumen] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.productoInventario.findMany({
+        where: { companyId },
+        orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
+        skip: ventana?.saltar ?? 0,
+        take: ventana ? ventana.tomar : 300,
+      }),
+      tx.productoInventario.findMany({
+        where: { companyId },
+        select: { activo: true, stock: true, stockMinimo: true },
+      }),
+    ])
+  )
 
   const items = productos.map((p) => ({
     id: p.id,
@@ -118,7 +120,9 @@ export async function getProductoInv(
   companyId: string,
   id: string
 ): Promise<ProductoInv | undefined> {
-  const p = await prisma.productoInventario.findFirst({ where: { id, companyId } })
+  const p = await conEmpresa(companyId, (tx) =>
+    tx.productoInventario.findFirst({ where: { id, companyId } })
+  )
   if (!p) return undefined
   return {
     id: p.id,
@@ -149,25 +153,27 @@ export async function getMovimientosRecientes(
   companyId: string,
   ventana?: { saltar: number; tomar: number }
 ): Promise<{ items: MovimientoInv[]; total: number }> {
-  const [movimientos, total] = await Promise.all([
-    prisma.movimientoInventario.findMany({
-    where: { companyId },
-    select: {
-      id: true,
-      tipo: true,
-      cantidad: true,
-      stockResultante: true,
-      motivo: true,
-      createdAt: true,
-      producto: { select: { nombre: true, unidad: true } },
-      registradoPor: { select: { name: true } },
-    },
-      orderBy: { createdAt: 'desc' },
-      skip: ventana?.saltar ?? 0,
-      take: ventana ? ventana.tomar : 25,
-    }),
-    prisma.movimientoInventario.count({ where: { companyId } }),
-  ])
+  const [movimientos, total] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.movimientoInventario.findMany({
+        where: { companyId },
+        select: {
+          id: true,
+          tipo: true,
+          cantidad: true,
+          stockResultante: true,
+          motivo: true,
+          createdAt: true,
+          producto: { select: { nombre: true, unidad: true } },
+          registradoPor: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: ventana?.saltar ?? 0,
+        take: ventana ? ventana.tomar : 25,
+      }),
+      tx.movimientoInventario.count({ where: { companyId } }),
+    ])
+  )
 
   const items = movimientos.map((m) => ({
     id: m.id,

@@ -9,7 +9,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
@@ -86,18 +86,24 @@ export async function guardarProveedor(
     }
 
     if (id) {
-      const upd = await prisma.proveedor.updateMany({
-        where: { id, companyId: ctx.companyId },
-        data: datos,
-      })
+      const upd = await conEmpresa(ctx.companyId, (tx) =>
+        tx.proveedor.updateMany({
+          where: { id, companyId: ctx.companyId },
+          data: datos,
+        })
+      )
       if (upd.count === 0) return { error: 'Proveedor no encontrado.' }
     } else {
-      const existe = await prisma.proveedor.findFirst({
-        where: { companyId: ctx.companyId, nombre: { equals: nombre, mode: 'insensitive' } },
-        select: { id: true },
-      })
+      const existe = await conEmpresa(ctx.companyId, (tx) =>
+        tx.proveedor.findFirst({
+          where: { companyId: ctx.companyId, nombre: { equals: nombre, mode: 'insensitive' } },
+          select: { id: true },
+        })
+      )
       if (existe) return { error: `Ya tienes un proveedor llamado "${nombre}".` }
-      await prisma.proveedor.create({ data: { companyId: ctx.companyId, ...datos } })
+      await conEmpresa(ctx.companyId, (tx) =>
+        tx.proveedor.create({ data: { companyId: ctx.companyId, ...datos } })
+      )
     }
 
     revalidatePath(RUTA_COMPRAS)
@@ -112,12 +118,16 @@ export async function alternarProveedor(id: string): Promise<Fase3State> {
   try {
     const ctx = await contexto('COMPRAS')
     if ('error' in ctx) return ctx
-    const p = await prisma.proveedor.findFirst({
-      where: { id, companyId: ctx.companyId },
-      select: { activo: true },
-    })
+    const p = await conEmpresa(ctx.companyId, (tx) =>
+      tx.proveedor.findFirst({
+        where: { id, companyId: ctx.companyId },
+        select: { activo: true },
+      })
+    )
     if (!p) return { error: 'Proveedor no encontrado.' }
-    await prisma.proveedor.update({ where: { id }, data: { activo: !p.activo } })
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.proveedor.update({ where: { id }, data: { activo: !p.activo } })
+    )
     revalidatePath(RUTA_COMPRAS)
     return { success: p.activo ? 'Proveedor desactivado.' : 'Proveedor activado.' }
   } catch (e) {
@@ -134,30 +144,36 @@ export async function crearOrden(_prev: Fase3State, formData: FormData): Promise
     if ('error' in ctx) return ctx
 
     const proveedorId = texto(formData.get('proveedorId'), 40)
-    const proveedor = await prisma.proveedor.findFirst({
-      where: { id: proveedorId, companyId: ctx.companyId },
-      select: { id: true, nombre: true },
-    })
+    const proveedor = await conEmpresa(ctx.companyId, (tx) =>
+      tx.proveedor.findFirst({
+        where: { id: proveedorId, companyId: ctx.companyId },
+        select: { id: true, nombre: true },
+      })
+    )
     if (!proveedor) return { error: 'Elige un proveedor.' }
 
     // El correlativo sale del MÁXIMO existente y no de un conteo: si alguna vez
     // se borra una orden, contar repetiría un número y el unique lo rechazaría.
-    const ultima = await prisma.ordenCompra.findFirst({
-      where: { companyId: ctx.companyId },
-      orderBy: { numero: 'desc' },
-      select: { numero: true },
-    })
+    const ultima = await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompra.findFirst({
+        where: { companyId: ctx.companyId },
+        orderBy: { numero: 'desc' },
+        select: { numero: true },
+      })
+    )
 
-    const orden = await prisma.ordenCompra.create({
-      data: {
-        companyId: ctx.companyId,
-        proveedorId: proveedor.id,
-        numero: siguienteNumero(ultima?.numero),
-        notas: texto(formData.get('notas'), 500) || null,
-        creadaPorId: ctx.userId,
-      },
-      select: { numero: true },
-    })
+    const orden = await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompra.create({
+        data: {
+          companyId: ctx.companyId,
+          proveedorId: proveedor.id,
+          numero: siguienteNumero(ultima?.numero),
+          notas: texto(formData.get('notas'), 500) || null,
+          creadaPorId: ctx.userId,
+        },
+        select: { numero: true },
+      })
+    )
 
     revalidatePath(RUTA_COMPRAS)
     return { success: `Orden ${orden.numero} creada para ${proveedor.nombre}.` }
@@ -180,16 +196,18 @@ export async function agregarLinea(_prev: Fase3State, formData: FormData): Promi
     if (cantidad == null || cantidad <= 0) return { error: 'Indica una cantidad mayor que cero.' }
     if (costoUnitario == null) return { error: 'Indica el costo unitario.' }
 
-    const [orden, producto] = await Promise.all([
-      prisma.ordenCompra.findFirst({
-        where: { id: ordenId, companyId: ctx.companyId },
-        select: { id: true, estado: true },
-      }),
-      prisma.productoInventario.findFirst({
-        where: { id: productoId, companyId: ctx.companyId },
-        select: { id: true, nombre: true },
-      }),
-    ])
+    const [orden, producto] = await conEmpresa(ctx.companyId, (tx) =>
+      Promise.all([
+        tx.ordenCompra.findFirst({
+          where: { id: ordenId, companyId: ctx.companyId },
+          select: { id: true, estado: true },
+        }),
+        tx.productoInventario.findFirst({
+          where: { id: productoId, companyId: ctx.companyId },
+          select: { id: true, nombre: true },
+        }),
+      ])
+    )
     if (!orden) return { error: 'Orden no encontrada.' }
     if (!producto) return { error: 'Producto no encontrado.' }
     // Una orden ya pedida no se edita: el proveedor tiene otra cosa en la mano.
@@ -197,15 +215,17 @@ export async function agregarLinea(_prev: Fase3State, formData: FormData): Promi
       return { error: 'Solo se pueden editar las líneas de un borrador.' }
     }
 
-    await prisma.ordenCompraLinea.create({
-      data: {
-        ordenId: orden.id,
-        productoId: producto.id,
-        nombre: producto.nombre,
-        cantidad,
-        costoUnitario,
-      },
-    })
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompraLinea.create({
+        data: {
+          ordenId: orden.id,
+          productoId: producto.id,
+          nombre: producto.nombre,
+          cantidad,
+          costoUnitario,
+        },
+      })
+    )
 
     revalidatePath(`${RUTA_COMPRAS}/${ordenId}`)
     return { success: `${producto.nombre} agregado.` }
@@ -219,15 +239,19 @@ export async function quitarLinea(lineaId: string): Promise<Fase3State> {
   try {
     const ctx = await contexto('COMPRAS')
     if ('error' in ctx) return ctx
-    const linea = await prisma.ordenCompraLinea.findFirst({
-      where: { id: lineaId, orden: { companyId: ctx.companyId } },
-      select: { ordenId: true, orden: { select: { estado: true } } },
-    })
+    const linea = await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompraLinea.findFirst({
+        where: { id: lineaId, orden: { companyId: ctx.companyId } },
+        select: { ordenId: true, orden: { select: { estado: true } } },
+      })
+    )
     if (!linea) return { error: 'Línea no encontrada.' }
     if (!puedeEditarLineas(linea.orden.estado)) {
       return { error: 'Solo se pueden editar las líneas de un borrador.' }
     }
-    await prisma.ordenCompraLinea.delete({ where: { id: lineaId } })
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompraLinea.delete({ where: { id: lineaId } })
+    )
     revalidatePath(`${RUTA_COMPRAS}/${linea.ordenId}`)
     return { success: 'Línea quitada.' }
   } catch (e) {
@@ -245,15 +269,17 @@ export async function moverOrden(ordenId: string, destino: string): Promise<Fase
     const ctx = await contexto('COMPRAS')
     if ('error' in ctx) return ctx
 
-    const orden = await prisma.ordenCompra.findFirst({
-      where: { id: ordenId, companyId: ctx.companyId },
-      select: {
-        id: true,
-        numero: true,
-        estado: true,
-        lineas: { select: { id: true, cantidad: true, cantidadRecibida: true, costoUnitario: true, productoId: true, nombre: true } },
-      },
-    })
+    const orden = await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompra.findFirst({
+        where: { id: ordenId, companyId: ctx.companyId },
+        select: {
+          id: true,
+          numero: true,
+          estado: true,
+          lineas: { select: { id: true, cantidad: true, cantidadRecibida: true, costoUnitario: true, productoId: true, nombre: true } },
+        },
+      })
+    )
     if (!orden) return { error: 'Orden no encontrada.' }
 
     const actual = orden.estado as OrdenEstado
@@ -265,13 +291,15 @@ export async function moverOrden(ordenId: string, destino: string): Promise<Fase
     }
 
     if (destino !== 'RECIBIDA') {
-      await prisma.ordenCompra.update({
-        where: { id: ordenId },
-        data: {
-          estado: destino,
-          ...(destino === 'PEDIDA' ? { pedidaAt: new Date() } : {}),
-        },
-      })
+      await conEmpresa(ctx.companyId, (tx) =>
+        tx.ordenCompra.update({
+          where: { id: ordenId },
+          data: {
+            estado: destino,
+            ...(destino === 'PEDIDA' ? { pedidaAt: new Date() } : {}),
+          },
+        })
+      )
       revalidatePath(RUTA_COMPRAS)
       revalidatePath(`${RUTA_COMPRAS}/${ordenId}`)
       return { success: destino === 'PEDIDA' ? `Orden ${orden.numero} pedida.` : 'Orden cancelada.' }
@@ -288,7 +316,7 @@ export async function moverOrden(ordenId: string, destino: string): Promise<Fase
       }))
     )
 
-    const resultado = await prisma.$transaction(async (tx) => {
+    const resultado = await conEmpresa(ctx.companyId, async (tx) => {
       const marca = await tx.ordenCompra.updateMany({
         where: { id: ordenId, estado: 'PEDIDA' },
         data: { estado: 'RECIBIDA', recibidaAt: new Date(), total },
@@ -363,19 +391,23 @@ export async function ajustarRecibido(
     const lineaId = texto(formData.get('lineaId'), 40)
     const recibida = numero(formData.get('cantidadRecibida'))
 
-    const linea = await prisma.ordenCompraLinea.findFirst({
-      where: { id: lineaId, orden: { companyId: ctx.companyId } },
-      select: { ordenId: true, orden: { select: { estado: true } } },
-    })
+    const linea = await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompraLinea.findFirst({
+        where: { id: lineaId, orden: { companyId: ctx.companyId } },
+        select: { ordenId: true, orden: { select: { estado: true } } },
+      })
+    )
     if (!linea) return { error: 'Línea no encontrada.' }
     if (linea.orden.estado !== 'PEDIDA') {
       return { error: 'Solo se ajusta lo recibido de una orden que está pedida.' }
     }
 
-    await prisma.ordenCompraLinea.update({
-      where: { id: lineaId },
-      data: { cantidadRecibida: recibida },
-    })
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.ordenCompraLinea.update({
+        where: { id: lineaId },
+        data: { cantidadRecibida: recibida },
+      })
+    )
 
     revalidatePath(`${RUTA_COMPRAS}/${linea.ordenId}`)
     return { success: 'Cantidad recibida actualizada.' }
@@ -416,21 +448,25 @@ export async function guardarActivo(_prev: Fase3State, formData: FormData): Prom
     }
 
     if (id) {
-      const upd = await prisma.activo.updateMany({
-        where: { id, companyId: ctx.companyId },
-        data: datos,
-      })
+      const upd = await conEmpresa(ctx.companyId, (tx) =>
+        tx.activo.updateMany({
+          where: { id, companyId: ctx.companyId },
+          data: datos,
+        })
+      )
       if (upd.count === 0) return { error: 'Equipo no encontrado.' }
     } else {
-      await prisma.activo.create({
-        data: {
-          companyId: ctx.companyId,
-          ...datos,
-          // Un equipo nuevo con frecuencia arranca su cuenta desde hoy: si no,
-          // nacería con el mantenimiento ya vencido.
-          proximoMantenimiento: calcularProximo(new Date(), frecuenciaDias),
-        },
-      })
+      await conEmpresa(ctx.companyId, (tx) =>
+        tx.activo.create({
+          data: {
+            companyId: ctx.companyId,
+            ...datos,
+            // Un equipo nuevo con frecuencia arranca su cuenta desde hoy: si no,
+            // nacería con el mantenimiento ya vencido.
+            proximoMantenimiento: calcularProximo(new Date(), frecuenciaDias),
+          },
+        })
+      )
     }
 
     revalidatePath(RUTA_ACTIVOS)
@@ -448,10 +484,12 @@ export async function cambiarEstadoActivo(id: string, estado: string): Promise<F
     if (!(ACTIVO_ESTADOS as readonly string[]).includes(estado)) {
       return { error: 'Estado no válido.' }
     }
-    const upd = await prisma.activo.updateMany({
-      where: { id, companyId: ctx.companyId },
-      data: { estado, ...(estado === 'BAJA' ? { activo: false } : {}) },
-    })
+    const upd = await conEmpresa(ctx.companyId, (tx) =>
+      tx.activo.updateMany({
+        where: { id, companyId: ctx.companyId },
+        data: { estado, ...(estado === 'BAJA' ? { activo: false } : {}) },
+      })
+    )
     if (upd.count === 0) return { error: 'Equipo no encontrado.' }
     revalidatePath(RUTA_ACTIVOS)
     return { success: 'Estado del equipo actualizado.' }
@@ -483,14 +521,16 @@ export async function registrarMantenimiento(
     }
     if (!descripcion) return { error: 'Describe qué se hizo.' }
 
-    const activo = await prisma.activo.findFirst({
-      where: { id: activoId, companyId: ctx.companyId },
-      select: { id: true, frecuenciaDias: true },
-    })
+    const activo = await conEmpresa(ctx.companyId, (tx) =>
+      tx.activo.findFirst({
+        where: { id: activoId, companyId: ctx.companyId },
+        select: { id: true, frecuenciaDias: true },
+      })
+    )
     if (!activo) return { error: 'Equipo no encontrado.' }
 
     const ahora = new Date()
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(ctx.companyId, async (tx) => {
       await tx.mantenimiento.create({
         data: {
           activoId: activo.id,
@@ -535,25 +575,31 @@ export async function marcarEntrada(_prev: Fase3State, formData: FormData): Prom
     if ('error' in ctx) return ctx
 
     const userId = texto(formData.get('userId'), 40)
-    const empleado = await prisma.user.findFirst({
-      where: { id: userId, companyId: ctx.companyId, role: { not: 'CLIENTE' } },
-      select: { id: true, name: true, email: true },
-    })
+    const empleado = await conEmpresa(ctx.companyId, (tx) =>
+      tx.user.findFirst({
+        where: { id: userId, companyId: ctx.companyId, role: { not: 'CLIENTE' } },
+        select: { id: true, name: true, email: true },
+      })
+    )
     if (!empleado) return { error: 'Empleado no encontrado.' }
 
-    const abierto = await prisma.turno.findFirst({
-      where: { userId: empleado.id, salidaAt: null },
-      select: { id: true },
-    })
+    const abierto = await conEmpresa(ctx.companyId, (tx) =>
+      tx.turno.findFirst({
+        where: { userId: empleado.id, salidaAt: null },
+        select: { id: true },
+      })
+    )
     if (abierto) return { error: 'Esa persona ya tiene un turno abierto.' }
 
-    await prisma.turno.create({
-      data: {
-        companyId: ctx.companyId,
-        userId: empleado.id,
-        costoHora: numero(formData.get('costoHora')),
-      },
-    })
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.turno.create({
+        data: {
+          companyId: ctx.companyId,
+          userId: empleado.id,
+          costoHora: numero(formData.get('costoHora')),
+        },
+      })
+    )
 
     revalidatePath(RUTA_TURNOS)
     return { success: `Entrada marcada para ${empleado.name || empleado.email}.` }
@@ -571,10 +617,12 @@ export async function marcarSalida(turnoId: string): Promise<Fase3State> {
 
     // El filtro `salidaAt: null` hace que cerrar dos veces no mueva la hora de
     // salida ya registrada.
-    const upd = await prisma.turno.updateMany({
-      where: { id: turnoId, companyId: ctx.companyId, salidaAt: null },
-      data: { salidaAt: new Date(), cerradoPorId: ctx.userId },
-    })
+    const upd = await conEmpresa(ctx.companyId, (tx) =>
+      tx.turno.updateMany({
+        where: { id: turnoId, companyId: ctx.companyId, salidaAt: null },
+        data: { salidaAt: new Date(), cerradoPorId: ctx.userId },
+      })
+    )
     if (upd.count === 0) return { error: 'Ese turno ya está cerrado.' }
 
     revalidatePath(RUTA_TURNOS)
@@ -605,16 +653,18 @@ export async function corregirTurno(_prev: Fase3State, formData: FormData): Prom
       return { error: 'La salida tiene que ser después de la entrada.' }
     }
 
-    const upd = await prisma.turno.updateMany({
-      where: { id, companyId: ctx.companyId },
-      data: {
-        ...(entradaAt ? { entradaAt } : {}),
-        salidaAt,
-        costoHora: numero(formData.get('costoHora')),
-        notas: texto(formData.get('notas'), 300) || null,
-        cerradoPorId: ctx.userId,
-      },
-    })
+    const upd = await conEmpresa(ctx.companyId, (tx) =>
+      tx.turno.updateMany({
+        where: { id, companyId: ctx.companyId },
+        data: {
+          ...(entradaAt ? { entradaAt } : {}),
+          salidaAt,
+          costoHora: numero(formData.get('costoHora')),
+          notas: texto(formData.get('notas'), 300) || null,
+          cerradoPorId: ctx.userId,
+        },
+      })
+    )
     if (upd.count === 0) return { error: 'Turno no encontrado.' }
 
     revalidatePath(RUTA_TURNOS)
@@ -630,12 +680,16 @@ export async function eliminarTurno(id: string): Promise<Fase3State> {
   try {
     const ctx = await contexto('TURNOS')
     if ('error' in ctx) return ctx
-    const t = await prisma.turno.findFirst({
-      where: { id, companyId: ctx.companyId },
-      select: { id: true },
-    })
+    const t = await conEmpresa(ctx.companyId, (tx) =>
+      tx.turno.findFirst({
+        where: { id, companyId: ctx.companyId },
+        select: { id: true },
+      })
+    )
     if (!t) return { error: 'Turno no encontrado.' }
-    await prisma.turno.delete({ where: { id } }).catch(anotarFallo('carwash:turno.delete', { id }))
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.turno.delete({ where: { id } }).catch(anotarFallo('carwash:turno.delete', { id }))
+    )
     revalidatePath(RUTA_TURNOS)
     return { success: 'Turno eliminado.' }
   } catch (e) {

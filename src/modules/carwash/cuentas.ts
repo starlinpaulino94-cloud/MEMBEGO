@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · Fase 2 — CUENTAS CORPORATIVAS (flotillas).
@@ -62,30 +62,34 @@ export interface CuentaResumen {
  */
 export async function getCuentas(companyId: string): Promise<CuentaResumen[] | null> {
   try {
-    const cuentas = await prisma.cuentaCorporativa.findMany({
-      where: { companyId },
-      orderBy: [{ activa: 'desc' }, { nombre: 'asc' }],
-      select: {
-        id: true,
-        nombre: true,
-        rnc: true,
-        contacto: true,
-        telefono: true,
-        activa: true,
-        limiteCredito: true,
-        diasCredito: true,
-        _count: { select: { vehiculos: { where: { activo: true } } } },
-      },
-    })
+    const cuentas = await conEmpresa(companyId, (tx) =>
+      tx.cuentaCorporativa.findMany({
+        where: { companyId },
+        orderBy: [{ activa: 'desc' }, { nombre: 'asc' }],
+        select: {
+          id: true,
+          nombre: true,
+          rnc: true,
+          contacto: true,
+          telefono: true,
+          activa: true,
+          limiteCredito: true,
+          diasCredito: true,
+          _count: { select: { vehiculos: { where: { activo: true } } } },
+        },
+      })
+    )
     if (cuentas.length === 0) return []
 
     // Un solo groupBy para todas las cuentas: sumar por cuenta con una consulta
     // por fila convertiría la pantalla en N+1 con 30 flotas.
-    const saldos = await prisma.cargoCuenta.groupBy({
-      by: ['cuentaId', 'estado'],
-      where: { cuentaId: { in: cuentas.map((c) => c.id) } },
-      _sum: { monto: true },
-    })
+    const saldos = await conEmpresa(companyId, (tx) =>
+      tx.cargoCuenta.groupBy({
+        by: ['cuentaId', 'estado'],
+        where: { cuentaId: { in: cuentas.map((c) => c.id) } },
+        _sum: { monto: true },
+      })
+    )
 
     return cuentas.map((c) => {
       const filas = saldos.filter((s) => s.cuentaId === c.id)
@@ -145,35 +149,39 @@ export async function getCuentaDetalle(
   cuentaId: string
 ): Promise<CuentaDetalle | null> {
   try {
-    const c = await prisma.cuentaCorporativa.findFirst({
-      where: { id: cuentaId, companyId },
-      include: {
-        vehiculos: {
-          orderBy: [{ activo: 'desc' }, { placa: 'asc' }],
-          select: { id: true, placa: true, alias: true, activo: true },
-        },
-        cargos: {
-          orderBy: { createdAt: 'desc' },
-          take: 300,
-          select: {
-            id: true,
-            createdAt: true,
-            concepto: true,
-            placa: true,
-            monto: true,
-            estado: true,
-            corteRef: true,
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.cuentaCorporativa.findFirst({
+        where: { id: cuentaId, companyId },
+        include: {
+          vehiculos: {
+            orderBy: [{ activo: 'desc' }, { placa: 'asc' }],
+            select: { id: true, placa: true, alias: true, activo: true },
+          },
+          cargos: {
+            orderBy: { createdAt: 'desc' },
+            take: 300,
+            select: {
+              id: true,
+              createdAt: true,
+              concepto: true,
+              placa: true,
+              monto: true,
+              estado: true,
+              corteRef: true,
+            },
           },
         },
-      },
-    })
+      })
+    )
     if (!c) return null
 
-    const porEstado = await prisma.cargoCuenta.groupBy({
-      by: ['estado'],
-      where: { cuentaId },
-      _sum: { monto: true },
-    })
+    const porEstado = await conEmpresa(companyId, (tx) =>
+      tx.cargoCuenta.groupBy({
+        by: ['estado'],
+        where: { cuentaId },
+        _sum: { monto: true },
+      })
+    )
     const suma = (e: string) => Number(porEstado.find((x) => x.estado === e)?._sum.monto ?? 0)
     const porFacturar = suma('PENDIENTE')
     const facturado = suma('FACTURADO')
@@ -222,14 +230,16 @@ export async function cuentaDeLaPlaca(
 ): Promise<{ cuentaId: string; nombre: string } | null> {
   if (!placa?.trim()) return null
   try {
-    const fila = await prisma.cuentaVehiculo.findFirst({
-      where: {
-        placa: normalizarPlaca(placa),
-        activo: true,
-        cuenta: { companyId, activa: true },
-      },
-      select: { cuenta: { select: { id: true, nombre: true } } },
-    })
+    const fila = await conEmpresa(companyId, (tx) =>
+      tx.cuentaVehiculo.findFirst({
+        where: {
+          placa: normalizarPlaca(placa),
+          activo: true,
+          cuenta: { companyId, activa: true },
+        },
+        select: { cuenta: { select: { id: true, nombre: true } } },
+      })
+    )
     return fila ? { cuentaId: fila.cuenta.id, nombre: fila.cuenta.nombre } : null
   } catch {
     return null

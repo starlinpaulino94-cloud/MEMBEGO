@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
@@ -68,15 +68,17 @@ export async function registrarEnCola(
     let clienteId: string | null = null
 
     if (placa) {
-      const vehiculo = await prisma.vehiculo
-        .findFirst({
-          where: {
-            placa: { equals: placa, mode: 'insensitive' },
-            cliente: { companyId: ctx.companyId },
-          },
-          select: { id: true, clienteId: true },
-        })
-        .catch(() => null)
+      const vehiculo = await conEmpresa(ctx.companyId, (tx) =>
+        tx.vehiculo
+          .findFirst({
+            where: {
+              placa: { equals: placa, mode: 'insensitive' },
+              cliente: { companyId: ctx.companyId },
+            },
+            select: { id: true, clienteId: true },
+          })
+          .catch(() => null)
+      )
       if (vehiculo) {
         vehiculoId = vehiculo.id
         clienteId = vehiculo.clienteId
@@ -88,9 +90,11 @@ export async function registrarEnCola(
       if (elegido) {
         // Se revalida contra la empresa: un id copiado de otro negocio no puede
         // colar un cliente ajeno en esta pista.
-        const c = await prisma.cliente
-          .findFirst({ where: { id: elegido, companyId: ctx.companyId }, select: { id: true } })
-          .catch(() => null)
+        const c = await conEmpresa(ctx.companyId, (tx) =>
+          tx.cliente
+            .findFirst({ where: { id: elegido, companyId: ctx.companyId }, select: { id: true } })
+            .catch(() => null)
+        )
         if (c) clienteId = c.id
       }
     }
@@ -109,34 +113,38 @@ export async function registrarEnCola(
       }
     }
 
-    const entrada = await prisma.colaVehiculo.create({
-      data: {
-        companyId: ctx.companyId,
-        placa: placa || null,
-        descripcion: descripcion || null,
-        servicio: servicio || null,
-        notaInterna: notaInterna || null,
-        vehiculoId,
-        clienteId,
-        registradaPorId: ctx.user.metadata.dbUserId ?? null,
-      },
-      select: { id: true },
-    })
-
-    const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    const entrada = await conEmpresa(ctx.companyId, (tx) =>
+      tx.colaVehiculo.create({
         data: {
           companyId: ctx.companyId,
-          userId: ctx.user.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'ColaVehiculo',
-          entidadId: entrada.id,
-          payload: { tipo: 'COLA_REGISTRO', placa, descripcion },
-          ...meta,
+          placa: placa || null,
+          descripcion: descripcion || null,
+          servicio: servicio || null,
+          notaInterna: notaInterna || null,
+          vehiculoId,
+          clienteId,
+          registradaPorId: ctx.user.metadata.dbUserId ?? null,
         },
+        select: { id: true },
       })
-      .catch(anotarFallo('carwash:auditLog.create'))
+    )
+
+    const meta = await getRequestMeta()
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.auditLog
+        .create({
+          data: {
+            companyId: ctx.companyId,
+            userId: ctx.user.metadata.dbUserId ?? null,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'ColaVehiculo',
+            entidadId: entrada.id,
+            payload: { tipo: 'COLA_REGISTRO', placa, descripcion },
+            ...meta,
+          },
+        })
+        .catch(anotarFallo('carwash:auditLog.create'))
+    )
 
     revalidatePath(RUTA_COLA)
     return { success: 'Vehículo agregado a la cola.' }
@@ -160,10 +168,12 @@ export async function moverCola(
       return { error: 'Estado no válido.' }
     }
 
-    const entrada = await prisma.colaVehiculo.findUnique({
-      where: { id },
-      select: { id: true, companyId: true, estado: true, inicioAt: true },
-    })
+    const entrada = await sinEmpresa('cola: buscar entrada por id para validar empresa', (tx) =>
+      tx.colaVehiculo.findUnique({
+        where: { id },
+        select: { id: true, companyId: true, estado: true, inicioAt: true },
+      })
+    )
     if (!entrada || entrada.companyId !== ctx.companyId) {
       return { error: 'Entrada de cola no encontrada.' }
     }
@@ -173,30 +183,34 @@ export async function moverCola(
     }
 
     const ahora = new Date()
-    await prisma.colaVehiculo.update({
-      where: { id },
-      data: {
-        estado: destino,
-        ...(destino === 'EN_SERVICIO' && !entrada.inicioAt ? { inicioAt: ahora } : {}),
-        ...(destino === 'LISTO' ? { listoAt: ahora } : {}),
-        ...(destino === 'ENTREGADO' ? { entregadoAt: ahora } : {}),
-      },
-    })
-
-    const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.colaVehiculo.update({
+        where: { id },
         data: {
-          companyId: ctx.companyId,
-          userId: ctx.user.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'ColaVehiculo',
-          entidadId: id,
-          payload: { tipo: 'COLA_TRANSICION', de: actual, a: destino },
-          ...meta,
+          estado: destino,
+          ...(destino === 'EN_SERVICIO' && !entrada.inicioAt ? { inicioAt: ahora } : {}),
+          ...(destino === 'LISTO' ? { listoAt: ahora } : {}),
+          ...(destino === 'ENTREGADO' ? { entregadoAt: ahora } : {}),
         },
       })
-      .catch(anotarFallo('carwash:auditLog.create'))
+    )
+
+    const meta = await getRequestMeta()
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.auditLog
+        .create({
+          data: {
+            companyId: ctx.companyId,
+            userId: ctx.user.metadata.dbUserId ?? null,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'ColaVehiculo',
+            entidadId: id,
+            payload: { tipo: 'COLA_TRANSICION', de: actual, a: destino },
+            ...meta,
+          },
+        })
+        .catch(anotarFallo('carwash:auditLog.create'))
+    )
 
     // ── Fase 2: al ENTREGAR se cierra el dinero de esa orden ────────────────
     // FUERA de la actualización de estado y a prueba de fallos: el vehículo ya
@@ -261,14 +275,16 @@ async function cargarAFlotaSiAplica(
   companyId: string,
   colaId: string
 ): Promise<{ cuenta: string; monto: number } | null> {
-  const cola = await prisma.colaVehiculo.findFirst({
-    where: { id: colaId, companyId },
-    select: {
-      placa: true,
-      vehiculo: { select: { placa: true } },
-      servicios: { select: { nombre: true, precio: true, cantidad: true } },
-    },
-  })
+  const cola = await conEmpresa(companyId, (tx) =>
+    tx.colaVehiculo.findFirst({
+      where: { id: colaId, companyId },
+      select: {
+        placa: true,
+        vehiculo: { select: { placa: true } },
+        servicios: { select: { nombre: true, precio: true, cantidad: true } },
+      },
+    })
+  )
   if (!cola) return null
 
   const placa = cola.placa ?? cola.vehiculo?.placa ?? null
@@ -276,10 +292,12 @@ async function cargarAFlotaSiAplica(
   const cuenta = await cuentaDeLaPlaca(companyId, placa)
   if (!cuenta) return null
 
-  const yaCargado = await prisma.cargoCuenta.findFirst({
-    where: { colaId },
-    select: { id: true },
-  })
+  const yaCargado = await conEmpresa(companyId, (tx) =>
+    tx.cargoCuenta.findFirst({
+      where: { colaId },
+      select: { id: true },
+    })
+  )
   if (yaCargado) return null
 
   const monto = cola.servicios.reduce((acc, s) => acc + Number(s.precio) * s.cantidad, 0)
@@ -288,15 +306,17 @@ async function cargarAFlotaSiAplica(
   const concepto =
     cola.servicios.map((s) => s.nombre).join(' + ').slice(0, 160) || 'Servicio de lavado'
 
-  await prisma.cargoCuenta.create({
-    data: {
-      cuentaId: cuenta.cuentaId,
-      colaId,
-      placa: placa ? normalizarPlaca(placa) : null,
-      concepto,
-      monto,
-    },
-  })
+  await conEmpresa(companyId, (tx) =>
+    tx.cargoCuenta.create({
+      data: {
+        cuentaId: cuenta.cuentaId,
+        colaId,
+        placa: placa ? normalizarPlaca(placa) : null,
+        concepto,
+        monto,
+      },
+    })
+  )
 
   return { cuenta: cuenta.nombre, monto }
 }
@@ -318,7 +338,7 @@ async function crearMostradorEnLinea(
 ): Promise<{ clienteId: string; vehiculoId: string | null } | null> {
   try {
     const { nuevoIdLocal } = await import('./mostrador')
-    return await prisma.$transaction(async (tx) => {
+    return await conEmpresa(companyId, async (tx) => {
       const cliente = await tx.cliente.create({
         data: {
           companyId,

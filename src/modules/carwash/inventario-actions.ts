@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
@@ -62,18 +62,22 @@ export async function guardarProducto(
     }
 
     if (id) {
-      const existente = await prisma.productoInventario.findUnique({
-        where: { id },
-        select: { companyId: true },
-      })
+      const existente = await conEmpresa(ctx.companyId, (tx) =>
+        tx.productoInventario.findUnique({
+          where: { id },
+          select: { companyId: true },
+        })
+      )
       if (!existente || existente.companyId !== ctx.companyId) {
         return { error: 'Producto no encontrado.' }
       }
       const activo = formData.get('activo') === 'on'
-      await prisma.productoInventario.update({ where: { id }, data: { ...base, activo } })
+      await conEmpresa(ctx.companyId, (tx) =>
+        tx.productoInventario.update({ where: { id }, data: { ...base, activo } })
+      )
     } else {
       const stockInicial = parseCantidad(formData.get('stockInicial')) ?? 0
-      await prisma.$transaction(async (tx) => {
+      await conEmpresa(ctx.companyId, async (tx) => {
         const producto = await tx.productoInventario.create({
           data: { ...base, companyId: ctx.companyId, stock: stockInicial },
           select: { id: true },
@@ -124,7 +128,7 @@ export async function registrarMovimiento(
       return { error: 'Indica una cantidad válida.' }
     }
 
-    const resultado = await prisma.$transaction(async (tx) => {
+    const resultado = await conEmpresa(ctx.companyId, async (tx) => {
       const producto = await tx.productoInventario.findUnique({
         where: { id: productoId },
         select: { companyId: true, stock: true, nombre: true, unidad: true },
@@ -160,19 +164,21 @@ export async function registrarMovimiento(
     if ('error' in resultado) return { error: resultado.error }
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
-        data: {
-          companyId: ctx.companyId,
-          userId: ctx.user.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'ProductoInventario',
-          entidadId: productoId,
-          payload: { tipo: 'INVENTARIO_MOVIMIENTO', movimiento: tipo, cantidad, motivo },
-          ...meta,
-        },
-      })
-      .catch(anotarFallo('carwash:auditLog.create'))
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.auditLog
+        .create({
+          data: {
+            companyId: ctx.companyId,
+            userId: ctx.user.metadata.dbUserId ?? null,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'ProductoInventario',
+            entidadId: productoId,
+            payload: { tipo: 'INVENTARIO_MOVIMIENTO', movimiento: tipo, cantidad, motivo },
+            ...meta,
+          },
+        })
+        .catch(anotarFallo('carwash:auditLog.create'))
+    )
 
     revalidatePath(RUTA_INVENTARIO)
     return { success: `Movimiento registrado en ${resultado.nombre}.` }

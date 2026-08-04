@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * CATÁLOGO DEL OFICIO (App Car Wash · Fase 1).
@@ -29,11 +29,13 @@ export interface TipoVehiculoItem {
 }
 
 export async function getTiposVehiculo(companyId: string): Promise<TipoVehiculoItem[]> {
-  const tipos = await prisma.tipoVehiculo.findMany({
-    where: { companyId },
-    orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
-    include: { _count: { select: { precios: true } } },
-  })
+  const tipos = await conEmpresa(companyId, (tx) =>
+    tx.tipoVehiculo.findMany({
+      where: { companyId },
+      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+      include: { _count: { select: { precios: true } } },
+    })
+  )
   return tipos.map((t) => ({
     id: t.id,
     nombre: t.nombre,
@@ -45,11 +47,13 @@ export async function getTiposVehiculo(companyId: string): Promise<TipoVehiculoI
 
 /** Tipos activos, para selectores. */
 export async function getTiposVehiculoActivos(companyId: string) {
-  return prisma.tipoVehiculo.findMany({
-    where: { companyId, activo: true },
-    orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
-    select: { id: true, nombre: true },
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.tipoVehiculo.findMany({
+      where: { companyId, activo: true },
+      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+      select: { id: true, nombre: true },
+    })
+  )
 }
 
 // ── Servicios y precios ─────────────────────────────────────────────────────
@@ -68,11 +72,13 @@ export interface ServicioItem {
 }
 
 export async function getServicios(companyId: string): Promise<ServicioItem[]> {
-  const servicios = await prisma.servicio.findMany({
-    where: { companyId },
-    orderBy: [{ esAdicional: 'asc' }, { orden: 'asc' }, { nombre: 'asc' }],
-    include: { precios: { select: { tipoVehiculoId: true, precio: true } } },
-  })
+  const servicios = await conEmpresa(companyId, (tx) =>
+    tx.servicio.findMany({
+      where: { companyId },
+      orderBy: [{ esAdicional: 'asc' }, { orden: 'asc' }, { nombre: 'asc' }],
+      include: { precios: { select: { tipoVehiculoId: true, precio: true } } },
+    })
+  )
   return servicios.map((s) => ({
     id: s.id,
     nombre: s.nombre,
@@ -91,21 +97,23 @@ export async function getServicios(companyId: string): Promise<ServicioItem[]> {
  * precio definido para ese tipo. Es lo que se ofrece al recibir un carro.
  */
 export async function getServiciosParaTipo(companyId: string, tipoVehiculoId: string) {
-  const precios = await prisma.servicioPrecio.findMany({
-    where: { tipoVehiculoId, servicio: { companyId, activo: true } },
-    include: {
-      servicio: {
-        select: {
-          id: true,
-          nombre: true,
-          categoria: true,
-          duracionMin: true,
-          esAdicional: true,
-          orden: true,
+  const precios = await conEmpresa(companyId, (tx) =>
+    tx.servicioPrecio.findMany({
+      where: { tipoVehiculoId, servicio: { companyId, activo: true } },
+      include: {
+        servicio: {
+          select: {
+            id: true,
+            nombre: true,
+            categoria: true,
+            duracionMin: true,
+            esAdicional: true,
+            orden: true,
+          },
         },
       },
-    },
-  })
+    })
+  )
   return precios
     .map((p) => ({
       servicioId: p.servicio.id,
@@ -135,11 +143,13 @@ export interface BahiaItem {
 }
 
 export async function getBahias(companyId: string): Promise<BahiaItem[]> {
-  const bahias = await prisma.bahia.findMany({
-    where: { companyId },
-    orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
-    include: { sucursal: { select: { nombre: true } } },
-  })
+  const bahias = await conEmpresa(companyId, (tx) =>
+    tx.bahia.findMany({
+      where: { companyId },
+      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+      include: { sucursal: { select: { nombre: true } } },
+    })
+  )
   return bahias.map((b) => ({
     id: b.id,
     nombre: b.nombre,
@@ -166,14 +176,16 @@ export interface EstadoCatalogo {
  * claro en vez de mostrar pantallas vacías sin explicación.
  */
 export async function getEstadoCatalogo(companyId: string): Promise<EstadoCatalogo> {
-  const [tipos, servicios, bahias, precios] = await Promise.all([
-    prisma.tipoVehiculo.count({ where: { companyId, activo: true } }),
-    prisma.servicio.count({ where: { companyId, activo: true } }),
-    prisma.bahia.count({ where: { companyId, activa: true } }),
-    prisma.servicioPrecio.count({
-      where: { servicio: { companyId, activo: true }, tipoVehiculo: { companyId, activo: true } },
-    }),
-  ])
+  const [tipos, servicios, bahias, precios] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.tipoVehiculo.count({ where: { companyId, activo: true } }),
+      tx.servicio.count({ where: { companyId, activo: true } }),
+      tx.bahia.count({ where: { companyId, activa: true } }),
+      tx.servicioPrecio.count({
+        where: { servicio: { companyId, activo: true }, tipoVehiculo: { companyId, activo: true } },
+      }),
+    ])
+  )
   return {
     tipos,
     servicios,

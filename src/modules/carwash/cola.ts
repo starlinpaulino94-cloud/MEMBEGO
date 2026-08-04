@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · E5 — COLA DE VEHÍCULOS (pista).
@@ -69,23 +69,25 @@ export type ColaEntrada = Awaited<ReturnType<typeof getColaTablero>>['activos'][
  * entregar de ayer sigue pendiente) + terminadas del día (historial corto).
  */
 export async function getColaTablero(companyId: string, inicioDia: Date) {
-  const [activos, terminadosHoy] = await Promise.all([
-    prisma.colaVehiculo.findMany({
-      where: { companyId, estado: { in: COLA_ACTIVOS } },
-      select: SELECT_ENTRADA,
-      orderBy: { createdAt: 'asc' },
-      take: 200,
-    }),
-    prisma.colaVehiculo.findMany({
-      where: {
-        companyId,
-        estado: { in: ['ENTREGADO', 'CANCELADO'] },
-        updatedAt: { gte: inicioDia },
-      },
-      select: SELECT_ENTRADA,
-      orderBy: { updatedAt: 'desc' },
-      take: 30,
-    }),
-  ])
+  const [activos, terminadosHoy] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.colaVehiculo.findMany({
+        where: { companyId, estado: { in: COLA_ACTIVOS } },
+        select: SELECT_ENTRADA,
+        orderBy: { createdAt: 'asc' },
+        take: 200,
+      }),
+      tx.colaVehiculo.findMany({
+        where: {
+          companyId,
+          estado: { in: ['ENTREGADO', 'CANCELADO'] },
+          updatedAt: { gte: inicioDia },
+        },
+        select: SELECT_ENTRADA,
+        orderBy: { updatedAt: 'desc' },
+        take: 30,
+      }),
+    ])
+  )
   return { activos, terminadosHoy }
 }
