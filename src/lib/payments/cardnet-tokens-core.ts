@@ -13,17 +13,23 @@
 export type AmbienteTokens = 'pruebas' | 'produccion'
 
 /**
- * URLs del servicio de tokens por ambiente.
+ * URLs del servicio de tokens por ambiente — MANUAL TÉCNICO v1.7 §11.
  *
- * El widget de CardNET (PWCheckout.js) es del middleware GTP/Seglan y EXIGE que
- * el script se cargue desde su propio dominio (`gtp-seglan.com`) — si se sirve
- * desde otro host, el propio script lo rechaza. El host se confirmó por el
- * mensaje del widget en QA:
- *   · QA:   tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1
- *   · Prod: tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1   (VERIFICAR-QA con CardNET)
+ *   · Pruebas:    https://lab.cardnet.com.do/servicios/tokens/v1
+ *   · Producción: https://servicios.cardnet.com.do/servicios/tokens/v1
  *
- * (El Postman traía `labservicios.cardnet.com.do/servicios/tokens/v1`, un host
- * viejo que devuelve 500. No usar.)
+ * y bajo esa base: `/api/{objeto}`, `/Capture`, `/Scripts/PWCheckout.js`.
+ *
+ * ANTES apuntaban a `gtp-seglan.com`, un middleware que NO aparece en ninguna
+ * página de la documentación de CardNET. El §3.1 del manual es explícito:
+ * «La librería debe ser importada por el comercio a través de la URL pública
+ * alojada en CARDNET. No deberá ser descargada y usada localmente desde un
+ * servidor propio del comercio o desde una URL de un tercero no autorizado».
+ *
+ * Ese desvío partía la integración en dos: el SDK se cargaba desde un dominio
+ * y la ventana de captura vivía en otro, así que el token no podía cruzar de
+ * vuelta. El iframe abría, el cliente digitaba su tarjeta, y el callback
+ * `tokenCreated` no llegaba nunca.
  */
 export function urlsTokens(ambiente: AmbienteTokens): {
   /** Base de la API REST (Customer, Purchase, …). Lleva Authorization: Basic. */
@@ -33,36 +39,50 @@ export function urlsTokens(ambiente: AmbienteTokens): {
   /** Script del checkout hospedado (PWCheckout.js) que carga el navegador. */
   script: string
 } {
-  const base =
-    ambiente === 'produccion'
-      ? 'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1'
-      : 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1'
   return {
-    api: `${base}/api`,
-    capture: `${base}/Capture/`,
-    script: `${base}/Scripts/PWCheckout.js`,
+    api: `${baseDe(ambiente)}/api`,
+    capture: `${baseDe(ambiente)}/Capture/`,
+    script: scriptDesdeCaptura(`${baseDe(ambiente)}/Capture/`),
   }
 }
 
+function baseDe(ambiente: AmbienteTokens): string {
+  return ambiente === 'produccion'
+    ? 'https://servicios.cardnet.com.do/servicios/tokens/v1'
+    : 'https://lab.cardnet.com.do/servicios/tokens/v1'
+}
+
 /**
- * Bases CANDIDATAS de la API REST, en orden de preferencia. Los documentos de
- * CardNET se contradicen entre sí (el Postman dice `labservicios`, el manual
- * dice `lab`, el widget vive en `gtp-seglan`), así que el servidor prueba en
- * orden y se queda con el primero que responda de verdad. `CARDNET_TOKENS_API_BASE`
- * (env) permite fijarlo a mano cuando CardNET confirme el definitivo.
+ * El script del widget, derivado de la MISMA base que la URL de captura.
+ *
+ * Es la invariante que hay que sostener: el SDK y el iframe tienen que estar
+ * en el mismo origen, o el token no vuelve. Como el `CaptureURL` lo decide
+ * CardNET en la respuesta (y varía entre `lab` y `labservicios` según el host
+ * que se consulte), el script se calcula a partir de él en vez de fijarse
+ * aparte. Así no pueden desalinearse.
+ */
+export function scriptDesdeCaptura(captureUrl: string): string {
+  const limpia = captureUrl.trim().replace(/\/+$/, '')
+  const base = limpia.replace(/\/Capture$/i, '')
+  return `${base}/Scripts/PWCheckout.js`
+}
+
+/**
+ * Bases CANDIDATAS de la API REST, en orden de preferencia.
+ *
+ * La primera es la del manual (§11); la segunda, el alias que usan el Postman
+ * y el HTML de ejemplo que entregó CardNET — ambos responden. Se prueban en
+ * orden y se usa el primero que conteste. `CARDNET_TOKENS_API_BASE` permite
+ * fijarlo a mano si CardNET mueve el servicio.
  */
 export function apiCandidatos(ambiente: AmbienteTokens): string[] {
   const fijo = process.env.CARDNET_TOKENS_API_BASE?.trim()
   if (fijo) return [fijo.replace(/\/$/, '')]
   return ambiente === 'produccion'
-    ? [
-        'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api',
-        'https://servicios.cardnet.com.do/servicios/tokens/v1/api',
-      ]
+    ? ['https://servicios.cardnet.com.do/servicios/tokens/v1/api']
     : [
-        'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/api',
-        'https://labservicios.cardnet.com.do/servicios/tokens/v1/api',
         'https://lab.cardnet.com.do/servicios/tokens/v1/api',
+        'https://labservicios.cardnet.com.do/servicios/tokens/v1/api',
       ]
 }
 
@@ -110,10 +130,23 @@ export interface ResultadoCompraToken {
 }
 
 /**
- * Interpreta la respuesta del Purchase. VERIFICAR-QA: la forma exacta de la
- * respuesta solo se confirma con un cobro real. Por eso se aceptan varias
- * grafías comunes del "aprobado" y, ante la duda, se trata como NO aprobado:
- * nunca activar producto por una respuesta ambigua es la postura segura.
+ * Estados finales de una transacción — MANUAL §10.6.
+ *
+ * `Pending` y `Preauthorized` NO son cobros: el dinero todavía no está. Si se
+ * trataran como aprobados se entregaría producto sin haber cobrado.
+ */
+export const TRANSACTION_STATUS = {
+  APROBADA: 1,
+  PENDIENTE: 2,
+  PREAUTORIZADA: 3,
+  RECHAZADA: 4,
+} as const
+
+/**
+ * Interpreta la respuesta del Purchase (manual §7.2 · §9.2 · §10.6).
+ *
+ * Ante la duda NO aprueba: activar producto por una respuesta ambigua es
+ * regalar mercancía, y es un error que solo se descubre cuadrando la caja.
  */
 export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
   const raw = (resp ?? {}) as Record<string, unknown>
@@ -136,6 +169,16 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
   const aprobadaBool = r.Approved === true || r.approved === true || r.IsApproved === true
   const codigoOk = codigo === '00' || codigo === '000'
 
+  // El estado final de la transacción (§10.6). Es el dato más fiable de todos:
+  // manda sobre cualquier otro indicio. Un 2 (Pending) o un 3 (Preauthorized)
+  // NO son cobros — el dinero aún no está — y aprobar ahí entregaría producto
+  // sin haber cobrado.
+  const estadoTx = Number(
+    tx.TransactionStatusId ?? r.TransactionStatusId ?? tx.TransactionStatus ?? NaN
+  )
+  const estadoConocido = Number.isFinite(estadoTx)
+  const estadoAprueba = estadoTx === TRANSACTION_STATUS.APROBADA
+
   const autorizacion =
     s(r.AuthorizationCode) ||
     s(tx.AuthorizationCode) ||
@@ -146,13 +189,20 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
 
   // Con errores del proveedor NUNCA se aprueba, diga lo que diga el resto.
   const aprobada =
-    errores.length === 0 && (aprobadaBool || codigoOk || Boolean(autorizacion))
+    errores.length === 0 &&
+    (estadoConocido
+      ? estadoAprueba
+      : aprobadaBool || codigoOk || Boolean(autorizacion))
 
   const motivo = aprobada
     ? null
     : errores.length > 0 && errores[0].mensaje
       ? errores[0].mensaje
-      : mensajeCompra(codigo, r)
+      : estadoTx === TRANSACTION_STATUS.PENDIENTE
+        ? 'El pago quedó pendiente de confirmación. No cierres la app; te avisaremos.'
+        : estadoTx === TRANSACTION_STATUS.PREAUTORIZADA
+          ? 'El pago quedó reservado pero sin cobrar. Contacta al comercio.'
+          : mensajeCompra(codigo, r)
 
   return {
     aprobada,
@@ -167,15 +217,37 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
  * conocido; si no, un genérico que no expone detalle del emisor.
  */
 function mensajeCompra(codigo: string, r: Record<string, unknown>): string {
+  // Códigos de respuesta de la transacción — MANUAL §9.2. Se traducen a algo
+  // que el cliente pueda ACCIONAR; el texto técnico del emisor no se muestra.
   const conocidos: Record<string, string> = {
     '05': 'Tu banco rechazó la tarjeta.',
-    '51': 'Fondos insuficientes.',
-    '54': 'La tarjeta está vencida.',
     '14': 'El número de tarjeta no es válido.',
     '41': 'Tarjeta reportada. Contacta a tu banco.',
+    '42': 'Cuenta inválida. Contacta a tu banco.',
     '43': 'Tarjeta reportada. Contacta a tu banco.',
+    '51': 'Fondos insuficientes.',
+    '52': 'Cuenta inválida. Contacta a tu banco.',
+    '53': 'Cuenta inválida. Contacta a tu banco.',
+    '54': 'La tarjeta está vencida.',
+    '56': 'Cuenta inválida. Contacta a tu banco.',
+    '57': 'Tu banco no permite este tipo de transacción.',
+    '58': 'Tu banco no permite esta transacción.',
+    '60': 'Contacta a tu banco para autorizar el pago.',
     '61': 'Superaste el límite de tu tarjeta.',
+    '62': 'Tarjeta restringida por tu banco.',
     '65': 'Superaste el límite de intentos. Intenta más tarde.',
+    '66': 'Contacta a tu banco para autorizar el pago.',
+    '75': 'Superaste los intentos de PIN. Contacta a tu banco.',
+    '78': 'Tu banco necesita activar la tarjeta primero.',
+    '79': 'Tu banco rechazó el pago.',
+    '81': 'PIN inválido.',
+    '82': 'Tu tarjeta requiere PIN para esta compra.',
+    '91': 'Tu banco no está disponible ahora. Intenta en unos minutos.',
+    '94': 'Este pago ya se procesó. Revisa tus movimientos antes de reintentar.',
+    '96': 'Error del sistema. Intenta de nuevo en un momento.',
+    '97': 'Tu banco no está disponible ahora. Intenta más tarde.',
+    '98': 'Excediste el límite de la tarjeta.',
+    '99': 'El código de seguridad (CVV) no es correcto.',
   }
   if (codigo && conocidos[codigo]) return conocidos[codigo]
   const msg = (r.ResponseMessage ?? r.Message ?? '') as string

@@ -71,9 +71,17 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       )
     }
+    const { scriptDesdeCaptura } = await import('@/lib/payments/cardnet-tokens-core')
+
     return NextResponse.json({
       ok: true,
       captureUrl: sesion.captureUrl,
+      // El script SIEMPRE del mismo origen que la ventana de captura. El
+      // `CaptureURL` lo decide CardNET en la respuesta (varía entre `lab` y
+      // `labservicios` según el host consultado), así que fijar el script
+      // aparte los desalinea tarde o temprano — y desalineados el token no
+      // cruza del iframe a la página.
+      scriptUrl: scriptDesdeCaptura(sesion.captureUrl),
       uniqueId: sesion.uniqueId,
       publicKey: pub.publicKey,
       conteoPerfiles,
