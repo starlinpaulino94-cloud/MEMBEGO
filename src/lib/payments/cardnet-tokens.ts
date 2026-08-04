@@ -1,4 +1,5 @@
 import 'server-only'
+import { anotarFallo } from '@/lib/prisma-errors'
 import {
   urlsTokens,
   apiCandidatos,
@@ -285,20 +286,65 @@ export async function consultarPerfilesPago(customerId: string): Promise<PerfilP
  * el mismo email invalida el UniqueID de la ventana y la mata con
  * INTERNAL_SERVER_ERROR).
  */
-export async function consultarClienteCardnet(
-  customerId: string
-): Promise<{ email: string | null; perfiles: PerfilPagoCardnet[] }> {
-  if (!customerId) return { email: null, perfiles: [] }
+export async function consultarClienteCardnet(customerId: string): Promise<{
+  email: string | null
+  perfiles: PerfilPagoCardnet[]
+  /**
+   * Datos de la ventana de captura. El manual §4.1.2.2 punto 4 es explícito:
+   * «este objeto Customer informa un CaptureURL y UniqueID que debe ser
+   * utilizado luego para mostrarle al usuario la interfaz de captura». O sea
+   * que la sesión sale de ESTA consulta, no de un POST aparte.
+   */
+  captureUrl: string | null
+  uniqueId: string | null
+}> {
+  const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null }
+  if (!customerId) return vacio
   const { ok, json } = await llamarTokens('GET', `/Customer/${encodeURIComponent(customerId)}`, null)
-  if (!ok) return { email: null, perfiles: [] }
+  if (!ok) return vacio
   const { datos } = desenvolverRespuesta(json)
-  const email =
-    typeof datos.Email === 'string' && datos.Email
-      ? datos.Email
-      : typeof datos.email === 'string' && datos.email
-        ? datos.email
-        : null
-  return { email, perfiles: extraerPerfiles(json) }
+  const s = (...ks: string[]) => {
+    for (const k of ks) {
+      const v = datos[k]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+    return null
+  }
+  const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
+  return {
+    email: s('Email', 'email'),
+    perfiles: extraerPerfiles(json),
+    // El formato documentado lleva barra final; la respuesta a veces no la trae.
+    captureUrl: captureUrl ? (captureUrl.endsWith('/') ? captureUrl : `${captureUrl}/`) : null,
+    uniqueId: s('UniqueID', 'UniqueId', 'uniqueId'),
+  }
+}
+
+/**
+ * CustomerId del cliente, según el §4.1.2.1: se registra UNA vez y se guarda.
+ *
+ * El POST solo ocurre la primera vez. Es la diferencia que importa: cada
+ * `POST /Customer` emite un `UniqueID` nuevo e INVALIDA el anterior, así que
+ * hacerlo en cada pago mata la ventana de captura que el cliente tenga
+ * abierta — el síntoma es un INTERNAL_SERVER_ERROR sin ninguna pista.
+ *
+ * `guardar` persiste el id para que la próxima vez ni siquiera haya POST.
+ */
+export async function obtenerCustomerId(input: {
+  email: string
+  guardado: string | null
+  guardar: (customerId: string) => Promise<void>
+}): Promise<string | null> {
+  const yaLoTengo = input.guardado?.trim()
+  if (yaLoTengo) return yaLoTengo
+
+  const cliente = await crearClienteCardnet({ email: input.email })
+  if (!cliente?.customerId) return null
+  // Best-effort: si la escritura falla, el cobro sigue — solo se pagará un
+  // POST de más la próxima vez. Pero queda anotado: si falla siempre, el
+  // síntoma vuelve a ser una ventana que muere sin explicación.
+  await input.guardar(cliente.customerId).catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
+  return cliente.customerId
 }
 
 /**
@@ -349,43 +395,18 @@ export async function consultarClienteDiagnostico(
 }
 
 /**
- * SESIÓN DE CAPTURA (paso previo OBLIGATORIO a abrir el iframe).
+ * NOTA HISTÓRICA · `crearSesionCaptura` se eliminó.
  *
- * El manual de tokenización (§4) es claro: NO se puede abrir el iframe con un
- * `session_id` inventado — eso da `TK004 INVALID_SESSION_IDENTIFIER` (el 500
- * que veíamos). Hay que crear un Customer en el servidor; CardNET devuelve un
- * `CaptureURL` y un `UniqueID` válidos, y con ESOS se abre el iframe.
+ * Abría la ventana con el `CaptureURL`/`UniqueID` de un `POST /Customer`. Es
+ * una lectura equivocada del manual: el §4.1.2.2 dice que esos datos salen del
+ * **GET** al Customer (ver `consultarClienteCardnet`). Y como cada POST emite
+ * una sesión nueva e invalida la anterior, llamarla al abrir la ventana era
+ * una forma segura de matar la sesión de otra pestaña —o la propia, si algo
+ * más tocaba al Customer— con un `INTERNAL_SERVER_ERROR` sin explicación.
  *
- * Devuelve lo que el navegador necesita (CaptureURL + UniqueID). NUNCA la llave
- * privada. VERIFICAR-QA: la grafía exacta de los campos de respuesta.
+ * No se restaura. El registro del Customer va por `obtenerCustomerId`, que
+ * hace el POST UNA vez en la vida del cliente y guarda el id.
  */
-export async function crearSesionCaptura(input: {
-  email: string
-}): Promise<{ captureUrl: string; uniqueId: string; customerId: string } | null> {
-  const { ok, json } = await postTokens('/customer', {
-    Email: input.email,
-    Enable: 'true',
-  })
-  if (!ok) return null
-  // La respuesta viene envuelta en { Response: {...}, Errors: [...] }. Un
-  // CS005 ("Email ya registrado") NO es fallo: el proveedor devuelve igual el
-  // customer y un UniqueID fresco para la sesión.
-  const { datos } = desenvolverRespuesta(json)
-  const s = (...ks: string[]) => {
-    for (const k of ks) {
-      const v = datos[k]
-      if (typeof v === 'string' && v) return v
-      if (typeof v === 'number') return String(v)
-    }
-    return ''
-  }
-  const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
-  const uniqueId = s('UniqueID', 'UniqueId', 'uniqueId')
-  const customerId = s('CustomerId', 'customerId', 'Id', 'id')
-  if (!captureUrl || !uniqueId) return null
-  // El CaptureURL llega sin barra final; el formato documentado la lleva.
-  return { captureUrl: captureUrl.endsWith('/') ? captureUrl : `${captureUrl}/`, uniqueId, customerId }
-}
 
 /**
  * Crea (o registra) un Customer en CardNET. Devuelve el CustomerId con el que

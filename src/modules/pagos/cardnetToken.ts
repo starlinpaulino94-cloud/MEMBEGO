@@ -7,7 +7,6 @@ import {
   getTokensConfig,
   cardnetTokensConfigurado,
   cobrarConToken,
-  crearClienteCardnet,
   consultarClienteCardnet,
 } from '@/lib/payments/cardnet-tokens'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
@@ -204,9 +203,17 @@ export async function cobrarPendienteConPerfil(input: {
     }
     perfiles = consulta.perfiles
   } else {
-    const cliente = await crearClienteCardnet({ email: input.emailCliente })
-    if (!cliente) return { estado: 'error', motivo: 'No se pudo consultar la pasarela.' }
-    customerId = cliente.customerId
+    // Sin customerId del navegador: se usa el guardado del cliente (§4.1.2.1).
+    // NUNCA se hace POST aquí — la ventana de captura puede seguir abierta y
+    // un POST emitiría un UniqueID nuevo, matándola con INTERNAL_SERVER_ERROR.
+    const guardado = await prisma.cliente
+      .findUnique({
+        where: { id: input.objetivo.clienteId },
+        select: { cardnetCustomerId: true },
+      })
+      .catch(() => null)
+    customerId = guardado?.cardnetCustomerId?.trim() || null
+    if (!customerId) return { estado: 'sin_tarjeta' }
     perfiles = (await consultarClienteCardnet(customerId)).perfiles
   }
   const conteoAntes = Math.max(0, input.conteoAntes ?? 0)
