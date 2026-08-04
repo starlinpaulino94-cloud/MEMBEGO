@@ -7,6 +7,7 @@ import {
   desenvolverRespuesta,
   extraerPerfiles,
   sinSensibles,
+  esIpValida,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
@@ -140,7 +141,11 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
     Capture: true,
-    CustomerIP: input.clienteIp,
+    // `getClientIdentifier` devuelve la cadena 'unknown' cuando no hay
+    // `x-forwarded-for`. Mandar eso como IP al antifraude de CardNET es peor
+    // que no mandar nada: un valor con formato inválido puede rechazar el
+    // cobro y el rechazo llegaría disfrazado de "tarjeta declinada".
+    ...(esIpValida(input.clienteIp) ? { CustomerIP: input.clienteIp } : {}),
     DataDo: {
       Tax: String(input.tax ?? 0),
       Invoice: input.invoice ?? input.orden,

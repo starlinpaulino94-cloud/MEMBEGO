@@ -138,3 +138,18 @@ test('extraerPerfiles con respuesta sin perfiles o malformada devuelve []', asyn
   assert.deepEqual(extraerPerfiles({}), [])
   assert.deepEqual(extraerPerfiles({ Response: { PaymentProfiles: 'no-array' } }), [])
 })
+
+test('la IP del antifraude no se manda si no es una IP', async () => {
+  // `getClientIdentifier` devuelve la cadena 'unknown' cuando falta la
+  // cabecera. Mandar eso como CustomerIP puede hacer que CardNET rechace por
+  // validación, y ese rechazo se le muestra al cliente como "tarjeta
+  // declinada" — un fallo carísimo de diagnosticar.
+  const { esIpValida } = await import('../src/lib/payments/cardnet-tokens-core')
+  assert.equal(esIpValida('190.80.12.4'), true)
+  assert.equal(esIpValida('2800:bf0:8000::1'), true)
+  assert.equal(esIpValida('unknown'), false)
+  assert.equal(esIpValida(''), false)
+  assert.equal(esIpValida('   '), false)
+  assert.equal(esIpValida('999.1.1.1'), false, 'octeto fuera de rango')
+  assert.equal(esIpValida('no-soy-una-ip'), false)
+})

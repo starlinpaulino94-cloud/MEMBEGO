@@ -214,6 +214,24 @@ export function sinSensibles(obj: Record<string, unknown>): Record<string, unkno
 export const MONEDA_DOP_TOKENS = 'DOP'
 
 /**
+ * ¿Esto es una IP que se pueda mandar al antifraude?
+ *
+ * Importa porque el identificador del cliente vale la cadena `'unknown'`
+ * cuando la petición no trae `x-forwarded-for`. Mandar `CustomerIP: "unknown"`
+ * es un dato con formato inválido, y un rechazo por validación llega al
+ * cliente con la misma cara que una tarjeta sin fondos: "declinada". Mejor
+ * omitir el campo que mentir en él.
+ */
+export function esIpValida(valor: string): boolean {
+  const v = (valor ?? '').trim()
+  if (!v || v === 'unknown') return false
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(v)
+  if (ipv4) return ipv4.slice(1).every((n) => Number(n) <= 255)
+  // IPv6: basta con que sea plausible (hex y dos puntos); CardNET valida el resto.
+  return v.includes(':') && /^[0-9a-f:.]+$/i.test(v)
+}
+
+/**
  * PERFIL DE PAGO (tarjeta registrada) dentro de la consulta del Customer.
  *
  * CONFIRMADO POR CARDNET: "al consultar el cliente hay un objeto en el JSON
