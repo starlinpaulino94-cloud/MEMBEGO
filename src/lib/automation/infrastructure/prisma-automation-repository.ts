@@ -20,12 +20,15 @@ import type {
 } from '../application/ports'
 import { mapAutomation, mapRun } from './mappers'
 
+/** Cliente Prisma o transacción: permite enhebrar el contexto RLS (tenant.ts). */
+type Db = PrismaClient | Prisma.TransactionClient
+
 function json(value: unknown): Prisma.InputJsonValue {
   return (value ?? {}) as Prisma.InputJsonValue
 }
 
 export class PrismaAutomationRepository implements AutomationRepository {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: Db) {}
 
   async createAutomation(data: CreateAutomationData): Promise<Automation> {
     const row = await this.db.automation.create({

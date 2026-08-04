@@ -46,9 +46,9 @@
  */
 
 import { headers } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
+import { authService } from '@/lib/auth'
 import { loginLimiter, getClientIdentifier } from '@/lib/rate-limit'
-import { ROLE_HOME, type AppRole } from '@/types'
+import { ROLE_HOME } from '@/types'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export interface LoginState {
@@ -97,20 +97,19 @@ export async function iniciarSesion(
   }
 
   try {
-    const supabase = await createClient()
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    const result = await authService.login({ email, password })
 
-    if (error) {
+    if (!result.ok) {
       // 429 y 5xx de Supabase no son "credenciales malas": decirle al usuario
       // que su contraseña está mal cuando el servicio está saturado le hace
       // cambiarla sin necesidad.
-      if (error.status === 429) {
+      if (result.status === 429) {
         return { error: 'El servicio de acceso está ocupado. Intenta de nuevo en un minuto.' }
       }
-      if (!error.status || error.status >= 500) {
+      if (!result.status || result.status >= 500) {
         return { error: 'No se pudo iniciar sesión ahora mismo. Intenta de nuevo en unos momentos.' }
       }
-      if (error.message.toLowerCase().includes('email not confirmed')) {
+      if (result.providerMessage?.toLowerCase().includes('email not confirmed')) {
         return { error: 'Confirma tu correo antes de entrar. Te enviamos un enlace al registrarte.' }
       }
       registrarEvento({ dominio: 'auth', accion: 'login', ok: false, motivo: 'credenciales' })
@@ -119,7 +118,7 @@ export async function iniciarSesion(
 
     registrarEvento({ dominio: 'auth', accion: 'login', ok: true })
 
-    const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
+    const role = result.user?.metadata.role ?? 'CLIENTE'
     return { redirect: destinoSeguro(redirectPedido, ROLE_HOME[role] ?? '/') }
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : ''
