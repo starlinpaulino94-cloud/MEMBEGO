@@ -243,7 +243,18 @@ export function PagoTokenCardnet({
           else router.refresh()
         } else {
           setEstado('error')
-          setMensaje(data.motivo ?? 'La tarjeta fue rechazada.')
+          // SOLO se dice "rechazada" si el servidor rechazó DE VERDAD. Antes,
+          // cualquier otro final (sesión vencida, límite de intentos, un 500,
+          // una respuesta ilegible) caía aquí con el mismo texto, y culpaba a
+          // la tarjeta de fallos que no eran de la tarjeta. Eso mandó una
+          // depuración entera a buscar en la pasarela un problema que estaba
+          // de este lado.
+          setMensaje(
+            data.motivo ??
+              (data.estado === 'rechazado'
+                ? 'La tarjeta fue rechazada.'
+                : `No se pudo procesar el pago (${data.estado ?? `HTTP ${resp.status}`}). Intenta de nuevo.`)
+          )
         }
       } catch {
         setEstado('error')
@@ -396,6 +407,8 @@ export function PagoTokenCardnet({
       }
       if (data.estado === 'rechazado') {
         setEstado('error')
+        // Aquí sí es un rechazo real: el servidor cobró y la pasarela dijo que
+        // no. Este camino ya estaba bien acotado; el del cobro directo no.
         setMensaje(data.motivo ?? 'La tarjeta fue rechazada.')
         return true
       }
