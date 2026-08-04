@@ -48,6 +48,8 @@ jobs:
         run: npx eslint src tests --max-warnings=0
       - name: Pruebas
         run: npm test
+      - name: Cobertura RLS (envoltorio de tenant)
+        run: node scripts/rls-cobertura.mjs
 
   construir:
     name: Build de producción

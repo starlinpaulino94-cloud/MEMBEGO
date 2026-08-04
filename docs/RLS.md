@@ -70,7 +70,7 @@ aunque la Capa 1 esté puesta.
 
 Hace tres cosas, todas sobre `public`:
 
-1. `ENABLE ROW LEVEL SECURITY` en las 112 tablas. Sin políticas, RLS deniega:
+1. `ENABLE ROW LEVEL SECURITY` en las 115 tablas. Sin políticas, RLS deniega:
    la ausencia **es** la política, igual que en el bucket de comprobantes.
 2. Retira los privilegios de `anon` y `authenticated`. Esto es lo decisivo:
    PostgREST responde *"permission denied for table"* antes de evaluar nada.
@@ -138,7 +138,7 @@ Ronda 2 — cubiertas por clave foránea: 0
 Catálogos globales: lectura abierta, escritura solo omnisciente.
 transaction_counters: ámbito global TX:* + TICKET del propio inquilino.
 ────────────────────────────────────────────────
-Cubiertas por política de inquilino: 112 de 112
+Cubiertas por política de inquilino: 115 de 115
 SIN ruta al inquilino (solo omnisciente): ninguna
 ```
 
@@ -171,9 +171,10 @@ clientes de Prisma; está anotado como trabajo futuro.
 ### Por qué apagada
 
 Para que RLS proteja de un `where` olvidado, **cada consulta** tiene que declarar
-su empresa. En MembeGo eso son **765 puntos de consulta**. Encenderlo de golpe
-significaría cambiar `DATABASE_URL` y descubrir en producción cuáles se
-quedaron fuera — y este contenedor no tiene acceso a tu base para probarlo antes.
+su empresa. En MembeGo eso son **~100 archivos, ~500+ puntos de consulta**. La
+migración a `conEmpresa`/`sinEmpresa` está completada (Fase 5); el gate de
+cobertura estática en CI (`node scripts/rls-cobertura.mjs`) bloquea que un
+archivo nuevo con consultas entre sin declarar su contexto.
 
 Peor: una Capa 2 a medias (políticas puestas, aplicación todavía conectando como
 `postgres`) **no protege de nada** y hace creer que sí. Esa ilusión es lo
@@ -221,10 +222,8 @@ transacción y no existe una variante "suelta".
 
 ### Orden recomendado para encenderla
 
-1. Migrar a `conEmpresa` los módulos de `/admin` (los 28 archivos que ya usan
-   `resolveCompanyId`, que es el punto donde se resuelve la empresa).
-2. Marcar con `sinEmpresa` lo que cruza inquilinos: marketplace, superadmin,
-   cron, trabajos de la cola.
+1. ~~Migrar a `conEmpresa` los módulos de `/admin`~~ → **Completado** (Fase 5.0–5.4 + carwash + regalos + app/ + lib/).
+2. ~~Marcar con `sinEmpresa` lo que cruza inquilinos~~ → **Completado**.
 3. En una base de **prueba**: aplicar la Capa 2, cambiar `DATABASE_URL` a
    `membego_app`, ejercitar la aplicación entera.
 4. `npm run rls:probar` contra esa base.
