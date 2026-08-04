@@ -10,7 +10,7 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import {
@@ -41,10 +41,12 @@ export async function guardarCapacidades(
 
     const companyId = String(formData.get('companyId') ?? '').trim()
     if (!companyId) return { error: 'Empresa no especificada.' }
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { id: true, name: true, type: true },
-    })
+    const company = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, type: true },
+      })
+    )
     if (!company) return { error: 'Empresa no encontrada.' }
 
     // Categoría elegida (o la derivada del type si no se cambia).
@@ -68,12 +70,14 @@ export async function guardarCapacidades(
     }
 
     const meta = await getRequestMeta()
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { capacidades: Object.keys(config).length ? config : Prisma.DbNull },
-    })
-    await prisma.auditLog
-      .create({
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { capacidades: Object.keys(config).length ? config : Prisma.DbNull },
+      })
+    )
+    await conEmpresa(companyId, (tx) =>
+      tx.auditLog.create({
         data: {
           companyId,
           userId: user.metadata.dbUserId ?? null,
@@ -84,7 +88,7 @@ export async function guardarCapacidades(
           ...meta,
         },
       })
-      .catch(anotarFallo('capacidades:auditLog.create'))
+    ).catch(anotarFallo('capacidades:auditLog.create'))
 
     // El resolutor está cacheado por tag: los cambios aplican de inmediato.
     revalidateTag(CAPACIDADES_TAG, 'max')

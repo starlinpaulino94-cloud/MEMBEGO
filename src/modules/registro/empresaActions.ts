@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { registerLimiter } from '@/lib/rate-limit'
@@ -35,7 +35,9 @@ async function uniqueCompanySlug(name: string): Promise<string> {
   const base = slugify(name) || 'empresa'
   let slug = base
   let n = 1
-  while (await prisma.company.findUnique({ where: { slug } })) {
+  while (await sinEmpresa('registro: comprobar slug de empresa (catálogo global)', (tx) =>
+    tx.company.findUnique({ where: { slug } })
+  )) {
     n += 1
     slug = `${base}-${n}`
   }
@@ -72,7 +74,9 @@ export async function registrarEmpresa(
   }
 
   // Unicidad de correo (auth) y detección de duplicados básicos.
-  const existingUser = await prisma.user.findUnique({ where: { email } })
+  const existingUser = await sinEmpresa('registro: buscar usuario por email (cross-tenant)', (tx) =>
+    tx.user.findUnique({ where: { email } })
+  )
   if (existingUser) {
     return { error: 'Ya existe una cuenta con ese correo. Inicia sesión.' }
   }
@@ -83,17 +87,19 @@ export async function registrarEmpresa(
 
   try {
     const slug = await uniqueCompanySlug(nombreComercial)
-    const company = await prisma.company.create({
-      data: {
-        name: nombreComercial,
-        slug,
-        type: tipo,
-        pais: pais || null,
-        isActive: true,
-        // Clave del onboarding: no aparece en el marketplace todavía.
-        isPublished: false,
-      },
-    })
+    const company = await sinEmpresa('registro: crear la nueva empresa', (tx) =>
+      tx.company.create({
+        data: {
+          name: nombreComercial,
+          slug,
+          type: tipo,
+          pais: pais || null,
+          isActive: true,
+          // Clave del onboarding: no aparece en el marketplace todavía.
+          isPublished: false,
+        },
+      })
+    )
     companyId = company.id
 
     // Toda empresa nace con su sucursal principal: la mayoría tiene un solo
@@ -118,19 +124,21 @@ export async function registrarEmpresa(
     await ensureEmailIdentity(supabaseId, email)
 
     const now = new Date()
-    const dbUser = await prisma.user.create({
-      data: {
-        supabaseId,
-        email,
-        name: nombrePropietario,
-        role: 'ADMINISTRADOR',
-        companyId,
-        termsAcceptedAt: now,
-        termsVersion: TERMS_VERSION,
-        marketingConsent,
-        marketingConsentAt: marketingConsent ? now : null,
-      },
-    })
+    const dbUser = await conEmpresa(company.id, (tx) =>
+      tx.user.create({
+        data: {
+          supabaseId,
+          email,
+          name: nombrePropietario,
+          role: 'ADMINISTRADOR',
+          companyId: company.id,
+          termsAcceptedAt: now,
+          termsVersion: TERMS_VERSION,
+          marketingConsent,
+          marketingConsentAt: marketingConsent ? now : null,
+        },
+      })
+    )
 
     await supabase.auth.admin.updateUserById(supabaseId, {
       app_metadata: {
@@ -152,7 +160,9 @@ export async function registrarEmpresa(
       await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('registro:rollback-auth-user'))
     }
     if (companyId) {
-      await prisma.company.delete({ where: { id: companyId } }).catch(anotarFallo('registro:company.delete'))
+      await conEmpresa(companyId, (tx) =>
+        tx.company.delete({ where: { id: companyId } })
+      ).catch(anotarFallo('registro:company.delete'))
     }
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }

@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { CANAL_COOKIE, sanitizarCanal } from './shared'
 
 /**
@@ -32,7 +32,9 @@ export async function capturarCanalRegistro(
   try {
     const canal = (await leerCanalCookie()) ?? sanitizarCanal(canalDeclarado)
     if (!canal) return
-    await prisma.$executeRaw`UPDATE "clientes" SET "canalOrigen" = ${canal} WHERE "id" = ${clienteId} AND "canalOrigen" IS NULL`
+    await sinEmpresa('adquisicion: actualizar canal del cliente por id (empresa desconocida aquí)', (tx) =>
+      tx.$executeRaw`UPDATE "clientes" SET "canalOrigen" = ${canal} WHERE "id" = ${clienteId} AND "canalOrigen" IS NULL`
+    )
   } catch (e) {
     console.error('[adquisicion] capturarCanalRegistro', e)
   }

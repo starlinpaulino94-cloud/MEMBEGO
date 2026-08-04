@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { crearTokenSSO } from '@/modules/integraciones/nucleo'
 import type { SessionUser } from '@/types'
 
@@ -19,9 +19,10 @@ export async function urlAperturaSSO(
 ): Promise<{ url: string } | { error: string }> {
   if (!user.metadata.companyId) return { error: 'Tu cuenta no tiene empresa activa.' }
 
-  const sistema = await prisma.sistemaConectado
-    .findUnique({ where: { slug }, select: { urlBase: true, secreto: true, activo: true, categoria: true } })
-    .catch(() => null)
+  const sistema = await sinEmpresa('sso: sistema conectado por slug (catálogo global)', (tx) =>
+    tx.sistemaConectado
+      .findUnique({ where: { slug }, select: { urlBase: true, secreto: true, activo: true, categoria: true } })
+  ).catch(() => null)
   if (!sistema || !sistema.activo) return { error: 'Sistema no disponible.' }
 
   // La empresa debe pertenecer a la categoría que el sistema atiende: un

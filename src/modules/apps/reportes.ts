@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { utcDesdeLocal, ymdEnTz, sumarDias } from '@/modules/citas/disponibilidad'
 
 /**
@@ -104,8 +104,8 @@ export async function getReporteOperativo(
 
   const [entradasCola, transacciones, movimientos] = await Promise.all([
     // Cola: puede no existir (capacidad apagada o migración pendiente).
-    prisma.colaVehiculo
-      .findMany({
+    conEmpresa(companyId, (tx) =>
+      tx.colaVehiculo.findMany({
         where: { companyId, createdAt: ventana },
         select: {
           createdAt: true,
@@ -114,19 +114,19 @@ export async function getReporteOperativo(
           servicio: true,
         },
       })
-      .catch(() => []),
-    prisma.transaction
-      .findMany({
+    ).catch(() => []),
+    conEmpresa(companyId, (tx) =>
+      tx.transaction.findMany({
         where: { companyId, estado: 'APPLIED', createdAt: ventana },
         select: { tipo: true, monto: true, createdAt: true },
       })
-      .catch(() => []),
-    prisma.movimientoInventario
-      .findMany({
+    ).catch(() => []),
+    conEmpresa(companyId, (tx) =>
+      tx.movimientoInventario.findMany({
         where: { companyId, tipo: 'SALIDA', createdAt: ventana },
         select: { cantidad: true, producto: { select: { nombre: true, unidad: true } } },
       })
-      .catch(() => []),
+    ).catch(() => []),
   ])
 
   // ── Serie por día ──────────────────────────────────────────────────────────

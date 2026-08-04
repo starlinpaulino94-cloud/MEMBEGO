@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { registerLimiter } from '@/lib/rate-limit'
@@ -15,6 +15,9 @@ import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { primerErrorZod } from '@/lib/validacion'
+import { capturarErrorInesperado } from '@/lib/sentry'
+import { registroSchema } from '@/modules/registro/schema'
 
 export interface RegistroState {
   error?: string
@@ -37,16 +40,8 @@ export interface RegistroState {
 }
 
 /**
- * Teléfono válido para el registro nuevo: validación laxa y multi-país —
- * basta con que contenga al menos 7 dígitos. La columna `Cliente.telefono`
- * sigue siendo opcional en la BD, así que esta exigencia solo aplica a los
- * registros nuevos y no afecta a los clientes ya registrados sin teléfono.
+ * Código de invitación del cliente; nunca bloquea el registro si falla.
  */
-function telefonoValido(raw: string): boolean {
-  return (raw.match(/\d/g)?.length ?? 0) >= 7
-}
-
-/** Código de invitación del cliente; nunca bloquea el registro si falla. */
 async function codigoInvitacionDe(clienteId: string): Promise<string | undefined> {
   try {
     return await ensureCodigoCorto(clienteId)
@@ -68,11 +63,13 @@ async function qrBienvenidaDe(
 ): Promise<string | undefined> {
   if (!campanaInvitacionId) return undefined
   try {
-    const qr = await prisma.qrToken.findFirst({
-      where: { clienteId, activo: true, compraId: { not: null } },
-      orderBy: { createdAt: 'desc' },
-      select: { token: true },
-    })
+    const qr = await sinEmpresa('registro: qr del regalo de bienvenida del cliente recién creado', (tx) =>
+      tx.qrToken.findFirst({
+        where: { clienteId, activo: true, compraId: { not: null } },
+        orderBy: { createdAt: 'desc' },
+        select: { token: true },
+      })
+    )
     return qr?.token
   } catch (e) {
     console.error('[registro] qrBienvenida error:', e)
@@ -92,50 +89,45 @@ export async function registrarCliente(
     return { error: 'Demasiados registros desde esta conexión. Intenta de nuevo en unos minutos.' }
   }
 
-  const companySlug = String(formData.get('companySlug') ?? '')
-  const nombre = String(formData.get('nombre') ?? '').trim()
-  const email = String(formData.get('email') ?? '')
-    .trim()
-    .toLowerCase()
-  const password = String(formData.get('password') ?? '')
-  const telefono = String(formData.get('telefono') ?? '').trim()
-  const refCode = String(formData.get('refCode') ?? '').trim()
-  // Campaña "Invita y Gana" (si el registro vino de una campaña de invitación).
-  const campanaInvitacionId = String(formData.get('campanaId') ?? '').trim() || undefined
-  // Growth Engine 3.0: código del enlace de invitación (landing) que trajo al
-  // usuario. Atribuye el registro al enlace y dispara el beneficio/recompensas.
-  const glCode = String(formData.get('glCode') ?? '').trim()
-  // Atribución de marketing: canal declarado en "¿Cómo nos conociste?".
-  const canalDeclarado = String(formData.get('canalDeclarado') ?? '').trim() || null
+  const parsed = registroSchema.safeParse({
+    companySlug: String(formData.get('companySlug') ?? ''),
+    nombre: String(formData.get('nombre') ?? ''),
+    email: String(formData.get('email') ?? ''),
+    password: String(formData.get('password') ?? ''),
+    telefono: String(formData.get('telefono') ?? ''),
+    terminos: String(formData.get('terminos') ?? ''),
+    refCode: String(formData.get('refCode') ?? ''),
+    campanaId: String(formData.get('campanaId') ?? ''),
+    glCode: String(formData.get('glCode') ?? ''),
+    canalDeclarado: String(formData.get('canalDeclarado') ?? ''),
+    marca: String(formData.get('marca') ?? ''),
+    modelo: String(formData.get('modelo') ?? ''),
+    anioRaw: String(formData.get('anio') ?? ''),
+    color: String(formData.get('color') ?? ''),
+    placa: String(formData.get('placa') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const {
+    companySlug,
+    nombre,
+    email,
+    password,
+    telefono,
+    refCode,
+    campanaId: campanaInvitacionId,
+    glCode,
+    canalDeclarado,
+    marca,
+    modelo,
+    anioRaw,
+    color,
+    placa,
+  } = parsed.data
   // F5.2: auto-seguir con opción de desmarcar. El hidden "off" va primero;
   // si el checkbox está marcado, el último valor es "on".
   const seguirEmpresa = formData.getAll('seguirEmpresa').at(-1) !== 'off'
-  // Consentimiento (Fase 1): términos obligatorio, marketing opcional.
-  const aceptaTerminos = formData.get('terminos') === 'on'
+  // Consentimiento (Fase 1): marketing opcional (términos ya validado por zod).
   const marketingConsent = formData.getAll('marketingConsent').at(-1) === 'on'
-
-  // Vehiculo (optional, for carwash)
-  const marca = String(formData.get('marca') ?? '').trim()
-  const modelo = String(formData.get('modelo') ?? '').trim()
-  const anioRaw = String(formData.get('anio') ?? '').trim()
-  const color = String(formData.get('color') ?? '').trim()
-  const placa = String(formData.get('placa') ?? '').trim()
-
-  if (!nombre || !email || !password) {
-    return { error: 'Completa todos los campos obligatorios.' }
-  }
-  if (password.length < 6) {
-    return { error: 'La contraseña debe tener al menos 6 caracteres.' }
-  }
-  // El teléfono es obligatorio en el registro nuevo (la columna sigue siendo
-  // opcional en la BD, así que los clientes ya registrados sin teléfono no se
-  // ven afectados). Validación laxa: al menos 7 dígitos.
-  if (!telefonoValido(telefono)) {
-    return { error: 'Ingresa un número de teléfono válido.' }
-  }
-  if (!aceptaTerminos) {
-    return { error: 'Debes aceptar los términos y la política de privacidad.' }
-  }
 
   // La empresa debe existir realmente en la BD: su id se usa como FK al crear
   // el Cliente. Un fallback con id ficticio provocaría una violación de FK y
@@ -146,10 +138,12 @@ export async function registrarCliente(
   // el registro. Con select, solo dependemos de columnas que siempre existen.
   let company: { id: string; name: string; slug: string; type: string } | null = null
   try {
-    company = await prisma.company.findUnique({
-      where: { slug: companySlug },
-      select: { id: true, name: true, slug: true, type: true },
-    })
+    company = await sinEmpresa('registro: buscar empresa por slug (catálogo global)', (tx) =>
+      tx.company.findUnique({
+        where: { slug: companySlug },
+        select: { id: true, name: true, slug: true, type: true },
+      })
+    )
   } catch (e) {
     console.error('[registro] company lookup error:', e)
     return { error: 'No se pudo verificar la empresa. Intenta de nuevo.' }
@@ -162,40 +156,48 @@ export async function registrarCliente(
 
   // Si ya existe una cuenta de cliente con este correo, esto es una
   // afiliación a una empresa adicional, no un registro nuevo.
-  const existingUser = await prisma.user.findUnique({ where: { email } })
+  const existingUser = await sinEmpresa('registro: buscar usuario por email (cross-tenant)', (tx) =>
+    tx.user.findUnique({ where: { email } })
+  )
   if (existingUser && existingUser.role !== 'CLIENTE') {
     return { error: 'Ya existe una cuenta con este correo.' }
   }
   if (existingUser) {
-    const existingCliente = await prisma.cliente.findUnique({
-      where: {
-        supabaseId_companyId: {
-          supabaseId: existingUser.supabaseId,
-          companyId: company.id,
+    const existingCliente = await conEmpresa(company.id, (tx) =>
+      tx.cliente.findUnique({
+        where: {
+          supabaseId_companyId: {
+            supabaseId: existingUser.supabaseId,
+            companyId: company.id,
+          },
         },
-      },
-    })
+      })
+    )
     if (existingCliente) {
       return { error: 'Ya tienes una cuenta en esta empresa. Inicia sesión.' }
     }
 
     try {
-      const cliente = await prisma.cliente.create({
-        data: {
-          companyId: company.id,
-          supabaseId: existingUser.supabaseId,
-          nombre: existingUser.name,
-          email,
-          telefono: telefono || null,
-        },
-      })
+      const cliente = await conEmpresa(company.id, (tx) =>
+        tx.cliente.create({
+          data: {
+            companyId: company.id,
+            supabaseId: existingUser.supabaseId,
+            nombre: existingUser.name,
+            email,
+            telefono: telefono || null,
+          },
+        })
+      )
 
       if (marca && modelo && anioRaw && color) {
         const anio = Number(anioRaw)
         if (!Number.isNaN(anio)) {
-          await prisma.vehiculo.create({
-            data: { clienteId: cliente.id, marca, modelo, anio, color, placa: placa || null },
-          })
+          await conEmpresa(company.id, (tx) =>
+            tx.vehiculo.create({
+              data: { clienteId: cliente.id, marca, modelo, anio, color, placa: placa || null },
+            })
+          )
         }
       }
 
@@ -204,15 +206,17 @@ export async function registrarCliente(
 
       // FASE 3/5.2: seguir la empresa al registrarse (salvo que lo desmarque).
       if (seguirEmpresa) {
-        await prisma.companyFollow
-          .upsert({
-            where: {
-              userId_companyId: { userId: existingUser.id, companyId: company.id },
-            },
-            update: {},
-            create: { userId: existingUser.id, companyId: company.id },
-          })
-          .catch((e) => console.error('[registro] auto-follow error:', e))
+        await conEmpresa(company.id, (tx) =>
+          tx.companyFollow
+            .upsert({
+              where: {
+                userId_companyId: { userId: existingUser.id, companyId: company.id },
+              },
+              update: {},
+              create: { userId: existingUser.id, companyId: company.id },
+            })
+            .catch((e) => console.error('[registro] auto-follow error:', e))
+        )
       }
 
       await admin.auth.admin.updateUserById(existingUser.supabaseId, {
@@ -262,7 +266,7 @@ export async function registrarCliente(
         qrBienvenida: await qrBienvenidaDe(cliente.id, campanaBienvenida),
       }
     } catch (e) {
-      console.error('[registro] afiliación a nueva empresa error:', e)
+      capturarErrorInesperado('registro:afiliacion', e)
       return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
     }
   }
@@ -292,7 +296,7 @@ export async function registrarCliente(
   await ensureEmailIdentity(supabaseId, email)
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await conEmpresa(company.id, async (tx) => {
       const now = new Date()
       const dbUser = await tx.user.create({
         data: {
@@ -412,11 +416,11 @@ export async function registrarCliente(
   } catch (e) {
     // Roll back the Supabase user if DB write failed
     await admin.auth.admin.deleteUser(supabaseId).catch(e => console.error('[registro-cleanup]', e))
-    console.error(e)
+    capturarErrorInesperado('registro:crear', e)
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }
   } catch (e) {
-    console.error('[registro] unexpected error:', e)
+    capturarErrorInesperado('registro:unexpected', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
   }
 }
@@ -437,31 +441,31 @@ export async function registrarCuentaGeneral(
       return { error: 'Demasiados registros desde esta conexión. Intenta de nuevo en unos minutos.' }
     }
 
-    const nombre = String(formData.get('nombre') ?? '').trim()
-    const email = String(formData.get('email') ?? '').trim().toLowerCase()
-    const password = String(formData.get('password') ?? '')
-    const telefono = String(formData.get('telefono') ?? '').trim()
-    const aceptaTerminos = formData.get('terminos') === 'on'
+    const parsed = registroSchema.safeParse({
+      companySlug: '',
+      nombre: String(formData.get('nombre') ?? ''),
+      email: String(formData.get('email') ?? ''),
+      password: String(formData.get('password') ?? ''),
+      telefono: String(formData.get('telefono') ?? ''),
+      terminos: String(formData.get('terminos') ?? ''),
+      refCode: '',
+      campanaId: '',
+      glCode: '',
+      canalDeclarado: String(formData.get('canalDeclarado') ?? ''),
+      marca: '',
+      modelo: '',
+      anioRaw: '',
+      color: '',
+      placa: '',
+    })
+    if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+    const { nombre, email, password, telefono, canalDeclarado } = parsed.data
+    // Consentimiento (Fase 1): marketing opcional (términos ya validado por zod).
     const marketingConsent = formData.getAll('marketingConsent').at(-1) === 'on'
-    // Atribución de marketing: canal declarado en "¿Cómo nos conociste?".
-    const canalDeclarado = String(formData.get('canalDeclarado') ?? '').trim() || null
 
-    if (!nombre || !email || !password) {
-      return { error: 'Completa todos los campos obligatorios.' }
-    }
-    if (password.length < 6) {
-      return { error: 'La contraseña debe tener al menos 6 caracteres.' }
-    }
-    // Teléfono obligatorio en el registro nuevo (la columna sigue opcional en
-    // la BD → los clientes ya registrados sin teléfono no se ven afectados).
-    if (!telefonoValido(telefono)) {
-      return { error: 'Ingresa un número de teléfono válido.' }
-    }
-    if (!aceptaTerminos) {
-      return { error: 'Debes aceptar los términos y la política de privacidad.' }
-    }
-
-    const existingUser = await prisma.user.findUnique({ where: { email } })
+    const existingUser = await sinEmpresa('registro: buscar usuario por email (cross-tenant)', (tx) =>
+      tx.user.findUnique({ where: { email } })
+    )
     if (existingUser) {
       return { error: 'Ya existe una cuenta con este correo. Inicia sesión.' }
     }
@@ -488,19 +492,21 @@ export async function registrarCuentaGeneral(
 
     try {
       const now = new Date()
-      const dbUser = await prisma.user.create({
-        data: {
-          supabaseId,
-          email,
-          name: nombre,
-          role: 'CLIENTE',
-          companyId: null,
-          termsAcceptedAt: now,
-          termsVersion: TERMS_VERSION,
-          marketingConsent,
-          marketingConsentAt: marketingConsent ? now : null,
-        },
-      })
+      const dbUser = await sinEmpresa('registro: crear usuario general sin empresa', (tx) =>
+        tx.user.create({
+          data: {
+            supabaseId,
+            email,
+            name: nombre,
+            role: 'CLIENTE',
+            companyId: null,
+            termsAcceptedAt: now,
+            termsVersion: TERMS_VERSION,
+            marketingConsent,
+            marketingConsentAt: marketingConsent ? now : null,
+          },
+        })
+      )
 
       await admin.auth.admin.updateUserById(supabaseId, {
         app_metadata: {
@@ -523,9 +529,11 @@ export async function registrarCuentaGeneral(
       })
       // Teléfono del formulario → ficha recién creada (la reparación no lo tiene).
       if (sesion.metadata.clienteId && telefono) {
-        await prisma.cliente
-          .update({ where: { id: sesion.metadata.clienteId }, data: { telefono } })
-          .catch(anotarFallo('registro:cliente.update'))
+        await sinEmpresa('registro: actualizar teléfono de la ficha recién creada', (tx) =>
+          tx.cliente
+            .update({ where: { id: sesion.metadata.clienteId }, data: { telefono } })
+            .catch(anotarFallo('registro:cliente.update'))
+        )
       }
       // Atribución de marketing: cookie del enlace ?src= o canal declarado.
       if (sesion.metadata.clienteId) {
@@ -541,11 +549,11 @@ export async function registrarCuentaGeneral(
       await admin.auth.admin.deleteUser(supabaseId).catch((err) =>
         console.error('[registro-general-cleanup]', err)
       )
-      console.error('[registro-general]', e)
+      capturarErrorInesperado('registro:general-crear', e)
       return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
     }
   } catch (e) {
-    console.error('[registro-general] unexpected error:', e)
+    capturarErrorInesperado('registro:general-unexpected', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
   }
 }

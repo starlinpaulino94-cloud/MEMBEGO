@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import {
   normalizarHorarios,
   slotsDelDia,
@@ -30,7 +30,7 @@ export interface AgendaConfigData {
 }
 
 export async function getAgendaConfig(companyId: string): Promise<AgendaConfigData | null> {
-  const cfg = await prisma.agendaConfig.findUnique({ where: { companyId } })
+  const cfg = await conEmpresa(companyId, (tx) => tx.agendaConfig.findUnique({ where: { companyId } }))
   if (!cfg) return null
   return {
     id: cfg.id,
@@ -79,14 +79,16 @@ export async function getDisponibilidadDia(
 
   const inicioDia = utcDesdeLocal(ymd, '00:00', timeZone)
   const finDia = utcDesdeLocal(sumarDias(ymd, 1), '00:00', timeZone)
-  const citas = await prisma.cita.findMany({
-    where: {
-      companyId,
-      estado: { in: [...ESTADOS_ACTIVOS] },
-      inicio: { gte: inicioDia, lt: finDia },
-    },
-    select: { inicio: true },
-  })
+  const citas = await conEmpresa(companyId, (tx) =>
+    tx.cita.findMany({
+      where: {
+        companyId,
+        estado: { in: [...ESTADOS_ACTIVOS] },
+        inicio: { gte: inicioDia, lt: finDia },
+      },
+      select: { inicio: true },
+    })
+  )
 
   const porSlot = new Map<number, number>()
   for (const c of citas) {
@@ -128,31 +130,40 @@ export function diasDeVentana(cfg: AgendaConfigData, timeZone: string): DiaAgend
 
 /** Citas del cliente (próximas primero, luego historial reciente). */
 export async function getCitasCliente(clienteId: string) {
-  return prisma.cita.findMany({
-    where: { clienteId },
-    include: {
-      vehiculo: { select: { marca: true, modelo: true } },
-      sucursal: { select: { nombre: true } },
-    },
-    orderBy: { inicio: 'desc' },
-    take: 30,
-  })
+  const cliente = await sinEmpresa(
+    'citas: empresa del cliente para sus citas (se usa su empresa después)',
+    (tx) => tx.cliente.findUnique({ where: { id: clienteId }, select: { companyId: true } })
+  )
+  if (!cliente) return []
+  return conEmpresa(cliente.companyId, (tx) =>
+    tx.cita.findMany({
+      where: { clienteId },
+      include: {
+        vehiculo: { select: { marca: true, modelo: true } },
+        sucursal: { select: { nombre: true } },
+      },
+      orderBy: { inicio: 'desc' },
+      take: 30,
+    })
+  )
 }
 
 /** Agenda del día para el panel (todas las citas, orden cronológico). */
 export async function getCitasDia(companyId: string, ymd: string, timeZone: string) {
   const inicioDia = utcDesdeLocal(ymd, '00:00', timeZone)
   const finDia = utcDesdeLocal(sumarDias(ymd, 1), '00:00', timeZone)
-  return prisma.cita.findMany({
-    where: { companyId, inicio: { gte: inicioDia, lt: finDia } },
-    include: {
-      cliente: { select: { id: true, nombre: true, telefono: true } },
-      vehiculo: { select: { marca: true, modelo: true, color: true } },
-      sucursal: { select: { nombre: true } },
-      atendidaPor: { select: { name: true } },
-    },
-    orderBy: { inicio: 'asc' },
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.cita.findMany({
+      where: { companyId, inicio: { gte: inicioDia, lt: finDia } },
+      include: {
+        cliente: { select: { id: true, nombre: true, telefono: true } },
+        vehiculo: { select: { marca: true, modelo: true, color: true } },
+        sucursal: { select: { nombre: true } },
+        atendidaPor: { select: { name: true } },
+      },
+      orderBy: { inicio: 'asc' },
+    })
+  )
 }
 
 // ─── Agenda completa (panel de la empresa) ──────────────────────────────────
@@ -275,22 +286,24 @@ export async function getAgenda(
   // Las pasadas se leen de la más reciente hacia atrás; el resto, cronológico.
   const orden = filtros.rango === 'pasadas' ? 'desc' : 'asc'
 
-  const [citas, total, agrupado] = await Promise.all([
-    prisma.cita.findMany({
-      where,
-      include: {
-        cliente: { select: { id: true, nombre: true, telefono: true } },
-        vehiculo: { select: { marca: true, modelo: true, color: true } },
-        sucursal: { select: { nombre: true } },
-        atendidaPor: { select: { name: true } },
-      },
-      orderBy: { inicio: orden },
-      skip: (filtros.pagina - 1) * POR_PAGINA,
-      take: POR_PAGINA,
-    }),
-    prisma.cita.count({ where }),
-    prisma.cita.groupBy({ by: ['estado'], where: baseWhere, _count: { _all: true } }),
-  ])
+  const [citas, total, agrupado] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.cita.findMany({
+        where,
+        include: {
+          cliente: { select: { id: true, nombre: true, telefono: true } },
+          vehiculo: { select: { marca: true, modelo: true, color: true } },
+          sucursal: { select: { nombre: true } },
+          atendidaPor: { select: { name: true } },
+        },
+        orderBy: { inicio: orden },
+        skip: (filtros.pagina - 1) * POR_PAGINA,
+        take: POR_PAGINA,
+      }),
+      tx.cita.count({ where }),
+      tx.cita.groupBy({ by: ['estado'], where: baseWhere, _count: { _all: true } }),
+    ])
+  )
 
   const porEstado = Object.fromEntries(ESTADOS_CITA.map((e) => [e, 0])) as Record<
     EstadoCita,

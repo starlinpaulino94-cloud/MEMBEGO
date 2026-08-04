@@ -47,7 +47,7 @@
  */
 
 import { randomBytes } from 'crypto'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { FULL_ADMIN_ROLES } from '@/types'
@@ -103,17 +103,21 @@ async function puedeSubir(
 ): Promise<boolean> {
   try {
     if (tipo === 'membresia') {
-      const m = await prisma.membership.findUnique({
-        where: { id },
-        select: { cliente: { select: { supabaseId: true } } },
-      })
+      const m = await sinEmpresa('comprobantes: membership por id para comprobar permiso (cross-tenant)', (tx) =>
+        tx.membership.findUnique({
+          where: { id },
+          select: { cliente: { select: { supabaseId: true } } },
+        })
+      )
       return m?.cliente?.supabaseId === supabaseId
     }
     if (tipo === 'compra') {
-      const c = await prisma.productoCompra.findUnique({
-        where: { id },
-        select: { cliente: { select: { supabaseId: true } } },
-      })
+      const c = await sinEmpresa('comprobantes: compra por id para comprobar permiso (cross-tenant)', (tx) =>
+        tx.productoCompra.findUnique({
+          where: { id },
+          select: { cliente: { select: { supabaseId: true } } },
+        })
+      )
       return c?.cliente?.supabaseId === supabaseId
     }
     // Soporte: el ticket todavía no existe cuando se adjunta el archivo (el
@@ -244,10 +248,12 @@ export async function urlAdjuntoTicket(
   if (!user) return null
 
   try {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-      select: { companyId: true, cliente: { select: { supabaseId: true } } },
-    })
+    const ticket = await sinEmpresa('comprobantes: ticket por id para comprobar permiso (cross-tenant)', (tx) =>
+      tx.supportTicket.findUnique({
+        where: { id: ticketId },
+        select: { companyId: true, cliente: { select: { supabaseId: true } } },
+      })
+    )
     if (!ticket) return null
 
     const esDueno = ticket.cliente?.supabaseId === user.supabaseId
@@ -279,12 +285,13 @@ async function esDeSuEmpresa(
   try {
     if (tipo === 'membresia') {
       return (
-        (await prisma.membership.count({ where: { id, companyId } })) > 0
+        (await conEmpresa(companyId, (tx) => tx.membership.count({ where: { id, companyId } }))) > 0
       )
     }
     if (tipo === 'compra') {
       return (
-        (await prisma.productoCompra.count({ where: { id, companyId } })) > 0
+        (await conEmpresa(companyId, (tx) => tx.productoCompra.count({ where: { id, companyId } }))) >
+        0
       )
     }
     return false

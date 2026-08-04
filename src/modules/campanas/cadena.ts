@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { registrarTransicionCompra } from '@/modules/promociones/compra'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -49,24 +49,26 @@ async function fichaEnEmpresa(
   companyId: string,
   datos: { nombre: string; email: string; telefono: string | null }
 ): Promise<string> {
-  const existente = await prisma.cliente.findUnique({
-    where: { supabaseId_companyId: { supabaseId, companyId } },
-    select: { id: true },
-  })
-  if (existente) return existente.id
+  return conEmpresa(companyId, async (tx) => {
+    const existente = await tx.cliente.findUnique({
+      where: { supabaseId_companyId: { supabaseId, companyId } },
+      select: { id: true },
+    })
+    if (existente) return existente.id
 
-  const creado = await prisma.cliente.create({
-    data: {
-      supabaseId,
-      companyId,
-      nombre: datos.nombre,
-      email: datos.email,
-      telefono: datos.telefono,
-      canalOrigen: 'CAMPANA_CONJUNTA',
-    },
-    select: { id: true },
+    const creado = await tx.cliente.create({
+      data: {
+        supabaseId,
+        companyId,
+        nombre: datos.nombre,
+        email: datos.email,
+        telefono: datos.telefono,
+        canalOrigen: 'CAMPANA_CONJUNTA',
+      },
+      select: { id: true },
+    })
+    return creado.id
   })
-  return creado.id
 }
 
 /**
@@ -81,13 +83,15 @@ export async function entregarPaso(
   | { compraId: string; titulo: string; companyName: string; yaExistia: boolean }
   | { error: string }
 > {
-  const paso = await prisma.campanaPaso.findUnique({
-    where: { id: pasoId },
-    include: {
-      company: { select: { name: true } },
-      campana: { select: { estado: true } },
-    },
-  })
+  const paso = await sinEmpresa('campanas: paso de campaña por id (cross-tenant)', (tx) =>
+    tx.campanaPaso.findUnique({
+      where: { id: pasoId },
+      include: {
+        company: { select: { name: true } },
+        campana: { select: { estado: true } },
+      },
+    })
+  )
   if (!paso) return { error: 'Paso de campaña no encontrado.' }
   if (!paso.promocionId) {
     return { error: 'Este paso aún no se ha aplicado en su empresa.' }
@@ -96,10 +100,12 @@ export async function entregarPaso(
     return { error: 'La campaña está archivada.' }
   }
 
-  const promo = await prisma.promocion.findUnique({
-    where: { id: paso.promocionId },
-    select: { id: true, companyId: true, precio: true, usosPorCompra: true, activo: true },
-  })
+  const promo = await conEmpresa(paso.companyId, (tx) =>
+    tx.promocion.findUnique({
+      where: { id: paso.promocionId },
+      select: { id: true, companyId: true, precio: true, usosPorCompra: true, activo: true },
+    })
+  )
   if (!promo || !promo.activo) {
     return { error: 'El beneficio de este paso ya no está disponible.' }
   }
@@ -107,14 +113,16 @@ export async function entregarPaso(
   const clienteId = await fichaEnEmpresa(supabaseId, paso.companyId, datos)
 
   // Un paso no se entrega dos veces al mismo cliente.
-  const yaLoTiene = await prisma.productoCompra.findFirst({
-    where: {
-      campanaPasoId: paso.id,
-      clienteId,
-      estado: { notIn: ['CANCELADA', 'RECHAZADA'] },
-    },
-    select: { id: true },
-  })
+  const yaLoTiene = await conEmpresa(paso.companyId, (tx) =>
+    tx.productoCompra.findFirst({
+      where: {
+        campanaPasoId: paso.id,
+        clienteId,
+        estado: { notIn: ['CANCELADA', 'RECHAZADA'] },
+      },
+      select: { id: true },
+    })
+  )
   if (yaLoTiene) {
     // Ya se lo habíamos entregado (p. ej. un segundo uso del mismo beneficio):
     // no se duplica y se avisa para no volver a anunciar el desbloqueo.
@@ -126,7 +134,7 @@ export async function entregarPaso(
     }
   }
 
-  const compra = await prisma.$transaction(async (tx) => {
+  const compra = await conEmpresa(paso.companyId, async (tx) => {
     const creada = await tx.productoCompra.create({
       data: {
         tipo: 'PROMOCION',
@@ -173,15 +181,17 @@ export async function inscribirEnCadena(
   datos: { nombre: string; email: string; telefono: string | null }
 ): Promise<ResultadoAvance> {
   try {
-    const campana = await prisma.campanaGlobal.findUnique({
-      where: { id: campanaId },
-      select: {
-        id: true,
-        modo: true,
-        estado: true,
-        pasos: { orderBy: { orden: 'asc' }, select: { id: true, orden: true, companyId: true } },
-      },
-    })
+    const campana = await sinEmpresa('campanas: campaña global por id (cross-tenant)', (tx) =>
+      tx.campanaGlobal.findUnique({
+        where: { id: campanaId },
+        select: {
+          id: true,
+          modo: true,
+          estado: true,
+          pasos: { orderBy: { orden: 'asc' }, select: { id: true, orden: true, companyId: true } },
+        },
+      })
+    )
     if (!campana) return { error: 'Campaña no encontrada.' }
     if (campana.modo !== 'CADENA') return { error: 'Esta campaña no es en cadena.' }
     if (campana.estado !== 'APLICADA') {
@@ -193,12 +203,14 @@ export async function inscribirEnCadena(
     // La inscripción vive contra la ficha del cliente en la empresa del paso 1.
     const clienteId = await fichaEnEmpresa(supabaseId, primero.companyId, datos)
 
-    const inscripcion = await prisma.campanaInscripcion.upsert({
-      where: { campanaId_clienteId: { campanaId, clienteId } },
-      create: { campanaId, clienteId, pasoActual: primero.orden },
-      update: {},
-      select: { id: true, pasoActual: true, estado: true },
-    })
+    const inscripcion = await conEmpresa(primero.companyId, (tx) =>
+      tx.campanaInscripcion.upsert({
+        where: { campanaId_clienteId: { campanaId, clienteId } },
+        create: { campanaId, clienteId, pasoActual: primero.orden },
+        update: {},
+        select: { id: true, pasoActual: true, estado: true },
+      })
+    )
     if (inscripcion.estado === 'COMPLETADA') return { completada: true }
 
     const entrega = await entregarPaso(primero.id, supabaseId, datos)
@@ -228,26 +240,32 @@ export async function inscribirEnCadena(
  */
 export async function avanzarCadenaTrasCanje(compraId: string): Promise<ResultadoAvance> {
   try {
-    const compra = await prisma.productoCompra.findUnique({
-      where: { id: compraId },
-      select: {
-        campanaPasoId: true,
-        cliente: { select: { supabaseId: true, nombre: true, email: true, telefono: true } },
-      },
-    })
+    const compra = await sinEmpresa('campanas: compra por id para avanzar cadena (cross-tenant)', (tx) =>
+      tx.productoCompra.findUnique({
+        where: { id: compraId },
+        select: {
+          campanaPasoId: true,
+          cliente: { select: { supabaseId: true, nombre: true, email: true, telefono: true } },
+        },
+      })
+    )
     if (!compra?.campanaPasoId || !compra.cliente) return { sinCambios: true }
 
-    const paso = await prisma.campanaPaso.findUnique({
-      where: { id: compra.campanaPasoId },
-      select: { orden: true, campanaId: true, companyId: true },
-    })
+    const paso = await sinEmpresa('campanas: paso por id (cross-tenant)', (tx) =>
+      tx.campanaPaso.findUnique({
+        where: { id: compra.campanaPasoId },
+        select: { orden: true, campanaId: true, companyId: true },
+      })
+    )
     if (!paso) return { sinCambios: true }
 
-    const siguiente = await prisma.campanaPaso.findFirst({
-      where: { campanaId: paso.campanaId, orden: { gt: paso.orden } },
-      orderBy: { orden: 'asc' },
-      select: { id: true, orden: true, companyId: true },
-    })
+    const siguiente = await sinEmpresa('campanas: siguiente paso de la cadena (cross-tenant)', (tx) =>
+      tx.campanaPaso.findFirst({
+        where: { campanaId: paso.campanaId, orden: { gt: paso.orden } },
+        orderBy: { orden: 'asc' },
+        select: { id: true, orden: true, companyId: true },
+      })
+    )
 
     const datos = {
       nombre: compra.cliente.nombre,
@@ -257,22 +275,24 @@ export async function avanzarCadenaTrasCanje(compraId: string): Promise<Resultad
 
     // La inscripción se identifica por la ficha del cliente en la empresa del
     // paso que acaba de canjear.
-    const clienteAqui = await prisma.cliente.findUnique({
-      where: {
-        supabaseId_companyId: { supabaseId: compra.cliente.supabaseId, companyId: paso.companyId },
-      },
-      select: { id: true },
-    })
+    const clienteAqui = await conEmpresa(paso.companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: {
+          supabaseId_companyId: { supabaseId: compra.cliente.supabaseId, companyId: paso.companyId },
+        },
+        select: { id: true },
+      })
+    )
 
     if (!siguiente) {
       // Era el último eslabón: la cadena queda completada.
       if (clienteAqui) {
-        await prisma.campanaInscripcion
-          .updateMany({
+        await conEmpresa(paso.companyId, (tx) =>
+          tx.campanaInscripcion.updateMany({
             where: { campanaId: paso.campanaId, clienteId: clienteAqui.id },
             data: { estado: 'COMPLETADA', completadaAt: new Date() },
           })
-          .catch(anotarFallo('campanas:campanaInscripcion.updateMany'))
+        ).catch(anotarFallo('campanas:campanaInscripcion.updateMany'))
       }
       return { completada: true }
     }
@@ -287,12 +307,12 @@ export async function avanzarCadenaTrasCanje(compraId: string): Promise<Resultad
     if (entrega.yaExistia) return { sinCambios: true }
 
     if (clienteAqui) {
-      await prisma.campanaInscripcion
-        .updateMany({
+      await conEmpresa(paso.companyId, (tx) =>
+        tx.campanaInscripcion.updateMany({
           where: { campanaId: paso.campanaId, clienteId: clienteAqui.id },
           data: { pasoActual: siguiente.orden },
         })
-        .catch(anotarFallo('campanas:campanaInscripcion.updateMany'))
+      ).catch(anotarFallo('campanas:campanaInscripcion.updateMany'))
     }
 
     return {
@@ -326,24 +346,30 @@ export async function vincularCompraSiEsPaso(
   clienteId: string
 ): Promise<void> {
   try {
-    const paso = await prisma.campanaPaso.findFirst({
-      where: { promocionId },
-      select: { id: true, orden: true, campanaId: true, campana: { select: { modo: true, estado: true } } },
-    })
+    const paso = await sinEmpresa('campanas: paso por promoción (cross-tenant)', (tx) =>
+      tx.campanaPaso.findFirst({
+        where: { promocionId },
+        select: { id: true, orden: true, campanaId: true, campana: { select: { modo: true, estado: true } } },
+      })
+    )
     if (!paso || paso.campana.modo !== 'CADENA' || paso.campana.estado !== 'APLICADA') return
 
-    await prisma.productoCompra.update({
-      where: { id: compraId },
-      data: { campanaPasoId: paso.id },
-    })
+    await conEmpresa(paso.companyId, (tx) =>
+      tx.productoCompra.update({
+        where: { id: compraId },
+        data: { campanaPasoId: paso.id },
+      })
+    )
 
     // Solo el primer eslabón inscribe; los siguientes ya llegan por la cadena.
     if (paso.orden === 1) {
-      await prisma.campanaInscripcion.upsert({
-        where: { campanaId_clienteId: { campanaId: paso.campanaId, clienteId } },
-        create: { campanaId: paso.campanaId, clienteId, pasoActual: 1 },
-        update: {},
-      })
+      await conEmpresa(paso.companyId, (tx) =>
+        tx.campanaInscripcion.upsert({
+          where: { campanaId_clienteId: { campanaId: paso.campanaId, clienteId } },
+          create: { campanaId: paso.campanaId, clienteId, pasoActual: 1 },
+          update: {},
+        })
+      )
     }
   } catch (e) {
     console.error('[campañas cadena] vincular compra:', e)

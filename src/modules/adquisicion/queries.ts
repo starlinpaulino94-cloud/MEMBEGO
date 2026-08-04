@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { Prisma } from '@prisma/client'
 import { canalLabel } from './shared'
 
@@ -54,6 +54,7 @@ interface ClienteRow {
  * sigue funcionando.
  */
 async function clientesDelPeriodo(
+  tx: Prisma.TransactionClient,
   companyId: string,
   filtro: AdquisicionFiltro
 ): Promise<ClienteRow[]> {
@@ -73,7 +74,7 @@ async function clientesDelPeriodo(
     referidoComo: { select: { id: true }, take: 1 },
   } as const
   try {
-    const rows = await prisma.cliente.findMany({
+    const rows = await tx.cliente.findMany({
       where,
       select: { ...base, canalOrigen: true },
       orderBy: { createdAt: 'desc' },
@@ -89,7 +90,7 @@ async function clientesDelPeriodo(
     }))
   } catch (e) {
     console.error('[adquisicion] fallback sin canalOrigen (¿migración 20260755 pendiente?)', e)
-    const rows = await prisma.cliente.findMany({
+    const rows = await tx.cliente.findMany({
       where,
       select: base,
       orderBy: { createdAt: 'desc' },
@@ -117,7 +118,7 @@ export async function getAdquisicion(
   companyId: string,
   filtro: AdquisicionFiltro = {}
 ): Promise<AdquisicionData> {
-  const rows = await clientesDelPeriodo(companyId, filtro)
+  const rows = await conEmpresa(companyId, (tx) => clientesDelPeriodo(tx, companyId, filtro))
   const total = rows.length
 
   const conteo = new Map<string, number>()

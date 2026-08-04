@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { sendEmail } from '@/lib/email'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
 import { ACTION_TYPES } from '@/lib/rule-engine'
@@ -71,15 +71,19 @@ export class LiveActionSink implements ActionSink {
   /** subjectId es el id de la ficha Cliente → usuario de la campana in-app. */
   private async usuarioDeCliente(subjectId: string | null) {
     if (!subjectId) return null
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: subjectId },
-      select: { supabaseId: true, email: true, nombre: true },
-    })
+    const cliente = await sinEmpresa('estrategias: ficha del cliente por id (cross-tenant)', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: subjectId },
+        select: { supabaseId: true, email: true, nombre: true },
+      })
+    )
     if (!cliente) return null
-    const user = await prisma.user.findUnique({
-      where: { supabaseId: cliente.supabaseId },
-      select: { id: true },
-    })
+    const user = await sinEmpresa('estrategias: usuario por supabaseId (cross-tenant)', (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     return { userId: user?.id ?? null, email: cliente.email, nombre: cliente.nombre }
   }
 
@@ -149,25 +153,29 @@ export class LiveActionSink implements ActionSink {
     if (!code || !input.subjectId) {
       return { ok: true, detail: { simulated: true, reason: 'sin código o sin sujeto' } }
     }
-    const benefit = await prisma.benefit.findFirst({
-      where: { companyId: input.companyId, code },
-      select: { id: true, nombre: true },
-    })
+    const benefit = await conEmpresa(input.companyId, (tx) =>
+      tx.benefit.findFirst({
+        where: { companyId: input.companyId, code },
+        select: { id: true, nombre: true },
+      })
+    )
     if (!benefit) {
       return { ok: true, detail: { simulated: true, reason: `beneficio ${code} no existe en la empresa` } }
     }
     const dias = Number(input.params.expiresInDays ?? 0)
-    const grant = await prisma.benefitGrant.create({
-      data: {
-        companyId: input.companyId,
-        benefitId: benefit.id,
-        subscriberId: input.subjectId,
-        subscriberKind: 'CLIENT',
-        sourceModule: 'automation',
-        expiresAt: dias > 0 ? new Date(Date.now() + dias * 86_400_000) : null,
-      },
-      select: { id: true },
-    })
+    const grant = await conEmpresa(input.companyId, (tx) =>
+      tx.benefitGrant.create({
+        data: {
+          companyId: input.companyId,
+          benefitId: benefit.id,
+          subscriberId: input.subjectId,
+          subscriberKind: 'CLIENT',
+          sourceModule: 'automation',
+          expiresAt: dias > 0 ? new Date(Date.now() + dias * 86_400_000) : null,
+        },
+        select: { id: true },
+      })
+    )
     return { ok: true, detail: { grantId: grant.id, benefit: benefit.nombre } }
   }
 
@@ -178,16 +186,18 @@ export class LiveActionSink implements ActionSink {
     params: Record<string, unknown>
   }) {
     const tipo = String(input.params.event ?? input.type)
-    await prisma.automationEvent.create({
-      data: {
-        companyId: input.companyId,
-        type: tipo,
-        subjectId: input.subjectId,
-        payload: input.params as object,
-        source: 'action_engine',
-        processed: true,
-      },
-    })
+    await conEmpresa(input.companyId, (tx) =>
+      tx.automationEvent.create({
+        data: {
+          companyId: input.companyId,
+          type: tipo,
+          subjectId: input.subjectId,
+          payload: input.params as object,
+          source: 'action_engine',
+          processed: true,
+        },
+      })
+    )
     return { ok: true, detail: { event: tipo } }
   }
 

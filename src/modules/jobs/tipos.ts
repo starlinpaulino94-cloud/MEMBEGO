@@ -37,7 +37,63 @@ export interface CargaAutomatizaciones {
   companyId: string
 }
 
-export type CargaTrabajo = CargaNotificar | CargaAutomatizaciones
+/**
+ * Correo transaccional (Resend) fuera del request. Fase 4 · Componente 5.
+ * El payload lleva el correo YA armado: el emisor conoce el HTML (recibos,
+ * invitaciones) y el worker solo lo entrega vía `sendEmail`, que conserva el
+ * bloqueo de empresas demo y la degradación sin RESEND_API_KEY.
+ */
+export interface CargaEmail {
+  tipo: 'email'
+  to: string
+  subject: string
+  html?: string
+  text?: string
+  companyId?: string | null
+}
+
+/**
+ * Evento del bus de estrategias pendiente de despachar. Fase 4 · Componente 5.
+ * Se persiste el evento (processed=false) y se encola su id: el worker hace el
+ * flip atómico y despacha. El índice [companyId, type, processed] de
+ * automation_events es el que permite barrer los estancados desde el cron.
+ */
+export interface CargaEvento {
+  tipo: 'evento-estrategia'
+  eventoId: string
+  /** Empresa del evento (para la observabilidad del trabajo). */
+  companyId: string
+}
+
+/**
+ * Cálculo y asignación de recompensas de referido. Fase 4 · Componente 5.
+ * `procesarReferidoCompletado` deja la transición COMPLETADO (fuente de
+ * verdad) en línea y mueve aquí el loop pesado de reglas. El referidoId hace
+ * que cada conversión tenga su propio trabajo (dos conversiones del mismo
+ * referente no se colapsan en la deduplicación).
+ */
+export interface CargaRecompensas {
+  tipo: 'recompensas-referido'
+  companyId: string
+  referenteClienteId: string
+  referidoId: string
+}
+
+export type CargaTrabajo =
+  | CargaNotificar
+  | CargaAutomatizaciones
+  | CargaEmail
+  | CargaEvento
+  | CargaRecompensas
+
+/** Tipos aceptados por el endpoint `/api/jobs` (cada caso del ejecutor). */
+export const TIPOS_TRABAJO = [
+  'notificar',
+  'automatizaciones',
+  'email',
+  'evento-estrategia',
+  'recompensas-referido',
+] as const
 
 /** Ruta del endpoint que ejecuta los trabajos. */
 export const RUTA_TRABAJOS = '/api/jobs'
