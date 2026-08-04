@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { crearNotificacion } from '@/modules/notificaciones/service'
 
 /**
@@ -21,16 +21,22 @@ export async function notificarClienteRegalo(
   href: string
 ) {
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { supabaseId: true },
-    })
-    if (!cliente?.supabaseId) return
-    const u = await prisma.user.findUnique({
-      where: { supabaseId: cliente.supabaseId },
-      select: { id: true },
-    })
-    if (u) await crearNotificacion({ userId: u.id, tipo: 'SISTEMA', titulo, mensaje, href })
+    const userId = await sinEmpresa(
+      'regalos: buscar user del destinatario por id (cross-tenant)',
+      async (tx) => {
+        const cliente = await tx.cliente.findUnique({
+          where: { id: clienteId },
+          select: { supabaseId: true },
+        })
+        if (!cliente?.supabaseId) return null
+        const u = await tx.user.findUnique({
+          where: { supabaseId: cliente.supabaseId },
+          select: { id: true },
+        })
+        return u?.id ?? null
+      }
+    )
+    if (userId) await crearNotificacion({ userId, tipo: 'SISTEMA', titulo, mensaje, href })
   } catch (e) {
     console.error('[regalos] notificar', e)
   }
@@ -50,17 +56,19 @@ export async function entregarCompraABeneficiario(compra: {
     if (!compra.beneficiarioClienteId || compra.beneficiarioClienteId === compra.clienteId) {
       return false
     }
-    const beneficiario = await prisma.cliente.findFirst({
-      where: { id: compra.beneficiarioClienteId, companyId: compra.companyId },
-      select: { id: true },
+    return await conEmpresa(compra.companyId, async (tx) => {
+      const beneficiario = await tx.cliente.findFirst({
+        where: { id: compra.beneficiarioClienteId, companyId: compra.companyId },
+        select: { id: true },
+      })
+      // Beneficiario borrado: la compra queda con el comprador (mejor que perderla).
+      if (!beneficiario) return false
+      await tx.productoCompra.update({
+        where: { id: compra.id },
+        data: { clienteId: beneficiario.id },
+      })
+      return true
     })
-    // Beneficiario borrado: la compra queda con el comprador (mejor que perderla).
-    if (!beneficiario) return false
-    await prisma.productoCompra.update({
-      where: { id: compra.id },
-      data: { clienteId: beneficiario.id },
-    })
-    return true
   } catch (e) {
     console.error('[regalos] entregarCompraABeneficiario', e)
     return false
@@ -76,38 +84,48 @@ export async function resolverRegaloPagado(vinculo: {
   membershipId?: string
 }) {
   try {
-    const regalo = await prisma.regalo.findFirst({
-      where: {
-        estado: 'PENDIENTE',
-        ...(vinculo.compraId
-          ? { tipo: 'REGALO_COMPRA', compraDestinoId: vinculo.compraId }
-          : { tipo: 'REGALO_MEMBRESIA', membershipDestinoId: vinculo.membershipId }),
-      },
-      include: {
-        remitente: { select: { id: true, nombre: true } },
-        destinatario: { select: { id: true, nombre: true } },
-      },
-    })
+    const regalo = await sinEmpresa(
+      'regalos: buscar regalo pagado por id del vínculo (empresa no conocida)',
+      (tx) =>
+        tx.regalo.findFirst({
+          where: {
+            estado: 'PENDIENTE',
+            ...(vinculo.compraId
+              ? { tipo: 'REGALO_COMPRA', compraDestinoId: vinculo.compraId }
+              : { tipo: 'REGALO_MEMBRESIA', membershipDestinoId: vinculo.membershipId }),
+          },
+          include: {
+            remitente: { select: { id: true, nombre: true } },
+            destinatario: { select: { id: true, nombre: true } },
+          },
+        })
+    )
     if (!regalo || !regalo.destinatarioId) return
 
-    const upd = await prisma.regalo.updateMany({
-      where: { id: regalo.id, estado: 'PENDIENTE' },
-      data: { estado: 'ACEPTADO', resueltoAt: new Date() },
-    })
+    const upd = await conEmpresa(regalo.companyId, (tx) =>
+      tx.regalo.updateMany({
+        where: { id: regalo.id, estado: 'PENDIENTE' },
+        data: { estado: 'ACEPTADO', resueltoAt: new Date() },
+      })
+    )
     if (upd.count === 0) return
 
     let etiqueta = 'tu regalo'
     if (regalo.promocionId) {
-      const p = await prisma.promocion.findUnique({
-        where: { id: regalo.promocionId },
-        select: { titulo: true },
-      })
+      const p = await conEmpresa(regalo.companyId, (tx) =>
+        tx.promocion.findUnique({
+          where: { id: regalo.promocionId },
+          select: { titulo: true },
+        })
+      )
       etiqueta = p?.titulo ?? etiqueta
     } else if (regalo.planId) {
-      const p = await prisma.plan.findUnique({
-        where: { id: regalo.planId },
-        select: { nombre: true },
-      })
+      const p = await conEmpresa(regalo.companyId, (tx) =>
+        tx.plan.findUnique({
+          where: { id: regalo.planId },
+          select: { nombre: true },
+        })
+      )
       etiqueta = p ? `tu membresía ${p.nombre}` : 'tu membresía'
     }
 
@@ -152,25 +170,29 @@ export async function vincularRegalosPorContacto(params: {
     if (digits.length >= 7) contactos.push(digits)
     if (contactos.length === 0) return 0
 
-    const pendientes = await prisma.regalo.findMany({
-      where: {
-        companyId: params.companyId,
-        estado: 'PENDIENTE',
-        destinatarioId: null,
-        destinatarioContacto: { in: contactos },
-        expiraAt: { gt: new Date() },
-      },
-      select: { id: true, remitenteId: true, remitente: { select: { nombre: true } } },
-    })
+    const pendientes = await conEmpresa(params.companyId, (tx) =>
+      tx.regalo.findMany({
+        where: {
+          companyId: params.companyId,
+          estado: 'PENDIENTE',
+          destinatarioId: null,
+          destinatarioContacto: { in: contactos },
+          expiraAt: { gt: new Date() },
+        },
+        select: { id: true, remitenteId: true, remitente: { select: { nombre: true } } },
+      })
+    )
 
     let vinculados = 0
     for (const r of pendientes) {
       // Guard: solo si sigue pendiente y sin reclamar (otro registro simultáneo
       // con el mismo contacto no lo duplica).
-      const upd = await prisma.regalo.updateMany({
-        where: { id: r.id, estado: 'PENDIENTE', destinatarioId: null },
-        data: { destinatarioId: params.clienteId },
-      })
+      const upd = await conEmpresa(params.companyId, (tx) =>
+        tx.regalo.updateMany({
+          where: { id: r.id, estado: 'PENDIENTE', destinatarioId: null },
+          data: { destinatarioId: params.clienteId },
+        })
+      )
       if (upd.count === 0) continue
       vinculados++
       await notificarClienteRegalo(
@@ -192,15 +214,17 @@ export async function vincularRegalosPorContacto(params: {
 
     // Gift cards enviadas a este contacto: se asignan igual (no expiran; las
     // PENDIENTE_PAGO quedan listas para cuando el comprador pague).
-    const giftCards = await prisma.giftCard.updateMany({
-      where: {
-        companyId: params.companyId,
-        destinatarioClienteId: null,
-        destinatarioContacto: { in: contactos },
-        estado: { in: ['PENDIENTE_PAGO', 'ACTIVA'] },
-      },
-      data: { destinatarioClienteId: params.clienteId },
-    })
+    const giftCards = await conEmpresa(params.companyId, (tx) =>
+      tx.giftCard.updateMany({
+        where: {
+          companyId: params.companyId,
+          destinatarioClienteId: null,
+          destinatarioContacto: { in: contactos },
+          estado: { in: ['PENDIENTE_PAGO', 'ACTIVA'] },
+        },
+        data: { destinatarioClienteId: params.clienteId },
+      })
+    )
     if (giftCards.count > 0) {
       await notificarClienteRegalo(
         params.clienteId,

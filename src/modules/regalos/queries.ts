@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import type { Tx } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
@@ -71,7 +72,8 @@ export function esperaDe(tipo: string, estado: string): EsperaRegalo | null {
  * una consulta por regalo.
  */
 async function resolverPagos(
-  regalos: { id: string; tipo: string; estado: string; compraDestinoId: string | null; membershipDestinoId: string | null }[]
+  regalos: { id: string; tipo: string; estado: string; compraDestinoId: string | null; membershipDestinoId: string | null }[],
+  tx: Tx
 ): Promise<Map<string, PagoDelRegalo>> {
   const mapa = new Map<string, PagoDelRegalo>()
   const conPago = regalos.filter((r) => esperaDe(r.tipo, r.estado) === 'PAGO')
@@ -82,7 +84,7 @@ async function resolverPagos(
 
   const [compras, membresias] = await Promise.all([
     compraIds.length
-      ? prisma.productoCompra
+      ? tx.productoCompra
           .findMany({
             where: { id: { in: compraIds } },
             select: { id: true, estado: true, referencia: true },
@@ -90,7 +92,7 @@ async function resolverPagos(
           .catch(() => [])
       : Promise.resolve([]),
     memIds.length
-      ? prisma.membership
+      ? tx.membership
           .findMany({
             where: { id: { in: memIds } },
             select: { id: true, estado: true, referencia: true },
@@ -135,27 +137,37 @@ function enmascarar(nombre: string): string {
 }
 
 /** Devuelve usos reservados al remitente de un regalo que no prosperó. */
-export async function devolverUsos(regalo: {
-  compraOrigenId: string | null
-  membershipOrigenId: string | null
-  usos: number
-}) {
-  if (regalo.compraOrigenId) {
-    await prisma.productoCompra.update({
-      where: { id: regalo.compraOrigenId },
-      data: { usosRestantes: { increment: regalo.usos }, consumidaAt: null, estado: 'ACTIVA' },
-    })
-  } else if (regalo.membershipOrigenId) {
-    await prisma.membership.update({
-      where: { id: regalo.membershipOrigenId },
-      data: { lavadosRestantes: { increment: regalo.usos } },
-    })
+export async function devolverUsos(
+  regalo: {
+    compraOrigenId: string | null
+    membershipOrigenId: string | null
+    usos: number
+  },
+  tx?: Tx
+) {
+  const devolver = async (db: Tx) => {
+    if (regalo.compraOrigenId) {
+      await db.productoCompra.update({
+        where: { id: regalo.compraOrigenId },
+        data: { usosRestantes: { increment: regalo.usos }, consumidaAt: null, estado: 'ACTIVA' },
+      })
+    } else if (regalo.membershipOrigenId) {
+      await db.membership.update({
+        where: { id: regalo.membershipOrigenId },
+        data: { lavadosRestantes: { increment: regalo.usos } },
+      })
+    }
   }
+  if (tx) return devolver(tx)
+  return sinEmpresa(
+    'regalos: devolver usos reservados (origen por id, empresa no conocida)',
+    devolver
+  )
 }
 
 /** Marca EXPIRADO todo pendiente vencido del cliente (como remitente o receptor) y devuelve usos. */
-export async function expirarPendientesVencidos(clienteId: string) {
-  const vencidos = await prisma.regalo.findMany({
+export async function expirarPendientesVencidos(clienteId: string, tx: Tx) {
+  const vencidos = await tx.regalo.findMany({
     where: {
       estado: 'PENDIENTE',
       expiraAt: { lt: new Date() },
@@ -165,38 +177,64 @@ export async function expirarPendientesVencidos(clienteId: string) {
   })
   for (const r of vencidos) {
     // Guard atómico: solo el primero en marcarlo devuelve los usos.
-    const upd = await prisma.regalo.updateMany({
+    const upd = await tx.regalo.updateMany({
       where: { id: r.id, estado: 'PENDIENTE' },
       data: { estado: 'EXPIRADO', resueltoAt: new Date() },
     })
-    if (upd.count > 0) await devolverUsos(r).catch((e) => console.error('[regalos] refund exp', e))
+    if (upd.count > 0) await devolverUsos(r, tx).catch((e) => console.error('[regalos] refund exp', e))
   }
 }
 
-/** Nombre legible del contenido de un regalo (promo, plan o lavados del plan). */
-async function etiquetaBeneficio(r: {
+interface RegaloParaEtiqueta {
+  id: string
   compraOrigenId: string | null
   membershipOrigenId: string | null
   promocionId: string | null
   planId?: string | null
   usos: number
-}): Promise<string> {
-  if (r.promocionId) {
-    const p = await prisma.promocion.findUnique({
-      where: { id: r.promocionId },
-      select: { titulo: true },
-    })
-    if (p) return p.titulo
+}
+
+/**
+ * Nombres legibles del contenido de VARIOS regalos, en dos consultas para toda
+ * la lista (promociones + planes) en vez de un findUnique por regalo. El
+ * fallback es idéntico a la versión por fila: promoción si existe, luego plan,
+ * luego lavados del plan, luego genérico.
+ */
+async function resolverEtiquetas(regalos: RegaloParaEtiqueta[], tx: Tx): Promise<Map<string, string>> {
+  const promocionIds = regalos.map((r) => r.promocionId).filter((x): x is string => !!x)
+  const planIds = regalos.map((r) => r.planId).filter((x): x is string => !!x)
+
+  const [promociones, planes] = await Promise.all([
+    promocionIds.length
+      ? tx.promocion.findMany({
+          where: { id: { in: promocionIds } },
+          select: { id: true, titulo: true },
+        })
+      : Promise.resolve([]),
+    planIds.length
+      ? tx.plan.findMany({
+          where: { id: { in: planIds } },
+          select: { id: true, nombre: true },
+        })
+      : Promise.resolve([]),
+  ])
+
+  const tituloDe = new Map(promociones.map((p) => [p.id, p.titulo]))
+  const nombreDe = new Map(planes.map((p) => [p.id, p.nombre]))
+
+  const mapa = new Map<string, string>()
+  for (const r of regalos) {
+    if (r.promocionId && tituloDe.has(r.promocionId)) {
+      mapa.set(r.id, tituloDe.get(r.promocionId)!)
+    } else if (r.planId && nombreDe.has(r.planId)) {
+      mapa.set(r.id, `Membresía ${nombreDe.get(r.planId)}`)
+    } else if (r.membershipOrigenId) {
+      mapa.set(r.id, `${r.usos} lavado${r.usos !== 1 ? 's' : ''} del plan`)
+    } else {
+      mapa.set(r.id, 'Beneficio')
+    }
   }
-  if (r.planId) {
-    const p = await prisma.plan.findUnique({
-      where: { id: r.planId },
-      select: { nombre: true },
-    })
-    if (p) return `Membresía ${p.nombre}`
-  }
-  if (r.membershipOrigenId) return `${r.usos} lavado${r.usos !== 1 ? 's' : ''} del plan`
-  return 'Beneficio'
+  return mapa
 }
 
 export async function getRegalosCliente(clienteId: string): Promise<{
@@ -204,44 +242,51 @@ export async function getRegalosCliente(clienteId: string): Promise<{
   enviados: RegaloItem[]
   pendientesRecibidos: number
 }> {
-  await expirarPendientesVencidos(clienteId).catch(anotarFallo('regalos:expirar-pendientes'))
+  const { regalos, pagos, etiquetas } = await sinEmpresa(
+    'regalos: panel del cliente por clienteId (empresa no conocida de entrada)',
+    async (tx) => {
+      await expirarPendientesVencidos(clienteId, tx).catch(anotarFallo('regalos:expirar-pendientes'))
 
-  const regalos = await prisma.regalo.findMany({
-    where: { OR: [{ remitenteId: clienteId }, { destinatarioId: clienteId }] },
-    include: {
-      remitente: { select: { nombre: true } },
-      destinatario: { select: { nombre: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 60,
-  })
+      const regalos = await tx.regalo.findMany({
+        where: { OR: [{ remitenteId: clienteId }, { destinatarioId: clienteId }] },
+        include: {
+          remitente: { select: { nombre: true } },
+          destinatario: { select: { nombre: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 60,
+      })
 
-  const pagos = await resolverPagos(regalos)
-
-  const items = await Promise.all(
-    regalos.map(async (r) => ({
-      raw: r,
-      item: {
-        id: r.id,
-        tipo: r.tipo,
-        estado: r.estado,
-        usos: r.usos,
-        mensaje: r.mensaje,
-        beneficio: await etiquetaBeneficio(r),
-        contraparte:
-          r.remitenteId === clienteId
-            ? r.destinatario
-              ? enmascarar(r.destinatario.nombre)
-              : (r.destinatarioContacto ?? '—')
-            : enmascarar(r.remitente.nombre),
-        espera: esperaDe(r.tipo, r.estado),
-        pago: pagos.get(r.id) ?? null,
-        expiraAt: r.expiraAt,
-        createdAt: r.createdAt,
-        resueltoAt: r.resueltoAt,
-      } satisfies RegaloItem,
-    }))
+      const [pagos, etiquetas] = await Promise.all([
+        resolverPagos(regalos, tx),
+        resolverEtiquetas(regalos, tx),
+      ])
+      return { regalos, pagos, etiquetas }
+    }
   )
+
+  const items = regalos.map((r) => ({
+    raw: r,
+    item: {
+      id: r.id,
+      tipo: r.tipo,
+      estado: r.estado,
+      usos: r.usos,
+      mensaje: r.mensaje,
+      beneficio: etiquetas.get(r.id) ?? 'Beneficio',
+      contraparte:
+        r.remitenteId === clienteId
+          ? r.destinatario
+            ? enmascarar(r.destinatario.nombre)
+            : (r.destinatarioContacto ?? '—')
+          : enmascarar(r.remitente.nombre),
+      espera: esperaDe(r.tipo, r.estado),
+      pago: pagos.get(r.id) ?? null,
+      expiraAt: r.expiraAt,
+      createdAt: r.createdAt,
+      resueltoAt: r.resueltoAt,
+    } satisfies RegaloItem,
+  }))
 
   const recibidos = items.filter((x) => x.raw.destinatarioId === clienteId).map((x) => x.item)
   const enviados = items.filter((x) => x.raw.remitenteId === clienteId).map((x) => x.item)
@@ -269,27 +314,29 @@ export interface OpcionRegalo {
  */
 export async function getOpcionesRegalo(companyId: string): Promise<OpcionRegalo[]> {
   const now = new Date()
-  const [promos, planes] = await Promise.all([
-    prisma.promocion.findMany({
-      where: {
-        companyId,
-        activo: true,
-        archivada: false,
-        precio: { gt: 0 },
-        vigenciaDesde: { lte: now },
-        OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-      },
-      select: { id: true, titulo: true, precio: true, usosPorCompra: true },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    }),
-    prisma.plan.findMany({
-      where: { companyId, activo: true },
-      select: { id: true, nombre: true, precio: true, lavadosIncluidos: true, vigenciaDias: true },
-      orderBy: { orden: 'asc' },
-      take: 12,
-    }),
-  ])
+  const [promos, planes] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.promocion.findMany({
+        where: {
+          companyId,
+          activo: true,
+          archivada: false,
+          precio: { gt: 0 },
+          vigenciaDesde: { lte: now },
+          OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+        },
+        select: { id: true, titulo: true, precio: true, usosPorCompra: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      tx.plan.findMany({
+        where: { companyId, activo: true },
+        select: { id: true, nombre: true, precio: true, lavadosIncluidos: true, vigenciaDias: true },
+        orderBy: { orden: 'asc' },
+        take: 12,
+      }),
+    ])
+  )
   return [
     ...promos.map((p) => ({
       tipo: 'PROMOCION' as const,
@@ -324,33 +371,37 @@ export interface FuenteTransferencia {
 export async function getFuentesTransferencia(
   clienteId: string
 ): Promise<FuenteTransferencia[]> {
-  const [compras, membresia] = await Promise.all([
-    prisma.productoCompra.findMany({
-      where: {
-        clienteId,
-        estado: 'ACTIVA',
-        usosRestantes: { gt: 0 },
-        promocionId: { not: null },
-        precioCongelado: { gt: 0 },
-      },
-      select: {
-        id: true,
-        usosRestantes: true,
-        promocion: { select: { titulo: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    }),
-    prisma.membership.findFirst({
-      where: {
-        cliente: { id: clienteId },
-        estado: 'ACTIVA',
-        lavadosRestantes: { gt: 0 },
-        OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
-      },
-      select: { id: true, lavadosRestantes: true, plan: { select: { nombre: true } } },
-    }),
-  ])
+  const [compras, membresia] = await sinEmpresa(
+    'regalos: fuentes de transferencia por clienteId (empresa no conocida de entrada)',
+    (tx) =>
+      Promise.all([
+        tx.productoCompra.findMany({
+          where: {
+            clienteId,
+            estado: 'ACTIVA',
+            usosRestantes: { gt: 0 },
+            promocionId: { not: null },
+            precioCongelado: { gt: 0 },
+          },
+          select: {
+            id: true,
+            usosRestantes: true,
+            promocion: { select: { titulo: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        }),
+        tx.membership.findFirst({
+          where: {
+            cliente: { id: clienteId },
+            estado: 'ACTIVA',
+            lavadosRestantes: { gt: 0 },
+            OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
+          },
+          select: { id: true, lavadosRestantes: true, plan: { select: { nombre: true } } },
+        }),
+      ])
+  )
 
   const fuentes: FuenteTransferencia[] = compras.map((c) => ({
     origen: 'COMPRA' as const,
@@ -450,26 +501,38 @@ export async function getRegalosAdmin(
   }
 
   const TAKE = 100
-  const [regalos, porEstado, totalFiltrado] = await Promise.all([
-    prisma.regalo.findMany({
-      where,
-      include: {
-        remitente: { select: { nombre: true } },
-        destinatario: { select: { nombre: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip: ventana?.saltar ?? 0,
-      // Con ventana mandan página y tamaño (ya acotados por leerPaginacion);
-      // sin ventana se conserva el tope viejo + 1 para detectar el corte.
-      take: ventana ? ventana.tomar : TAKE + 1,
-    }),
-    prisma.regalo.groupBy({
-      by: ['estado'],
-      where: { companyId },
-      _count: { _all: true },
-    }),
-    prisma.regalo.count({ where }),
-  ])
+  const { regalos, visibles, porEstado, totalFiltrado, pagos, etiquetas } = await conEmpresa(
+    companyId,
+    async (tx) => {
+      const [regalos, porEstado, totalFiltrado] = await Promise.all([
+        tx.regalo.findMany({
+          where,
+          include: {
+            remitente: { select: { nombre: true } },
+            destinatario: { select: { nombre: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: ventana?.saltar ?? 0,
+          // Con ventana mandan página y tamaño (ya acotados por leerPaginacion);
+          // sin ventana se conserva el tope viejo + 1 para detectar el corte.
+          take: ventana ? ventana.tomar : TAKE + 1,
+        }),
+        tx.regalo.groupBy({
+          by: ['estado'],
+          where: { companyId },
+          _count: { _all: true },
+        }),
+        tx.regalo.count({ where }),
+      ])
+
+      const visibles = ventana ? regalos : regalos.slice(0, TAKE)
+      const [pagos, etiquetas] = await Promise.all([
+        resolverPagos(visibles, tx),
+        resolverEtiquetas(visibles, tx),
+      ])
+      return { regalos, visibles, porEstado, totalFiltrado, pagos, etiquetas }
+    }
+  )
 
   const conteo = (estado: string) =>
     porEstado.find((g) => g.estado === estado)?._count._all ?? 0
@@ -477,27 +540,22 @@ export async function getRegalosAdmin(
   const aceptados = conteo('ACEPTADO')
   const resueltosSinCancelar = aceptados + conteo('RECHAZADO') + conteo('EXPIRADO')
 
-  const visibles = ventana ? regalos : regalos.slice(0, TAKE)
-  const pagos = await resolverPagos(visibles)
-
-  const items = await Promise.all(
-    visibles.map(async (r) => ({
-      id: r.id,
-      tipo: r.tipo,
-      estado: r.estado,
-      usos: r.usos,
-      beneficio: await etiquetaBeneficio(r),
-      remitente: r.remitente.nombre,
-      destinatario: r.destinatario?.nombre ?? r.destinatarioContacto ?? '—',
-      sinCuenta: !r.destinatarioId,
-      espera: esperaDe(r.tipo, r.estado),
-      pago: pagos.get(r.id) ?? null,
-      mensaje: r.mensaje,
-      createdAt: r.createdAt,
-      expiraAt: r.expiraAt,
-      resueltoAt: r.resueltoAt,
-    }))
-  )
+  const items = visibles.map((r) => ({
+    id: r.id,
+    tipo: r.tipo,
+    estado: r.estado,
+    usos: r.usos,
+    beneficio: etiquetas.get(r.id) ?? 'Beneficio',
+    remitente: r.remitente.nombre,
+    destinatario: r.destinatario?.nombre ?? r.destinatarioContacto ?? '—',
+    sinCuenta: !r.destinatarioId,
+    espera: esperaDe(r.tipo, r.estado),
+    pago: pagos.get(r.id) ?? null,
+    mensaje: r.mensaje,
+    createdAt: r.createdAt,
+    expiraAt: r.expiraAt,
+    resueltoAt: r.resueltoAt,
+  }))
 
   return {
     items,

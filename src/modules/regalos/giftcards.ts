@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 /**
  * Gift cards de monto abierto (Regalos P2P · extensión de R4) — consultas.
@@ -41,13 +41,17 @@ export async function getGiftCardsCliente(clienteId: string): Promise<{
   recibidas: GiftCardItem[]
   compradas: GiftCardItem[]
 }> {
-  const cards = await prisma.giftCard.findMany({
-    where: {
-      OR: [{ compradorClienteId: clienteId }, { destinatarioClienteId: clienteId }],
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 40,
-  })
+  const cards = await sinEmpresa(
+    'giftcards: panel del cliente por clienteId (empresa no conocida de entrada)',
+    (tx) =>
+      tx.giftCard.findMany({
+        where: {
+          OR: [{ compradorClienteId: clienteId }, { destinatarioClienteId: clienteId }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+      })
+  )
   if (cards.length === 0) return { recibidas: [], compradas: [] }
 
   // Nombres de las contrapartes (ids planos → lookup en bloque).
@@ -56,10 +60,12 @@ export async function getGiftCardsCliente(clienteId: string): Promise<{
     ids.add(c.compradorClienteId)
     if (c.destinatarioClienteId) ids.add(c.destinatarioClienteId)
   }
-  const clientes = await prisma.cliente.findMany({
-    where: { id: { in: [...ids] } },
-    select: { id: true, nombre: true },
-  })
+  const clientes = await sinEmpresa('giftcards: nombres de contrapartes por id (cross-tenant)', (tx) =>
+    tx.cliente.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, nombre: true },
+    })
+  )
   const nombre = (id: string | null) =>
     id ? (clientes.find((c) => c.id === id)?.nombre ?? null) : null
 
@@ -116,31 +122,34 @@ export interface GiftCardsAdminData {
 }
 
 export async function getGiftCardsAdmin(companyId: string): Promise<GiftCardsAdminData> {
-  const [cards, agregadoActivas, porCobrar] = await Promise.all([
-    prisma.giftCard.findMany({
-      where: { companyId },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    }),
-    prisma.giftCard.aggregate({
-      where: { companyId, estado: 'ACTIVA' },
-      _count: { _all: true },
-      _sum: { saldo: true },
-    }),
-    prisma.giftCard.count({ where: { companyId, estado: 'PENDIENTE_PAGO' } }),
-  ])
+  const { cards, agregadoActivas, porCobrar, clientes } = await conEmpresa(companyId, async (tx) => {
+    const [cards, agregadoActivas, porCobrar] = await Promise.all([
+      tx.giftCard.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      }),
+      tx.giftCard.aggregate({
+        where: { companyId, estado: 'ACTIVA' },
+        _count: { _all: true },
+        _sum: { saldo: true },
+      }),
+      tx.giftCard.count({ where: { companyId, estado: 'PENDIENTE_PAGO' } }),
+    ])
 
-  const ids = new Set<string>()
-  for (const c of cards) {
-    ids.add(c.compradorClienteId)
-    if (c.destinatarioClienteId) ids.add(c.destinatarioClienteId)
-  }
-  const clientes = ids.size
-    ? await prisma.cliente.findMany({
-        where: { id: { in: [...ids] } },
-        select: { id: true, nombre: true },
-      })
-    : []
+    const ids = new Set<string>()
+    for (const c of cards) {
+      ids.add(c.compradorClienteId)
+      if (c.destinatarioClienteId) ids.add(c.destinatarioClienteId)
+    }
+    const clientes = ids.size
+      ? await tx.cliente.findMany({
+          where: { id: { in: [...ids] } },
+          select: { id: true, nombre: true },
+        })
+      : []
+    return { cards, agregadoActivas, porCobrar, clientes }
+  })
   const nombre = (id: string | null) =>
     id ? (clientes.find((c) => c.id === id)?.nombre ?? '—') : null
 
