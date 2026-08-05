@@ -197,7 +197,7 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
   const motivo = aprobada
     ? null
     : errores.length > 0 && errores[0].mensaje
-      ? errores[0].mensaje
+      ? mensajeDeError(errores[0].mensaje)
       : estadoTx === TRANSACTION_STATUS.PENDIENTE
         ? 'El pago quedó pendiente de confirmación. No cierres la app; te avisaremos.'
         : estadoTx === TRANSACTION_STATUS.PREAUTORIZADA
@@ -210,6 +210,30 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
     codigo: codigo || (aprobada ? '00' : ''),
     motivo,
   }
+}
+
+/**
+ * Texto de la tarjeta que espera su código de activación (§3.1.1 operativo).
+ *
+ * Se comparte con `cardnetToken.ts`: al cliente le tiene que llegar lo mismo
+ * llegue por donde llegue el fallo — cobrando con el token del widget, o
+ * cobrando con el perfil que se consulta después.
+ */
+export const MENSAJE_ACTIVACION_PENDIENTE =
+  'Tu tarjeta quedó registrada pero falta activarla. Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo para completar el pago.'
+
+/**
+ * Traduce el error del proveedor a algo que el cliente pueda ACCIONAR.
+ *
+ * «El token no está activo» es técnicamente exacto e inútil para quien acaba
+ * de digitar su tarjeta: no dice qué es un token, ni qué hacer. Detrás de esa
+ * frase está el flujo de activación del §4.1.2.3, que sí se puede explicar.
+ */
+function mensajeDeError(mensaje: string): string {
+  if (/token.*(no|sin).*activ|activ.*pendiente|not.*activ/i.test(mensaje)) {
+    return MENSAJE_ACTIVACION_PENDIENTE
+  }
+  return mensaje
 }
 
 /**

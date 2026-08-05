@@ -279,3 +279,28 @@ test('sin el campo Enabled se asume habilitado', () => {
   })
   assert.equal(perfiles[0].habilitado, true)
 })
+
+test('«El token no está activo» se traduce a instrucciones, no se repite tal cual', () => {
+  // Es el mensaje real que devolvió CardNET en el primer cobro que llegó hasta
+  // el Purchase. Es exacto y completamente inútil para quien acaba de digitar
+  // su tarjeta: no dice qué es un token ni qué hacer. Detrás está el flujo de
+  // activación del §4.1.2.3, que sí se puede explicar.
+  const r = interpretarCompraToken({
+    Response: {},
+    Errors: [{ ErrorCode: 'TK010', Message: 'El token no está activo' }],
+  })
+  assert.equal(r.aprobada, false)
+  assert.match(r.motivo ?? '', /RD\$1\.00/)
+  assert.match(r.motivo ?? '', /6 dígitos/)
+  assert.doesNotMatch(r.motivo ?? '', /^El token no está activo$/)
+})
+
+test('los demás errores del proveedor se muestran tal cual', () => {
+  // Solo se reescribe lo que sabemos explicar mejor. Inventar traducciones
+  // para errores que no conocemos escondería información útil.
+  const r = interpretarCompraToken({
+    Response: {},
+    Errors: [{ ErrorCode: 'TK004', Message: 'Sesión inválida' }],
+  })
+  assert.equal(r.motivo, 'Sesión inválida')
+})

@@ -9,6 +9,7 @@ import {
   cobrarConToken,
   consultarClienteCardnet,
 } from '@/lib/payments/cardnet-tokens'
+import { MENSAJE_ACTIVACION_PENDIENTE } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
 
@@ -241,8 +242,7 @@ export async function cobrarPendienteConPerfil(input: {
     return {
       estado: 'pendiente_activacion',
       ultimos4: perfil.ultimos4,
-      motivo:
-        'Tu tarjeta quedó registrada pero falta activarla. Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo para completar el pago.',
+      motivo: MENSAJE_ACTIVACION_PENDIENTE,
     }
   }
 
