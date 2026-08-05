@@ -316,6 +316,22 @@ export interface PerfilPagoCardnet {
   token: string | null
   marca: string | null
   ultimos4: string | null
+  /**
+   * ¿El medio de pago está habilitado para cobrar?
+   *
+   * MANUAL §4.1.2.2 punto 12: «deberá verificar que el objeto PaymentProfile
+   * podrá estar marcado como **deshabilitado (Enabled=false)**, por lo que
+   * para que dicho perfil (Token) pueda ser utilizado, deberá ser activado».
+   *
+   * Con las llaves CON autenticación 3DS, la tarjeta recién capturada nace
+   * `Enabled: false`: CardNET hace un microcargo de RD$1.00 y el cliente debe
+   * ingresar el código de 6 dígitos que le muestra su banco (§4.1.2.3). Cobrar
+   * con un perfil deshabilitado no funciona, y el fallo no dice por qué.
+   *
+   * Si el campo no viene, se asume habilitado: es lo que ocurre con las llaves
+   * SIN autenticación, donde el token queda activo solo.
+   */
+  habilitado: boolean
 }
 
 /** Saca los perfiles de pago de la respuesta de `GET /Customer/{id}`. */
@@ -340,11 +356,15 @@ export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardne
       const ultimos4 =
         s('LastFour', 'Last4', 'last4') ??
         (enmascarado ? enmascarado.replace(/[^0-9]/g, '').slice(-4) || null : null)
+      // Solo un `false` explícito deshabilita. Un campo ausente no puede
+      // bloquear un cobro que sí habría pasado.
+      const enabled = p.Enabled ?? p.enabled ?? p.IsEnabled
       return {
         paymentProfileId: s('PaymentProfileId', 'ProfileId', 'Id', 'id'),
         token: s('Token', 'TrxToken', 'PWToken', 'token'),
         marca: s('Brand', 'CardBrand', 'CardType', 'Franchise'),
         ultimos4,
+        habilitado: enabled !== false && enabled !== 'false',
       }
     })
     .filter((p) => Boolean(p.token || p.paymentProfileId))

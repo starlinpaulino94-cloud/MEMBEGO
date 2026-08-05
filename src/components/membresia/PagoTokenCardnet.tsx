@@ -357,6 +357,15 @@ export function PagoTokenCardnet({
         setMensaje(data.motivo ?? 'La tarjeta fue rechazada.')
         return true
       }
+      if (data.estado === 'pendiente_activacion') {
+        // Terminal: la tarjeta existe pero CardNET la dejó deshabilitada hasta
+        // que el cliente ingrese el código que le cobró su banco. Seguir
+        // sondeando no la habilita, y dejar la pantalla girando en silencio es
+        // peor que decirle qué hacer.
+        setEstado('error')
+        setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
+        return true
+      }
       if (data.estado === 'sin_pendiente') {
         // Otro canal ya cobró (u otra pestaña): la página se pone al día.
         setEstado('listo')

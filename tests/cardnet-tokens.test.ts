@@ -6,6 +6,7 @@ import {
   interpretarCompraToken,
   desenvolverRespuesta,
   sinSensibles,
+  extraerPerfiles as extraerPerfilesSync,
 } from '../src/lib/payments/cardnet-tokens-core'
 
 /**
@@ -245,4 +246,36 @@ test('los códigos de rechazo del §9.2 se traducen a algo accionable', () => {
   // Un código desconocido no filtra detalle técnico del emisor.
   const raro = interpretarCompraToken({ ResponseCode: 'ZZ' })
   assert.doesNotMatch(raro.motivo ?? '', /ZZ/)
+})
+
+test('un perfil deshabilitado se reconoce: no se puede cobrar con él', async () => {
+  // MANUAL §4.1.2.2 punto 12: «el objeto PaymentProfile podrá estar marcado
+  // como deshabilitado (Enabled=false), por lo que para que dicho perfil
+  // (Token) pueda ser utilizado, deberá ser activado».
+  //
+  // Con las llaves CON autenticación 3DS la tarjeta recién capturada nace así.
+  // Sin mirar este campo, se intenta cobrar con un token muerto y el fallo
+  // llega al cliente como un rechazo genérico que no le dice qué hacer.
+  const { extraerPerfiles } = await import('../src/lib/payments/cardnet-tokens-core')
+  const perfiles = extraerPerfiles({
+    Response: {
+      PaymentProfiles: [
+        { PaymentProfileId: 50330, Token: 'CT__viejo_habilitado_1234', Enabled: true },
+        { PaymentProfileId: 50331, Token: 'CT__nuevo_sin_activar_5678', Enabled: false },
+      ],
+    },
+    Errors: [],
+  })
+  assert.equal(perfiles[0].habilitado, true)
+  assert.equal(perfiles[1].habilitado, false, 'el recién capturado espera activación')
+})
+
+test('sin el campo Enabled se asume habilitado', () => {
+  // Es lo que ocurre con las llaves SIN autenticación: el token queda activo
+  // solo. Un campo ausente no puede bloquear un cobro que sí habría pasado.
+  const perfiles = extraerPerfilesSync({
+    Response: { PaymentProfiles: [{ PaymentProfileId: 1, Token: 'CT__sin_campo_enabled_1' }] },
+    Errors: [],
+  })
+  assert.equal(perfiles[0].habilitado, true)
 })
