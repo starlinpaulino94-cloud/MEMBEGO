@@ -307,3 +307,32 @@ test('los demás errores del proveedor se muestran tal cual', () => {
   })
   assert.equal(r.motivo, 'Sesión inválida')
 })
+
+test('el CustomerId guardado NO se reutiliza al cambiar de cuenta de CardNET', async () => {
+  // Cada juego de llaves (pruebas con 3DS, pruebas sin 3DS, producción) es una
+  // CUENTA distinta, y un CustomerId solo vale dentro de la suya. Reutilizarlo
+  // tras cambiar de llaves abre la ventana con un session_id que la cuenta
+  // nueva no reconoce → INTERNAL_SERVER_ERROR, sin ninguna pista de que el
+  // culpable es un dato viejo en la base. Pasó de verdad.
+  const { marcarCustomerIdConCuenta, leerCustomerIdDeCuenta } = await import(
+    '../src/lib/payments/cardnet-tokens-core'
+  )
+  const CUENTA_A = '3-whMGoDQeLbIZPYm9KZvW_I56ONV7HQ' // con autenticación
+  const CUENTA_B = 'J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ' // sin autenticación
+
+  const guardado = marcarCustomerIdConCuenta('112027', CUENTA_A)
+  assert.equal(leerCustomerIdDeCuenta(guardado, CUENTA_A), '112027', 'misma cuenta: se reutiliza')
+  assert.equal(leerCustomerIdDeCuenta(guardado, CUENTA_B), null, 'otra cuenta: se descarta')
+})
+
+test('un CustomerId sin etiqueta de cuenta se descarta', async () => {
+  // Valores anteriores a este cambio: no se puede saber de qué cuenta son.
+  // Registrar un Customer de más es barato; abrir una ventana muerta cuesta
+  // una sesión entera de depuración.
+  const { leerCustomerIdDeCuenta } = await import('../src/lib/payments/cardnet-tokens-core')
+  const CUENTA = '3-whMGoDQeLbIZPYm9KZvW_I56ONV7HQ'
+  assert.equal(leerCustomerIdDeCuenta('112027', CUENTA), null)
+  assert.equal(leerCustomerIdDeCuenta('', CUENTA), null)
+  assert.equal(leerCustomerIdDeCuenta(null, CUENTA), null)
+  assert.equal(leerCustomerIdDeCuenta(':', CUENTA), null)
+})

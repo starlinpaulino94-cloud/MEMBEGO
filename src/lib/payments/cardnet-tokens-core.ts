@@ -314,6 +314,51 @@ export function sinSensibles(obj: Record<string, unknown>): Record<string, unkno
 /** Código de moneda de la República Dominicana para el Purchase. */
 export const MONEDA_DOP_TOKENS = 'DOP'
 
+// ── CustomerId atado a su cuenta de CardNET ─────────────────────────────────
+//
+// Un CustomerId solo vale dentro de la cuenta que lo emitió. CardNET entrega
+// juegos de llaves distintos (pruebas con y sin autenticación 3DS, producción),
+// y CADA JUEGO ES UNA CUENTA. Si se cambia de juego y se reutiliza el id
+// guardado, la ventana de captura se abre con un `session_id` que la cuenta
+// nueva no reconoce: `INTERNAL_SERVER_ERROR`, sin ninguna pista de que el
+// culpable es un dato viejo en la base.
+//
+// Por eso el id se guarda etiquetado con la cuenta: `<huella>:<customerId>`.
+// Al leerlo, si la etiqueta no corresponde a las llaves actuales, se ignora y
+// se registra un Customer nuevo. Es autocurativo: cambiar de llaves no exige
+// tocar la base a mano.
+
+/** Huella corta y estable de la cuenta, derivada de su llave PÚBLICA. */
+function huellaCuenta(publicKey: string): string {
+  let h = 0
+  for (const c of publicKey.trim()) h = (h * 31 + c.charCodeAt(0)) | 0
+  return (h >>> 0).toString(36)
+}
+
+/** Etiqueta el CustomerId con la cuenta que lo emitió, para poder guardarlo. */
+export function marcarCustomerIdConCuenta(customerId: string, publicKey: string): string {
+  return `${huellaCuenta(publicKey)}:${customerId}`
+}
+
+/**
+ * Lee el CustomerId guardado SOLO si pertenece a la cuenta vigente.
+ *
+ * Un valor sin etiqueta viene de antes de este cambio: no se puede saber de
+ * qué cuenta es, así que se descarta. Registrar un Customer de más es barato;
+ * abrir una ventana muerta cuesta una sesión de depuración.
+ */
+export function leerCustomerIdDeCuenta(
+  guardado: string | null | undefined,
+  publicKey: string
+): string | null {
+  const v = guardado?.trim()
+  if (!v) return null
+  const sep = v.indexOf(':')
+  if (sep <= 0) return null
+  if (v.slice(0, sep) !== huellaCuenta(publicKey)) return null
+  return v.slice(sep + 1) || null
+}
+
 /**
  * ¿Esto es una IP que se pueda mandar al antifraude?
  *

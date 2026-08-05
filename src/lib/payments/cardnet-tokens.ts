@@ -9,6 +9,8 @@ import {
   extraerPerfiles,
   sinSensibles,
   esIpValida,
+  marcarCustomerIdConCuenta,
+  leerCustomerIdDeCuenta,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
@@ -333,9 +335,17 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
 export async function obtenerCustomerId(input: {
   email: string
   guardado: string | null
-  guardar: (customerId: string) => Promise<void>
+  guardar: (valorAGuardar: string) => Promise<void>
 }): Promise<string | null> {
-  const yaLoTengo = input.guardado?.trim()
+  const cfg = getTokensConfig()
+  if (!cfg) return null
+
+  // El id guardado solo sirve para LA MISMA cuenta de CardNET que lo emitió.
+  // Al cambiar de juego de llaves se cambia de cuenta, y un CustomerId de la
+  // cuenta vieja abre la ventana con un session_id que la nueva no reconoce:
+  // INTERNAL_SERVER_ERROR, sin ninguna pista de que la causa es un dato viejo.
+  // Por eso se guarda etiquetado con la cuenta y se descarta si no coincide.
+  const yaLoTengo = leerCustomerIdDeCuenta(input.guardado, cfg.publicKey)
   if (yaLoTengo) return yaLoTengo
 
   const cliente = await crearClienteCardnet({ email: input.email })
@@ -343,7 +353,9 @@ export async function obtenerCustomerId(input: {
   // Best-effort: si la escritura falla, el cobro sigue — solo se pagará un
   // POST de más la próxima vez. Pero queda anotado: si falla siempre, el
   // síntoma vuelve a ser una ventana que muere sin explicación.
-  await input.guardar(cliente.customerId).catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
+  await input
+    .guardar(marcarCustomerIdConCuenta(cliente.customerId, cfg.publicKey))
+    .catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
   return cliente.customerId
 }
 
