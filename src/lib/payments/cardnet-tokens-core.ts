@@ -197,7 +197,7 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
   const motivo = aprobada
     ? null
     : errores.length > 0 && errores[0].mensaje
-      ? mensajeDeError(errores[0].mensaje)
+      ? mensajeDeError(errores[0].codigo, errores[0].mensaje)
       : estadoTx === TRANSACTION_STATUS.PENDIENTE
         ? 'El pago quedó pendiente de confirmación. No cierres la app; te avisaremos.'
         : estadoTx === TRANSACTION_STATUS.PREAUTORIZADA
@@ -229,7 +229,12 @@ export const MENSAJE_ACTIVACION_PENDIENTE =
  * de digitar su tarjeta: no dice qué es un token, ni qué hacer. Detrás de esa
  * frase está el flujo de activación del §4.1.2.3, que sí se puede explicar.
  */
-function mensajeDeError(mensaje: string): string {
+function mensajeDeError(codigo: string, mensaje: string): string {
+  // `PR001` es el código que devuelve el Purchase cuando el medio de pago
+  // existe pero no está habilitado (confirmado en vivo, 05/08/2026). Se empareja
+  // por código antes que por texto: el texto puede cambiar de redacción o de
+  // idioma, el código no.
+  if (codigo === 'PR001') return MENSAJE_ACTIVACION_PENDIENTE
   if (/token.*(no|sin).*activ|activ.*pendiente|not.*activ/i.test(mensaje)) {
     return MENSAJE_ACTIVACION_PENDIENTE
   }

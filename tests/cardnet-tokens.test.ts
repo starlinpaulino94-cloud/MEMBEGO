@@ -285,9 +285,12 @@ test('«El token no está activo» se traduce a instrucciones, no se repite tal 
   // el Purchase. Es exacto y completamente inútil para quien acaba de digitar
   // su tarjeta: no dice qué es un token ni qué hacer. Detrás está el flujo de
   // activación del §4.1.2.3, que sí se puede explicar.
+  // Respuesta REAL capturada en producción de pruebas (05/08/2026): el código
+  // es PR001 y el texto lleva punto final. Se empareja por código, que no
+  // depende de la redacción ni del idioma.
   const r = interpretarCompraToken({
-    Response: {},
-    Errors: [{ ErrorCode: 'TK010', Message: 'El token no está activo' }],
+    Response: { TrxToken: '***', Amount: null },
+    Errors: [{ ErrorCode: 'PR001', Message: 'El token no está activo.' }],
   })
   assert.equal(r.aprobada, false)
   assert.match(r.motivo ?? '', /RD\$1\.00/)
