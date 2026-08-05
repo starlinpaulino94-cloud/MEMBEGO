@@ -97,6 +97,64 @@ export async function GET(req: NextRequest) {
       },
     })
   }
+  // ?sesion=1: REPITE los pasos de la ventana de pago y enseña cada uno con su
+  // respuesta cruda. Sin esto, un fallo en la sesión sale como un 502 mudo y
+  // solo queda adivinar cuál de los tres pasos se rompió.
+  if (req.nextUrl.searchParams.get('sesion') === '1' && base.configurado) {
+    const { registrarClienteDiagnostico, consultarClienteCardnet, consultarClienteDiagnostico } =
+      await import('@/lib/payments/cardnet-tokens')
+    const { leerCustomerIdDeCuenta } = await import('@/lib/payments/cardnet-tokens-core')
+    const { prisma } = await import('@/lib/prisma')
+
+    const clienteId = user.metadata.clienteId ?? null
+    const email = user.email || (clienteId ? `${clienteId}@membego.local` : '')
+    const fila = clienteId
+      ? await prisma.cliente
+          .findUnique({ where: { id: clienteId }, select: { cardnetCustomerId: true } })
+          .catch(() => null)
+      : null
+
+    const guardadoCrudo = fila?.cardnetCustomerId ?? null
+    const guardadoUtil = leerCustomerIdDeCuenta(guardadoCrudo, base.publicKey ?? '')
+
+    // Paso 1: registrar (solo si no hay id utilizable, igual que el flujo real).
+    const registro = guardadoUtil ? [] : await registrarClienteDiagnostico(email)
+    const customerId =
+      guardadoUtil ??
+      (() => {
+        const ok = registro.find((r) => r.ok)
+        const datos = (ok?.respuesta.Response ?? ok?.respuesta ?? {}) as Record<string, unknown>
+        const v = datos.CustomerId ?? datos.customerId ?? ''
+        return String(v).trim() || null
+      })()
+
+    // Paso 2: el GET del que salen CaptureURL y UniqueID (§4.1.2.2).
+    const consulta = customerId ? await consultarClienteCardnet(customerId) : null
+    const crudo = customerId ? await consultarClienteDiagnostico(customerId) : null
+
+    return NextResponse.json({
+      ...base,
+      sesion: {
+        rol: user.metadata.role,
+        clienteId,
+        emailUsado: email,
+        guardadoEnBd: guardadoCrudo,
+        guardadoUtilizable: guardadoUtil,
+        paso1_registro: registro,
+        customerIdResuelto: customerId,
+        paso2_consulta: consulta
+          ? {
+              email: consulta.email,
+              captureUrl: consulta.captureUrl,
+              tieneUniqueId: Boolean(consulta.uniqueId),
+              perfiles: consulta.perfiles.length,
+            }
+          : null,
+        paso2_crudo: crudo,
+      },
+    })
+  }
+
   if (req.nextUrl.searchParams.get('probar') !== '1' || !base.configurado) {
     return NextResponse.json(base)
   }
