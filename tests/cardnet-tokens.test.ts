@@ -23,40 +23,38 @@ test('urlsTokens usa los hosts del MANUAL §11, no un middleware ajeno', () => {
   const qa = urlsTokens('pruebas')
   assert.equal(qa.api, 'https://lab.cardnet.com.do/servicios/tokens/v1/api')
   assert.equal(qa.capture, 'https://lab.cardnet.com.do/servicios/tokens/v1/Capture/')
-  assert.equal(qa.script, 'https://lab.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js')
 
   const prod = urlsTokens('produccion')
   assert.equal(prod.api, 'https://servicios.cardnet.com.do/servicios/tokens/v1/api')
-  assert.equal(prod.script, 'https://servicios.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js')
+  assert.equal(prod.capture, 'https://servicios.cardnet.com.do/servicios/tokens/v1/Capture/')
 
-  for (const u of [qa.api, qa.capture, qa.script, prod.api, prod.capture, prod.script]) {
+  // La API y la captura sí van en cardnet.com.do. El script es la excepción
+  // (ver la prueba siguiente): lo exige el propio widget.
+  for (const u of [qa.api, qa.capture, prod.api, prod.capture]) {
     assert.ok(u.includes('cardnet.com.do'), `${u} debe servirse desde CardNET`)
-    assert.ok(!u.includes('gtp-seglan'), `${u} no puede venir de un tercero`)
+    assert.ok(!u.includes('gtp-seglan'), `${u} no puede venir del middleware`)
   }
 })
 
-test('el script SIEMPRE sale del mismo origen que la ventana de captura', async () => {
-  // Es LA invariante de esta integración. CardNET devuelve el CaptureURL en la
-  // respuesta y varía según el host consultado (lab / labservicios); derivar
-  // el script de él impide que se desalineen.
-  const { scriptDesdeCaptura } = await import('../src/lib/payments/cardnet-tokens-core')
+test('el script del widget se carga del middleware que el propio widget exige', async () => {
+  // El widget rechaza cualquier otro origen y lo grita en la consola:
+  // «PWCheckout.js debe ser cargado desde la URL https://tr-tsp-test.gtp-seglan
+  //  .com/… No puede ser descargado o importado desde un servidor propio o
+  //  dominio de terceros distinto».
+  //
+  // Es la excepción a la regla: API y captura en cardnet.com.do, script en el
+  // middleware. Yo lo había unificado por un razonamiento que sonaba bien
+  // (mismo origen para que el token cruce) y que el widget desmiente.
+  const { scriptWidget } = await import('../src/lib/payments/cardnet-tokens-core')
   assert.equal(
-    scriptDesdeCaptura('https://labservicios.cardnet.com.do/servicios/tokens/v1/Capture'),
-    'https://labservicios.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js'
+    scriptWidget('pruebas'),
+    'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1/Scripts/PWCheckout.js'
   )
-  // Con barra final (la forma que arma nuestro código) da lo mismo.
   assert.equal(
-    scriptDesdeCaptura('https://lab.cardnet.com.do/servicios/tokens/v1/Capture/'),
-    'https://lab.cardnet.com.do/servicios/tokens/v1/Scripts/PWCheckout.js'
+    scriptWidget('produccion'),
+    'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1/Scripts/PWCheckout.js'
   )
-  const origen = (u: string) => new URL(u).origin
-  for (const cap of [
-    'https://lab.cardnet.com.do/servicios/tokens/v1/Capture/',
-    'https://labservicios.cardnet.com.do/servicios/tokens/v1/Capture',
-    'https://servicios.cardnet.com.do/servicios/tokens/v1/Capture/',
-  ]) {
-    assert.equal(origen(scriptDesdeCaptura(cap)), origen(cap))
-  }
+  assert.equal(urlsTokens('pruebas').script, scriptWidget('pruebas'))
 })
 
 test('el monto sigue la tabla de codificación del manual §10.4', () => {
@@ -335,4 +333,22 @@ test('un CustomerId sin etiqueta de cuenta se descarta', async () => {
   assert.equal(leerCustomerIdDeCuenta('', CUENTA), null)
   assert.equal(leerCustomerIdDeCuenta(null, CUENTA), null)
   assert.equal(leerCustomerIdDeCuenta(':', CUENTA), null)
+})
+
+test('las rutas se prueban en ambas grafías (el servicio no es consistente)', async () => {
+  // El manual y el Postman escriben `/Customer`; el ambiente de pruebas
+  // responde 200 a `/customer`. Un 404 por la grafía hacía que se descartara
+  // el host entero y la sesión terminara en un 502 nuestro con el mensaje
+  // «No se pudo iniciar la ventana de pago», que no dice nada de la causa.
+  const { variantesDeRuta: variantesDeRutaParaPrueba } = await import(
+    '../src/lib/payments/cardnet-tokens-core'
+  )
+  assert.deepEqual(variantesDeRutaParaPrueba('/Customer'), ['/Customer', '/customer'])
+  assert.deepEqual(variantesDeRutaParaPrueba('/customer'), ['/customer', '/Customer'])
+  assert.deepEqual(variantesDeRutaParaPrueba('/Customer/112065'), [
+    '/Customer/112065',
+    '/customer/112065',
+  ])
+  // Sin letra que cambiar, no se inventa una segunda llamada.
+  assert.deepEqual(variantesDeRutaParaPrueba('/123'), ['/123'])
 })

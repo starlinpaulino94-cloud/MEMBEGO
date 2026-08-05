@@ -20,16 +20,11 @@ export type AmbienteTokens = 'pruebas' | 'produccion'
  *
  * y bajo esa base: `/api/{objeto}`, `/Capture`, `/Scripts/PWCheckout.js`.
  *
- * ANTES apuntaban a `gtp-seglan.com`, un middleware que NO aparece en ninguna
- * página de la documentación de CardNET. El §3.1 del manual es explícito:
- * «La librería debe ser importada por el comercio a través de la URL pública
- * alojada en CARDNET. No deberá ser descargada y usada localmente desde un
- * servidor propio del comercio o desde una URL de un tercero no autorizado».
+ * ANTES la API apuntaba a `gtp-seglan.com`, que no aparece en ninguna página
+ * del manual. La API y la ventana de captura van aquí, en cardnet.com.do.
  *
- * Ese desvío partía la integración en dos: el SDK se cargaba desde un dominio
- * y la ventana de captura vivía en otro, así que el token no podía cruzar de
- * vuelta. El iframe abría, el cliente digitaba su tarjeta, y el callback
- * `tokenCreated` no llegaba nunca.
+ * El SCRIPT del widget es la excepción y va en el middleware: ver
+ * `scriptWidget`, que explica por qué.
  */
 export function urlsTokens(ambiente: AmbienteTokens): {
   /** Base de la API REST (Customer, Purchase, …). Lleva Authorization: Basic. */
@@ -42,7 +37,7 @@ export function urlsTokens(ambiente: AmbienteTokens): {
   return {
     api: `${baseDe(ambiente)}/api`,
     capture: `${baseDe(ambiente)}/Capture/`,
-    script: scriptDesdeCaptura(`${baseDe(ambiente)}/Capture/`),
+    script: scriptWidget(ambiente),
   }
 }
 
@@ -53,17 +48,31 @@ function baseDe(ambiente: AmbienteTokens): string {
 }
 
 /**
- * El script del widget, derivado de la MISMA base que la URL de captura.
+ * De dónde se carga `PWCheckout.js`.
  *
- * Es la invariante que hay que sostener: el SDK y el iframe tienen que estar
- * en el mismo origen, o el token no vuelve. Como el `CaptureURL` lo decide
- * CardNET en la respuesta (y varía entre `lab` y `labservicios` según el host
- * que se consulte), el script se calcula a partir de él en vez de fijarse
- * aparte. Así no pueden desalinearse.
+ * OJO: NO es el mismo host que la API ni que la ventana de captura. El propio
+ * widget lo exige y lo dice en la consola del navegador si se sirve desde otro
+ * lado:
+ *
+ *   «El componente PWCheckout.js debe ser cargado desde la URL
+ *    https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1… No puede ser
+ *    descargado o importado desde un servidor propio o dominio de terceros
+ *    distinto.»
+ *
+ * `gtp-seglan` es el middleware autorizado de CardNET, así que esto no
+ * contradice el §3.1 del manual («la librería debe importarse desde la URL
+ * pública alojada en CARDNET, no desde un servidor propio o un tercero NO
+ * autorizado»): es el host que la propia plataforma señala.
+ *
+ * Yo había derivado el script del `CaptureURL` suponiendo que SDK e iframe
+ * debían compartir origen. El mensaje del widget dice lo contrario, y manda el
+ * widget.
  */
-export function scriptDesdeCaptura(captureUrl: string): string {
-  const limpia = captureUrl.trim().replace(/\/+$/, '')
-  const base = limpia.replace(/\/Capture$/i, '')
+export function scriptWidget(ambiente: AmbienteTokens): string {
+  const base =
+    ambiente === 'produccion'
+      ? 'https://tr-tsp.gtp-seglan.com/tr-tsp-mw-cardnet/v1'
+      : 'https://tr-tsp-test.gtp-seglan.com/tr-tsp-mw-cardnet/v1'
   return `${base}/Scripts/PWCheckout.js`
 }
 
@@ -442,4 +451,26 @@ export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardne
       }
     })
     .filter((p) => Boolean(p.token || p.paymentProfileId))
+}
+
+/**
+ * Variantes de MAYÚSCULA/minúscula del primer segmento de la ruta.
+ *
+ * El servicio no es consistente: el manual y el Postman escriben `/Customer`,
+ * pero el ambiente de pruebas responde 200 a `/customer`, y la otra grafía
+ * puede devolver 404. Un 404 hace que se descarte el host entero y la llamada
+ * termine sin respuesta — el síntoma es un 502 nuestro con el mensaje «No se
+ * pudo iniciar la ventana de pago», que no dice nada de la causa real.
+ *
+ * En vez de apostar por una grafía, se prueban las dos.
+ */
+export function variantesDeRuta(path: string): string[] {
+  const m = /^\/([^/]+)(.*)$/.exec(path)
+  if (!m) return [path]
+  const [, seg, resto] = m
+  const otra =
+    seg[0] === seg[0].toLowerCase()
+      ? seg[0].toUpperCase() + seg.slice(1)
+      : seg[0].toLowerCase() + seg.slice(1)
+  return otra === seg ? [path] : [path, `/${otra}${resto}`]
 }

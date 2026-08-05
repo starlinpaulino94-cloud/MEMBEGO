@@ -8,7 +8,6 @@ import {
   consultarClienteCardnet,
   obtenerCustomerId,
 } from '@/lib/payments/cardnet-tokens'
-import { scriptDesdeCaptura } from '@/lib/payments/cardnet-tokens-core'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { logErrorBd } from '@/lib/prisma-errors'
 
@@ -120,9 +119,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       captureUrl: consulta.captureUrl,
-      // El script SIEMPRE del mismo origen que la ventana: el token vuelve del
-      // iframe por postMessage y con orígenes distintos no cruza.
-      scriptUrl: scriptDesdeCaptura(consulta.captureUrl),
+      // El script NO sale de aquí: lo sirve el middleware autorizado y el
+      // propio widget rechaza cualquier otro origen (ver `scriptWidget`).
+      scriptUrl: pub.scriptUrl,
       uniqueId: consulta.uniqueId,
       publicKey: pub.publicKey,
       // Línea base para saber si el cliente registró una tarjeta NUEVA.
