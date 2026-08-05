@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, Loader2, CheckCircle2, ShieldCheck, AlertCircle, Lock } from 'lucide-react'
 import { toast } from 'sonner'
-import { tokenDe, refsGuardado } from '@/lib/payments/cardnet-widget'
+import {
+  tokenDe,
+  refsGuardado,
+  textoSeguroWidget,
+  imagenSeguraWidget,
+} from '@/lib/payments/cardnet-widget'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -583,12 +588,17 @@ export function PagoTokenCardnet({
     conteoAntesRef.current = sesion.conteoPerfiles
     customerIdRef.current = sesion.customerId
 
+    // Los textos van SANEADOS: el widget los arrastra a la URL de la ventana
+    // de captura sin escaparlos, y un `&` —como el de «CARTOWN Wash &
+    // Detailing»— parte la consulta y CardNET responde 500.
+    const marca = textoSeguroWidget(companyName, 'Pago seguro')
+    const imagen = imagenSeguraWidget(logoUrl)
     sdk.SetProperties({
-      name: companyName ?? 'Pago seguro',
+      name: marca,
       email: '',
-      ...(logoUrl ? { image: logoUrl } : {}),
-      button_label: `Pagar ${montoTexto}`,
-      description: companyName ? `Membresía ${companyName}` : 'Membresía',
+      ...(imagen ? { image: imagen } : {}),
+      button_label: textoSeguroWidget(`Pagar ${montoTexto}`, 'Pagar'),
+      description: textoSeguroWidget(`Membresia ${marca}`, 'Membresia'),
       currency: 'DOP',
       lang: 'ESP',
       // OBLIGATORIO según el manual (§3.2): el widget inserta el token en el

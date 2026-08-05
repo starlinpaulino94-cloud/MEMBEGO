@@ -115,3 +115,37 @@ export function refsGuardado(data: unknown): RefsTarjeta {
     ultimos4: g('Last4', 'LastFour', 'ultimos4'),
   }
 }
+
+/**
+ * Texto seguro para las propiedades visuales del widget.
+ *
+ * El widget arrastra los valores de `SetProperties` a la URL de la ventana de
+ * captura (`Capture/?key=…&name=…`). Si uno lleva `&`, `?` o `#`, parte la
+ * consulta y CardNET recibe una URL rota: responde 500 y la ventana muestra
+ * `INTERNAL_SERVER_ERROR`, sin ninguna pista de que la culpa es un carácter en
+ * el nombre del comercio.
+ *
+ * Nos pasó con «CARTOWN Wash & Detailing».
+ *
+ * Se limpia aquí y no se confía en que el widget escape: no lo hace, y el
+ * síntoma es carísimo de rastrear. Los acentos sí se conservan —son legítimos
+ * en un nombre y no rompen la URL— pero el texto se acota, porque un valor
+ * larguísimo también puede tumbar la petición.
+ */
+export const MAX_TEXTO_WIDGET = 60
+
+export function textoSeguroWidget(valor: string | null | undefined, reserva = ''): string {
+  const v = (valor ?? '').replace(/[&?#=+%]/g, ' ').replace(/\s+/g, ' ').trim()
+  return (v || reserva).slice(0, MAX_TEXTO_WIDGET).trim()
+}
+
+/**
+ * URL de imagen aceptable para el widget. Una URL con `&` (típico en enlaces
+ * con parámetros) rompería la consulta igual que el nombre; ante la duda, se
+ * omite la imagen — perder el logo es mejor que perder el pago.
+ */
+export function imagenSeguraWidget(url: string | null | undefined): string | null {
+  const v = (url ?? '').trim()
+  if (!v || !/^https:\/\//i.test(v)) return null
+  return /[&?#]/.test(v) ? null : v
+}
