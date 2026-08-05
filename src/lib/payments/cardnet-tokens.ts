@@ -12,6 +12,8 @@ import {
   marcarCustomerIdConCuenta,
   leerCustomerIdDeCuenta,
   variantesDeRuta,
+  reintentarConOtraGrafia,
+  referenciaCobro,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
@@ -138,19 +140,27 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     }
   }
 
+  // Referencia CORTA para todos los campos que CardNET arrastra hasta la
+  // autorización del adquirente. Ver `referenciaCobro`: nuestro cuid de 25
+  // caracteres viaja bien por el Purchase, pero el tramo siguiente es otro
+  // sistema — y es ese el que respondió `BadRequest`.
+  const referencia = referenciaCobro(input.orden)
+
   const cuerpo: Record<string, unknown> = {
     TrxToken: input.trxToken,
-    Order: input.orden,
+    Order: referencia,
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
     Capture: true,
-    // Identificador único de la compra (manual §2.6 · §7.2, String[50]).
-    // Sin él, un corte de red durante el cobro deja la duda de si pasó o no, y
-    // el reintento vuelve a cobrarle al cliente. Con él, CardNET reconoce la
-    // operación y devuelve el mismo resultado en vez de duplicar el cargo.
-    // Se usa el id del intento: es único por cobro y ya sirve para conciliar.
-    UniqueID: input.orden.slice(0, 50),
+    // Identificador único de la compra (manual §2.6 · §7.2).
+    //
+    // OJO: mandábamos el id completo (25 caracteres) y CardNET lo archivó como
+    // cadena VACÍA — o sea que la idempotencia que creíamos tener no existía.
+    // Ahora va la referencia corta. Si vuelve a llegar vacía en la respuesta,
+    // el campo es decorativo y hay que quitarlo; si llega con valor, sirve.
+    // El expediente que se guarda permite comprobar exactamente eso.
+    UniqueID: referencia,
     // `getClientIdentifier` devuelve la cadena 'unknown' cuando no hay
     // `x-forwarded-for`. Mandar eso como IP al antifraude de CardNET es peor
     // que no mandar nada: un valor con formato inválido puede rechazar el
@@ -158,18 +168,18 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     ...(esIpValida(input.clienteIp) ? { CustomerIP: input.clienteIp } : {}),
     DataDo: {
       Tax: String(input.tax ?? 0),
-      Invoice: input.invoice ?? input.orden,
+      Invoice: input.invoice ? referenciaCobro(input.invoice) : referencia,
     },
   }
 
-  const { ok, status, json } = await postTokens('/Purchase', cuerpo)
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Purchase', cuerpo, true)
   if (status === 0) {
     return {
       aprobada: false,
       autorizacion: null,
       codigo: '',
       motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.',
-      crudo: sinSensibles(json),
+      crudo: evidencia(status, json),
     }
   }
 
@@ -179,8 +189,23 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
   return {
     ...interpretado,
     aprobada,
-    crudo: sinSensibles(json),
+    crudo: evidencia(status, json),
   }
+}
+
+/**
+ * Expediente del cobro: la respuesta del proveedor SIN sensibles, más el status
+ * HTTP con el que llegó.
+ *
+ * El status importa tanto como el cuerpo. Un 404 (ruta equivocada), un 401
+ * (llave mal formateada) y un 200 con la transacción declinada producen los
+ * tres el MISMO texto en pantalla —«No se pudo procesar el pago»— porque
+ * ninguno trae un código de respuesta que sepamos leer. Guardando el status,
+ * una consulta a `pago_intentos` distingue los tres casos en un segundo; sin
+ * él, solo queda volver a reproducir el fallo a ciegas. Pasó.
+ */
+function evidencia(status: number, json: Record<string, unknown>): Record<string, unknown> {
+  return { _http: status, ...sinSensibles(json) }
 }
 
 // ── Fase 2: tarjeta guardada (cobros recurrentes) ───────────────────────────
@@ -291,12 +316,19 @@ async function postTokens(
 async function llamarTokensConRuta(
   metodo: 'GET' | 'POST',
   path: string,
-  cuerpo: Record<string, unknown> | null
+  cuerpo: Record<string, unknown> | null,
+  /**
+   * `true` cuando la llamada MUEVE DINERO. Cambia una sola cosa: si no hubo
+   * respuesta (timeout/red), no se repite con la otra grafía — el cobro pudo
+   * haberse procesado allá y perdido la respuesta de vuelta. Ver
+   * `reintentarConOtraGrafia`.
+   */
+  esCobro = false
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   let ultima: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
   for (const variante of variantesDeRuta(path)) {
     const r = await llamarTokens(metodo, variante, cuerpo)
-    if (r.ok || (r.status !== 404 && r.status !== 0)) return r
+    if (r.ok || !reintentarConOtraGrafia(r.status, esCobro)) return r
     ultima = r
   }
   return ultima ?? { ok: false, status: 0, json: { _error: 'sin respuesta' } }
@@ -521,23 +553,26 @@ export async function cobrarConCredencialGuardada(input: {
   orden: string
   clienteIp: string
 }): Promise<CobrarConTokenSalida> {
+  const referencia = referenciaCobro(input.orden)
   const cuerpo: Record<string, unknown> = {
     ...(input.token ? { TrxToken: input.token } : {}),
     CustomerId: input.customerId,
     ...(input.paymentProfileId ? { PaymentProfileId: input.paymentProfileId } : {}),
-    Order: input.orden,
+    Order: referencia,
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
     Capture: true,
-    CustomerIP: input.clienteIp,
+    // Mismo criterio que en el cobro con token: una IP con formato inválido
+    // puede tumbar la autorización y el fallo llega disfrazado de rechazo.
+    ...(esIpValida(input.clienteIp) ? { CustomerIP: input.clienteIp } : {}),
     // Marca de credencial archivada / recurrente (nombres del ZTRANS).
     Environment: 'Ecommerce_COF',
-    DataDo: { Tax: '0', Invoice: input.orden },
+    DataDo: { Tax: '0', Invoice: referencia },
   }
-  const { ok, json } = await postTokens('/Purchase', cuerpo)
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Purchase', cuerpo, true)
   const interpretado = interpretarCompraToken(json)
-  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: sinSensibles(json) }
+  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: evidencia(status, json) }
 }
 
 /**

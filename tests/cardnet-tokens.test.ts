@@ -370,3 +370,172 @@ test('las rutas se prueban en ambas grafías (el servicio no es consistente)', a
   // Sin letra que cambiar, no se inventa una segunda llamada.
   assert.deepEqual(variantesDeRutaParaPrueba('/123'), ['/123'])
 })
+
+test('un cobro sin respuesta NO se repite: repetirlo puede cobrar dos veces', async () => {
+  // Probar la otra grafía es gratis cuando el servicio contestó 404: la ruta
+  // no existe, así que del otro lado no pasó nada.
+  //
+  // Cuando NO hubo respuesta (status 0: timeout, conexión cortada) la
+  // situación es distinta y depende de qué se llamó. En una consulta, repetir
+  // es inofensivo. En un COBRO no: CardNET pudo recibir el Purchase,
+  // procesarlo, y perderse la respuesta de vuelta. Repetir ahí es la forma
+  // exacta de cobrarle dos veces al cliente por una compra.
+  const { reintentarConOtraGrafia } = await import('../src/lib/payments/cardnet-tokens-core')
+  const CONSULTA = false
+  const COBRO = true
+
+  // Ruta inexistente: nada se ejecutó, se puede reintentar siempre.
+  assert.equal(reintentarConOtraGrafia(404, CONSULTA), true)
+  assert.equal(reintentarConOtraGrafia(404, COBRO), true)
+
+  // Sin respuesta: aquí está la diferencia que importa.
+  assert.equal(reintentarConOtraGrafia(0, CONSULTA), true)
+  assert.equal(reintentarConOtraGrafia(0, COBRO), false, 'un cobro sin respuesta NO se repite')
+
+  // Cualquier respuesta real del servicio (aunque sea un error) significa que
+  // la ruta existe: cambiar de grafía solo enturbiaría el diagnóstico.
+  for (const status of [200, 400, 401, 403, 409, 500, 502]) {
+    assert.equal(reintentarConOtraGrafia(status, CONSULTA), false, `consulta ${status}`)
+    assert.equal(reintentarConOtraGrafia(status, COBRO), false, `cobro ${status}`)
+  }
+})
+
+test('un fallo TÉCNICO de la pasarela no se le cuelga a la tarjeta del cliente', async () => {
+  // Respuesta REAL de CardNET (PurchaseId 99268, 05/08/2026), recortada. El
+  // nivel de arriba solo dice `TransactionStatusId: 4` y ningún código: el
+  // motivo está en `Transaction.Steps`, en el paso que cortó la cadena.
+  //
+  // Sin leer los pasos, esto salía por pantalla como «Verifica los datos o
+  // intenta con otra tarjeta» — culpando a una tarjeta que estaba perfecta
+  // (VISA, Enabled: true, recién capturada) y mandando al cliente a buscar
+  // otra. Y de paso borraba la única pista de la respuesta.
+  const { interpretarCompraToken, MENSAJE_FALLO_PASARELA } = await import(
+    '../src/lib/payments/cardnet-tokens-core'
+  )
+  const real = {
+    Errors: [],
+    Response: {
+      Order: 'cmsger7ao0001l404dwib9e1k',
+      Amount: 160000,
+      Capture: true,
+      Currency: 'DOP',
+      PurchaseId: 99268,
+      Transaction: {
+        Steps: [
+          {
+            Step: 'CardNet GetIdempotencyKey',
+            Error: '',
+            Status: 'Get Idempotency Key OK',
+            ResponseCode: '0',
+            ResponseMessage: 'OK',
+            AuthorizationCode: null,
+          },
+          {
+            Step: 'CardNet Authorization Without CVV',
+            Error: '',
+            Status: 'Authorization Fail',
+            ResponseCode: 'BadRequest',
+            ResponseMessage: 'Bad Request',
+            AuthorizationCode: null,
+          },
+        ],
+        Status: 'Rejected',
+        Description: 'BadRequest Bad Request',
+        ApprovalCode: null,
+        TransactionID: 1208656,
+        TransactionStatusId: 4,
+      },
+    },
+  }
+  const res = interpretarCompraToken(real)
+  assert.equal(res.aprobada, false)
+  assert.equal(res.autorizacion, null)
+  // El código técnico se CONSERVA: es lo que hay que mandarle a CardNET.
+  assert.equal(res.codigo, 'BadRequest')
+  // Y al cliente se le dice la verdad, incluido lo único que le importa.
+  assert.equal(res.motivo, MENSAJE_FALLO_PASARELA)
+  assert.match(res.motivo ?? '', /no se te hizo ningún cargo/i)
+  assert.doesNotMatch(res.motivo ?? '', /otra tarjeta|verifica los datos/i)
+})
+
+test('un rechazo REAL del emisor sigue diciendo lo del emisor, no lo de la pasarela', async () => {
+  // La guardia del caso anterior no puede tragarse los rechazos de verdad: si
+  // el banco dice «fondos insuficientes», eso es lo que hay que decir.
+  const { interpretarCompraToken } = await import('../src/lib/payments/cardnet-tokens-core')
+  const sinFondos = {
+    Errors: [],
+    Response: {
+      Transaction: {
+        Steps: [
+          { Step: 'CardNet GetIdempotencyKey', Status: 'OK', ResponseCode: '0' },
+          { Step: 'CardNet Authorization', Status: 'Authorization Fail', ResponseCode: '51' },
+        ],
+        Status: 'Rejected',
+        TransactionStatusId: 4,
+      },
+    },
+  }
+  const res = interpretarCompraToken(sinFondos)
+  assert.equal(res.aprobada, false)
+  assert.equal(res.codigo, '51')
+  assert.equal(res.motivo, 'Fondos insuficientes.')
+})
+
+test('un cobro con todos los pasos en orden sí aprueba', async () => {
+  // La otra mitad de la guardia: leer los pasos no puede volverse un motivo
+  // para rechazar cobros buenos. Un cliente al que se le cobró y no se le
+  // activó la membresía es peor que uno al que no se le cobró.
+  const { interpretarCompraToken } = await import('../src/lib/payments/cardnet-tokens-core')
+  const aprobado = {
+    Errors: [],
+    Response: {
+      Transaction: {
+        Steps: [
+          { Step: 'CardNet GetIdempotencyKey', Error: '', Status: 'Get Idempotency Key OK', ResponseCode: '0' },
+          {
+            Step: 'CardNet Authorization Without CVV',
+            Error: '',
+            Status: 'Authorization OK',
+            ResponseCode: '00',
+            ResponseMessage: 'Approved',
+            AuthorizationCode: '123456',
+          },
+        ],
+        Status: 'Approved',
+        TransactionStatusId: 1,
+      },
+    },
+  }
+  const res = interpretarCompraToken(aprobado)
+  assert.equal(res.aprobada, true)
+  assert.equal(res.motivo, null)
+})
+
+test('la referencia del cobro cabe en los campos del adquirente', async () => {
+  // Mandábamos el cuid completo (25 caracteres) en Order, Invoice y UniqueID.
+  // CardNET devolvió el UniqueID como cadena VACÍA: estos campos tienen
+  // límites que nadie documenta y que el servicio aplica en silencio.
+  const { referenciaCobro, LARGO_REFERENCIA_COBRO } = await import(
+    '../src/lib/payments/cardnet-tokens-core'
+  )
+  const id = 'cmsger7ao0001l404dwib9e1k'
+  const ref = referenciaCobro(id)
+  assert.equal(ref.length, LARGO_REFERENCIA_COBRO)
+  assert.ok(LARGO_REFERENCIA_COBRO <= 12, 'no crecer sin confirmarlo con CardNET')
+  assert.match(ref, /^[A-Za-z0-9]+$/, 'sin símbolos que puedan romper la trama')
+
+  // Es un SUFIJO del id: conciliar sigue siendo una consulta directa.
+  assert.ok(id.endsWith(ref), `${id} debe terminar en ${ref}`)
+
+  // Se corta por el FINAL, que es la parte aleatoria del cuid. Cortando por
+  // delante, dos intentos creados en el mismo segundo darían la misma
+  // referencia — y dos cobros distintos con la misma referencia es
+  // exactamente lo que no se puede conciliar después.
+  const a = referenciaCobro('cmsger7ao0001l404dwib9e1k')
+  const b = referenciaCobro('cmsger7ao0002l404zzzz1111')
+  assert.notEqual(a, b)
+
+  // Nunca vacío: un Order vacío rompería el cobro entero.
+  assert.equal(referenciaCobro(''), 'MEMBEGO')
+  assert.equal(referenciaCobro('---'), 'MEMBEGO')
+})

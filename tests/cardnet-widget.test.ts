@@ -96,3 +96,32 @@ test('un payload vacío no inventa referencias', () => {
   assert.equal(refs.customerId, null)
   assert.equal(refs.paymentProfileId, null)
 })
+
+test('el nombre del comercio no puede romper la URL de la ventana de captura', async () => {
+  // El widget arrastra los valores de SetProperties a la URL de la ventana
+  // (`Capture/?key=…&name=…`) SIN escaparlos. «CARTOWN Wash & Detailing» parte
+  // la consulta en ese `&`, CardNET recibe una URL rota y responde 500 — que
+  // en pantalla se lee como INTERNAL_SERVER_ERROR, sin ninguna pista de que la
+  // culpa es un carácter del nombre. Pasó de verdad.
+  const { textoSeguroWidget } = await import('../src/lib/payments/cardnet-widget')
+  assert.equal(textoSeguroWidget('CARTOWN Wash & Detailing'), 'CARTOWN Wash Detailing')
+  for (const malo of ['a&b', 'a?b', 'a#b', 'a=b', 'a+b', 'a%b']) {
+    assert.doesNotMatch(textoSeguroWidget(malo), /[&?#=+%]/, malo)
+  }
+  // Los acentos se conservan: son legítimos y no rompen nada.
+  assert.equal(textoSeguroWidget('Membresía Cartown'), 'Membresía Cartown')
+  // Vacío o solo símbolos cae a la reserva, nunca a cadena vacía.
+  assert.equal(textoSeguroWidget('', 'Pago seguro'), 'Pago seguro')
+  assert.equal(textoSeguroWidget('&&&', 'Pago seguro'), 'Pago seguro')
+  // Un texto larguísimo tampoco debe tumbar la petición.
+  assert.ok(textoSeguroWidget('x'.repeat(500)).length <= 60)
+})
+
+test('un logo con parámetros en la URL se omite antes que romper el pago', async () => {
+  const { imagenSeguraWidget } = await import('../src/lib/payments/cardnet-widget')
+  assert.equal(imagenSeguraWidget('https://cdn.x.com/logo.png'), 'https://cdn.x.com/logo.png')
+  // Perder el logo es mejor que perder el cobro.
+  assert.equal(imagenSeguraWidget('https://cdn.x.com/l.png?w=200&h=200'), null)
+  assert.equal(imagenSeguraWidget('http://inseguro.com/l.png'), null, 'solo https')
+  assert.equal(imagenSeguraWidget(null), null)
+})
