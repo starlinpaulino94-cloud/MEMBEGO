@@ -370,3 +370,32 @@ test('las rutas se prueban en ambas grafías (el servicio no es consistente)', a
   // Sin letra que cambiar, no se inventa una segunda llamada.
   assert.deepEqual(variantesDeRutaParaPrueba('/123'), ['/123'])
 })
+
+test('un cobro sin respuesta NO se repite: repetirlo puede cobrar dos veces', async () => {
+  // Probar la otra grafía es gratis cuando el servicio contestó 404: la ruta
+  // no existe, así que del otro lado no pasó nada.
+  //
+  // Cuando NO hubo respuesta (status 0: timeout, conexión cortada) la
+  // situación es distinta y depende de qué se llamó. En una consulta, repetir
+  // es inofensivo. En un COBRO no: CardNET pudo recibir el Purchase,
+  // procesarlo, y perderse la respuesta de vuelta. Repetir ahí es la forma
+  // exacta de cobrarle dos veces al cliente por una compra.
+  const { reintentarConOtraGrafia } = await import('../src/lib/payments/cardnet-tokens-core')
+  const CONSULTA = false
+  const COBRO = true
+
+  // Ruta inexistente: nada se ejecutó, se puede reintentar siempre.
+  assert.equal(reintentarConOtraGrafia(404, CONSULTA), true)
+  assert.equal(reintentarConOtraGrafia(404, COBRO), true)
+
+  // Sin respuesta: aquí está la diferencia que importa.
+  assert.equal(reintentarConOtraGrafia(0, CONSULTA), true)
+  assert.equal(reintentarConOtraGrafia(0, COBRO), false, 'un cobro sin respuesta NO se repite')
+
+  // Cualquier respuesta real del servicio (aunque sea un error) significa que
+  // la ruta existe: cambiar de grafía solo enturbiaría el diagnóstico.
+  for (const status of [200, 400, 401, 403, 409, 500, 502]) {
+    assert.equal(reintentarConOtraGrafia(status, CONSULTA), false, `consulta ${status}`)
+    assert.equal(reintentarConOtraGrafia(status, COBRO), false, `cobro ${status}`)
+  }
+})

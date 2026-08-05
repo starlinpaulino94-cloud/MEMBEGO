@@ -12,6 +12,7 @@ import {
   marcarCustomerIdConCuenta,
   leerCustomerIdDeCuenta,
   variantesDeRuta,
+  reintentarConOtraGrafia,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
@@ -162,14 +163,14 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     },
   }
 
-  const { ok, status, json } = await postTokens('/Purchase', cuerpo)
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Purchase', cuerpo, true)
   if (status === 0) {
     return {
       aprobada: false,
       autorizacion: null,
       codigo: '',
       motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.',
-      crudo: sinSensibles(json),
+      crudo: evidencia(status, json),
     }
   }
 
@@ -179,8 +180,23 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
   return {
     ...interpretado,
     aprobada,
-    crudo: sinSensibles(json),
+    crudo: evidencia(status, json),
   }
+}
+
+/**
+ * Expediente del cobro: la respuesta del proveedor SIN sensibles, más el status
+ * HTTP con el que llegó.
+ *
+ * El status importa tanto como el cuerpo. Un 404 (ruta equivocada), un 401
+ * (llave mal formateada) y un 200 con la transacción declinada producen los
+ * tres el MISMO texto en pantalla —«No se pudo procesar el pago»— porque
+ * ninguno trae un código de respuesta que sepamos leer. Guardando el status,
+ * una consulta a `pago_intentos` distingue los tres casos en un segundo; sin
+ * él, solo queda volver a reproducir el fallo a ciegas. Pasó.
+ */
+function evidencia(status: number, json: Record<string, unknown>): Record<string, unknown> {
+  return { _http: status, ...sinSensibles(json) }
 }
 
 // ── Fase 2: tarjeta guardada (cobros recurrentes) ───────────────────────────
@@ -291,12 +307,19 @@ async function postTokens(
 async function llamarTokensConRuta(
   metodo: 'GET' | 'POST',
   path: string,
-  cuerpo: Record<string, unknown> | null
+  cuerpo: Record<string, unknown> | null,
+  /**
+   * `true` cuando la llamada MUEVE DINERO. Cambia una sola cosa: si no hubo
+   * respuesta (timeout/red), no se repite con la otra grafía — el cobro pudo
+   * haberse procesado allá y perdido la respuesta de vuelta. Ver
+   * `reintentarConOtraGrafia`.
+   */
+  esCobro = false
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   let ultima: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
   for (const variante of variantesDeRuta(path)) {
     const r = await llamarTokens(metodo, variante, cuerpo)
-    if (r.ok || (r.status !== 404 && r.status !== 0)) return r
+    if (r.ok || !reintentarConOtraGrafia(r.status, esCobro)) return r
     ultima = r
   }
   return ultima ?? { ok: false, status: 0, json: { _error: 'sin respuesta' } }
@@ -535,9 +558,9 @@ export async function cobrarConCredencialGuardada(input: {
     Environment: 'Ecommerce_COF',
     DataDo: { Tax: '0', Invoice: input.orden },
   }
-  const { ok, json } = await postTokens('/Purchase', cuerpo)
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Purchase', cuerpo, true)
   const interpretado = interpretarCompraToken(json)
-  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: sinSensibles(json) }
+  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: evidencia(status, json) }
 }
 
 /**

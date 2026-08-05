@@ -480,6 +480,24 @@ export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardne
  *
  * En vez de apostar por una grafía, se prueban las dos.
  */
+/**
+ * ¿Vale la pena repetir la llamada con la otra grafía de la ruta?
+ *
+ * `404` sí: la ruta no existe, así que del otro lado no se ejecutó NADA y
+ * repetir es gratis.
+ *
+ * `0` (sin respuesta: timeout, DNS, conexión cortada) depende de qué se estaba
+ * llamando. En una consulta, repetir es inofensivo. En un COBRO no: el servidor
+ * puede haber recibido y procesado el Purchase y habérsele caído la respuesta
+ * de vuelta — repetirlo es la receta exacta para cobrarle dos veces al cliente.
+ * Ahí se prefiere quedarse sin saber antes que duplicar el cargo.
+ */
+export function reintentarConOtraGrafia(status: number, esCobro: boolean): boolean {
+  if (status === 404) return true
+  if (status === 0) return !esCobro
+  return false
+}
+
 export function variantesDeRuta(path: string): string[] {
   const m = /^\/([^/]+)(.*)$/.exec(path)
   if (!m) return [path]
