@@ -11,6 +11,7 @@ import {
   esIpValida,
   marcarCustomerIdConCuenta,
   leerCustomerIdDeCuenta,
+  variantesDeRuta,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
@@ -271,6 +272,37 @@ async function postTokens(
 }
 
 /**
+ * Variantes de MAYÚSCULA/minúscula del primer segmento de la ruta.
+ *
+ * El servicio no es consistente: el manual y el Postman escriben `/Customer`,
+ * pero el ambiente de pruebas responde 200 a `/customer` y hay evidencia de
+ * que la otra grafía devuelve 404. Un 404 hace que `llamarTokens` descarte el
+ * host entero y termine sin respuesta — el síntoma es un 502 nuestro con el
+ * mensaje «No se pudo iniciar la ventana de pago», que no dice nada de la
+ * causa real.
+ *
+ * En vez de apostar por una grafía, se prueban las dos.
+ */
+/**
+ * Llama probando las grafías de la ruta. La primera que no dé 404 manda: un
+ * 401 o un 500 son respuestas del servicio (la ruta existe), y reintentarlas
+ * con otra grafía solo enturbiaría el diagnóstico.
+ */
+async function llamarTokensConRuta(
+  metodo: 'GET' | 'POST',
+  path: string,
+  cuerpo: Record<string, unknown> | null
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  let ultima: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
+  for (const variante of variantesDeRuta(path)) {
+    const r = await llamarTokens(metodo, variante, cuerpo)
+    if (r.ok || (r.status !== 404 && r.status !== 0)) return r
+    ultima = r
+  }
+  return ultima ?? { ok: false, status: 0, json: { _error: 'sin respuesta' } }
+}
+
+/**
  * PERFILES DE PAGO del Customer (`GET /Customer/{id}`).
  *
  * CONFIRMADO POR CARDNET: tras la captura hospedada, el token de la tarjeta
@@ -302,7 +334,11 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
 }> {
   const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null }
   if (!customerId) return vacio
-  const { ok, json } = await llamarTokens('GET', `/Customer/${encodeURIComponent(customerId)}`, null)
+  const { ok, json } = await llamarTokensConRuta(
+    'GET',
+    `/Customer/${encodeURIComponent(customerId)}`,
+    null
+  )
   if (!ok) return vacio
   const { datos } = desenvolverRespuesta(json)
   const s = (...ks: string[]) => {
@@ -429,7 +465,7 @@ export async function crearClienteCardnet(input: {
   nombre?: string
   apellido?: string
 }): Promise<{ customerId: string } | null> {
-  const { ok, json } = await postTokens('/Customer', {
+  const { ok, json } = await llamarTokensConRuta('POST', '/Customer', {
     Email: input.email,
     ...(input.nombre ? { FirstName: input.nombre } : {}),
     ...(input.apellido ? { LastName: input.apellido } : {}),
