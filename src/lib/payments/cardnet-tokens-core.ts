@@ -337,16 +337,31 @@ export const MONEDA_DOP_TOKENS = 'DOP'
 // se registra un Customer nuevo. Es autocurativo: cambiar de llaves no exige
 // tocar la base a mano.
 
-/** Huella corta y estable de la cuenta, derivada de su llave PÚBLICA. */
-function huellaCuenta(publicKey: string): string {
+/**
+ * Huella corta de la cuenta, derivada de LAS DOS llaves.
+ *
+ * Con solo la pública, la etiqueta puede mentir: el Customer lo crea la llave
+ * PRIVADA, así que un par mezclado (pública de una cuenta, privada de otra)
+ * guardaba un cliente de la cuenta A rotulado como de la B. Al arreglar el
+ * par, la etiqueta seguía «coincidiendo» y se reutilizaba un id que la cuenta
+ * buena no reconoce — `TK011 El Cliente especificado no es válido`. Pasó.
+ *
+ * Incluyendo ambas, cualquier cambio en cualquiera de las dos invalida la
+ * etiqueta, que es exactamente lo que se quiere.
+ */
+function huellaCuenta(publicKey: string, privateKey: string): string {
   let h = 0
-  for (const c of publicKey.trim()) h = (h * 31 + c.charCodeAt(0)) | 0
+  for (const c of `${publicKey.trim()}|${privateKey.trim()}`) h = (h * 31 + c.charCodeAt(0)) | 0
   return (h >>> 0).toString(36)
 }
 
 /** Etiqueta el CustomerId con la cuenta que lo emitió, para poder guardarlo. */
-export function marcarCustomerIdConCuenta(customerId: string, publicKey: string): string {
-  return `${huellaCuenta(publicKey)}:${customerId}`
+export function marcarCustomerIdConCuenta(
+  customerId: string,
+  publicKey: string,
+  privateKey: string
+): string {
+  return `${huellaCuenta(publicKey, privateKey)}:${customerId}`
 }
 
 /**
@@ -358,13 +373,14 @@ export function marcarCustomerIdConCuenta(customerId: string, publicKey: string)
  */
 export function leerCustomerIdDeCuenta(
   guardado: string | null | undefined,
-  publicKey: string
+  publicKey: string,
+  privateKey: string
 ): string | null {
   const v = guardado?.trim()
   if (!v) return null
   const sep = v.indexOf(':')
   if (sep <= 0) return null
-  if (v.slice(0, sep) !== huellaCuenta(publicKey)) return null
+  if (v.slice(0, sep) !== huellaCuenta(publicKey, privateKey)) return null
   return v.slice(sep + 1) || null
 }
 

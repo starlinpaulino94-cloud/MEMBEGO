@@ -315,12 +315,29 @@ test('el CustomerId guardado NO se reutiliza al cambiar de cuenta de CardNET', a
   const { marcarCustomerIdConCuenta, leerCustomerIdDeCuenta } = await import(
     '../src/lib/payments/cardnet-tokens-core'
   )
-  const CUENTA_A = '3-whMGoDQeLbIZPYm9KZvW_I56ONV7HQ' // con autenticación
-  const CUENTA_B = 'J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ' // sin autenticación
+  const PUB_A = '3-whMGoDQeLbIZPYm9KZvW_I56ONV7HQ' // con autenticación
+  const PRIV_A = '573h-JheWH2bkL9bx59i8Lp-0YATxJdw4pfF3UorkpXaO3G3FDxsxr__'
+  const PUB_B = 'J_eHXPYlDo9wlFpFXjgalm_I56ONV7HQ' // sin autenticación
+  const PRIV_B = 'on3smurlSFA-_xT9IRGDv6v17bAY8Ri6acwsmjpjIojkNmByKuUJkA__'
 
-  const guardado = marcarCustomerIdConCuenta('112027', CUENTA_A)
-  assert.equal(leerCustomerIdDeCuenta(guardado, CUENTA_A), '112027', 'misma cuenta: se reutiliza')
-  assert.equal(leerCustomerIdDeCuenta(guardado, CUENTA_B), null, 'otra cuenta: se descarta')
+  const guardado = marcarCustomerIdConCuenta('112027', PUB_A, PRIV_A)
+  assert.equal(
+    leerCustomerIdDeCuenta(guardado, PUB_A, PRIV_A),
+    '112027',
+    'misma cuenta: se reutiliza'
+  )
+  assert.equal(leerCustomerIdDeCuenta(guardado, PUB_B, PRIV_B), null, 'otra cuenta: se descarta')
+
+  // EL CASO QUE FALLÓ: par mezclado. El Customer lo crea la PRIVADA, así que
+  // etiquetar solo con la pública guardaba un cliente de la cuenta A rotulado
+  // como de la B. Al arreglar el par, la etiqueta seguía coincidiendo y se
+  // reutilizaba un id que la cuenta buena rechaza con TK011.
+  const conParMezclado = marcarCustomerIdConCuenta('112001', PUB_B, PRIV_A)
+  assert.equal(
+    leerCustomerIdDeCuenta(conParMezclado, PUB_B, PRIV_B),
+    null,
+    'lo guardado con un par mezclado no sirve cuando el par se arregla'
+  )
 })
 
 test('un CustomerId sin etiqueta de cuenta se descarta', async () => {
@@ -328,11 +345,12 @@ test('un CustomerId sin etiqueta de cuenta se descarta', async () => {
   // Registrar un Customer de más es barato; abrir una ventana muerta cuesta
   // una sesión entera de depuración.
   const { leerCustomerIdDeCuenta } = await import('../src/lib/payments/cardnet-tokens-core')
-  const CUENTA = '3-whMGoDQeLbIZPYm9KZvW_I56ONV7HQ'
-  assert.equal(leerCustomerIdDeCuenta('112027', CUENTA), null)
-  assert.equal(leerCustomerIdDeCuenta('', CUENTA), null)
-  assert.equal(leerCustomerIdDeCuenta(null, CUENTA), null)
-  assert.equal(leerCustomerIdDeCuenta(':', CUENTA), null)
+  const PUB = '3-whMGoDQeLbIZPYm9KZvW_I56ONV7HQ'
+  const PRIV = '573h-JheWH2bkL9bx59i8Lp-0YATxJdw4pfF3UorkpXaO3G3FDxsxr__'
+  assert.equal(leerCustomerIdDeCuenta('112027', PUB, PRIV), null)
+  assert.equal(leerCustomerIdDeCuenta('', PUB, PRIV), null)
+  assert.equal(leerCustomerIdDeCuenta(null, PUB, PRIV), null)
+  assert.equal(leerCustomerIdDeCuenta(':', PUB, PRIV), null)
 })
 
 test('las rutas se prueban en ambas grafías (el servicio no es consistente)', async () => {

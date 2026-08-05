@@ -381,7 +381,7 @@ export async function obtenerCustomerId(input: {
   // cuenta vieja abre la ventana con un session_id que la nueva no reconoce:
   // INTERNAL_SERVER_ERROR, sin ninguna pista de que la causa es un dato viejo.
   // Por eso se guarda etiquetado con la cuenta y se descarta si no coincide.
-  const yaLoTengo = leerCustomerIdDeCuenta(input.guardado, cfg.publicKey)
+  const yaLoTengo = leerCustomerIdDeCuenta(input.guardado, cfg.publicKey, cfg.privateKey)
   if (yaLoTengo) return yaLoTengo
 
   const cliente = await crearClienteCardnet({ email: input.email })
@@ -390,7 +390,7 @@ export async function obtenerCustomerId(input: {
   // POST de más la próxima vez. Pero queda anotado: si falla siempre, el
   // síntoma vuelve a ser una ventana que muere sin explicación.
   await input
-    .guardar(marcarCustomerIdConCuenta(cliente.customerId, cfg.publicKey))
+    .guardar(marcarCustomerIdConCuenta(cliente.customerId, cfg.publicKey, cfg.privateKey))
     .catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
   return cliente.customerId
 }
