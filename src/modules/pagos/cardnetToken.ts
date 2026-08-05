@@ -9,6 +9,7 @@ import {
   cobrarConToken,
   consultarClienteCardnet,
 } from '@/lib/payments/cardnet-tokens'
+import { MENSAJE_ACTIVACION_PENDIENTE } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
 
@@ -126,6 +127,12 @@ export type ConfirmacionPerfilResultado =
   | { estado: 'sin_tarjeta' }
   | { estado: 'en_proceso' }
   | { estado: 'sin_pendiente' }
+  /**
+   * La tarjeta se registró pero CardNET la dejó deshabilitada a la espera del
+   * código de activación de 6 dígitos (§4.1.2.3). Es un estado TERMINAL del
+   * sondeo: seguir esperando no la va a habilitar sola.
+   */
+  | { estado: 'pendiente_activacion'; motivo: string; ultimos4: string | null }
   | { estado: 'rechazado'; motivo: string }
   | { estado: 'error'; motivo: string }
 
@@ -224,6 +231,20 @@ export async function cobrarPendienteConPerfil(input: {
   // El perfil recién agregado es el último de la lista (VERIFICAR-QA el orden).
   const perfil = perfiles[perfiles.length - 1]
   if (!perfil.token) return { estado: 'sin_tarjeta' }
+
+  // MANUAL §4.1.2.2 punto 12: el PaymentProfile puede venir `Enabled: false`.
+  // Con las llaves CON autenticación, la tarjeta recién capturada nace así:
+  // CardNET cobra RD$1.00 y el banco le muestra al cliente un código de 6
+  // dígitos que hay que ingresar para activarla (§4.1.2.3). Cobrar con un
+  // perfil deshabilitado falla, y el fallo no explica por qué — por eso se
+  // detecta aquí y se le dice al cliente qué tiene que hacer.
+  if (!perfil.habilitado) {
+    return {
+      estado: 'pendiente_activacion',
+      ultimos4: perfil.ultimos4,
+      motivo: MENSAJE_ACTIVACION_PENDIENTE,
+    }
+  }
 
   const res = await cobrarObjetivoConToken({
     objetivo: input.objetivo,

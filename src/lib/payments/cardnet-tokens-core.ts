@@ -197,7 +197,7 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
   const motivo = aprobada
     ? null
     : errores.length > 0 && errores[0].mensaje
-      ? errores[0].mensaje
+      ? mensajeDeError(errores[0].codigo, errores[0].mensaje)
       : estadoTx === TRANSACTION_STATUS.PENDIENTE
         ? 'El pago quedó pendiente de confirmación. No cierres la app; te avisaremos.'
         : estadoTx === TRANSACTION_STATUS.PREAUTORIZADA
@@ -210,6 +210,35 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
     codigo: codigo || (aprobada ? '00' : ''),
     motivo,
   }
+}
+
+/**
+ * Texto de la tarjeta que espera su código de activación (§3.1.1 operativo).
+ *
+ * Se comparte con `cardnetToken.ts`: al cliente le tiene que llegar lo mismo
+ * llegue por donde llegue el fallo — cobrando con el token del widget, o
+ * cobrando con el perfil que se consulta después.
+ */
+export const MENSAJE_ACTIVACION_PENDIENTE =
+  'Tu tarjeta quedó registrada pero falta activarla. Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo para completar el pago.'
+
+/**
+ * Traduce el error del proveedor a algo que el cliente pueda ACCIONAR.
+ *
+ * «El token no está activo» es técnicamente exacto e inútil para quien acaba
+ * de digitar su tarjeta: no dice qué es un token, ni qué hacer. Detrás de esa
+ * frase está el flujo de activación del §4.1.2.3, que sí se puede explicar.
+ */
+function mensajeDeError(codigo: string, mensaje: string): string {
+  // `PR001` es el código que devuelve el Purchase cuando el medio de pago
+  // existe pero no está habilitado (confirmado en vivo, 05/08/2026). Se empareja
+  // por código antes que por texto: el texto puede cambiar de redacción o de
+  // idioma, el código no.
+  if (codigo === 'PR001') return MENSAJE_ACTIVACION_PENDIENTE
+  if (/token.*(no|sin).*activ|activ.*pendiente|not.*activ/i.test(mensaje)) {
+    return MENSAJE_ACTIVACION_PENDIENTE
+  }
+  return mensaje
 }
 
 /**
@@ -316,6 +345,22 @@ export interface PerfilPagoCardnet {
   token: string | null
   marca: string | null
   ultimos4: string | null
+  /**
+   * ¿El medio de pago está habilitado para cobrar?
+   *
+   * MANUAL §4.1.2.2 punto 12: «deberá verificar que el objeto PaymentProfile
+   * podrá estar marcado como **deshabilitado (Enabled=false)**, por lo que
+   * para que dicho perfil (Token) pueda ser utilizado, deberá ser activado».
+   *
+   * Con las llaves CON autenticación 3DS, la tarjeta recién capturada nace
+   * `Enabled: false`: CardNET hace un microcargo de RD$1.00 y el cliente debe
+   * ingresar el código de 6 dígitos que le muestra su banco (§4.1.2.3). Cobrar
+   * con un perfil deshabilitado no funciona, y el fallo no dice por qué.
+   *
+   * Si el campo no viene, se asume habilitado: es lo que ocurre con las llaves
+   * SIN autenticación, donde el token queda activo solo.
+   */
+  habilitado: boolean
 }
 
 /** Saca los perfiles de pago de la respuesta de `GET /Customer/{id}`. */
@@ -340,11 +385,15 @@ export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardne
       const ultimos4 =
         s('LastFour', 'Last4', 'last4') ??
         (enmascarado ? enmascarado.replace(/[^0-9]/g, '').slice(-4) || null : null)
+      // Solo un `false` explícito deshabilita. Un campo ausente no puede
+      // bloquear un cobro que sí habría pasado.
+      const enabled = p.Enabled ?? p.enabled ?? p.IsEnabled
       return {
         paymentProfileId: s('PaymentProfileId', 'ProfileId', 'Id', 'id'),
         token: s('Token', 'TrxToken', 'PWToken', 'token'),
         marca: s('Brand', 'CardBrand', 'CardType', 'Franchise'),
         ultimos4,
+        habilitado: enabled !== false && enabled !== 'false',
       }
     })
     .filter((p) => Boolean(p.token || p.paymentProfileId))

@@ -123,10 +123,37 @@ Por eso el script se **deriva** del `CaptureURL` que devuelve CardNET
 desalinearse. El §3.1 del manual además prohíbe cargar la librería desde un
 host que no sea de CardNET.
 
+### Tarjeta de prueba
+
+Del ejemplo de `TokenRequest` del manual (§5, p. 18):
+
+| Campo | Valor |
+|---|---|
+| Número | `4111 1111 1111 1111` |
+| CVV | `123` |
+| Expiración | cualquier fecha futura |
+
+### Los DOS juegos de llaves NO son intercambiables
+
+CardNET entrega dos pares, y cambian el flujo, no solo las credenciales:
+
+| | SIN autenticación | CON autenticación (3DS) |
+|---|---|---|
+| Tras capturar la tarjeta | El token queda **activo solo** (§3.1.2 operativo) | El perfil nace `Enabled: false` (§4.1.2.2 p.12) |
+| Paso extra | Ninguno | CardNET cobra **RD$1.00** y el banco muestra un código de 6 dígitos (`Cardnet:Z2R78V`) que el cliente debe ingresar (§4.1.2.3) |
+| Reintentos | — | 3; al tercero CardNET **borra la tarjeta** |
+| ¿Implementado aquí? | Sí, completo | **No.** Falta la pantalla de activación y la llamada `POST /Customer/{id}/activate` |
+
+Hoy el código **detecta** el perfil deshabilitado y le explica al cliente qué
+pasó (`estado: 'pendiente_activacion'`), en vez de intentar un cobro que iba a
+fallar sin decir por qué. Pero no puede completarlo: eso requiere la pantalla
+de activación.
+
+**Para probar y certificar: usa el juego SIN autenticación.** La decisión de
+producción (menos fricción vs. más protección antifraude) está abierta.
+
 ### Lo que solo confirma un cobro real
 
-- [ ] Tarjeta de prueba de CardNET **del juego que corresponda a tus llaves**
-      (hay uno CON autenticación 3DS y otro SIN), con su clave del reto.
 - [ ] Un cobro aprobado de punta a punta, con la consola del navegador abierta.
 - [ ] Que `pago_intentos.respuesta` guarde la respuesta cruda del Purchase.
 

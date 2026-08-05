@@ -6,6 +6,7 @@ import {
   interpretarCompraToken,
   desenvolverRespuesta,
   sinSensibles,
+  extraerPerfiles as extraerPerfilesSync,
 } from '../src/lib/payments/cardnet-tokens-core'
 
 /**
@@ -245,4 +246,64 @@ test('los códigos de rechazo del §9.2 se traducen a algo accionable', () => {
   // Un código desconocido no filtra detalle técnico del emisor.
   const raro = interpretarCompraToken({ ResponseCode: 'ZZ' })
   assert.doesNotMatch(raro.motivo ?? '', /ZZ/)
+})
+
+test('un perfil deshabilitado se reconoce: no se puede cobrar con él', async () => {
+  // MANUAL §4.1.2.2 punto 12: «el objeto PaymentProfile podrá estar marcado
+  // como deshabilitado (Enabled=false), por lo que para que dicho perfil
+  // (Token) pueda ser utilizado, deberá ser activado».
+  //
+  // Con las llaves CON autenticación 3DS la tarjeta recién capturada nace así.
+  // Sin mirar este campo, se intenta cobrar con un token muerto y el fallo
+  // llega al cliente como un rechazo genérico que no le dice qué hacer.
+  const { extraerPerfiles } = await import('../src/lib/payments/cardnet-tokens-core')
+  const perfiles = extraerPerfiles({
+    Response: {
+      PaymentProfiles: [
+        { PaymentProfileId: 50330, Token: 'CT__viejo_habilitado_1234', Enabled: true },
+        { PaymentProfileId: 50331, Token: 'CT__nuevo_sin_activar_5678', Enabled: false },
+      ],
+    },
+    Errors: [],
+  })
+  assert.equal(perfiles[0].habilitado, true)
+  assert.equal(perfiles[1].habilitado, false, 'el recién capturado espera activación')
+})
+
+test('sin el campo Enabled se asume habilitado', () => {
+  // Es lo que ocurre con las llaves SIN autenticación: el token queda activo
+  // solo. Un campo ausente no puede bloquear un cobro que sí habría pasado.
+  const perfiles = extraerPerfilesSync({
+    Response: { PaymentProfiles: [{ PaymentProfileId: 1, Token: 'CT__sin_campo_enabled_1' }] },
+    Errors: [],
+  })
+  assert.equal(perfiles[0].habilitado, true)
+})
+
+test('«El token no está activo» se traduce a instrucciones, no se repite tal cual', () => {
+  // Es el mensaje real que devolvió CardNET en el primer cobro que llegó hasta
+  // el Purchase. Es exacto y completamente inútil para quien acaba de digitar
+  // su tarjeta: no dice qué es un token ni qué hacer. Detrás está el flujo de
+  // activación del §4.1.2.3, que sí se puede explicar.
+  // Respuesta REAL capturada en producción de pruebas (05/08/2026): el código
+  // es PR001 y el texto lleva punto final. Se empareja por código, que no
+  // depende de la redacción ni del idioma.
+  const r = interpretarCompraToken({
+    Response: { TrxToken: '***', Amount: null },
+    Errors: [{ ErrorCode: 'PR001', Message: 'El token no está activo.' }],
+  })
+  assert.equal(r.aprobada, false)
+  assert.match(r.motivo ?? '', /RD\$1\.00/)
+  assert.match(r.motivo ?? '', /6 dígitos/)
+  assert.doesNotMatch(r.motivo ?? '', /^El token no está activo$/)
+})
+
+test('los demás errores del proveedor se muestran tal cual', () => {
+  // Solo se reescribe lo que sabemos explicar mejor. Inventar traducciones
+  // para errores que no conocemos escondería información útil.
+  const r = interpretarCompraToken({
+    Response: {},
+    Errors: [{ ErrorCode: 'TK004', Message: 'Sesión inválida' }],
+  })
+  assert.equal(r.motivo, 'Sesión inválida')
 })
