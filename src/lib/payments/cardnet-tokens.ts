@@ -481,6 +481,28 @@ export async function crearClienteCardnet(input: {
 }
 
 /**
+ * DIAGNÓSTICO del registro de Customer: hace exactamente lo mismo que
+ * `crearClienteCardnet` pero devuelve el status y la respuesta CRUDA de cada
+ * grafía de ruta probada.
+ *
+ * Existe porque un fallo aquí se veía como un 502 mudo («No se pudo iniciar la
+ * ventana de pago») que obligaba a adivinar. Con esto, el fallo se lee.
+ */
+export async function registrarClienteDiagnostico(email: string): Promise<
+  { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+> {
+  const cfg = getTokensConfig()
+  if (!cfg) return []
+  const salida: { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[] = []
+  for (const ruta of variantesDeRuta('/Customer')) {
+    const r = await llamarTokens('POST', ruta, { Email: email, Enable: 'true' })
+    salida.push({ ruta, ok: r.ok, status: r.status, respuesta: sinSensibles(r.json) })
+    if (r.ok) break
+  }
+  return salida
+}
+
+/**
  * Cobra una CREDENCIAL GUARDADA (renovación recurrente). Reutiliza el mismo
  * Purchase, pero con las referencias almacenadas en vez de un token de un solo
  * uso.
