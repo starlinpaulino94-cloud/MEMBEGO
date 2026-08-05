@@ -115,7 +115,11 @@ export async function GET(req: NextRequest) {
       : null
 
     const guardadoCrudo = fila?.cardnetCustomerId ?? null
-    const guardadoUtil = leerCustomerIdDeCuenta(guardadoCrudo, base.publicKey ?? '')
+    const guardadoUtil = leerCustomerIdDeCuenta(
+      guardadoCrudo,
+      base.publicKey ?? '',
+      process.env.CARDNET_TOKENS_PRIVATE_KEY ?? ''
+    )
 
     // Paso 1: registrar (solo si no hay id utilizable, igual que el flujo real).
     const registro = guardadoUtil ? [] : await registrarClienteDiagnostico(email)

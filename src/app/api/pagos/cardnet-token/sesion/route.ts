@@ -71,38 +71,63 @@ export async function POST(req: NextRequest) {
 
     const email = user.email || `${clienteId}@membego.local`
 
-    // §4.1.2.1: registrar una vez, guardar el id. El POST solo ocurre en el
-    // primer pago de este cliente; a partir de ahí, nunca más.
-    const customerId = await obtenerCustomerId({
-      email,
-      guardado: cliente?.cardnetCustomerId ?? null,
-      guardar: async (nuevo) => {
-        await prisma.cliente
-          .update({ where: { id: clienteId }, data: { cardnetCustomerId: nuevo } })
-          .catch(anotarSinRomper(clienteId))
-      },
-    })
-    if (!customerId) {
+    const guardar = async (valor: string | null) => {
+      await prisma.cliente
+        .update({ where: { id: clienteId }, data: { cardnetCustomerId: valor } })
+        .catch(anotarSinRomper(clienteId))
+    }
+
+    /**
+     * Resuelve el Customer y consulta su ventana. Devuelve `null` si el
+     * Customer que se usó NO sirve, para poder reintentar con uno nuevo.
+     */
+    const intentar = async (guardado: string | null) => {
+      const customerId = await obtenerCustomerId({
+        email,
+        guardado,
+        guardar: (valor) => guardar(valor),
+      })
+      if (!customerId) return { customerId: null, consulta: null }
+      // §4.1.2.2 punto 3-4: el GET trae los perfiles Y los datos de la ventana.
+      return { customerId, consulta: await consultarClienteCardnet(customerId) }
+    }
+
+    let { customerId, consulta } = await intentar(cliente?.cardnetCustomerId ?? null)
+
+    /**
+     * ¿El Customer que teníamos guardado ya no sirve?
+     *
+     * CardNET responde `TK011 El Cliente especificado no es válido` cuando el
+     * id no existe en la cuenta — y lo hace con HTTP 200, así que sin mirar el
+     * cuerpo parece que todo fue bien y solo faltaron los datos de la ventana.
+     *
+     * Pasa cada vez que el id guardado queda huérfano: se cambió de juego de
+     * llaves, se restauró la base desde otro entorno, o CardNET depuró su lado.
+     * En vez de dejar al cliente atascado con un 502 que no explica nada, se
+     * descarta el id y se registra uno nuevo. UNA sola vez: si el segundo
+     * intento también falla, el problema no es el id guardado.
+     */
+    const inservible = !consulta?.captureUrl || !consulta?.uniqueId
+    const teniamosGuardado = Boolean(cliente?.cardnetCustomerId)
+    if (inservible && teniamosGuardado) {
+      await guardar(null)
+      ;({ customerId, consulta } = await intentar(null))
+    }
+
+    if (!customerId || !consulta) {
       return NextResponse.json(
         { ok: false, error: 'No se pudo iniciar la ventana de pago. Intenta de nuevo.' },
         { status: 502 }
       )
     }
 
-    // §4.1.2.2 punto 3-4: el GET trae los perfiles Y los datos de la ventana.
-    // Una sola llamada para las dos cosas — antes eran dos, y la segunda
-    // mataba a la primera.
-    const consulta = await consultarClienteCardnet(customerId)
-
-    // El Customer guardado debe seguir siendo de este cliente. Si el correo no
-    // coincide (id heredado de otro entorno, cliente que cambió de correo), se
-    // descarta y se registra uno nuevo en el próximo intento.
+    // El Customer debe seguir siendo de este cliente. Si el correo no coincide
+    // (id heredado de otro entorno, cliente que cambió de correo), se descarta
+    // y se registra uno nuevo en el próximo intento.
     const emailCoincide =
       !consulta.email || consulta.email.trim().toLowerCase() === email.trim().toLowerCase()
     if (!emailCoincide) {
-      await prisma.cliente
-        .update({ where: { id: clienteId }, data: { cardnetCustomerId: null } })
-        .catch(anotarSinRomper(clienteId))
+      await guardar(null)
       return NextResponse.json(
         { ok: false, error: 'La sesión de pago no era válida. Intenta de nuevo.' },
         { status: 409 }
