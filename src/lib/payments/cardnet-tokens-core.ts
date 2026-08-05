@@ -152,6 +152,75 @@ export const TRANSACTION_STATUS = {
 } as const
 
 /**
+ * PASO de `Transaction.Steps` donde de verdad se rompió el cobro.
+ *
+ * El Purchase no es una llamada: es una secuencia. CardNET la reporta paso a
+ * paso, y el único lugar donde dice QUÉ falló es el paso que falló:
+ *
+ *   [{ Step: "CardNet GetIdempotencyKey",          Status: "…OK",                ResponseCode: "0" },
+ *    { Step: "CardNet Authorization Without CVV",  Status: "Authorization Fail", ResponseCode: "BadRequest" }]
+ *
+ * El nivel de arriba solo trae `TransactionStatusId: 4` («rechazada») y ni un
+ * código. Al leer únicamente ese nivel, TODO fallo —una autorización
+ * malformada, un banco sin fondos, la pasarela caída— salía por la misma
+ * frase: «Verifica los datos o intenta con otra tarjeta». O sea, culpando a la
+ * tarjeta del cliente de problemas que no eran de su tarjeta, y tirando la
+ * única pista útil que traía la respuesta. Pasó, y costó una depuración entera.
+ */
+export interface PasoTransaccion {
+  paso: string
+  estado: string
+  codigo: string
+  mensaje: string
+}
+
+/** Códigos de paso que significan «este paso salió bien». */
+const PASO_OK = new Set(['0', '00', '000'])
+
+/**
+ * Devuelve el ÚLTIMO paso fallido de la transacción, o `null` si todos
+ * pasaron. Se toma el último a propósito: los pasos son una cadena y el que la
+ * corta es el que explica el rechazo.
+ */
+export function pasoQueFallo(transaccion: unknown): PasoTransaccion | null {
+  const tx = (transaccion ?? {}) as Record<string, unknown>
+  const pasos = Array.isArray(tx.Steps) ? tx.Steps : []
+  let ultimo: PasoTransaccion | null = null
+  for (const crudo of pasos) {
+    if (!crudo || typeof crudo !== 'object') continue
+    const p = crudo as Record<string, unknown>
+    const t = (v: unknown) => (v == null ? '' : String(v)).trim()
+    const codigo = t(p.ResponseCode)
+    const estado = t(p.Status)
+    const error = t(p.Error)
+    const fallo =
+      Boolean(error) ||
+      /fail|error|reject|denied/i.test(estado) ||
+      (codigo !== '' && !PASO_OK.has(codigo))
+    if (!fallo) continue
+    ultimo = { paso: t(p.Step), estado, codigo, mensaje: t(p.ResponseMessage) || error }
+  }
+  return ultimo
+}
+
+/** ¿El código es uno del emisor (§9.2), o algo técnico de la pasarela? */
+function esCodigoDeEmisor(codigo: string): boolean {
+  return /^\d{2,3}$/.test(codigo)
+}
+
+/**
+ * Lo que se le dice al cliente cuando el fallo NO es de su tarjeta.
+ *
+ * «BadRequest», «Timeout» o un 500 del adquirente no son problemas del
+ * cliente, y pedirle que «verifique los datos o intente con otra tarjeta» lo
+ * manda a dar vueltas por algo que nunca va a poder arreglar — y encima le
+ * hace dudar de su tarjeta. Lo único que de verdad necesita saber es que no se
+ * le cobró.
+ */
+export const MENSAJE_FALLO_PASARELA =
+  'El pago no se pudo completar por un problema de la pasarela, no de tu tarjeta. No se te hizo ningún cargo. Intenta de nuevo en unos minutos.'
+
+/**
  * Interpreta la respuesta del Purchase (manual §7.2 · §9.2 · §10.6).
  *
  * Ante la duda NO aprueba: activar producto por una respuesta ambigua es
@@ -168,10 +237,14 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
   >
 
   const s = (v: unknown) => (v == null ? '' : String(v)).trim()
+  // El paso que cortó la cadena: la única parte de la respuesta que dice QUÉ
+  // salió mal. Ver `pasoQueFallo`.
+  const paso = pasoQueFallo(tx)
   // Distintos nombres posibles del código de respuesta según la versión.
   const codigo =
     s(r.ResponseCode) ||
     s(tx.ResponseCode) ||
+    (paso?.codigo ?? '') ||
     s(r.IsoCode) ||
     s(r.IsoResponseCode) ||
     s(r['response-code'])
@@ -196,29 +269,53 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
     s(r.RRN) ||
     null
 
-  // Con errores del proveedor NUNCA se aprueba, diga lo que diga el resto.
+  // Con errores del proveedor NUNCA se aprueba, diga lo que diga el resto. Un
+  // paso fallido tampoco puede convivir con una aprobación.
   const aprobada =
     errores.length === 0 &&
+    !paso &&
     (estadoConocido
       ? estadoAprueba
       : aprobadaBool || codigoOk || Boolean(autorizacion))
 
-  const motivo = aprobada
-    ? null
-    : errores.length > 0 && errores[0].mensaje
-      ? mensajeDeError(errores[0].codigo, errores[0].mensaje)
-      : estadoTx === TRANSACTION_STATUS.PENDIENTE
-        ? 'El pago quedó pendiente de confirmación. No cierres la app; te avisaremos.'
-        : estadoTx === TRANSACTION_STATUS.PREAUTORIZADA
-          ? 'El pago quedó reservado pero sin cobrar. Contacta al comercio.'
-          : mensajeCompra(codigo, r)
+  const motivo = aprobada ? null : motivoDelRechazo({ errores, estadoTx, codigo, paso, r })
 
   return {
     aprobada,
     autorizacion: autorizacion || null,
+    // El código técnico del paso se conserva aunque no se le enseñe al
+    // cliente: es lo que hay que mandarle a CardNET cuando toca reclamar.
     codigo: codigo || (aprobada ? '00' : ''),
     motivo,
   }
+}
+
+/** Elige QUÉ se le dice al cliente, en orden de cuánta información aporta. */
+function motivoDelRechazo(input: {
+  errores: { codigo: string; mensaje: string }[]
+  estadoTx: number
+  codigo: string
+  paso: PasoTransaccion | null
+  r: Record<string, unknown>
+}): string {
+  const { errores, estadoTx, codigo, paso, r } = input
+  // 1. Un error explícito del servicio (p. ej. PR001, token sin activar).
+  if (errores.length > 0 && errores[0].mensaje) {
+    return mensajeDeError(errores[0].codigo, errores[0].mensaje)
+  }
+  // 2. Estados que no son rechazos y necesitan otra explicación (§10.6).
+  if (estadoTx === TRANSACTION_STATUS.PENDIENTE) {
+    return 'El pago quedó pendiente de confirmación. No cierres la app; te avisaremos.'
+  }
+  if (estadoTx === TRANSACTION_STATUS.PREAUTORIZADA) {
+    return 'El pago quedó reservado pero sin cobrar. Contacta al comercio.'
+  }
+  // 3. Un código del emisor (§9.2): se traduce a algo accionable.
+  if (esCodigoDeEmisor(codigo)) return mensajeCompra(codigo, r)
+  // 4. El paso falló con un código TÉCNICO («BadRequest», «Timeout»): el
+  //    problema no es la tarjeta del cliente y no se le debe decir que lo es.
+  if (paso) return MENSAJE_FALLO_PASARELA
+  return mensajeCompra(codigo, r)
 }
 
 /**
@@ -322,6 +419,41 @@ export function sinSensibles(obj: Record<string, unknown>): Record<string, unkno
 
 /** Código de moneda de la República Dominicana para el Purchase. */
 export const MONEDA_DOP_TOKENS = 'DOP'
+
+/**
+ * Largo de la referencia que viaja en `Order`, `Invoice` y `UniqueID`.
+ *
+ * Nuestros ids son cuid de 25 caracteres. El objeto Purchase los acepta —los
+ * devuelve intactos— pero el Purchase es solo el primer tramo: con esos datos
+ * CardNET arma después la autorización hacia el adquirente, que es otro
+ * sistema y tiene campos mucho más estrechos. Ese segundo tramo es el que
+ * respondió `BadRequest`.
+ *
+ * Que los campos de esta familia tienen límites lo dice la propia respuesta:
+ * mandamos un `UniqueID` de 25 caracteres y CardNET lo archivó como cadena
+ * VACÍA, sin avisar. Doce caracteres caben en cualquier especificación de
+ * adquirente conocida, y acortar no cuesta nada.
+ *
+ * HIPÓTESIS, no certeza: la causa del `BadRequest` la confirma CardNET con el
+ * `PurchaseId`. Esto solo elimina un sospechoso que sale gratis eliminar.
+ */
+export const LARGO_REFERENCIA_COBRO = 12
+
+/**
+ * Referencia corta y limpia del cobro, derivada del id del intento.
+ *
+ * Se toman los ÚLTIMOS caracteres, no los primeros: en un cuid el principio es
+ * marca de tiempo y contador —casi idénticos entre filas creadas seguidas— y
+ * el final es la parte aleatoria. Cortar por delante daría referencias que
+ * chocan justo entre los cobros más cercanos en el tiempo.
+ *
+ * Conciliar sigue siendo directo, porque es un sufijo del id:
+ *   select * from pago_intentos where id like '%' || 'l404dwib9e1k';
+ */
+export function referenciaCobro(id: string): string {
+  const limpio = (id ?? '').replace(/[^A-Za-z0-9]/g, '')
+  return limpio.slice(-LARGO_REFERENCIA_COBRO) || 'MEMBEGO'
+}
 
 // ── CustomerId atado a su cuenta de CardNET ─────────────────────────────────
 //
