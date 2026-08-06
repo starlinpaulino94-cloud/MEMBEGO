@@ -18,7 +18,7 @@
 
 import { revalidatePath } from 'next/cache'
 import type { AuditAccion, Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { purgarClienteRow } from '@/modules/superadmin/purgar'
@@ -45,20 +45,22 @@ async function auditar(
   payload: Record<string, unknown>
 ) {
   const meta = await getRequestMeta().catch(() => ({ ipAddress: null, userAgent: null }))
-  await prisma.auditLog
-    .create({
-      data: {
-        companyId,
-        userId,
-        accion,
-        entidadTipo: 'Company',
-        entidadId: companyId,
-        payload: payload as Prisma.InputJsonValue,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-      },
-    })
-    .catch((e) => console.error('[demo] audit:', e))
+  await sinEmpresa('demo: auditar operación de empresa demo', (tx) =>
+    tx.auditLog
+      .create({
+        data: {
+          companyId,
+          userId,
+          accion,
+          entidadTipo: 'Company',
+          entidadId: companyId,
+          payload: payload as Prisma.InputJsonValue,
+          ipAddress: meta.ipAddress,
+          userAgent: meta.userAgent,
+        },
+      })
+      .catch((e) => console.error('[demo] audit:', e))
+  )
 }
 
 /**
@@ -82,10 +84,12 @@ export async function marcarComoDemo(
     const activar = String(formData.get('activar') ?? '') === '1'
     if (!companyId) return { error: 'Empresa no especificada.' }
 
-    const empresa = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { id: true, name: true, isPublished: true },
-    })
+    const empresa = await sinEmpresa('demo: buscar empresa por id', (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, isPublished: true },
+      })
+    )
     if (!empresa) return { error: 'Empresa no encontrada.' }
 
     if (!activar) {
@@ -99,16 +103,18 @@ export async function marcarComoDemo(
       }
     }
 
-    await prisma.company.update({
-      where: { id: companyId },
-      data: {
-        esDemo: activar,
-        // Una empresa de práctica sale de la vitrina en el mismo movimiento.
-        // Que se marque como demo y siga publicada sería exactamente el error
-        // que esta función existe para evitar.
-        ...(activar ? { isPublished: false } : {}),
-      },
-    })
+    await sinEmpresa('demo: marcar empresa como de demostración', (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: {
+          esDemo: activar,
+          // Una empresa de práctica sale de la vitrina en el mismo movimiento.
+          // Que se marque como demo y siga publicada sería exactamente el error
+          // que esta función existe para evitar.
+          ...(activar ? { isPublished: false } : {}),
+        },
+      })
+    )
 
     await auditar(companyId, user.metadata.dbUserId ?? null, 'EMPRESA_DEMO_CAMBIADA', {
       nombre: empresa.name,
@@ -162,10 +168,12 @@ export async function reiniciarDemo(
     const companyId = String(formData.get('companyId') ?? '').trim()
     if (!companyId) return { error: 'Empresa no especificada.' }
 
-    const empresa = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { id: true, name: true, esDemo: true },
-    })
+    const empresa = await sinEmpresa('demo: buscar empresa por id', (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, esDemo: true },
+      })
+    )
     if (!empresa) return { error: 'Empresa no encontrada.' }
     if (!empresa.esDemo) {
       return {
@@ -186,29 +194,31 @@ export async function reiniciarDemo(
     // paso propio.
 
     // 1· Pista. Las incidencias van primero porque apuntan a entradas de cola.
-    await prisma.incidencia.deleteMany({ where: { companyId } })
-    await prisma.comision.deleteMany({ where: { companyId } })
-    await prisma.cargoCuenta.deleteMany({ where: { cuenta: { companyId } } })
-    await prisma.colaVehiculo.deleteMany({ where: { companyId } })
-    await prisma.turno.deleteMany({ where: { companyId } })
-
     // 2· Dinero. Transacciones antes que las sesiones de caja que las agrupan.
-    await prisma.transaction.deleteMany({ where: { companyId } })
-    await prisma.movimientoCaja.deleteMany({ where: { companyId } })
-    await prisma.cajaSesion.deleteMany({ where: { companyId } })
-    await prisma.pagoIntento.deleteMany({ where: { companyId } }).catch(() => ({ count: 0 }))
-
     // 3· Compras y membresías que no cuelgan de un cliente (o que quedaron
     //    sueltas), antes de borrar a los clientes.
-    await prisma.comprobante.deleteMany({ where: { membership: { companyId } } })
-    await prisma.membership.deleteMany({ where: { companyId } })
-    await prisma.productoCompra.deleteMany({ where: { companyId } })
+    await sinEmpresa('demo: borrar datos de práctica (pista, dinero, membresías)', async (tx) => {
+      await tx.incidencia.deleteMany({ where: { companyId } })
+      await tx.comision.deleteMany({ where: { companyId } })
+      await tx.cargoCuenta.deleteMany({ where: { cuenta: { companyId } } })
+      await tx.colaVehiculo.deleteMany({ where: { companyId } })
+      await tx.turno.deleteMany({ where: { companyId } })
+      await tx.transaction.deleteMany({ where: { companyId } })
+      await tx.movimientoCaja.deleteMany({ where: { companyId } })
+      await tx.cajaSesion.deleteMany({ where: { companyId } })
+      await tx.pagoIntento.deleteMany({ where: { companyId } }).catch(() => ({ count: 0 }))
+      await tx.comprobante.deleteMany({ where: { membership: { companyId } } })
+      await tx.membership.deleteMany({ where: { companyId } })
+      await tx.productoCompra.deleteMany({ where: { companyId } })
+    })
 
     // 4· Clientes, uno a uno con la misma purga que usa el borrado individual.
-    const clientes = await prisma.cliente.findMany({
-      where: { companyId },
-      select: { id: true },
-    })
+    const clientes = await sinEmpresa('demo: listar clientes de la empresa de práctica', (tx) =>
+      tx.cliente.findMany({
+        where: { companyId },
+        select: { id: true },
+      })
+    )
     for (const c of clientes) await purgarClienteRow(c.id)
 
     await auditar(companyId, user.metadata.dbUserId ?? null, 'EMPRESA_DEMO_REINICIADA', {

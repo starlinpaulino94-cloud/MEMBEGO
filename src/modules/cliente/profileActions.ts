@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 
 async function requireCliente() {
@@ -45,19 +45,24 @@ export async function actualizarPerfil(
   }
 
   try {
-    await prisma.cliente.update({
-      where: { id: user.metadata.clienteId! },
-      data: {
-        nombre,
-        telefono,
-        fechaNacimiento,
-        ciudad,
-        genero,
-        notifPromos,
-        notifRecordatorios,
-        ...(avatarUrl !== null ? { avatarUrl } : {}),
-      },
-    })
+    const companyId = user.metadata.companyId
+    if (!companyId) return { error: 'Empresa requerida.' }
+    const clienteId = user.metadata.clienteId!
+    await conEmpresa(companyId, (tx) =>
+      tx.cliente.update({
+        where: { id: clienteId },
+        data: {
+          nombre,
+          telefono,
+          fechaNacimiento,
+          ciudad,
+          genero,
+          notifPromos,
+          notifRecordatorios,
+          ...(avatarUrl !== null ? { avatarUrl } : {}),
+        },
+      })
+    )
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')
     revalidatePath('/mis-membresias')
@@ -90,9 +95,14 @@ export async function agregarVehiculo(
   }
 
   try {
-    await prisma.vehiculo.create({
-      data: { clienteId: user.metadata.clienteId!, marca, modelo, anio, color, placa },
-    })
+    const companyId = user.metadata.companyId
+    if (!companyId) return { error: 'Empresa requerida.' }
+    const clienteId = user.metadata.clienteId!
+    await conEmpresa(companyId, (tx) =>
+      tx.vehiculo.create({
+        data: { clienteId, marca, modelo, anio, color, placa },
+      })
+    )
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')
     return { success: true }
@@ -113,13 +123,20 @@ export async function eliminarVehiculo(
   if (!vehiculoId) return { error: 'Vehículo no especificado.' }
 
   try {
-    const v = await prisma.vehiculo.findUnique({ where: { id: vehiculoId } })
-    if (!v || v.clienteId !== user.metadata.clienteId) return { error: 'No autorizado.' }
+    const v = await sinEmpresa('cliente: buscar mi vehículo', (tx) =>
+      tx.vehiculo.findUnique({
+        where: { id: vehiculoId },
+        select: { id: true, clienteId: true, cliente: { select: { companyId: true } } },
+      })
+    )
+    const clienteId = user.metadata.clienteId!
+    if (!v || v.clienteId !== clienteId) return { error: 'No autorizado.' }
+    const companyId = v.cliente.companyId
 
-    const visitas = await prisma.visit.count({ where: { vehiculoId } })
+    const visitas = await conEmpresa(companyId, (tx) => tx.visit.count({ where: { vehiculoId } }))
     if (visitas > 0) return { error: 'No se puede eliminar: tiene visitas asociadas.' }
 
-    await prisma.vehiculo.delete({ where: { id: vehiculoId } })
+    await conEmpresa(companyId, (tx) => tx.vehiculo.delete({ where: { id: vehiculoId } }))
 
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')

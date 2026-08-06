@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
@@ -52,18 +52,24 @@ export async function guardarTipoVehiculo(
 
     if (id) {
       // La cláusula por companyId impide editar el tipo de otra empresa.
-      const upd = await prisma.tipoVehiculo.updateMany({
-        where: { id, companyId },
-        data: { nombre, orden },
-      })
+      const upd = await conEmpresa(companyId, (tx) =>
+        tx.tipoVehiculo.updateMany({
+          where: { id, companyId },
+          data: { nombre, orden },
+        })
+      )
       if (upd.count === 0) return { error: 'Tipo de vehículo no encontrado.' }
     } else {
-      const existe = await prisma.tipoVehiculo.findFirst({
-        where: { companyId, nombre: { equals: nombre, mode: 'insensitive' } },
-        select: { id: true },
-      })
+      const existe = await conEmpresa(companyId, (tx) =>
+        tx.tipoVehiculo.findFirst({
+          where: { companyId, nombre: { equals: nombre, mode: 'insensitive' } },
+          select: { id: true },
+        })
+      )
       if (existe) return { error: `Ya tienes un tipo llamado "${nombre}".` }
-      await prisma.tipoVehiculo.create({ data: { companyId, nombre, orden } })
+      await conEmpresa(companyId, (tx) =>
+        tx.tipoVehiculo.create({ data: { companyId, nombre, orden } })
+      )
     }
 
     revalidatePath(RUTA)
@@ -78,12 +84,16 @@ export async function alternarTipoVehiculo(id: string): Promise<CatalogoState> {
   try {
     const companyId = await empresaDelAdmin()
     if (!companyId) return { error: 'No autorizado.' }
-    const tipo = await prisma.tipoVehiculo.findFirst({
-      where: { id, companyId },
-      select: { activo: true },
-    })
+    const tipo = await conEmpresa(companyId, (tx) =>
+      tx.tipoVehiculo.findFirst({
+        where: { id, companyId },
+        select: { activo: true },
+      })
+    )
     if (!tipo) return { error: 'Tipo no encontrado.' }
-    await prisma.tipoVehiculo.update({ where: { id }, data: { activo: !tipo.activo } })
+    await conEmpresa(companyId, (tx) =>
+      tx.tipoVehiculo.update({ where: { id }, data: { activo: !tipo.activo } })
+    )
     revalidatePath(RUTA)
     return { success: tipo.activo ? 'Tipo desactivado.' : 'Tipo activado.' }
   } catch (e) {
@@ -113,30 +123,38 @@ export async function guardarServicio(
 
     let servicioId = id
     if (id) {
-      const upd = await prisma.servicio.updateMany({
-        where: { id, companyId },
-        data: { nombre, descripcion, categoria, duracionMin, esAdicional, orden },
-      })
+      const upd = await conEmpresa(companyId, (tx) =>
+        tx.servicio.updateMany({
+          where: { id, companyId },
+          data: { nombre, descripcion, categoria, duracionMin, esAdicional, orden },
+        })
+      )
       if (upd.count === 0) return { error: 'Servicio no encontrado.' }
     } else {
-      const existe = await prisma.servicio.findFirst({
-        where: { companyId, nombre: { equals: nombre, mode: 'insensitive' } },
-        select: { id: true },
-      })
+      const existe = await conEmpresa(companyId, (tx) =>
+        tx.servicio.findFirst({
+          where: { companyId, nombre: { equals: nombre, mode: 'insensitive' } },
+          select: { id: true },
+        })
+      )
       if (existe) return { error: `Ya tienes un servicio llamado "${nombre}".` }
-      const creado = await prisma.servicio.create({
-        data: { companyId, nombre, descripcion, categoria, duracionMin, esAdicional, orden },
-        select: { id: true },
-      })
+      const creado = await conEmpresa(companyId, (tx) =>
+        tx.servicio.create({
+          data: { companyId, nombre, descripcion, categoria, duracionMin, esAdicional, orden },
+          select: { id: true },
+        })
+      )
       servicioId = creado.id
     }
 
     // Precios por tipo de vehículo: campos `precio_<tipoVehiculoId>`.
     // Vacío = ese servicio NO aplica a ese tipo (se borra la tarifa).
-    const tipos = await prisma.tipoVehiculo.findMany({
-      where: { companyId },
-      select: { id: true },
-    })
+    const tipos = await conEmpresa(companyId, (tx) =>
+      tx.tipoVehiculo.findMany({
+        where: { companyId },
+        select: { id: true },
+      })
+    )
     // Auditoría de producción · Fase 4. Antes era un `await` por tipo de
     // vehículo dentro del bucle: con ocho tipos, ocho viajes de ida y vuelta a
     // la base en serie, cada uno pagando la latencia completa. No es
@@ -155,17 +173,17 @@ export async function guardarServicio(
       else conPrecio.push({ tipoVehiculoId: t.id, precio })
     }
 
-    await prisma
-      .$transaction([
+    await conEmpresa(companyId, (tx) =>
+      Promise.all([
         ...(sinPrecio.length
           ? [
-              prisma.servicioPrecio.deleteMany({
+              tx.servicioPrecio.deleteMany({
                 where: { servicioId, tipoVehiculoId: { in: sinPrecio } },
               }),
             ]
           : []),
         ...conPrecio.map((c) =>
-          prisma.servicioPrecio.upsert({
+          tx.servicioPrecio.upsert({
             where: {
               servicioId_tipoVehiculoId: {
                 servicioId,
@@ -177,6 +195,7 @@ export async function guardarServicio(
           })
         ),
       ])
+    )
       .catch(anotarFallo('carwash:servicioPrecio.guardar'))
 
     revalidatePath(RUTA)
@@ -191,9 +210,13 @@ export async function alternarServicio(id: string): Promise<CatalogoState> {
   try {
     const companyId = await empresaDelAdmin()
     if (!companyId) return { error: 'No autorizado.' }
-    const s = await prisma.servicio.findFirst({ where: { id, companyId }, select: { activo: true } })
+    const s = await conEmpresa(companyId, (tx) =>
+      tx.servicio.findFirst({ where: { id, companyId }, select: { activo: true } })
+    )
     if (!s) return { error: 'Servicio no encontrado.' }
-    await prisma.servicio.update({ where: { id }, data: { activo: !s.activo } })
+    await conEmpresa(companyId, (tx) =>
+      tx.servicio.update({ where: { id }, data: { activo: !s.activo } })
+    )
     revalidatePath(RUTA)
     return { success: s.activo ? 'Servicio desactivado.' : 'Servicio activado.' }
   } catch (e) {
@@ -221,27 +244,35 @@ export async function guardarBahia(
     // Una sucursal de otra empresa no puede colarse por el formulario.
     let sucursalId: string | null = null
     if (sucursalIdRaw) {
-      const suc = await prisma.sucursal.findFirst({
-        where: { id: sucursalIdRaw, companyId },
-        select: { id: true },
-      })
+      const suc = await conEmpresa(companyId, (tx) =>
+        tx.sucursal.findFirst({
+          where: { id: sucursalIdRaw, companyId },
+          select: { id: true },
+        })
+      )
       if (!suc) return { error: 'Sucursal no válida.' }
       sucursalId = suc.id
     }
 
     if (id) {
-      const upd = await prisma.bahia.updateMany({
-        where: { id, companyId },
-        data: { nombre, orden, sucursalId },
-      })
+      const upd = await conEmpresa(companyId, (tx) =>
+        tx.bahia.updateMany({
+          where: { id, companyId },
+          data: { nombre, orden, sucursalId },
+        })
+      )
       if (upd.count === 0) return { error: 'Bahía no encontrada.' }
     } else {
-      const existe = await prisma.bahia.findFirst({
-        where: { companyId, nombre: { equals: nombre, mode: 'insensitive' } },
-        select: { id: true },
-      })
+      const existe = await conEmpresa(companyId, (tx) =>
+        tx.bahia.findFirst({
+          where: { companyId, nombre: { equals: nombre, mode: 'insensitive' } },
+          select: { id: true },
+        })
+      )
       if (existe) return { error: `Ya tienes una bahía llamada "${nombre}".` }
-      await prisma.bahia.create({ data: { companyId, nombre, orden, sucursalId } })
+      await conEmpresa(companyId, (tx) =>
+        tx.bahia.create({ data: { companyId, nombre, orden, sucursalId } })
+      )
     }
 
     revalidatePath(RUTA)
@@ -257,9 +288,13 @@ export async function alternarBahia(id: string): Promise<CatalogoState> {
   try {
     const companyId = await empresaDelAdmin()
     if (!companyId) return { error: 'No autorizado.' }
-    const b = await prisma.bahia.findFirst({ where: { id, companyId }, select: { activa: true } })
+    const b = await conEmpresa(companyId, (tx) =>
+      tx.bahia.findFirst({ where: { id, companyId }, select: { activa: true } })
+    )
     if (!b) return { error: 'Bahía no encontrada.' }
-    await prisma.bahia.update({ where: { id }, data: { activa: !b.activa } })
+    await conEmpresa(companyId, (tx) =>
+      tx.bahia.update({ where: { id }, data: { activa: !b.activa } })
+    )
     revalidatePath(RUTA)
     revalidatePath('/admin/app/carwash')
     return { success: b.activa ? 'Bahía desactivada.' : 'Bahía activada.' }
@@ -280,31 +315,39 @@ export async function asignarBahia(
     const companyId = await empresaDelAdmin()
     if (!companyId) return { error: 'No autorizado.' }
 
-    const entrada = await prisma.colaVehiculo.findFirst({
-      where: { id: colaId, companyId },
-      select: { id: true },
-    })
+    const entrada = await conEmpresa(companyId, (tx) =>
+      tx.colaVehiculo.findFirst({
+        where: { id: colaId, companyId },
+        select: { id: true },
+      })
+    )
     if (!entrada) return { error: 'Vehículo no encontrado en la cola.' }
 
     if (bahiaId) {
-      const bahia = await prisma.bahia.findFirst({
-        where: { id: bahiaId, companyId, activa: true },
-        select: { id: true, nombre: true },
-      })
+      const bahia = await conEmpresa(companyId, (tx) =>
+        tx.bahia.findFirst({
+          where: { id: bahiaId, companyId, activa: true },
+          select: { id: true, nombre: true },
+        })
+      )
       if (!bahia) return { error: 'Bahía no válida.' }
 
       // Una bahía atiende un vehículo a la vez: si está ocupada, avisar en vez
       // de pisar silenciosamente al que ya estaba.
-      const ocupada = await prisma.colaVehiculo.findFirst({
-        where: { bahiaId, estado: 'EN_SERVICIO', id: { not: colaId } },
-        select: { placa: true },
-      })
+      const ocupada = await conEmpresa(companyId, (tx) =>
+        tx.colaVehiculo.findFirst({
+          where: { bahiaId, estado: 'EN_SERVICIO', id: { not: colaId } },
+          select: { placa: true },
+        })
+      )
       if (ocupada) {
         return { error: `${bahia.nombre} está ocupada${ocupada.placa ? ` con ${ocupada.placa}` : ''}.` }
       }
     }
 
-    await prisma.colaVehiculo.update({ where: { id: colaId }, data: { bahiaId } })
+    await conEmpresa(companyId, (tx) =>
+      tx.colaVehiculo.update({ where: { id: colaId }, data: { bahiaId } })
+    )
     revalidatePath('/admin/app/carwash')
     revalidatePath('/admin/app/carwash/cola')
     return { success: bahiaId ? 'Vehículo asignado.' : 'Vehículo liberado de la bahía.' }

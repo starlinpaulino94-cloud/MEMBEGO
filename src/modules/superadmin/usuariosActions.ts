@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUser } from '@/lib/auth'
+import { sinEmpresa } from '@/lib/tenant'
 import { INVITABLE_ROLES, type AppRole } from '@/types'
 
 export interface UsuarioStaffState {
@@ -44,33 +44,39 @@ export async function actualizarUsuarioStaff(
     return { error: 'La contraseña debe tener al menos 6 caracteres.' }
   }
 
-  const target = await prisma.user.findUnique({ where: { id: userId } })
+  const target = await sinEmpresa('superadmin: buscar usuario de staff por id', (tx) =>
+    tx.user.findUnique({ where: { id: userId } })
+  )
   if (!target) return { error: 'Usuario no encontrado.' }
   if (target.role === 'SUPERADMIN' || target.role === 'CLIENTE') {
     return { error: 'Este usuario no se puede editar desde aquí.' }
   }
 
   // Todas las empresas asignadas deben existir.
-  const existentes = await prisma.company.count({
-    where: { id: { in: companyIds } },
-  })
+  const existentes = await sinEmpresa('superadmin: verificar empresas asignadas', (tx) =>
+    tx.company.count({
+      where: { id: { in: companyIds } },
+    })
+  )
   if (existentes !== companyIds.length) {
     return { error: 'Alguna de las empresas seleccionadas no existe.' }
   }
 
   try {
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: userId },
-        data: { name: nombre, role, companyId: empresaActiva },
-      }),
-      // Set completo de accesos: se reemplaza por lo marcado en el formulario.
-      prisma.userCompanyAccess.deleteMany({ where: { userId } }),
-      prisma.userCompanyAccess.createMany({
-        data: companyIds.map((companyId) => ({ userId, companyId })),
-        skipDuplicates: true,
-      }),
-    ])
+    await sinEmpresa('superadmin: actualizar usuario y accesos multi-empresa', async (tx) => {
+      await Promise.all([
+        tx.user.update({
+          where: { id: userId },
+          data: { name: nombre, role, companyId: empresaActiva },
+        }),
+        // Set completo de accesos: se reemplaza por lo marcado en el formulario.
+        tx.userCompanyAccess.deleteMany({ where: { userId } }),
+        tx.userCompanyAccess.createMany({
+          data: companyIds.map((companyId) => ({ userId, companyId })),
+          skipDuplicates: true,
+        }),
+      ])
+    })
 
     // Sincroniza Supabase Auth: rol/empresa activa en app_metadata, nombre y
     // contraseña (solo si se escribió una nueva).

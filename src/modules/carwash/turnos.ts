@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · Fase 3 — TURNOS Y ASISTENCIA.
@@ -81,34 +81,36 @@ export async function getPanelTurnos(
 ): Promise<PanelTurnos | null> {
   try {
     const ahora = new Date()
-    const [turnos, vehiculos, empleados] = await Promise.all([
-      prisma.turno.findMany({
-        where: {
-          companyId,
-          // Un turno cuenta en el período si ENTRÓ en él. Usar la salida
-          // dejaría fuera los turnos todavía abiertos, que son justamente los
-          // que interesan cuando se mira el panel a media jornada.
-          entradaAt: { gte: desde, lte: hasta },
-        },
-        orderBy: { entradaAt: 'desc' },
-        take: 500,
-        select: {
-          id: true,
-          entradaAt: true,
-          salidaAt: true,
-          costoHora: true,
-          user: { select: { id: true, name: true, email: true } },
-        },
-      }),
-      prisma.colaVehiculo.count({
-        where: { companyId, estado: 'ENTREGADO', entregadoAt: { gte: desde, lte: hasta } },
-      }),
-      prisma.user.findMany({
-        where: { companyId, role: { not: 'CLIENTE' } },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true, email: true },
-      }),
-    ])
+    const [turnos, vehiculos, empleados] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.turno.findMany({
+          where: {
+            companyId,
+            // Un turno cuenta en el período si ENTRÓ en él. Usar la salida
+            // dejaría fuera los turnos todavía abiertos, que son justamente los
+            // que interesan cuando se mira el panel a media jornada.
+            entradaAt: { gte: desde, lte: hasta },
+          },
+          orderBy: { entradaAt: 'desc' },
+          take: 500,
+          select: {
+            id: true,
+            entradaAt: true,
+            salidaAt: true,
+            costoHora: true,
+            user: { select: { id: true, name: true, email: true } },
+          },
+        }),
+        tx.colaVehiculo.count({
+          where: { companyId, estado: 'ENTREGADO', entregadoAt: { gte: desde, lte: hasta } },
+        }),
+        tx.user.findMany({
+          where: { companyId, role: { not: 'CLIENTE' } },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, email: true },
+        }),
+      ])
+    )
 
     const filas: TurnoFila[] = turnos.map((t) => {
       const horas = horasDeTurno(t.entradaAt, t.salidaAt, ahora)

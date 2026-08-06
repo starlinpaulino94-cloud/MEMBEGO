@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 
 /**
  * Bitácora de actividad (AuditLog).
@@ -120,38 +120,43 @@ export async function getAuditoria(
   const hasta = filtro.hasta ? limiteDia(filtro.hasta, true) : null
   const q = filtro.q?.trim()
 
-  const logs = await prisma.auditLog.findMany({
-    where: {
-      ...(companyId ? { companyId } : filtro.empresa ? { companyId: filtro.empresa } : {}),
-      ...(filtro.accion ? { accion: filtro.accion as never } : {}),
-      ...(desde || hasta
-        ? { createdAt: { ...(desde ? { gte: desde } : {}), ...(hasta ? { lte: hasta } : {}) } }
-        : {}),
-      ...(q
-        ? {
-            OR: [
-              { entidadId: { contains: q, mode: 'insensitive' } },
-              { entidadTipo: { contains: q, mode: 'insensitive' } },
-              { user: { name: { contains: q, mode: 'insensitive' } } },
-              { user: { email: { contains: q, mode: 'insensitive' } } },
-            ],
-          }
-        : {}),
-    },
-    select: {
-      id: true,
-      createdAt: true,
-      accion: true,
-      entidadTipo: true,
-      entidadId: true,
-      ipAddress: true,
-      payload: true,
-      user: { select: { name: true, email: true } },
-      company: { select: { name: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take,
-  })
+  const fn = (tx: Tx) =>
+    tx.auditLog.findMany({
+      where: {
+        ...(companyId ? { companyId } : filtro.empresa ? { companyId: filtro.empresa } : {}),
+        ...(filtro.accion ? { accion: filtro.accion as never } : {}),
+        ...(desde || hasta
+          ? { createdAt: { ...(desde ? { gte: desde } : {}), ...(hasta ? { lte: hasta } : {}) } }
+          : {}),
+        ...(q
+          ? {
+              OR: [
+                { entidadId: { contains: q, mode: 'insensitive' } },
+                { entidadTipo: { contains: q, mode: 'insensitive' } },
+                { user: { name: { contains: q, mode: 'insensitive' } } },
+                { user: { email: { contains: q, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        accion: true,
+        entidadTipo: true,
+        entidadId: true,
+        ipAddress: true,
+        payload: true,
+        user: { select: { name: true, email: true } },
+        company: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take,
+    })
+
+  const logs = companyId
+    ? await conEmpresa(companyId, fn)
+    : await sinEmpresa('auditoría: bitácora global (superadmin sin empresa)', fn)
 
   return logs.map((l) => {
     const payload = (l.payload ?? {}) as Record<string, unknown>

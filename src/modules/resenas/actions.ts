@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 
 export interface ResenaState {
@@ -31,36 +31,46 @@ export async function guardarResena(
       return { error: 'Elige una calificación de 1 a 5 estrellas.' }
     }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: {
-        supabaseId_companyId: { supabaseId: user.supabaseId, companyId },
-      },
-      select: { id: true },
-    })
+    const cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: {
+          supabaseId_companyId: { supabaseId: user.supabaseId, companyId },
+        },
+        select: { id: true },
+      })
+    )
     if (!cliente) {
       return { error: 'Únete a esta empresa para dejar tu reseña.' }
     }
 
-    await prisma.companyRating.upsert({
-      where: { companyId_clienteId: { companyId, clienteId: cliente.id } },
-      create: { companyId, clienteId: cliente.id, rating, comment: comment || null },
-      update: { rating, comment: comment || null },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.companyRating.upsert({
+        where: { companyId_clienteId: { companyId, clienteId: cliente.id } },
+        create: { companyId, clienteId: cliente.id, rating, comment: comment || null },
+        update: { rating, comment: comment || null },
+      })
+    )
 
     // Promedio real (solo reseñas visibles) → dato que muestran las tarjetas.
-    const agg = await prisma.companyRating.aggregate({
-      where: { companyId, visible: true },
-      _avg: { rating: true },
-    })
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { averageRating: agg._avg.rating },
-    })
+    const agg = await conEmpresa(companyId, (tx) =>
+      tx.companyRating.aggregate({
+        where: { companyId, visible: true },
+        _avg: { rating: true },
+      })
+    )
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { averageRating: agg._avg.rating },
+      })
+    )
 
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { slug: true },
-    })
+    const company = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { slug: true },
+      })
+    )
     if (company) {
       revalidatePath(`/cliente/empresas/${company.slug}`)
       revalidatePath(`/empresas/${company.slug}`)

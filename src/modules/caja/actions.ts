@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { SCANNER_ROLES } from '@/types'
 import { getRequestMeta } from '@/lib/server-utils'
@@ -19,6 +19,14 @@ import {
 } from '@/modules/caja/queries'
 import { calcularArqueo, etiquetaArqueo } from '@/modules/caja/arqueo'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { primerErrorZod } from '@/lib/validacion'
+import { capturarErrorInesperado } from '@/lib/sentry'
+import {
+  abrirCajaSchema,
+  cerrarCajaSchema,
+  movimientoCajaSchema,
+  cobrarOrdenSchema,
+} from '@/modules/caja/schema'
 
 /**
  * Caja (POS) · acciones del turno: abrir, cerrar (con arqueo) y cobrar.
@@ -50,7 +58,9 @@ async function staffAutorizado() {
   const userId = user.metadata.dbUserId ?? null
   // Documento comercial: SIEMPRE el nombre del empleado, nunca su correo.
   const nombre = userId
-    ? ((await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name ??
+    ? ((await conEmpresa(companyId, (tx) =>
+        tx.user.findUnique({ where: { id: userId }, select: { name: true } })
+      ))?.name ??
       user.email ??
       null)
     : (user.email ?? null)
@@ -84,10 +94,12 @@ export async function obtenerReporteDia(
   if (!auth) return { error: 'No autorizado.' }
   if (!auth.userId) return { error: 'Tu usuario no está vinculado a un empleado.' }
 
-  const empresa = await prisma.company.findUnique({
-    where: { id: auth.companyId },
-    select: { zonaHoraria: true },
-  })
+  const empresa = await conEmpresa(auth.companyId, (tx) =>
+    tx.company.findUnique({
+      where: { id: auth.companyId },
+      select: { zonaHoraria: true },
+    })
+  )
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
   const dia = /^\d{4}-\d{2}-\d{2}$/.test(fecha ?? '') ? (fecha as string) : hoyLocal(timeZone)
 
@@ -101,13 +113,6 @@ export async function obtenerReporteDia(
   return { reporte }
 }
 
-function num(v: FormDataEntryValue | null): number | null {
-  const s = String(v ?? '').trim()
-  if (!s) return null
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
-}
-
 export async function abrirCaja(
   _prev: CajaActionState,
   formData: FormData
@@ -118,51 +123,66 @@ export async function abrirCaja(
     return { error: 'Demasiados intentos. Espera un momento.' }
   }
 
-  const sucursalId = String(formData.get('sucursalId') ?? '').trim()
-  const balanceInicial = num(formData.get('balanceInicial')) ?? 0
-  const turno = String(formData.get('turno') ?? '').trim() || null
-  if (!sucursalId) return { error: 'Selecciona la sucursal.' }
-  if (balanceInicial < 0) return { error: 'El balance inicial no puede ser negativo.' }
-
-  const sucursal = await prisma.sucursal.findFirst({
-    where: { id: sucursalId, companyId: auth.companyId, activa: true },
-    select: { id: true, nombre: true },
+  const parsed = abrirCajaSchema.safeParse({
+    sucursalId: String(formData.get('sucursalId') ?? ''),
+    balanceInicial: String(formData.get('balanceInicial') ?? ''),
+    turno: String(formData.get('turno') ?? ''),
   })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { sucursalId, balanceInicial, turno } = parsed.data
+
+  try {
+    const sucursal = await conEmpresa(auth.companyId, (tx) =>
+      tx.sucursal.findFirst({
+        where: { id: sucursalId, companyId: auth.companyId, activa: true },
+        select: { id: true, nombre: true },
+      })
+    )
   if (!sucursal) return { error: 'Sucursal no válida.' }
 
-  const yaAbierta = await prisma.cajaSesion.findFirst({
-    where: { sucursalId, estado: 'ABIERTA' },
-    select: { id: true },
-  })
+  const yaAbierta = await conEmpresa(auth.companyId, (tx) =>
+    tx.cajaSesion.findFirst({
+      where: { sucursalId, estado: 'ABIERTA' },
+      select: { id: true },
+    })
+  )
   if (yaAbierta) return { error: 'Esta sucursal ya tiene una caja abierta. Ciérrala antes de abrir otra.' }
 
   const meta = await getRequestMeta()
-  const sesion = await prisma.cajaSesion.create({
-    data: {
-      companyId: auth.companyId,
-      sucursalId,
-      abiertaPorId: auth.userId!,
-      turno,
-      balanceInicial,
-    },
-    select: { id: true },
-  })
+  const sesion = await conEmpresa(auth.companyId, (tx) =>
+    tx.cajaSesion.create({
+      data: {
+        companyId: auth.companyId,
+        sucursalId,
+        abiertaPorId: auth.userId!,
+        turno,
+        balanceInicial,
+      },
+      select: { id: true },
+    })
+  )
 
-  await prisma.auditLog.create({
-    data: {
-      companyId: auth.companyId,
-      userId: auth.userId,
-      accion: 'CAJA_ABIERTA',
-      entidadTipo: 'CajaSesion',
-      entidadId: sesion.id,
-      payload: { sucursal: sucursal.nombre, balanceInicial, turno },
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
-    },
-  })
+  await conEmpresa(auth.companyId, (tx) =>
+    tx.auditLog.create({
+      data: {
+        companyId: auth.companyId,
+        userId: auth.userId,
+        accion: 'CAJA_ABIERTA',
+        entidadTipo: 'CajaSesion',
+        entidadId: sesion.id,
+        payload: { sucursal: sucursal.nombre, balanceInicial, turno },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      },
+    })
+  )
 
   revalidatePath('/empleado/caja')
   return { success: true, detalle: `Caja abierta en ${sucursal.nombre}.` }
+  } catch (e) {
+    capturarErrorInesperado('caja:abrir', e)
+    return { error: 'Ocurrió un error. Intenta de nuevo.' }
+  }
 }
 
 export async function cerrarCaja(
@@ -172,35 +192,40 @@ export async function cerrarCaja(
   const auth = await staffAutorizado()
   if (!auth) return { error: 'No autorizado.' }
 
-  const cajaSesionId = String(formData.get('cajaSesionId') ?? '').trim()
-  const balanceFinal = num(formData.get('balanceFinal'))
-  const observaciones = String(formData.get('observaciones') ?? '').trim() || null
-  if (!cajaSesionId) return { error: 'Sesión no especificada.' }
-  if (balanceFinal == null || balanceFinal < 0) {
-    return { error: 'Indica el efectivo contado al cerrar.' }
-  }
-
-  const sesion = await prisma.cajaSesion.findFirst({
-    where: { id: cajaSesionId, companyId: auth.companyId, estado: 'ABIERTA' },
-    select: { id: true, balanceInicial: true, sucursal: { select: { nombre: true } } },
+  const parsed = cerrarCajaSchema.safeParse({
+    cajaSesionId: String(formData.get('cajaSesionId') ?? ''),
+    balanceFinal: String(formData.get('balanceFinal') ?? ''),
+    observaciones: String(formData.get('observaciones') ?? ''),
   })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { cajaSesionId, balanceFinal, observaciones } = parsed.data
+
+  try {
+    const sesion = await conEmpresa(auth.companyId, (tx) =>
+      tx.cajaSesion.findFirst({
+        where: { id: cajaSesionId, companyId: auth.companyId, estado: 'ABIERTA' },
+        select: { id: true, balanceInicial: true, sucursal: { select: { nombre: true } } },
+      })
+    )
   if (!sesion) return { error: 'La caja ya está cerrada o no existe.' }
 
   // Arqueo: esperado = inicial + cobros en efectivo + entradas − salidas.
-  const [efectivo, entradas, salidas] = await Promise.all([
-    prisma.transaction.aggregate({
-      where: { cajaSesionId, estado: 'APPLIED', metodoCobro: 'EFECTIVO' },
-      _sum: { monto: true },
-    }),
-    prisma.movimientoCaja.aggregate({
-      where: { cajaSesionId, tipo: 'ENTRADA' },
-      _sum: { monto: true },
-    }),
-    prisma.movimientoCaja.aggregate({
-      where: { cajaSesionId, tipo: 'SALIDA' },
-      _sum: { monto: true },
-    }),
-  ])
+  const [efectivo, entradas, salidas] = await conEmpresa(auth.companyId, (tx) =>
+    Promise.all([
+      tx.transaction.aggregate({
+        where: { cajaSesionId, estado: 'APPLIED', metodoCobro: 'EFECTIVO' },
+        _sum: { monto: true },
+      }),
+      tx.movimientoCaja.aggregate({
+        where: { cajaSesionId, tipo: 'ENTRADA' },
+        _sum: { monto: true },
+      }),
+      tx.movimientoCaja.aggregate({
+        where: { cajaSesionId, tipo: 'SALIDA' },
+        _sum: { monto: true },
+      }),
+    ])
+  )
   // La cuenta vive en `arqueo.ts` (pura, cubierta por tests/caja.test.ts).
   const { balanceEsperado, diferencia } = calcularArqueo({
     balanceInicial: Number(sesion.balanceInicial),
@@ -212,42 +237,50 @@ export async function cerrarCaja(
 
   const meta = await getRequestMeta()
   // Guard atómico: solo cierra si sigue ABIERTA (dos cierres concurrentes → uno gana).
-  const cerrada = await prisma.cajaSesion.updateMany({
-    where: { id: cajaSesionId, estado: 'ABIERTA' },
-    data: {
-      estado: 'CERRADA',
-      cerradaPorId: auth.userId,
-      cerradaAt: new Date(),
-      balanceFinal,
-      balanceEsperado,
-      diferencia,
-      observaciones,
-    },
-  })
-  if (cerrada.count === 0) return { error: 'La caja ya fue cerrada.' }
-
-  await prisma.auditLog.create({
-    data: {
-      companyId: auth.companyId,
-      userId: auth.userId,
-      accion: 'CAJA_CERRADA',
-      entidadTipo: 'CajaSesion',
-      entidadId: cajaSesionId,
-      payload: {
-        sucursal: sesion.sucursal.nombre,
+  const cerrada = await conEmpresa(auth.companyId, (tx) =>
+    tx.cajaSesion.updateMany({
+      where: { id: cajaSesionId, estado: 'ABIERTA' },
+      data: {
+        estado: 'CERRADA',
+        cerradaPorId: auth.userId,
+        cerradaAt: new Date(),
         balanceFinal,
         balanceEsperado,
         diferencia,
         observaciones,
       },
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
-    },
-  })
+    })
+  )
+  if (cerrada.count === 0) return { error: 'La caja ya fue cerrada.' }
+
+  await conEmpresa(auth.companyId, (tx) =>
+    tx.auditLog.create({
+      data: {
+        companyId: auth.companyId,
+        userId: auth.userId,
+        accion: 'CAJA_CERRADA',
+        entidadTipo: 'CajaSesion',
+        entidadId: cajaSesionId,
+        payload: {
+          sucursal: sesion.sucursal.nombre,
+          balanceFinal,
+          balanceEsperado,
+          diferencia,
+          observaciones,
+        },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      },
+    })
+  )
 
   revalidatePath('/empleado/caja')
   const signo = etiquetaArqueo(diferencia)
   return { success: true, detalle: `Caja cerrada (${signo}).` }
+  } catch (e) {
+    capturarErrorInesperado('caja:cerrar', e)
+    return { error: 'Ocurrió un error. Intenta de nuevo.' }
+  }
 }
 
 /**
@@ -265,38 +298,42 @@ export async function registrarMovimientoCaja(
     return { error: 'Demasiados intentos. Espera un momento.' }
   }
 
-  const cajaSesionId = String(formData.get('cajaSesionId') ?? '').trim()
-  const tipo = String(formData.get('tipo') ?? '').trim()
-  const monto = num(formData.get('monto'))
-  const concepto = String(formData.get('concepto') ?? '').trim()
-
-  if (!cajaSesionId) return { error: 'Sesión no especificada.' }
-  if (!['ENTRADA', 'SALIDA'].includes(tipo)) return { error: 'Tipo de movimiento no válido.' }
-  if (monto == null || monto <= 0) return { error: 'Indica un monto mayor que cero.' }
-  if (!concepto) return { error: 'Describe el concepto del movimiento.' }
-
-  const sesion = await prisma.cajaSesion.findFirst({
-    where: { id: cajaSesionId, companyId: auth.companyId, estado: 'ABIERTA' },
-    select: { id: true },
+  const parsed = movimientoCajaSchema.safeParse({
+    cajaSesionId: String(formData.get('cajaSesionId') ?? ''),
+    tipo: String(formData.get('tipo') ?? ''),
+    monto: String(formData.get('monto') ?? ''),
+    concepto: String(formData.get('concepto') ?? ''),
   })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { cajaSesionId, tipo, monto, concepto } = parsed.data
+
+  try {
+    const sesion = await conEmpresa(auth.companyId, (tx) =>
+      tx.cajaSesion.findFirst({
+        where: { id: cajaSesionId, companyId: auth.companyId, estado: 'ABIERTA' },
+        select: { id: true },
+      })
+    )
   if (!sesion) return { error: 'La caja está cerrada: ábrela para registrar movimientos.' }
 
-  const mov = await prisma.movimientoCaja.create({
-    data: {
-      companyId: auth.companyId,
-      cajaSesionId,
-      tipo: tipo as 'ENTRADA' | 'SALIDA',
-      monto,
-      concepto: concepto.slice(0, 200),
-      registradoPorId: auth.userId,
-      registradoPor: auth.nombre,
-    },
-    select: { id: true },
-  })
+  const mov = await conEmpresa(auth.companyId, (tx) =>
+    tx.movimientoCaja.create({
+      data: {
+        companyId: auth.companyId,
+        cajaSesionId,
+        tipo,
+        monto,
+        concepto: concepto.slice(0, 200),
+        registradoPorId: auth.userId,
+        registradoPor: auth.nombre,
+      },
+      select: { id: true },
+    })
+  )
 
   const meta = await getRequestMeta()
-  await prisma.auditLog
-    .create({
+  await conEmpresa(auth.companyId, (tx) =>
+    tx.auditLog.create({
       data: {
         companyId: auth.companyId,
         userId: auth.userId,
@@ -308,11 +345,15 @@ export async function registrarMovimientoCaja(
         userAgent: meta.userAgent,
       },
     })
-    .catch(anotarFallo('caja:auditoria'))
+  ).catch(anotarFallo('caja:auditoria'))
 
   revalidatePath('/empleado/caja')
   const etiqueta = tipo === 'ENTRADA' ? 'Entrada' : 'Salida'
   return { success: true, detalle: `${etiqueta} registrada: RD$${monto.toFixed(2)}.` }
+  } catch (e) {
+    capturarErrorInesperado('caja:movimiento', e)
+    return { error: 'Ocurrió un error. Intenta de nuevo.' }
+  }
 }
 
 export async function cobrarOrden(
@@ -325,26 +366,31 @@ export async function cobrarOrden(
     return { error: 'Demasiados intentos. Espera un momento.' }
   }
 
-  const cajaSesionId = String(formData.get('cajaSesionId') ?? '').trim()
-  const ordenTipo = String(formData.get('ordenTipo') ?? '').trim()
-  const ordenId = String(formData.get('ordenId') ?? '').trim()
-  const metodoCobro = String(formData.get('metodoCobro') ?? '').trim()
-  const observaciones = String(formData.get('observaciones') ?? '').trim() || null
+  const parsed = cobrarOrdenSchema.safeParse({
+    cajaSesionId: String(formData.get('cajaSesionId') ?? ''),
+    ordenTipo: String(formData.get('ordenTipo') ?? ''),
+    ordenId: String(formData.get('ordenId') ?? ''),
+    metodoCobro: String(formData.get('metodoCobro') ?? ''),
+    observaciones: String(formData.get('observaciones') ?? ''),
+    montoEfectivo: String(formData.get('montoEfectivo') ?? ''),
+    montoTransferencia: String(formData.get('montoTransferencia') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const {
+    cajaSesionId,
+    ordenTipo,
+    ordenId,
+    metodoCobro,
+    observaciones,
+    montoEfectivo,
+    montoTransferencia,
+  } = parsed.data
 
   // Pago MIXTO (Fase 4 · opcional): parte en efectivo + parte en transferencia
   // en un solo cobro. Se registra como una transacción POR CADA parte (misma
   // orden, mismo momento): así el arqueo, el cierre Z y los reportes por
   // método cuadran sin reglas especiales.
   const esMixto = metodoCobro === 'MIXTO'
-  const montoEfectivo = Math.round((num(formData.get('montoEfectivo')) ?? 0) * 100) / 100
-  const montoTransferencia =
-    Math.round((num(formData.get('montoTransferencia')) ?? 0) * 100) / 100
-
-  if (!cajaSesionId || !ordenId) return { error: 'Datos incompletos.' }
-  if (!['MEMBRESIA', 'PROMOCION'].includes(ordenTipo)) return { error: 'Tipo de orden no válido.' }
-  if (!['EFECTIVO', 'TRANSFERENCIA', 'OTRO', 'MIXTO'].includes(metodoCobro)) {
-    return { error: 'Selecciona la forma de pago.' }
-  }
 
   /** Valida las partes del pago mixto contra el total REAL de la orden. */
   const validarMixto = (total: number): string | null => {
@@ -360,10 +406,13 @@ export async function cobrarOrden(
   }
 
   // La caja debe estar ABIERTA y ser de la empresa del empleado.
-  const sesion = await prisma.cajaSesion.findFirst({
-    where: { id: cajaSesionId, companyId: auth.companyId, estado: 'ABIERTA' },
-    select: { id: true, sucursalId: true, sucursal: { select: { nombre: true } } },
-  })
+  try {
+    const sesion = await conEmpresa(auth.companyId, (tx) =>
+      tx.cajaSesion.findFirst({
+        where: { id: cajaSesionId, companyId: auth.companyId, estado: 'ABIERTA' },
+        select: { id: true, sucursalId: true, sucursal: { select: { nombre: true } } },
+      })
+    )
   if (!sesion) return { error: 'La caja está cerrada: ábrela para poder cobrar.' }
 
   const meta = await getRequestMeta()
@@ -377,14 +426,16 @@ export async function cobrarOrden(
   let membershipId: string | null = null
 
   if (ordenTipo === 'MEMBRESIA') {
-    const m = await prisma.membership.findFirst({
-      where: { id: ordenId, cliente: { companyId: auth.companyId } },
-      include: {
-        cliente: { select: { id: true, nombre: true, supabaseId: true } },
-        plan: { select: { nombre: true, precio: true } },
-        planSolicitado: { select: { nombre: true, precio: true } },
-      },
-    })
+    const m = await conEmpresa(auth.companyId, (tx) =>
+      tx.membership.findFirst({
+        where: { id: ordenId, cliente: { companyId: auth.companyId } },
+        include: {
+          cliente: { select: { id: true, nombre: true, supabaseId: true } },
+          plan: { select: { nombre: true, precio: true } },
+          planSolicitado: { select: { nombre: true, precio: true } },
+        },
+      })
+    )
     if (!m) return { error: 'Orden no encontrada.' }
     const esCambio = m.estado === 'ACTIVA' && m.planIdSolicitado != null
     if (m.estado === 'ACTIVA' && !esCambio) return { error: 'Esta membresía ya está activa (cobro duplicado).' }
@@ -405,16 +456,20 @@ export async function cobrarOrden(
     const res = await activarMembresia(m.id, auth.userId, metaAct)
     if (!res.ok) return { error: res.error }
 
-    const u = await prisma.user.findUnique({ where: { supabaseId: res.supabaseId }, select: { id: true } })
+    const u = await sinEmpresa('caja: lookup global de usuario por supabaseId', (tx) =>
+      tx.user.findUnique({ where: { supabaseId: res.supabaseId }, select: { id: true } })
+    )
     clienteUserId = u?.id ?? null
   } else {
-    const c = await prisma.productoCompra.findFirst({
-      where: { id: ordenId, companyId: auth.companyId },
-      include: {
-        cliente: { select: { id: true, nombre: true, supabaseId: true } },
-        promocion: { select: { titulo: true, precio: true } },
-      },
-    })
+    const c = await conEmpresa(auth.companyId, (tx) =>
+      tx.productoCompra.findFirst({
+        where: { id: ordenId, companyId: auth.companyId },
+        include: {
+          cliente: { select: { id: true, nombre: true, supabaseId: true } },
+          promocion: { select: { titulo: true, precio: true } },
+        },
+      })
+    )
     if (!c) return { error: 'Orden no encontrada.' }
     if (c.estado === 'ACTIVA') return { error: 'Esta compra ya está activa (cobro duplicado).' }
 
@@ -431,10 +486,12 @@ export async function cobrarOrden(
     })
     if (!res.ok) return { error: res.error }
 
-    const u = await prisma.user.findUnique({
-      where: { supabaseId: c.cliente.supabaseId ?? '' },
-      select: { id: true },
-    })
+    const u = await sinEmpresa('caja: lookup global de usuario por supabaseId', (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: c.cliente.supabaseId ?? '' },
+        select: { id: true },
+      })
+    )
     clienteUserId = u?.id ?? null
   }
 
@@ -454,82 +511,87 @@ export async function cobrarOrden(
       ]
     : [{ metodo: metodoCobro as 'EFECTIVO' | 'TRANSFERENCIA' | 'OTRO', monto }]
 
-  const txs: { codigo: string; ticketNumero: string }[] = []
-  let refMixto: string | null = null
-  for (const [i, parte] of partes.entries()) {
-    const etiquetaMetodo = esMixto
-      ? `${METODO_ETIQUETA[parte.metodo]} (pago mixto ${i + 1}/${partes.length})`
-      : METODO_ETIQUETA[parte.metodo]
-    const tx = await crearTransaccionAplicada(prisma, {
-      tipo: 'SALE',
-      companyId: auth.companyId,
-      sucursalId: sesion.sucursalId,
-      clienteId,
-      empleadoId: auth.userId,
-      caja: sesion.sucursal.nombre,
-      cajaSesionId: sesion.id,
-      monto: parte.monto,
-      metodoCobro: parte.metodo,
-      membershipId,
-      snapshot: {
-        detalle,
-        cliente: clienteNombre,
-        empleado: auth.nombre,
-        sucursal: sesion.sucursal.nombre,
-        servicio: detalle,
-        ordenTipo,
-        ordenId,
-        observaciones,
-        // Factura: líneas estructuradas + totales (consultables e imprimibles).
-        lineas: [
-          {
-            descripcion: detalle,
-            cantidad: 1,
-            precioUnitario: parte.monto,
-            descuento: 0,
-            total: parte.monto,
-          },
-        ],
-        subtotal: parte.monto.toFixed(2),
-        total: parte.monto.toFixed(2),
-        metodoCobroLabel: etiquetaMetodo,
-        // Trazabilidad del cobro dividido: total real y referencia cruzada
-        // al comprobante de la otra parte.
-        ...(esMixto
-          ? {
-              pagoMixto: true,
-              pagoMixtoTotal: monto.toFixed(2),
-              ...(refMixto ? { pagoMixtoRef: refMixto } : {}),
-            }
-          : {}),
-      },
-      auditoria: { ipAddress: meta.ipAddress, userAgent: meta.userAgent },
-      resultado: observaciones,
-      userId: auth.userId,
-    })
-    refMixto = refMixto ?? tx.codigo
-    txs.push(tx)
-  }
-
-  await prisma.auditLog.create({
-    data: {
-      companyId: auth.companyId,
-      userId: auth.userId,
-      accion: 'COBRO_REGISTRADO',
-      entidadTipo: ordenTipo === 'MEMBRESIA' ? 'Membership' : 'ProductoCompra',
-      entidadId: ordenId,
-      payload: {
-        codigo: txs.map((t) => t.codigo).join(' + '),
-        monto,
-        metodoCobro,
-        ...(esMixto ? { montoEfectivo, montoTransferencia } : {}),
-        detalle,
-        cajaSesionId,
-      },
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
-    },
+  const txs: { codigo: string; ticketNumero: string }[] = await conEmpresa(auth.companyId, async (tx) => {
+    const creadas: { codigo: string; ticketNumero: string }[] = []
+    let refMixto: string | null = null
+    for (const [i, parte] of partes.entries()) {
+      const etiquetaMetodo = esMixto
+        ? `${METODO_ETIQUETA[parte.metodo]} (pago mixto ${i + 1}/${partes.length})`
+        : METODO_ETIQUETA[parte.metodo]
+      const creada = await crearTransaccionAplicada(tx, {
+        tipo: 'SALE',
+        companyId: auth.companyId,
+        sucursalId: sesion.sucursalId,
+        clienteId,
+        empleadoId: auth.userId,
+        caja: sesion.sucursal.nombre,
+        cajaSesionId: sesion.id,
+        monto: parte.monto,
+        metodoCobro: parte.metodo,
+        membershipId,
+        snapshot: {
+          detalle,
+          cliente: clienteNombre,
+          empleado: auth.nombre,
+          sucursal: sesion.sucursal.nombre,
+          servicio: detalle,
+          ordenTipo,
+          ordenId,
+          observaciones,
+          // Factura: líneas estructuradas + totales (consultables e imprimibles).
+          lineas: [
+            {
+              descripcion: detalle,
+              cantidad: 1,
+              precioUnitario: parte.monto,
+              descuento: 0,
+              total: parte.monto,
+            },
+          ],
+          subtotal: parte.monto.toFixed(2),
+          total: parte.monto.toFixed(2),
+          metodoCobroLabel: etiquetaMetodo,
+          // Trazabilidad del cobro dividido: total real y referencia cruzada
+          // al comprobante de la otra parte.
+          ...(esMixto
+            ? {
+                pagoMixto: true,
+                pagoMixtoTotal: monto.toFixed(2),
+                ...(refMixto ? { pagoMixtoRef: refMixto } : {}),
+              }
+            : {}),
+        },
+        auditoria: { ipAddress: meta.ipAddress, userAgent: meta.userAgent },
+        resultado: observaciones,
+        userId: auth.userId,
+      })
+      refMixto = refMixto ?? creada.codigo
+      creadas.push(creada)
+    }
+    return creadas
   })
+
+  await conEmpresa(auth.companyId, (tx) =>
+    tx.auditLog.create({
+      data: {
+        companyId: auth.companyId,
+        userId: auth.userId,
+        accion: 'COBRO_REGISTRADO',
+        entidadTipo: ordenTipo === 'MEMBRESIA' ? 'Membership' : 'ProductoCompra',
+        entidadId: ordenId,
+        payload: {
+          codigo: txs.map((t) => t.codigo).join(' + '),
+          monto,
+          metodoCobro,
+          ...(esMixto ? { montoEfectivo, montoTransferencia } : {}),
+          detalle,
+          cajaSesionId,
+        },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      },
+    })
+  )
 
   // Aviso al cliente: su pago quedó confirmado y el beneficio activo.
   if (clienteUserId) {
@@ -548,5 +610,9 @@ export async function cobrarOrden(
     detalle: esMixto
       ? `Cobro mixto registrado · ${txs.map((t) => t.codigo).join(' + ')} (efectivo RD$${montoEfectivo.toFixed(2)} + transferencia RD$${montoTransferencia.toFixed(2)}).`
       : `Cobro registrado · ${txs[0].codigo} (ticket ${txs[0].ticketNumero}).`,
+  }
+  } catch (e) {
+    capturarErrorInesperado('caja:cobrar', e)
+    return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }

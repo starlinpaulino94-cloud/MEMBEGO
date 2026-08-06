@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 export interface ReglaRecompensaState {
   error?: string
@@ -39,16 +39,18 @@ export async function crearReglaRecompensa(
   }
 
   try {
-    await prisma.reglaRecompensa.create({
-      data: {
-        companyId,
-        nombre,
-        condicion: 'N_REFERIDOS_COMPLETADOS',
-        valorCondicion,
-        tipoRecompensa: tipoRecompensa as 'LAVADOS_GRATIS' | 'DESCUENTO_PORCENTAJE' | 'DESCUENTO_MONTO',
-        valorRecompensa,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.reglaRecompensa.create({
+        data: {
+          companyId,
+          nombre,
+          condicion: 'N_REFERIDOS_COMPLETADOS',
+          valorCondicion,
+          tipoRecompensa: tipoRecompensa as 'LAVADOS_GRATIS' | 'DESCUENTO_PORCENTAJE' | 'DESCUENTO_MONTO',
+          valorRecompensa,
+        },
+      })
+    )
 
     revalidatePath('/admin/referidos')
     return { success: true }
@@ -71,7 +73,9 @@ export async function actualizarReglaRecompensa(
   if (!id) return { error: 'ID requerido.' }
 
   try {
-    const regla = await prisma.reglaRecompensa.findUnique({ where: { id } })
+    const regla = await sinEmpresa('regla por id sin conocer la empresa', (tx) =>
+      tx.reglaRecompensa.findUnique({ where: { id } })
+    )
     if (!regla) return { error: 'Regla no encontrada.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -80,7 +84,9 @@ export async function actualizarReglaRecompensa(
       return { error: 'No autorizado.' }
     }
 
-    await prisma.reglaRecompensa.update({ where: { id }, data: { activo } })
+    await conEmpresa(regla.companyId, (tx) =>
+      tx.reglaRecompensa.update({ where: { id }, data: { activo } })
+    )
 
     revalidatePath('/admin/referidos')
     return { success: true }
@@ -101,7 +107,9 @@ export async function eliminarReglaRecompensa(
   if (!id) return { error: 'ID requerido.' }
 
   try {
-    const regla = await prisma.reglaRecompensa.findUnique({ where: { id } })
+    const regla = await sinEmpresa('regla por id sin conocer la empresa', (tx) =>
+      tx.reglaRecompensa.findUnique({ where: { id } })
+    )
     if (!regla) return { error: 'Regla no encontrada.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -110,7 +118,7 @@ export async function eliminarReglaRecompensa(
       return { error: 'No autorizado.' }
     }
 
-    await prisma.reglaRecompensa.delete({ where: { id } })
+    await conEmpresa(regla.companyId, (tx) => tx.reglaRecompensa.delete({ where: { id } }))
 
     revalidatePath('/admin/referidos')
     return { success: true }

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import {
   calcularPuntos,
   nivelPara,
@@ -54,23 +54,25 @@ export async function getGamificacion(
       membresiasActivas,
       gastoAgg,
       premiosActivos,
-    ] = await Promise.all([
-      prisma.productoCompra.count({
-        where: { clienteId, companyId, estado: { in: ['ACTIVA', 'CONSUMIDA'] } },
-      }),
-      prisma.productoCompra.count({
-        where: { clienteId, companyId, estado: 'CONSUMIDA' },
-      }),
-      prisma.referido.count({
-        where: { referenteClienteId: clienteId, companyId, estado: 'COMPLETADO' },
-      }),
-      prisma.membership.count({ where: { clienteId, companyId, estado: 'ACTIVA' } }),
-      prisma.ruletaJugada.aggregate({
-        where: { clienteId, companyId },
-        _sum: { costoPuntos: true },
-      }),
-      prisma.ruletaPremio.count({ where: { companyId, activo: true } }),
-    ])
+    ] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.productoCompra.count({
+          where: { clienteId, companyId, estado: { in: ['ACTIVA', 'CONSUMIDA'] } },
+        }),
+        tx.productoCompra.count({
+          where: { clienteId, companyId, estado: 'CONSUMIDA' },
+        }),
+        tx.referido.count({
+          where: { referenteClienteId: clienteId, companyId, estado: 'COMPLETADO' },
+        }),
+        tx.membership.count({ where: { clienteId, companyId, estado: 'ACTIVA' } }),
+        tx.ruletaJugada.aggregate({
+          where: { clienteId, companyId },
+          _sum: { costoPuntos: true },
+        }),
+        tx.ruletaPremio.count({ where: { companyId, activo: true } }),
+      ])
+    )
 
     const stats: GamificacionStats = {
       beneficiosReclamados,

@@ -10,7 +10,7 @@
  * permitiría activar membresías sin pagar. Solo debe invocarse server-to-server.
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { procesarReferidoCompletado } from '@/modules/referidos/actions'
 import { procesarConversionGrowth } from '@/modules/growth/registro'
@@ -33,10 +33,17 @@ export async function activarMembresia(
   userId: string | null,
   meta: Meta
 ): Promise<ActivarResult> {
-  const membership = await prisma.membership.findUnique({
-    where: { id: membershipId },
-    include: { plan: true, cliente: true },
-  })
+  // Se busca la membresía por id sin conocer aún la empresa (cross-tenant por
+  // diseño: el caller ya autorizó; aquí solo se revalida estado y se lee el
+  // contexto). Toda la mutación siguiente corre dentro de `conEmpresa`.
+  const membership = await sinEmpresa(
+    'activarMembresia: buscar la membresía por id antes de conocer su empresa',
+    (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        include: { plan: true, cliente: true },
+      })
+  )
   if (!membership) return { ok: false, error: 'Membresía no encontrada.' }
   if (membership.estado === 'ACTIVA') return { ok: false, error: 'La membresía ya está activa.' }
   if (!ESTADOS_ACTIVABLES.has(membership.estado)) {
@@ -55,7 +62,7 @@ export async function activarMembresia(
 
   // esPrimera se calcula dentro de la transacción para evitar race condition
   // con activaciones concurrentes del mismo cliente EN ESTA EMPRESA.
-  const { esPrimera } = await prisma.$transaction(async (tx) => {
+  const { esPrimera } = await conEmpresa(membership.companyId, async (tx) => {
     const previasConfirmadas = await tx.membership.count({
       where: {
         clienteId: membership.clienteId,

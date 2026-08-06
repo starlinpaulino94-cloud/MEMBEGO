@@ -23,7 +23,7 @@
  *     identificador de sesión.
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
 import { activarMembresia } from '@/modules/pagos/activacion'
@@ -55,40 +55,48 @@ export async function crearIntento(input: CrearIntentoInput) {
   if (!input.compraId && !input.membershipId) {
     throw new Error('Un intento de pago tiene que apuntar a una compra o a una membresía.')
   }
-  return prisma.pagoIntento.create({
-    data: {
-      companyId: input.companyId,
-      clienteId: input.clienteId ?? null,
-      proveedor: input.proveedor,
-      compraId: input.compraId ?? null,
-      membershipId: input.membershipId ?? null,
-      monto: input.monto,
-      moneda: input.moneda ?? 'DOP',
-      estado: 'CREADO',
-      ipAddress: input.ipAddress ?? null,
-      userAgent: input.userAgent ?? null,
-    },
-  })
+  return conEmpresa(input.companyId, (tx) =>
+    tx.pagoIntento.create({
+      data: {
+        companyId: input.companyId,
+        clienteId: input.clienteId ?? null,
+        proveedor: input.proveedor,
+        compraId: input.compraId ?? null,
+        membershipId: input.membershipId ?? null,
+        monto: input.monto,
+        moneda: input.moneda ?? 'DOP',
+        estado: 'CREADO',
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+      },
+    })
+  )
 }
 
 /** Marca que el cliente ya fue enviado a la pasarela y con qué sesión. */
-export async function marcarRedirigido(intentoId: string, referenciaExterna: string) {
-  await prisma.pagoIntento
-    .update({
+export async function marcarRedirigido(
+  intentoId: string,
+  referenciaExterna: string,
+  companyId: string
+) {
+  await conEmpresa(companyId, (tx) =>
+    tx.pagoIntento.update({
       where: { id: intentoId },
       data: { estado: 'REDIRIGIDO', referenciaExterna },
     })
-    .catch(anotarFallo('pagos:marcarRedirigido', { intentoId }))
+  ).catch(anotarFallo('pagos:marcarRedirigido', { intentoId }))
 }
 
 /** Busca el intento por la referencia que devuelve la pasarela. */
 export async function buscarIntentoPorReferencia(referenciaExterna: string) {
-  return prisma.pagoIntento
-    .findFirst({
-      where: { referenciaExterna },
-      orderBy: { createdAt: 'desc' },
-    })
-    .catch(anotarFallo('pagos:buscarIntentoPorReferencia'))
+  return sinEmpresa(
+    'pagos: webhook/callback de la pasarela localiza el intento por referencia de cualquier empresa',
+    (tx) =>
+      tx.pagoIntento.findFirst({
+        where: { referenciaExterna },
+        orderBy: { createdAt: 'desc' },
+      })
+  ).catch(anotarFallo('pagos:buscarIntentoPorReferencia'))
 }
 
 export interface ResultadoVerificado {
@@ -117,20 +125,24 @@ export async function confirmarIntento(
   intentoId: string,
   resultado: ResultadoVerificado
 ): Promise<ConfirmacionResultado> {
-  const intento = await prisma.pagoIntento.findUnique({ where: { id: intentoId } })
+  const intento = await sinEmpresa(
+    'pagos: localizar intento por id al confirmar (puede llegar de webhook o retorno, cualquier empresa)',
+    (tx) => tx.pagoIntento.findUnique({ where: { id: intentoId } })
+  )
   if (!intento) return { ok: false, estado: 'ERROR', motivo: 'Intento de pago no encontrado.' }
 
   if (!resultado.aprobada) {
-    await prisma.pagoIntento
-      .update({
-        where: { id: intentoId },
-        data: {
-          estado: 'RECHAZADO',
-          motivoRechazo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
-          respuesta: (resultado.crudo ?? null) as never,
-        },
-      })
-      .catch(anotarFallo('pagos:confirmarIntento:rechazo', { intentoId }))
+    await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento
+        .update({
+          where: { id: intentoId },
+          data: {
+            estado: 'RECHAZADO',
+            motivoRechazo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+            respuesta: (resultado.crudo ?? null) as never,
+          },
+        })
+    ).catch(anotarFallo('pagos:confirmarIntento:rechazo', { intentoId }))
     return {
       ok: false,
       estado: 'RECHAZADO',
@@ -148,12 +160,13 @@ export async function confirmarIntento(
     Math.abs(resultado.montoCobrado - esperado) > 0.01
   ) {
     const motivo = `El monto cobrado (${resultado.montoCobrado}) no coincide con el esperado (${esperado}).`
-    await prisma.pagoIntento
-      .update({
-        where: { id: intentoId },
-        data: { estado: 'ERROR', motivoRechazo: motivo, respuesta: (resultado.crudo ?? null) as never },
-      })
-      .catch(anotarFallo('pagos:confirmarIntento:montoDistinto', { intentoId }))
+    await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento
+        .update({
+          where: { id: intentoId },
+          data: { estado: 'ERROR', motivoRechazo: motivo, respuesta: (resultado.crudo ?? null) as never },
+        })
+    ).catch(anotarFallo('pagos:confirmarIntento:montoDistinto', { intentoId }))
     return { ok: false, estado: 'ERROR', motivo }
   }
 
@@ -161,15 +174,17 @@ export async function confirmarIntento(
   // updateMany con `activadoAt: null` en el WHERE es una operación atómica: la
   // base de datos decide quién llega primero. `count === 0` = ya lo activó otro
   // (webhook, recarga de la página, doble clic) y aquí no hay nada que hacer.
-  const marca = await prisma.pagoIntento.updateMany({
-    where: { id: intentoId, activadoAt: null },
-    data: {
-      estado: 'APROBADO',
-      activadoAt: new Date(),
-      autorizacion: resultado.autorizacion,
-      respuesta: (resultado.crudo ?? null) as never,
-    },
-  })
+  const marca = await conEmpresa(intento.companyId, (tx) =>
+    tx.pagoIntento.updateMany({
+      where: { id: intentoId, activadoAt: null },
+      data: {
+        estado: 'APROBADO',
+        activadoAt: new Date(),
+        autorizacion: resultado.autorizacion,
+        respuesta: (resultado.crudo ?? null) as never,
+      },
+    })
+  )
 
   if (marca.count === 0) {
     return {
@@ -193,22 +208,24 @@ export async function confirmarIntento(
       // El cobro SÍ ocurrió: no se revierte `activadoAt` (eso abriría la puerta
       // a un doble cobro en el reintento). Se deja constancia del fallo para
       // que un administrador complete la entrega a mano.
-      await prisma.pagoIntento
-        .update({
-          where: { id: intentoId },
-          data: { motivoRechazo: `Cobrado, pero la activación falló: ${res.error}` },
-        })
-        .catch(anotarFallo('pagos:confirmarIntento:activacionCompraFallo', { intentoId }))
+      await conEmpresa(intento.companyId, (tx) =>
+        tx.pagoIntento
+          .update({
+            where: { id: intentoId },
+            data: { motivoRechazo: `Cobrado, pero la activación falló: ${res.error}` },
+          })
+      ).catch(anotarFallo('pagos:confirmarIntento:activacionCompraFallo', { intentoId }))
     }
   } else if (intento.membershipId) {
     const res = await activarMembresia(intento.membershipId, null, meta)
     if (!res.ok) {
-      await prisma.pagoIntento
-        .update({
-          where: { id: intentoId },
-          data: { motivoRechazo: `Cobrado, pero la activación falló: ${res.error}` },
-        })
-        .catch(anotarFallo('pagos:confirmarIntento:activacionMembresiaFallo', { intentoId }))
+      await conEmpresa(intento.companyId, (tx) =>
+        tx.pagoIntento
+          .update({
+            where: { id: intentoId },
+            data: { motivoRechazo: `Cobrado, pero la activación falló: ${res.error}` },
+          })
+      ).catch(anotarFallo('pagos:confirmarIntento:activacionMembresiaFallo', { intentoId }))
     }
   }
 

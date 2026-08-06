@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · Fase 2 — COMISIONES POR LAVADOR.
@@ -96,23 +96,27 @@ export async function devengarComision(
   colaId: string
 ): Promise<{ monto: number } | null> {
   try {
-    const cola = await prisma.colaVehiculo.findFirst({
-      where: { id: colaId, companyId },
-      select: {
-        atendidoPorId: true,
-        servicios: {
-          select: {
-            nombre: true,
-            precio: true,
-            cantidad: true,
-            servicio: { select: { comisionPorcentaje: true, comisionMonto: true } },
+    const cola = await conEmpresa(companyId, (tx) =>
+      tx.colaVehiculo.findFirst({
+        where: { id: colaId, companyId },
+        select: {
+          atendidoPorId: true,
+          servicios: {
+            select: {
+              nombre: true,
+              precio: true,
+              cantidad: true,
+              servicio: { select: { comisionPorcentaje: true, comisionMonto: true } },
+            },
           },
         },
-      },
-    })
+      })
+    )
     // Sin lavador asignado no hay a quién pagarle. No es un error: muchos
     // negocios no asignan al inicio, y forzarlo trabaría la entrega.
     if (!cola?.atendidoPorId || cola.servicios.length === 0) return null
+    // A const: dentro del closure de conEmpresa se pierde el estrechamiento.
+    const atendidoPorId = cola.atendidoPorId
 
     const calculo = calcularComision(
       cola.servicios.map((s) => ({
@@ -126,16 +130,18 @@ export async function devengarComision(
     )
     if (calculo.monto <= 0) return null
 
-    await prisma.comision.create({
-      data: {
-        companyId,
-        colaId,
-        userId: cola.atendidoPorId,
-        base: calculo.base,
-        monto: calculo.monto,
-        detalle: calculo.detalle,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.comision.create({
+        data: {
+          companyId,
+          colaId,
+          userId: atendidoPorId,
+          base: calculo.base,
+          monto: calculo.monto,
+          detalle: calculo.detalle,
+        },
+      })
+    )
     return { monto: calculo.monto }
   } catch {
     // Choque con el unique (ya devengada) o tabla sin migrar. En ninguno de los
@@ -182,32 +188,34 @@ export async function getPanelComisiones(
   hasta: Date
 ): Promise<PanelComisiones | null> {
   try {
-    const [filas, serviciosSinTarifa] = await Promise.all([
-      prisma.comision.findMany({
-        where: { companyId, createdAt: { gte: desde, lte: hasta } },
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-        select: {
-          id: true,
-          createdAt: true,
-          base: true,
-          monto: true,
-          detalle: true,
-          estado: true,
-          loteRef: true,
-          user: { select: { id: true, name: true, email: true } },
-          cola: { select: { placa: true, vehiculo: { select: { placa: true } } } },
-        },
-      }),
-      prisma.servicio.count({
-        where: {
-          companyId,
-          activo: true,
-          comisionPorcentaje: null,
-          comisionMonto: null,
-        },
-      }),
-    ])
+    const [filas, serviciosSinTarifa] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.comision.findMany({
+          where: { companyId, createdAt: { gte: desde, lte: hasta } },
+          orderBy: { createdAt: 'desc' },
+          take: 500,
+          select: {
+            id: true,
+            createdAt: true,
+            base: true,
+            monto: true,
+            detalle: true,
+            estado: true,
+            loteRef: true,
+            user: { select: { id: true, name: true, email: true } },
+            cola: { select: { placa: true, vehiculo: { select: { placa: true } } } },
+          },
+        }),
+        tx.servicio.count({
+          where: {
+            companyId,
+            activo: true,
+            comisionPorcentaje: null,
+            comisionMonto: null,
+          },
+        }),
+      ])
+    )
 
     const porLavador = new Map<string, ResumenLavador>()
     let pendiente = 0

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { otorgarBeneficioCampana } from '@/modules/invitaciones/beneficios'
 import { crearNotificacion } from '@/modules/notificaciones/service'
 
@@ -20,32 +20,38 @@ export async function incrementarProgresoCampana(
   referidoClienteId?: string
 ): Promise<void> {
   try {
-    const campana = await prisma.campanaInvitacion.findUnique({
-      where: { id: campanaId },
-      select: { id: true, nombre: true, metaRegistros: true, estado: true },
-    })
+    const campana = await conEmpresa(companyId, (tx) =>
+      tx.campanaInvitacion.findUnique({
+        where: { id: campanaId },
+        select: { id: true, nombre: true, metaRegistros: true, estado: true },
+      })
+    )
     if (!campana || campana.estado !== 'ACTIVA') return
 
-    const progreso = await prisma.invitacionProgreso.upsert({
-      where: { campanaId_clienteId: { campanaId, clienteId: referenteClienteId } },
-      update: { registrosCompletados: { increment: 1 } },
-      create: {
-        campanaId,
-        clienteId: referenteClienteId,
-        companyId,
-        registrosCompletados: 1,
-      },
-    })
+    const progreso = await conEmpresa(companyId, (tx) =>
+      tx.invitacionProgreso.upsert({
+        where: { campanaId_clienteId: { campanaId, clienteId: referenteClienteId } },
+        update: { registrosCompletados: { increment: 1 } },
+        create: {
+          campanaId,
+          clienteId: referenteClienteId,
+          companyId,
+          registrosCompletados: 1,
+        },
+      })
+    )
 
-    await prisma.invitacionEvento.create({
-      data: {
-        campanaId,
-        clienteId: referenteClienteId,
-        companyId,
-        tipo: 'REGISTRO_COMPLETADO',
-        ...(referidoClienteId ? { meta: { referidoClienteId } } : {}),
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.invitacionEvento.create({
+        data: {
+          campanaId,
+          clienteId: referenteClienteId,
+          companyId,
+          tipo: 'REGISTRO_COMPLETADO',
+          ...(referidoClienteId ? { meta: { referidoClienteId } } : {}),
+        },
+      })
+    )
 
     // Regalo de bienvenida prometido en la landing: se entrega al INVITADO
     // en cuanto su registro queda atribuido a la campaña.
@@ -78,7 +84,7 @@ async function entregarPremioMeta(
   companyId: string,
   campanaNombre: string
 ): Promise<void> {
-  const conStock = await prisma.$transaction(async (tx) => {
+  const conStock = await conEmpresa(companyId, async (tx) => {
     const campana = await tx.campanaInvitacion.findUnique({
       where: { id: campanaId },
       select: { maxPremios: true, premiosOtorgados: true },
@@ -104,15 +110,17 @@ async function entregarPremioMeta(
 
   if (!conStock) return
 
-  await prisma.invitacionEvento.create({
-    data: {
-      campanaId,
-      clienteId,
-      companyId,
-      tipo: 'PREMIO_RECLAMADO',
-      meta: { automatico: true },
-    },
-  })
+  await conEmpresa(companyId, (tx) =>
+    tx.invitacionEvento.create({
+      data: {
+        campanaId,
+        clienteId,
+        companyId,
+        tipo: 'PREMIO_RECLAMADO',
+        meta: { automatico: true },
+      },
+    })
+  )
 
   // Beneficio digital real (QR + wallet) + su notificación de entrega.
   await otorgarBeneficioCampana({ campanaId, clienteId, rol: 'INVITANTE' })
@@ -123,15 +131,19 @@ async function entregarPremioMeta(
 
 async function notificarMetaAlcanzada(clienteId: string, campanaNombre: string) {
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { supabaseId: true },
-    })
+    const cliente = await sinEmpresa('invitaciones: buscar cliente por id (empresa desconocida)', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { supabaseId: true },
+      })
+    )
     if (!cliente) return
-    const user = await prisma.user.findUnique({
-      where: { supabaseId: cliente.supabaseId },
-      select: { id: true },
-    })
+    const user = await sinEmpresa('invitaciones: buscar user por supabaseId (users son globales, no por empresa)', (tx) =>
+      tx.user.findUnique({
+        where: { supabaseId: cliente.supabaseId },
+        select: { id: true },
+      })
+    )
     if (!user) return
     await crearNotificacion({
       userId: user.id,

@@ -35,3 +35,24 @@ export function captureSupabaseError(
     }
   })
 }
+
+export function capturarErrorInesperado(
+  contexto: string,
+  e: unknown,
+  extra?: Record<string, unknown>
+) {
+  console.error(`[${contexto}]`, e)
+  Sentry.withScope((scope) => {
+    scope.setTag('source', 'server-action')
+    scope.setTag('contexto', contexto)
+    scope.setContext('accion', { contexto, ...extra })
+    if (e instanceof Error) {
+      Sentry.captureException(e)
+    } else {
+      Sentry.captureMessage(`Server action error: ${contexto}`, {
+        level: 'error',
+        extra: { error: e },
+      })
+    }
+  })
+}

@@ -1,19 +1,32 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { sendEmail } from '@/lib/email'
+import { encolarEmail } from '@/modules/jobs/emisiones'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
 import {
   normalizarCodigoPais,
   normalizarNumero,
   estadoLabel,
-  TICKET_CATEGORIAS,
   TICKET_ESTADOS,
 } from '@/lib/soporte'
 import type { SessionUser } from '@/types'
+import { primerErrorZod } from '@/lib/validacion'
+import { capturarErrorInesperado } from '@/lib/sentry'
+import {
+  configComunicacionSchema,
+  correoPruebaSchema,
+  faqSchema,
+  faqActualizarSchema,
+  responderTicketSchema,
+  notaInternaSchema,
+  cambiarEstadoTicketSchema,
+  responderClienteSchema,
+  crearTicketSchema,
+} from '@/modules/soporte/schema'
 
 export interface ActionState {
   error?: string
@@ -32,10 +45,12 @@ function resolveCompanyId(user: SessionUser, formData: FormData): string {
 
 /** Encuentra el User (para notificar) a partir del supabaseId de un cliente. */
 async function findUserIdBySupabase(supabaseId: string): Promise<string | null> {
-  const u = await prisma.user.findFirst({
-    where: { supabaseId },
-    select: { id: true },
-  })
+  const u = await sinEmpresa('soporte: usuario por supabaseId (un usuario puede ser de varias empresas)', (tx) =>
+    tx.user.findFirst({
+      where: { supabaseId },
+      select: { id: true },
+    })
+  )
   return u?.id ?? null
 }
 
@@ -51,56 +66,53 @@ export async function guardarComunicacionConfig(
   const companyId = resolveCompanyId(user, formData)
   if (!companyId) return { error: 'Selecciona una empresa para guardar la configuración.' }
 
-  const codigoPais = normalizarCodigoPais(String(formData.get('codigoPais') ?? ''))
-  const numero = normalizarNumero(String(formData.get('numero') ?? ''))
   const mensajePlantilla = String(formData.get('mensajePlantilla') ?? '').trim()
   const activo = formData.get('activo') !== 'false'
-  const correoSoporte = String(formData.get('correoSoporte') ?? '').trim()
   const horaInicio = String(formData.get('horaInicio') ?? '').trim()
   const horaCierre = String(formData.get('horaCierre') ?? '').trim()
   const diasLaborales = String(formData.get('diasLaborales') ?? '').trim()
 
-  if (!codigoPais || codigoPais.length < 2) {
-    return { error: 'Ingresa un código de país válido (ej: +52).' }
-  }
-  if (!numero || numero.length < 7) {
-    return { error: 'Ingresa un número de WhatsApp válido (solo dígitos).' }
-  }
-  if (correoSoporte && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoSoporte)) {
-    return { error: 'El correo de soporte no tiene un formato válido.' }
-  }
+  const parsed = configComunicacionSchema.safeParse({
+    codigoPais: normalizarCodigoPais(String(formData.get('codigoPais') ?? '')),
+    numero: normalizarNumero(String(formData.get('numero') ?? '')),
+    correoSoporte: String(formData.get('correoSoporte') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { codigoPais, numero, correoSoporte } = parsed.data
 
   try {
-    await prisma.whatsAppConfig.upsert({
-      where: { companyId },
-      create: {
-        companyId,
-        codigoPais,
-        numero,
-        mensajePlantilla: mensajePlantilla || undefined,
-        activo,
-        correoSoporte: correoSoporte || null,
-        horaInicio: horaInicio || null,
-        horaCierre: horaCierre || null,
-        diasLaborales: diasLaborales || null,
-      },
-      update: {
-        codigoPais,
-        numero,
-        mensajePlantilla: mensajePlantilla || undefined,
-        activo,
-        correoSoporte: correoSoporte || null,
-        horaInicio: horaInicio || null,
-        horaCierre: horaCierre || null,
-        diasLaborales: diasLaborales || null,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.whatsAppConfig.upsert({
+        where: { companyId },
+        create: {
+          companyId,
+          codigoPais,
+          numero,
+          mensajePlantilla: mensajePlantilla || undefined,
+          activo,
+          correoSoporte: correoSoporte || null,
+          horaInicio: horaInicio || null,
+          horaCierre: horaCierre || null,
+          diasLaborales: diasLaborales || null,
+        },
+        update: {
+          codigoPais,
+          numero,
+          mensajePlantilla: mensajePlantilla || undefined,
+          activo,
+          correoSoporte: correoSoporte || null,
+          horaInicio: horaInicio || null,
+          horaCierre: horaCierre || null,
+          diasLaborales: diasLaborales || null,
+        },
+      })
+    )
 
     revalidatePath('/admin/comunicacion')
     revalidatePath('/cliente/ayuda')
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:config', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -112,10 +124,11 @@ export async function enviarCorreoPrueba(
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
 
-  const correo = String(formData.get('correoSoporte') ?? '').trim()
-  if (!correo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
-    return { error: 'Ingresa un correo de soporte válido antes de probar.' }
-  }
+  const parsed = correoPruebaSchema.safeParse({
+    correoSoporte: String(formData.get('correoSoporte') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { correoSoporte: correo } = parsed.data
 
   try {
     const result = await sendEmail({
@@ -135,7 +148,7 @@ export async function enviarCorreoPrueba(
           : `No se pudo enviar el correo de prueba: ${result.reason ?? 'error'}.`,
     }
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:correo-prueba', e)
     return { error: 'Ocurrió un error al enviar el correo.' }
   }
 }
@@ -153,22 +166,25 @@ export async function crearFaq(
 
   // XSS protection: pregunta and respuesta are auto-escaped by React JSX
   // when rendered. No additional sanitization needed.
-  const pregunta = String(formData.get('pregunta') ?? '').trim()
-  const respuesta = String(formData.get('respuesta') ?? '').trim()
-  const orden = Number(formData.get('orden') ?? 0) || 0
-  if (!pregunta || !respuesta) {
-    return { error: 'La pregunta y la respuesta son obligatorias.' }
-  }
+  const parsed = faqSchema.safeParse({
+    pregunta: String(formData.get('pregunta') ?? ''),
+    respuesta: String(formData.get('respuesta') ?? ''),
+    orden: String(formData.get('orden') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { pregunta, respuesta, orden } = parsed.data
 
   try {
-    await prisma.faqItem.create({
-      data: { companyId, pregunta, respuesta, orden },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.faqItem.create({
+        data: { companyId, pregunta, respuesta, orden },
+      })
+    )
     revalidatePath('/admin/comunicacion')
     revalidatePath('/cliente/ayuda')
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:crear-faq', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -179,28 +195,35 @@ export async function actualizarFaq(
 ): Promise<ActionState> {
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
-  const id = String(formData.get('id') ?? '')
-  const pregunta = String(formData.get('pregunta') ?? '').trim()
-  const respuesta = String(formData.get('respuesta') ?? '').trim()
-  const orden = Number(formData.get('orden') ?? 0) || 0
-  if (!id || !pregunta || !respuesta) return { error: 'Datos incompletos.' }
+  const parsed = faqActualizarSchema.safeParse({
+    id: String(formData.get('id') ?? ''),
+    pregunta: String(formData.get('pregunta') ?? ''),
+    respuesta: String(formData.get('respuesta') ?? ''),
+    orden: String(formData.get('orden') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { id, pregunta, respuesta, orden } = parsed.data
 
   try {
-    const faq = await prisma.faqItem.findUnique({ where: { id } })
+    const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
+      tx.faqItem.findUnique({ where: { id } })
+    )
     if (!faq) return { error: 'Pregunta no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && faq.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
 
-    await prisma.faqItem.update({
-      where: { id },
-      data: { pregunta, respuesta, orden },
-    })
+    await conEmpresa(faq.companyId, (tx) =>
+      tx.faqItem.update({
+        where: { id },
+        data: { pregunta, respuesta, orden },
+      })
+    )
     revalidatePath('/admin/comunicacion')
     revalidatePath('/cliente/ayuda')
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:actualizar-faq', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -209,12 +232,14 @@ export async function eliminarFaq(id: string): Promise<ActionState> {
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
   try {
-    const faq = await prisma.faqItem.findUnique({ where: { id } })
+    const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
+      tx.faqItem.findUnique({ where: { id } })
+    )
     if (!faq) return { error: 'Pregunta no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && faq.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
-    await prisma.faqItem.delete({ where: { id } })
+    await conEmpresa(faq.companyId, (tx) => tx.faqItem.delete({ where: { id } }))
     revalidatePath('/admin/comunicacion')
     revalidatePath('/cliente/ayuda')
     return OK
@@ -228,12 +253,14 @@ export async function toggleFaq(id: string, activo: boolean): Promise<ActionStat
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
   try {
-    const faq = await prisma.faqItem.findUnique({ where: { id } })
+    const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
+      tx.faqItem.findUnique({ where: { id } })
+    )
     if (!faq) return { error: 'Pregunta no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && faq.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
-    await prisma.faqItem.update({ where: { id }, data: { activo } })
+    await conEmpresa(faq.companyId, (tx) => tx.faqItem.update({ where: { id }, data: { activo } }))
     revalidatePath('/admin/comunicacion')
     revalidatePath('/cliente/ayuda')
     return OK
@@ -258,54 +285,41 @@ export async function crearTicket(
     return { error: 'No se pudo identificar tu cuenta de cliente.' }
   }
 
-  const asunto = String(formData.get('asunto') ?? '').trim()
-  const descripcion = String(formData.get('descripcion') ?? '').trim()
-  const categoriaRaw = String(formData.get('categoria') ?? 'OTRO').trim()
-  const adjuntoUrl = String(formData.get('adjuntoUrl') ?? '').trim() || null
-  const categoria = (TICKET_CATEGORIAS as readonly string[]).includes(categoriaRaw)
-    ? categoriaRaw
-    : 'OTRO'
-
-  if (!asunto || !descripcion) {
-    return { error: 'El asunto y la descripción son obligatorios.' }
-  }
-
-  // El adjunto debe ser un archivo subido a nuestro Storage de Supabase, no una
-  // URL arbitraria (evita SSRF / inyección de enlaces externos).
-  if (adjuntoUrl) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const prefijo = `${supabaseUrl}/storage/v1/object/public/`
-    if (!supabaseUrl || !adjuntoUrl.startsWith(prefijo)) {
-      return { error: 'El adjunto no es válido.' }
-    }
-    const ok = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'].some((ext) =>
-      adjuntoUrl.toLowerCase().split('?')[0].endsWith(ext)
-    )
-    if (!ok) return { error: 'Formato de adjunto no permitido.' }
-  }
+  const parsed = crearTicketSchema.safeParse({
+    asunto: String(formData.get('asunto') ?? ''),
+    descripcion: String(formData.get('descripcion') ?? ''),
+    categoria: String(formData.get('categoria') ?? 'OTRO'),
+    adjuntoUrl: String(formData.get('adjuntoUrl') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { asunto, descripcion, categoria, adjuntoUrl } = parsed.data
 
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { nombre: true },
-    })
+    const cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { nombre: true },
+      })
+    )
 
-    const ticket = await prisma.supportTicket.create({
-      data: {
-        companyId,
-        clienteId,
-        asunto,
-        categoria: categoria as never,
-        adjuntoUrl: adjuntoUrl || null,
-        mensajes: {
-          create: {
-            autorTipo: 'CLIENTE',
-            autorNombre: cliente?.nombre ?? 'Cliente',
-            cuerpo: descripcion,
+    const ticket = await conEmpresa(companyId, (tx) =>
+      tx.supportTicket.create({
+        data: {
+          companyId,
+          clienteId,
+          asunto,
+          categoria: categoria as never,
+          adjuntoUrl: adjuntoUrl || null,
+          mensajes: {
+            create: {
+              autorTipo: 'CLIENTE',
+              autorNombre: cliente?.nombre ?? 'Cliente',
+              cuerpo: descripcion,
+            },
           },
         },
-      },
-    })
+      })
+    )
 
     await notificarAdmins(companyId, {
       tipo: 'TICKET_NUEVO',
@@ -314,12 +328,14 @@ export async function crearTicket(
       href: `/admin/tickets/${ticket.id}`,
     })
 
-    const config = await prisma.whatsAppConfig.findUnique({
-      where: { companyId },
-      select: { correoSoporte: true },
-    })
+    const config = await conEmpresa(companyId, (tx) =>
+      tx.whatsAppConfig.findUnique({
+        where: { companyId },
+        select: { correoSoporte: true },
+      })
+    )
     if (config?.correoSoporte) {
-      sendEmail({
+      await encolarEmail({
         to: config.correoSoporte,
         subject: `Nuevo ticket: ${asunto}`,
         html: `<p>Se recibió un nuevo ticket de soporte.</p>
@@ -335,7 +351,7 @@ export async function crearTicket(
     revalidatePath('/admin/tickets')
     return { success: true, message: 'Ticket enviado. Te avisaremos cuando haya respuesta.' }
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:crear-ticket', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -343,10 +359,12 @@ export async function crearTicket(
 // ── SECCIÓN 7 (admin): gestión de tickets ────────────────────────────────────
 
 async function loadTicketForAdmin(user: SessionUser, ticketId: string) {
-  const ticket = await prisma.supportTicket.findUnique({
-    where: { id: ticketId },
-    include: { cliente: { select: { supabaseId: true, nombre: true } } },
-  })
+  const ticket = await sinEmpresa('soporte: buscar ticket por id (se valida la empresa después)', (tx) =>
+    tx.supportTicket.findUnique({
+      where: { id: ticketId },
+      include: { cliente: { select: { supabaseId: true, nombre: true } } },
+    })
+  )
   if (!ticket) return null
   if (user.metadata.role !== 'SUPERADMIN' && ticket.companyId !== user.metadata.companyId) {
     return null
@@ -361,10 +379,13 @@ export async function responderTicket(
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
 
-  const ticketId = String(formData.get('ticketId') ?? '')
-  const cuerpo = String(formData.get('cuerpo') ?? '').trim()
-  const nuevoEstado = String(formData.get('estado') ?? '').trim()
-  if (!ticketId || !cuerpo) return { error: 'Escribe una respuesta.' }
+  const parsed = responderTicketSchema.safeParse({
+    ticketId: String(formData.get('ticketId') ?? ''),
+    cuerpo: String(formData.get('cuerpo') ?? ''),
+    nuevoEstado: String(formData.get('estado') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { ticketId, cuerpo, nuevoEstado } = parsed.data
 
   try {
     const ticket = await loadTicketForAdmin(user, ticketId)
@@ -375,20 +396,22 @@ export async function responderTicket(
         ? nuevoEstado
         : 'ESPERANDO_CLIENTE'
 
-    await prisma.$transaction([
-      prisma.ticketMensaje.create({
-        data: {
-          ticketId,
-          autorTipo: 'ADMIN',
-          autorNombre: user.email,
-          cuerpo,
-        },
-      }),
-      prisma.supportTicket.update({
-        where: { id: ticketId },
-        data: { estado: estado as never },
-      }),
-    ])
+    await conEmpresa(ticket.companyId, (tx) =>
+      Promise.all([
+        tx.ticketMensaje.create({
+          data: {
+            ticketId,
+            autorTipo: 'ADMIN',
+            autorNombre: user.email,
+            cuerpo,
+          },
+        }),
+        tx.supportTicket.update({
+          where: { id: ticketId },
+          data: { estado: estado as never },
+        }),
+      ])
+    )
 
     const clienteUserId = await findUserIdBySupabase(ticket.cliente.supabaseId)
     if (clienteUserId) {
@@ -406,7 +429,7 @@ export async function responderTicket(
     revalidatePath(`/cliente/ayuda/${ticketId}`)
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:responder', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -418,27 +441,32 @@ export async function agregarNotaInterna(
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
 
-  const ticketId = String(formData.get('ticketId') ?? '')
-  const cuerpo = String(formData.get('cuerpo') ?? '').trim()
-  if (!ticketId || !cuerpo) return { error: 'Escribe la nota interna.' }
+  const parsed = notaInternaSchema.safeParse({
+    ticketId: String(formData.get('ticketId') ?? ''),
+    cuerpo: String(formData.get('cuerpo') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { ticketId, cuerpo } = parsed.data
 
   try {
     const ticket = await loadTicketForAdmin(user, ticketId)
     if (!ticket) return { error: 'Ticket no encontrado.' }
 
-    await prisma.ticketMensaje.create({
-      data: {
-        ticketId,
-        autorTipo: 'ADMIN',
-        autorNombre: user.email,
-        cuerpo,
-        esNotaInterna: true,
-      },
-    })
+    await conEmpresa(ticket.companyId, (tx) =>
+      tx.ticketMensaje.create({
+        data: {
+          ticketId,
+          autorTipo: 'ADMIN',
+          autorNombre: user.email,
+          cuerpo,
+          esNotaInterna: true,
+        },
+      })
+    )
     revalidatePath(`/admin/tickets/${ticketId}`)
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:nota-interna', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -449,27 +477,28 @@ export async function cambiarEstadoTicket(
 ): Promise<ActionState> {
   const user = await requireAdminUser()
   if (!user) return { error: 'No autorizado.' }
-  if (!(TICKET_ESTADOS as readonly string[]).includes(estado)) {
-    return { error: 'Estado inválido.' }
-  }
+  const parsed = cambiarEstadoTicketSchema.safeParse({ estado })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
   try {
     const ticket = await loadTicketForAdmin(user, ticketId)
     if (!ticket) return { error: 'Ticket no encontrado.' }
 
-    await prisma.$transaction([
-      prisma.supportTicket.update({
-        where: { id: ticketId },
-        data: { estado: estado as never },
-      }),
-      prisma.ticketMensaje.create({
-        data: {
-          ticketId,
-          autorTipo: 'SISTEMA',
-          autorNombre: 'Sistema',
-          cuerpo: `Estado cambiado a "${estadoLabel(estado)}".`,
-        },
-      }),
-    ])
+    await conEmpresa(ticket.companyId, (tx) =>
+      Promise.all([
+        tx.supportTicket.update({
+          where: { id: ticketId },
+          data: { estado: estado as never },
+        }),
+        tx.ticketMensaje.create({
+          data: {
+            ticketId,
+            autorTipo: 'SISTEMA',
+            autorNombre: 'Sistema',
+            cuerpo: `Estado cambiado a "${estadoLabel(estado)}".`,
+          },
+        }),
+      ])
+    )
 
     const clienteUserId = await findUserIdBySupabase(ticket.cliente.supabaseId)
     if (clienteUserId) {
@@ -486,7 +515,7 @@ export async function cambiarEstadoTicket(
     revalidatePath('/admin/tickets')
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:cambiar-estado', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
@@ -500,33 +529,40 @@ export async function responderTicketCliente(
   const user = await getUser()
   if (!user || user.metadata.role !== 'CLIENTE') return { error: 'No autorizado.' }
 
-  const ticketId = String(formData.get('ticketId') ?? '')
-  const cuerpo = String(formData.get('cuerpo') ?? '').trim()
-  if (!ticketId || !cuerpo) return { error: 'Escribe tu mensaje.' }
+  const parsed = responderClienteSchema.safeParse({
+    ticketId: String(formData.get('ticketId') ?? ''),
+    cuerpo: String(formData.get('cuerpo') ?? ''),
+  })
+  if (!parsed.success) return { error: primerErrorZod(parsed.error) }
+  const { ticketId, cuerpo } = parsed.data
 
   try {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: ticketId },
-      include: { cliente: { select: { id: true, nombre: true } } },
-    })
+    const ticket = await sinEmpresa('soporte: buscar ticket por id (se valida el cliente después)', (tx) =>
+      tx.supportTicket.findUnique({
+        where: { id: ticketId },
+        include: { cliente: { select: { id: true, nombre: true } } },
+      })
+    )
     if (!ticket || ticket.clienteId !== user.metadata.clienteId) {
       return { error: 'Ticket no encontrado.' }
     }
 
-    await prisma.$transaction([
-      prisma.ticketMensaje.create({
-        data: {
-          ticketId,
-          autorTipo: 'CLIENTE',
-          autorNombre: ticket.cliente.nombre,
-          cuerpo,
-        },
-      }),
-      prisma.supportTicket.update({
-        where: { id: ticketId },
-        data: { estado: 'EN_PROCESO' },
-      }),
-    ])
+    await conEmpresa(ticket.companyId, (tx) =>
+      Promise.all([
+        tx.ticketMensaje.create({
+          data: {
+            ticketId,
+            autorTipo: 'CLIENTE',
+            autorNombre: ticket.cliente.nombre,
+            cuerpo,
+          },
+        }),
+        tx.supportTicket.update({
+          where: { id: ticketId },
+          data: { estado: 'EN_PROCESO' },
+        }),
+      ])
+    )
 
     await notificarAdmins(ticket.companyId, {
       tipo: 'TICKET_ACTUALIZADO',
@@ -539,7 +575,7 @@ export async function responderTicketCliente(
     revalidatePath(`/admin/tickets/${ticketId}`)
     return OK
   } catch (e) {
-    console.error('[soporte]', e)
+    capturarErrorInesperado('soporte:responder-cliente', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }

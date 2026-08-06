@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import {
   AutomationService,
   PrismaAutomationRepository,
@@ -25,8 +25,8 @@ export interface EstrategiaState {
   success?: boolean
 }
 
-function service() {
-  return new AutomationService(new PrismaAutomationRepository(prisma))
+function service(tx: Tx) {
+  return new AutomationService(new PrismaAutomationRepository(tx))
 }
 
 function revalidateEstrategias() {
@@ -35,10 +35,12 @@ function revalidateEstrategias() {
 
 /** La automatización existe y pertenece a la empresa del usuario (o superadmin). */
 async function automatizacionDeMiEmpresa(id: string, user: SessionUser) {
-  const auto = await prisma.automation.findUnique({
-    where: { id },
-    select: { id: true, companyId: true, status: true, templateKey: true },
-  })
+  const auto = await sinEmpresa('automatización por id sin conocer la empresa', (tx) =>
+    tx.automation.findUnique({
+      where: { id },
+      select: { id: true, companyId: true, status: true, templateKey: true },
+    })
+  )
   if (!auto) return null
   if (user.metadata.role !== 'SUPERADMIN' && auto.companyId !== user.metadata.companyId) {
     return null
@@ -63,17 +65,21 @@ export async function instalarEstrategia(
 
   try {
     // Evitar duplicados: una instalación activa (no archivada) por playbook.
-    const existente = await prisma.automation.findFirst({
-      where: {
-        companyId,
-        templateKey: `playbook.${playbook.id}`,
-        status: { not: 'ARCHIVED' },
-      },
-      select: { id: true },
-    })
+    const existente = await conEmpresa(companyId, (tx) =>
+      tx.automation.findFirst({
+        where: {
+          companyId,
+          templateKey: `playbook.${playbook.id}`,
+          status: { not: 'ARCHIVED' },
+        },
+        select: { id: true },
+      })
+    )
     if (existente) return { error: 'Esta plantilla ya está instalada.' }
 
-    await service().createAutomation(playbookToCreateData(playbook, companyId))
+    await conEmpresa(companyId, (tx) =>
+      service(tx).createAutomation(playbookToCreateData(playbook, companyId))
+    )
     revalidateEstrategias()
     return { success: true }
   } catch (e) {
@@ -95,7 +101,7 @@ export async function publicarEstrategia(
   if (!auto) return { error: 'Automatización no encontrada.' }
 
   try {
-    await service().publishAutomation(id)
+    await conEmpresa(auto.companyId, (tx) => service(tx).publishAutomation(id))
     revalidateEstrategias()
     return { success: true }
   } catch (e) {
@@ -117,7 +123,7 @@ export async function pausarEstrategia(
   if (!auto) return { error: 'Automatización no encontrada.' }
 
   try {
-    await service().pauseAutomation(id)
+    await conEmpresa(auto.companyId, (tx) => service(tx).pauseAutomation(id))
     revalidateEstrategias()
     return { success: true }
   } catch (e) {
@@ -139,7 +145,7 @@ export async function archivarEstrategia(
   if (!auto) return { error: 'Automatización no encontrada.' }
 
   try {
-    await service().archiveAutomation(id)
+    await conEmpresa(auto.companyId, (tx) => service(tx).archiveAutomation(id))
     revalidateEstrategias()
     return { success: true }
   } catch (e) {

@@ -93,6 +93,43 @@ mejor que la cola no funcione a que funcione sin firmar.
 
 ## Lo que queda fuera de esta fase
 
-El correo saliente (`src/lib/email.ts`) sigue enviándose dentro del request. Hoy
-son envíos de uno en uno, no fan-out, así que no es el mismo problema — pero es
-el siguiente candidato natural a pasar por la cola.
+`Upstash-Delay` (implementado en `src/lib/jobs/qstash.ts`) no tiene aún ningún
+llamador: es la pieza que falta para reanudar automatizaciones en `WAITING`
+(plan B-6: un scheduler que entregue el evento cuando pasa la espera).
+
+## Fase 4 — correos, bus de estrategias y recompensas de referido
+
+Tres tipos de trabajo más, todos con el mismo contrato (`encolar` → `/api/jobs`):
+
+| Tipo | Carga | Emisor | Worker |
+|---|---|---|---|
+| `email` | `to/subject/html/text/companyId` | `encolarEmail` (`src/modules/jobs/emisiones.ts`) | `sendEmail` (best-effort, nunca lanza) |
+| `evento-estrategia` | `eventoId/companyId` | `emitirEventoEstrategia` (`src/modules/estrategias/eventos.ts`) | `despacharEventoEstrategia` (flip atómico `processed` + dispatch + outbox) |
+| `recompensas-referido` | `companyId/referenteClienteId/referidoId` | `procesarReferidoCompletado` (`src/modules/referidos/actions.ts`) | `evaluarRecompensas` (idempotente por unique referente+regla) |
+
+Decisiones de diseño que conviene no deshacer:
+
+**El bus de estrategias es ahora un outbox (patrón B-6).** `emitirEventoEstrategia`
+persiste `automation_events` con `processed=false` y encola el id; el worker hace
+el flip atómico `false → true` y despacha. El flip es la exclusión mutua: un
+reintento de QStash o el barrido del cron encuentra el evento ya procesado y no
+lo duplica. Si el despacho falla se **reabre** el evento y se relanza el error —
+repetir es seguro, perder el evento no lo es. El cron diario
+(`/api/cron/automatizaciones`) barre los `processed:false` con más de 6 horas y
+los re-encola (resiliencia si la cola estuvo caída o el worker agotó reintentos).
+
+**Emails de prueba y de verificación siguen inline.** `enviarCorreoPrueba`, el
+diagnóstico `/api/pagos/cardnet-token/estado?correo=1` y la verificación de
+registro (`sendVerificationEmail`, que devuelve al UX si salió) no pasan por la
+cola. Los recibos de pago, invitaciones de miembro y avisos de ticket sí.
+
+**Sin QStash se ejecuta en línea y con `await`.** Los emisores hacen `await`
+porque, sin cola, `encolar` ejecuta el trabajo dentro del request y este debe
+terminar antes de responder. Con QStash configurado, ese `await` es solo la
+publicación (rápida); el trabajo pesado corre en el worker.
+
+**La idempotencia de las recompensas ya existía.** El unique
+`(referenteClienteId, reglaId)` + manejo de P2002 hacen que un reintento salte
+las recompensas ya otorgadas; la clave de dedup por `referidoId` garantiza además
+que cada conversión genere su propio trabajo (dos conversiones del mismo
+referente no se colapsan).

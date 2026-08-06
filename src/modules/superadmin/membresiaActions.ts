@@ -8,10 +8,10 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 export async function ajustarLavadosMembresia(input: {
   membershipId: string
@@ -31,16 +31,18 @@ export async function ajustarLavadosMembresia(input: {
     const motivo = String(input.motivo ?? '').trim().slice(0, 200)
     if (!motivo) return { error: 'Escribe el motivo del ajuste (queda en la auditoría).' }
 
-    const membership = await prisma.membership.findUnique({
-      where: { id: String(input.membershipId) },
-      select: {
-        id: true,
-        companyId: true,
-        lavadosRestantes: true,
-        cliente: { select: { nombre: true } },
-        plan: { select: { esIlimitado: true } },
-      },
-    })
+    const membership = await sinEmpresa('superadmin: buscar membresía por id', (tx) =>
+      tx.membership.findUnique({
+        where: { id: String(input.membershipId) },
+        select: {
+          id: true,
+          companyId: true,
+          lavadosRestantes: true,
+          cliente: { select: { nombre: true } },
+          plan: { select: { esIlimitado: true } },
+        },
+      })
+    )
     if (!membership) return { error: 'Membresía no encontrada.' }
     if (membership.plan.esIlimitado) {
       return { error: 'Este plan es ilimitado: no usa contador de lavados.' }
@@ -49,31 +51,33 @@ export async function ajustarLavadosMembresia(input: {
       return { error: 'La membresía ya tiene esa cantidad.' }
     }
 
-    await prisma.membership.update({
-      where: { id: membership.id },
-      data: { lavadosRestantes: lavados },
-    })
-
     const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
-        data: {
-          companyId: membership.companyId,
-          userId: session.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'Membership',
-          entidadId: membership.id,
-          payload: {
-            tipo: 'AJUSTE_LAVADOS',
-            antes: membership.lavadosRestantes,
-            despues: lavados,
-            motivo,
-            cliente: membership.cliente.nombre,
-          },
-          ...meta,
-        },
+    await conEmpresa(membership.companyId, async (tx) => {
+      await tx.membership.update({
+        where: { id: membership.id },
+        data: { lavadosRestantes: lavados },
       })
-      .catch(anotarFallo('superadmin:auditoria-membresia'))
+
+      await tx.auditLog
+        .create({
+          data: {
+            companyId: membership.companyId,
+            userId: session.metadata.dbUserId ?? null,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'Membership',
+            entidadId: membership.id,
+            payload: {
+              tipo: 'AJUSTE_LAVADOS',
+              antes: membership.lavadosRestantes,
+              despues: lavados,
+              motivo,
+              cliente: membership.cliente.nombre,
+            },
+            ...meta,
+          },
+        })
+        .catch(anotarFallo('superadmin:auditoria-membresia'))
+    })
 
     revalidatePath('/superadmin/membresias')
     revalidatePath('/admin/membresias')

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 
 /**
  * Purga de un Cliente con todas sus dependencias restrictivas, en orden.
@@ -15,30 +15,32 @@ import { prisma } from '@/lib/prisma'
  * paso propio. Devuelve conteos para dejar rastro de lo borrado.
  */
 export async function purgarClienteRow(clienteId: string) {
-  const [comprobantes, visitas, qrs, membresias, compras, referidos, refEventos, tickets, vehiculos] =
-    await prisma.$transaction([
-      prisma.comprobante.deleteMany({ where: { membership: { clienteId } } }),
-      prisma.visit.deleteMany({ where: { clienteId } }),
-      prisma.qrToken.deleteMany({ where: { clienteId } }),
-      prisma.membership.deleteMany({ where: { clienteId } }),
-      prisma.productoCompra.deleteMany({ where: { clienteId } }),
-      prisma.referido.deleteMany({
-        where: { OR: [{ referenteClienteId: clienteId }, { referidoClienteId: clienteId }] },
-      }),
-      prisma.referralEvent.deleteMany({ where: { clienteId } }),
-      prisma.supportTicket.deleteMany({ where: { clienteId } }),
-      prisma.vehiculo.deleteMany({ where: { clienteId } }),
-    ])
-  await prisma.cliente.delete({ where: { id: clienteId } })
-  return {
-    comprobantes: comprobantes.count,
-    visitas: visitas.count,
-    qrs: qrs.count,
-    membresias: membresias.count,
-    compras: compras.count,
-    referidos: referidos.count,
-    refEventos: refEventos.count,
-    tickets: tickets.count,
-    vehiculos: vehiculos.count,
-  }
+  return sinEmpresa('purgar un cliente con todas sus dependencias', async (tx) => {
+    const [comprobantes, visitas, qrs, membresias, compras, referidos, refEventos, tickets, vehiculos] =
+      await Promise.all([
+        tx.comprobante.deleteMany({ where: { membership: { clienteId } } }),
+        tx.visit.deleteMany({ where: { clienteId } }),
+        tx.qrToken.deleteMany({ where: { clienteId } }),
+        tx.membership.deleteMany({ where: { clienteId } }),
+        tx.productoCompra.deleteMany({ where: { clienteId } }),
+        tx.referido.deleteMany({
+          where: { OR: [{ referenteClienteId: clienteId }, { referidoClienteId: clienteId }] },
+        }),
+        tx.referralEvent.deleteMany({ where: { clienteId } }),
+        tx.supportTicket.deleteMany({ where: { clienteId } }),
+        tx.vehiculo.deleteMany({ where: { clienteId } }),
+      ])
+    await tx.cliente.delete({ where: { id: clienteId } })
+    return {
+      comprobantes: comprobantes.count,
+      visitas: visitas.count,
+      qrs: qrs.count,
+      membresias: membresias.count,
+      compras: compras.count,
+      referidos: referidos.count,
+      refEventos: refEventos.count,
+      tickets: tickets.count,
+      vehiculos: vehiculos.count,
+    }
+  })
 }

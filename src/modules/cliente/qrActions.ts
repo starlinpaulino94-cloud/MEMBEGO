@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 
@@ -35,12 +35,14 @@ export async function compartirQrToken(
     const id = qrTokenId.trim()
     if (!id) return { error: 'Falta el código QR.' }
 
-    const qr = await prisma.qrToken.findUnique({
-      where: { id },
-      include: {
-        cliente: { select: { id: true, supabaseId: true, companyId: true } },
-      },
-    })
+    const qr = await sinEmpresa('cliente: buscar mi QR', (tx) =>
+      tx.qrToken.findUnique({
+        where: { id },
+        include: {
+          cliente: { select: { id: true, supabaseId: true, companyId: true } },
+        },
+      })
+    )
     if (!qr) return { error: 'El código QR no existe.' }
 
     // Propiedad: por supabaseId o, como respaldo, por el clienteId de la sesión
@@ -61,30 +63,32 @@ export async function compartirQrToken(
     const meta = await getRequestMeta()
 
     // Actualiza contadores + deja rastro inmutable en el historial.
-    const [actualizado] = await prisma.$transaction([
-      prisma.qrToken.update({
-        where: { id },
-        data: {
-          compartidoCount: { increment: 1 },
-          ultimoCompartido: now,
-        },
-        select: { compartidoCount: true, ultimoCompartido: true },
-      }),
-      prisma.auditLog.create({
-        data: {
-          companyId: qr.cliente.companyId,
-          userId: user.metadata.dbUserId ?? null,
-          accion: 'QR_COMPARTIDO',
-          entidadTipo: 'QrToken',
-          entidadId: id,
-          payload: {
-            clienteId: qr.cliente.id,
-            membresiaId: qr.membresiaId,
+    const [actualizado] = await conEmpresa(qr.cliente.companyId, (tx) =>
+      Promise.all([
+        tx.qrToken.update({
+          where: { id },
+          data: {
+            compartidoCount: { increment: 1 },
+            ultimoCompartido: now,
           },
-          ...meta,
-        },
-      }),
-    ])
+          select: { compartidoCount: true, ultimoCompartido: true },
+        }),
+        tx.auditLog.create({
+          data: {
+            companyId: qr.cliente.companyId,
+            userId: user.metadata.dbUserId ?? null,
+            accion: 'QR_COMPARTIDO',
+            entidadTipo: 'QrToken',
+            entidadId: id,
+            payload: {
+              clienteId: qr.cliente.id,
+              membresiaId: qr.membresiaId,
+            },
+            ...meta,
+          },
+        }),
+      ])
+    )
 
     return {
       success: true,

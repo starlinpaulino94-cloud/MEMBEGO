@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { logErrorBd } from '@/lib/prisma-errors'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { esEmpresaDemo } from '@/modules/demo'
@@ -89,12 +89,15 @@ export async function montoDeObjetivo(
   obj: ObjetivoPago
 ): Promise<{ pesos: number; descripcion: string } | null> {
   if (obj.membershipId) {
-    const m = await prisma.membership
-      .findUnique({
-        where: { id: obj.membershipId },
-        include: { plan: true, planSolicitado: true, cliente: true },
-      })
-      .catch(() => null)
+    const membershipId = obj.membershipId
+    const m = await sinEmpresa(
+      'pagos: leer membresía por id para validar objetivo de cobro (empresa se valida después)',
+      (tx) =>
+        tx.membership.findUnique({
+          where: { id: membershipId },
+          include: { plan: true, planSolicitado: true, cliente: true },
+        })
+    ).catch(() => null)
     if (!m || m.cliente.companyId !== obj.companyId || m.clienteId !== obj.clienteId) return null
 
     // Cambio de plan pendiente: se cobra el plan SOLICITADO. Si no, el actual.
@@ -108,9 +111,15 @@ export async function montoDeObjetivo(
   }
 
   if (obj.compraId) {
-    const c = await prisma.productoCompra
-      .findUnique({ where: { id: obj.compraId }, include: { promocion: true } })
-      .catch(() => null)
+    const compraId = obj.compraId
+    const c = await sinEmpresa(
+      'pagos: leer compra por id para validar objetivo de cobro (empresa se valida después)',
+      (tx) =>
+        tx.productoCompra.findUnique({
+          where: { id: compraId },
+          include: { promocion: true },
+        })
+    ).catch(() => null)
     if (!c || c.companyId !== obj.companyId || c.clienteId !== obj.clienteId) return null
     const pesos = Number(c.precioCongelado ?? c.promocion?.precio ?? 0)
     return { pesos, descripcion: c.promocion?.titulo ?? 'Compra' }
@@ -260,7 +269,7 @@ export async function iniciarPagoTarjeta(input: {
   }
 
   if (auth.tipo === 'reto') {
-    await marcarRedirigido(intento.id, auth.threeDSServerTransID)
+    await marcarRedirigido(intento.id, auth.threeDSServerTransID, input.objetivo.companyId)
     return {
       estado: 'reto',
       intentoId: intento.id,
@@ -297,7 +306,10 @@ export async function completarPagoTarjeta(input: {
   const config = getCardnetConfig()
   if (!config) return { estado: 'error', motivo: 'El pago con tarjeta no está disponible.' }
 
-  const intento = await prisma.pagoIntento.findUnique({ where: { id: input.intentoId } }).catch(() => null)
+  const intento = await sinEmpresa(
+    'pagos: localizar intento por id al volver de la pasarela (puede ser de cualquier empresa)',
+    (tx) => tx.pagoIntento.findUnique({ where: { id: input.intentoId } })
+  ).catch(() => null)
   // El intento tiene que ser de ESTE cliente: así un navegador no completa el
   // pago de otro.
   if (!intento || intento.clienteId !== input.clienteId) {

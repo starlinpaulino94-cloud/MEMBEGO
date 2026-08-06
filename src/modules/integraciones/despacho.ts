@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { firmarHmac, EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
 
@@ -32,10 +32,12 @@ async function sistemasDestino(companyId: string) {
   try {
     const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
     const { categoria } = await getCapacidadesEmpresa(companyId)
-    return await prisma.sistemaConectado.findMany({
-      where: { activo: true, categoria, urlWebhook: { not: null } },
-      select: { id: true, urlWebhook: true, secreto: true },
-    })
+    return await conEmpresa(companyId, (tx) =>
+      tx.sistemaConectado.findMany({
+        where: { activo: true, categoria, urlWebhook: { not: null } },
+        select: { id: true, urlWebhook: true, secreto: true },
+      })
+    )
   } catch {
     return []
   }
@@ -96,8 +98,8 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
     if (sistemas.length === 0) return
 
     for (const sistema of sistemas) {
-      const fila = await prisma.eventoSaliente
-        .create({
+      const fila = await conEmpresa(evento.companyId, (tx) =>
+        tx.eventoSaliente.create({
           data: {
             sistemaId: sistema.id,
             companyId: evento.companyId,
@@ -108,18 +110,18 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
             } as object,
           },
         })
-        .catch(anotarFallo('integraciones:outbox', { tipo: evento.tipo }))
+      ).catch(anotarFallo('integraciones:outbox', { tipo: evento.tipo }))
       if (!fila || !sistema.urlWebhook) continue
 
       const error = await entregar(sistema.urlWebhook, sistema.secreto, cuerpoDe(fila))
-      await prisma.eventoSaliente
-        .update({
+      await conEmpresa(evento.companyId, (tx) =>
+        tx.eventoSaliente.update({
           where: { id: fila.id },
           data: error
             ? { intentos: 1, ultimoError: error.slice(0, 300) }
             : { estado: 'ENVIADO', intentos: 1, enviadoAt: new Date() },
         })
-        .catch(anotarFallo('integraciones:marcar', { id: fila.id }))
+      ).catch(anotarFallo('integraciones:marcar', { id: fila.id }))
     }
   } catch (e) {
     console.error('[integraciones] reenviar evento:', e)
@@ -130,27 +132,28 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
 export async function reintentarPendientes(limite = 100): Promise<{ enviados: number; fallidos: number }> {
   let enviados = 0
   let fallidos = 0
-  const pendientes = await prisma.eventoSaliente
-    .findMany({
+  const pendientes = await sinEmpresa('integraciones: reintento global de eventos pendientes (cron)', (tx) =>
+    tx.eventoSaliente.findMany({
       where: { estado: 'PENDIENTE' },
       orderBy: { createdAt: 'asc' },
       take: limite,
       include: { sistema: { select: { urlWebhook: true, secreto: true, activo: true } } },
     })
-    .catch(() => [])
+  ).catch(() => [])
 
   for (const ev of pendientes) {
     if (!ev.sistema.activo || !ev.sistema.urlWebhook) {
-      await prisma.eventoSaliente
-        .update({ where: { id: ev.id }, data: { estado: 'FALLIDO', ultimoError: 'Sistema inactivo o sin webhook.' } })
-        .catch(anotarFallo('integraciones:cerrar', { id: ev.id }))
+      await sinEmpresa('integraciones: cerrar evento sin destino (cron global)', (tx) =>
+        tx.eventoSaliente
+          .update({ where: { id: ev.id }, data: { estado: 'FALLIDO', ultimoError: 'Sistema inactivo o sin webhook.' } })
+      ).catch(anotarFallo('integraciones:cerrar', { id: ev.id }))
       fallidos++
       continue
     }
     const error = await entregar(ev.sistema.urlWebhook, ev.sistema.secreto, cuerpoDe(ev))
     const intentos = ev.intentos + 1
-    await prisma.eventoSaliente
-      .update({
+    await sinEmpresa('integraciones: marcar evento tras reintento (cron global)', (tx) =>
+      tx.eventoSaliente.update({
         where: { id: ev.id },
         data: error
           ? {
@@ -160,7 +163,7 @@ export async function reintentarPendientes(limite = 100): Promise<{ enviados: nu
             }
           : { estado: 'ENVIADO', intentos, enviadoAt: new Date() },
       })
-      .catch(anotarFallo('integraciones:marcar', { id: ev.id }))
+    ).catch(anotarFallo('integraciones:marcar', { id: ev.id }))
     if (error) fallidos += intentos >= MAX_INTENTOS ? 1 : 0
     else enviados++
   }

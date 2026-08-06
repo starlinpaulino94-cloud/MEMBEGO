@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · Fase 3 — EQUIPOS Y MANTENIMIENTO.
@@ -99,40 +99,44 @@ export async function getPanelActivos(
 ): Promise<PanelActivos | null> {
   try {
     const ahora = new Date()
-    const [activos, agg] = await Promise.all([
-      prisma.activo.findMany({
-        where: { companyId, activo: true },
-        orderBy: [{ estado: 'asc' }, { nombre: 'asc' }],
-        select: {
-          id: true,
-          nombre: true,
-          categoria: true,
-          marca: true,
-          modelo: true,
-          ubicacion: true,
-          estado: true,
-          frecuenciaDias: true,
-          proximoMantenimiento: true,
-          _count: { select: { mantenimientos: true } },
-          mantenimientos: {
-            orderBy: { realizadoAt: 'desc' },
-            take: 1,
-            select: { realizadoAt: true },
+    const [activos, agg] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.activo.findMany({
+          where: { companyId, activo: true },
+          orderBy: [{ estado: 'asc' }, { nombre: 'asc' }],
+          select: {
+            id: true,
+            nombre: true,
+            categoria: true,
+            marca: true,
+            modelo: true,
+            ubicacion: true,
+            estado: true,
+            frecuenciaDias: true,
+            proximoMantenimiento: true,
+            _count: { select: { mantenimientos: true } },
+            mantenimientos: {
+              orderBy: { realizadoAt: 'desc' },
+              take: 1,
+              select: { realizadoAt: true },
+            },
           },
-        },
-      }),
-      prisma.mantenimiento.aggregate({
+        }),
+      tx.mantenimiento.aggregate({
         where: { activo: { companyId }, realizadoAt: { gte: desde, lte: hasta } },
         _sum: { costo: true, horasParado: true },
       }),
     ])
+    )
 
     // Horas paradas por equipo, en una sola consulta para toda la lista.
-    const horasPorActivo = await prisma.mantenimiento.groupBy({
-      by: ['activoId'],
-      where: { activo: { companyId } },
-      _sum: { horasParado: true },
-    })
+    const horasPorActivo = await conEmpresa(companyId, (tx) =>
+      tx.mantenimiento.groupBy({
+        by: ['activoId'],
+        where: { activo: { companyId } },
+        _sum: { horasParado: true },
+      })
+    )
     const horas = new Map(
       horasPorActivo.map((h) => [h.activoId, Number(h._sum.horasParado ?? 0)])
     )
@@ -172,21 +176,23 @@ export async function getPanelActivos(
 /** Historial de mantenimientos de un equipo. */
 export async function getMantenimientos(companyId: string, activoId: string) {
   try {
-    return await prisma.mantenimiento.findMany({
-      where: { activoId, activo: { companyId } },
-      orderBy: { realizadoAt: 'desc' },
-      take: 100,
-      select: {
-        id: true,
-        tipo: true,
-        descripcion: true,
-        costo: true,
-        horasParado: true,
-        realizadoAt: true,
-        proveedor: true,
-        hechoPor: { select: { name: true, email: true } },
-      },
-    })
+    return await conEmpresa(companyId, (tx) =>
+      tx.mantenimiento.findMany({
+        where: { activoId, activo: { companyId } },
+        orderBy: { realizadoAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          tipo: true,
+          descripcion: true,
+          costo: true,
+          horasParado: true,
+          realizadoAt: true,
+          proveedor: true,
+          hechoPor: { select: { name: true, email: true } },
+        },
+      })
+    )
   } catch {
     return []
   }

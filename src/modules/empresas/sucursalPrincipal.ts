@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * Sucursal principal automática.
@@ -22,45 +22,47 @@ export const SUCURSAL_PRINCIPAL_NOMBRE = 'Sucursal principal'
 
 export async function ensureSucursalPrincipal(companyId: string): Promise<void> {
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { direccion: true, ciudad: true, telefono: true },
+    await conEmpresa(companyId, async (tx) => {
+      const company = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { direccion: true, ciudad: true, telefono: true },
+      })
+      if (!company) return
+
+      const direccion =
+        [company.direccion, company.ciudad].filter(Boolean).join(', ') || null
+
+      const existente = await tx.sucursal.findFirst({
+        where: { companyId },
+        select: { id: true },
+      })
+
+      if (!existente) {
+        await tx.sucursal.create({
+          data: {
+            companyId,
+            nombre: SUCURSAL_PRINCIPAL_NOMBRE,
+            direccion,
+            telefono: company.telefono,
+          },
+        })
+        return
+      }
+
+      // Completar SOLO campos vacíos de la sucursal auto-creada.
+      if (direccion) {
+        await tx.sucursal.updateMany({
+          where: { companyId, nombre: SUCURSAL_PRINCIPAL_NOMBRE, direccion: null },
+          data: { direccion },
+        })
+      }
+      if (company.telefono) {
+        await tx.sucursal.updateMany({
+          where: { companyId, nombre: SUCURSAL_PRINCIPAL_NOMBRE, telefono: null },
+          data: { telefono: company.telefono },
+        })
+      }
     })
-    if (!company) return
-
-    const direccion =
-      [company.direccion, company.ciudad].filter(Boolean).join(', ') || null
-
-    const existente = await prisma.sucursal.findFirst({
-      where: { companyId },
-      select: { id: true },
-    })
-
-    if (!existente) {
-      await prisma.sucursal.create({
-        data: {
-          companyId,
-          nombre: SUCURSAL_PRINCIPAL_NOMBRE,
-          direccion,
-          telefono: company.telefono,
-        },
-      })
-      return
-    }
-
-    // Completar SOLO campos vacíos de la sucursal auto-creada.
-    if (direccion) {
-      await prisma.sucursal.updateMany({
-        where: { companyId, nombre: SUCURSAL_PRINCIPAL_NOMBRE, direccion: null },
-        data: { direccion },
-      })
-    }
-    if (company.telefono) {
-      await prisma.sucursal.updateMany({
-        where: { companyId, nombre: SUCURSAL_PRINCIPAL_NOMBRE, telefono: null },
-        data: { telefono: company.telefono },
-      })
-    }
   } catch (e) {
     console.error('[sucursal-principal]', e)
   }

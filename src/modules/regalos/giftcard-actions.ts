@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { generarCodigo } from '@/lib/codes'
@@ -78,15 +78,21 @@ export async function comprarGiftCard(
         }
         destinatarioContacto = digits
       }
-      const existente = destinatarioContacto.includes('@')
-        ? await prisma.cliente.findFirst({
-            where: { companyId, email: { equals: destinatarioContacto, mode: 'insensitive' } },
-            select: { id: true },
-          })
-        : await prisma.cliente.findFirst({
-            where: { companyId, telefono: { contains: destinatarioContacto } },
-            select: { id: true },
-          })
+      // A const: dentro de los closures de conEmpresa se pierde el estrechamiento.
+      const contacto = destinatarioContacto
+      const existente = contacto.includes('@')
+        ? await conEmpresa(companyId, (tx) =>
+            tx.cliente.findFirst({
+              where: { companyId, email: { equals: contacto, mode: 'insensitive' } },
+              select: { id: true },
+            })
+          )
+        : await conEmpresa(companyId, (tx) =>
+            tx.cliente.findFirst({
+              where: { companyId, telefono: { contains: contacto } },
+              select: { id: true },
+            })
+          )
       if (existente) {
         destinatarioId = existente.id
         destinatarioContacto = null
@@ -95,10 +101,12 @@ export async function comprarGiftCard(
 
     if (destinatarioId === clienteId) return { error: 'Para ti mismo no hace falta gift card 🙂' }
     if (destinatarioContacto) {
-      const yo = await prisma.cliente.findUnique({
-        where: { id: clienteId },
-        select: { email: true, telefono: true },
-      })
+      const yo = await conEmpresa(companyId, (tx) =>
+        tx.cliente.findUnique({
+          where: { id: clienteId },
+          select: { email: true, telefono: true },
+        })
+      )
       const misDigits = yo?.telefono?.replace(/\D/g, '') ?? ''
       if (
         yo?.email?.toLowerCase() === destinatarioContacto ||
@@ -110,10 +118,12 @@ export async function comprarGiftCard(
 
     let destinatarioNombre: string | null = null
     if (destinatarioId) {
-      const destinatario = await prisma.cliente.findFirst({
-        where: { id: destinatarioId, companyId },
-        select: { nombre: true },
-      })
+      const destinatario = await conEmpresa(companyId, (tx) =>
+        tx.cliente.findFirst({
+          where: { id: destinatarioId, companyId },
+          select: { nombre: true },
+        })
+      )
       if (!destinatario) return { error: 'Destinatario no encontrado en este negocio.' }
       destinatarioNombre = destinatario.nombre
     }
@@ -122,26 +132,30 @@ export async function comprarGiftCard(
     let codigo: string | null = null
     for (let intento = 0; intento < 5 && !codigo; intento++) {
       const candidato = `GC-${generarCodigo(6)}`
-      const ocupado = await prisma.giftCard.findUnique({
-        where: { codigo: candidato },
-        select: { id: true },
-      })
+      const ocupado = await sinEmpresa('giftcards: verificar código único global', (tx) =>
+        tx.giftCard.findUnique({
+          where: { codigo: candidato },
+          select: { id: true },
+        })
+      )
       if (!ocupado) codigo = candidato
     }
     if (!codigo) return { error: 'No se pudo generar el código. Intenta de nuevo.' }
 
-    await prisma.giftCard.create({
-      data: {
-        companyId,
-        codigo,
-        monto,
-        saldo: monto,
-        compradorClienteId: clienteId,
-        destinatarioClienteId: destinatarioId,
-        destinatarioContacto,
-        mensaje,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.giftCard.create({
+        data: {
+          companyId,
+          codigo,
+          monto,
+          saldo: monto,
+          compradorClienteId: clienteId,
+          destinatarioClienteId: destinatarioId,
+          destinatarioContacto,
+          mensaje,
+        },
+      })
+    )
 
     await notificarAdmins(companyId, {
       tipo: 'NUEVO_COMPROBANTE',
@@ -178,52 +192,62 @@ export async function confirmarPagoGiftCard(
     return { error: 'Método de cobro no válido.' }
   }
 
-  const card = await prisma.giftCard.findFirst({
-    where: { id: giftCardId, companyId, estado: 'PENDIENTE_PAGO' },
-  })
+  const card = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.findFirst({
+      where: { id: giftCardId, companyId, estado: 'PENDIENTE_PAGO' },
+    })
+  )
   if (!card) return { error: 'Esta gift card ya no está pendiente de pago.' }
 
   // Guard atómico contra doble confirmación.
-  const upd = await prisma.giftCard.updateMany({
-    where: { id: card.id, estado: 'PENDIENTE_PAGO' },
-    data: { estado: 'ACTIVA', metodoCobro: metodo, activadaAt: new Date() },
-  })
+  const upd = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.updateMany({
+      where: { id: card.id, estado: 'PENDIENTE_PAGO' },
+      data: { estado: 'ACTIVA', metodoCobro: metodo, activadaAt: new Date() },
+    })
+  )
   if (upd.count === 0) return { error: 'Esta gift card ya fue procesada.' }
 
   const monto = Number(card.monto)
-  const comprador = await prisma.cliente.findUnique({
-    where: { id: card.compradorClienteId },
-    select: { nombre: true },
-  })
+  const comprador = await conEmpresa(companyId, (tx) =>
+    tx.cliente.findUnique({
+      where: { id: card.compradorClienteId },
+      select: { nombre: true },
+    })
+  )
 
   // Venta oficial (libro mayor + factura). Best-effort: la activación ya
   // ocurrió y no se revierte por un fallo de facturación.
   try {
     const meta = await getRequestMeta()
     const detalle = `Gift card ${card.codigo}`
-    const tx = await crearTransaccionAplicada(prisma, {
-      tipo: 'SALE',
-      companyId,
-      clienteId: card.compradorClienteId,
-      empleadoId: user.metadata.dbUserId ?? null,
-      monto,
-      metodoCobro: metodo,
-      snapshot: {
-        detalle,
-        cliente: comprador?.nombre ?? 'Cliente',
-        servicio: detalle,
-        lineas: [
-          { descripcion: detalle, cantidad: 1, precioUnitario: monto, descuento: 0, total: monto },
-        ],
-        subtotal: monto.toFixed(2),
-        total: monto.toFixed(2),
-        metodoCobroLabel:
-          metodo === 'EFECTIVO' ? 'Efectivo' : metodo === 'TRANSFERENCIA' ? 'Transferencia' : 'Otro',
-      },
-      auditoria: { ipAddress: meta.ipAddress, userAgent: meta.userAgent },
-      userId: user.metadata.dbUserId ?? null,
-    })
-    await prisma.giftCard.update({ where: { id: card.id }, data: { txVentaId: tx.id } })
+    const txVenta = await conEmpresa(companyId, (tx) =>
+      crearTransaccionAplicada(tx, {
+        tipo: 'SALE',
+        companyId,
+        clienteId: card.compradorClienteId,
+        empleadoId: user.metadata.dbUserId ?? null,
+        monto,
+        metodoCobro: metodo,
+        snapshot: {
+          detalle,
+          cliente: comprador?.nombre ?? 'Cliente',
+          servicio: detalle,
+          lineas: [
+            { descripcion: detalle, cantidad: 1, precioUnitario: monto, descuento: 0, total: monto },
+          ],
+          subtotal: monto.toFixed(2),
+          total: monto.toFixed(2),
+          metodoCobroLabel:
+            metodo === 'EFECTIVO' ? 'Efectivo' : metodo === 'TRANSFERENCIA' ? 'Transferencia' : 'Otro',
+        },
+        auditoria: { ipAddress: meta.ipAddress, userAgent: meta.userAgent },
+        userId: user.metadata.dbUserId ?? null,
+      })
+    )
+    await conEmpresa(companyId, (tx) =>
+      tx.giftCard.update({ where: { id: card.id }, data: { txVentaId: txVenta.id } })
+    )
   } catch (e) {
     console.error('[giftcards] venta:', e)
   }
@@ -266,38 +290,48 @@ export async function redimirGiftCard(
   const monto = Math.round(Number(montoRaw) * 100) / 100
   if (!Number.isFinite(monto) || monto <= 0) return { error: 'Monto de consumo no válido.' }
 
-  const card = await prisma.giftCard.findFirst({
-    where: { id: giftCardId, companyId, estado: 'ACTIVA' },
-  })
+  const card = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.findFirst({
+      where: { id: giftCardId, companyId, estado: 'ACTIVA' },
+    })
+  )
   if (!card) return { error: 'Esta gift card no está activa.' }
 
   // Descuento atómico: solo si el saldo alcanza.
-  const upd = await prisma.giftCard.updateMany({
-    where: { id: card.id, estado: 'ACTIVA', saldo: { gte: monto } },
-    data: { saldo: { decrement: monto } },
-  })
+  const upd = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.updateMany({
+      where: { id: card.id, estado: 'ACTIVA', saldo: { gte: monto } },
+      data: { saldo: { decrement: monto } },
+    })
+  )
   if (upd.count === 0) {
     return { error: `Saldo insuficiente: quedan ${fmtRD(Number(card.saldo))}.` }
   }
 
-  const actual = await prisma.giftCard.findUnique({
-    where: { id: card.id },
-    select: { saldo: true },
-  })
+  const actual = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.findUnique({
+      where: { id: card.id },
+      select: { saldo: true },
+    })
+  )
   const saldoRestante = Number(actual?.saldo ?? 0)
   if (saldoRestante <= 0) {
-    await prisma.giftCard.updateMany({
-      where: { id: card.id, estado: 'ACTIVA', saldo: { lte: 0 } },
-      data: { estado: 'AGOTADA', resueltoAt: new Date() },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.giftCard.updateMany({
+        where: { id: card.id, estado: 'ACTIVA', saldo: { lte: 0 } },
+        data: { estado: 'AGOTADA', resueltoAt: new Date() },
+      })
+    )
   }
 
   // Comprobante del consumo (el ingreso ya se registró al confirmar el pago).
   const duenoId = card.destinatarioClienteId ?? card.compradorClienteId
-  const dueno = await prisma.cliente.findUnique({
-    where: { id: duenoId },
-    select: { nombre: true },
-  })
+  const dueno = await conEmpresa(companyId, (tx) =>
+    tx.cliente.findUnique({
+      where: { id: duenoId },
+      select: { nombre: true },
+    })
+  )
   await registrarEntregaBeneficio({
     tipo: 'BENEFIT_USE',
     companyId,
@@ -337,16 +371,20 @@ export async function cancelarGiftCardAdmin(
   const motivoLimpio = motivo.trim().slice(0, 300)
   if (motivoLimpio.length < 3) return { error: 'Escribe el motivo de la cancelación.' }
 
-  const card = await prisma.giftCard.findFirst({
-    where: { id: giftCardId, companyId, estado: 'PENDIENTE_PAGO' },
-    select: { id: true, codigo: true, compradorClienteId: true },
-  })
+  const card = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.findFirst({
+      where: { id: giftCardId, companyId, estado: 'PENDIENTE_PAGO' },
+      select: { id: true, codigo: true, compradorClienteId: true },
+    })
+  )
   if (!card) return { error: 'Solo se cancelan gift cards pendientes de pago.' }
 
-  const upd = await prisma.giftCard.updateMany({
-    where: { id: card.id, estado: 'PENDIENTE_PAGO' },
-    data: { estado: 'CANCELADA', resueltoAt: new Date() },
-  })
+  const upd = await conEmpresa(companyId, (tx) =>
+    tx.giftCard.updateMany({
+      where: { id: card.id, estado: 'PENDIENTE_PAGO' },
+      data: { estado: 'CANCELADA', resueltoAt: new Date() },
+    })
+  )
   if (upd.count === 0) return { error: 'Esta gift card ya fue procesada.' }
 
   await notificarClienteRegalo(

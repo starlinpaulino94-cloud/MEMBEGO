@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa } from '@/lib/tenant'
 import type { MarketingCampaignEstado } from '@prisma/client'
 import { esMarketingTipoValido, horaAMinutos } from '@/lib/marketing'
 
@@ -117,9 +117,11 @@ export async function crearCampanaMarketing(
   try {
     // Se crea ACTIVA para que empiece a mostrarse dentro de su ventana; el
     // admin puede pausarla luego.
-    await prisma.marketingCampaign.create({
-      data: { companyId, estado: 'ACTIVA', ...parsed.data } as never,
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.marketingCampaign.create({
+        data: { companyId, estado: 'ACTIVA', ...parsed.data } as never,
+      })
+    )
     revalidar()
     return { success: true }
   } catch (e) {
@@ -139,20 +141,24 @@ export async function actualizarCampanaMarketing(
   const id = s(fd, 'id')
   if (!id) return { error: 'Campaña no encontrada.' }
 
-  const existe = await prisma.marketingCampaign.findFirst({
-    where: { id, companyId },
-    select: { id: true },
-  })
+  const existe = await conEmpresa(companyId, (tx) =>
+    tx.marketingCampaign.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    })
+  )
   if (!existe) return { error: 'Campaña no encontrada.' }
 
   const parsed = parse(fd)
   if ('error' in parsed) return { error: parsed.error }
 
   try {
-    await prisma.marketingCampaign.update({
-      where: { id },
-      data: parsed.data as never,
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.marketingCampaign.update({
+        where: { id },
+        data: parsed.data as never,
+      })
+    )
     revalidar()
     return { success: true }
   } catch (e) {
@@ -170,10 +176,12 @@ export async function cambiarEstadoCampanaMarketing(
   const companyId = (await resolveCompanyId(user)) ?? ''
   if (!companyId) return { ok: false }
 
-  const res = await prisma.marketingCampaign.updateMany({
-    where: { id, companyId },
-    data: { estado },
-  })
+  const res = await conEmpresa(companyId, (tx) =>
+    tx.marketingCampaign.updateMany({
+      where: { id, companyId },
+      data: { estado },
+    })
+  )
   revalidar()
   return { ok: res.count > 0 }
 }
@@ -184,7 +192,9 @@ export async function eliminarCampanaMarketing(id: string): Promise<{ ok: boolea
   const companyId = (await resolveCompanyId(user)) ?? ''
   if (!companyId) return { ok: false }
 
-  const res = await prisma.marketingCampaign.deleteMany({ where: { id, companyId } })
+  const res = await conEmpresa(companyId, (tx) =>
+    tx.marketingCampaign.deleteMany({ where: { id, companyId } })
+  )
   revalidar()
   return { ok: res.count > 0 }
 }

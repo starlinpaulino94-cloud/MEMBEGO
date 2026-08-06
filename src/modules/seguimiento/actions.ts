@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { crearNotificacion } from '@/modules/notificaciones/service'
@@ -25,24 +25,28 @@ export async function enviarRecordatorioSeguimiento(
     const user = await requireSection('seguimiento')
     if (!user) return { error: 'No tienes permisos para enviar recordatorios.' }
 
-    const compra = await prisma.productoCompra.findUnique({
-      where: { id: compraId },
-      select: {
-        id: true,
-        companyId: true,
-        estado: true,
-        usosRestantes: true,
-        fechaVencimiento: true,
-        promocion: { select: { id: true, titulo: true } },
-        cliente: {
+    const compra = await sinEmpresa(
+      'seguimiento: localizar recompensa por id (su empresa se deriva de la compra)',
+      (tx) =>
+        tx.productoCompra.findUnique({
+          where: { id: compraId },
           select: {
-            supabaseId: true,
-            nombre: true,
-            company: { select: { name: true, zonaHoraria: true } },
+            id: true,
+            companyId: true,
+            estado: true,
+            usosRestantes: true,
+            fechaVencimiento: true,
+            promocion: { select: { id: true, titulo: true } },
+            cliente: {
+              select: {
+                supabaseId: true,
+                nombre: true,
+                company: { select: { name: true, zonaHoraria: true } },
+              },
+            },
           },
-        },
-      },
-    })
+        })
+    )
     if (!compra) return { error: 'Recompensa no encontrada.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -54,10 +58,14 @@ export async function enviarRecordatorioSeguimiento(
       return { error: 'Esta recompensa ya no está disponible para el cliente.' }
     }
 
-    const destinatario = await prisma.user.findUnique({
-      where: { supabaseId: compra.cliente.supabaseId },
-      select: { id: true },
-    })
+    const destinatario = await sinEmpresa(
+      'seguimiento: buscar usuario global por supabaseId (id del destinatario de la notificación)',
+      (tx) =>
+        tx.user.findUnique({
+          where: { supabaseId: compra.cliente.supabaseId },
+          select: { id: true },
+        })
+    )
     if (!destinatario) {
       return { error: 'El cliente no tiene cuenta de usuario para notificar.' }
     }
@@ -84,21 +92,23 @@ export async function enviarRecordatorioSeguimiento(
 
     // Trazabilidad: el recordatorio queda en auditoría con fecha/hora y admin.
     const meta = await getRequestMeta()
-    await prisma.auditLog.create({
-      data: {
-        companyId: compra.companyId,
-        userId: user.metadata.dbUserId ?? null,
-        accion: 'NOTA_INTERNA',
-        entidadTipo: 'ProductoCompra',
-        entidadId: compra.id,
-        payload: {
-          tipo: 'RECORDATORIO_SEGUIMIENTO',
-          promocionId: compra.promocion?.id ?? null,
-          cliente: compra.cliente.nombre,
+    await conEmpresa(compra.companyId, (tx) =>
+      tx.auditLog.create({
+        data: {
+          companyId: compra.companyId,
+          userId: user.metadata.dbUserId ?? null,
+          accion: 'NOTA_INTERNA',
+          entidadTipo: 'ProductoCompra',
+          entidadId: compra.id,
+          payload: {
+            tipo: 'RECORDATORIO_SEGUIMIENTO',
+            promocionId: compra.promocion?.id ?? null,
+            cliente: compra.cliente.nombre,
+          },
+          ...meta,
         },
-        ...meta,
-      },
-    })
+      })
+    )
 
     return { ok: true }
   } catch (e) {
@@ -157,10 +167,12 @@ export async function guardarSeguimientoConfig(
       promosExcluidas,
     }
 
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { seguimientoConfig: config },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { seguimientoConfig: config },
+      })
+    )
     revalidatePath('/admin/seguimiento')
     return { success: 'Configuración guardada.' }
   } catch (e) {

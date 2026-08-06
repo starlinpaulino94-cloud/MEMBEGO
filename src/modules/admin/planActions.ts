@@ -1,10 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -102,21 +102,23 @@ export async function crearPlan(
   if ('error' in parsed) return { error: parsed.error }
 
   try {
-    await prisma.plan.create({
-      data: {
-        companyId,
-        nombre: parsed.nombre,
-        precio: parsed.precio,
-        lavadosIncluidos: parsed.esIlimitado ? 0 : parsed.lavados,
-        esIlimitado: parsed.esIlimitado,
-        descripcion: parsed.descripcion,
-        beneficios: parsed.beneficios,
-        vigenciaDias: parsed.vigenciaDias,
-        condiciones: parsed.condiciones,
-        color: parsed.color,
-        orden: parsed.orden,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.plan.create({
+        data: {
+          companyId,
+          nombre: parsed.nombre,
+          precio: parsed.precio,
+          lavadosIncluidos: parsed.esIlimitado ? 0 : parsed.lavados,
+          esIlimitado: parsed.esIlimitado,
+          descripcion: parsed.descripcion,
+          beneficios: parsed.beneficios,
+          vigenciaDias: parsed.vigenciaDias,
+          condiciones: parsed.condiciones,
+          color: parsed.color,
+          orden: parsed.orden,
+        },
+      })
+    )
 
     revalidatePlanes()
     return { success: true }
@@ -131,10 +133,12 @@ async function planDeMiEmpresa(
   planId: string,
   user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
 ) {
-  const plan = await prisma.plan.findUnique({
-    where: { id: planId },
-    select: { id: true, companyId: true, activo: true },
-  })
+  const plan = await sinEmpresa('plan por id sin conocer la empresa', (tx) =>
+    tx.plan.findUnique({
+      where: { id: planId },
+      select: { id: true, companyId: true, activo: true },
+    })
+  )
   if (!plan) return null
   if (
     user.metadata.role !== 'SUPERADMIN' &&
@@ -164,22 +168,24 @@ export async function actualizarPlan(
     const plan = await planDeMiEmpresa(planId, user)
     if (!plan) return { error: 'Plan no encontrado.' }
 
-    await prisma.plan.update({
-      where: { id: planId },
-      data: {
-        nombre: parsed.nombre,
-        precio: parsed.precio,
-        lavadosIncluidos: parsed.esIlimitado ? 0 : parsed.lavados,
-        esIlimitado: parsed.esIlimitado,
-        descripcion: parsed.descripcion,
-        beneficios: parsed.beneficios,
-        vigenciaDias: parsed.vigenciaDias,
-        condiciones: parsed.condiciones,
-        color: parsed.color,
-        orden: parsed.orden,
-        activo,
-      },
-    })
+    await conEmpresa(plan.companyId, (tx) =>
+      tx.plan.update({
+        where: { id: planId },
+        data: {
+          nombre: parsed.nombre,
+          precio: parsed.precio,
+          lavadosIncluidos: parsed.esIlimitado ? 0 : parsed.lavados,
+          esIlimitado: parsed.esIlimitado,
+          descripcion: parsed.descripcion,
+          beneficios: parsed.beneficios,
+          vigenciaDias: parsed.vigenciaDias,
+          condiciones: parsed.condiciones,
+          color: parsed.color,
+          orden: parsed.orden,
+          activo,
+        },
+      })
+    )
 
     revalidatePlanes()
     return { success: true }
@@ -209,10 +215,12 @@ export async function alternarPlanActivo(
     const plan = await planDeMiEmpresa(planId, user)
     if (!plan) return { error: 'Plan no encontrado.' }
 
-    await prisma.plan.update({
-      where: { id: planId },
-      data: { activo: !plan.activo },
-    })
+    await conEmpresa(plan.companyId, (tx) =>
+      tx.plan.update({
+        where: { id: planId },
+        data: { activo: !plan.activo },
+      })
+    )
 
     revalidatePlanes()
     return { success: true }
@@ -236,12 +244,14 @@ export async function eliminarPlan(
     const plan = await planDeMiEmpresa(planId, user)
     if (!plan) return { error: 'Plan no encontrado.' }
 
-    const count = await prisma.membership.count({ where: { planId } })
+    const count = await conEmpresa(plan.companyId, (tx) =>
+      tx.membership.count({ where: { planId } })
+    )
     if (count > 0) {
       return { error: `No se puede eliminar: hay ${count} membresía(s) asociadas.` }
     }
 
-    await prisma.plan.delete({ where: { id: planId } })
+    await conEmpresa(plan.companyId, (tx) => tx.plan.delete({ where: { id: planId } }))
     revalidatePlanes()
     return { success: true }
   } catch (e) {
@@ -261,13 +271,15 @@ export async function cancelarMembresia(
   if (!membershipId) return { error: 'Membresía no especificada.' }
 
   try {
-    const m = await prisma.membership.findUnique({
-      where: { id: membershipId },
-      include: { cliente: true },
-    })
+    const m = await sinEmpresa('membresía por id para superadmin', (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        include: { cliente: true },
+      })
+    )
     if (!m) return { error: 'Membresía no encontrada.' }
 
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(m.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membershipId },
         data: { estado: 'CANCELADA' },
@@ -304,14 +316,16 @@ export async function desactivarMembresia(
   if (!membershipId) return { error: 'Membresía no especificada.' }
 
   try {
-    const m = await prisma.membership.findUnique({
-      where: { id: membershipId },
-      include: { cliente: true },
-    })
+    const m = await sinEmpresa('membresía por id para superadmin', (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        include: { cliente: true },
+      })
+    )
     if (!m) return { error: 'Membresía no encontrada.' }
     if (m.estado !== 'ACTIVA') return { error: 'Solo se puede desactivar una membresía activa.' }
 
-    await prisma.$transaction(async (tx) => {
+    await conEmpresa(m.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membershipId },
         data: { estado: 'VENCIDA' },

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 export interface ResenaPublica {
   id: string
@@ -24,25 +24,27 @@ export async function getCompanyResenas(
   limit = 12
 ): Promise<CompanyResenas> {
   try {
-    const [agg, items] = await Promise.all([
-      prisma.companyRating.aggregate({
-        where: { companyId, visible: true },
-        _avg: { rating: true },
-        _count: true,
-      }),
-      prisma.companyRating.findMany({
-        where: { companyId, visible: true },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        select: {
-          id: true,
-          rating: true,
-          comment: true,
-          createdAt: true,
-          cliente: { select: { nombre: true } },
-        },
-      }),
-    ])
+    const [agg, items] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.companyRating.aggregate({
+          where: { companyId, visible: true },
+          _avg: { rating: true },
+          _count: true,
+        }),
+        tx.companyRating.findMany({
+          where: { companyId, visible: true },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          select: {
+            id: true,
+            rating: true,
+            comment: true,
+            createdAt: true,
+            cliente: { select: { nombre: true } },
+          },
+        }),
+      ])
+    )
     return {
       promedio: agg._avg.rating != null ? Math.round(agg._avg.rating * 10) / 10 : null,
       total: agg._count,
@@ -72,15 +74,19 @@ export async function getMiResena(
   supabaseId: string
 ): Promise<MiResenaInfo> {
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { supabaseId_companyId: { supabaseId, companyId } },
-      select: { id: true },
-    })
+    const cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: { supabaseId_companyId: { supabaseId, companyId } },
+        select: { id: true },
+      })
+    )
     if (!cliente) return { esCliente: false, resena: null }
-    const r = await prisma.companyRating.findUnique({
-      where: { companyId_clienteId: { companyId, clienteId: cliente.id } },
-      select: { rating: true, comment: true },
-    })
+    const r = await conEmpresa(companyId, (tx) =>
+      tx.companyRating.findUnique({
+        where: { companyId_clienteId: { companyId, clienteId: cliente.id } },
+        select: { rating: true, comment: true },
+      })
+    )
     return { esCliente: true, resena: r ?? null }
   } catch (e) {
     console.error('[getMiResena]', e)

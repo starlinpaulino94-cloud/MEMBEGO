@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { checkBootstrapAccess } from '@/lib/bootstrap-guard'
@@ -46,9 +46,11 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Localizar el id del usuario en auth.users (misma base de datos).
-    const rows = await prisma.$queryRaw<{ id: string }[]>`
-      select id::text as id from auth.users where email = ${email} limit 1
-    `
+    const rows = await sinEmpresa('auth-user-lookup', (tx) =>
+      tx.$queryRaw<{ id: string }[]>`
+        select id::text as id from auth.users where email = ${email} limit 1
+      `
+    )
     if (rows.length === 0) {
       return NextResponse.json(
         { error: 'No existe un usuario con ese correo.' },

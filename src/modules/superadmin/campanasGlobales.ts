@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 
 /**
  * CAMPAÑAS GLOBALES — marketing conjunto entre empresas, definido por el
@@ -108,15 +108,17 @@ export interface CampanaResumen {
 }
 
 export async function getCampanasGlobales(): Promise<CampanaResumen[]> {
-  const campanas = await prisma.campanaGlobal.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    include: {
-      participantes: {
-        select: { aplicadaAt: true, error: true },
+  const campanas = await sinEmpresa('superadmin: listar campañas globales', (tx) =>
+    tx.campanaGlobal.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        participantes: {
+          select: { aplicadaAt: true, error: true },
+        },
       },
-    },
-  })
+    })
+  )
   return campanas.map((c) => ({
     id: c.id,
     nombre: c.nombre,
@@ -133,18 +135,20 @@ export async function getCampanasGlobales(): Promise<CampanaResumen[]> {
 }
 
 export async function getCampanaGlobal(id: string) {
-  return prisma.campanaGlobal.findUnique({
-    where: { id },
-    include: {
-      creadaPor: { select: { name: true, email: true } },
-      participantes: {
-        include: { company: { select: { id: true, name: true, isActive: true } } },
-        orderBy: { createdAt: 'asc' },
+  return sinEmpresa('superadmin: detalle de campaña global', (tx) =>
+    tx.campanaGlobal.findUnique({
+      where: { id },
+      include: {
+        creadaPor: { select: { name: true, email: true } },
+        participantes: {
+          include: { company: { select: { id: true, name: true, isActive: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
+        pasos: {
+          include: { company: { select: { id: true, name: true } } },
+          orderBy: { orden: 'asc' },
+        },
       },
-      pasos: {
-        include: { company: { select: { id: true, name: true } } },
-        orderBy: { orden: 'asc' },
-      },
-    },
-  })
+    })
+  )
 }

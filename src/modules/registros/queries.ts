@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 /**
  * Registros / Comprobantes (Control de comprobantes · Fase 3 · G7+G10).
@@ -202,6 +202,16 @@ const INCLUDE = {
   _count: { select: { impresiones: true } },
 } as const
 
+/** Consulta sobre el ledger: con tenant si hay empresa, global si no. */
+function ledger<T>(
+  companyId: string | undefined,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  return companyId
+    ? conEmpresa(companyId, fn)
+    : sinEmpresa('registros: ledger global sin empresa', fn)
+}
+
 /**
  * Registros filtrados + resumen agregado. El resumen se calcula sobre TODAS las
  * transacciones que cumplen el filtro (hasta MAX_EXPORT), aunque la tabla solo
@@ -219,24 +229,26 @@ export async function getRegistros(
 ): Promise<RegistrosResultado> {
   const where = construirWhere(companyId, filtro, timeZone)
 
-  const [rows, agregados, totalFilas] = await Promise.all([
-    prisma.transaction.findMany({
-      where,
-      include: INCLUDE,
-      orderBy: { createdAt: 'desc' },
-      skip: ventana?.saltar ?? 0,
-      take: ventana ? Math.min(ventana.tomar, MAX_TABLA) : MAX_TABLA,
-    }),
-    // Resumen: se agregan solo las APLICADAS con monto (ingresos reales),
-    // por método y por tipo, en JS sobre un conjunto acotado.
-    prisma.transaction.findMany({
-      where: { ...where, estado: 'APPLIED', monto: { not: null } },
-      select: { monto: true, metodoCobro: true, tipo: true },
-      take: MAX_EXPORT,
-    }),
-    // Total real del filtro: es lo que permite navegar a CUALQUIER página.
-    prisma.transaction.count({ where }),
-  ])
+  const [rows, agregados, totalFilas] = await ledger(companyId, (tx) =>
+    Promise.all([
+      tx.transaction.findMany({
+        where,
+        include: INCLUDE,
+        orderBy: { createdAt: 'desc' },
+        skip: ventana?.saltar ?? 0,
+        take: ventana ? Math.min(ventana.tomar, MAX_TABLA) : MAX_TABLA,
+      }),
+      // Resumen: se agregan solo las APLICADAS con monto (ingresos reales),
+      // por método y por tipo, en JS sobre un conjunto acotado.
+      tx.transaction.findMany({
+        where: { ...where, estado: 'APPLIED', monto: { not: null } },
+        select: { monto: true, metodoCobro: true, tipo: true },
+        take: MAX_EXPORT,
+      }),
+      // Total real del filtro: es lo que permite navegar a CUALQUIER página.
+      tx.transaction.count({ where }),
+    ])
+  )
 
   const items = rows.map(mapItem)
 
@@ -278,12 +290,14 @@ export async function getRegistrosParaExport(
   timeZone: string
 ): Promise<RegistroItem[]> {
   const where = construirWhere(companyId, filtro, timeZone)
-  const rows = await prisma.transaction.findMany({
-    where,
-    include: INCLUDE,
-    orderBy: { createdAt: 'desc' },
-    take: MAX_EXPORT,
-  })
+  const rows = await ledger(companyId, (tx) =>
+    tx.transaction.findMany({
+      where,
+      include: INCLUDE,
+      orderBy: { createdAt: 'desc' },
+      take: MAX_EXPORT,
+    })
+  )
   return rows.map(mapItem)
 }
 

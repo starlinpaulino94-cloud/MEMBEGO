@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { SIN_DEMO } from '@/modules/demo'
 
 /**
@@ -109,51 +109,53 @@ export async function leerMetricas(): Promise<Metricas> {
       pagosSinResolver,
       empresasActivas,
       notificaciones24h,
-    ] = await Promise.all([
-      // `visits` no tiene companyId propio: se llega por la membresía.
-      prisma.visit.count({
-        where: { fechaVisita: { gte: hace24 }, membership: { company: SIN_DEMO } },
-      }),
-      prisma.visit.count({
-        where: {
-          fechaVisita: { gte: hace48, lt: hace24 },
-          membership: { company: SIN_DEMO },
-        },
-      }),
-      prisma.transaction.count({
-        where: { createdAt: { gte: hace24 }, company: SIN_DEMO },
-      }),
-      prisma.cliente.count({
-        where: { createdAt: { gte: hace24 }, company: SIN_DEMO },
-      }),
-      prisma.pagoIntento.count({
-        where: { createdAt: { gte: hace24 }, estado: 'APROBADO', company: SIN_DEMO },
-      }),
-      prisma.pagoIntento.count({
-        where: { createdAt: { gte: hace24 }, estado: 'RECHAZADO', company: SIN_DEMO },
-      }),
-      // Más de una hora en 'REDIRIGIDO' sin activar: el cliente se fue a pagar
-      // y nunca volvió, o el aviso se perdió. Cada fila es dinero en el aire.
-      // Ver docs/runbooks/pagos-cardnet.md.
-      prisma.pagoIntento.count({
-        where: {
-          createdAt: { gte: hace24, lt: haceHoras(1) },
-          estado: { in: ['CREADO', 'REDIRIGIDO'] },
-          activadoAt: null,
-          company: SIN_DEMO,
-        },
-      }),
-      prisma.company.count({ where: { ...SIN_DEMO, isActive: true } }),
-      // Las notificaciones cuelgan del usuario, no de la empresa, y un usuario
-      // puede no tener empresa (un cliente del marketplace). El OR conserva a
-      // esos y descarta solo a los de empresas de práctica.
-      prisma.notificacion.count({
-        where: {
-          createdAt: { gte: hace24 },
-          user: { OR: [{ companyId: null }, { company: SIN_DEMO }] },
-        },
-      }),
-    ])
+    ] = await sinEmpresa('observabilidad: métricas globales de negocio', (tx) =>
+      Promise.all([
+        // `visits` no tiene companyId propio: se llega por la membresía.
+        tx.visit.count({
+          where: { fechaVisita: { gte: hace24 }, membership: { company: SIN_DEMO } },
+        }),
+        tx.visit.count({
+          where: {
+            fechaVisita: { gte: hace48, lt: hace24 },
+            membership: { company: SIN_DEMO },
+          },
+        }),
+        tx.transaction.count({
+          where: { createdAt: { gte: hace24 }, company: SIN_DEMO },
+        }),
+        tx.cliente.count({
+          where: { createdAt: { gte: hace24 }, company: SIN_DEMO },
+        }),
+        tx.pagoIntento.count({
+          where: { createdAt: { gte: hace24 }, estado: 'APROBADO', company: SIN_DEMO },
+        }),
+        tx.pagoIntento.count({
+          where: { createdAt: { gte: hace24 }, estado: 'RECHAZADO', company: SIN_DEMO },
+        }),
+        // Más de una hora en 'REDIRIGIDO' sin activar: el cliente se fue a pagar
+        // y nunca volvió, o el aviso se perdió. Cada fila es dinero en el aire.
+        // Ver docs/runbooks/pagos-cardnet.md.
+        tx.pagoIntento.count({
+          where: {
+            createdAt: { gte: hace24, lt: haceHoras(1) },
+            estado: { in: ['CREADO', 'REDIRIGIDO'] },
+            activadoAt: null,
+            company: SIN_DEMO,
+          },
+        }),
+        tx.company.count({ where: { ...SIN_DEMO, isActive: true } }),
+        // Las notificaciones cuelgan del usuario, no de la empresa, y un usuario
+        // puede no tener empresa (un cliente del marketplace). El OR conserva a
+        // esos y descarta solo a los de empresas de práctica.
+        tx.notificacion.count({
+          where: {
+            createdAt: { gte: hace24 },
+            user: { OR: [{ companyId: null }, { company: SIN_DEMO }] },
+          },
+        }),
+      ])
+    )
 
     Object.assign(negocio, {
       visitas24h,
@@ -181,7 +183,7 @@ export async function leerMetricas(): Promise<Metricas> {
 
   try {
     const t0 = Date.now()
-    await prisma.$queryRaw`SELECT 1`
+    await sinEmpresa('observabilidad: latencia base', (tx) => tx.$queryRaw`SELECT 1`)
     sistema.latenciaBdMs = Date.now() - t0
     sistema.bdViva = true
   } catch (e) {
@@ -193,10 +195,12 @@ export async function leerMetricas(): Promise<Metricas> {
     // Saturación del pool: el incidente P2024 visto ANTES de que ocurra, que es
     // la diferencia entre este runbook y una tarde perdida.
     // Ver docs/runbooks/pool-agotado.md.
-    const filas = await prisma.$queryRaw<{ abiertas: bigint; tope: string }[]>`
-      SELECT (SELECT count(*) FROM pg_stat_activity) AS abiertas,
-             current_setting('max_connections') AS tope
-    `
+    const filas = await sinEmpresa('observabilidad: conexiones del pool', (tx) =>
+      tx.$queryRaw<{ abiertas: bigint; tope: string }[]>`
+        SELECT (SELECT count(*) FROM pg_stat_activity) AS abiertas,
+               current_setting('max_connections') AS tope
+      `
+    )
     if (filas[0]) {
       sistema.conexiones = Number(filas[0].abiertas)
       sistema.conexionesMax = Number(filas[0].tope)
@@ -208,9 +212,11 @@ export async function leerMetricas(): Promise<Metricas> {
   }
 
   try {
-    const filas = await prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT count(*) AS n FROM pg_index WHERE NOT indisvalid
-    `
+    const filas = await sinEmpresa('observabilidad: índices inválidos', (tx) =>
+      tx.$queryRaw<{ n: bigint }[]>`
+        SELECT count(*) AS n FROM pg_index WHERE NOT indisvalid
+      `
+    )
     sistema.indicesInvalidos = Number(filas[0]?.n ?? 0)
   } catch {
     fallos.push('indices')

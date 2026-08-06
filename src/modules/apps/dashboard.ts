@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getCitasDia } from '@/modules/citas/queries'
 import { utcDesdeLocal, ymdEnTz, sumarDias } from '@/modules/citas/disponibilidad'
 import { getSeguimiento } from '@/modules/seguimiento/queries'
@@ -52,8 +52,8 @@ export async function getDashboardOperativo(
 
   const [citas, canjesHoy, ventas, ultimasRaw, seguimiento] = await Promise.all([
     getCitasDia(companyId, hoy, timeZone).catch(() => []),
-    prisma.transaction
-      .count({
+    conEmpresa(companyId, (tx) =>
+      tx.transaction.count({
         where: {
           companyId,
           tipo: 'PROMOTION_USE',
@@ -61,9 +61,9 @@ export async function getDashboardOperativo(
           createdAt: { gte: inicioDia, lt: finDia },
         },
       })
-      .catch(() => 0),
-    prisma.transaction
-      .aggregate({
+    ).catch(() => 0),
+    conEmpresa(companyId, (tx) =>
+      tx.transaction.aggregate({
         where: {
           companyId,
           tipo: 'SALE',
@@ -73,9 +73,9 @@ export async function getDashboardOperativo(
         _sum: { monto: true },
         _count: { _all: true },
       })
-      .catch(() => null),
-    prisma.transaction
-      .findMany({
+    ).catch(() => null),
+    conEmpresa(companyId, (tx) =>
+      tx.transaction.findMany({
         where: {
           companyId,
           estado: 'APPLIED',
@@ -93,7 +93,7 @@ export async function getDashboardOperativo(
         orderBy: { createdAt: 'desc' },
         take: 8,
       })
-      .catch(() => []),
+    ).catch(() => []),
     getSeguimientoConfig(companyId)
       .then((config) => getSeguimiento(companyId, {}, config, 1))
       .catch(() => null),

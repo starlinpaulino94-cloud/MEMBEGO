@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * Seguimiento de beneficios gratis · Fase S3: parametrización por empresa
@@ -65,10 +65,12 @@ export function resolverSeguimientoConfig(raw: unknown): SeguimientoConfig {
 export async function getSeguimientoConfig(companyId: string): Promise<SeguimientoConfig> {
   if (!companyId) return SEGUIMIENTO_DEFAULTS
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { seguimientoConfig: true },
-    })
+    const company = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { seguimientoConfig: true },
+      })
+    )
     return resolverSeguimientoConfig(company?.seguimientoConfig)
   } catch (e) {
     console.error('[seguimiento] getSeguimientoConfig', e)

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { verificarFirma } from '@/lib/jobs/qstash'
 import { ejecutarTrabajo } from '@/modules/jobs/ejecutor'
-import type { CargaTrabajo } from '@/modules/jobs/tipos'
+import { TIPOS_TRABAJO, type CargaTrabajo } from '@/modules/jobs/tipos'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export const dynamic = 'force-dynamic'
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Cuerpo no válido.' }, { status: 400 })
   }
 
-  if (carga?.tipo !== 'notificar' && carga?.tipo !== 'automatizaciones') {
+  if (!carga || !TIPOS_TRABAJO.includes(carga.tipo)) {
     return NextResponse.json({ error: 'Tipo de trabajo desconocido.' }, { status: 400 })
   }
 

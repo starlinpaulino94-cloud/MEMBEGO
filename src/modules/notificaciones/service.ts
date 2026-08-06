@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import type { NotifTipo } from '@prisma/client'
 import { FULL_ADMIN_ROLES } from '@/types'
 
@@ -14,7 +14,9 @@ export async function crearNotificacion(data: {
   href?: string
 }) {
   try {
-    await prisma.notificacion.create({ data })
+    await sinEmpresa('notificaciones: crear por usuario (un usuario puede ser de varias empresas)', (tx) =>
+      tx.notificacion.create({ data })
+    )
   } catch (e) {
     console.error('[notificacion] create error', e)
   }
@@ -37,13 +39,15 @@ export async function notificarAdmins(
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
 ) {
   try {
-    const admins = await prisma.user.findMany({
-      where: { companyId, role: { in: FULL_ADMIN_ROLES } },
-      select: { id: true },
-    })
-    if (admins.length === 0) return
-    await prisma.notificacion.createMany({
-      data: admins.map((a) => ({ userId: a.id, ...payload })),
+    await conEmpresa(companyId, async (tx) => {
+      const admins = await tx.user.findMany({
+        where: { companyId, role: { in: FULL_ADMIN_ROLES } },
+        select: { id: true },
+      })
+      if (admins.length === 0) return
+      await tx.notificacion.createMany({
+        data: admins.map((a) => ({ userId: a.id, ...payload })),
+      })
     })
   } catch (e) {
     console.error('[notificacion] notificarAdmins error', e)

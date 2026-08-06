@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import {
   normalizeEngagementConfig,
   type EngagementConfig,
@@ -11,10 +11,12 @@ import {
  */
 export async function getEngagementConfig(companyId: string): Promise<EngagementConfig> {
   try {
-    const c = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { engagementConfig: true, colorPrimario: true },
-    })
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { engagementConfig: true, colorPrimario: true },
+      })
+    )
     return normalizeEngagementConfig(c?.engagementConfig, c?.colorPrimario ?? null)
   } catch (e) {
     console.error('[engagement] getEngagementConfig:', e)

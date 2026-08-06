@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { crearTransaccionAplicada } from '@/lib/transactions'
 import type { TransactionTipo } from '@/lib/transactions'
 
@@ -35,42 +35,44 @@ export async function registrarEntregaBeneficio(input: {
   auditoria?: { ipAddress?: string | null; userAgent?: string | null }
 }): Promise<{ id: string; codigo: string; ticketNumero: string } | null> {
   try {
-    const empleadoNombre = input.empleadoId
-      ? ((
-          await prisma.user.findUnique({
-            where: { id: input.empleadoId },
-            select: { name: true },
-          })
-        )?.name ?? null)
-      : null
+    return await conEmpresa(input.companyId, async (tx) => {
+      const empleadoNombre = input.empleadoId
+        ? ((
+            await tx.user.findUnique({
+              where: { id: input.empleadoId },
+              select: { name: true },
+            })
+          )?.name ?? null)
+        : null
 
-    return await crearTransaccionAplicada(prisma, {
-      tipo: input.tipo,
-      companyId: input.companyId,
-      sucursalId: input.sucursalId ?? null,
-      clienteId: input.clienteId,
-      empleadoId: input.empleadoId,
-      // Entrega gratuita: sin monto ni método de cobro (no cuenta como venta).
-      monto: 0,
-      metodoCobro: null,
-      snapshot: {
-        esEntrega: true,
-        cliente: input.clienteNombre,
-        empleado: empleadoNombre ?? undefined,
-        sucursal: input.sucursalNombre ?? undefined,
-        servicio: input.detalle ?? 'Entrega de beneficio',
-        beneficio: input.beneficio,
-        restantes: input.restantes ?? undefined,
-        observaciones: input.observaciones ?? undefined,
-        // Sin total/subtotal → el comprobante no muestra importes.
-        metodoCobroLabel: 'Regalo · sin costo',
-      },
-      auditoria: {
-        ipAddress: input.auditoria?.ipAddress ?? null,
-        userAgent: input.auditoria?.userAgent ?? null,
-      },
-      resultado: input.observaciones ?? null,
-      userId: input.empleadoId,
+      return crearTransaccionAplicada(tx, {
+        tipo: input.tipo,
+        companyId: input.companyId,
+        sucursalId: input.sucursalId ?? null,
+        clienteId: input.clienteId,
+        empleadoId: input.empleadoId,
+        // Entrega gratuita: sin monto ni método de cobro (no cuenta como venta).
+        monto: 0,
+        metodoCobro: null,
+        snapshot: {
+          esEntrega: true,
+          cliente: input.clienteNombre,
+          empleado: empleadoNombre ?? undefined,
+          sucursal: input.sucursalNombre ?? undefined,
+          servicio: input.detalle ?? 'Entrega de beneficio',
+          beneficio: input.beneficio,
+          restantes: input.restantes ?? undefined,
+          observaciones: input.observaciones ?? undefined,
+          // Sin total/subtotal → el comprobante no muestra importes.
+          metodoCobroLabel: 'Regalo · sin costo',
+        },
+        auditoria: {
+          ipAddress: input.auditoria?.ipAddress ?? null,
+          userAgent: input.auditoria?.userAgent ?? null,
+        },
+        resultado: input.observaciones ?? null,
+        userId: input.empleadoId,
+      })
     })
   } catch (e) {
     console.error('[entrega-beneficio]', e)

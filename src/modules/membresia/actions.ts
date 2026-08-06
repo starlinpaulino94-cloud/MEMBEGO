@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { formSubmitLimiter } from '@/lib/rate-limit'
@@ -34,89 +34,97 @@ export async function seleccionarPlan(
     const planId = String(formData.get('planId') ?? '')
     if (!planId) return { error: 'Selecciona un plan.' }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: user.metadata.clienteId },
-      include: {
-        company: {
-          select: {
-            bienvenidaActiva: true,
-            bienvenidaTipo: true,
-            bienvenidaValor: true,
+    const companyId = user.metadata.companyId
+    if (!companyId) return { error: 'Empresa requerida.' }
+
+    const result = await conEmpresa(companyId, async (tx) => {
+      const cliente = await tx.cliente.findUnique({
+        where: { id: clientId },
+        include: {
+          company: {
+            select: {
+              bienvenidaActiva: true,
+              bienvenidaTipo: true,
+              bienvenidaValor: true,
+            },
           },
         },
-      },
-    })
-    if (!cliente) return { error: 'Cliente no encontrado.' }
+      })
+      if (!cliente) return { error: 'Cliente no encontrado.' } as SeleccionState
 
-    const plan = await prisma.plan.findUnique({ where: { id: planId } })
-    // Validate: plan must exist, belong to client's company, and be active
-    if (!plan || plan.companyId !== cliente.companyId || !plan.activo) {
-      return { error: 'Plan no válido para tu empresa.' }
-    }
-
-    // Block if there's already an active membership IN THIS COMPANY
-    const existing = await prisma.membership.findUnique({
-      where: {
-        clienteId_companyId: {
-          clienteId: cliente.id,
-          companyId: cliente.companyId,
-        },
-      },
-    })
-
-    if (existing?.estado === 'ACTIVA') {
-      return {
-        error: 'Ya tienes una membresía activa en esta empresa. Espera a que venza para cambiar.',
+      const plan = await tx.plan.findUnique({ where: { id: planId } })
+      // Validate: plan must exist, belong to client's company, and be active
+      if (!plan || plan.companyId !== cliente.companyId || !plan.activo) {
+        return { error: 'Plan no válido para tu empresa.' } as SeleccionState
       }
-    }
 
-    // O-13: beneficio de bienvenida — solo para la PRIMERA activación. Una
-    // fila nunca activada tiene fechaInicio null (la activación lo fija y la
-    // renovación jamás lo vuelve a null). Se congela aquí el importe para que
-    // cambios posteriores de configuración no alteren solicitudes en curso.
-    const elegibleBienvenida = !existing || existing.fechaInicio == null
-    const descuento = elegibleBienvenida
-      ? calcularDescuentoBienvenida(cliente.company, Number(plan.precio))
-      : 0
-    const descuentoBienvenida = descuento > 0 ? descuento : null
-
-    let membershipId: string
-    if (existing) {
-      // Reuse existing membership (PENDIENTE or PENDIENTE_PAGO). Si estaba
-      // CANCELADA/VENCIDA/RECHAZADA, la solicitud la REABRE: vuelve a
-      // PENDIENTE para entrar de nuevo al flujo de pago (renovación que el
-      // cliente reclama tras una cancelación del admin).
-      await prisma.membership.update({
-        where: { id: existing.id },
-        data: {
-          planId: plan.id,
-          montoPagado: null,
-          pagoConfirmado: false,
-          descuentoBienvenida,
-          ...(['CANCELADA', 'VENCIDA', 'RECHAZADA'].includes(existing.estado)
-            ? { estado: 'PENDIENTE' as const, rechazadoReason: null }
-            : {}),
+      // Block if there's already an active membership IN THIS COMPANY
+      const existing = await tx.membership.findUnique({
+        where: {
+          clienteId_companyId: {
+            clienteId: cliente.id,
+            companyId: cliente.companyId,
+          },
         },
       })
-      membershipId = existing.id
-    } else {
-      // Create new membership with companyId
-      const created = await prisma.membership.create({
-        data: {
-          clienteId: cliente.id,
-          companyId: cliente.companyId,
-          planId: plan.id,
-          userId: user.metadata.dbUserId || null,
-          estado: 'PENDIENTE',
-          descuentoBienvenida,
-        },
-      })
-      membershipId = created.id
-    }
+
+      if (existing?.estado === 'ACTIVA') {
+        return {
+          error: 'Ya tienes una membresía activa en esta empresa. Espera a que venza para cambiar.',
+        } as SeleccionState
+      }
+
+      // O-13: beneficio de bienvenida — solo para la PRIMERA activación. Una
+      // fila nunca activada tiene fechaInicio null (la activación lo fija y la
+      // renovación jamás lo vuelve a null). Se congela aquí el importe para que
+      // cambios posteriores de configuración no alteren solicitudes en curso.
+      const elegibleBienvenida = !existing || existing.fechaInicio == null
+      const descuento = elegibleBienvenida
+        ? calcularDescuentoBienvenida(cliente.company, Number(plan.precio))
+        : 0
+      const descuentoBienvenida = descuento > 0 ? descuento : null
+
+      let membershipId: string
+      if (existing) {
+        // Reuse existing membership (PENDIENTE or PENDIENTE_PAGO). Si estaba
+        // CANCELADA/VENCIDA/RECHAZADA, la solicitud la REABRE: vuelve a
+        // PENDIENTE para entrar de nuevo al flujo de pago (renovación que el
+        // cliente reclama tras una cancelación del admin).
+        await tx.membership.update({
+          where: { id: existing.id },
+          data: {
+            planId: plan.id,
+            montoPagado: null,
+            pagoConfirmado: false,
+            descuentoBienvenida,
+            ...(['CANCELADA', 'VENCIDA', 'RECHAZADA'].includes(existing.estado)
+              ? { estado: 'PENDIENTE' as const, rechazadoReason: null }
+              : {}),
+          },
+        })
+        membershipId = existing.id
+      } else {
+        // Create new membership with companyId
+        const created = await tx.membership.create({
+          data: {
+            clienteId: cliente.id,
+            companyId: cliente.companyId,
+            planId: plan.id,
+            userId: user.metadata.dbUserId || null,
+            estado: 'PENDIENTE',
+            descuentoBienvenida,
+          },
+        })
+        membershipId = created.id
+      }
+
+      return { success: true, membershipId }
+    })
+    if (result.error) return result
 
     revalidatePath('/mis-membresias')
     revalidatePath('/cliente/planes')
-    return { success: true, membershipId }
+    return result
   } catch (e) {
     console.error('[membresia] seleccionarPlan error:', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
@@ -187,10 +195,12 @@ export async function enviarComprobante(
     return { error: 'El comprobante adjunto no corresponde a este pago.' }
   }
 
-  const membership = await prisma.membership.findUnique({
-    where: { id: membershipId },
-    include: { cliente: true },
-  })
+  const membership = await sinEmpresa('membresia: buscar membresía para comprobante', (tx) =>
+    tx.membership.findUnique({
+      where: { id: membershipId },
+      include: { cliente: { select: { id: true, nombre: true, companyId: true } } },
+    })
+  )
   if (!membership) return { error: 'Membresía no encontrada.' }
   if (membership.clienteId !== user.metadata.clienteId) {
     return { error: 'No autorizado.' }
@@ -205,19 +215,21 @@ export async function enviarComprobante(
     return { error: 'Solo puedes enviar comprobante en estado Pendiente o Rechazado.' }
   }
 
-  await prisma.membership.update({
-    where: { id: membershipId },
-    data: {
-      comprobanteUrl,
-      comprobanteNota: nota,
-      metodoPagoId: metodoPagoId || null,
-      // En un cambio de plan la membresía sigue ACTIVA; en un pago normal pasa a
-      // PENDIENTE_PAGO para entrar a la cola de validación del admin.
-      ...(esCambioDePlan
-        ? {}
-        : { estado: 'PENDIENTE_PAGO', rechazadoReason: null }),
-    },
-  })
+  await conEmpresa(membership.cliente.companyId, (tx) =>
+    tx.membership.update({
+      where: { id: membershipId },
+      data: {
+        comprobanteUrl,
+        comprobanteNota: nota,
+        metodoPagoId: metodoPagoId || null,
+        // En un cambio de plan la membresía sigue ACTIVA; en un pago normal pasa a
+        // PENDIENTE_PAGO para entrar a la cola de validación del admin.
+        ...(esCambioDePlan
+          ? {}
+          : { estado: 'PENDIENTE_PAGO', rechazadoReason: null }),
+      },
+    })
+  )
 
   await notificarAdmins(membership.cliente.companyId, {
     tipo: 'NUEVO_COMPROBANTE',
@@ -270,10 +282,12 @@ export async function avisarPagoPresencial(
   const sucursalId = String(formData.get('sucursalId') ?? '').trim() || null
   if (!membershipId) return { error: 'Membresía no especificada.' }
 
-  const membership = await prisma.membership.findUnique({
-    where: { id: membershipId },
-    include: { cliente: true },
-  })
+  const membership = await sinEmpresa('membresia: buscar membresía para pago presencial', (tx) =>
+    tx.membership.findUnique({
+      where: { id: membershipId },
+      include: { cliente: { select: { id: true, nombre: true, companyId: true } } },
+    })
+  )
   if (!membership) return { error: 'Membresía no encontrada.' }
   if (membership.clienteId !== user.metadata.clienteId) {
     return { error: 'No autorizado.' }
@@ -287,24 +301,28 @@ export async function avisarPagoPresencial(
 
   // El método (si viene) debe ser presencial, activo y de la misma empresa.
   if (metodoPagoId) {
-    const metodo = await prisma.metodoPago.findFirst({
-      where: {
-        id: metodoPagoId,
-        companyId: membership.cliente.companyId,
-        tipo: 'PRESENCIAL',
-        activo: true,
-      },
-      select: { id: true },
-    })
+    const metodo = await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.metodoPago.findFirst({
+        where: {
+          id: metodoPagoId,
+          companyId: membership.cliente.companyId,
+          tipo: 'PRESENCIAL',
+          activo: true,
+        },
+        select: { id: true },
+      })
+    )
     if (!metodo) return { error: 'Método de pago no válido.' }
   }
 
   // Sucursal elegida por el cliente (si la empresa tiene varias).
   if (sucursalId) {
-    const sucursal = await prisma.sucursal.findFirst({
-      where: { id: sucursalId, companyId: membership.cliente.companyId, activa: true },
-      select: { id: true },
-    })
+    const sucursal = await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.sucursal.findFirst({
+        where: { id: sucursalId, companyId: membership.cliente.companyId, activa: true },
+        select: { id: true },
+      })
+    )
     if (!sucursal) return { error: 'Sucursal no válida.' }
   }
 
@@ -313,27 +331,31 @@ export async function avisarPagoPresencial(
   if (!referencia) {
     for (let intento = 0; intento < 5 && !referencia; intento++) {
       const candidata = generarReferencia()
-      const ocupada = await prisma.membership.findUnique({
-        where: { referencia: candidata },
-        select: { id: true },
-      })
+      const ocupada = await sinEmpresa('membresia: verificar referencia única', (tx) =>
+        tx.membership.findUnique({
+          where: { referencia: candidata },
+          select: { id: true },
+        })
+      )
       if (!ocupada) referencia = candidata
     }
     if (!referencia) return { error: 'No se pudo generar la referencia. Intenta de nuevo.' }
   }
 
-  await prisma.membership.update({
-    where: { id: membershipId },
-    data: {
-      metodoPagoId,
-      referencia,
-      sucursalPagoId: sucursalId,
-      comprobanteNota: 'El cliente pagará en la sucursal (pago presencial).',
-      ...(membership.estado === 'RECHAZADA'
-        ? { estado: 'PENDIENTE', rechazadoReason: null }
-        : {}),
-    },
-  })
+  await conEmpresa(membership.cliente.companyId, (tx) =>
+    tx.membership.update({
+      where: { id: membershipId },
+      data: {
+        metodoPagoId,
+        referencia,
+        sucursalPagoId: sucursalId,
+        comprobanteNota: 'El cliente pagará en la sucursal (pago presencial).',
+        ...(membership.estado === 'RECHAZADA'
+          ? { estado: 'PENDIENTE', rechazadoReason: null }
+          : {}),
+      },
+    })
+  )
 
   await notificarAdmins(membership.cliente.companyId, {
     // NUEVO_COMPROBANTE: mismo canal que la cola de validación de pagos (el
@@ -386,10 +408,18 @@ export async function cancelarPago(
   const membershipId = String(formData.get('membershipId') ?? '').trim()
   if (!membershipId) return { error: 'Membresía no especificada.' }
 
-  const membership = await prisma.membership.findUnique({
-    where: { id: membershipId },
-    select: { id: true, clienteId: true, estado: true, planIdSolicitado: true },
-  })
+  const membership = await sinEmpresa('membresia: buscar membresía a cancelar', (tx) =>
+    tx.membership.findUnique({
+      where: { id: membershipId },
+      select: {
+        id: true,
+        clienteId: true,
+        estado: true,
+        planIdSolicitado: true,
+        cliente: { select: { companyId: true } },
+      },
+    })
+  )
   if (!membership) return { error: 'Membresía no encontrada.' }
   if (membership.clienteId !== user.metadata.clienteId) return { error: 'No autorizado.' }
 
@@ -398,15 +428,17 @@ export async function cancelarPago(
 
   if (esCambioDePlan) {
     // Solo se descarta el cambio; el plan vigente y su período no se tocan.
-    await prisma.membership.update({
-      where: { id: membershipId },
-      data: {
-        planIdSolicitado: null,
-        comprobanteUrl: null,
-        comprobanteNota: null,
-        metodoPagoId: null,
-      },
-    })
+    await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.membership.update({
+        where: { id: membershipId },
+        data: {
+          planIdSolicitado: null,
+          comprobanteUrl: null,
+          comprobanteNota: null,
+          metodoPagoId: null,
+        },
+      })
+    )
     revalidatePath('/mis-membresias')
     revalidatePath(`/membresia/${membershipId}`)
     return { success: true, eraCambioDePlan: true }
@@ -416,16 +448,18 @@ export async function cancelarPago(
     return { error: 'Esta membresía no tiene un pago pendiente para cancelar.' }
   }
 
-  await prisma.membership.update({
-    where: { id: membershipId },
-    data: {
-      estado: 'CANCELADA',
-      comprobanteUrl: null,
-      comprobanteNota: null,
-      metodoPagoId: null,
-      rechazadoReason: null,
-    },
-  })
+  await conEmpresa(membership.cliente.companyId, (tx) =>
+    tx.membership.update({
+      where: { id: membershipId },
+      data: {
+        estado: 'CANCELADA',
+        comprobanteUrl: null,
+        comprobanteNota: null,
+        metodoPagoId: null,
+        rechazadoReason: null,
+      },
+    })
+  )
   revalidatePath('/mis-membresias')
   revalidatePath(`/membresia/${membershipId}`)
   return { success: true, eraCambioDePlan: false }

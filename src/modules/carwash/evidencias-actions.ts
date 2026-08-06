@@ -7,7 +7,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
@@ -57,12 +57,14 @@ export async function guardarEvidencia(
     let vehiculoId: string | null = null
     let colaIdValida: string | null = null
     if (colaId) {
-      const entrada = await prisma.colaVehiculo
-        .findUnique({
-          where: { id: colaId },
-          select: { companyId: true, clienteId: true, vehiculoId: true, placa: true },
-        })
-        .catch(() => null)
+      const entrada = await sinEmpresa('evidencias: buscar entrada de cola por id para validar empresa', (tx) =>
+        tx.colaVehiculo
+          .findUnique({
+            where: { id: colaId },
+            select: { companyId: true, clienteId: true, vehiculoId: true, placa: true },
+          })
+          .catch(() => null)
+      )
       if (!entrada || entrada.companyId !== ctx.companyId) {
         return { error: 'La entrada de cola indicada no existe.' }
       }
@@ -72,35 +74,39 @@ export async function guardarEvidencia(
       if (!placa && entrada.placa) placa = entrada.placa
     }
 
-    const evidencia = await prisma.evidenciaFoto.create({
-      data: {
-        companyId: ctx.companyId,
-        colaId: colaIdValida,
-        clienteId,
-        vehiculoId,
-        placa: placa || null,
-        momento,
-        url,
-        nota: nota || null,
-        subidaPorId: ctx.user.metadata.dbUserId ?? null,
-      },
-      select: { id: true },
-    })
-
-    const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    const evidencia = await conEmpresa(ctx.companyId, (tx) =>
+      tx.evidenciaFoto.create({
         data: {
           companyId: ctx.companyId,
-          userId: ctx.user.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'EvidenciaFoto',
-          entidadId: evidencia.id,
-          payload: { tipo: 'EVIDENCIA_SUBIDA', momento, placa, colaId: colaIdValida },
-          ...meta,
+          colaId: colaIdValida,
+          clienteId,
+          vehiculoId,
+          placa: placa || null,
+          momento,
+          url,
+          nota: nota || null,
+          subidaPorId: ctx.user.metadata.dbUserId ?? null,
         },
+        select: { id: true },
       })
-      .catch(anotarFallo('carwash:auditLog.create'))
+    )
+
+    const meta = await getRequestMeta()
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.auditLog
+        .create({
+          data: {
+            companyId: ctx.companyId,
+            userId: ctx.user.metadata.dbUserId ?? null,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'EvidenciaFoto',
+            entidadId: evidencia.id,
+            payload: { tipo: 'EVIDENCIA_SUBIDA', momento, placa, colaId: colaIdValida },
+            ...meta,
+          },
+        })
+        .catch(anotarFallo('carwash:auditLog.create'))
+    )
 
     revalidatePath(RUTA_EVIDENCIAS)
     revalidatePath('/admin/app/carwash/cola')
@@ -119,14 +125,16 @@ export async function eliminarEvidencia(id: string): Promise<{ ok?: true; error?
     const ctx = await contextoEvidencias()
     if ('error' in ctx) return { error: ctx.error }
 
-    const evidencia = await prisma.evidenciaFoto.findUnique({
-      where: { id },
-      select: { companyId: true },
-    })
+    const evidencia = await sinEmpresa('evidencias: buscar foto por id para validar empresa', (tx) =>
+      tx.evidenciaFoto.findUnique({
+        where: { id },
+        select: { companyId: true },
+      })
+    )
     if (!evidencia || evidencia.companyId !== ctx.companyId) {
       return { error: 'Foto no encontrada.' }
     }
-    await prisma.evidenciaFoto.delete({ where: { id } })
+    await conEmpresa(ctx.companyId, (tx) => tx.evidenciaFoto.delete({ where: { id } }))
 
     revalidatePath(RUTA_EVIDENCIAS)
     revalidatePath('/admin/app/carwash/cola')

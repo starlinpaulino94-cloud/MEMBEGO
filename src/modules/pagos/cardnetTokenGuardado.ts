@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import { periodEnd } from '@/lib/server-utils'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
@@ -32,37 +32,39 @@ export interface GuardarTarjetaInput {
 
 /** Persiste una tarjeta tokenizada y, si se pide, la ata a una membresía. */
 export async function guardarTarjeta(input: GuardarTarjetaInput) {
-  const tarjeta = await prisma.tarjetaTokenizada.create({
-    data: {
-      companyId: input.companyId,
-      clienteId: input.clienteId,
-      customerId: input.customerId,
-      paymentProfileId: input.paymentProfileId ?? null,
-      token: input.token ?? null,
-      marca: input.marca ?? null,
-      ultimos4: input.ultimos4 ?? null,
-      vencMes: input.vencMes ?? null,
-      vencAnio: input.vencAnio ?? null,
-    },
+  return conEmpresa(input.companyId, async (tx) => {
+    const tarjeta = await tx.tarjetaTokenizada.create({
+      data: {
+        companyId: input.companyId,
+        clienteId: input.clienteId,
+        customerId: input.customerId,
+        paymentProfileId: input.paymentProfileId ?? null,
+        token: input.token ?? null,
+        marca: input.marca ?? null,
+        ultimos4: input.ultimos4 ?? null,
+        vencMes: input.vencMes ?? null,
+        vencAnio: input.vencAnio ?? null,
+      },
+    })
+
+    if (input.membershipId) {
+      await tx.membership
+        .updateMany({
+          // Solo si la membresía es de este cliente (barrera de pertenencia).
+          where: { id: input.membershipId, clienteId: input.clienteId },
+          data: { autoRenovar: true, tarjetaTokenizadaId: tarjeta.id },
+        })
+        .catch(anotarFallo('pagos:guardarTarjeta:ataMembresia', { membershipId: input.membershipId }))
+    }
+
+    return tarjeta
   })
-
-  if (input.membershipId) {
-    await prisma.membership
-      .updateMany({
-        // Solo si la membresía es de este cliente (barrera de pertenencia).
-        where: { id: input.membershipId, clienteId: input.clienteId },
-        data: { autoRenovar: true, tarjetaTokenizadaId: tarjeta.id },
-      })
-      .catch(anotarFallo('pagos:guardarTarjeta:ataMembresia', { membershipId: input.membershipId }))
-  }
-
-  return tarjeta
 }
 
 /** Tarjetas activas del cliente (para "Mis tarjetas"). Nunca expone el token. */
 export async function listarTarjetasCliente(clienteId: string, companyId: string) {
-  return prisma.tarjetaTokenizada
-    .findMany({
+  return conEmpresa(companyId, (tx) =>
+    tx.tarjetaTokenizada.findMany({
       where: { clienteId, companyId, activa: true },
       select: {
         id: true,
@@ -74,12 +76,15 @@ export async function listarTarjetasCliente(clienteId: string, companyId: string
       },
       orderBy: { createdAt: 'desc' },
     })
-    .catch(() => [])
+  ).catch(() => [])
 }
 
 /** El cliente quita su tarjeta: se desactiva, se borra en CardNET y se apaga la renovación. */
 export async function eliminarTarjeta(id: string, clienteId: string): Promise<boolean> {
-  const tarjeta = await prisma.tarjetaTokenizada.findUnique({ where: { id } }).catch(() => null)
+  const tarjeta = await sinEmpresa(
+    'pagos: localizar tarjeta tokenizada por id (su empresa se deriva de la tarjeta)',
+    (tx) => tx.tarjetaTokenizada.findUnique({ where: { id } })
+  ).catch(() => null)
   if (!tarjeta || tarjeta.clienteId !== clienteId || !tarjeta.activa) return false
 
   if (tarjeta.paymentProfileId) {
@@ -89,13 +94,15 @@ export async function eliminarTarjeta(id: string, clienteId: string): Promise<bo
     }).catch(() => false)
   }
 
-  await prisma.$transaction([
-    prisma.membership.updateMany({
-      where: { tarjetaTokenizadaId: id },
-      data: { autoRenovar: false, tarjetaTokenizadaId: null },
-    }),
-    prisma.tarjetaTokenizada.update({ where: { id }, data: { activa: false } }),
-  ]).catch(anotarFallo('pagos:eliminarTarjeta', { id }))
+  await conEmpresa(tarjeta.companyId, (tx) =>
+    Promise.all([
+      tx.membership.updateMany({
+        where: { tarjetaTokenizadaId: id },
+        data: { autoRenovar: false, tarjetaTokenizadaId: null },
+      }),
+      tx.tarjetaTokenizada.update({ where: { id }, data: { activa: false } }),
+    ])
+  ).catch(anotarFallo('pagos:eliminarTarjeta', { id }))
   return true
 }
 
@@ -122,9 +129,14 @@ export async function renovarMembresiaPorTarjeta(
   membershipId: string,
   clienteIp = '0.0.0.0'
 ): Promise<RenovacionResultado> {
-  const m = await prisma.membership
-    .findUnique({ where: { id: membershipId }, include: { plan: true, tarjetaTokenizada: true } })
-    .catch(() => null)
+  const m = await sinEmpresa(
+    'pagos: localizar membresía por id para renovación (su empresa se deriva de la membresía)',
+    (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        include: { plan: true, tarjetaTokenizada: true },
+      })
+  ).catch(() => null)
   if (!m) return { estado: 'omitida', motivo: 'Membresía no encontrada.' }
   if (!m.autoRenovar || !m.tarjetaTokenizada || !m.tarjetaTokenizada.activa) {
     return { estado: 'omitida', motivo: 'Sin renovación automática o sin tarjeta activa.' }
@@ -134,33 +146,36 @@ export async function renovarMembresiaPorTarjeta(
   }
 
   // Guarda anti-duplicado: ¿ya intentamos renovarla hace poco?
-  const reciente = await prisma.pagoIntento
-    .findFirst({
-      where: {
-        membershipId,
-        proveedor: 'CARDNET',
-        createdAt: { gte: new Date(Date.now() - VENTANA_ANTIDUPLICADO_MS) },
-      },
-      select: { id: true },
-    })
-    .catch(() => null)
+  const reciente = await conEmpresa(m.companyId, (tx) =>
+    tx.pagoIntento
+      .findFirst({
+        where: {
+          membershipId,
+          proveedor: 'CARDNET',
+          createdAt: { gte: new Date(Date.now() - VENTANA_ANTIDUPLICADO_MS) },
+        },
+        select: { id: true },
+      })
+  ).catch(() => null)
   if (reciente) return { estado: 'omitida', motivo: 'Ya hubo un intento reciente.' }
 
   const pesos = Number(m.plan.precio)
   if (pesos <= 0) return { estado: 'omitida', motivo: 'Precio del plan no válido.' }
 
-  const intento = await prisma.pagoIntento.create({
-    data: {
-      companyId: m.companyId,
-      clienteId: m.clienteId,
-      proveedor: 'CARDNET',
-      membershipId,
-      monto: pesos,
-      moneda: 'DOP',
-      estado: 'CREADO',
-      ipAddress: clienteIp,
-    },
-  })
+  const intento = await conEmpresa(m.companyId, (tx) =>
+    tx.pagoIntento.create({
+      data: {
+        companyId: m.companyId,
+        clienteId: m.clienteId,
+        proveedor: 'CARDNET',
+        membershipId,
+        monto: pesos,
+        moneda: 'DOP',
+        estado: 'CREADO',
+        ipAddress: clienteIp,
+      },
+    })
+  )
 
   let cobro
   try {
@@ -174,19 +189,20 @@ export async function renovarMembresiaPorTarjeta(
     })
   } catch (e) {
     logErrorBd('pagos:renovacion:cobrar', e, { membershipId })
-    await prisma.pagoIntento
-      .update({ where: { id: intento.id }, data: { estado: 'ERROR', motivoRechazo: 'No se pudo contactar la pasarela.' } })
-      .catch(anotarFallo('pagos:renovacion:errorUpdate', { intentoId: intento.id }))
+    await conEmpresa(m.companyId, (tx) =>
+      tx.pagoIntento.update({ where: { id: intento.id }, data: { estado: 'ERROR', motivoRechazo: 'No se pudo contactar la pasarela.' } })
+    ).catch(anotarFallo('pagos:renovacion:errorUpdate', { intentoId: intento.id }))
     return { estado: 'error', motivo: 'No se pudo contactar la pasarela.' }
   }
 
   if (!cobro.aprobada) {
-    await prisma.pagoIntento
-      .update({
-        where: { id: intento.id },
-        data: { estado: 'RECHAZADO', motivoRechazo: cobro.motivo ?? 'Rechazada', respuesta: (cobro.crudo ?? null) as never },
-      })
-      .catch(anotarFallo('pagos:renovacion:rechazo', { intentoId: intento.id }))
+    await conEmpresa(m.companyId, (tx) =>
+      tx.pagoIntento
+        .update({
+          where: { id: intento.id },
+          data: { estado: 'RECHAZADO', motivoRechazo: cobro.motivo ?? 'Rechazada', respuesta: (cobro.crudo ?? null) as never },
+        })
+    ).catch(anotarFallo('pagos:renovacion:rechazo', { intentoId: intento.id }))
     return { estado: 'rechazada', motivo: cobro.motivo ?? 'La tarjeta fue rechazada.' }
   }
 
@@ -196,46 +212,51 @@ export async function renovarMembresiaPorTarjeta(
   const base = m.fechaVencimiento && m.fechaVencimiento > now ? m.fechaVencimiento : now
   const nuevaVigencia = periodEnd(base, m.plan.vigenciaDias ?? 30)
 
-  const marca = await prisma.pagoIntento.updateMany({
-    where: { id: intento.id, activadoAt: null },
-    data: {
-      estado: 'APROBADO',
-      activadoAt: now,
-      autorizacion: cobro.autorizacion,
-      respuesta: (cobro.crudo ?? null) as never,
-    },
-  })
+  const marca = await conEmpresa(m.companyId, (tx) =>
+    tx.pagoIntento.updateMany({
+      where: { id: intento.id, activadoAt: null },
+      data: {
+        estado: 'APROBADO',
+        activadoAt: now,
+        autorizacion: cobro.autorizacion,
+        respuesta: (cobro.crudo ?? null) as never,
+      },
+    })
+  )
   if (marca.count === 0) return { estado: 'omitida', motivo: 'Ya estaba renovada.' }
 
   try {
-    await prisma.$transaction([
-      prisma.membership.update({
-        where: { id: membershipId },
-        data: {
-          estado: 'ACTIVA',
-          fechaVencimiento: nuevaVigencia,
-          lavadosRestantes: m.plan.esIlimitado ? 0 : m.plan.lavadosIncluidos,
-          montoPagado: pesos,
-          pagoConfirmado: true,
-        },
-      }),
-      prisma.auditLog.create({
-        data: {
-          companyId: m.companyId,
-          userId: null,
-          accion: 'PAGO_APROBADO',
-          entidadTipo: 'Membership',
-          entidadId: membershipId,
-          payload: { motivo: 'renovacion_automatica_tarjeta', monto: pesos, intentoId: intento.id },
-        },
-      }),
-    ])
+    await conEmpresa(m.companyId, (tx) =>
+      Promise.all([
+        tx.membership.update({
+          where: { id: membershipId },
+          data: {
+            estado: 'ACTIVA',
+            fechaVencimiento: nuevaVigencia,
+            lavadosRestantes: m.plan.esIlimitado ? 0 : m.plan.lavadosIncluidos,
+            montoPagado: pesos,
+            pagoConfirmado: true,
+          },
+        }),
+        tx.auditLog.create({
+          data: {
+            companyId: m.companyId,
+            userId: null,
+            accion: 'PAGO_APROBADO',
+            entidadTipo: 'Membership',
+            entidadId: membershipId,
+            payload: { motivo: 'renovacion_automatica_tarjeta', monto: pesos, intentoId: intento.id },
+          },
+        }),
+      ])
+    )
   } catch (e) {
     // El cobro SÍ ocurrió; no se revierte activadoAt. Se deja constancia.
     logErrorBd('pagos:renovacion:extension', e, { membershipId, intentoId: intento.id })
-    await prisma.pagoIntento
-      .update({ where: { id: intento.id }, data: { motivoRechazo: 'Cobrado, pero la extensión falló.' } })
-      .catch(anotarFallo('pagos:renovacion:extensionFallo', { intentoId: intento.id }))
+    await conEmpresa(m.companyId, (tx) =>
+      tx.pagoIntento
+        .update({ where: { id: intento.id }, data: { motivoRechazo: 'Cobrado, pero la extensión falló.' } })
+    ).catch(anotarFallo('pagos:renovacion:extensionFallo', { intentoId: intento.id }))
     return { estado: 'error', motivo: 'Cobrado, pero la extensión falló. Revisar a mano.' }
   }
 
@@ -256,19 +277,21 @@ export async function renovarMembresiaPorTarjeta(
 /** Membresías que toca renovar ahora (activas, con tarjeta, por vencer). */
 export async function membresiasARenovar(limite = 200): Promise<string[]> {
   const corte = new Date(Date.now() + MARGEN_MS)
-  const filas = await prisma.membership
-    .findMany({
-      where: {
-        estado: 'ACTIVA',
-        autoRenovar: true,
-        tarjetaTokenizadaId: { not: null },
-        tarjetaTokenizada: { activa: true },
-        fechaVencimiento: { not: null, lte: corte },
-      },
-      select: { id: true },
-      take: limite,
-    })
-    .catch(() => [])
+  const filas = await sinEmpresa(
+    'pagos: el cron de renovación selecciona membresías por vencer de todas las empresas',
+    (tx) =>
+      tx.membership.findMany({
+        where: {
+          estado: 'ACTIVA',
+          autoRenovar: true,
+          tarjetaTokenizadaId: { not: null },
+          tarjetaTokenizada: { activa: true },
+          fechaVencimiento: { not: null, lte: corte },
+        },
+        select: { id: true },
+        take: limite,
+      })
+  ).catch(() => [])
   return filas.map((f) => f.id)
 }
 

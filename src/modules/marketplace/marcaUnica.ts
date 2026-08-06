@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 import { SIN_DEMO } from '@/modules/demo'
 
@@ -36,9 +36,11 @@ export const esMarcaUnica = unstable_cache(
       // Sin las de práctica: crear una empresa de entrenamiento no puede
       // sacar a la plataforma del modo marca única y cambiarle la portada al
       // negocio real.
-      const total = await prisma.company.count({
-        where: { isActive: true, isPublished: true, ...SIN_DEMO },
-      })
+      const total = await sinEmpresa('marketplace: vitrina pública', (tx) =>
+        tx.company.count({
+          where: { isActive: true, isPublished: true, ...SIN_DEMO },
+        })
+      )
       return total <= 1
     } catch (e) {
       console.error('[marcaUnica] count', e)
@@ -52,22 +54,24 @@ export const esMarcaUnica = unstable_cache(
 export const getEmpresaPrincipal = unstable_cache(
   async (): Promise<EmpresaPrincipal | null> => {
     try {
-      const company = await prisma.company.findFirst({
-        where: { isActive: true, isPublished: true, ...SIN_DEMO },
-        orderBy: [
-          { isFeatured: 'desc' },
-          { featuredOrder: 'asc' },
-          { createdAt: 'asc' },
-        ],
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          description: true,
-          logoUrl: true,
-          ciudad: true,
-        },
-      })
+      const company = await sinEmpresa('marketplace: vitrina pública', (tx) =>
+        tx.company.findFirst({
+          where: { isActive: true, isPublished: true, ...SIN_DEMO },
+          orderBy: [
+            { isFeatured: 'desc' },
+            { featuredOrder: 'asc' },
+            { createdAt: 'asc' },
+          ],
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            logoUrl: true,
+            ciudad: true,
+          },
+        })
+      )
       return company
     } catch (e) {
       console.error('[marcaUnica]', e)

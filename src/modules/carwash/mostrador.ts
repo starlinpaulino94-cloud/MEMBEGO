@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { normalizarPlaca } from './cuentas'
 
 /**
@@ -77,34 +77,36 @@ export async function buscarClientes(
     const placa = normalizarPlaca(termino)
     const soloDigitos = normalizarTelefono(termino)
 
-    const clientes = await prisma.cliente.findMany({
-      where: {
-        companyId,
-        OR: [
-          { nombre: { contains: termino, mode: 'insensitive' } },
-          ...(soloDigitos.length >= 3
-            ? [{ telefono: { contains: soloDigitos } as const }]
-            : []),
-          { vehiculos: { some: { placa: { contains: placa, mode: 'insensitive' } } } },
-        ],
-      },
-      orderBy: { nombre: 'asc' },
-      take: limite,
-      select: {
-        id: true,
-        nombre: true,
-        telefono: true,
-        email: true,
-        esLocal: true,
-        vehiculos: { select: { placa: true }, take: 6 },
-        _count: { select: { colaVehiculos: true } },
-        colaVehiculos: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { createdAt: true },
+    const clientes = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findMany({
+        where: {
+          companyId,
+          OR: [
+            { nombre: { contains: termino, mode: 'insensitive' } },
+            ...(soloDigitos.length >= 3
+              ? [{ telefono: { contains: soloDigitos } as const }]
+              : []),
+            { vehiculos: { some: { placa: { contains: placa, mode: 'insensitive' } } } },
+          ],
         },
-      },
-    })
+        orderBy: { nombre: 'asc' },
+        take: limite,
+        select: {
+          id: true,
+          nombre: true,
+          telefono: true,
+          email: true,
+          esLocal: true,
+          vehiculos: { select: { placa: true }, take: 6 },
+          _count: { select: { colaVehiculos: true } },
+          colaVehiculos: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { createdAt: true },
+          },
+        },
+      })
+    )
 
     return clientes.map((c) => ({
       id: c.id,
@@ -130,19 +132,21 @@ export async function duenoDeLaPlaca(companyId: string, placa: string) {
   const limpia = normalizarPlaca(placa)
   if (!limpia) return null
   try {
-    const vehiculo = await prisma.vehiculo.findFirst({
-      where: {
-        placa: { equals: limpia, mode: 'insensitive' },
-        cliente: { companyId },
-      },
-      select: {
-        id: true,
-        marca: true,
-        modelo: true,
-        tipoVehiculoId: true,
-        cliente: { select: { id: true, nombre: true, telefono: true, esLocal: true } },
-      },
-    })
+    const vehiculo = await conEmpresa(companyId, (tx) =>
+      tx.vehiculo.findFirst({
+        where: {
+          placa: { equals: limpia, mode: 'insensitive' },
+          cliente: { companyId },
+        },
+        select: {
+          id: true,
+          marca: true,
+          modelo: true,
+          tipoVehiculoId: true,
+          cliente: { select: { id: true, nombre: true, telefono: true, esLocal: true } },
+        },
+      })
+    )
     return vehiculo
   } catch {
     return null
@@ -174,37 +178,39 @@ export async function getFicha(
   clienteId: string
 ): Promise<FichaMostrador | null> {
   try {
-    const c = await prisma.cliente.findFirst({
-      where: { id: clienteId, companyId },
-      select: {
-        id: true,
-        nombre: true,
-        telefono: true,
-        email: true,
-        esLocal: true,
-        createdAt: true,
-        vehiculos: {
-          select: {
-            id: true,
-            placa: true,
-            marca: true,
-            modelo: true,
-            tipoVehiculo: { select: { nombre: true } },
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { id: clienteId, companyId },
+        select: {
+          id: true,
+          nombre: true,
+          telefono: true,
+          email: true,
+          esLocal: true,
+          createdAt: true,
+          vehiculos: {
+            select: {
+              id: true,
+              placa: true,
+              marca: true,
+              modelo: true,
+              tipoVehiculo: { select: { nombre: true } },
+            },
+          },
+          colaVehiculos: {
+            orderBy: { createdAt: 'desc' },
+            take: 100,
+            select: {
+              id: true,
+              createdAt: true,
+              placa: true,
+              estado: true,
+              servicios: { select: { nombre: true, precio: true, cantidad: true } },
+            },
           },
         },
-        colaVehiculos: {
-          orderBy: { createdAt: 'desc' },
-          take: 100,
-          select: {
-            id: true,
-            createdAt: true,
-            placa: true,
-            estado: true,
-            servicios: { select: { nombre: true, precio: true, cantidad: true } },
-          },
-        },
-      },
-    })
+      })
+    )
     if (!c) return null
 
     const visitas = c.colaVehiculos.map((v) => ({
@@ -248,19 +254,21 @@ export async function getFicha(
 /** Últimos clientes de mostrador dados de alta. Lo que se ve al abrir. */
 export async function getRecientes(companyId: string, limite = 30) {
   try {
-    return await prisma.cliente.findMany({
-      where: { companyId, esLocal: true },
-      orderBy: { createdAt: 'desc' },
-      take: limite,
-      select: {
-        id: true,
-        nombre: true,
-        telefono: true,
-        createdAt: true,
-        vehiculos: { select: { placa: true }, take: 4 },
-        _count: { select: { colaVehiculos: true } },
-      },
-    })
+    return await conEmpresa(companyId, (tx) =>
+      tx.cliente.findMany({
+        where: { companyId, esLocal: true },
+        orderBy: { createdAt: 'desc' },
+        take: limite,
+        select: {
+          id: true,
+          nombre: true,
+          telefono: true,
+          createdAt: true,
+          vehiculos: { select: { placa: true }, take: 4 },
+          _count: { select: { colaVehiculos: true } },
+        },
+      })
+    )
   } catch {
     return null
   }

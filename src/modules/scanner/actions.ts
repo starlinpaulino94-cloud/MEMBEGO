@@ -7,7 +7,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { requireAdminUser } from '@/lib/auth/guards'
 
 const MODOS = ['camara', 'lector'] as const
@@ -26,10 +26,12 @@ export async function guardarEscanerModoEmpresa(modo: string): Promise<EscanerMo
     if (!companyId) return { error: 'Tu cuenta no tiene una empresa asignada.' }
     if (!(MODOS as readonly string[]).includes(modo)) return { error: 'Modo no válido.' }
 
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { escanerModo: modo },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { escanerModo: modo },
+      })
+    )
 
     revalidatePath('/admin/scanner')
     revalidatePath('/empleado/scanner')

@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 // F4.6: CRUD de campañas. Cada empresa administra solo las suyas; al
 // eliminar, las promociones/publicaciones quedan sin campaña (SetNull).
@@ -43,10 +43,12 @@ async function campanaDeMiEmpresa(
   id: string,
   user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
 ) {
-  const campana = await prisma.campana.findUnique({
-    where: { id },
-    select: { id: true, companyId: true },
-  })
+  const campana = await sinEmpresa('campaña por id sin conocer la empresa', (tx) =>
+    tx.campana.findUnique({
+      where: { id },
+      select: { id: true, companyId: true },
+    })
+  )
   if (!campana) return null
   if (
     user.metadata.role !== 'SUPERADMIN' &&
@@ -71,7 +73,7 @@ export async function crearCampana(
   if ('error' in parsed) return { error: parsed.error }
 
   try {
-    await prisma.campana.create({ data: { companyId, ...parsed } })
+    await conEmpresa(companyId, (tx) => tx.campana.create({ data: { companyId, ...parsed } }))
     revalidateCampanas()
     return { success: true }
   } catch (e) {
@@ -99,10 +101,12 @@ export async function actualizarCampana(
     const campana = await campanaDeMiEmpresa(id, user)
     if (!campana) return { error: 'Campaña no encontrada.' }
 
-    await prisma.campana.update({
-      where: { id },
-      data: { ...parsed, activo },
-    })
+    await conEmpresa(campana.companyId, (tx) =>
+      tx.campana.update({
+        where: { id },
+        data: { ...parsed, activo },
+      })
+    )
     revalidateCampanas()
     return { success: true }
   } catch (e) {
@@ -126,7 +130,7 @@ export async function eliminarCampana(
     if (!campana) return { error: 'Campaña no encontrada.' }
 
     // SetNull en las FKs: promos y publicaciones quedan sin campaña.
-    await prisma.campana.delete({ where: { id } })
+    await conEmpresa(campana.companyId, (tx) => tx.campana.delete({ where: { id } }))
     revalidateCampanas()
     return { success: true }
   } catch (e) {

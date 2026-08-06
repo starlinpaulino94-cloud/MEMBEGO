@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { MarketingCampaignTipo } from '@prisma/client'
 
 /**
@@ -47,16 +47,18 @@ export interface CampanaViva {
 export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]> {
   try {
     const now = new Date()
-    const candidatas = await prisma.marketingCampaign.findMany({
-      where: {
-        companyId,
-        estado: 'ACTIVA',
-        fechaInicio: { lte: now },
-        fechaFin: { gte: now },
-      },
-      orderBy: [{ destacada: 'desc' }, { prioridad: 'desc' }, { fechaFin: 'asc' }],
-      take: 20,
-    })
+    const candidatas = await conEmpresa(companyId, (tx) =>
+      tx.marketingCampaign.findMany({
+        where: {
+          companyId,
+          estado: 'ACTIVA',
+          fechaInicio: { lte: now },
+          fechaFin: { gte: now },
+        },
+        orderBy: [{ destacada: 'desc' }, { prioridad: 'desc' }, { fechaFin: 'asc' }],
+        take: 20,
+      })
+    )
 
     const rd = ahoraRD()
     const vivas: CampanaViva[] = []
@@ -106,12 +108,14 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
 // ─── Admin ────────────────────────────────────────────────────────────────
 
 export async function getCampanasMarketingAdmin(companyId: string) {
-  return prisma.marketingCampaign.findMany({
-    where: { companyId },
-    orderBy: [{ estado: 'asc' }, { fechaFin: 'desc' }],
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.marketingCampaign.findMany({
+      where: { companyId },
+      orderBy: [{ estado: 'asc' }, { fechaFin: 'desc' }],
+    })
+  )
 }
 
 export async function getCampanaMarketing(id: string, companyId: string) {
-  return prisma.marketingCampaign.findFirst({ where: { id, companyId } })
+  return conEmpresa(companyId, (tx) => tx.marketingCampaign.findFirst({ where: { id, companyId } }))
 }

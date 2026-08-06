@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { crearTransaccionAplicada } from '@/lib/transactions/application/transaction-service'
 
 /**
@@ -32,54 +32,57 @@ export async function registrarVentaConfirmada(input: {
   auditoria?: { ipAddress?: string | null; userAgent?: string | null }
 }): Promise<{ id: string; codigo: string; ticketNumero: string } | null> {
   try {
-    // Documento comercial: SIEMPRE el nombre del empleado, nunca su correo.
-    const empleadoNombre = input.empleadoId
-      ? ((
-          await prisma.user.findUnique({
+    // La venta se registra siempre dentro del contexto de la empresa: el
+    // contador de ticket (transaction_counters) y la transacción misma son
+    // datos de ese inquilino.
+    return await conEmpresa(input.companyId, async (tx) => {
+      // Documento comercial: SIEMPRE el nombre del empleado, nunca su correo.
+      const empleadoNombre = input.empleadoId
+        ? ((await tx.user.findUnique({
             where: { id: input.empleadoId },
             select: { name: true },
-          })
-        )?.name ?? null)
-      : null
+          }))?.name ?? null)
+        : null
 
-    return await crearTransaccionAplicada(prisma, {
-      tipo: 'SALE',
-      companyId: input.companyId,
-      sucursalId: input.sucursalId ?? null,
-      clienteId: input.clienteId,
-      empleadoId: input.empleadoId,
-      caja: null,
-      cajaSesionId: null,
-      monto: input.monto,
-      metodoCobro: input.metodoCobro,
-      membershipId: input.membershipId ?? null,
-      snapshot: {
-        detalle: input.detalle,
-        cliente: input.clienteNombre,
-        empleado: empleadoNombre ?? undefined,
-        sucursal: input.sucursalNombre ?? undefined,
-        servicio: input.detalle,
-        observaciones: input.observaciones ?? undefined,
-        lineas: [
-          {
-            descripcion: input.detalle,
-            cantidad: 1,
-            precioUnitario: input.monto,
-            descuento: 0,
-            total: input.monto,
-          },
-        ],
-        subtotal: input.monto.toFixed(2),
-        total: input.monto.toFixed(2),
-        metodoCobroLabel: input.metodoCobroLabel,
-        referenciaPago: input.referenciaPago ?? undefined,
-      },
-      auditoria: {
-        ipAddress: input.auditoria?.ipAddress ?? null,
-        userAgent: input.auditoria?.userAgent ?? null,
-      },
-      resultado: input.observaciones ?? null,
-      userId: input.empleadoId,
+      return crearTransaccionAplicada(tx, {
+        tipo: 'SALE',
+        companyId: input.companyId,
+        sucursalId: input.sucursalId ?? null,
+        clienteId: input.clienteId,
+        empleadoId: input.empleadoId,
+        caja: null,
+        cajaSesionId: null,
+        monto: input.monto,
+        metodoCobro: input.metodoCobro,
+        membershipId: input.membershipId ?? null,
+        snapshot: {
+          detalle: input.detalle,
+          cliente: input.clienteNombre,
+          empleado: empleadoNombre ?? undefined,
+          sucursal: input.sucursalNombre ?? undefined,
+          servicio: input.detalle,
+          observaciones: input.observaciones ?? undefined,
+          lineas: [
+            {
+              descripcion: input.detalle,
+              cantidad: 1,
+              precioUnitario: input.monto,
+              descuento: 0,
+              total: input.monto,
+            },
+          ],
+          subtotal: input.monto.toFixed(2),
+          total: input.monto.toFixed(2),
+          metodoCobroLabel: input.metodoCobroLabel,
+          referenciaPago: input.referenciaPago ?? undefined,
+        },
+        auditoria: {
+          ipAddress: input.auditoria?.ipAddress ?? null,
+          userAgent: input.auditoria?.userAgent ?? null,
+        },
+        resultado: input.observaciones ?? null,
+        userId: input.empleadoId,
+      })
     })
   } catch (e) {
     console.error('[venta-confirmada]', e)

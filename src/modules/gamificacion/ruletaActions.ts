@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireRole } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -36,10 +36,12 @@ export async function girarRuleta(): Promise<GiroResultado> {
     return { ok: false, error: `Necesitas ${COSTO_RULETA} puntos para girar.` }
   }
 
-  const premios = await prisma.ruletaPremio.findMany({
-    where: { companyId, activo: true },
-    select: { id: true, nombre: true, tipo: true, promocionId: true, probabilidad: true },
-  })
+  const premios = await conEmpresa(companyId, (tx) =>
+    tx.ruletaPremio.findMany({
+      where: { companyId, activo: true },
+      select: { id: true, nombre: true, tipo: true, promocionId: true, probabilidad: true },
+    })
+  )
   if (premios.length === 0) return { ok: false, error: 'No hay premios disponibles.' }
 
   // Selección ponderada en el SERVIDOR: el cliente nunca decide el premio.
@@ -69,17 +71,19 @@ export async function girarRuleta(): Promise<GiroResultado> {
   }
 
   try {
-    await prisma.ruletaJugada.create({
-      data: {
-        companyId,
-        clienteId,
-        costoPuntos: COSTO_RULETA,
-        premioId: elegido.id,
-        premioNombre: elegido.nombre,
-        gano,
-        productoCompraId,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.ruletaJugada.create({
+        data: {
+          companyId,
+          clienteId,
+          costoPuntos: COSTO_RULETA,
+          premioId: elegido.id,
+          premioNombre: elegido.nombre,
+          gano,
+          productoCompraId,
+        },
+      })
+    )
   } catch (e) {
     console.error('[ruleta] girar:', e)
     return { ok: false, error: 'No se pudo completar el giro.' }
@@ -162,15 +166,20 @@ export async function crearRuletaPremio(
 
   // Si vincula una promoción, debe ser de la misma empresa.
   if (parsed.data.promocionId) {
-    const promo = await prisma.promocion.findFirst({
-      where: { id: parsed.data.promocionId, companyId },
-      select: { id: true },
-    })
+    const promocionId = parsed.data.promocionId
+    const promo = await conEmpresa(companyId, (tx) =>
+      tx.promocion.findFirst({
+        where: { id: promocionId, companyId },
+        select: { id: true },
+      })
+    )
     if (!promo) return { error: 'Promoción no encontrada.' }
   }
 
   try {
-    await prisma.ruletaPremio.create({ data: { companyId, ...parsed.data } })
+    await conEmpresa(companyId, (tx) =>
+      tx.ruletaPremio.create({ data: { companyId, ...parsed.data } })
+    )
     revalidar()
     return { success: true }
   } catch (e) {
@@ -189,25 +198,32 @@ export async function actualizarRuletaPremio(
   const id = s(fd, 'id')
   if (!id) return { error: 'Premio no encontrado.' }
 
-  const existe = await prisma.ruletaPremio.findFirst({
-    where: { id, companyId },
-    select: { id: true },
-  })
+  const existe = await conEmpresa(companyId, (tx) =>
+    tx.ruletaPremio.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    })
+  )
   if (!existe) return { error: 'Premio no encontrado.' }
 
   const parsed = parse(fd)
   if ('error' in parsed) return { error: parsed.error }
 
   if (parsed.data.promocionId) {
-    const promo = await prisma.promocion.findFirst({
-      where: { id: parsed.data.promocionId, companyId },
-      select: { id: true },
-    })
+    const promocionId = parsed.data.promocionId
+    const promo = await conEmpresa(companyId, (tx) =>
+      tx.promocion.findFirst({
+        where: { id: promocionId, companyId },
+        select: { id: true },
+      })
+    )
     if (!promo) return { error: 'Promoción no encontrada.' }
   }
 
   try {
-    await prisma.ruletaPremio.update({ where: { id }, data: parsed.data })
+    await conEmpresa(companyId, (tx) =>
+      tx.ruletaPremio.update({ where: { id }, data: parsed.data })
+    )
     revalidar()
     return { success: true }
   } catch (e) {
@@ -223,7 +239,9 @@ export async function cambiarActivoRuletaPremio(
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await resolveCompanyId(user)
   if (!companyId) return { ok: false }
-  const res = await prisma.ruletaPremio.updateMany({ where: { id, companyId }, data: { activo } })
+  const res = await conEmpresa(companyId, (tx) =>
+    tx.ruletaPremio.updateMany({ where: { id, companyId }, data: { activo } })
+  )
   revalidar()
   return { ok: res.count > 0 }
 }
@@ -232,7 +250,9 @@ export async function eliminarRuletaPremio(id: string): Promise<{ ok: boolean }>
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await resolveCompanyId(user)
   if (!companyId) return { ok: false }
-  const res = await prisma.ruletaPremio.deleteMany({ where: { id, companyId } })
+  const res = await conEmpresa(companyId, (tx) =>
+    tx.ruletaPremio.deleteMany({ where: { id, companyId } })
+  )
   revalidar()
   return { ok: res.count > 0 }
 }

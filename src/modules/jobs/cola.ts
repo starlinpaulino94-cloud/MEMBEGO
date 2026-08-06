@@ -43,17 +43,32 @@ export async function encolar(carga: CargaTrabajo): Promise<'cola' | 'en-linea'>
  * lote para las notificaciones. NO incluye la hora exacta: si la incluyera,
  * dos disparos del mismo cron con un minuto de diferencia serían claves
  * distintas y la deduplicación no serviría de nada.
+ *
+ * Las de Fase 4 van por identidad:
+ *  · email  → huella del contenido: una publicación repetida del mismo correo
+ *    (reintento del emisor) no entrega el recibo dos veces.
+ *  · evento → el id del automation_event: cada evento se despacha una vez.
+ *  · recompensas → referidoId: una conversión = un trabajo, aunque la misma
+ *    persona convierta dos veces.
  */
-function claveDedup(carga: CargaTrabajo): string {
+export function claveDedup(carga: CargaTrabajo): string {
   const dia = new Date().toISOString().slice(0, 10)
-  if (carga.tipo === 'automatizaciones') {
-    return `auto:${carga.companyId}:${dia}`
+  switch (carga.tipo) {
+    case 'automatizaciones':
+      return `auto:${carga.companyId}:${dia}`
+    case 'notificar':
+      // Las notificaciones llevan un hash del contenido: dos campañas distintas
+      // el mismo día a la misma audiencia SÍ deben salir las dos.
+      return `notif:${carga.companyId}:${carga.audiencia}:${carga.desde}:${huella(
+        carga.payload.titulo + carga.payload.mensaje
+      )}`
+    case 'email':
+      return `email:${huella(carga.to + carga.subject + (carga.html ?? '') + (carga.text ?? ''))}`
+    case 'evento-estrategia':
+      return `evt:${carga.eventoId}`
+    case 'recompensas-referido':
+      return `recomp:${carga.companyId}:${carga.referidoId}`
   }
-  // Las notificaciones llevan un hash del contenido: dos campañas distintas el
-  // mismo día a la misma audiencia SÍ deben salir las dos.
-  return `notif:${carga.companyId}:${carga.audiencia}:${carga.desde}:${huella(
-    carga.payload.titulo + carga.payload.mensaje
-  )}`
 }
 
 /** Huella corta y estable de un texto. No es criptográfica ni lo necesita. */

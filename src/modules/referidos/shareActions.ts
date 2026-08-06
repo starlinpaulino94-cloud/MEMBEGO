@@ -1,7 +1,7 @@
 'use server'
 
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { logReferralEvent } from '@/lib/referidos'
 import { createRateLimiter } from '@/lib/rate-limit'
 
@@ -22,27 +22,32 @@ export async function registrarShare(canal: string): Promise<{ ok: boolean }> {
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { ok: false }
     }
-    if (!(await shareLimiter(`share:${user.metadata.clienteId}`))) {
+    const clienteId = user.metadata.clienteId
+    if (!(await shareLimiter(`share:${clienteId}`))) {
       return { ok: false }
     }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: user.metadata.clienteId },
-      select: { id: true, companyId: true },
-    })
+    const cliente = await sinEmpresa('referidos: buscar cliente por id (empresa desconocida)', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { id: true, companyId: true },
+      })
+    )
     if (!cliente) return { ok: false }
 
     // Dedupe en BD (el rate limiter en memoria no cubre múltiples lambdas):
     // un mismo gesto de compartir puede disparar el tracking más de una vez
     // (ej. abrir el QR + elegir canal). Solo cuenta 1 share por minuto.
-    const reciente = await prisma.referralEvent.findFirst({
-      where: {
-        clienteId: cliente.id,
-        tipo: 'SHARE',
-        createdAt: { gte: new Date(Date.now() - 60 * 1000) },
-      },
-      select: { id: true },
-    })
+    const reciente = await conEmpresa(cliente.companyId, (tx) =>
+      tx.referralEvent.findFirst({
+        where: {
+          clienteId: cliente.id,
+          tipo: 'SHARE',
+          createdAt: { gte: new Date(Date.now() - 60 * 1000) },
+        },
+        select: { id: true },
+      })
+    )
     if (reciente) return { ok: true }
 
     const canalLimpio = String(canal).slice(0, 30)

@@ -55,12 +55,21 @@ export async function GET(request: NextRequest) {
       console.error('[cron-automatizaciones] integraciones', e)
       return { enviados: 0, fallidos: 0 }
     })
+    // Estrategias · Fase 4: re-encola los eventos del bus que quedaron
+    // processed:false (cola caída o reintentos agotados). Sin QStash, el
+    // re-encolado degrada a ejecución en línea.
+    const { barrerEventosEstrategia } = await import('@/modules/estrategias/eventos')
+    const estrategias = await barrerEventosEstrategia().catch((e) => {
+      console.error('[cron-automatizaciones] estrategias', e)
+      return { reencolados: 0 }
+    })
     return NextResponse.json({
       ok: true,
       reparto,
       regalos,
       seguimiento,
       integraciones,
+      estrategias,
     })
   } catch (e) {
     console.error('[cron-automatizaciones]', e)

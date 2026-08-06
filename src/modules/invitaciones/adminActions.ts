@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { ADMIN_ROLES } from '@/types'
@@ -32,10 +32,12 @@ async function uniqueSlug(base: string): Promise<string> {
   let attempt = 0
   while (true) {
     const candidate = attempt === 0 ? slug : `${slug}-${attempt}`
-    const exists = await prisma.campanaInvitacion.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    })
+    const exists = await sinEmpresa('invitaciones: verificar slug de campaña único global', (tx) =>
+      tx.campanaInvitacion.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      })
+    )
     if (!exists) return candidate
     attempt++
     if (attempt > 20) return `${slug}-${Date.now()}`
@@ -112,29 +114,31 @@ export async function crearCampanaInvitacion(
   const slug = await uniqueSlug(nombre)
 
   try {
-    await prisma.campanaInvitacion.create({
-      data: {
-        companyId,
-        slug,
-        nombre,
-        titulo,
-        descripcion,
-        textoLanding,
-        imagenUrl,
-        bannerUrl,
-        metaRegistros,
-        beneficioInvitante: beneficioInvitante as object,
-        beneficioInvitado: beneficioInvitado as object,
-        fechaInicio: new Date(fechaInicio),
-        fechaFin: new Date(fechaFin),
-        maxPremios,
-        colorPrimario,
-        colorSecundario,
-        usarBanner,
-        contenido: contenido ?? undefined,
-        estado: 'BORRADOR',
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.campanaInvitacion.create({
+        data: {
+          companyId,
+          slug,
+          nombre,
+          titulo,
+          descripcion,
+          textoLanding,
+          imagenUrl,
+          bannerUrl,
+          metaRegistros,
+          beneficioInvitante: beneficioInvitante as object,
+          beneficioInvitado: beneficioInvitado as object,
+          fechaInicio: new Date(fechaInicio),
+          fechaFin: new Date(fechaFin),
+          maxPremios,
+          colorPrimario,
+          colorSecundario,
+          usarBanner,
+          contenido: contenido ?? undefined,
+          estado: 'BORRADOR',
+        },
+      })
+    )
 
     revalidatePath('/admin/invitaciones')
     return { success: true }
@@ -176,28 +180,34 @@ export async function actualizarCampanaInvitacion(
   const contenido = parseContenido(formData)
 
   try {
-    await prisma.campanaInvitacion.update({
-      where: { id },
-      data: {
-        nombre,
-        titulo,
-        descripcion,
-        textoLanding,
-        imagenUrl,
-        bannerUrl,
-        metaRegistros,
-        beneficioInvitante: beneficioInvitante as object,
-        beneficioInvitado: beneficioInvitado as object,
-        fechaInicio: new Date(fechaInicio),
-        fechaFin: new Date(fechaFin),
-        maxPremios,
-        colorPrimario,
-        colorSecundario,
-        usarBanner,
-        // null limpia los textos personalizados → vuelve a los valores por defecto.
-        contenido: contenido ?? (Prisma.DbNull as never),
-      },
-    })
+    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa desconocida)', (tx) =>
+      tx.campanaInvitacion.findUnique({ where: { id }, select: { companyId: true } })
+    )
+    if (!campana) return { error: 'Campaña no encontrada.' }
+    await conEmpresa(campana.companyId, (tx) =>
+      tx.campanaInvitacion.update({
+        where: { id },
+        data: {
+          nombre,
+          titulo,
+          descripcion,
+          textoLanding,
+          imagenUrl,
+          bannerUrl,
+          metaRegistros,
+          beneficioInvitante: beneficioInvitante as object,
+          beneficioInvitado: beneficioInvitado as object,
+          fechaInicio: new Date(fechaInicio),
+          fechaFin: new Date(fechaFin),
+          maxPremios,
+          colorPrimario,
+          colorSecundario,
+          usarBanner,
+          // null limpia los textos personalizados → vuelve a los valores por defecto.
+          contenido: contenido ?? (Prisma.DbNull as never),
+        },
+      })
+    )
 
     revalidatePath('/admin/invitaciones')
     return { success: true }
@@ -214,10 +224,16 @@ export async function cambiarEstadoCampana(
   await requireRole(ADMIN_ROLES)
 
   try {
-    await prisma.campanaInvitacion.update({
-      where: { id },
-      data: { estado },
-    })
+    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa desconocida)', (tx) =>
+      tx.campanaInvitacion.findUnique({ where: { id }, select: { companyId: true } })
+    )
+    if (!campana) return { error: 'Campaña no encontrada.' }
+    await conEmpresa(campana.companyId, (tx) =>
+      tx.campanaInvitacion.update({
+        where: { id },
+        data: { estado },
+      })
+    )
     revalidatePath('/admin/invitaciones')
     return { success: true }
   } catch (e) {
@@ -230,7 +246,11 @@ export async function eliminarCampana(id: string): Promise<CampanaState> {
   await requireRole(ADMIN_ROLES)
 
   try {
-    await prisma.campanaInvitacion.delete({ where: { id } })
+    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa desconocida)', (tx) =>
+      tx.campanaInvitacion.findUnique({ where: { id }, select: { companyId: true } })
+    )
+    if (!campana) return { error: 'Campaña no encontrada.' }
+    await conEmpresa(campana.companyId, (tx) => tx.campanaInvitacion.delete({ where: { id } }))
     revalidatePath('/admin/invitaciones')
     return { success: true }
   } catch (e) {

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { ensureCodigoCorto } from '@/lib/referidos'
@@ -79,10 +79,12 @@ export async function buscarDestinatario(
   // ── Por @código: exacto, sin mínimo de longitud ────────────────────────────
   const codigo = term.startsWith('@') ? term.slice(1) : term
   if (/^[A-Za-z0-9]{4,12}$/.test(codigo)) {
-    const porCodigo = await prisma.cliente.findFirst({
-      where: { codigoCorto: codigo.toUpperCase(), companyId },
-      select: { id: true, nombre: true, telefono: true, avatarUrl: true, codigoCorto: true },
-    })
+    const porCodigo = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { codigoCorto: codigo.toUpperCase(), companyId },
+        select: { id: true, nombre: true, telefono: true, avatarUrl: true, codigoCorto: true },
+      })
+    )
     if (porCodigo && porCodigo.id !== clienteId) {
       return {
         resultados: [
@@ -106,20 +108,22 @@ export async function buscarDestinatario(
   }
 
   const digits = term.replace(/\D/g, '')
-  const clientes = await prisma.cliente.findMany({
-    where: {
-      companyId,
-      id: { not: clienteId },
-      OR: [
-        { nombre: { contains: term, mode: 'insensitive' } },
-        { email: { equals: term, mode: 'insensitive' } },
-        ...(digits.length >= 7 ? [{ telefono: { contains: digits } }] : []),
-      ],
-    },
-    select: { id: true, nombre: true, telefono: true, avatarUrl: true, codigoCorto: true },
-    orderBy: { createdAt: 'asc' },
-    take: 5,
-  })
+  const clientes = await conEmpresa(companyId, (tx) =>
+    tx.cliente.findMany({
+      where: {
+        companyId,
+        id: { not: clienteId },
+        OR: [
+          { nombre: { contains: term, mode: 'insensitive' } },
+          { email: { equals: term, mode: 'insensitive' } },
+          ...(digits.length >= 7 ? [{ telefono: { contains: digits } }] : []),
+        ],
+      },
+      select: { id: true, nombre: true, telefono: true, avatarUrl: true, codigoCorto: true },
+      orderBy: { createdAt: 'asc' },
+      take: 5,
+    })
+  )
 
   return {
     resultados: clientes.map((c) => ({
@@ -142,16 +146,22 @@ async function notificarCliente(
   href: string
 ) {
   try {
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { supabaseId: true },
-    })
-    if (!cliente?.supabaseId) return
-    const u = await prisma.user.findUnique({
-      where: { supabaseId: cliente.supabaseId },
-      select: { id: true },
-    })
-    if (u) await crearNotificacion({ userId: u.id, tipo: 'SISTEMA', titulo, mensaje, href })
+    const userId = await sinEmpresa(
+      'regalos: buscar user del destinatario por id (cross-tenant)',
+      async (tx) => {
+        const cliente = await tx.cliente.findUnique({
+          where: { id: clienteId },
+          select: { supabaseId: true },
+        })
+        if (!cliente?.supabaseId) return null
+        const u = await tx.user.findUnique({
+          where: { supabaseId: cliente.supabaseId },
+          select: { id: true },
+        })
+        return u?.id ?? null
+      }
+    )
+    if (userId) await crearNotificacion({ userId, tipo: 'SISTEMA', titulo, mensaje, href })
   } catch (e) {
     console.error('[regalos] notificar', e)
   }
@@ -207,15 +217,21 @@ export async function enviarTransferencia(
 
     // Si ese contacto YA es cliente del negocio, el regalo va directo a su
     // cuenta (misma experiencia que si lo hubieran buscado por nombre).
-    const existente = destinatarioContacto.includes('@')
-      ? await prisma.cliente.findFirst({
-          where: { companyId, email: { equals: destinatarioContacto, mode: 'insensitive' } },
-          select: { id: true },
-        })
-      : await prisma.cliente.findFirst({
-          where: { companyId, telefono: { contains: destinatarioContacto } },
-          select: { id: true },
-        })
+    // A const: dentro de los closures de conEmpresa se pierde el estrechamiento.
+    const contacto = destinatarioContacto
+    const existente = contacto.includes('@')
+      ? await conEmpresa(companyId, (tx) =>
+          tx.cliente.findFirst({
+            where: { companyId, email: { equals: contacto, mode: 'insensitive' } },
+            select: { id: true },
+          })
+        )
+      : await conEmpresa(companyId, (tx) =>
+          tx.cliente.findFirst({
+            where: { companyId, telefono: { contains: contacto } },
+            select: { id: true },
+          })
+        )
     if (existente) {
       destinatarioId = existente.id
       destinatarioContacto = null
@@ -224,10 +240,12 @@ export async function enviarTransferencia(
 
   if (destinatarioId === clienteId) return { error: 'No puedes enviarte un regalo a ti mismo.' }
   if (destinatarioContacto) {
-    const yo = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { email: true, telefono: true },
-    })
+    const yo = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { email: true, telefono: true },
+      })
+    )
     const misDigits = yo?.telefono?.replace(/\D/g, '') ?? ''
     if (
       yo?.email?.toLowerCase() === destinatarioContacto ||
@@ -254,14 +272,16 @@ export async function enviarTransferencia(
   const inicioMes = new Date()
   inicioMes.setDate(1)
   inicioMes.setHours(0, 0, 0, 0)
-  const enviadasMes = await prisma.regalo.count({
-    where: {
-      remitenteId: clienteId,
-      tipo: 'TRANSFERENCIA_USOS',
-      createdAt: { gte: inicioMes },
-      estado: { not: 'CANCELADO' },
-    },
-  })
+  const enviadasMes = await conEmpresa(companyId, (tx) =>
+    tx.regalo.count({
+      where: {
+        remitenteId: clienteId,
+        tipo: 'TRANSFERENCIA_USOS',
+        createdAt: { gte: inicioMes },
+        estado: { not: 'CANCELADO' },
+      },
+    })
+  )
   if (enviadasMes >= config.maxTransferenciasMes) {
     return { error: `Alcanzaste el límite de ${config.maxTransferenciasMes} transferencias este mes.` }
   }
@@ -269,10 +289,12 @@ export async function enviarTransferencia(
   // Destinatario con cuenta: mismo negocio, existente.
   let destinatarioNombre: string | null = null
   if (destinatarioId) {
-    const destinatario = await prisma.cliente.findFirst({
-      where: { id: destinatarioId, companyId },
-      select: { id: true, nombre: true },
-    })
+    const destinatario = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { id: destinatarioId, companyId },
+        select: { id: true, nombre: true },
+      })
+    )
     if (!destinatario) return { error: 'Destinatario no encontrado en este negocio.' }
     destinatarioNombre = destinatario.nombre
   }
@@ -284,81 +306,93 @@ export async function enviarTransferencia(
   let etiqueta = ''
 
   if (origen === 'COMPRA') {
-    const compra = await prisma.productoCompra.findFirst({
-      where: {
-        id: origenId,
-        clienteId,
-        companyId,
-        estado: 'ACTIVA',
-        promocionId: { not: null },
-        // Anti-farmeo: los beneficios gratis (campaña/ruleta/bienvenida) no se
-        // transfieren; solo compras con precio real.
-        precioCongelado: { gt: 0 },
-      },
-      select: { id: true, promocionId: true, promocion: { select: { titulo: true } } },
-    })
+    const compra = await conEmpresa(companyId, (tx) =>
+      tx.productoCompra.findFirst({
+        where: {
+          id: origenId,
+          clienteId,
+          companyId,
+          estado: 'ACTIVA',
+          promocionId: { not: null },
+          // Anti-farmeo: los beneficios gratis (campaña/ruleta/bienvenida) no se
+          // transfieren; solo compras con precio real.
+          precioCongelado: { gt: 0 },
+        },
+        select: { id: true, promocionId: true, promocion: { select: { titulo: true } } },
+      })
+    )
     if (!compra) return { error: 'Ese beneficio no existe o no es transferible.' }
-    const res = await prisma.productoCompra.updateMany({
-      where: { id: compra.id, usosRestantes: { gte: usos } },
-      data: { usosRestantes: { decrement: usos } },
-    })
+    const res = await conEmpresa(companyId, (tx) =>
+      tx.productoCompra.updateMany({
+        where: { id: compra.id, usosRestantes: { gte: usos } },
+        data: { usosRestantes: { decrement: usos } },
+      })
+    )
     if (res.count === 0) return { error: 'No tienes suficientes usos disponibles.' }
     compraOrigenId = compra.id
     promocionId = compra.promocionId
     etiqueta = compra.promocion?.titulo ?? 'Beneficio'
   } else {
-    const membresia = await prisma.membership.findFirst({
-      where: {
-        id: origenId,
-        cliente: { id: clienteId },
-        estado: 'ACTIVA',
-        OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
-      },
-      select: { id: true, plan: { select: { nombre: true } } },
-    })
+    const membresia = await conEmpresa(companyId, (tx) =>
+      tx.membership.findFirst({
+        where: {
+          id: origenId,
+          cliente: { id: clienteId },
+          estado: 'ACTIVA',
+          OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
+        },
+        select: { id: true, plan: { select: { nombre: true } } },
+      })
+    )
     if (!membresia) return { error: 'No tienes una membresía activa con lavados.' }
     // El receptor necesita membresía ACTIVA: los lavados del plan viven en el
     // plan (el caso sin cuenta ya se rechazó arriba).
     if (!destinatarioId) return { error: 'Datos incompletos.' }
-    const memDest = await prisma.membership.findFirst({
-      where: {
-        cliente: { id: destinatarioId },
-        estado: 'ACTIVA',
-        OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
-      },
-      select: { id: true },
-    })
+    const memDest = await conEmpresa(companyId, (tx) =>
+      tx.membership.findFirst({
+        where: {
+          cliente: { id: destinatarioId },
+          estado: 'ACTIVA',
+          OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
+        },
+        select: { id: true },
+      })
+    )
     if (!memDest) {
       return {
         error:
           'Tu amigo necesita una membresía activa para recibir lavados del plan. Puedes transferirle usos de una promoción de tu wallet.',
       }
     }
-    const res = await prisma.membership.updateMany({
-      where: { id: membresia.id, lavadosRestantes: { gte: usos } },
-      data: { lavadosRestantes: { decrement: usos } },
-    })
+    const res = await conEmpresa(companyId, (tx) =>
+      tx.membership.updateMany({
+        where: { id: membresia.id, lavadosRestantes: { gte: usos } },
+        data: { lavadosRestantes: { decrement: usos } },
+      })
+    )
     if (res.count === 0) return { error: 'No tienes suficientes lavados disponibles.' }
     membershipOrigenId = membresia.id
     etiqueta = `Lavados del plan ${membresia.plan.nombre}`
   }
 
-  const regalo = await prisma.regalo.create({
-    data: {
-      companyId,
-      tipo: 'TRANSFERENCIA_USOS',
-      remitenteId: clienteId,
-      destinatarioId,
-      destinatarioContacto,
-      compraOrigenId,
-      membershipOrigenId,
-      promocionId,
-      usos,
-      mensaje,
-      expiraAt: new Date(Date.now() + config.vigenciaHoras * 60 * 60 * 1000),
-    },
-    select: { id: true },
-  })
+  const regalo = await conEmpresa(companyId, (tx) =>
+    tx.regalo.create({
+      data: {
+        companyId,
+        tipo: 'TRANSFERENCIA_USOS',
+        remitenteId: clienteId,
+        destinatarioId,
+        destinatarioContacto,
+        compraOrigenId,
+        membershipOrigenId,
+        promocionId,
+        usos,
+        mensaje,
+        expiraAt: new Date(Date.now() + config.vigenciaHoras * 60 * 60 * 1000),
+      },
+      select: { id: true },
+    })
+  )
 
   if (destinatarioId) {
     await notificarCliente(
@@ -393,19 +427,28 @@ export async function responderRegalo(
   const regaloId = String(formData.get('regaloId') ?? '').trim()
   const aceptar = String(formData.get('decision') ?? '') === 'aceptar'
 
-  const regalo = await prisma.regalo.findFirst({
-    where: { id: regaloId, destinatarioId: clienteId, estado: 'PENDIENTE' },
-    include: { remitente: { select: { id: true, nombre: true } } },
-  })
+  const regalo = await sinEmpresa(
+    'regalos: buscar regalo pendiente por id (empresa no conocida)',
+    (tx) =>
+      tx.regalo.findFirst({
+        where: { id: regaloId, destinatarioId: clienteId, estado: 'PENDIENTE' },
+        include: { remitente: { select: { id: true, nombre: true } } },
+      })
+  )
   if (!regalo) return { error: 'Este regalo ya no está pendiente.' }
 
   // ¿Expiró? Se marca y se devuelven los usos al remitente.
   if (regalo.expiraAt < new Date()) {
-    const upd = await prisma.regalo.updateMany({
-      where: { id: regalo.id, estado: 'PENDIENTE' },
-      data: { estado: 'EXPIRADO', resueltoAt: new Date() },
-    })
-    if (upd.count > 0) await devolverUsos(regalo).catch(anotarFallo('regalos:regalo.updateMany'))
+    const upd = await conEmpresa(regalo.companyId, (tx) =>
+      tx.regalo.updateMany({
+        where: { id: regalo.id, estado: 'PENDIENTE' },
+        data: { estado: 'EXPIRADO', resueltoAt: new Date() },
+      })
+    )
+    if (upd.count > 0)
+      await conEmpresa(regalo.companyId, (tx) => devolverUsos(regalo, tx)).catch(
+        anotarFallo('regalos:regalo.updateMany')
+      )
     revalidatePath('/cliente/regalos')
     return { error: 'Este regalo expiró y los usos volvieron a tu amigo.' }
   }
@@ -413,12 +456,16 @@ export async function responderRegalo(
   const remitenteNombre = regalo.remitente.nombre.split(/\s+/)[0]
 
   if (!aceptar) {
-    const upd = await prisma.regalo.updateMany({
-      where: { id: regalo.id, estado: 'PENDIENTE' },
-      data: { estado: 'RECHAZADO', resueltoAt: new Date() },
-    })
+    const upd = await conEmpresa(regalo.companyId, (tx) =>
+      tx.regalo.updateMany({
+        where: { id: regalo.id, estado: 'PENDIENTE' },
+        data: { estado: 'RECHAZADO', resueltoAt: new Date() },
+      })
+    )
     if (upd.count === 0) return { error: 'Este regalo ya no está pendiente.' }
-    await devolverUsos(regalo).catch((e) => console.error('[regalos] refund rechazo', e))
+    await conEmpresa(regalo.companyId, (tx) => devolverUsos(regalo, tx)).catch((e) =>
+      console.error('[regalos] refund rechazo', e)
+    )
     await notificarCliente(
       regalo.remitenteId,
       'Regalo rechazado',
@@ -435,76 +482,94 @@ export async function responderRegalo(
   let membershipDestinoId: string | null = null
 
   if (regalo.compraOrigenId && regalo.promocionId) {
+    const compraOrigenId = regalo.compraOrigenId
     // Compra ESPEJO en la wallet del receptor: hereda promoción, precio y
     // vencimiento del origen → el canje con QR funciona sin cambios.
-    const origenCompra = await prisma.productoCompra.findUnique({
-      where: { id: regalo.compraOrigenId },
-      select: { precioCongelado: true, fechaVencimiento: true, promocion: { select: { titulo: true } } },
-    })
+    const origenCompra = await conEmpresa(regalo.companyId, (tx) =>
+      tx.productoCompra.findUnique({
+        where: { id: compraOrigenId },
+        select: { precioCongelado: true, fechaVencimiento: true, promocion: { select: { titulo: true } } },
+      })
+    )
     etiqueta = origenCompra?.promocion?.titulo ?? 'Beneficio'
-    const espejo = await prisma.productoCompra.create({
-      data: {
-        tipo: 'PROMOCION',
-        estado: 'ACTIVA',
-        companyId: regalo.companyId,
-        clienteId,
-        promocionId: regalo.promocionId,
-        precioCongelado: origenCompra?.precioCongelado ?? null,
-        pagoConfirmado: true,
-        usosIncluidos: regalo.usos,
-        usosRestantes: regalo.usos,
-        fechaActivacion: new Date(),
-        fechaVencimiento: origenCompra?.fechaVencimiento ?? null,
-        adminNota: `Transferencia P2P de ${regalo.remitente.nombre} (regalo ${regalo.id})`,
-      },
-      select: { id: true },
-    })
+    const espejo = await conEmpresa(regalo.companyId, (tx) =>
+      tx.productoCompra.create({
+        data: {
+          tipo: 'PROMOCION',
+          estado: 'ACTIVA',
+          companyId: regalo.companyId,
+          clienteId,
+          promocionId: regalo.promocionId,
+          precioCongelado: origenCompra?.precioCongelado ?? null,
+          pagoConfirmado: true,
+          usosIncluidos: regalo.usos,
+          usosRestantes: regalo.usos,
+          fechaActivacion: new Date(),
+          fechaVencimiento: origenCompra?.fechaVencimiento ?? null,
+          adminNota: `Transferencia P2P de ${regalo.remitente.nombre} (regalo ${regalo.id})`,
+        },
+        select: { id: true },
+      })
+    )
     compraDestinoId = espejo.id
   } else if (regalo.membershipOrigenId) {
     // Lavados del plan → a la membresía ACTIVA del receptor (revalidada aquí).
-    const memDest = await prisma.membership.findFirst({
-      where: {
-        cliente: { id: clienteId },
-        estado: 'ACTIVA',
-        OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
-      },
-      select: { id: true, plan: { select: { nombre: true } } },
-    })
+    const memDest = await conEmpresa(regalo.companyId, (tx) =>
+      tx.membership.findFirst({
+        where: {
+          cliente: { id: clienteId },
+          estado: 'ACTIVA',
+          OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
+        },
+        select: { id: true, plan: { select: { nombre: true } } },
+      })
+    )
     if (!memDest) {
       return { error: 'Necesitas una membresía activa para recibir estos lavados.' }
     }
     etiqueta = 'Lavados del plan'
-    await prisma.membership.update({
-      where: { id: memDest.id },
-      data: { lavadosRestantes: { increment: regalo.usos } },
-    })
+    await conEmpresa(regalo.companyId, (tx) =>
+      tx.membership.update({
+        where: { id: memDest.id },
+        data: { lavadosRestantes: { increment: regalo.usos } },
+      })
+    )
     membershipDestinoId = memDest.id
   } else {
     return { error: 'Este regalo tiene un contenido no válido.' }
   }
 
   // Guard atómico del estado: si otra pestaña lo aceptó primero, deshacemos.
-  const upd = await prisma.regalo.updateMany({
-    where: { id: regalo.id, estado: 'PENDIENTE' },
-    data: { estado: 'ACEPTADO', resueltoAt: new Date(), compraDestinoId, membershipDestinoId },
-  })
+  const upd = await conEmpresa(regalo.companyId, (tx) =>
+    tx.regalo.updateMany({
+      where: { id: regalo.id, estado: 'PENDIENTE' },
+      data: { estado: 'ACEPTADO', resueltoAt: new Date(), compraDestinoId, membershipDestinoId },
+    })
+  )
   if (upd.count === 0) {
     if (compraDestinoId) {
-      await prisma.productoCompra.delete({ where: { id: compraDestinoId } }).catch(anotarFallo('regalos:productoCompra.delete'))
+      await conEmpresa(regalo.companyId, (tx) =>
+        tx.productoCompra.delete({ where: { id: compraDestinoId } })
+      ).catch(anotarFallo('regalos:productoCompra.delete'))
     }
     if (membershipDestinoId) {
-      await prisma.membership
-        .update({ where: { id: membershipDestinoId }, data: { lavadosRestantes: { decrement: regalo.usos } } })
-        .catch(anotarFallo('regalos:membership.update'))
+      await conEmpresa(regalo.companyId, (tx) =>
+        tx.membership.update({
+          where: { id: membershipDestinoId },
+          data: { lavadosRestantes: { decrement: regalo.usos } },
+        })
+      ).catch(anotarFallo('regalos:membership.update'))
     }
     return { error: 'Este regalo ya fue procesado.' }
   }
 
   // Comprobantes (G3): una Transaction por cada parte, reimprimibles.
-  const receptor = await prisma.cliente.findUnique({
-    where: { id: clienteId },
-    select: { nombre: true },
-  })
+  const receptor = await conEmpresa(regalo.companyId, (tx) =>
+    tx.cliente.findUnique({
+      where: { id: clienteId },
+      select: { nombre: true },
+    })
+  )
   const [txRem, txDest] = await Promise.all([
     registrarEntregaBeneficio({
       tipo: 'BENEFIT_USE',
@@ -528,12 +593,14 @@ export async function responderRegalo(
       observaciones: regalo.mensaje,
     }),
   ])
-  await prisma.regalo
-    .update({
-      where: { id: regalo.id },
-      data: { txRemitenteId: txRem?.id ?? null, txDestinatarioId: txDest?.id ?? null },
-    })
-    .catch(anotarFallo('regalos:regalo.update'))
+  await conEmpresa(regalo.companyId, (tx) =>
+    tx.regalo
+      .update({
+        where: { id: regalo.id },
+        data: { txRemitenteId: txRem?.id ?? null, txDestinatarioId: txDest?.id ?? null },
+      })
+      .catch(anotarFallo('regalos:regalo.update'))
+  )
 
   await notificarCliente(
     regalo.remitenteId,
@@ -558,16 +625,20 @@ export async function cancelarRegalo(
   if (!clienteId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
 
   const regaloId = String(formData.get('regaloId') ?? '').trim()
-  const regalo = await prisma.regalo.findFirst({
-    where: { id: regaloId, remitenteId: clienteId, estado: 'PENDIENTE' },
-    select: { id: true, compraOrigenId: true, membershipOrigenId: true, usos: true },
-  })
+  const regalo = await sinEmpresa('regalos: buscar regalo pendiente por id (cross-tenant)', (tx) =>
+    tx.regalo.findFirst({
+      where: { id: regaloId, remitenteId: clienteId, estado: 'PENDIENTE' },
+      select: { id: true, compraOrigenId: true, membershipOrigenId: true, usos: true },
+    })
+  )
   if (!regalo) return { error: 'Este regalo ya no está pendiente.' }
 
-  const upd = await prisma.regalo.updateMany({
-    where: { id: regalo.id, estado: 'PENDIENTE' },
-    data: { estado: 'CANCELADO', resueltoAt: new Date() },
-  })
+  const upd = await sinEmpresa('regalos: cancelar regalo propio', (tx) =>
+    tx.regalo.updateMany({
+      where: { id: regalo.id, estado: 'PENDIENTE' },
+      data: { estado: 'CANCELADO', resueltoAt: new Date() },
+    })
+  )
   if (upd.count === 0) return { error: 'Este regalo ya fue procesado.' }
   await devolverUsos(regalo).catch((e) => console.error('[regalos] refund cancel', e))
 
@@ -605,13 +676,15 @@ export async function regalarPromocion(
       return { error: 'El negocio no tiene activados los regalos entre usuarios.' }
     }
 
-    const [promo, destinatario] = await Promise.all([
-      prisma.promocion.findFirst({ where: { id: promocionId, companyId } }),
-      prisma.cliente.findFirst({
-        where: { id: destinatarioId, companyId },
-        select: { id: true, nombre: true },
-      }),
-    ])
+    const [promo, destinatario] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.promocion.findFirst({ where: { id: promocionId, companyId } }),
+        tx.cliente.findFirst({
+          where: { id: destinatarioId, companyId },
+          select: { id: true, nombre: true },
+        }),
+      ])
+    )
     if (!promo) return { error: 'Promoción no encontrada.' }
     if (!destinatario) return { error: 'Destinatario no encontrado en este negocio.' }
 
@@ -622,10 +695,12 @@ export async function regalarPromocion(
     if (!ventana.ok) return { error: ventana.mensaje }
 
     if (promo.visibilidad === 'privada') {
-      const activa = await prisma.membership.findFirst({
-        where: { clienteId: destinatario.id, companyId, estado: 'ACTIVA' },
-        select: { id: true },
-      })
+      const activa = await conEmpresa(companyId, (tx) =>
+        tx.membership.findFirst({
+          where: { clienteId: destinatario.id, companyId, estado: 'ACTIVA' },
+          select: { id: true },
+        })
+      )
       if (!activa) return { error: 'Esta promoción es exclusiva para miembros: tu amigo necesita membresía activa.' }
     }
 
@@ -635,7 +710,7 @@ export async function regalarPromocion(
       if (limite.alcanzado) return { error: mensajeLimitePorCliente(promo.limitePorCliente) }
     }
 
-    const compra = await prisma.$transaction(async (tx) => {
+    const compra = await conEmpresa(companyId, async (tx) => {
       const creada = await tx.productoCompra.create({
         data: {
           tipo: 'PROMOCION',
@@ -732,23 +807,27 @@ export async function regalarMembresia(
       return { error: 'El negocio no tiene activados los regalos entre usuarios.' }
     }
 
-    const [plan, destinatario] = await Promise.all([
-      prisma.plan.findFirst({ where: { id: planId, companyId, activo: true } }),
-      prisma.cliente.findFirst({
-        where: { id: destinatarioId, companyId },
-        select: { id: true, nombre: true },
-      }),
-    ])
+    const [plan, destinatario] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.plan.findFirst({ where: { id: planId, companyId, activo: true } }),
+        tx.cliente.findFirst({
+          where: { id: destinatarioId, companyId },
+          select: { id: true, nombre: true },
+        }),
+      ])
+    )
     if (!plan) return { error: 'Plan no encontrado.' }
     if (!destinatario) return { error: 'Destinatario no encontrado en este negocio.' }
 
     // Estado actual del amigo: con ACTIVA no se regala otra; con solicitud en
     // curso tampoco (no pisamos su propio proceso de pago).
-    const existente = await prisma.membership.findFirst({
-      where: { clienteId: destinatario.id, companyId },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, estado: true },
-    })
+    const existente = await conEmpresa(companyId, (tx) =>
+      tx.membership.findFirst({
+        where: { clienteId: destinatario.id, companyId },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true, estado: true },
+      })
+    )
     if (existente?.estado === 'ACTIVA') {
       return { error: 'Tu amigo ya tiene una membresía activa.' }
     }
@@ -760,40 +839,46 @@ export async function regalarMembresia(
     let referencia: string | null = null
     for (let intento = 0; intento < 5 && !referencia; intento++) {
       const candidata = `ORD-${generarCodigo(6)}`
-      const ocupada = await prisma.membership.findUnique({
-        where: { referencia: candidata },
-        select: { id: true },
-      })
+      const ocupada = await conEmpresa(companyId, (tx) =>
+        tx.membership.findUnique({
+          where: { referencia: candidata },
+          select: { id: true },
+        })
+      )
       if (!ocupada) referencia = candidata
     }
     if (!referencia) return { error: 'No se pudo generar la referencia. Intenta de nuevo.' }
 
-    const membership = await prisma.membership.create({
-      data: {
-        clienteId: destinatario.id, // la membresía ES del amigo
-        companyId,
-        planId: plan.id,
-        estado: 'PENDIENTE',
-        referencia,
-        beneficiarioClienteId: destinatario.id,
-        userId: user.metadata.dbUserId || null,
-        comprobanteNota: `Regalo: la paga ${user.email ?? 'otro cliente'} (ref. ${referencia})`,
-      },
-      select: { id: true },
-    })
+    const membership = await conEmpresa(companyId, (tx) =>
+      tx.membership.create({
+        data: {
+          clienteId: destinatario.id, // la membresía ES del amigo
+          companyId,
+          planId: plan.id,
+          estado: 'PENDIENTE',
+          referencia,
+          beneficiarioClienteId: destinatario.id,
+          userId: user.metadata.dbUserId || null,
+          comprobanteNota: `Regalo: la paga ${user.email ?? 'otro cliente'} (ref. ${referencia})`,
+        },
+        select: { id: true },
+      })
+    )
 
-    await prisma.regalo.create({
-      data: {
-        companyId,
-        tipo: 'REGALO_MEMBRESIA',
-        remitenteId: clienteId,
-        destinatarioId: destinatario.id,
-        planId: plan.id,
-        membershipDestinoId: membership.id,
-        mensaje,
-        expiraAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.regalo.create({
+        data: {
+          companyId,
+          tipo: 'REGALO_MEMBRESIA',
+          remitenteId: clienteId,
+          destinatarioId: destinatario.id,
+          planId: plan.id,
+          membershipDestinoId: membership.id,
+          mensaje,
+          expiraAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      })
+    )
 
     await notificarAdmins(companyId, {
       tipo: 'NUEVO_COMPROBANTE',
@@ -871,10 +956,12 @@ export async function guardarRegalosConfig(
   }
 
   try {
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { regalosConfig: config },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { regalosConfig: config },
+      })
+    )
   } catch (e) {
     console.error('[regalos] guardarRegalosConfig', e)
     return { error: 'No se pudo guardar la configuración. Intenta de nuevo.' }
@@ -905,24 +992,28 @@ export async function cancelarRegaloAdmin(
   const motivoLimpio = motivo.trim().slice(0, 300)
   if (motivoLimpio.length < 3) return { error: 'Escribe el motivo de la cancelación.' }
 
-  const regalo = await prisma.regalo.findFirst({
-    where: { id: regaloId, companyId, estado: 'PENDIENTE' },
-    select: {
-      id: true,
-      tipo: true,
-      usos: true,
-      compraOrigenId: true,
-      membershipOrigenId: true,
-      remitenteId: true,
-      destinatarioId: true,
-    },
-  })
+  const regalo = await sinEmpresa('regalos: admin busca regalo pendiente por id (cross-tenant)', (tx) =>
+    tx.regalo.findFirst({
+      where: { id: regaloId, companyId, estado: 'PENDIENTE' },
+      select: {
+        id: true,
+        tipo: true,
+        usos: true,
+        compraOrigenId: true,
+        membershipOrigenId: true,
+        remitenteId: true,
+        destinatarioId: true,
+      },
+    })
+  )
   if (!regalo) return { error: 'Este regalo ya no está pendiente.' }
 
-  const upd = await prisma.regalo.updateMany({
-    where: { id: regalo.id, estado: 'PENDIENTE' },
-    data: { estado: 'CANCELADO', resueltoAt: new Date() },
-  })
+  const upd = await sinEmpresa('regalos: admin cancela regalo', (tx) =>
+    tx.regalo.updateMany({
+      where: { id: regalo.id, estado: 'PENDIENTE' },
+      data: { estado: 'CANCELADO', resueltoAt: new Date() },
+    })
+  )
   if (upd.count === 0) return { error: 'Este regalo ya fue procesado.' }
   await devolverUsos(regalo).catch((e) => console.error('[regalos] refund admin', e))
 

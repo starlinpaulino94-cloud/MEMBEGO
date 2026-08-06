@@ -1,7 +1,7 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
 import { requireSection } from '@/lib/auth/guards'
+import { conEmpresa } from '@/lib/tenant'
 import { esSegmentoValido, resolverSegmento } from './segmentos'
 
 // F4.5: envío manual de notificaciones a segmentos de clientes.
@@ -43,10 +43,12 @@ export async function enviarNotificacionSegmento(
   try {
     // Si es por plan, verificar que el plan pertenece a la empresa.
     if (planId) {
-      const plan = await prisma.plan.findUnique({
-        where: { id: planId },
-        select: { companyId: true },
-      })
+      const plan = await conEmpresa(companyId, (tx) =>
+        tx.plan.findUnique({
+          where: { id: planId },
+          select: { companyId: true },
+        })
+      )
       if (!plan || plan.companyId !== companyId) {
         return { error: 'Plan inválido.' }
       }
@@ -57,15 +59,17 @@ export async function enviarNotificacionSegmento(
       return { error: 'Ese segmento no tiene destinatarios ahora mismo.' }
     }
 
-    await prisma.notificacion.createMany({
-      data: userIds.map((userId) => ({
-        userId,
-        tipo: 'SISTEMA' as const,
-        titulo,
-        mensaje,
-        href: '/cliente/promociones',
-      })),
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.notificacion.createMany({
+        data: userIds.map((userId) => ({
+          userId,
+          tipo: 'SISTEMA' as const,
+          titulo,
+          mensaje,
+          href: '/cliente/promociones',
+        })),
+      })
+    )
 
     return { success: true, enviadas: userIds.length }
   } catch (e) {

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · Fase 2 — INCIDENCIAS Y REWASH.
@@ -96,41 +96,45 @@ export async function getPanelIncidencias(
         : {}),
     }
 
-    const [filas, abiertas, delPeriodo, rewash, costoAgg, entregados] = await Promise.all([
-      prisma.incidencia.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: 300,
-        select: {
-          id: true,
-          createdAt: true,
-          tipo: true,
-          gravedad: true,
-          estado: true,
-          descripcion: true,
-          resolucion: true,
-          placa: true,
-          costo: true,
-          rewashColaId: true,
-          cliente: { select: { nombre: true } },
-          vehiculo: { select: { placa: true } },
-          reportadaPor: { select: { name: true, email: true } },
-          responsable: { select: { name: true, email: true } },
-        },
-      }),
-      // Abiertas de SIEMPRE, no solo del período: una incidencia de hace tres
-      // semanas sin resolver sigue siendo un problema abierto hoy.
-      prisma.incidencia.count({ where: { companyId, estado: { not: 'RESUELTA' } } }),
-      prisma.incidencia.count({ where: { companyId, createdAt: rango } }),
-      prisma.incidencia.count({ where: { companyId, createdAt: rango, tipo: 'REWASH' } }),
-      prisma.incidencia.aggregate({
-        where: { companyId, createdAt: rango },
-        _sum: { costo: true },
-      }),
-      prisma.colaVehiculo.count({
-        where: { companyId, estado: 'ENTREGADO', entregadoAt: rango },
-      }),
-    ])
+    const [filas, abiertas, delPeriodo, rewash, costoAgg, entregados] = await conEmpresa(
+      companyId,
+      (tx) =>
+        Promise.all([
+          tx.incidencia.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: 300,
+            select: {
+              id: true,
+              createdAt: true,
+              tipo: true,
+              gravedad: true,
+              estado: true,
+              descripcion: true,
+              resolucion: true,
+              placa: true,
+              costo: true,
+              rewashColaId: true,
+              cliente: { select: { nombre: true } },
+              vehiculo: { select: { placa: true } },
+              reportadaPor: { select: { name: true, email: true } },
+              responsable: { select: { name: true, email: true } },
+            },
+          }),
+          // Abiertas de SIEMPRE, no solo del período: una incidencia de hace tres
+          // semanas sin resolver sigue siendo un problema abierto hoy.
+          tx.incidencia.count({ where: { companyId, estado: { not: 'RESUELTA' } } }),
+          tx.incidencia.count({ where: { companyId, createdAt: rango } }),
+          tx.incidencia.count({ where: { companyId, createdAt: rango, tipo: 'REWASH' } }),
+          tx.incidencia.aggregate({
+            where: { companyId, createdAt: rango },
+            _sum: { costo: true },
+          }),
+          tx.colaVehiculo.count({
+            where: { companyId, estado: 'ENTREGADO', entregadoAt: rango },
+          }),
+        ])
+    )
 
     return {
       filas: filas.map((f) => ({
@@ -172,21 +176,23 @@ export async function getPanelIncidencias(
 export async function getEntregadosRecientes(companyId: string, dias = 3) {
   try {
     const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000)
-    return await prisma.colaVehiculo.findMany({
-      where: { companyId, estado: 'ENTREGADO', entregadoAt: { gte: desde } },
-      orderBy: { entregadoAt: 'desc' },
-      take: 60,
-      select: {
-        id: true,
-        placa: true,
-        descripcion: true,
-        entregadoAt: true,
-        clienteId: true,
-        vehiculoId: true,
-        vehiculo: { select: { placa: true, marca: true, modelo: true } },
-        cliente: { select: { nombre: true } },
-      },
-    })
+    return await conEmpresa(companyId, (tx) =>
+      tx.colaVehiculo.findMany({
+        where: { companyId, estado: 'ENTREGADO', entregadoAt: { gte: desde } },
+        orderBy: { entregadoAt: 'desc' },
+        take: 60,
+        select: {
+          id: true,
+          placa: true,
+          descripcion: true,
+          entregadoAt: true,
+          clienteId: true,
+          vehiculoId: true,
+          vehiculo: { select: { placa: true, marca: true, modelo: true } },
+          cliente: { select: { nombre: true } },
+        },
+      })
+    )
   } catch {
     return []
   }

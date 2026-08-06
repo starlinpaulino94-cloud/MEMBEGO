@@ -1,16 +1,18 @@
 import { cache } from 'react'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 export async function getCampanaActiva(companyId: string) {
-  return prisma.campanaInvitacion.findFirst({
-    where: {
-      companyId,
-      estado: 'ACTIVA',
-      fechaInicio: { lte: new Date() },
-      fechaFin: { gte: new Date() },
-    },
-    orderBy: { orden: 'asc' },
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.campanaInvitacion.findFirst({
+      where: {
+        companyId,
+        estado: 'ACTIVA',
+        fechaInicio: { lte: new Date() },
+        fechaFin: { gte: new Date() },
+      },
+      orderBy: { orden: 'asc' },
+    })
+  )
 }
 
 /**
@@ -25,32 +27,34 @@ export const getCampanaPorCodigoInvitacion = cache(async (code: string) => {
   const clean = decodeURIComponent(code).trim()
   if (!clean) return null
 
-  const cliente = await prisma.cliente
-    .findFirst({
-      where: {
-        OR: [{ codigoCorto: clean.toUpperCase() }, { codigoReferido: clean }],
-      },
-      select: { companyId: true, codigoCorto: true, codigoReferido: true },
-    })
-    .catch(() => null)
+  const cliente = await sinEmpresa('invitaciones: resolver cliente por código de invitación (códigos únicos globales)', (tx) =>
+    tx.cliente
+      .findFirst({
+        where: {
+          OR: [{ codigoCorto: clean.toUpperCase() }, { codigoReferido: clean }],
+        },
+        select: { companyId: true, codigoCorto: true, codigoReferido: true },
+      })
+  ).catch(() => null)
   if (!cliente) return null
 
-  const campana = await prisma.campanaInvitacion
-    .findFirst({
-      where: {
-        companyId: cliente.companyId,
-        estado: 'ACTIVA',
-        fechaInicio: { lte: new Date() },
-        fechaFin: { gte: new Date() },
-      },
-      orderBy: { orden: 'asc' },
-      include: {
-        company: {
-          select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+  const campana = await conEmpresa(cliente.companyId, (tx) =>
+    tx.campanaInvitacion
+      .findFirst({
+        where: {
+          companyId: cliente.companyId,
+          estado: 'ACTIVA',
+          fechaInicio: { lte: new Date() },
+          fechaFin: { gte: new Date() },
         },
-      },
-    })
-    .catch(() => null)
+        orderBy: { orden: 'asc' },
+        include: {
+          company: {
+            select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+          },
+        },
+      })
+  ).catch(() => null)
   if (!campana) return null
 
   return { campana, ref: cliente.codigoCorto ?? cliente.codigoReferido }
@@ -58,44 +62,52 @@ export const getCampanaPorCodigoInvitacion = cache(async (code: string) => {
 
 // React.cache por el mismo motivo que getCampanaPorCodigoInvitacion.
 export const getCampanaBySlug = cache(async (slug: string) => {
-  return prisma.campanaInvitacion.findUnique({
-    where: { slug },
-    include: {
-      company: {
-        select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+  return sinEmpresa('invitaciones: resolver campaña por slug único global', (tx) =>
+    tx.campanaInvitacion.findUnique({
+      where: { slug },
+      include: {
+        company: {
+          select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+        },
       },
-    },
-  })
+    })
+  )
 })
 
 export async function getProgresoCliente(campanaId: string, clienteId: string) {
-  return prisma.invitacionProgreso.findUnique({
-    where: { campanaId_clienteId: { campanaId, clienteId } },
-  })
+  return sinEmpresa('invitaciones: consultar progreso por campana+cliente (sin empresa; panel cliente)', (tx) =>
+    tx.invitacionProgreso.findUnique({
+      where: { campanaId_clienteId: { campanaId, clienteId } },
+    })
+  )
 }
 
 export async function getProgresoOCrear(campanaId: string, clienteId: string, companyId: string) {
-  return prisma.invitacionProgreso.upsert({
-    where: { campanaId_clienteId: { campanaId, clienteId } },
-    update: {},
-    create: { campanaId, clienteId, companyId },
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.invitacionProgreso.upsert({
+      where: { campanaId_clienteId: { campanaId, clienteId } },
+      update: {},
+      create: { campanaId, clienteId, companyId },
+    })
+  )
 }
 
 export async function getCampanasEmpresa(companyId: string) {
-  return prisma.campanaInvitacion.findMany({
-    where: { companyId },
-    orderBy: [{ estado: 'asc' }, { orden: 'asc' }, { createdAt: 'desc' }],
-    include: {
-      _count: {
-        select: {
-          progresos: true,
-          eventos: true,
-          referidos: true,
+  return conEmpresa(companyId, (tx) =>
+    tx.campanaInvitacion.findMany({
+      where: { companyId },
+      orderBy: [{ estado: 'asc' }, { orden: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        _count: {
+          select: {
+            progresos: true,
+            eventos: true,
+            referidos: true,
+          },
         },
       },
-    },
-  })
+    })
+  )
 }
 
 export interface CampanaDashboard {
@@ -118,35 +130,39 @@ export interface CampanaDashboard {
 }
 
 export async function getCampanaDashboard(campanaId: string): Promise<CampanaDashboard | null> {
-  const campana = await prisma.campanaInvitacion.findUnique({
-    where: { id: campanaId },
-    include: {
-      company: {
-        select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+  const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa desconocida)', (tx) =>
+    tx.campanaInvitacion.findUnique({
+      where: { id: campanaId },
+      include: {
+        company: {
+          select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+        },
       },
-    },
-  })
+    })
+  )
   if (!campana) return null
 
-  const [eventosTipo, progresoAgg, topRaw] = await Promise.all([
-    prisma.invitacionEvento.groupBy({
-      by: ['tipo'],
-      where: { campanaId },
-      _count: { id: true },
-    }),
-    prisma.invitacionProgreso.aggregate({
-      where: { campanaId },
-      _count: { _all: true },
-      _sum: { registrosCompletados: true },
-    }),
-    prisma.invitacionEvento.groupBy({
-      by: ['clienteId'],
-      where: { campanaId, tipo: 'COMPARTIDA', clienteId: { not: null } },
-      _count: { id: true },
-      orderBy: { _count: { id: 'desc' } },
-      take: 10,
-    }),
-  ])
+  const [eventosTipo, progresoAgg, topRaw] = await conEmpresa(campana.companyId, (tx) =>
+    Promise.all([
+      tx.invitacionEvento.groupBy({
+        by: ['tipo'],
+        where: { campanaId },
+        _count: { id: true },
+      }),
+      tx.invitacionProgreso.aggregate({
+        where: { campanaId },
+        _count: { _all: true },
+        _sum: { registrosCompletados: true },
+      }),
+      tx.invitacionEvento.groupBy({
+        by: ['clienteId'],
+        where: { campanaId, tipo: 'COMPARTIDA', clienteId: { not: null } },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 10,
+      }),
+    ])
+  )
 
   const countTipo = (t: string) =>
     eventosTipo.find((e) => e.tipo === t)?._count.id ?? 0
@@ -155,18 +171,22 @@ export async function getCampanaDashboard(campanaId: string): Promise<CampanaDas
     .map((t) => t.clienteId)
     .filter((id): id is string => id !== null)
 
-  const [nombres, metasCount, premiosCount, registrosPorCliente] = await Promise.all([
-    prisma.cliente.findMany({
-      where: { id: { in: topIds } },
-      select: { id: true, nombre: true },
-    }),
-    prisma.invitacionProgreso.count({ where: { campanaId, metaAlcanzada: true } }),
-    prisma.invitacionProgreso.count({ where: { campanaId, premioReclamado: true } }),
-    prisma.invitacionProgreso.findMany({
-      where: { campanaId, clienteId: { in: topIds } },
-      select: { clienteId: true, registrosCompletados: true },
-    }),
-  ])
+  const [nombres, metasCount, premiosCount, registrosPorCliente] = await conEmpresa(
+    campana.companyId,
+    (tx) =>
+      Promise.all([
+        tx.cliente.findMany({
+          where: { id: { in: topIds } },
+          select: { id: true, nombre: true },
+        }),
+        tx.invitacionProgreso.count({ where: { campanaId, metaAlcanzada: true } }),
+        tx.invitacionProgreso.count({ where: { campanaId, premioReclamado: true } }),
+        tx.invitacionProgreso.findMany({
+          where: { campanaId, clienteId: { in: topIds } },
+          select: { clienteId: true, registrosCompletados: true },
+        }),
+      ])
+  )
 
   const nombreDe = new Map(nombres.map((n) => [n.id, n.nombre]))
   const regDe = new Map(registrosPorCliente.map((r) => [r.clienteId, r.registrosCompletados]))
@@ -201,18 +221,20 @@ export async function getCampanaDashboard(campanaId: string): Promise<CampanaDas
  * sospechosos por el anti-fraude para no inflar la lista.
  */
 export async function getInvitadosPorCliente(clienteId: string, limit = 50) {
-  return prisma.referido.findMany({
-    where: { referenteClienteId: clienteId, sospechoso: false },
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: {
-      id: true,
-      estado: true,
-      recompensaAplicada: true,
-      createdAt: true,
-      referidoCliente: { select: { nombre: true } },
-    },
-  })
+  return sinEmpresa('invitaciones: listar referidos de un cliente (panel cliente, cruza sus empresas)', (tx) =>
+    tx.referido.findMany({
+      where: { referenteClienteId: clienteId, sospechoso: false },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        estado: true,
+        recompensaAplicada: true,
+        createdAt: true,
+        referidoCliente: { select: { nombre: true } },
+      },
+    })
+  )
 }
 
 export interface InvitaYGanaStats {
@@ -233,23 +255,25 @@ export async function getInvitaYGanaStats(
   companyId: string
 ): Promise<InvitaYGanaStats> {
   const [compartidas, registrados, recompensas, premiosCampana, activos] =
-    await Promise.all([
-      prisma.invitacionEvento.count({
-        where: { clienteId, companyId, tipo: 'COMPARTIDA' },
-      }),
-      prisma.referido.count({
-        where: { referenteClienteId: clienteId, sospechoso: false },
-      }),
-      prisma.referralRecompensa.count({
-        where: { referenteClienteId: clienteId, companyId },
-      }),
-      prisma.invitacionProgreso.count({
-        where: { clienteId, companyId, premioReclamado: true },
-      }),
-      prisma.productoCompra.count({
-        where: { clienteId, companyId, estado: 'ACTIVA' },
-      }),
-    ])
+    await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.invitacionEvento.count({
+          where: { clienteId, companyId, tipo: 'COMPARTIDA' },
+        }),
+        tx.referido.count({
+          where: { referenteClienteId: clienteId, sospechoso: false },
+        }),
+        tx.referralRecompensa.count({
+          where: { referenteClienteId: clienteId, companyId },
+        }),
+        tx.invitacionProgreso.count({
+          where: { clienteId, companyId, premioReclamado: true },
+        }),
+        tx.productoCompra.count({
+          where: { clienteId, companyId, estado: 'ACTIVA' },
+        }),
+      ])
+    )
 
   return {
     invitacionesEnviadas: compartidas,

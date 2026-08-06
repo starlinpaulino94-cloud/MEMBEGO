@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -29,25 +29,27 @@ export interface OfertaActionState {
 /** Notifica "tienes un regalo" a una lista de clientes (mejor esfuerzo). */
 async function notificarInvitados(clienteIds: string[], titulo: string, codigo: string) {
   if (clienteIds.length === 0) return
-  const clientes = await prisma.cliente.findMany({
-    where: { id: { in: clienteIds } },
-    select: { supabaseId: true },
-  })
-  const users = await prisma.user.findMany({
-    where: { supabaseId: { in: clientes.map((c) => c.supabaseId) } },
-    select: { id: true },
-  })
-  await prisma.notificacion
-    .createMany({
-      data: users.map((u) => ({
-        userId: u.id,
-        tipo: 'PROMOCION_NUEVA' as const,
-        titulo: '🎁 Tienes un regalo',
-        mensaje: `Fuiste seleccionado para "${titulo}". Ábrelo y reclámalo.`,
-        href: `/oferta/${codigo}`,
-      })),
+  await sinEmpresa('ofertas: notificaciones y users son globales (no tienen empresa)', async (tx) => {
+    const clientes = await tx.cliente.findMany({
+      where: { id: { in: clienteIds } },
+      select: { supabaseId: true },
     })
-    .catch((e) => console.error('[ofertas] notificar:', e))
+    const users = await tx.user.findMany({
+      where: { supabaseId: { in: clientes.map((c) => c.supabaseId) } },
+      select: { id: true },
+    })
+    await tx.notificacion
+      .createMany({
+        data: users.map((u) => ({
+          userId: u.id,
+          tipo: 'PROMOCION_NUEVA' as const,
+          titulo: '🎁 Tienes un regalo',
+          mensaje: `Fuiste seleccionado para "${titulo}". Ábrelo y reclámalo.`,
+          href: `/oferta/${codigo}`,
+        })),
+      })
+      .catch((e) => console.error('[ofertas] notificar:', e))
+  })
 }
 
 /** ADMIN · Crear oferta privada con su lista inicial de invitados. */
@@ -79,28 +81,32 @@ export async function crearOfertaPrivada(
     if (clienteIds.length === 0) return { error: 'Selecciona al menos un cliente.' }
 
     // Todos los invitados deben ser clientes de ESTA empresa.
-    const validos = await prisma.cliente.findMany({
-      where: { id: { in: clienteIds }, companyId },
-      select: { id: true },
-    })
+    const validos = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findMany({
+        where: { id: { in: clienteIds }, companyId },
+        select: { id: true },
+      })
+    )
     if (validos.length !== clienteIds.length) {
       return { error: 'Hay clientes seleccionados que no pertenecen a la empresa.' }
     }
 
-    const oferta = await prisma.ofertaPrivada.create({
-      data: {
-        companyId,
-        codigo: generarCodigo(10),
-        titulo,
-        descripcion,
-        usosPorPeriodo,
-        periodo,
-        vigenciaHasta,
-        creadaPorId: user.metadata.dbUserId ?? null,
-        invitados: { createMany: { data: clienteIds.map((clienteId) => ({ clienteId })) } },
-      },
-      select: { id: true, codigo: true },
-    })
+    const oferta = await conEmpresa(companyId, (tx) =>
+      tx.ofertaPrivada.create({
+        data: {
+          companyId,
+          codigo: generarCodigo(10),
+          titulo,
+          descripcion,
+          usosPorPeriodo,
+          periodo,
+          vigenciaHasta,
+          creadaPorId: user.metadata.dbUserId ?? null,
+          invitados: { createMany: { data: clienteIds.map((clienteId) => ({ clienteId })) } },
+        },
+        select: { id: true, codigo: true },
+      })
+    )
 
     await notificarInvitados(clienteIds, titulo, oferta.codigo)
 
@@ -126,16 +132,20 @@ export async function cambiarEstadoOferta(
     if (!['ACTIVA', 'PAUSADA', 'FINALIZADA'].includes(estado)) {
       return { error: 'Estado no válido.' }
     }
-    const oferta = await prisma.ofertaPrivada.findUnique({ where: { id: ofertaId } })
+    const oferta = await sinEmpresa('ofertas: buscar oferta por id (empresa se valida contra el usuario)', (tx) =>
+      tx.ofertaPrivada.findUnique({ where: { id: ofertaId } })
+    )
     if (!oferta) return { error: 'Oferta no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && oferta.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
 
-    await prisma.ofertaPrivada.update({
-      where: { id: oferta.id },
-      data: { estado: estado as 'ACTIVA' | 'PAUSADA' | 'FINALIZADA' },
-    })
+    await conEmpresa(oferta.companyId, (tx) =>
+      tx.ofertaPrivada.update({
+        where: { id: oferta.id },
+        data: { estado: estado as 'ACTIVA' | 'PAUSADA' | 'FINALIZADA' },
+      })
+    )
     revalidatePath('/admin/ofertas/vip')
     revalidatePath(`/admin/ofertas/${oferta.id}`)
     return { success: true }
@@ -158,28 +168,36 @@ export async function gestionarInvitado(
     const clienteId = String(formData.get('clienteId') ?? '')
     const accion = String(formData.get('accion') ?? '')
 
-    const oferta = await prisma.ofertaPrivada.findUnique({ where: { id: ofertaId } })
+    const oferta = await sinEmpresa('ofertas: buscar oferta por id (empresa se valida contra el usuario)', (tx) =>
+      tx.ofertaPrivada.findUnique({ where: { id: ofertaId } })
+    )
     if (!oferta) return { error: 'Oferta no encontrada.' }
     if (user.metadata.role !== 'SUPERADMIN' && oferta.companyId !== user.metadata.companyId) {
       return { error: 'No autorizado.' }
     }
 
     if (accion === 'agregar') {
-      const cliente = await prisma.cliente.findFirst({
-        where: { id: clienteId, companyId: oferta.companyId },
-        select: { id: true },
-      })
+      const cliente = await conEmpresa(oferta.companyId, (tx) =>
+        tx.cliente.findFirst({
+          where: { id: clienteId, companyId: oferta.companyId },
+          select: { id: true },
+        })
+      )
       if (!cliente) return { error: 'Cliente no válido.' }
-      await prisma.ofertaInvitado.upsert({
-        where: { ofertaId_clienteId: { ofertaId, clienteId } },
-        create: { ofertaId, clienteId },
-        update: {},
-      })
+      await conEmpresa(oferta.companyId, (tx) =>
+        tx.ofertaInvitado.upsert({
+          where: { ofertaId_clienteId: { ofertaId, clienteId } },
+          create: { ofertaId, clienteId },
+          update: {},
+        })
+      )
       await notificarInvitados([clienteId], oferta.titulo, oferta.codigo)
     } else if (accion === 'quitar') {
       // Al quitarlo pierde el acceso (el historial de usos se va con la
       // invitación: cascade). Para conservar historial, mejor FINALIZAR.
-      await prisma.ofertaInvitado.deleteMany({ where: { ofertaId, clienteId } })
+      await conEmpresa(oferta.companyId, (tx) =>
+        tx.ofertaInvitado.deleteMany({ where: { ofertaId, clienteId } })
+      )
     } else {
       return { error: 'Acción no válida.' }
     }
@@ -202,13 +220,15 @@ export async function registrarUsoOferta(
     if (!user) return { error: 'No autorizado.' }
 
     const invitadoId = String(formData.get('invitadoId') ?? '')
-    const invitado = await prisma.ofertaInvitado.findUnique({
-      where: { id: invitadoId },
-      include: {
-        oferta: { include: { company: { select: { zonaHoraria: true } } } },
-        cliente: { select: { nombre: true } },
-      },
-    })
+    const invitado = await sinEmpresa('ofertas: buscar invitación por id (empresa se valida contra el usuario)', (tx) =>
+      tx.ofertaInvitado.findUnique({
+        where: { id: invitadoId },
+        include: {
+          oferta: { include: { company: { select: { zonaHoraria: true } } } },
+          cliente: { select: { nombre: true } },
+        },
+      })
+    )
     if (!invitado) return { error: 'Invitación no encontrada.' }
     const { oferta } = invitado
     if (user.metadata.role !== 'SUPERADMIN' && oferta.companyId !== user.metadata.companyId) {
@@ -220,7 +240,7 @@ export async function registrarUsoOferta(
     }
 
     // Cupo del período dentro de una transacción (evita el doble canje).
-    const resultado = await prisma.$transaction(async (tx) => {
+    const resultado = await conEmpresa(oferta.companyId, async (tx) => {
       const usados = await tx.ofertaUso.count({
         where: {
           invitadoId,
@@ -277,31 +297,39 @@ export async function reclamarOferta(
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { error: 'Inicia sesión con tu cuenta de cliente.' }
     }
-    if (!(await formSubmitLimiter(`oferta:${user.metadata.clienteId}`))) {
+    // A const: los closures de conEmpresa pierden el estrechamiento del guard.
+    const clienteId = user.metadata.clienteId
+    if (!(await formSubmitLimiter(`oferta:${clienteId}`))) {
       return { error: 'Demasiados intentos. Espera un momento.' }
     }
 
     const codigo = String(formData.get('codigo') ?? '').trim()
-    const oferta = await prisma.ofertaPrivada.findUnique({ where: { codigo } })
+    const oferta = await sinEmpresa('ofertas: buscar oferta por código único global', (tx) =>
+      tx.ofertaPrivada.findUnique({ where: { codigo } })
+    )
     if (!oferta) return { error: 'Esta oferta ya no existe.' }
     if (!ofertaVigente(oferta)) return { error: 'Esta oferta ya no está disponible.' }
 
     // La barrera real: SOLO invitados. Poseer el link no da acceso.
-    const actualizado = await prisma.ofertaInvitado.updateMany({
-      where: {
-        ofertaId: oferta.id,
-        clienteId: user.metadata.clienteId,
-        reclamadaAt: null,
-      },
-      data: { reclamadaAt: new Date() },
-    })
-    if (actualizado.count === 0) {
-      const existe = await prisma.ofertaInvitado.findUnique({
+    const actualizado = await conEmpresa(oferta.companyId, (tx) =>
+      tx.ofertaInvitado.updateMany({
         where: {
-          ofertaId_clienteId: { ofertaId: oferta.id, clienteId: user.metadata.clienteId },
+          ofertaId: oferta.id,
+          clienteId,
+          reclamadaAt: null,
         },
-        select: { reclamadaAt: true },
+        data: { reclamadaAt: new Date() },
       })
+    )
+    if (actualizado.count === 0) {
+      const existe = await conEmpresa(oferta.companyId, (tx) =>
+        tx.ofertaInvitado.findUnique({
+          where: {
+            ofertaId_clienteId: { ofertaId: oferta.id, clienteId },
+          },
+          select: { reclamadaAt: true },
+        })
+      )
       if (existe?.reclamadaAt) return { success: true, mensaje: 'Ya habías reclamado este regalo.' }
       return { error: 'Tu cuenta no aplica para esta promoción.' }
     }

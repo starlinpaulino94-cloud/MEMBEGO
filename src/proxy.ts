@@ -4,6 +4,7 @@ import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/env'
 import { sessionCookieDomain } from '@/lib/site'
 import { ROLE_HOME, ROUTE_PROTECTION, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
 import { adminSectionForPath, canAccessAdminSection } from '@/lib/auth/permissions'
+import { verifyLocalSession } from '@/lib/auth/jwt'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
 import {
   COOKIE_MANTENIMIENTO,
@@ -168,24 +169,39 @@ export async function proxy(request: NextRequest) {
 
     // Rendimiento (auditoría Enterprise): el middleware corre en CADA request
     // y una validación de red contra Supabase aquí añadía 100–300 ms a cada
-    // click de navegación. Camino rápido: getSession() decodifica la cookie
-    // SIN red; si el token sigue fresco (>5 min para expirar) usamos ese user
+    // click de navegación. Camino rápido: verifyLocalSession() verifica la
+    // FIRMA del access token de la cookie localmente (jose + SUPABASE_JWT_SECRET),
+    // sin red. Si el token sigue fresco (>5 min para expirar) usamos ese user
     // solo para las REDIRECCIONES de UX. La AUTORIZACIÓN real no vive aquí:
     // todas las páginas y server actions validan con getUser() contra el
-    // servidor (fail-closed, verificado en docs/MATURITY.md) — una cookie
-    // falsificada pasaría el redirect pero muere en la capa de datos.
-    // Cerca de expirar (o sin sesión legible) sí llamamos getUser(): valida
+    // servidor (fail-closed, verificado en docs/MATURITY.md).
+    // Cerca de expirar (o sin sesión verificable) sí llamamos getUser(): valida
     // en el servidor Y refresca/rota el token en las cookies — ese refresco
     // solo puede persistirse desde el middleware.
+    // Sin SUPABASE_JWT_SECRET configurado, verifyLocalSession() devuelve null y
+    // se cae a getSession() (decodifica sin firma) conservando el
+    // comportamiento actual, solo para UX — nunca para autorización.
     const REFRESH_MARGIN_S = 5 * 60
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
+    const localSession = await verifyLocalSession(request.cookies.getAll())
 
-    let user = session?.user ?? null
-    const expiraEn = session?.expires_at ?? 0
+    let user: { id: string; email?: string; app_metadata?: unknown } | null = null
+    let expiraEn = 0
+    if (localSession) {
+      user = {
+        id: localSession.user.id,
+        email: localSession.user.email,
+        app_metadata: localSession.user.appMetadata,
+      }
+      expiraEn = localSession.expiresAt
+    } else {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      user = session?.user ?? null
+      expiraEn = session?.expires_at ?? 0
+    }
     const tokenFresco = expiraEn * 1000 > Date.now() + REFRESH_MARGIN_S * 1000
-    if (!session || !tokenFresco) {
+    if (!user || !tokenFresco) {
       const {
         data: { user: validado },
       } = await supabase.auth.getUser()

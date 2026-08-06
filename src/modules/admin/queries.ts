@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import type { SessionUser } from '@/types'
 
 /** companyId filter: superadmin gets undefined (all), admin gets their company. */
@@ -8,35 +8,46 @@ export function companyFilter(user: SessionUser): string | undefined {
   return user.metadata.companyId ?? '__none__'
 }
 
+/** Query de una empresa, o de todas si `companyId` es undefined (superadmin). */
+function scopeEmpresa<T>(
+  companyId: string | undefined,
+  fn: (tx: Tx) => Promise<T>
+): Promise<T> {
+  if (companyId) return conEmpresa(companyId, fn)
+  return sinEmpresa('reportes del superadmin: cruza todas las empresas', fn)
+}
+
 export async function adminMetrics(user: SessionUser) {
   const companyId = companyFilter(user)
-  const clienteWhere = companyId ? { companyId } : {}
-  // Filtro directo por memberships.companyId (indexado); antes se filtraba
-  // vía cliente.companyId, forzando un JOIN innecesario.
-  const membershipWhere = companyId ? { companyId } : {}
-  const visitWhere = companyId ? { cliente: { companyId } } : {}
+  return scopeEmpresa(companyId, async (tx) => {
+    const clienteWhere = companyId ? { companyId } : {}
+    // Filtro directo por memberships.companyId (indexado); antes se filtraba
+    // vía cliente.companyId, forzando un JOIN innecesario.
+    const membershipWhere = companyId ? { companyId } : {}
+    const visitWhere = companyId ? { cliente: { companyId } } : {}
 
-  const safeCount = (p: Promise<number>) => p.catch(() => 0)
+    const safeCount = (p: Promise<number>) => p.catch(() => 0)
 
-  const [totalClientes, activas, pendientes, visitasHoy] = await Promise.all([
-    safeCount(prisma.cliente.count({ where: clienteWhere })),
-    safeCount(prisma.membership.count({
-      where: { ...membershipWhere, estado: 'ACTIVA' },
-    })),
-    safeCount(prisma.membership.count({
-      where: { ...membershipWhere, estado: 'PENDIENTE' },
-    })),
-    safeCount(prisma.visit.count({
-      where: {
-        ...visitWhere,
-        fechaVisita: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0)),
+    const [totalClientes, activas, pendientes, visitasHoy] = await Promise.all([
+      safeCount(tx.cliente.count({ where: clienteWhere })),
+      safeCount(tx.membership.count({
+        where: { ...membershipWhere, estado: 'ACTIVA' },
+      })),
+      safeCount(tx.membership.count({
+        where: { ...membershipWhere, estado: 'PENDIENTE' },
+      })),
+      safeCount(tx.visit.count({
+        where: {
+          ...visitWhere,
+          fechaVisita: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          },
         },
-      },
-    })),
-  ])
+      })),
+    ])
 
-  return { totalClientes, activas, pendientes, visitasHoy }
+    return { totalClientes, activas, pendientes, visitasHoy }
+  })
 }
 
 export interface ReportePorPlan {
@@ -66,12 +77,13 @@ export interface ReportesData {
 }
 
 async function ingresosDelMes(
+  tx: Tx,
   where: Prisma.MembershipWhereInput,
   monthStart: Date,
   monthEnd: Date
 ): Promise<number> {
   try {
-    const agg = await prisma.membership.aggregate({
+    const agg = await tx.membership.aggregate({
       _sum: { montoPagado: true },
       where: {
         ...where,
@@ -86,18 +98,19 @@ async function ingresosDelMes(
 }
 
 async function activasPorPlanQuery(
+  tx: Tx,
   where: Prisma.MembershipWhereInput
 ): Promise<ReportePorPlan[]> {
   try {
     // Conteo agregado en la BD. Antes se cargaban TODAS las membresías
     // activas (con include del plan) solo para contarlas en memoria.
-    const grupos = await prisma.membership.groupBy({
+    const grupos = await tx.membership.groupBy({
       by: ['planId'],
       where: { ...where, estado: 'ACTIVA' },
       _count: { _all: true },
     })
     if (grupos.length === 0) return []
-    const planes = await prisma.plan.findMany({
+    const planes = await tx.plan.findMany({
       where: { id: { in: grupos.map((g) => g.planId) } },
       select: { id: true, nombre: true },
     })
@@ -116,10 +129,11 @@ async function activasPorPlanQuery(
 }
 
 async function clientesFrecuentesQuery(
+  tx: Tx,
   visitWhere: Prisma.VisitWhereInput
 ): Promise<ClienteFrecuente[]> {
   try {
-    const visitasPorCliente = await prisma.visit.groupBy({
+    const visitasPorCliente = await tx.visit.groupBy({
       by: ['clienteId'],
       where: visitWhere,
       _count: { _all: true },
@@ -127,7 +141,7 @@ async function clientesFrecuentesQuery(
       take: 5,
     })
     if (visitasPorCliente.length === 0) return []
-    const clientes = await prisma.cliente.findMany({
+    const clientes = await tx.cliente.findMany({
       where: { id: { in: visitasPorCliente.map((v) => v.clienteId) } },
       select: { id: true, nombre: true },
     })
@@ -143,12 +157,13 @@ async function clientesFrecuentesQuery(
 }
 
 async function membresiasPorVencerQuery(
+  tx: Tx,
   where: Prisma.MembershipWhereInput,
   now: Date,
   in7Days: Date
 ): Promise<MembresiaPorVencer[]> {
   try {
-    const porVencer = await prisma.membership.findMany({
+    const porVencer = await tx.membership.findMany({
       where: {
         ...where,
         estado: 'ACTIVA',
@@ -187,22 +202,24 @@ export async function getReportesAdmin(
   const in7Days = new Date(now)
   in7Days.setDate(in7Days.getDate() + 7)
 
-  // Bloques independientes en paralelo (antes ~6 round-trips secuenciales),
-  // cada uno con su fallback para no tumbar el reporte completo.
-  const [ingresosMes, activasPorPlan, lavadosMes, clientesFrecuentes, membresiasPorVencer] =
-    await Promise.all([
-      ingresosDelMes(membershipWhere, monthStart, monthEnd),
-      activasPorPlanQuery(membershipWhere),
-      prisma.visit
-        .count({
-          where: { ...visitWhere, fechaVisita: { gte: monthStart, lt: monthEnd } },
-        })
-        .catch(() => 0),
-      clientesFrecuentesQuery(visitWhere),
-      membresiasPorVencerQuery(membershipWhere, now, in7Days),
-    ])
+  return scopeEmpresa(companyId, async (tx) => {
+    // Bloques independientes en paralelo (antes ~6 round-trips secuenciales),
+    // cada uno con su fallback para no tumbar el reporte completo.
+    const [ingresosMes, activasPorPlan, lavadosMes, clientesFrecuentes, membresiasPorVencer] =
+      await Promise.all([
+        ingresosDelMes(tx, membershipWhere, monthStart, monthEnd),
+        activasPorPlanQuery(tx, membershipWhere),
+        tx.visit
+          .count({
+            where: { ...visitWhere, fechaVisita: { gte: monthStart, lt: monthEnd } },
+          })
+          .catch(() => 0),
+        clientesFrecuentesQuery(tx, visitWhere),
+        membresiasPorVencerQuery(tx, membershipWhere, now, in7Days),
+      ])
 
-  return { ingresosMes, activasPorPlan, lavadosMes, clientesFrecuentes, membresiasPorVencer }
+    return { ingresosMes, activasPorPlan, lavadosMes, clientesFrecuentes, membresiasPorVencer }
+  })
 }
 
 export interface ReportesGlobales {
@@ -228,62 +245,74 @@ export async function getReportesGlobales(): Promise<ReportesGlobales> {
   const [total, companies, ingresosPorEmpresa, activasPorEmpresaPlan, lavadosPorEmpresa, porVencerGlobal] =
     await Promise.all([
       getReportesAdmin(undefined),
-      prisma.company.findMany({
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      }),
-      prisma.membership
-        .groupBy({
-          by: ['companyId'],
-          _sum: { montoPagado: true },
-          where: {
-            pagoConfirmado: true,
-            updatedAt: { gte: monthStart, lt: monthEnd },
-          },
+      sinEmpresa('reportes globales: listar todas las empresas', (tx) =>
+        tx.company.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
         })
-        .catch(() => []),
-      prisma.membership
-        .groupBy({
-          by: ['companyId', 'planId'],
-          _count: { _all: true },
-          where: { estado: 'ACTIVA' },
-        })
-        .catch(() => []),
-      prisma.$queryRaw<{ companyId: string; total: number }[]>`
-        SELECT c."companyId", COUNT(*)::int AS total
-        FROM "visits" v
-        JOIN "clientes" c ON c."id" = v."clienteId"
-        WHERE v."fechaVisita" >= ${monthStart} AND v."fechaVisita" < ${monthEnd}
-        GROUP BY c."companyId"
-      `.catch(() => [] as { companyId: string; total: number }[]),
-      prisma.membership
-        .findMany({
-          where: {
-            estado: 'ACTIVA',
-            fechaVencimiento: { gte: now, lte: in7Days },
-          },
-          select: {
-            id: true,
-            companyId: true,
-            fechaVencimiento: true,
-            plan: { select: { nombre: true } },
-            cliente: { select: { nombre: true } },
-          },
-          orderBy: { fechaVencimiento: 'asc' },
-          take: 500,
-        })
-        .catch(() => []),
+      ),
+      sinEmpresa('reportes globales: ingresos por empresa', (tx) =>
+        tx.membership
+          .groupBy({
+            by: ['companyId'],
+            _sum: { montoPagado: true },
+            where: {
+              pagoConfirmado: true,
+              updatedAt: { gte: monthStart, lt: monthEnd },
+            },
+          })
+          .catch(() => [])
+      ),
+      sinEmpresa('reportes globales: activas por empresa y plan', (tx) =>
+        tx.membership
+          .groupBy({
+            by: ['companyId', 'planId'],
+            _count: { _all: true },
+            where: { estado: 'ACTIVA' },
+          })
+          .catch(() => [])
+      ),
+      sinEmpresa('reportes globales: lavados por empresa', (tx) =>
+        tx.$queryRaw<{ companyId: string; total: number }[]>`
+          SELECT c."companyId", COUNT(*)::int AS total
+          FROM "visits" v
+          JOIN "clientes" c ON c."id" = v."clienteId"
+          WHERE v."fechaVisita" >= ${monthStart} AND v."fechaVisita" < ${monthEnd}
+          GROUP BY c."companyId"
+        `.catch(() => [] as { companyId: string; total: number }[])
+      ),
+      sinEmpresa('reportes globales: membresías por vencer en todas las empresas', (tx) =>
+        tx.membership
+          .findMany({
+            where: {
+              estado: 'ACTIVA',
+              fechaVencimiento: { gte: now, lte: in7Days },
+            },
+            select: {
+              id: true,
+              companyId: true,
+              fechaVencimiento: true,
+              plan: { select: { nombre: true } },
+              cliente: { select: { nombre: true } },
+            },
+            orderBy: { fechaVencimiento: 'asc' },
+            take: 500,
+          })
+          .catch(() => [])
+      ),
     ])
 
   // Nombres de todos los planes referenciados, en una sola pasada.
   const planIds = [...new Set(activasPorEmpresaPlan.map((g) => g.planId))]
   const planes = planIds.length
-    ? await prisma.plan
-        .findMany({
-          where: { id: { in: planIds } },
-          select: { id: true, nombre: true },
-        })
-        .catch(() => [])
+    ? await sinEmpresa('reportes globales: nombres de planes referenciados', (tx) =>
+        tx.plan
+          .findMany({
+            where: { id: { in: planIds } },
+            select: { id: true, nombre: true },
+          })
+          .catch(() => [])
+      )
     : []
   const planNombre = new Map(planes.map((p) => [p.id, p.nombre]))
 

@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * Engagement Engine · Fase 4 — Urgencia y prueba social (SOLO datos reales).
@@ -51,25 +51,27 @@ export async function getPruebaSocial(companyId: string): Promise<PruebaSocial |
   try {
     const hace7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const [totalMiembros, registrosSemana, beneficiosReclamados, ultimasCompras, ultimosClientes] =
-      await Promise.all([
-        prisma.cliente.count({ where: { companyId } }),
-        prisma.cliente.count({ where: { companyId, createdAt: { gte: hace7 } } }),
-        prisma.productoCompra.count({
-          where: { companyId, estado: { in: ['ACTIVA', 'CONSUMIDA'] } },
-        }),
-        prisma.productoCompra.findMany({
-          where: { companyId, estado: { in: ['ACTIVA', 'CONSUMIDA'] } },
-          orderBy: { createdAt: 'desc' },
-          take: 6,
-          select: { createdAt: true, cliente: { select: { nombre: true } } },
-        }),
-        prisma.cliente.findMany({
-          where: { companyId },
-          orderBy: { createdAt: 'desc' },
-          take: 6,
-          select: { createdAt: true, nombre: true },
-        }),
-      ])
+      await conEmpresa(companyId, (tx) =>
+        Promise.all([
+          tx.cliente.count({ where: { companyId } }),
+          tx.cliente.count({ where: { companyId, createdAt: { gte: hace7 } } }),
+          tx.productoCompra.count({
+            where: { companyId, estado: { in: ['ACTIVA', 'CONSUMIDA'] } },
+          }),
+          tx.productoCompra.findMany({
+            where: { companyId, estado: { in: ['ACTIVA', 'CONSUMIDA'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 6,
+            select: { createdAt: true, cliente: { select: { nombre: true } } },
+          }),
+          tx.cliente.findMany({
+            where: { companyId },
+            orderBy: { createdAt: 'desc' },
+            take: 6,
+            select: { createdAt: true, nombre: true },
+          }),
+        ])
+      )
 
     const recientes = [
       ...ultimasCompras.map((c) => ({

@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { cookies } from 'next/headers'
 
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
@@ -23,14 +23,16 @@ export async function recordPromotionView(promotionId: string): Promise<boolean>
     }
 
     // Record the view
-    await prisma.promocion.update({
-      where: { id: promotionId },
-      data: {
-        viewCount: {
-          increment: 1,
+    await sinEmpresa('marketplace: contador público de vistas de promoción', (tx) =>
+      tx.promocion.update({
+        where: { id: promotionId },
+        data: {
+          viewCount: {
+            increment: 1,
+          },
         },
-      },
-    })
+      })
+    )
 
     // Update rate limit cookie (will be set by response)
     ;(await cookies()).set(viewsKey, String(viewCount + 1), {
@@ -62,14 +64,16 @@ export async function recordPromotionShare(promotionId: string): Promise<boolean
     }
 
     // Record the share
-    await prisma.promocion.update({
-      where: { id: promotionId },
-      data: {
-        shareCount: {
-          increment: 1,
+    await sinEmpresa('marketplace: contador público de compartidos de promoción', (tx) =>
+      tx.promocion.update({
+        where: { id: promotionId },
+        data: {
+          shareCount: {
+            increment: 1,
+          },
         },
-      },
-    })
+      })
+    )
 
     // Update rate limit cookie
     ;(await cookies()).set(sharesKey, String(shareCount + 1), {

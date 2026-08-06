@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * App Car Wash · Fase 3 — PROVEEDORES Y ÓRDENES DE COMPRA.
@@ -87,24 +87,26 @@ export interface ProveedorResumen {
 /** Proveedores con cuántos productos surten y cuántas órdenes tienen en vuelo. */
 export async function getProveedores(companyId: string): Promise<ProveedorResumen[] | null> {
   try {
-    const provs = await prisma.proveedor.findMany({
-      where: { companyId },
-      orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
-      select: {
-        id: true,
-        nombre: true,
-        contacto: true,
-        telefono: true,
-        diasCredito: true,
-        activo: true,
-        _count: {
-          select: {
-            productos: true,
-            ordenes: { where: { estado: { in: ['BORRADOR', 'PEDIDA'] } } },
+    const provs = await conEmpresa(companyId, (tx) =>
+      tx.proveedor.findMany({
+        where: { companyId },
+        orderBy: [{ activo: 'desc' }, { nombre: 'asc' }],
+        select: {
+          id: true,
+          nombre: true,
+          contacto: true,
+          telefono: true,
+          diasCredito: true,
+          activo: true,
+          _count: {
+            select: {
+              productos: true,
+              ordenes: { where: { estado: { in: ['BORRADOR', 'PEDIDA'] } } },
+            },
           },
         },
-      },
-    })
+      })
+    )
     return provs.map((p) => ({
       id: p.id,
       nombre: p.nombre,
@@ -155,46 +157,50 @@ export async function getPanelCompras(
   hasta: Date
 ): Promise<PanelCompras | null> {
   try {
-    const [ordenes, proveedores, productos, gastoAgg] = await Promise.all([
-      prisma.ordenCompra.findMany({
-        where: { companyId },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        select: {
-          id: true,
-          numero: true,
-          estado: true,
-          total: true,
-          createdAt: true,
-          pedidaAt: true,
-          recibidaAt: true,
-          proveedor: { select: { nombre: true } },
-          lineas: { select: { cantidad: true, costoUnitario: true } },
-        },
-      }),
-      prisma.proveedor.findMany({
-        where: { companyId, activo: true },
-        orderBy: { nombre: 'asc' },
-        select: { id: true, nombre: true },
-      }),
-      prisma.productoInventario.findMany({
-        where: { companyId, activo: true },
-        orderBy: { nombre: 'asc' },
-        select: { id: true, nombre: true, unidad: true, costo: true, stock: true, stockMinimo: true },
-      }),
-      prisma.ordenCompra.aggregate({
-        where: { companyId, estado: 'RECIBIDA', recibidaAt: { gte: desde, lte: hasta } },
-        _sum: { total: true },
-      }),
-    ])
+    const [ordenes, proveedores, productos, gastoAgg] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.ordenCompra.findMany({
+          where: { companyId },
+          orderBy: { createdAt: 'desc' },
+          take: 200,
+          select: {
+            id: true,
+            numero: true,
+            estado: true,
+            total: true,
+            createdAt: true,
+            pedidaAt: true,
+            recibidaAt: true,
+            proveedor: { select: { nombre: true } },
+            lineas: { select: { cantidad: true, costoUnitario: true } },
+          },
+        }),
+        tx.proveedor.findMany({
+          where: { companyId, activo: true },
+          orderBy: { nombre: 'asc' },
+          select: { id: true, nombre: true },
+        }),
+        tx.productoInventario.findMany({
+          where: { companyId, activo: true },
+          orderBy: { nombre: 'asc' },
+          select: { id: true, nombre: true, unidad: true, costo: true, stock: true, stockMinimo: true },
+        }),
+        tx.ordenCompra.aggregate({
+          where: { companyId, estado: 'RECIBIDA', recibidaAt: { gte: desde, lte: hasta } },
+          _sum: { total: true },
+        }),
+      ])
+    )
 
     // Productos que ya están en alguna orden viva: no hace falta volver a pedirlos.
     const enOrdenAbierta = new Set(
       (
-        await prisma.ordenCompraLinea.findMany({
-          where: { orden: { companyId, estado: { in: ['BORRADOR', 'PEDIDA'] } } },
-          select: { productoId: true },
-        })
+        await conEmpresa(companyId, (tx) =>
+          tx.ordenCompraLinea.findMany({
+            where: { orden: { companyId, estado: { in: ['BORRADOR', 'PEDIDA'] } } },
+            select: { productoId: true },
+          })
+        )
       ).map((l) => l.productoId)
     )
 
@@ -276,16 +282,18 @@ export async function getOrdenDetalle(
   ordenId: string
 ): Promise<OrdenDetalle | null> {
   try {
-    const o = await prisma.ordenCompra.findFirst({
-      where: { id: ordenId, companyId },
-      include: {
-        proveedor: { select: { id: true, nombre: true, telefono: true } },
-        lineas: {
-          orderBy: { createdAt: 'asc' },
-          include: { producto: { select: { unidad: true } } },
+    const o = await conEmpresa(companyId, (tx) =>
+      tx.ordenCompra.findFirst({
+        where: { id: ordenId, companyId },
+        include: {
+          proveedor: { select: { id: true, nombre: true, telefono: true } },
+          lineas: {
+            orderBy: { createdAt: 'asc' },
+            include: { producto: { select: { unidad: true } } },
+          },
         },
-      },
-    })
+      })
+    )
     if (!o) return null
 
     const lineas = o.lineas.map((l) => ({

@@ -2,15 +2,15 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
-import { sendEmail } from '@/lib/email'
+import { encolarEmail } from '@/modules/jobs/emisiones'
 import { getAppUrl, SITE_NAME } from '@/lib/site'
 import { TERMS_VERSION } from '@/lib/legal'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { FULL_ADMIN_ROLES, INVITABLE_ROLES, type AppRole } from '@/types'
 import { anotarFallo } from '@/lib/prisma-errors'
 
@@ -33,12 +33,14 @@ async function requireOwner() {
 
 /** Invitaciones PENDIENTES de una empresa (para el panel de equipo). */
 export async function listInvitacionesPendientes(companyId: string) {
-  return prisma.invitacion.findMany({
-    where: { companyId, estado: 'PENDIENTE' },
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    select: { id: true, email: true, rol: true, expiraEn: true },
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.invitacion.findMany({
+      where: { companyId, estado: 'PENDIENTE' },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: { id: true, email: true, rol: true, expiraEn: true },
+    })
+  )
 }
 
 export async function invitarMiembro(
@@ -58,7 +60,9 @@ export async function invitarMiembro(
   if (!INVITABLE_ROLES.includes(rol)) return { error: 'Rol no válido.' }
 
   // Ya es miembro de esta empresa.
-  const existingUser = await prisma.user.findUnique({ where: { email } })
+  const existingUser = await sinEmpresa('uniqueness de email al invitar', (tx) =>
+    tx.user.findUnique({ where: { email } })
+  )
   if (existingUser?.companyId === companyId) {
     return { error: 'Esa persona ya pertenece a tu equipo.' }
   }
@@ -69,36 +73,44 @@ export async function invitarMiembro(
   }
 
   // Reutiliza una invitación pendiente para el mismo correo (reenvío).
-  const pendiente = await prisma.invitacion.findFirst({
-    where: { companyId, email, estado: 'PENDIENTE' },
-  })
+  const pendiente = await conEmpresa(companyId, (tx) =>
+    tx.invitacion.findFirst({
+      where: { companyId, email, estado: 'PENDIENTE' },
+    })
+  )
 
   const expiraEn = new Date(Date.now() + DIAS_VALIDEZ * 24 * 60 * 60 * 1000)
 
   const invitacion = pendiente
-    ? await prisma.invitacion.update({
-        where: { id: pendiente.id },
-        data: { rol, expiraEn },
-      })
-    : await prisma.invitacion.create({
-        data: {
-          companyId,
-          email,
-          rol,
-          expiraEn,
-          invitadoPor: owner.metadata.dbUserId || null,
-        },
-      })
+    ? await conEmpresa(companyId, (tx) =>
+        tx.invitacion.update({
+          where: { id: pendiente.id },
+          data: { rol, expiraEn },
+        })
+      )
+    : await conEmpresa(companyId, (tx) =>
+        tx.invitacion.create({
+          data: {
+            companyId,
+            email,
+            rol,
+            expiraEn,
+            invitadoPor: owner.metadata.dbUserId || null,
+          },
+        })
+      )
 
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { name: true },
-  })
+  const company = await conEmpresa(companyId, (tx) =>
+    tx.company.findUnique({
+      where: { id: companyId },
+      select: { name: true },
+    })
+  )
 
   const nombreEmpresa = company?.name ?? 'Una empresa'
   const nombreSeguro = escapeHtml(nombreEmpresa)
   const url = `${getAppUrl()}/invitacion/${invitacion.token}`
-  await sendEmail({
+  await encolarEmail({
     to: email,
     subject: `Te invitaron a ${nombreEmpresa}`,
     html: `
@@ -123,14 +135,18 @@ export async function cancelarInvitacion(id: string): Promise<InvitacionState> {
   if (!owner || !owner.metadata.companyId) {
     return { error: 'No autorizado.' }
   }
-  const inv = await prisma.invitacion.findUnique({ where: { id } })
+  const inv = await sinEmpresa('invitación por id sin conocer la empresa', (tx) =>
+    tx.invitacion.findUnique({ where: { id } })
+  )
   if (!inv || inv.companyId !== owner.metadata.companyId) {
     return { error: 'Invitación no encontrada.' }
   }
-  await prisma.invitacion.update({
-    where: { id },
-    data: { estado: 'CANCELADA' },
-  })
+  await conEmpresa(inv.companyId, (tx) =>
+    tx.invitacion.update({
+      where: { id },
+      data: { estado: 'CANCELADA' },
+    })
+  )
   revalidatePath('/admin/empleados')
   return { success: true }
 }
@@ -164,19 +180,25 @@ export async function aceptarInvitacion(
     return { error: 'Debes aceptar los términos y la política de privacidad.' }
   }
 
-  const invitacion = await prisma.invitacion.findUnique({ where: { token } })
+  const invitacion = await sinEmpresa('invitación por token al aceptar', (tx) =>
+    tx.invitacion.findUnique({ where: { token } })
+  )
   if (!invitacion || invitacion.estado !== 'PENDIENTE') {
     return { error: 'La invitación no es válida o ya fue usada.' }
   }
   if (invitacion.expiraEn <= new Date()) {
-    await prisma.invitacion
-      .update({ where: { id: invitacion.id }, data: { estado: 'EXPIRADA' } })
-      .catch(anotarFallo('admin:invitacion.update'))
+    await conEmpresa(invitacion.companyId, (tx) =>
+      tx.invitacion
+        .update({ where: { id: invitacion.id }, data: { estado: 'EXPIRADA' } })
+        .catch(anotarFallo('admin:invitacion.update'))
+    )
     return { error: 'La invitación expiró. Pide una nueva.' }
   }
 
   const email = invitacion.email
-  const existing = await prisma.user.findUnique({ where: { email } })
+  const existing = await sinEmpresa('uniqueness de email al aceptar', (tx) =>
+    tx.user.findUnique({ where: { email } })
+  )
   if (existing) {
     return { error: 'Ese correo ya tiene una cuenta. Inicia sesión.' }
   }
@@ -201,20 +223,23 @@ export async function aceptarInvitacion(
     await ensureEmailIdentity(supabaseId, email)
 
     const now = new Date()
-    const dbUser = await prisma.user.create({
-      data: {
-        supabaseId,
-        email,
-        name: nombre,
-        role: invitacion.rol,
-        companyId: invitacion.companyId,
-        termsAcceptedAt: now,
-        termsVersion: TERMS_VERSION,
-      },
-    })
+    const sid = supabaseId
+    const dbUser = await conEmpresa(invitacion.companyId, (tx) =>
+      tx.user.create({
+        data: {
+          supabaseId: sid,
+          email,
+          name: nombre,
+          role: invitacion.rol,
+          companyId: invitacion.companyId,
+          termsAcceptedAt: now,
+          termsVersion: TERMS_VERSION,
+        },
+      })
+    )
     dbUserId = dbUser.id
 
-    await admin.auth.admin.updateUserById(supabaseId, {
+    await admin.auth.admin.updateUserById(sid, {
       app_metadata: {
         role: invitacion.rol,
         dbUserId: dbUser.id,
@@ -222,17 +247,22 @@ export async function aceptarInvitacion(
       },
     })
 
-    await prisma.invitacion.update({
-      where: { id: invitacion.id },
-      data: { estado: 'ACEPTADA', aceptadaEn: now },
-    })
+    await conEmpresa(invitacion.companyId, (tx) =>
+      tx.invitacion.update({
+        where: { id: invitacion.id },
+        data: { estado: 'ACEPTADA', aceptadaEn: now },
+      })
+    )
   } catch (e) {
     console.error('[invitacion] aceptar:', e)
     // Rollback completo: sin esto quedaría una fila User huérfana (con
     // supabaseId de un usuario ya borrado) que bloquea para siempre el
     // reintento (el chequeo de "correo ya registrado" la encontraría).
     if (dbUserId) {
-      await prisma.user.delete({ where: { id: dbUserId } }).catch(anotarFallo('admin:user.delete'))
+      const uid = dbUserId
+      await sinEmpresa('rollback: borrar usuario creado', (tx) =>
+        tx.user.delete({ where: { id: uid } }).catch(anotarFallo('admin:user.delete'))
+      )
     }
     if (supabaseId) {
       await admin.auth.admin.deleteUser(supabaseId).catch(anotarFallo('admin:user.delete'))

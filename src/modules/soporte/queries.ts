@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import type { SessionUser } from '@/types'
 
 export interface CompanyOption {
@@ -39,10 +39,12 @@ export async function resolveCompanyContext(
     }
   }
 
-  const companies = await prisma.company.findMany({
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-  })
+  const companies = await sinEmpresa('soporte: lista de empresas para selector de superadmin', (tx) =>
+    tx.company.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    })
+  )
 
   const exists = (id?: string | null) =>
     (id && companies.find((c) => c.id === id)?.id) || null
@@ -58,7 +60,7 @@ export async function resolveCompanyContext(
 
 export async function getComunicacionConfig(companyId: string | null) {
   if (!companyId) return null
-  return prisma.whatsAppConfig.findUnique({ where: { companyId } })
+  return conEmpresa(companyId, (tx) => tx.whatsAppConfig.findUnique({ where: { companyId } }))
 }
 
 export async function getFaqs(
@@ -66,10 +68,12 @@ export async function getFaqs(
   opts: { activeOnly?: boolean } = {}
 ) {
   if (!companyId) return []
-  return prisma.faqItem.findMany({
-    where: { companyId, ...(opts.activeOnly ? { activo: true } : {}) },
-    orderBy: [{ orden: 'asc' }, { createdAt: 'asc' }],
-  })
+  return conEmpresa(companyId, (tx) =>
+    tx.faqItem.findMany({
+      where: { companyId, ...(opts.activeOnly ? { activo: true } : {}) },
+      orderBy: [{ orden: 'asc' }, { createdAt: 'asc' }],
+    })
+  )
 }
 
 export interface TicketFilters {
@@ -95,16 +99,21 @@ export async function listTicketsAdmin(
     ]
   }
 
-  return prisma.supportTicket.findMany({
-    where,
-    orderBy: { updatedAt: 'desc' },
-    include: {
-      cliente: { select: { nombre: true, email: true } },
-      company: { select: { name: true } },
-      _count: { select: { mensajes: true } },
-    },
-    take: 200,
-  })
+  const fn = (tx: Tx) =>
+    tx.supportTicket.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        cliente: { select: { nombre: true, email: true } },
+        company: { select: { name: true } },
+        _count: { select: { mensajes: true } },
+      },
+      take: 200,
+    })
+
+  return companyId
+    ? conEmpresa(companyId, fn)
+    : sinEmpresa('soporte: todos los tickets (superadmin sin empresa)', fn)
 }
 
 export async function ticketStats(companyId: string | null, isSuperadmin: boolean) {
@@ -112,35 +121,44 @@ export async function ticketStats(companyId: string | null, isSuperadmin: boolea
   if (companyId) base.companyId = companyId
   else if (!isSuperadmin) base.companyId = '__none__'
 
-  const [nuevos, enProceso, resueltos, total] = await Promise.all([
-    prisma.supportTicket.count({ where: { ...base, estado: 'NUEVO' } }),
-    prisma.supportTicket.count({ where: { ...base, estado: 'EN_PROCESO' } }),
-    prisma.supportTicket.count({ where: { ...base, estado: 'RESUELTO' } }),
-    prisma.supportTicket.count({ where: base }),
-  ])
+  const fn = (tx: Tx) =>
+    Promise.all([
+      tx.supportTicket.count({ where: { ...base, estado: 'NUEVO' } }),
+      tx.supportTicket.count({ where: { ...base, estado: 'EN_PROCESO' } }),
+      tx.supportTicket.count({ where: { ...base, estado: 'RESUELTO' } }),
+      tx.supportTicket.count({ where: base }),
+    ])
+
+  const [nuevos, enProceso, resueltos, total] = companyId
+    ? await conEmpresa(companyId, fn)
+    : await sinEmpresa('soporte: estadísticas globales de tickets (superadmin)', fn)
   return { nuevos, enProceso, resueltos, total }
 }
 
 /** Detalle de un ticket. includeInternal controla si se ven las notas internas. */
 export async function getTicketDetail(id: string, includeInternal: boolean) {
-  return prisma.supportTicket.findUnique({
-    where: { id },
-    include: {
-      cliente: { select: { id: true, nombre: true, email: true, telefono: true } },
-      company: { select: { id: true, name: true } },
-      mensajes: {
-        where: includeInternal ? {} : { esNotaInterna: false },
-        orderBy: { createdAt: 'asc' },
+  return sinEmpresa('soporte: ticket por id (la página valida el acceso)', (tx) =>
+    tx.supportTicket.findUnique({
+      where: { id },
+      include: {
+        cliente: { select: { id: true, nombre: true, email: true, telefono: true } },
+        company: { select: { id: true, name: true } },
+        mensajes: {
+          where: includeInternal ? {} : { esNotaInterna: false },
+          orderBy: { createdAt: 'asc' },
+        },
       },
-    },
-  })
+    })
+  )
 }
 
 export async function listTicketsCliente(clienteId: string) {
-  return prisma.supportTicket.findMany({
-    where: { clienteId },
-    orderBy: { updatedAt: 'desc' },
-    include: { _count: { select: { mensajes: true } } },
-    take: 100,
-  })
+  return sinEmpresa('soporte: tickets por cliente (solo id)', (tx) =>
+    tx.supportTicket.findMany({
+      where: { clienteId },
+      orderBy: { updatedAt: 'desc' },
+      include: { _count: { select: { mensajes: true } } },
+      take: 100,
+    })
+  )
 }

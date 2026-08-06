@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa, conEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { logReferralEvent, hashIp, REF_COOKIE, VISITOR_COOKIE } from '@/lib/referidos'
 import { incrementarProgresoCampana } from '@/modules/invitaciones/motorProgreso'
@@ -29,14 +29,16 @@ async function esRegistroSospechoso(
     // sospechoso: patrón típico de autoreferido (mismo dispositivo creando
     // varias cuentas con el propio enlace).
     if (ipHashValor) {
-      const repetidosIp = await prisma.referralEvent.count({
-        where: {
-          clienteId: referenteClienteId,
-          tipo,
-          createdAt: { gte: hace7d },
-          meta: { path: ['ipHash'], equals: ipHashValor },
-        },
-      })
+      const repetidosIp = await sinEmpresa('anti-fraude-ip', (tx) =>
+        tx.referralEvent.count({
+          where: {
+            clienteId: referenteClienteId,
+            tipo,
+            createdAt: { gte: hace7d },
+            meta: { path: ['ipHash'], equals: ipHashValor },
+          },
+        })
+      )
       if (repetidosIp >= 1) return true
     }
 
@@ -44,13 +46,15 @@ async function esRegistroSospechoso(
     // de una cuenta en 30 días = duplicidad de cuentas, para cualquier
     // referente. Detecta granjas de cuentas aunque roten la red.
     if (visitorId) {
-      const repetidosVisitante = await prisma.referralEvent.count({
-        where: {
-          tipo: { in: ['REGISTRO', 'REGISTRO_GLOBAL'] },
-          visitorId,
-          createdAt: { gte: hace30d },
-        },
-      })
+      const repetidosVisitante = await sinEmpresa('anti-fraude-visitor', (tx) =>
+        tx.referralEvent.count({
+          where: {
+            tipo: { in: ['REGISTRO', 'REGISTRO_GLOBAL'] },
+            visitorId,
+            createdAt: { gte: hace30d },
+          },
+        })
+      )
       if (repetidosVisitante >= 1) return true
     }
 
@@ -72,22 +76,26 @@ export async function registrarRegistroIniciado(refCode: string | null | undefin
     const visitorId = cookieStore.get(VISITOR_COOKIE)?.value ?? null
     if (!visitorId) return // sin visitante rastreable no hay etapa que medir
 
-    const referente = await prisma.cliente.findUnique({
-      where: { codigoReferido: refCode },
-      select: { id: true, companyId: true },
-    })
+    const referente = await sinEmpresa('reg-iniciado-lookup', (tx) =>
+      tx.cliente.findUnique({
+        where: { codigoReferido: refCode },
+        select: { id: true, companyId: true },
+      })
+    )
     if (!referente) return
 
     const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    const yaRegistrado = await prisma.referralEvent.findFirst({
-      where: {
-        clienteId: referente.id,
-        tipo: 'REGISTRO_INICIADO',
-        visitorId,
-        createdAt: { gte: hace24h },
-      },
-      select: { id: true },
-    })
+    const yaRegistrado = await sinEmpresa('reg-iniciado-dedup', (tx) =>
+      tx.referralEvent.findFirst({
+        where: {
+          clienteId: referente.id,
+          tipo: 'REGISTRO_INICIADO',
+          visitorId,
+          createdAt: { gte: hace24h },
+        },
+        select: { id: true },
+      })
+    )
     if (yaRegistrado) return
 
     await logReferralEvent({
@@ -108,20 +116,24 @@ export async function registrarRegistroIniciado(refCode: string | null | undefin
  */
 export async function registrarVerificacionReferido(supabaseId: string) {
   try {
-    const referidos = await prisma.referido.findMany({
-      where: { referidoCliente: { supabaseId } },
-      select: {
-        referidoClienteId: true,
-        referenteClienteId: true,
-        companyId: true,
-        sospechoso: true,
-      },
-    })
-    for (const r of referidos) {
-      const ya = await prisma.referralEvent.findFirst({
-        where: { tipo: 'VERIFICADO', referidoClienteId: r.referidoClienteId },
-        select: { id: true },
+    const referidos = await sinEmpresa('verif-referido-lookup', (tx) =>
+      tx.referido.findMany({
+        where: { referidoCliente: { supabaseId } },
+        select: {
+          referidoClienteId: true,
+          referenteClienteId: true,
+          companyId: true,
+          sospechoso: true,
+        },
       })
+    )
+    for (const r of referidos) {
+      const ya = await sinEmpresa('verif-referido-dedup', (tx) =>
+        tx.referralEvent.findFirst({
+          where: { tipo: 'VERIFICADO', referidoClienteId: r.referidoClienteId },
+          select: { id: true },
+        })
+      )
       if (ya) continue
       await logReferralEvent({
         clienteId: r.referenteClienteId,
@@ -184,11 +196,13 @@ export async function vincularReferido(
     // El código puede ser el corto (/r/XXXXXX y campañas "Invita y Gana",
     // ?ref=codigoCorto) o el largo (codigoReferido) — mismo criterio que
     // el resolvedor de /r/[code].
-    const referente = await prisma.cliente.findFirst({
-      where: {
-        OR: [{ codigoCorto: code.toUpperCase() }, { codigoReferido: code }],
-      },
-    })
+    const referente = await sinEmpresa('vincular-lookup-referente', (tx) =>
+      tx.cliente.findFirst({
+        where: {
+          OR: [{ codigoCorto: code.toUpperCase() }, { codigoReferido: code }],
+        },
+      })
+    )
     if (!referente) return
 
     // Anti-abuso: nadie puede referirse a sí mismo. La comparación es por
@@ -196,10 +210,12 @@ export async function vincularReferido(
     // comparar ids dejaba pasar el autoreferido hacia otra empresa o con la
     // cookie puesta al probar el propio enlace.
     if (referente.id === referidoClienteId) return
-    const referidoCliente = await prisma.cliente.findUnique({
-      where: { id: referidoClienteId },
-      select: { supabaseId: true, nombre: true },
-    })
+    const referidoCliente = await sinEmpresa('vincular-lookup-referido', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: referidoClienteId },
+        select: { supabaseId: true, nombre: true },
+      })
+    )
     if (!referidoCliente) return
     if (referidoCliente.supabaseId === referente.supabaseId) return
 
@@ -209,15 +225,17 @@ export async function vincularReferido(
       // Programa de la empresa (+ campaña "Invita y Gana" si aplica).
       const campanaId = opts?.campanaInvitacionId ?? null
       const sospechoso = await esRegistroSospechoso(referente.id, huella, visitorId, 'REGISTRO')
-      await prisma.referido.create({
-        data: {
-          companyId,
-          referenteClienteId: referente.id,
-          referidoClienteId,
-          sospechoso,
-          ...(campanaId ? { campanaInvitacionId: campanaId } : {}),
-        },
-      })
+      await conEmpresa(companyId, (tx) =>
+        tx.referido.create({
+          data: {
+            companyId,
+            referenteClienteId: referente.id,
+            referidoClienteId,
+            sospechoso,
+            ...(campanaId ? { campanaInvitacionId: campanaId } : {}),
+          },
+        })
+      )
       await logReferralEvent({
         clienteId: referente.id,
         companyId,

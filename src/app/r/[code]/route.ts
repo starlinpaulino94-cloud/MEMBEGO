@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getAppUrl } from '@/lib/site'
 import {
@@ -88,8 +88,8 @@ export async function GET(
   }
 
   // ── Legacy: código único del cliente → registro directo (sin romper nada) ───
-  const cliente = await prisma.cliente
-    .findFirst({
+  const cliente = await sinEmpresa('referral-link-lookup', (tx) =>
+    tx.cliente.findFirst({
       where: {
         OR: [{ codigoCorto: clean.toUpperCase() }, { codigoReferido: clean }],
       },
@@ -100,7 +100,7 @@ export async function GET(
         company: { select: { slug: true, isActive: true } },
       },
     })
-    .catch(() => null)
+  ).catch(() => null)
 
   // Código inválido o empresa inactiva: al marketplace, sin tracking.
   if (!cliente || !cliente.company.isActive) {

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 
 // ─── FASE 3: capa social — acciones de seguir/favorita/guardar ──────────────
@@ -25,15 +25,17 @@ export async function getEstadoSeguimiento(
     return { authenticated: false, following: false, esFavorita: false }
   }
   try {
-    const follow = await prisma.companyFollow.findUnique({
-      where: {
-        userId_companyId: {
-          userId: user.metadata.dbUserId,
-          companyId,
+    const follow = await conEmpresa(companyId, (tx) =>
+      tx.companyFollow.findUnique({
+        where: {
+          userId_companyId: {
+            userId: user.metadata.dbUserId,
+            companyId,
+          },
         },
-      },
-      select: { esFavorita: true },
-    })
+        select: { esFavorita: true },
+      })
+    )
     return {
       authenticated: true,
       following: follow != null,
@@ -63,37 +65,43 @@ export async function toggleSeguirEmpresa(
   const userId = user.metadata.dbUserId
 
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { isActive: true, isPublished: true, esDemo: true },
+    return await conEmpresa(companyId, async (tx) => {
+      const company = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { isActive: true, isPublished: true, esDemo: true },
+      })
+      if (!company || !company.isActive || !company.isPublished) {
+        return { error: 'Empresa no disponible.' }
+      }
+      // Una empresa de práctica no se sigue: seguirla la metería en el feed y en
+      // "mis empresas" de alguien que nunca pidió verla. Al entrenamiento se
+      // entra por el enlace de registro, que es otra cosa.
+      if (company.esDemo) return { error: 'Empresa no disponible.' }
+
+      const existing = await tx.companyFollow.findUnique({
+        where: { userId_companyId: { userId, companyId } },
+        select: { id: true },
+      })
+
+      let following: boolean
+      if (existing) {
+        await tx.companyFollow.delete({ where: { id: existing.id } })
+        following = false
+      } else {
+        await tx.companyFollow.create({ data: { userId, companyId } })
+        following = true
+      }
+
+      return { following }
+    }).then((result) => {
+      if (!result.error) {
+        revalidatePath('/cliente/empresas')
+        revalidatePath('/cliente/explorar')
+        revalidatePath('/mis-membresias')
+        revalidatePath('/cliente/ayuda')
+      }
+      return result
     })
-    if (!company || !company.isActive || !company.isPublished) {
-      return { error: 'Empresa no disponible.' }
-    }
-    // Una empresa de práctica no se sigue: seguirla la metería en el feed y en
-    // "mis empresas" de alguien que nunca pidió verla. Al entrenamiento se
-    // entra por el enlace de registro, que es otra cosa.
-    if (company.esDemo) return { error: 'Empresa no disponible.' }
-
-    const existing = await prisma.companyFollow.findUnique({
-      where: { userId_companyId: { userId, companyId } },
-      select: { id: true },
-    })
-
-    let following: boolean
-    if (existing) {
-      await prisma.companyFollow.delete({ where: { id: existing.id } })
-      following = false
-    } else {
-      await prisma.companyFollow.create({ data: { userId, companyId } })
-      following = true
-    }
-
-    revalidatePath('/cliente/empresas')
-    revalidatePath('/cliente/explorar')
-    revalidatePath('/mis-membresias')
-    revalidatePath('/cliente/ayuda')
-    return { following }
   } catch (e) {
     console.error('[social] toggleSeguirEmpresa', e)
     return { error: 'No se pudo completar. Intenta de nuevo.' }
@@ -111,26 +119,28 @@ export async function toggleFavoritaEmpresa(
   const userId = user.metadata.dbUserId
 
   try {
-    const follow = await prisma.companyFollow.findUnique({
-      where: { userId_companyId: { userId, companyId } },
-      select: { id: true, esFavorita: true },
-    })
-    if (!follow) {
-      // Marcar favorita implica seguir.
-      await prisma.companyFollow.create({
-        data: { userId, companyId, esFavorita: true },
+    return await conEmpresa(companyId, async (tx) => {
+      const follow = await tx.companyFollow.findUnique({
+        where: { userId_companyId: { userId, companyId } },
+        select: { id: true, esFavorita: true },
+      })
+      if (!follow) {
+        // Marcar favorita implica seguir.
+        await tx.companyFollow.create({
+          data: { userId, companyId, esFavorita: true },
+        })
+        revalidatePath('/cliente/empresas')
+        return { following: true, esFavorita: true }
+      }
+
+      const updated = await tx.companyFollow.update({
+        where: { id: follow.id },
+        data: { esFavorita: !follow.esFavorita },
+        select: { esFavorita: true },
       })
       revalidatePath('/cliente/empresas')
-      return { following: true, esFavorita: true }
-    }
-
-    const updated = await prisma.companyFollow.update({
-      where: { id: follow.id },
-      data: { esFavorita: !follow.esFavorita },
-      select: { esFavorita: true },
+      return { following: true, esFavorita: updated.esFavorita }
     })
-    revalidatePath('/cliente/empresas')
-    return { following: true, esFavorita: updated.esFavorita }
   } catch (e) {
     console.error('[social] toggleFavoritaEmpresa', e)
     return { error: 'No se pudo completar. Intenta de nuevo.' }
@@ -148,27 +158,32 @@ export async function toggleGuardarPromocion(
   const userId = user.metadata.dbUserId
 
   try {
-    const existing = await prisma.promocionGuardada.findUnique({
-      where: { userId_promocionId: { userId, promocionId } },
-      select: { id: true },
-    })
+    return await sinEmpresa(
+      'social: promociones guardadas del cliente cruzan sus empresas',
+      async (tx) => {
+        const existing = await tx.promocionGuardada.findUnique({
+          where: { userId_promocionId: { userId, promocionId } },
+          select: { id: true },
+        })
 
-    let guardada: boolean
-    if (existing) {
-      await prisma.promocionGuardada.delete({ where: { id: existing.id } })
-      guardada = false
-    } else {
-      const promo = await prisma.promocion.findUnique({
-        where: { id: promocionId },
-        select: { activo: true },
-      })
-      if (!promo) return { error: 'Promoción no encontrada.' }
-      await prisma.promocionGuardada.create({ data: { userId, promocionId } })
-      guardada = true
-    }
+        let guardada: boolean
+        if (existing) {
+          await tx.promocionGuardada.delete({ where: { id: existing.id } })
+          guardada = false
+        } else {
+          const promo = await tx.promocion.findUnique({
+            where: { id: promocionId },
+            select: { activo: true },
+          })
+          if (!promo) return { error: 'Promoción no encontrada.' }
+          await tx.promocionGuardada.create({ data: { userId, promocionId } })
+          guardada = true
+        }
 
-    revalidatePath('/cliente/promociones')
-    return { guardada }
+        revalidatePath('/cliente/promociones')
+        return { guardada }
+      }
+    )
   } catch (e) {
     console.error('[social] toggleGuardarPromocion', e)
     return { error: 'No se pudo completar. Intenta de nuevo.' }

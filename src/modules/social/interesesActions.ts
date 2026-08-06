@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 
 // F5.2: intereses del cliente (categorías favoritas). Alimentan las
@@ -30,22 +30,30 @@ export async function guardarIntereses(
 
   try {
     // Solo categorías reales y activas.
-    const validas = await prisma.businessCategory.findMany({
-      where: { id: { in: categoryIds }, active: true },
-      select: { id: true },
-    })
+    const validas = await sinEmpresa(
+      'intereses: validar categorías activas del usuario',
+      (tx) =>
+        tx.businessCategory.findMany({
+          where: { id: { in: categoryIds }, active: true },
+          select: { id: true },
+        })
+    )
 
-    await prisma.$transaction([
-      prisma.userInteres.deleteMany({ where: { userId } }),
-      ...(validas.length > 0
-        ? [
-            prisma.userInteres.createMany({
-              data: validas.map((c) => ({ userId, categoryId: c.id })),
-              skipDuplicates: true,
-            }),
-          ]
-        : []),
-    ])
+    await sinEmpresa(
+      'intereses: guardar intereses del usuario (no pertenecen a una empresa)',
+      (tx) =>
+        Promise.all([
+          tx.userInteres.deleteMany({ where: { userId } }),
+          ...(validas.length > 0
+            ? [
+                tx.userInteres.createMany({
+                  data: validas.map((c) => ({ userId, categoryId: c.id })),
+                  skipDuplicates: true,
+                }),
+              ]
+            : []),
+        ])
+    )
 
     revalidatePath('/mis-membresias')
     revalidatePath('/cliente/promociones')

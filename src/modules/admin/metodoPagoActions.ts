@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 export interface MetodoPagoState {
   error?: string
@@ -25,7 +25,7 @@ export async function crearMetodoPago(
   if (!companyId) return { error: 'Empresa requerida.' }
 
   // Verify company exists to prevent creating metodoPago for non-existent companies
-  const company = await prisma.company.findUnique({ where: { id: companyId } })
+  const company = await conEmpresa(companyId, (tx) => tx.company.findUnique({ where: { id: companyId } }))
   if (!company) return { error: 'Empresa no encontrada.' }
 
   const tipo = String(formData.get('tipo') ?? '').trim()
@@ -41,17 +41,19 @@ export async function crearMetodoPago(
   }
 
   try {
-    await prisma.metodoPago.create({
-      data: {
-        companyId,
-        tipo: tipo as 'TRANSFERENCIA' | 'PRESENCIAL',
-        nombre,
-        titular,
-        numeroCuenta,
-        tipoCuenta,
-        instrucciones,
-      },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.metodoPago.create({
+        data: {
+          companyId,
+          tipo: tipo as 'TRANSFERENCIA' | 'PRESENCIAL',
+          nombre,
+          titular,
+          numeroCuenta,
+          tipoCuenta,
+          instrucciones,
+        },
+      })
+    )
 
     revalidatePath('/admin/metodos-pago')
     revalidatePath('/superadmin/metodos-pago')
@@ -79,7 +81,9 @@ export async function actualizarMetodoPago(
 
   if (!id || !nombre) return { error: 'ID y nombre son obligatorios.' }
 
-  const method = await prisma.metodoPago.findUnique({ where: { id } })
+  const method = await sinEmpresa('método de pago por id sin conocer la empresa', (tx) =>
+    tx.metodoPago.findUnique({ where: { id } })
+  )
   if (!method) return { error: 'Método no encontrado.' }
   if (
     user.metadata.role !== 'SUPERADMIN' &&
@@ -89,10 +93,12 @@ export async function actualizarMetodoPago(
   }
 
   try {
-    await prisma.metodoPago.update({
-      where: { id },
-      data: { nombre, titular, numeroCuenta, tipoCuenta, instrucciones, activo },
-    })
+    await conEmpresa(method.companyId, (tx) =>
+      tx.metodoPago.update({
+        where: { id },
+        data: { nombre, titular, numeroCuenta, tipoCuenta, instrucciones, activo },
+      })
+    )
 
     revalidatePath('/admin/metodos-pago')
     revalidatePath('/superadmin/metodos-pago')
@@ -113,7 +119,9 @@ export async function eliminarMetodoPago(
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return { error: 'ID requerido.' }
 
-  const method = await prisma.metodoPago.findUnique({ where: { id } })
+  const method = await sinEmpresa('método de pago por id sin conocer la empresa', (tx) =>
+    tx.metodoPago.findUnique({ where: { id } })
+  )
   if (!method) return { error: 'Método no encontrado.' }
   if (
     user.metadata.role !== 'SUPERADMIN' &&
@@ -123,11 +131,15 @@ export async function eliminarMetodoPago(
   }
 
   try {
-    const count = await prisma.membership.count({ where: { metodoPagoId: id } })
+    const count = await conEmpresa(method.companyId, (tx) =>
+      tx.membership.count({ where: { metodoPagoId: id } })
+    )
     if (count > 0) {
-      await prisma.metodoPago.update({ where: { id }, data: { activo: false } })
+      await conEmpresa(method.companyId, (tx) =>
+        tx.metodoPago.update({ where: { id }, data: { activo: false } })
+      )
     } else {
-      await prisma.metodoPago.delete({ where: { id } })
+      await conEmpresa(method.companyId, (tx) => tx.metodoPago.delete({ where: { id } }))
     }
 
     revalidatePath('/admin/metodos-pago')

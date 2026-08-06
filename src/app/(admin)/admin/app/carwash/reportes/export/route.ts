@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireSection } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getReporteOperativo, reporteToCsv } from '@/modules/apps/reportes'
 
 export const dynamic = 'force-dynamic'
@@ -18,10 +18,9 @@ export async function GET(request: NextRequest) {
   }
 
   const sp = request.nextUrl.searchParams
-  const empresa = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { zonaHoraria: true },
-  })
+  const empresa = await conEmpresa(companyId, (tx) =>
+    tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+  )
   const reporte = await getReporteOperativo(
     companyId,
     { desde: sp.get('desde') ?? undefined, hasta: sp.get('hasta') ?? undefined },

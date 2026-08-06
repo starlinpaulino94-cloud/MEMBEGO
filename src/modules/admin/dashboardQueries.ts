@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 // F4.8: métricas del dashboard ejecutivo de la empresa. Módulo interno.
 
@@ -29,6 +29,7 @@ export interface DashboardEjecutivo {
 export async function getDashboardEjecutivo(
   companyId: string
 ): Promise<DashboardEjecutivo> {
+  return conEmpresa(companyId, async (tx) => {
   const now = new Date()
   const hace30dias = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const hace14dias = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
@@ -49,24 +50,24 @@ export async function getDashboardEjecutivo(
     nuevosSeguidores30d,
     referidosCompletados,
   ] = await Promise.all([
-    prisma.cliente.count({ where: { companyId } }),
-    prisma.cliente.count({ where: { companyId, createdAt: { gte: hace30dias } } }),
-    prisma.membership.count({ where: { companyId, estado: 'ACTIVA' } }),
-    prisma.membership.count({
+    tx.cliente.count({ where: { companyId } }),
+    tx.cliente.count({ where: { companyId, createdAt: { gte: hace30dias } } }),
+    tx.membership.count({ where: { companyId, estado: 'ACTIVA' } }),
+    tx.membership.count({
       where: {
         companyId,
         estado: 'ACTIVA',
         fechaVencimiento: { gte: now, lte: en7dias },
       },
     }),
-    prisma.membership.count({
+    tx.membership.count({
       where: { companyId, estado: { in: ['PENDIENTE', 'PENDIENTE_PAGO'] } },
     }),
-    prisma.companyFollow.count({ where: { companyId } }),
-    prisma.companyFollow.count({
+    tx.companyFollow.count({ where: { companyId } }),
+    tx.companyFollow.count({
       where: { companyId, createdAt: { gte: hace30dias } },
     }),
-    prisma.referido.count({ where: { companyId, estado: 'COMPLETADO' } }),
+    tx.referido.count({ where: { companyId, estado: 'COMPLETADO' } }),
   ])
 
   const [
@@ -79,23 +80,23 @@ export async function getDashboardEjecutivo(
     topPromosRaw,
     actividadRaw,
   ] = await Promise.all([
-    prisma.promocion.count({
+    tx.promocion.count({
       where: { companyId, activo: true, archivada: false },
     }),
     // Agregado en BD: antes se cargaban TODAS las membresías activas (con
     // su plan) solo para sumar precios en memoria.
-    prisma.membership.groupBy({
+    tx.membership.groupBy({
       by: ['planId'],
       where: { companyId, estado: 'ACTIVA' },
       _count: { _all: true },
     }),
-    prisma.visit.count({
+    tx.visit.count({
       where: { cliente: { companyId }, fechaVisita: { gte: inicioHoy } },
     }),
-    prisma.visit.count({
+    tx.visit.count({
       where: { cliente: { companyId }, fechaVisita: { gte: inicioMes } },
     }),
-    prisma.cliente.count({
+    tx.cliente.count({
       where: {
         companyId,
         memberships: { some: { estado: 'ACTIVA' } },
@@ -108,14 +109,14 @@ export async function getDashboardEjecutivo(
     // zona, guarda UTC) para evitar el round-trip a Date y que las claves
     // coincidan exactamente con las de relleno (toISOString), sin depender
     // del timezone del proceso Node ni de la sesión de la BD.
-    prisma.$queryRaw<{ dia: string; total: number }[]>`
+    tx.$queryRaw<{ dia: string; total: number }[]>`
       SELECT to_char(v."fechaVisita", 'YYYY-MM-DD') AS dia, COUNT(*)::int AS total
       FROM "visits" v
       JOIN "clientes" c ON c."id" = v."clienteId"
       WHERE c."companyId" = ${companyId} AND v."fechaVisita" >= ${hace14dias}
       GROUP BY 1
     `.catch(() => [] as { dia: string; total: number }[]),
-    prisma.promocion.findMany({
+    tx.promocion.findMany({
       where: { companyId, archivada: false },
       select: {
         id: true,
@@ -126,7 +127,7 @@ export async function getDashboardEjecutivo(
       orderBy: { viewCount: 'desc' },
       take: 3,
     }),
-    prisma.auditLog.findMany({
+    tx.auditLog.findMany({
       where: { companyId },
       select: {
         id: true,
@@ -143,7 +144,7 @@ export async function getDashboardEjecutivo(
   // Ingresos estimados = Σ (membresías activas por plan × precio del plan).
   let ingresosEstimadosMes = 0
   if (activasPorPlanGrupos.length > 0) {
-    const precios = await prisma.plan.findMany({
+    const precios = await tx.plan.findMany({
       where: { id: { in: activasPorPlanGrupos.map((g) => g.planId) } },
       select: { id: true, precio: true },
     })
@@ -249,4 +250,5 @@ export async function getDashboardEjecutivo(
     actividad,
     recomendaciones,
   }
+  })
 }

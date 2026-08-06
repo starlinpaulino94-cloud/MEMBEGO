@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 
 /**
  * Aviso de MIGRACIONES PENDIENTES en el panel del superadmin.
@@ -215,13 +215,16 @@ export interface MigracionPendiente {
 
 async function leerFaltantes(): Promise<MigracionPendiente[]> {
   // Una sola consulta a information_schema: barata y sin depender de Prisma
-  // conociendo las columnas (que es justo lo que puede faltar).
+  // conociendo las columnas (que es justo lo que puede faltar). El catálogo de
+  // Postgres es global, no por empresa, así que corre fuera de contexto.
   const tablas = [...new Set(OBJETOS_ESPERADOS.map((o) => o.tabla))]
-  const filas = await prisma.$queryRaw<{ table_name: string; column_name: string }[]>`
-    SELECT table_name, column_name
-    FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = ANY(${tablas})
-  `
+  const filas = await sinEmpresa('superadmin: leer esquema (information_schema)', (tx) =>
+    tx.$queryRaw<{ table_name: string; column_name: string }[]>`
+      SELECT table_name, column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = ANY(${tablas})
+    `
+  )
 
   const columnasPorTabla = new Map<string, Set<string>>()
   for (const f of filas) {

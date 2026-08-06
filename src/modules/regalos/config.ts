@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 
 /**
  * Regalos P2P · configuración por empresa (docs/REGALOS-P2P.md §3.4).
@@ -54,10 +54,12 @@ function resolver(raw: unknown): RegalosConfig {
 export async function getRegalosConfig(companyId: string): Promise<RegalosConfig> {
   if (!companyId) return REGALOS_DEFAULTS
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { regalosConfig: true },
-    })
+    const company = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { regalosConfig: true },
+      })
+    )
     return resolver(company?.regalosConfig)
   } catch (e) {
     console.error('[regalos] getRegalosConfig', e)

@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import type { Prisma } from '@prisma/client'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
 import { SIN_DEMO } from '@/modules/demo'
 
@@ -23,31 +24,33 @@ export interface EmpresaSeguida {
 
 /** Empresas que sigue el usuario, favoritas primero. */
 export async function getMisEmpresas(dbUserId: string): Promise<EmpresaSeguida[]> {
-  const follows = await prisma.companyFollow.findMany({
-    // Seguir una empresa de práctica ya está bloqueado en la acción, pero el
-    // filtro va también aquí: si alguna vez se marca como demo una empresa que
-    // ya tenía seguidores, esos seguidores dejan de verla en el acto.
-    where: { userId: dbUserId, company: { isActive: true, isPublished: true, ...SIN_DEMO } },
-    orderBy: [{ esFavorita: 'desc' }, { createdAt: 'desc' }],
-    select: {
-      id: true,
-      esFavorita: true,
-      createdAt: true,
-      company: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          type: true,
-          description: true,
-          logoUrl: true,
-          bannerUrl: true,
-          ciudad: true,
-          activePromotionsCount: true,
+  const follows = await sinEmpresa('social: empresas seguidas del cliente cruzan empresas', (tx) =>
+    tx.companyFollow.findMany({
+      // Seguir una empresa de práctica ya está bloqueado en la acción, pero el
+      // filtro va también aquí: si alguna vez se marca como demo una empresa que
+      // ya tenía seguidores, esos seguidores dejan de verla en el acto.
+      where: { userId: dbUserId, company: { isActive: true, isPublished: true, ...SIN_DEMO } },
+      orderBy: [{ esFavorita: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        esFavorita: true,
+        createdAt: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            type: true,
+            description: true,
+            logoUrl: true,
+            bannerUrl: true,
+            ciudad: true,
+            activePromotionsCount: true,
+          },
         },
       },
-    },
-  })
+    })
+  )
 
   return follows.map((f) => ({
     followId: f.id,
@@ -59,10 +62,12 @@ export async function getMisEmpresas(dbUserId: string): Promise<EmpresaSeguida[]
 
 /** IDs de empresas seguidas (para marcar tarjetas). */
 export async function getSeguidasIds(dbUserId: string): Promise<Set<string>> {
-  const rows = await prisma.companyFollow.findMany({
-    where: { userId: dbUserId },
-    select: { companyId: true },
-  })
+  const rows = await sinEmpresa('social: empresas seguidas del cliente cruzan empresas', (tx) =>
+    tx.companyFollow.findMany({
+      where: { userId: dbUserId },
+      select: { companyId: true },
+    })
+  )
   return new Set(rows.map((r) => r.companyId))
 }
 
@@ -70,44 +75,52 @@ export async function getSeguidasIds(dbUserId: string): Promise<Set<string>> {
 export async function getPromocionesGuardadas(
   dbUserId: string
 ): Promise<PromotionPublic[]> {
-  const guardadas = await prisma.promocionGuardada.findMany({
-    where: { userId: dbUserId },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      promocion: {
+  const guardadas = await sinEmpresa(
+    'social: promociones guardadas del cliente cruzan empresas',
+    (tx) =>
+      tx.promocionGuardada.findMany({
+        where: { userId: dbUserId },
+        orderBy: { createdAt: 'desc' },
         select: {
-          id: true,
-          titulo: true,
-          slug: true,
-          descripcion: true,
-          imagenUrl: true,
-          tipo: true,
-          descuento: true,
-          codigo: true,
-          vigenciaDesde: true,
-          vigenciaHasta: true,
-          viewCount: true,
-          shareCount: true,
-          tags: true,
-          isFeatured: true,
-          createdAt: true,
-          company: {
-            select: { id: true, name: true, slug: true, logoUrl: true },
+          promocion: {
+            select: {
+              id: true,
+              titulo: true,
+              slug: true,
+              descripcion: true,
+              imagenUrl: true,
+              tipo: true,
+              descuento: true,
+              codigo: true,
+              vigenciaDesde: true,
+              vigenciaHasta: true,
+              viewCount: true,
+              shareCount: true,
+              tags: true,
+              isFeatured: true,
+              createdAt: true,
+              company: {
+                select: { id: true, name: true, slug: true, logoUrl: true },
+              },
+            },
           },
         },
-      },
-    },
-  })
+      })
+  )
 
   return guardadas.map((g) => g.promocion) as PromotionPublic[]
 }
 
 /** IDs de promociones guardadas (para marcar tarjetas). */
 export async function getGuardadasIds(dbUserId: string): Promise<Set<string>> {
-  const rows = await prisma.promocionGuardada.findMany({
-    where: { userId: dbUserId },
-    select: { promocionId: true },
-  })
+  const rows = await sinEmpresa(
+    'social: promociones guardadas del cliente cruzan empresas',
+    (tx) =>
+      tx.promocionGuardada.findMany({
+        where: { userId: dbUserId },
+        select: { promocionId: true },
+      })
+  )
   return new Set(rows.map((r) => r.promocionId))
 }
 
@@ -206,86 +219,94 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
   const en7dias = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const hace14dias = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
-  const [follows, dbUser] = await Promise.all([
-    prisma.companyFollow.findMany({
-      where: { userId: dbUserId },
-      select: { companyId: true, esFavorita: true },
-    }),
-    prisma.user.findUnique({
-      where: { id: dbUserId },
-      select: { supabaseId: true },
-    }),
-  ])
+  const { follows, misRaw, destacadasRaw, nuevasRaw, expiranRaw } = await sinEmpresa(
+      'social: feed del cliente cruza sus empresas seguidas y el marketplace',
+      async (tx) => {
+        const [follows, dbUser] = await Promise.all([
+          tx.companyFollow.findMany({
+            where: { userId: dbUserId },
+            select: { companyId: true, esFavorita: true },
+          }),
+          tx.user.findUnique({
+            where: { id: dbUserId },
+            select: { supabaseId: true },
+          }),
+        ])
+        const seguidasIds = follows.map((f) => f.companyId)
+
+        // Empresas donde es MIEMBRO (cuenta de cliente): ahí también ve privadas.
+        const miembroIds = dbUser
+          ? (
+              await tx.cliente.findMany({
+                where: { supabaseId: dbUser.supabaseId },
+                select: { companyId: true },
+              })
+            ).map((c) => c.companyId)
+          : []
+
+        const misEmpresasIds = [...new Set([...seguidasIds, ...miembroIds])]
+
+        const [misRaw, destacadasRaw, nuevasRaw, expiranRaw] = await Promise.all([
+          // MIS EMPRESAS: las que sigo + aquellas donde soy cliente. Las segundas
+          // se incluyen aunque no las siga porque son suyas de verdad — y porque
+          // es el único camino por el que un cliente de una empresa de práctica (o
+          // de una que aún no se publicó) ve sus propias promociones.
+          misEmpresasIds.length > 0
+            ? tx.promocion.findMany({
+                where: {
+                  ...promoDeMisEmpresas(now),
+                  companyId: { in: misEmpresasIds },
+                  // Públicas de cualquiera de las mías + privadas solo donde soy
+                  // cliente: una promo privada es para los miembros, no para
+                  // cualquiera que le dio a seguir.
+                  AND: [
+                    {
+                      OR: [
+                        { visibilidad: 'publica' },
+                        ...(miembroIds.length > 0
+                          ? [{ visibilidad: 'privada', companyId: { in: miembroIds } }]
+                          : []),
+                      ],
+                    },
+                  ],
+                },
+                select: PROMO_SELECT,
+                orderBy: [{ prioridad: 'desc' }, { isFeatured: 'desc' }, { publicadaEn: 'desc' }],
+                take: 30,
+              })
+            : Promise.resolve([]),
+          tx.promocion.findMany({
+            where: { ...promoVigente(now), isFeatured: true },
+            select: PROMO_SELECT,
+            orderBy: [{ featuredOrder: 'asc' }, { publicadaEn: 'desc' }],
+            take: 12,
+          }),
+          tx.promocion.findMany({
+            where: { ...promoVigente(now), publicadaEn: { gte: hace14dias } },
+            select: PROMO_SELECT,
+            orderBy: { publicadaEn: 'desc' },
+            take: 12,
+          }),
+          tx.promocion.findMany({
+            where: {
+              ...promoVigente(now),
+              vigenciaHasta: { gte: now, lte: en7dias },
+            },
+            select: PROMO_SELECT,
+            orderBy: { vigenciaHasta: 'asc' },
+            take: 12,
+          }),
+        ])
+
+        return { follows, miembroIds, misRaw, destacadasRaw, nuevasRaw, expiranRaw }
+      }
+    )
+
   const seguidasIds = follows.map((f) => f.companyId)
   const favoritasIds = new Set(
     follows.filter((f) => f.esFavorita).map((f) => f.companyId)
   )
-
-  // Empresas donde es MIEMBRO (cuenta de cliente): ahí también ve privadas.
-  const miembroIds = dbUser
-    ? (
-        await prisma.cliente.findMany({
-          where: { supabaseId: dbUser.supabaseId },
-          select: { companyId: true },
-        })
-      ).map((c) => c.companyId)
-    : []
-
-  const misEmpresasIds = [...new Set([...seguidasIds, ...miembroIds])]
-
-  const [misRaw, destacadasRaw, nuevasRaw, expiranRaw, empresasRecomendadas] =
-    await Promise.all([
-      // MIS EMPRESAS: las que sigo + aquellas donde soy cliente. Las segundas
-      // se incluyen aunque no las siga porque son suyas de verdad — y porque
-      // es el único camino por el que un cliente de una empresa de práctica (o
-      // de una que aún no se publicó) ve sus propias promociones.
-      misEmpresasIds.length > 0
-        ? prisma.promocion.findMany({
-            where: {
-              ...promoDeMisEmpresas(now),
-              companyId: { in: misEmpresasIds },
-              // Públicas de cualquiera de las mías + privadas solo donde soy
-              // cliente: una promo privada es para los miembros, no para
-              // cualquiera que le dio a seguir.
-              AND: [
-                {
-                  OR: [
-                    { visibilidad: 'publica' },
-                    ...(miembroIds.length > 0
-                      ? [{ visibilidad: 'privada', companyId: { in: miembroIds } }]
-                      : []),
-                  ],
-                },
-              ],
-            },
-            select: PROMO_SELECT,
-            orderBy: [{ prioridad: 'desc' }, { isFeatured: 'desc' }, { publicadaEn: 'desc' }],
-            take: 30,
-          })
-        : Promise.resolve([]),
-      prisma.promocion.findMany({
-        where: { ...promoVigente(now), isFeatured: true },
-        select: PROMO_SELECT,
-        orderBy: [{ featuredOrder: 'asc' }, { publicadaEn: 'desc' }],
-        take: 12,
-      }),
-      prisma.promocion.findMany({
-        where: { ...promoVigente(now), publicadaEn: { gte: hace14dias } },
-        select: PROMO_SELECT,
-        orderBy: { publicadaEn: 'desc' },
-        take: 12,
-      }),
-      prisma.promocion.findMany({
-        where: {
-          ...promoVigente(now),
-          vigenciaHasta: { gte: now, lte: en7dias },
-        },
-        select: PROMO_SELECT,
-        orderBy: { vigenciaHasta: 'asc' },
-        take: 12,
-      }),
-      getEmpresasRecomendadas(dbUserId, seguidasIds, 4),
-    ])
+  const empresasRecomendadas = await getEmpresasRecomendadas(dbUserId, seguidasIds, 4)
 
   // Favoritas primero dentro de "mis empresas".
   const misEmpresas = [...misRaw].sort((a, b) => {
@@ -315,12 +336,14 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
   const recomendadasIds = empresasRecomendadas.map((c) => c.id)
   const recomendadasRaw =
     recomendadasIds.length > 0
-      ? await prisma.promocion.findMany({
-          where: { ...promoVigente(now), companyId: { in: recomendadasIds } },
-          select: PROMO_SELECT,
-          orderBy: [{ isFeatured: 'desc' }, { publicadaEn: 'desc' }],
-          take: 12,
-        })
+      ? await sinEmpresa('social: promos de las empresas recomendadas', (tx) =>
+          tx.promocion.findMany({
+            where: { ...promoVigente(now), companyId: { in: recomendadasIds } },
+            select: PROMO_SELECT,
+            orderBy: [{ isFeatured: 'desc' }, { publicadaEn: 'desc' }],
+            take: 12,
+          })
+        )
       : []
   const recomendadas = dedupe(recomendadasRaw, 6)
 
@@ -377,55 +400,56 @@ async function getEmpresasRecomendadas(
 
     // Afinidad: categorías de las empresas seguidas + intereses del usuario
     // (F5.2 — el onboarding B2C alimenta directamente las recomendaciones).
-    let candidatas: Awaited<
-      ReturnType<typeof prisma.company.findMany<{ select: typeof companySelect }>>
-    > = []
+    let candidatas: Prisma.CompanyGetPayload<{ select: typeof companySelect }>[] = []
 
-    {
-      const [cats, intereses] = await Promise.all([
-        seguidasIds.length > 0
-          ? prisma.companyToCategory.findMany({
-              where: { companyId: { in: seguidasIds } },
-              select: { categoryId: true },
-            })
-          : Promise.resolve([]),
-        prisma.userInteres.findMany({
-          where: { userId: dbUserId },
-          select: { categoryId: true },
-        }),
-      ])
-      const categoryIds = [
-        ...new Set([
-          ...cats.map((c) => c.categoryId),
-          ...intereses.map((i) => i.categoryId),
-        ]),
-      ]
-      if (categoryIds.length > 0) {
-        candidatas = await prisma.company.findMany({
-          where: {
-            ...baseWhere,
-            categories: { some: { categoryId: { in: categoryIds } } },
-          },
-          select: companySelect,
-          orderBy: [{ isFeatured: 'desc' }, { activePromotionsCount: 'desc' }],
-          take: limit,
-        })
+    await sinEmpresa(
+      'social: recomendaciones cruzan empresas del marketplace',
+      async (tx) => {
+        const [cats, intereses] = await Promise.all([
+          seguidasIds.length > 0
+            ? tx.companyToCategory.findMany({
+                where: { companyId: { in: seguidasIds } },
+                select: { categoryId: true },
+              })
+            : Promise.resolve([]),
+          tx.userInteres.findMany({
+            where: { userId: dbUserId },
+            select: { categoryId: true },
+          }),
+        ])
+        const categoryIds = [
+          ...new Set([
+            ...cats.map((c) => c.categoryId),
+            ...intereses.map((i) => i.categoryId),
+          ]),
+        ]
+        if (categoryIds.length > 0) {
+          candidatas = await tx.company.findMany({
+            where: {
+              ...baseWhere,
+              categories: { some: { categoryId: { in: categoryIds } } },
+            },
+            select: companySelect,
+            orderBy: [{ isFeatured: 'desc' }, { activePromotionsCount: 'desc' }],
+            take: limit,
+          })
+        }
+
+        // Respaldo: populares del marketplace.
+        if (candidatas.length < limit) {
+          const extra = await tx.company.findMany({
+            where: {
+              ...baseWhere,
+              id: { notIn: [...seguidasIds, ...candidatas.map((c) => c.id)] },
+            },
+            select: companySelect,
+            orderBy: [{ isFeatured: 'desc' }, { totalMembersCount: 'desc' }],
+            take: limit - candidatas.length,
+          })
+          candidatas = [...candidatas, ...extra]
+        }
       }
-    }
-
-    // Respaldo: populares del marketplace.
-    if (candidatas.length < limit) {
-      const extra = await prisma.company.findMany({
-        where: {
-          ...baseWhere,
-          id: { notIn: [...seguidasIds, ...candidatas.map((c) => c.id)] },
-        },
-        select: companySelect,
-        orderBy: [{ isFeatured: 'desc' }, { totalMembersCount: 'desc' }],
-        take: limit - candidatas.length,
-      })
-      candidatas = [...candidatas, ...extra]
-    }
+    )
 
     return candidatas.map((c) => ({
       ...c,
@@ -473,36 +497,38 @@ export async function getAudienciaEmpresa(
     agregados,
     guardadasTotales,
     promosRaw,
-  ] = await Promise.all([
-    prisma.companyFollow.count({ where: { companyId } }),
-    prisma.companyFollow.count({
-      where: { companyId, createdAt: { gte: hace30dias } },
-    }),
-    prisma.companyFollow.count({ where: { companyId, esFavorita: true } }),
-    prisma.cliente.count({
-      where: { companyId, createdAt: { gte: hace30dias } },
-    }),
-    prisma.promocion.aggregate({
-      where: { companyId },
-      _sum: { viewCount: true, shareCount: true },
-    }),
-    prisma.promocionGuardada.count({
-      where: { promocion: { companyId } },
-    }),
-    prisma.promocion.findMany({
-      where: { companyId },
-      select: {
-        id: true,
-        titulo: true,
-        activo: true,
-        viewCount: true,
-        shareCount: true,
-        _count: { select: { guardadaPor: true } },
-      },
-      orderBy: { viewCount: 'desc' },
-      take: 20,
-    }),
-  ])
+  ] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.companyFollow.count({ where: { companyId } }),
+      tx.companyFollow.count({
+        where: { companyId, createdAt: { gte: hace30dias } },
+      }),
+      tx.companyFollow.count({ where: { companyId, esFavorita: true } }),
+      tx.cliente.count({
+        where: { companyId, createdAt: { gte: hace30dias } },
+      }),
+      tx.promocion.aggregate({
+        where: { companyId },
+        _sum: { viewCount: true, shareCount: true },
+      }),
+      tx.promocionGuardada.count({
+        where: { promocion: { companyId } },
+      }),
+      tx.promocion.findMany({
+        where: { companyId },
+        select: {
+          id: true,
+          titulo: true,
+          activo: true,
+          viewCount: true,
+          shareCount: true,
+          _count: { select: { guardadaPor: true } },
+        },
+        orderBy: { viewCount: 'desc' },
+        take: 20,
+      }),
+    ])
+  )
 
   const vistasTotales = agregados._sum.viewCount ?? 0
   const compartidasTotales = agregados._sum.shareCount ?? 0
@@ -552,10 +578,14 @@ export async function getNovedadesInicio(
   limit = 6
 ): Promise<NovedadInicio[]> {
   try {
-    const follows = await prisma.companyFollow.findMany({
-      where: { userId: dbUserId },
-      select: { companyId: true },
-    })
+    const follows = await sinEmpresa(
+      'social: novedades de las empresas que el cliente sigue (cruzan empresas)',
+      (tx) =>
+        tx.companyFollow.findMany({
+          where: { userId: dbUserId },
+          select: { companyId: true },
+        })
+    )
     const companyIds = follows.map((f) => f.companyId)
     if (companyIds.length === 0) return []
 
@@ -563,46 +593,50 @@ export async function getNovedadesInicio(
     const hace14dias = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
     const companySel = { select: { name: true, slug: true } } as const
 
-    const [promos, posts] = await Promise.all([
-      prisma.promocion.findMany({
-        where: {
-          companyId: { in: companyIds },
-          activo: true,
-          publicadaEn: { gte: hace14dias },
-          OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
-        },
-        select: {
-          id: true,
-          titulo: true,
-          publicadaEn: true,
-          company: companySel,
-        },
-        orderBy: { publicadaEn: 'desc' },
-        take: limit,
-      }),
-      prisma.companyPost.findMany({
-        where: {
-          companyId: { in: companyIds },
-          activo: true,
-          OR: [
-            // Eventos futuros…
-            { tipo: 'EVENTO', fechaEvento: { gte: now } },
-            // …y noticias/beneficios recientes.
-            { tipo: { not: 'EVENTO' }, publicadaEn: { gte: hace14dias } },
-          ],
-        },
-        select: {
-          id: true,
-          tipo: true,
-          titulo: true,
-          fechaEvento: true,
-          publicadaEn: true,
-          company: companySel,
-        },
-        orderBy: { publicadaEn: 'desc' },
-        take: limit,
-      }),
-    ])
+    const [promos, posts] = await sinEmpresa(
+      'social: novedades de empresas seguidas (cruzan empresas)',
+      (tx) =>
+        Promise.all([
+          tx.promocion.findMany({
+            where: {
+              companyId: { in: companyIds },
+              activo: true,
+              publicadaEn: { gte: hace14dias },
+              OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+            },
+            select: {
+              id: true,
+              titulo: true,
+              publicadaEn: true,
+              company: companySel,
+            },
+            orderBy: { publicadaEn: 'desc' },
+            take: limit,
+          }),
+          tx.companyPost.findMany({
+            where: {
+              companyId: { in: companyIds },
+              activo: true,
+              OR: [
+                // Eventos futuros…
+                { tipo: 'EVENTO', fechaEvento: { gte: now } },
+                // …y noticias/beneficios recientes.
+                { tipo: { not: 'EVENTO' }, publicadaEn: { gte: hace14dias } },
+              ],
+            },
+            select: {
+              id: true,
+              tipo: true,
+              titulo: true,
+              fechaEvento: true,
+              publicadaEn: true,
+              company: companySel,
+            },
+            orderBy: { publicadaEn: 'desc' },
+            take: limit,
+          }),
+        ])
+    )
 
     const items: NovedadInicio[] = [
       ...promos.map((p) => ({
@@ -658,17 +692,21 @@ export async function getOnboardingCliente(
   dbUserId: string,
   supabaseId: string
 ): Promise<OnboardingCliente> {
-  const [cliente, intereses, follows, memberships] = await Promise.all([
-    prisma.cliente.findFirst({
-      where: { supabaseId },
-      select: { fechaNacimiento: true, telefono: true },
-    }),
-    prisma.userInteres.count({ where: { userId: dbUserId } }),
-    prisma.companyFollow.count({ where: { userId: dbUserId } }),
-    prisma.membership.count({
-      where: { cliente: { supabaseId } },
-    }),
-  ])
+  const [cliente, intereses, follows, memberships] = await sinEmpresa(
+    'social: onboarding cruza las empresas del cliente (cliente por supabaseId, intereses y follows por usuario)',
+    (tx) =>
+      Promise.all([
+        tx.cliente.findFirst({
+          where: { supabaseId },
+          select: { fechaNacimiento: true, telefono: true },
+        }),
+        tx.userInteres.count({ where: { userId: dbUserId } }),
+        tx.companyFollow.count({ where: { userId: dbUserId } }),
+        tx.membership.count({
+          where: { cliente: { supabaseId } },
+        }),
+      ])
+  )
 
   const items: OnboardingClienteItem[] = [
     {

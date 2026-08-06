@@ -9,7 +9,7 @@
 
 import { revalidatePath } from 'next/cache'
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { ADMIN_ROLES, SCANNER_ROLES } from '@/types'
@@ -110,7 +110,9 @@ export async function consultarTransaccionPorCodigo(
   if (!user || !SCANNER_ROLES.includes(user.metadata.role)) {
     return { error: 'No autorizado.' }
   }
-  const t = await getByCodigo(codigo)
+  const t = await sinEmpresa('transacciones: buscar por código (lookup global)', (tx) =>
+    getByCodigo(codigo, tx)
+  )
   if (!t) return { error: 'No existe ninguna transacción con ese código.' }
   if (!autorizado(user, t.companyId)) {
     return { error: 'Esta transacción pertenece a otra empresa.' }
@@ -149,22 +151,26 @@ export async function obtenerTicket(
   if (!user || !SCANNER_ROLES.includes(user.metadata.role)) {
     return { error: 'No autorizado.' }
   }
-  const t = await getById(transactionId)
+  const t = await sinEmpresa('transacciones: buscar transacción por id', (tx) =>
+    getById(transactionId, tx)
+  )
   if (!t) return { error: 'Transacción no encontrada.' }
   if (!autorizado(user, t.companyId)) {
     return { error: 'Esta transacción pertenece a otra empresa.' }
   }
 
-  const [company, plantilla] = await Promise.all([
-    prisma.company.findUnique({
-      where: { id: t.companyId },
-      select: {
-        name: true, direccion: true, telefono: true, website: true,
-        logoUrl: true, zonaHoraria: true,
-      },
-    }),
-    prisma.receiptTemplate.findUnique({ where: { companyId: t.companyId } }),
-  ])
+  const [company, plantilla] = await conEmpresa(t.companyId, (tx) =>
+    Promise.all([
+      tx.company.findUnique({
+        where: { id: t.companyId },
+        select: {
+          name: true, direccion: true, telefono: true, website: true,
+          logoUrl: true, zonaHoraria: true,
+        },
+      }),
+      tx.receiptTemplate.findUnique({ where: { companyId: t.companyId } }),
+    ])
+  )
   if (!company) return { error: 'Empresa no encontrada.' }
 
   const s = t.snapshot
@@ -229,21 +235,29 @@ export async function registrarImpresionTx(
     if (!user || !SCANNER_ROLES.includes(user.metadata.role)) {
       return { error: 'No autorizado.' }
     }
-    const t = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-      select: { companyId: true },
-    })
+    const t = await sinEmpresa('transacciones: buscar transacción por id', (tx) =>
+      tx.transaction.findUnique({
+        where: { id: transactionId },
+        select: { companyId: true },
+      })
+    )
     if (!t) return { error: 'Transacción no encontrada.' }
     if (!autorizado(user, t.companyId)) return { error: 'No autorizado.' }
 
-    const { numero, esCopia } = await registrarImpresionRecibo(transactionId, {
-      empleadoId: user.metadata.dbUserId ?? null,
-      motivo: motivo?.trim() || null,
-    })
+    const { numero, esCopia } = await conEmpresa(t.companyId, (tx) =>
+      registrarImpresionRecibo(
+        transactionId,
+        {
+          empleadoId: user.metadata.dbUserId ?? null,
+          motivo: motivo?.trim() || null,
+        },
+        tx
+      )
+    )
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    await conEmpresa(t.companyId, (tx) =>
+      tx.auditLog.create({
         data: {
           companyId: t.companyId,
           userId: user.metadata.dbUserId ?? null,
@@ -254,7 +268,7 @@ export async function registrarImpresionTx(
           ...meta,
         },
       })
-      .catch(anotarFallo('transacciones:auditLog.create'))
+    ).catch(anotarFallo('transacciones:auditLog.create'))
 
     return { numero, esCopia }
   } catch {
@@ -283,10 +297,12 @@ export async function anularTransaccion(
     const motivoLimpio = motivo.trim()
     if (motivoLimpio.length < 3) return { error: 'Indica el motivo de la anulación.' }
 
-    const t = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-      select: { companyId: true, estado: true },
-    })
+    const t = await sinEmpresa('transacciones: buscar transacción por id', (tx) =>
+      tx.transaction.findUnique({
+        where: { id: transactionId },
+        select: { companyId: true, estado: true },
+      })
+    )
     if (!t) return { error: 'Transacción no encontrada.' }
     if (!autorizado(user, t.companyId)) return { error: 'No autorizado.' }
     if (t.estado !== 'APPLIED') {
@@ -294,25 +310,28 @@ export async function anularTransaccion(
     }
 
     // Guard atómico: solo anula si sigue APPLIED (evita doble anulación).
-    const res = await prisma.transaction.updateMany({
-      where: { id: transactionId, estado: 'APPLIED' },
-      data: { estado: 'CANCELLED', cancelledAt: new Date() },
+    const res = await conEmpresa(t.companyId, async (tx) => {
+      const upd = await tx.transaction.updateMany({
+        where: { id: transactionId, estado: 'APPLIED' },
+        data: { estado: 'CANCELLED', cancelledAt: new Date() },
+      })
+      if (upd.count === 0) return null
+      await tx.transactionTransicion.create({
+        data: {
+          transactionId,
+          desde: 'APPLIED',
+          hacia: 'CANCELLED',
+          motivo: motivoLimpio.slice(0, 300),
+          userId: user.metadata.dbUserId ?? null,
+        },
+      })
+      return true
     })
-    if (res.count === 0) return { error: 'La transacción ya no está aplicada.' }
-
-    await prisma.transactionTransicion.create({
-      data: {
-        transactionId,
-        desde: 'APPLIED',
-        hacia: 'CANCELLED',
-        motivo: motivoLimpio.slice(0, 300),
-        userId: user.metadata.dbUserId ?? null,
-      },
-    })
+    if (res === null) return { error: 'La transacción ya no está aplicada.' }
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    await conEmpresa(t.companyId, (tx) =>
+      tx.auditLog.create({
         data: {
           companyId: t.companyId,
           userId: user.metadata.dbUserId ?? null,
@@ -323,7 +342,7 @@ export async function anularTransaccion(
           ...meta,
         },
       })
-      .catch(anotarFallo('transacciones:auditLog.create'))
+    ).catch(anotarFallo('transacciones:auditLog.create'))
 
     revalidatePath('/admin/registros')
     revalidatePath('/admin/facturas')
@@ -353,55 +372,61 @@ export async function anularTransaccionesCliente(
     const motivoLimpio = motivo.trim()
     if (motivoLimpio.length < 3) return { error: 'Indica el motivo de la anulación.' }
 
-    const cliente = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: { companyId: true, nombre: true },
-    })
+    const cliente = await sinEmpresa('transacciones: buscar cliente por id', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: { companyId: true, nombre: true },
+      })
+    )
     if (!cliente) return { error: 'Cliente no encontrado.' }
     if (!autorizado(user, cliente.companyId)) return { error: 'No autorizado.' }
 
-    const aplicadas = await prisma.transaction.findMany({
-      where: { clienteId, companyId: cliente.companyId, estado: 'APPLIED' },
-      select: { id: true },
-    })
-    if (aplicadas.length === 0) return { success: true, anuladas: 0 }
-
     // Guard atómico por fila: solo cambia lo que sigue APPLIED.
-    const res = await prisma.transaction.updateMany({
-      where: { id: { in: aplicadas.map((t) => t.id) }, estado: 'APPLIED' },
-      data: { estado: 'CANCELLED', cancelledAt: new Date() },
+    const { anuladas, ids } = await conEmpresa(cliente.companyId, async (tx) => {
+      const aplicadas = await tx.transaction.findMany({
+        where: { clienteId, companyId: cliente.companyId, estado: 'APPLIED' },
+        select: { id: true },
+      })
+      if (aplicadas.length === 0) return { anuladas: 0, ids: [] as string[] }
+      const upd = await tx.transaction.updateMany({
+        where: { id: { in: aplicadas.map((t) => t.id) }, estado: 'APPLIED' },
+        data: { estado: 'CANCELLED', cancelledAt: new Date() },
+      })
+      return { anuladas: upd.count, ids: aplicadas.map((t) => t.id) }
     })
-    await prisma.transactionTransicion
-      .createMany({
-        data: aplicadas.map((t) => ({
-          transactionId: t.id,
+    if (ids.length === 0) return { success: true, anuladas: 0 }
+
+    await conEmpresa(cliente.companyId, (tx) =>
+      tx.transactionTransicion.createMany({
+        data: ids.map((id) => ({
+          transactionId: id,
           desde: 'APPLIED' as const,
           hacia: 'CANCELLED' as const,
           motivo: motivoLimpio.slice(0, 300),
           userId: user.metadata.dbUserId ?? null,
         })),
       })
-      .catch((e) => console.error('[transacciones] transiciones masivas:', e))
+    ).catch((e) => console.error('[transacciones] transiciones masivas:', e))
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    await conEmpresa(cliente.companyId, (tx) =>
+      tx.auditLog.create({
         data: {
           companyId: cliente.companyId,
           userId: user.metadata.dbUserId ?? null,
           accion: 'TRANSACCION_ANULADA',
           entidadTipo: 'Cliente',
           entidadId: clienteId,
-          payload: { motivo: motivoLimpio, anuladas: res.count, masiva: true, cliente: cliente.nombre },
+          payload: { motivo: motivoLimpio, anuladas, masiva: true, cliente: cliente.nombre },
           ...meta,
         },
       })
-      .catch(anotarFallo('transacciones:auditLog.create'))
+    ).catch(anotarFallo('transacciones:auditLog.create'))
 
     revalidatePath('/admin/registros')
     revalidatePath('/admin/facturas')
     revalidatePath(`/admin/clientes/${clienteId}`)
-    return { success: true, anuladas: res.count }
+    return { success: true, anuladas }
   } catch (e) {
     console.error('[transacciones] anularTransaccionesCliente:', e)
     return { error: 'No se pudieron anular las transacciones.' }
@@ -471,15 +496,17 @@ export async function guardarPlantillaRecibo(
     // Solo se persisten las claves definidas (lo demás usa el default).
     const data = JSON.parse(JSON.stringify(limpio)) as Prisma.InputJsonObject
 
-    await prisma.receiptTemplate.upsert({
-      where: { companyId },
-      create: { companyId, config: data },
-      update: { config: data },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.receiptTemplate.upsert({
+        where: { companyId },
+        create: { companyId, config: data },
+        update: { config: data },
+      })
+    )
 
     const meta = await getRequestMeta()
-    await prisma.auditLog
-      .create({
+    await conEmpresa(companyId, (tx) =>
+      tx.auditLog.create({
         data: {
           companyId,
           userId: user.metadata.dbUserId ?? null,
@@ -490,7 +517,7 @@ export async function guardarPlantillaRecibo(
           ...meta,
         },
       })
-      .catch(anotarFallo('transacciones:auditLog.create'))
+    ).catch(anotarFallo('transacciones:auditLog.create'))
 
     revalidatePath('/admin/perfil')
     return { success: true }

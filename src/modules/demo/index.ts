@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 /**
  * EMPRESAS DE DEMOSTRACIÓN — la política, en un solo archivo.
@@ -65,10 +65,12 @@ export const SIN_DEMO = { esDemo: false } as const
 export async function esEmpresaDemo(companyId: string | null | undefined): Promise<boolean> {
   if (!companyId) return false
   try {
-    const c = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { esDemo: true },
-    })
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { esDemo: true },
+      })
+    )
     return c?.esDemo === true
   } catch {
     // Columna sin migrar: nadie es demo todavía.
@@ -88,10 +90,12 @@ export async function nombreSiEsDemo(
 ): Promise<string | null> {
   if (!companyId) return null
   try {
-    const c = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { esDemo: true, name: true },
-    })
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { esDemo: true, name: true },
+      })
+    )
     return c?.esDemo === true ? c.name : null
   } catch {
     return null
@@ -101,10 +105,12 @@ export async function nombreSiEsDemo(
 /** Ids de las empresas demo. Para separar métricas sin N+1. */
 export async function idsEmpresasDemo(): Promise<string[]> {
   try {
-    const filas = await prisma.company.findMany({
-      where: { esDemo: true },
-      select: { id: true },
-    })
+    const filas = await sinEmpresa('demo: ids de empresas demo (métricas de plataforma)', (tx) =>
+      tx.company.findMany({
+        where: { esDemo: true },
+        select: { id: true },
+      })
+    )
     return filas.map((f) => f.id)
   } catch {
     return []
@@ -124,17 +130,19 @@ export interface ResumenDemo {
 /** Empresas de demostración con su enlace de registro. */
 export async function getEmpresasDemo(baseUrl: string): Promise<ResumenDemo[]> {
   try {
-    const empresas = await prisma.company.findMany({
-      where: { esDemo: true },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        createdAt: true,
-        _count: { select: { clientes: true } },
-      },
-    })
+    const empresas = await sinEmpresa('demo: empresas demo con su enlace de registro', (tx) =>
+      tx.company.findMany({
+        where: { esDemo: true },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          createdAt: true,
+          _count: { select: { clientes: true } },
+        },
+      })
+    )
     return empresas.map((e) => ({
       id: e.id,
       name: e.name,
@@ -175,14 +183,16 @@ export async function contarDatosDemo(companyId: string): Promise<InventarioDemo
     colaVehiculos,
     incidencias,
     turnos,
-  ] = await Promise.all([
-    prisma.cliente.count({ where: { companyId } }).catch(cero),
-    prisma.membership.count({ where: { companyId } }).catch(cero),
-    prisma.productoCompra.count({ where: { companyId } }).catch(cero),
-    prisma.transaction.count({ where: { companyId } }).catch(cero),
-    prisma.colaVehiculo.count({ where: { companyId } }).catch(cero),
-    prisma.incidencia.count({ where: { companyId } }).catch(cero),
-    prisma.turno.count({ where: { companyId } }).catch(cero),
-  ])
+  ] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.cliente.count({ where: { companyId } }).catch(cero),
+      tx.membership.count({ where: { companyId } }).catch(cero),
+      tx.productoCompra.count({ where: { companyId } }).catch(cero),
+      tx.transaction.count({ where: { companyId } }).catch(cero),
+      tx.colaVehiculo.count({ where: { companyId } }).catch(cero),
+      tx.incidencia.count({ where: { companyId } }).catch(cero),
+      tx.turno.count({ where: { companyId } }).catch(cero),
+    ])
+  )
   return { clientes, membresias, compras, transacciones, colaVehiculos, incidencias, turnos }
 }

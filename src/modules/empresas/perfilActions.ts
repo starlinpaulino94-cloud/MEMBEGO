@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath, revalidateTag } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
@@ -51,8 +51,8 @@ export async function actualizarPerfilPublico(
     .filter(Boolean)
 
   try {
-    await prisma.$transaction([
-      prisma.company.update({
+    await conEmpresa(companyId, async (tx) => {
+      await tx.company.update({
         where: { id: companyId },
         data: {
           description: val(formData, 'description'),
@@ -87,17 +87,15 @@ export async function actualizarPerfilPublico(
           tiktok: val(formData, 'tiktok'),
           googleMapsUrl: val(formData, 'googleMapsUrl'),
         },
-      }),
-      prisma.companyToCategory.deleteMany({ where: { companyId } }),
-      ...(categoryIds.length > 0
-        ? [
-            prisma.companyToCategory.createMany({
-              data: categoryIds.map((categoryId) => ({ companyId, categoryId })),
-              skipDuplicates: true,
-            }),
-          ]
-        : []),
-    ])
+      })
+      await tx.companyToCategory.deleteMany({ where: { companyId } })
+      if (categoryIds.length > 0) {
+        await tx.companyToCategory.createMany({
+          data: categoryIds.map((categoryId) => ({ companyId, categoryId })),
+          skipDuplicates: true,
+        })
+      }
+    })
 
     // La dirección/teléfono recién guardados completan la sucursal principal
     // auto-creada (solo campos vacíos; nunca pisa ediciones del admin).
@@ -138,10 +136,12 @@ export async function publicarMiEmpresa(
       return { error: `Completa antes: ${faltan.join(', ')}.` }
     }
 
-    await prisma.company.update({
-      where: { id: companyId },
-      data: { isPublished: true },
-    })
+    await conEmpresa(companyId, (tx) =>
+      tx.company.update({
+        where: { id: companyId },
+        data: { isPublished: true },
+      })
+    )
 
     revalidatePath('/admin/dashboard')
     revalidatePath('/empresas', 'layout')

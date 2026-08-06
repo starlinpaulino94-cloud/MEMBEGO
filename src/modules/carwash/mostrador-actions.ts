@@ -9,7 +9,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
@@ -67,13 +67,15 @@ export async function crearClienteMostrador(
     // quién es. Dos fichas con el mismo carro parten el historial en dos y
     // nadie vuelve a saber cuántas veces vino ese cliente.
     if (placa) {
-      const existente = await prisma.vehiculo.findFirst({
-        where: {
-          placa: { equals: placa, mode: 'insensitive' },
-          cliente: { companyId: ctx.companyId },
-        },
-        select: { cliente: { select: { id: true, nombre: true } } },
-      })
+      const existente = await conEmpresa(ctx.companyId, (tx) =>
+        tx.vehiculo.findFirst({
+          where: {
+            placa: { equals: placa, mode: 'insensitive' },
+            cliente: { companyId: ctx.companyId },
+          },
+          select: { cliente: { select: { id: true, nombre: true } } },
+        })
+      )
       if (existente) {
         return {
           error: `La placa ${placa} ya está registrada a nombre de ${existente.cliente.nombre}.`,
@@ -84,7 +86,7 @@ export async function crearClienteMostrador(
 
     const tipoVehiculoId = texto(formData.get('tipoVehiculoId'), 40) || null
 
-    const cliente = await prisma.$transaction(async (tx) => {
+    const cliente = await conEmpresa(ctx.companyId, async (tx) => {
       const c = await tx.cliente.create({
         data: {
           companyId: ctx.companyId,
@@ -140,10 +142,12 @@ export async function editarClienteMostrador(
 
     // Solo los de mostrador: los datos de un cliente con cuenta los cambia él
     // desde su perfil, no el negocio.
-    const upd = await prisma.cliente.updateMany({
-      where: { id, companyId: ctx.companyId, esLocal: true },
-      data: { nombre, telefono: texto(formData.get('telefono'), 30) || null },
-    })
+    const upd = await conEmpresa(ctx.companyId, (tx) =>
+      tx.cliente.updateMany({
+        where: { id, companyId: ctx.companyId, esLocal: true },
+        data: { nombre, telefono: texto(formData.get('telefono'), 30) || null },
+      })
+    )
     if (upd.count === 0) {
       return { error: 'Cliente no encontrado, o tiene cuenta propia y edita sus datos él mismo.' }
     }
@@ -166,39 +170,45 @@ export async function agregarVehiculo(
     if ('error' in ctx) return ctx
 
     const clienteId = texto(formData.get('clienteId'), 40)
-    const cliente = await prisma.cliente.findFirst({
-      where: { id: clienteId, companyId: ctx.companyId },
-      select: { id: true },
-    })
+    const cliente = await conEmpresa(ctx.companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { id: clienteId, companyId: ctx.companyId },
+        select: { id: true },
+      })
+    )
     if (!cliente) return { error: 'Cliente no encontrado.' }
 
     const placaCruda = texto(formData.get('placa'), 20)
     const placa = placaCruda ? normalizarPlaca(placaCruda) : null
     if (placa) {
-      const existente = await prisma.vehiculo.findFirst({
-        where: {
-          placa: { equals: placa, mode: 'insensitive' },
-          cliente: { companyId: ctx.companyId },
-        },
-        select: { cliente: { select: { nombre: true } } },
-      })
+      const existente = await conEmpresa(ctx.companyId, (tx) =>
+        tx.vehiculo.findFirst({
+          where: {
+            placa: { equals: placa, mode: 'insensitive' },
+            cliente: { companyId: ctx.companyId },
+          },
+          select: { cliente: { select: { nombre: true } } },
+        })
+      )
       if (existente) {
         return { error: `La placa ${placa} ya está a nombre de ${existente.cliente.nombre}.` }
       }
     }
 
     const tipoVehiculoId = texto(formData.get('tipoVehiculoId'), 40) || null
-    await prisma.vehiculo.create({
-      data: {
-        clienteId: cliente.id,
-        placa,
-        marca: texto(formData.get('marca'), 40) || 'Sin marca',
-        modelo: texto(formData.get('modelo'), 40) || 'Sin modelo',
-        anio: Number(formData.get('anio')) || new Date().getFullYear(),
-        color: texto(formData.get('color'), 30) || 'Sin color',
-        ...(tipoVehiculoId ? { tipoVehiculoId } : {}),
-      },
-    })
+    await conEmpresa(ctx.companyId, (tx) =>
+      tx.vehiculo.create({
+        data: {
+          clienteId: cliente.id,
+          placa,
+          marca: texto(formData.get('marca'), 40) || 'Sin marca',
+          modelo: texto(formData.get('modelo'), 40) || 'Sin modelo',
+          anio: Number(formData.get('anio')) || new Date().getFullYear(),
+          color: texto(formData.get('color'), 30) || 'Sin color',
+          ...(tipoVehiculoId ? { tipoVehiculoId } : {}),
+        },
+      })
+    )
 
     revalidatePath(`${RUTA}/${clienteId}`)
     return { success: 'Vehículo agregado.' }
@@ -235,16 +245,18 @@ export async function vincularConCuenta(
     if (!localId || !destinoId) return { error: 'Faltan datos.' }
     if (localId === destinoId) return { error: 'Es el mismo cliente.' }
 
-    const [local, destino] = await Promise.all([
-      prisma.cliente.findFirst({
-        where: { id: localId, companyId: ctx.companyId },
-        select: { id: true, nombre: true, esLocal: true, supabaseId: true },
-      }),
-      prisma.cliente.findFirst({
-        where: { id: destinoId, companyId: ctx.companyId },
-        select: { id: true, nombre: true, esLocal: true, supabaseId: true },
-      }),
-    ])
+    const [local, destino] = await conEmpresa(ctx.companyId, (tx) =>
+      Promise.all([
+        tx.cliente.findFirst({
+          where: { id: localId, companyId: ctx.companyId },
+          select: { id: true, nombre: true, esLocal: true, supabaseId: true },
+        }),
+        tx.cliente.findFirst({
+          where: { id: destinoId, companyId: ctx.companyId },
+          select: { id: true, nombre: true, esLocal: true, supabaseId: true },
+        }),
+      ])
+    )
     if (!local || !destino) return { error: 'Cliente no encontrado.' }
 
     // El origen tiene que ser de mostrador y el destino una cuenta real. Al
@@ -256,7 +268,7 @@ export async function vincularConCuenta(
       return { error: 'El destino tiene que ser un cliente con cuenta en la plataforma.' }
     }
 
-    const movidos = await prisma.$transaction(async (tx) => {
+    const movidos = await conEmpresa(ctx.companyId, async (tx) => {
       const [vehiculos, cola, incidencias, visitas] = await Promise.all([
         tx.vehiculo.updateMany({ where: { clienteId: localId }, data: { clienteId: destinoId } }),
         tx.colaVehiculo.updateMany({ where: { clienteId: localId }, data: { clienteId: destinoId } }),
@@ -276,15 +288,17 @@ export async function vincularConCuenta(
     // y se dice, en vez de dejar un borrado a medias.
     let fichaBorrada = true
     try {
-      await prisma.cliente.delete({ where: { id: localId } })
+      await conEmpresa(ctx.companyId, (tx) => tx.cliente.delete({ where: { id: localId } }))
     } catch {
       fichaBorrada = false
-      await prisma.cliente
-        .update({
-          where: { id: localId },
-          data: { nombre: `${local.nombre} (fusionado con ${destino.nombre})` },
-        })
-        .catch(anotarFallo('mostrador:marcarFusionado', { localId }))
+      await conEmpresa(ctx.companyId, (tx) =>
+        tx.cliente
+          .update({
+            where: { id: localId },
+            data: { nombre: `${local.nombre} (fusionado con ${destino.nombre})` },
+          })
+          .catch(anotarFallo('mostrador:marcarFusionado', { localId }))
+      )
     }
 
     revalidatePath(RUTA)

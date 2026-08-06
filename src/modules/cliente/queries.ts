@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 
 /**
  * Load all memberships for a user across all companies.
@@ -30,35 +30,41 @@ export async function getClienteAllMemberships(
       ...(supabaseId ? [{ supabaseId }] : []),
       ...(clienteId ? [{ id: clienteId }] : []),
     ]
-    const clientes = await prisma.cliente.findMany({
-      where: { OR: or },
-      select: { id: true },
-    })
+    const clientes = await sinEmpresa('cliente: buscar mis cuentas de cliente', (tx) =>
+      tx.cliente.findMany({
+        where: { OR: or },
+        select: { id: true },
+      })
+    )
     const clienteIds = clientes.map((c) => c.id)
     if (clienteIds.length === 0) return []
 
     // Membresías (con plan y empresa). Se consultan aparte de los QR para que un
     // problema con las columnas de qr_tokens (activo/membresiaId) no tumbe toda
     // la lista.
-    const memberships = await prisma.membership.findMany({
-      where: { clienteId: { in: clienteIds } },
-      include: {
-        plan: true,
-        company: {
-          select: { id: true, name: true, logoUrl: true, type: true, colorPrimario: true },
+    const memberships = await sinEmpresa('cliente: mis membresías (todas las empresas)', (tx) =>
+      tx.membership.findMany({
+        where: { clienteId: { in: clienteIds } },
+        include: {
+          plan: true,
+          company: {
+            select: { id: true, name: true, logoUrl: true, type: true, colorPrimario: true },
+          },
         },
-      },
-      orderBy: [{ estado: 'asc' }, { fechaVencimiento: 'desc' }],
-    })
+        orderBy: [{ estado: 'asc' }, { fechaVencimiento: 'desc' }],
+      })
+    )
 
     // QR activos por membresía — resiliente: si falla (drift de esquema), la
     // lista sigue mostrándose sin QR en vez de romperse por completo.
     const qrByMembership = new Map<string, { id: string; token: string }>()
     try {
-      const qrs = await prisma.qrToken.findMany({
-        where: { membresiaId: { in: memberships.map((m) => m.id) }, activo: true },
-        select: { id: true, token: true, membresiaId: true },
-      })
+      const qrs = await sinEmpresa('cliente: mis QR activos', (tx) =>
+        tx.qrToken.findMany({
+          where: { membresiaId: { in: memberships.map((m) => m.id) }, activo: true },
+          select: { id: true, token: true, membresiaId: true },
+        })
+      )
       for (const q of qrs) {
         if (q.membresiaId && !qrByMembership.has(q.membresiaId)) {
           qrByMembership.set(q.membresiaId, { id: q.id, token: q.token })
@@ -120,15 +126,17 @@ import { unstable_cache } from 'next/cache'
  */
 export const getClienteCompaniesCached = unstable_cache(
   async (supabaseId: string) =>
-    prisma.cliente.findMany({
-      where: { supabaseId },
-      select: {
-        id: true,
-        companyId: true,
-        company: { select: { id: true, name: true, logoUrl: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
+    sinEmpresa('cliente: mis empresas (cuentas cross-tenant)', (tx) =>
+      tx.cliente.findMany({
+        where: { supabaseId },
+        select: {
+          id: true,
+          companyId: true,
+          company: { select: { id: true, name: true, logoUrl: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    ),
   ['cliente-companies'],
   { revalidate: 300 }
 )
@@ -187,18 +195,20 @@ export async function getClientePerfil(clienteId: string): Promise<ClientePerfil
   }
 
   try {
-    return await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: {
-        ...selectBase,
-        avatarUrl: true,
-        fechaNacimiento: true,
-        ciudad: true,
-        genero: true,
-        notifPromos: true,
-        notifRecordatorios: true,
-      },
-    })
+    return await sinEmpresa('cliente: mi perfil', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: {
+          ...selectBase,
+          avatarUrl: true,
+          fechaNacimiento: true,
+          ciudad: true,
+          genero: true,
+          notifPromos: true,
+          notifRecordatorios: true,
+        },
+      })
+    )
   } catch (error) {
     const { logErrorBd } = await import('@/lib/prisma-errors')
     const info = logErrorBd('getClientePerfil', error, { clienteId })
@@ -206,10 +216,12 @@ export async function getClientePerfil(clienteId: string): Promise<ClientePerfil
     // el select reducido evita las columnas nuevas y la página sigue viva.
     if (info.tipo !== 'SCHEMA_DRIFT') throw error
 
-    const base = await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      select: selectBase,
-    })
+    const base = await sinEmpresa('cliente: mi perfil (select base)', (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: selectBase,
+      })
+    )
     if (!base) return null
     return {
       ...base,
@@ -254,28 +266,30 @@ export async function getClienteVisitas(
   inicioMes.setDate(1)
   inicioMes.setHours(0, 0, 0, 0)
 
-  const [total, esteMes, visitas] = await Promise.all([
-    prisma.visit.count({ where: { clienteId } }),
-    prisma.visit.count({ where: { clienteId, fechaVisita: { gte: inicioMes } } }),
-    prisma.visit.findMany({
-      where: { clienteId },
-      select: {
-        id: true,
-        servicio: true,
-        fechaVisita: true,
-        descontado: true,
-        notas: true,
-        sucursal: { select: { nombre: true } },
-        empleado: { select: { name: true } },
-        membership: { select: { plan: { select: { nombre: true } } } },
-        vehiculo: { select: { marca: true, modelo: true, placa: true } },
-        transaccion: { select: { codigo: true, ticketNumero: true, estado: true } },
-      },
-      orderBy: { fechaVisita: 'desc' },
-      skip,
-      take: pageSize,
-    }),
-  ])
+  const [total, esteMes, visitas] = await sinEmpresa('cliente: mi historial de visitas', (tx) =>
+    Promise.all([
+      tx.visit.count({ where: { clienteId } }),
+      tx.visit.count({ where: { clienteId, fechaVisita: { gte: inicioMes } } }),
+      tx.visit.findMany({
+        where: { clienteId },
+        select: {
+          id: true,
+          servicio: true,
+          fechaVisita: true,
+          descontado: true,
+          notas: true,
+          sucursal: { select: { nombre: true } },
+          empleado: { select: { name: true } },
+          membership: { select: { plan: { select: { nombre: true } } } },
+          vehiculo: { select: { marca: true, modelo: true, placa: true } },
+          transaccion: { select: { codigo: true, ticketNumero: true, estado: true } },
+        },
+        orderBy: { fechaVisita: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ])
+  )
 
   return {
     total,
@@ -324,15 +338,17 @@ export async function getMembresiaActivaPrincipalId(
       ...(supabaseId ? [{ supabaseId }] : []),
       ...(clienteId ? [{ id: clienteId }] : []),
     ]
-    const m = await prisma.membership.findFirst({
-      where: {
-        estado: 'ACTIVA',
-        OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
-        cliente: { OR: or },
-      },
-      orderBy: { fechaVencimiento: 'desc' },
-      select: { id: true },
-    })
+    const m = await sinEmpresa('cliente: membresía activa principal', (tx) =>
+      tx.membership.findFirst({
+        where: {
+          estado: 'ACTIVA',
+          OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
+          cliente: { OR: or },
+        },
+        orderBy: { fechaVencimiento: 'desc' },
+        select: { id: true },
+      })
+    )
     return m?.id ?? null
   } catch (e) {
     console.error('[getMembresiaActivaPrincipalId]', e)
@@ -357,17 +373,19 @@ export async function getBeneficioDisponible(
 ): Promise<BeneficioDisponible | null> {
   if (!clienteId) return null
   try {
-    const compra = await prisma.productoCompra.findFirst({
-      where: { clienteId, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        usosRestantes: true,
-        usosIncluidos: true,
-        promocion: { select: { titulo: true } },
-        company: { select: { name: true } },
-      },
-    })
+    const compra = await sinEmpresa('cliente: beneficio disponible', (tx) =>
+      tx.productoCompra.findFirst({
+        where: { clienteId, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          usosRestantes: true,
+          usosIncluidos: true,
+          promocion: { select: { titulo: true } },
+          company: { select: { name: true } },
+        },
+      })
+    )
     if (!compra?.promocion) return null
     return {
       id: compra.id,
@@ -420,12 +438,14 @@ export interface ClientePagos {
  * (aprobados/rechazados) reconstruido desde el AuditLog. Devuelve datos planos.
  */
 export async function getClientePagos(clienteId: string): Promise<ClientePagos> {
-  const memberships = await prisma.membership.findMany({
-    where: { clienteId },
-    include: { plan: true, metodoPago: true, planSolicitado: true },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  })
+  const memberships = await sinEmpresa('cliente: mis membresías y pagos', (tx) =>
+    tx.membership.findMany({
+      where: { clienteId },
+      include: { plan: true, metodoPago: true, planSolicitado: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })
+  )
 
   const membershipIds = memberships.map((m) => m.id)
   const current = memberships[0] ?? null
@@ -433,15 +453,17 @@ export async function getClientePagos(clienteId: string): Promise<ClientePagos> 
   let historial: PagoHistorialItem[] = []
   if (membershipIds.length > 0) {
     try {
-      const logs = await prisma.auditLog.findMany({
-        where: {
-          entidadTipo: 'Membership',
-          entidadId: { in: membershipIds },
-          accion: { in: ['PAGO_APROBADO', 'PAGO_RECHAZADO'] },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      })
+      const logs = await sinEmpresa('cliente: historial de pagos (auditLog)', (tx) =>
+        tx.auditLog.findMany({
+          where: {
+            entidadTipo: 'Membership',
+            entidadId: { in: membershipIds },
+            accion: { in: ['PAGO_APROBADO', 'PAGO_RECHAZADO'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        })
+      )
 
       // Resolver nombres de plan referenciados en los payloads.
       const planIds = new Set<string>()
@@ -451,10 +473,12 @@ export async function getClientePagos(clienteId: string): Promise<ClientePagos> 
         if (typeof p.planNuevo === 'string') planIds.add(p.planNuevo)
       }
       const planes = planIds.size
-        ? await prisma.plan.findMany({
-            where: { id: { in: [...planIds] } },
-            select: { id: true, nombre: true },
-          })
+        ? await sinEmpresa('cliente: resolver nombres de planes', (tx) =>
+            tx.plan.findMany({
+              where: { id: { in: [...planIds] } },
+              select: { id: true, nombre: true },
+            })
+          )
         : []
       const planName = new Map(planes.map((p) => [p.id, p.nombre]))
 
@@ -471,11 +495,13 @@ export async function getClientePagos(clienteId: string): Promise<ClientePagos> 
       )
       const validadorIds = [...new Set(logs.map((l) => l.userId).filter((u): u is string => !!u))]
       const validadores = validadorIds.length
-        ? await prisma.user
-            .findMany({
-              where: { id: { in: validadorIds } },
-              select: { id: true, name: true },
-            })
+        ? await sinEmpresa('cliente: resolver validadores', (tx) =>
+            tx.user
+              .findMany({
+                where: { id: { in: validadorIds } },
+                select: { id: true, name: true },
+              })
+          )
             .catch(() => [])
         : []
       const validadorName = new Map(validadores.map((u) => [u.id, u.name]))

@@ -1,5 +1,5 @@
 import { unstable_cache } from 'next/cache'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import type { AdminSection } from '@/lib/auth/permissions'
 import {
   CAPACIDAD_DE_SECCION,
@@ -32,16 +32,18 @@ export interface CapacidadesEmpresa {
 /** Fila mínima de la empresa, tolerante a la columna sin migrar. */
 async function leerEmpresa(companyId: string): Promise<{ type: string | null; raw: unknown }> {
   try {
-    const c = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { type: true, capacidades: true },
-    })
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { type: true, capacidades: true },
+      })
+    )
     return { type: c?.type ?? null, raw: c?.capacidades ?? null }
   } catch {
     // Columna aún sin migrar: solo el type (paquete base de la categoría).
-    const c = await prisma.company
-      .findUnique({ where: { id: companyId }, select: { type: true } })
-      .catch(() => null)
+    const c = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({ where: { id: companyId }, select: { type: true } })
+    ).catch(() => null)
     return { type: c?.type ?? null, raw: null }
   }
 }

@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { logErrorBd } from '@/lib/prisma-errors'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { esEmpresaDemo } from '@/modules/demo'
@@ -174,18 +174,19 @@ export async function cobrarPendienteConPerfil(input: {
   }
 
   // ¿Hay un cobro de este mismo objetivo en vuelo? (doble canal / doble pestaña)
-  const enVuelo = await prisma.pagoIntento
-    .findFirst({
-      where: {
-        proveedor: 'CARDNET',
-        estado: 'CREADO',
-        createdAt: { gte: new Date(Date.now() - VENTANA_EN_VUELO_MS) },
-        ...(input.objetivo.membershipId ? { membershipId: input.objetivo.membershipId } : {}),
-        ...(input.objetivo.compraId ? { compraId: input.objetivo.compraId } : {}),
-      },
-      select: { id: true },
-    })
-    .catch(() => null)
+  const enVuelo = await conEmpresa(input.objetivo.companyId, (tx) =>
+    tx.pagoIntento
+      .findFirst({
+        where: {
+          proveedor: 'CARDNET',
+          estado: 'CREADO',
+          createdAt: { gte: new Date(Date.now() - VENTANA_EN_VUELO_MS) },
+          ...(input.objetivo.membershipId ? { membershipId: input.objetivo.membershipId } : {}),
+          ...(input.objetivo.compraId ? { compraId: input.objetivo.compraId } : {}),
+        },
+        select: { id: true },
+      })
+  ).catch(() => null)
   if (enVuelo) return { estado: 'en_proceso' }
 
   // Si ya no hay nada pendiente (p. ej. el otro canal ya cobró y activó),
@@ -213,12 +214,14 @@ export async function cobrarPendienteConPerfil(input: {
     // Sin customerId del navegador: se usa el guardado del cliente (§4.1.2.1).
     // NUNCA se hace POST aquí — la ventana de captura puede seguir abierta y
     // un POST emitiría un UniqueID nuevo, matándola con INTERNAL_SERVER_ERROR.
-    const guardado = await prisma.cliente
-      .findUnique({
-        where: { id: input.objetivo.clienteId },
-        select: { cardnetCustomerId: true },
-      })
-      .catch(() => null)
+    const guardado = await conEmpresa(input.objetivo.companyId, (tx) =>
+      tx.cliente
+        .findUnique({
+          where: { id: input.objetivo.clienteId },
+          select: { cardnetCustomerId: true },
+        })
+        .catch(() => null)
+    )
     customerId = guardado?.cardnetCustomerId?.trim() || null
     if (!customerId) return { estado: 'sin_tarjeta' }
     perfiles = (await consultarClienteCardnet(customerId)).perfiles
