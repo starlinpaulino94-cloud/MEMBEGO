@@ -5,6 +5,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { validarVehiculoNuevo } from '@/modules/registro/vehiculo-nuevo'
+import { clasificarErrorPrisma } from '@/lib/prisma-errors'
 import { capturarErrorInesperado } from '@/lib/sentry'
 
 /**
@@ -104,6 +105,13 @@ export async function agregarVehiculoCliente(
     revalidatePath('/cliente/planes')
     return { success: true, vehiculoId: creado.id }
   } catch (e) {
+    // Carrera de placa duplicada perdida contra el unique: mensaje claro.
+    if (clasificarErrorPrisma(e).codigo === 'P2002') {
+      return {
+        error:
+          'Esta placa ya está registrada en otra cuenta. Si el vehículo es tuyo, escríbenos desde Ayuda para reclamarlo.',
+      }
+    }
     capturarErrorInesperado('cliente:agregarVehiculo', e)
     return { error: 'No se pudo guardar el vehículo. Intenta de nuevo.' }
   }

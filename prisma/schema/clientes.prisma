@@ -178,9 +178,12 @@ model Vehiculo {
   @@index([clienteId])
   // Selector de vehículo del cliente (planes, checkout) y búsqueda del principal.
   @@index([clienteId, esPrincipal])
-  // Detección de duplicados por identidad técnica. NO unique todavía: primero
-  // la auditoría de producción; el constraint llega en su propia migración.
-  @@index([pais, placaNormalizada])
+  // Identidad técnica del vehículo (§7): una placa = un vehículo. SEGURO
+  // sobre los datos históricos: sus filas tienen placaNormalizada NULL y en
+  // Postgres los NULL no chocan entre sí (NULLS DISTINCT) — el constraint
+  // solo aplica a capturas nuevas y al backfill (scripts/backfill-placas.mjs,
+  // que salta colisiones y las reporta en vez de reventar).
+  @@unique([pais, placaNormalizada])
   @@map("vehiculos")
 }
 

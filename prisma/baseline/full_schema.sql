@@ -2536,7 +2536,7 @@ CREATE INDEX "vehiculos_clienteId_idx" ON "vehiculos"("clienteId");
 CREATE INDEX "vehiculos_clienteId_esPrincipal_idx" ON "vehiculos"("clienteId", "esPrincipal");
 
 -- CreateIndex
-CREATE INDEX "vehiculos_pais_placaNormalizada_idx" ON "vehiculos"("pais", "placaNormalizada");
+CREATE UNIQUE INDEX "vehiculos_pais_placaNormalizada_key" ON "vehiculos"("pais", "placaNormalizada");
 
 -- CreateIndex
 CREATE INDEX "cliente_notas_clienteId_createdAt_idx" ON "cliente_notas"("clienteId", "createdAt");

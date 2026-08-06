@@ -14,7 +14,7 @@ import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, clasificarErrorPrisma } from '@/lib/prisma-errors'
 import { primerErrorZod } from '@/lib/validacion'
 import { capturarErrorInesperado } from '@/lib/sentry'
 import { registroSchema } from '@/modules/registro/schema'
@@ -360,6 +360,14 @@ export async function registrarCliente(
         qrBienvenida: await qrBienvenidaDe(cliente.id, campanaBienvenida),
       }
     } catch (e) {
+      // El unique de placa cierra la carrera que el chequeo previo no puede:
+      // quien pierde la carrera recibe el mismo mensaje claro, no un genérico.
+      if (clasificarErrorPrisma(e).codigo === 'P2002') {
+        return {
+          error:
+            'Esta placa ya está registrada en otra cuenta. Si el vehículo es tuyo, escríbenos desde Ayuda para reclamarlo.',
+        }
+      }
       capturarErrorInesperado('registro:afiliacion', e)
       return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
     }
@@ -528,6 +536,13 @@ export async function registrarCliente(
   } catch (e) {
     // Roll back the Supabase user if DB write failed
     await admin.auth.admin.deleteUser(supabaseId).catch(e => console.error('[registro-cleanup]', e))
+    // Carrera de placa duplicada perdida contra el unique: mensaje claro.
+    if (clasificarErrorPrisma(e).codigo === 'P2002') {
+      return {
+        error:
+          'Esta placa ya está registrada en otra cuenta. Si el vehículo es tuyo, escríbenos desde Ayuda para reclamarlo.',
+      }
+    }
     capturarErrorInesperado('registro:crear', e)
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }
