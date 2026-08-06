@@ -38,6 +38,12 @@ export const registroSchema = z.object({
   anioRaw: z.string().trim().default(''),
   color: z.string().trim().default(''),
   placa: z.string().trim().default(''),
+  // Onboarding v2 (Fase 4). Vacíos en el formulario clásico: el flujo legacy
+  // no cambia. `flujoV2` marca que el alta entró por el asistente y activa la
+  // validación estricta del vehículo en los negocios que lo exigen.
+  tipoVehiculoId: z.string().trim().default(''),
+  pais: z.string().trim().default(''),
+  flujoV2: z.string().trim().default(''),
 })
 
 export type RegistroInput = z.infer<typeof registroSchema>

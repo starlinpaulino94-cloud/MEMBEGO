@@ -1,8 +1,13 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { registrarRegistroIniciado } from '@/lib/referidos-attribution'
+import { capacidadesEfectivas } from '@/modules/capacidades/catalogo'
+import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
+import { isRegistroV2Enabled } from '@/lib/registroV2'
 import { RegisterForm } from '@/components/auth/RegisterForm'
+import { AsistenteRegistro, type TipoVehiculoOpcion } from '@/components/auth/AsistenteRegistro'
 import { CompanyRegistroHeader } from '@/components/auth/CompanyRegistroHeader'
 import { AfiliarEmpresaCard } from '@/components/cliente/AfiliarEmpresaCard'
 
@@ -32,6 +37,7 @@ export default async function RegistroPage({
       logoUrl: true,
       bannerUrl: true,
       colorPrimario: true,
+      capacidades: true,
     },
   })
 
@@ -67,6 +73,26 @@ export default async function RegistroPage({
     )
   }
 
+  // Onboarding v2: el flujo lo decide la CATEGORÍA del negocio (declarativo,
+  // resuelto en el servidor), no un `type === 'carwash'` en el cliente.
+  const { categoria } = capacidadesEfectivas(company.type, company.capacidades)
+  const flujoConVehiculo = flujoRequiereVehiculo(categoria)
+
+  // Categorías de vehículo del negocio, para las tarjetas del paso 1 del
+  // vehículo. Si la empresa no configuró ninguna, el asistente omite los pasos
+  // de vehículo (fail-open: el registro jamás se bloquea por configuración).
+  let tiposVehiculo: TipoVehiculoOpcion[] = []
+  if (isRegistroV2Enabled() && flujoConVehiculo) {
+    tiposVehiculo = await conEmpresa(company.id, (tx) =>
+      tx.tipoVehiculo.findMany({
+        where: { companyId: company.id, activo: true },
+        select: { id: true, nombre: true, descripcion: true, iconoUrl: true },
+        orderBy: { orden: 'asc' },
+      })
+    ).catch(() => [])
+  }
+  const requiereVehiculo = flujoConVehiculo && tiposVehiculo.length > 0
+
   return (
     <>
       <CompanyRegistroHeader
@@ -76,12 +102,24 @@ export default async function RegistroPage({
         colorPrimario={company.colorPrimario}
         referido={!!ref}
       />
-      <RegisterForm
-        companySlug={company.slug}
-        companyName={company.name}
-        isCarwash={company.type === 'carwash'}
-        colorPrimario={company.colorPrimario}
-      />
+      {isRegistroV2Enabled() ? (
+        <AsistenteRegistro
+          modo="empresa"
+          companySlug={company.slug}
+          companyName={company.name}
+          colorPrimario={company.colorPrimario}
+          requiereVehiculo={requiereVehiculo}
+          tiposVehiculo={tiposVehiculo}
+        />
+      ) : (
+        // Salida de emergencia (NEXT_PUBLIC_REGISTRO_V2=0): formulario clásico.
+        <RegisterForm
+          companySlug={company.slug}
+          companyName={company.name}
+          isCarwash={flujoConVehiculo}
+          colorPrimario={company.colorPrimario}
+        />
+      )}
     </>
   )
 }
