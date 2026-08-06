@@ -30,8 +30,13 @@ import type { EvaluacionRequisitos } from '@/modules/onboarding/flujos'
 
 export type { AccionElegibilidad, DecisionPlan, VehiculoInfo } from '@/modules/elegibilidad/decidir'
 
-/** Categoría de negocio efectiva de la empresa (tipo legacy + overrides). */
-async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<CategoriaNegocio | null> {
+/**
+ * Categoría de negocio efectiva de la empresa (tipo legacy + overrides).
+ * Exportada para que las acciones que YA están dentro de su propia
+ * transacción (p. ej. seleccionarPlan) compongan los mismos datos sin anidar
+ * conEmpresa — las reglas siguen siendo las puras de decidir.ts.
+ */
+export async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<CategoriaNegocio | null> {
   const company = await tx.company.findUnique({
     where: { id: companyId },
     select: { type: true, capacidades: true },
@@ -41,7 +46,7 @@ async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<CategoriaN
 }
 
 /** Vehículos del cliente en la forma plana que consume el motor puro. */
-async function vehiculosDe(tx: Tx, clienteId: string): Promise<VehiculoInfo[]> {
+export async function vehiculosDe(tx: Tx, clienteId: string): Promise<VehiculoInfo[]> {
   const filas = await tx.vehiculo.findMany({
     where: { clienteId },
     select: {
@@ -92,6 +97,14 @@ export interface PlanElegible {
   id: string
   nombre: string
   decision: DecisionPlan
+  /** Ficha completa para la tarjeta: el motor es la ÚNICA consulta de planes
+   *  de la página (la respuesta trae solo lo autorizado, §10). */
+  esIlimitado: boolean
+  descripcion: string | null
+  lavadosIncluidos: number
+  beneficios: string[]
+  vigenciaDias: number
+  condiciones: string | null
 }
 
 export interface ResultadoPlanes {
@@ -101,8 +114,11 @@ export interface ResultadoPlanes {
    * negocios sin vehículos o cuando faltan requisitos.
    */
   vehiculo: VehiculoInfo | null
-  /** Vacío cuando faltan requisitos (§10: sin vehículo no se enseñan planes). */
+  /** Vacío cuando faltan requisitos (§10: sin vehículo no se enseñan planes),
+   *  salvo modo vitrina (ver `vitrinaSinRequisitos`). */
   planes: PlanElegible[]
+  /** true = la lista viene en modo vitrina: precios base, compra bloqueada. */
+  vitrina: boolean
 }
 
 /**
@@ -115,23 +131,33 @@ export async function planesElegibles(args: {
   clienteId: string
   /** Vehículo elegido; ausente = el principal (o el más reciente). */
   vehiculoId?: string
+  /**
+   * REGLA DE COMPATIBILIDAD: true para clientes con una membresía previa en
+   * la empresa. Si les faltan requisitos, en vez de ocultar los planes se
+   * devuelven en VITRINA (precio base, compra bloqueada): quien ya es miembro
+   * puede seguir viendo la oferta como siempre; solo la compra nueva exige el
+   * vehículo. Los clientes nuevos (false) reciben el gating estricto (§10).
+   */
+  vitrinaSinRequisitos?: boolean
 }): Promise<ResultadoPlanes> {
-  const { companyId, clienteId, vehiculoId } = args
+  const { companyId, clienteId, vehiculoId, vitrinaSinRequisitos = false } = args
   return conEmpresa(companyId, async (tx) => {
     const categoria = await categoriaDeEmpresa(tx, companyId)
     const vehiculos = await vehiculosDe(tx, clienteId)
     const requisitos = requisitosParaAccion({ accion: 'COMPRAR_PLAN', categoria, vehiculos })
-    if (!requisitos.canProceed) {
-      return { requisitos, vehiculo: null, planes: [] }
+    const enVitrina = !requisitos.canProceed && vitrinaSinRequisitos
+    if (!requisitos.canProceed && !enVitrina) {
+      return { requisitos, vehiculo: null, planes: [], vitrina: false }
     }
 
     // El vehículo de contexto solo existe en negocios con paso de vehículo.
     // `vehiculosDe` ya ordena principal-primero. Un vehiculoId ajeno (de otro
-    // cliente) simplemente no aparece en la lista y cae al principal.
-    const conVehiculo = vehiculos.length > 0
-    const vehiculo = conVehiculo
-      ? (vehiculos.find((v) => v.id === vehiculoId) ?? vehiculos[0])
-      : null
+    // cliente) simplemente no aparece en la lista y cae al principal. En
+    // vitrina no hay vehículo utilizable: precios base.
+    const vehiculo =
+      !enVitrina && vehiculos.length > 0
+        ? (vehiculos.find((v) => v.id === vehiculoId) ?? vehiculos[0])
+        : null
 
     const planes = await tx.plan.findMany({
       where: { companyId, activo: true },
@@ -140,6 +166,12 @@ export async function planesElegibles(args: {
         nombre: true,
         precio: true,
         nivelTarifarioMax: true,
+        esIlimitado: true,
+        descripcion: true,
+        lavadosIncluidos: true,
+        beneficios: true,
+        vigenciaDias: true,
+        condiciones: true,
         preciosPorCategoria: vehiculo?.tipoVehiculoId
           ? {
               where: { tipoVehiculoId: vehiculo.tipoVehiculoId, activo: true },
@@ -153,9 +185,16 @@ export async function planesElegibles(args: {
     return {
       requisitos,
       vehiculo,
+      vitrina: enVitrina,
       planes: planes.map((p) => ({
         id: p.id,
         nombre: p.nombre,
+        esIlimitado: p.esIlimitado,
+        descripcion: p.descripcion,
+        lavadosIncluidos: p.lavadosIncluidos,
+        beneficios: p.beneficios,
+        vigenciaDias: p.vigenciaDias,
+        condiciones: p.condiciones,
         decision: decidirPlan(
           {
             id: p.id,
