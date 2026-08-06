@@ -92,6 +92,9 @@ model Promocion {
   // Engagement Engine · Fase 6B: promoción como premio de la ruleta.
   ruletaPremios RuletaPremio[]
 
+  // La dirección pública no se puede repetir dentro de una empresa (dos
+  // empresas SÍ pueden tener «lavado-premium»). Migración 20260775.
+  @@unique([companyId, slug])
   @@index([companyId, activo])
   @@index([isFeatured, vigenciaHasta])
   @@index([tipo])

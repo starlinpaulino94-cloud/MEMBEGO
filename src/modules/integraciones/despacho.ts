@@ -60,7 +60,11 @@ async function entregar(
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     if (resp.ok) return null
-    return `HTTP ${resp.status}`
+    // El código solo no alcanza: un 404 de la plataforma de alojamiento («el
+    // dominio no apunta a nada») y un 404 de la aplicación («falta la ruta»)
+    // se arreglan en sitios distintos, y sin el cuerpo son indistinguibles.
+    const detalle = (await resp.text().catch(() => '')).trim().replace(/\s+/g, ' ')
+    return detalle ? `HTTP ${resp.status} · ${detalle.slice(0, 200)}` : `HTTP ${resp.status}`
   } catch (e) {
     return e instanceof Error ? e.message : 'fetch falló'
   }

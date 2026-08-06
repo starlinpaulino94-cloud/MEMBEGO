@@ -7,9 +7,9 @@ import {
   getTokensConfig,
   cardnetTokensConfigurado,
   cobrarConToken,
-  crearClienteCardnet,
   consultarClienteCardnet,
 } from '@/lib/payments/cardnet-tokens'
+import { MENSAJE_ACTIVACION_PENDIENTE } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
 
@@ -127,6 +127,12 @@ export type ConfirmacionPerfilResultado =
   | { estado: 'sin_tarjeta' }
   | { estado: 'en_proceso' }
   | { estado: 'sin_pendiente' }
+  /**
+   * La tarjeta se registró pero CardNET la dejó deshabilitada a la espera del
+   * código de activación de 6 dígitos (§4.1.2.3). Es un estado TERMINAL del
+   * sondeo: seguir esperando no la va a habilitar sola.
+   */
+  | { estado: 'pendiente_activacion'; motivo: string; ultimos4: string | null }
   | { estado: 'rechazado'; motivo: string }
   | { estado: 'error'; motivo: string }
 
@@ -205,9 +211,19 @@ export async function cobrarPendienteConPerfil(input: {
     }
     perfiles = consulta.perfiles
   } else {
-    const cliente = await crearClienteCardnet({ email: input.emailCliente })
-    if (!cliente) return { estado: 'error', motivo: 'No se pudo consultar la pasarela.' }
-    customerId = cliente.customerId
+    // Sin customerId del navegador: se usa el guardado del cliente (§4.1.2.1).
+    // NUNCA se hace POST aquí — la ventana de captura puede seguir abierta y
+    // un POST emitiría un UniqueID nuevo, matándola con INTERNAL_SERVER_ERROR.
+    const guardado = await conEmpresa(input.objetivo.companyId, (tx) =>
+      tx.cliente
+        .findUnique({
+          where: { id: input.objetivo.clienteId },
+          select: { cardnetCustomerId: true },
+        })
+        .catch(() => null)
+    )
+    customerId = guardado?.cardnetCustomerId?.trim() || null
+    if (!customerId) return { estado: 'sin_tarjeta' }
     perfiles = (await consultarClienteCardnet(customerId)).perfiles
   }
   const conteoAntes = Math.max(0, input.conteoAntes ?? 0)
@@ -218,6 +234,20 @@ export async function cobrarPendienteConPerfil(input: {
   // El perfil recién agregado es el último de la lista (VERIFICAR-QA el orden).
   const perfil = perfiles[perfiles.length - 1]
   if (!perfil.token) return { estado: 'sin_tarjeta' }
+
+  // MANUAL §4.1.2.2 punto 12: el PaymentProfile puede venir `Enabled: false`.
+  // Con las llaves CON autenticación, la tarjeta recién capturada nace así:
+  // CardNET cobra RD$1.00 y el banco le muestra al cliente un código de 6
+  // dígitos que hay que ingresar para activarla (§4.1.2.3). Cobrar con un
+  // perfil deshabilitado falla, y el fallo no explica por qué — por eso se
+  // detecta aquí y se le dice al cliente qué tiene que hacer.
+  if (!perfil.habilitado) {
+    return {
+      estado: 'pendiente_activacion',
+      ultimos4: perfil.ultimos4,
+      motivo: MENSAJE_ACTIVACION_PENDIENTE,
+    }
+  }
 
   const res = await cobrarObjetivoConToken({
     objetivo: input.objetivo,

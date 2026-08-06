@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { slugDisponible } from '@/modules/promociones/slug'
 import { notificarSeguidoresEmpresa } from '@/modules/notificaciones/service'
 import { esTipoValido, esVisibilidadValida } from '@/lib/promociones'
 import {
@@ -201,6 +202,28 @@ async function guardarShareConfig(
   )
 }
 
+/**
+ * Slug público libre dentro de la empresa.
+ *
+ * Se calcula UNA VEZ, al crear (o la primera vez que se edita una promoción
+ * vieja que aún no lo tiene). Nunca se recalcula al cambiar el título: un
+ * enlace ya compartido por WhatsApp seguiría circulando y moriría.
+ */
+async function asignarSlug(companyId: string, titulo: string): Promise<string> {
+  const existentes = await conEmpresa(companyId, (tx) =>
+    tx.promocion
+      .findMany({
+        where: { companyId, slug: { not: null } },
+        select: { slug: true },
+      })
+      .catch(() => [] as { slug: string | null }[])
+  )
+  return slugDisponible(
+    titulo,
+    existentes.map((p) => p.slug ?? '').filter(Boolean)
+  )
+}
+
 /** Valida que la campaña exista y pertenezca a la empresa. */
 async function validarCampana(
   campanaId: string | null,
@@ -232,7 +255,7 @@ async function promoDeMiEmpresa(id: string, user: NonNullable<Awaited<ReturnType
   const promo = await sinEmpresa('promoción por id sin conocer la empresa', (tx) =>
     tx.promocion.findUnique({
       where: { id },
-      select: { id: true, companyId: true, titulo: true, activo: true, archivada: true },
+      select: { id: true, companyId: true, titulo: true, activo: true, archivada: true, slug: true },
     })
   )
   if (!promo) return null
@@ -265,8 +288,25 @@ export async function crearPromocion(
   if (campanaError) return { error: campanaError }
 
   try {
+    // Carrera posible: dos personas creando la misma promoción a la vez leen
+    // los mismos slugs ocupados. El índice único es el árbitro; si choca, se
+    // desempata con una marca de tiempo en vez de fallarle al usuario.
+    const slug = await asignarSlug(companyId, parsed.data.titulo)
     const legacy = await conEmpresa(companyId, (tx) =>
-      tx.promocion.create({ data: { companyId, ...parsed.data } })
+      tx.promocion
+        .create({ data: { companyId, ...parsed.data, slug } })
+        .catch(async (e) => {
+          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+            return tx.promocion.create({
+              data: {
+                companyId,
+                ...parsed.data,
+                slug: `${slug.slice(0, 50)}-${Date.now().toString(36)}`,
+              },
+            })
+          }
+          throw e
+        })
     )
     await guardarShareConfig(legacy.id, companyId, parsed.share)
 
@@ -313,10 +353,16 @@ export async function actualizarPromocion(
     const campanaError = await validarCampana(parsed.data.campanaId, promo.companyId)
     if (campanaError) return { error: campanaError }
 
+    // El slug NO se recalcula con el título: solo se rellena si la promoción
+    // viene de antes de los enlaces con nombre y aún no tiene uno.
+    const slug = promo.slug
+      ? undefined
+      : await asignarSlug(promo.companyId, parsed.data.titulo)
+
     await conEmpresa(promo.companyId, (tx) =>
       tx.promocion.update({
         where: { id },
-        data: { ...parsed.data, activo },
+        data: { ...parsed.data, activo, ...(slug ? { slug } : {}) },
       })
     )
     await guardarShareConfig(id, promo.companyId, parsed.share)
@@ -410,11 +456,14 @@ export async function duplicarPromocion(
     const original = await conEmpresa(promo.companyId, (tx) =>
       tx.promocion.findUniqueOrThrow({ where: { id } })
     )
+    const tituloCopia = `${original.titulo} (Copia)`
+    const slugCopia = await asignarSlug(original.companyId, tituloCopia)
     const copy = await conEmpresa(promo.companyId, (tx) =>
       tx.promocion.create({
         data: {
           companyId: original.companyId,
-          titulo: `${original.titulo} (Copia)`,
+          titulo: tituloCopia,
+          slug: slugCopia,
           descripcion: original.descripcion,
           imagenUrl: original.imagenUrl,
           tipo: original.tipo,

@@ -28,28 +28,65 @@ conflicto de negocio que exige tu decisión antes de ejecutarse**.
 
 ---
 
-## 1. Dark mode — el número asusta más de lo que debe
+## 1. Dark mode — HECHO (Fase 2)
 
-**Medido:** 158 ocurrencias de `bg-white` sin `dark:`, 8 de `text-black`,
-21 estilos inline con hexadecimal, 4 `className` con hex.
+**Dato que cambia la lectura del problema:** el tema por defecto de MembeGo ya
+es OSCURO (`ThemeProvider`, `defaultTheme="dark"`). Así que cada superficie
+blanca fija dentro de la app no era "algo que se verá mal si alguien activa el
+modo oscuro": se estaba viendo mal por defecto.
 
-**Matiz crítico que evita romper cosas:** no todos son errores. Al menos tres
-familias son *correctas* y deben conservarse:
+**El error real no es usar blanco, es mezclarlo.** De las 158 ocurrencias de
+`bg-white`, 107 llevan opacidad (`bg-white/10`, `/20`…): son velos sobre
+degradados de marca u overlays oscuros y están bien. De las sólidas, la mayoría
+son impresión (el papel es blanco), fondo de QR (el lector lo necesita), el
+botón de Google (marca) o el marco del formulario de CardNET. Lo que sí rompía
+la pantalla eran las **parejas imposibles**: una superficie blanca fija con
+texto de token (que en oscuro es casi blanco → ilegible), o una superficie de
+token con texto slate fijo (que en oscuro desaparece).
 
-1. **Impresión** (`ReceiptTicket`, `FacturaPrintDialog`, `seguimiento/imprimir`):
-   el papel es blanco. Forzar tokens de tema rompería los tickets.
-2. **Códigos QR** (`IdMembegoCard`, `WalletStack`, `CompanyQRRegistro`): un QR
-   necesita fondo blanco real para que el lector lo capte. Es funcional.
-3. **Superficies sobre gradiente de marca** (`bg-white/10`, `border-white/20`):
-   ahí el blanco es correcto porque el fondo siempre es oscuro.
+**Corregido (11 sitios, todos parejas imposibles):**
 
-**Trabajo real:** clasificar las 158 ocurrencias en esas 3 familias + las que sí
-son deuda, y migrar solo estas últimas a tokens (`card`, `background`, `muted`,
-`border`, `popover`). Los tokens **ya existen** en `globals.css` y el kit los
-usa; no hace falta ampliar el sistema, solo aplicarlo donde falta.
+| Dónde | Qué se veía |
+| --- | --- |
+| Nuevo plan / Editar plan | formulario blanco con etiquetas claras |
+| Config. de bienvenida | `<select>` blanco con texto del tema |
+| Membresías (chips de filtro) | chip blanco con texto gris claro |
+| Ficha de cliente (botón Correo) | botón blanco con texto gris claro |
+| Perfil (selector de empresa) | tarjeta blanca con texto del tema |
+| Dashboard (recomendaciones) | tarjeta blanca con texto del tema |
+| Modal de la ruleta | tarjeta blanca de premio |
+| Overlay de celebración (registro) | tarjeta blanca + degradados hacia blanco |
+| PanelError | título y texto oscuros sobre lienzo oscuro (invisible) |
+| Invitación por token | página clara suelta dentro de la app |
 
-**Riesgo:** un reemplazo masivo por regex rompería tickets y QR. Debe ser
-archivo por archivo con criterio.
+**Guardia permanente:** `tests/tema-oscuro.test.ts` recorre `src` y
+`packages/ui/src` y falla si un archivo mezcla las dos capas. La comprobación
+es por ARCHIVO a propósito: en JSX la tarjeta es un `<div>` y su texto un `<p>`
+anidado, así que mirar línea por línea deja pasar justo el caso real (se
+comprobó: la versión por línea no detectaba ninguno de los 11 errores). Los
+archivos que mezclan legítimamente están declarados con su motivo, y hay una
+prueba que verifica que la guardia sabe fallar y otra que borra exenciones que
+ya no aplican.
+
+**Se dejó a propósito con paleta clara propia:** `CampanaLanding` (landing
+pública de conversión que llega por WhatsApp) y la sección festiva de
+Invita y Gana. Son coherentes por dentro (blanco fijo con texto oscuro fijo),
+no tienen parejas imposibles y su diseño claro es intencional.
+
+## 2. Sidebar y Navbar — validado (Fase 2)
+
+Lo medido en la auditoría seguía siendo cierto: la estructura no necesitaba
+reescritura. De las tres cosas que faltaba verificar, dos ya estaban (Escape
+cierra el drawer; el scroll del fondo se bloquea) y la tercera no:
+
+- **Foco atrapado:** con el menú abierto, tabular se escapaba al contenido de
+  atrás que el diálogo dice estar tapando (`aria-modal="true"`). Ahora el foco
+  circula dentro del panel.
+- **Foco devuelto:** al cerrar vuelve al botón que lo abrió, en vez de saltar al
+  principio de la página.
+- **Menú cerrado, pero tabulable:** el drawer sigue en el árbol para poder
+  animarse, así que sus enlaces se podían enfocar con el teclado aunque
+  estuvieran fuera de pantalla. Se marca `inert` mientras está cerrado.
 
 ## 2. Sidebar y Navbar — ya cumple lo pedido
 
@@ -131,43 +168,129 @@ El kit ya aporta `promo-badge`, `promo-banner`, `flash-promotion`, `countdown`,
 `countdown` | `limitada` | `bienvenida` | `referidos`) que **componga** las
 piezas del kit ya existentes. Cero componentes nuevos de bajo nivel.
 
-## 6. Rutas públicas de promociones — hay deuda real
+## 6. Rutas públicas de promociones — HECHO (Fase 4)
 
-**Medido:**
+**Antes:** `/promocion/cmd7k2p9x0001qz3f8b2h4t1a`. Un enlace que no dice nada,
+que se corta feo en la vista previa de WhatsApp y que nadie reconoce. La
+columna `promociones.slug` existía en el esquema desde la Fase 2 del
+marketplace, vacía y sin usarse.
 
-- Existen `/promocion/[id]`, `/oferta/[codigo]`, `/promociones`,
-  `/empresas/[companySlug]` — cuatro convenciones conviviendo.
-- `/promocion/[id]` resuelve por **id interno**, no por slug.
-- `promociones.slug` **existe en el esquema** (`String?`) pero no se usa para
-  resolver la ruta.
-- Sí hay `opengraph-image.tsx` por promoción — la metadata de compartir ya
-  funciona.
+**Ahora:** `/promocion/lavado-premium-gratis`.
 
-**Trabajo:** generar slugs únicos por empresa, resolver por slug con respaldo
-por id (para no romper enlaces ya compartidos), y unificar la convención.
-**Requiere migración de datos** (backfill de slugs) — ver §Migraciones.
+**Lo construido:**
 
-## 7. Reportes
+- `src/modules/promociones/slug.ts` — núcleo puro: quita acentos (y convierte
+  la ñ en n, si no «Año» quedaría «ao»), descarta artículos, corta por palabra
+  completa a 60 caracteres y resuelve repeticiones con `-2`, `-3`… El sufijo
+  cuenta para el tope, así que el slug nunca crece sin control.
+- Asignación en `crearPromocion`, `duplicarPromocion` y —solo si falta— en
+  `actualizarPromocion`.
+- La ruta pasa a ser `/promocion/[clave]` y resuelve **por slug O por id** en
+  una sola consulta. Un enlace viejo con id que ya tiene slug se redirige (308)
+  a la dirección con nombre, para que las vistas previas y los contadores de
+  las redes no se repartan entre dos URLs.
+- Los botones de compartir (panel, detalle público, «mis promociones») y la
+  vista previa del editor usan ya la dirección con nombre.
+- `tests/promociones-slug.test.ts` — 10 pruebas: acentos y ñ, títulos
+  imposibles, corte por palabra, repetidos, tope con sufijo, y la distinción
+  entre un id de la base y un slug.
 
-`recharts` ya es dependencia y hay 3 componentes de gráfica
-(`VisitasChart`, `BarrasEmpresas`, `MembresiasPie`). Existe exportación CSV en
-4 módulos (`registros`, `carwash/reportes`, `actividad`, `seguimiento`) — o sea
-**el patrón de export ya está resuelto y se puede reutilizar**; Reportes es
-justamente el que no lo tiene.
+**REGLA QUE NO SE PUEDE ROMPER:** el slug **no cambia** al editar el título.
+Un enlace compartido por WhatsApp sigue circulando meses; si el slug cambiara,
+ese enlace moriría. Se asigna una vez y se queda.
 
-**Trabajo:** KPIs con comparación de período, filtros (rango, sucursal,
-agrupación), gráficas con paleta semántica que funcione en ambos temas, y
-export reutilizando la ruta que ya existe.
+**Cambio de base de datos** (migración `20260775_promociones_slug`, idempotente):
+rellena los slugs de las promociones existentes desde su título, desempata los
+repetidos por empresa y crea el índice único `(companyId, slug)`. Dos empresas
+distintas SÍ pueden tener «lavado-premium»; la misma empresa, no. Mientras el
+SQL no se corra, las promociones viejas siguen abriéndose por id — no se rompe
+nada, simplemente aún no tienen nombre bonito.
 
-## 8. Reglas de recompensas
+**Lo que NO se unificó:** siguen existiendo `/oferta/[codigo]` (ofertas
+privadas, que se resuelven por un código secreto y no deben ser adivinables) y
+`/empresas/[slug]`. Son convenciones distintas porque resuelven cosas
+distintas; unificarlas por simetría habría roto el secreto de las ofertas.
 
-`ReglaRecompensaForm.tsx` vive embebido en `/admin/crecimiento/page.tsx`.
-Mover a `/admin/crecimiento/recompensas` (listado) + `/nueva` + `/[id]/editar`,
-con el mismo patrón de los demás formularios administrativos.
+## 7. Reportes — HECHO (Fase 5)
 
-**Validación crítica ya existente que hay que preservar:** la ejecución
-idempotente de reglas (evitar recompensas duplicadas ante reintentos) vive en
-`src/modules/admin/recompensaActions.ts` — no se toca la lógica, solo la UI.
+**Lo que había:** una página de una sola vista, «el mes en curso», sin filtros,
+sin comparación, sin gráfica y sin exportar. Y un detalle que importa más de lo
+que parece: los cortes de mes se hacían con la hora del servidor, no con la del
+negocio. Un lavado cobrado a las 9 de la noche del día 31 en Santo Domingo se
+guarda como la 1 de la madrugada del 1 en UTC, así que caía en el mes siguiente
+y el reporte no cuadraba con la caja.
+
+**Lo construido:**
+
+- `src/modules/reportes/rango.ts` — núcleo puro de fechas. Presets (hoy, 7 días,
+  30 días, este mes, mes pasado), rango a mano, y todos los límites en
+  **medianoche local de la empresa**. Calcula además el periodo anterior con
+  EXACTAMENTE los mismos días: comparar 30 días contra un mes de 31 inventaría
+  una caída del 3% que nunca ocurrió.
+- `src/modules/reportes/queries.ts` — KPIs con su comparación, serie diaria
+  (rellenando los días sin actividad), desglose por tipo de operación y por
+  método de cobro, clientes más activos y membresías activas por plan. Cada
+  consulta va envuelta: si una falla, el reporte se marca como **incompleto** en
+  pantalla en vez de enseñar ceros como si fueran reales.
+- `ReporteChart` — barras apiladas (ventas / entregas sin cobro) con los colores
+  del tema por clases, no hexadecimales quemados.
+- `/admin/reportes/export` — CSV con el MISMO rango que la pantalla (viaja por
+  query string), separador `;` y BOM, que es lo que Excel en español necesita
+  para no partir todo en una columna ni romper los acentos.
+- `tests/reportes-rango.test.ts` — 15 pruebas con reloj fijo: la venta nocturna
+  cae en el mes correcto, «mes pasado» acierta en febrero bisiesto y al cruzar
+  de año, la basura en la URL no rompe nada, la variación no inventa
+  porcentajes sobre cero, y el CSV cuadra su fila de TOTAL.
+
+**Decisión que se ve en pantalla:** los ingresos de caja y los cobros de
+membresías se muestran SEPARADOS. Son dinero que entra por caminos distintos
+(mostrador vs. activaciones y renovaciones) y sumarlos en una sola cifra
+impediría cuadrar el reporte contra la caja del día.
+
+**Limitación heredada, escrita para que no sorprenda:** el cobro de una
+membresía se fecha por `updatedAt` porque no hay un campo de fecha de pago
+propio. Editar una membresía vieja la mueve de periodo. Arreglarlo pide una
+columna nueva y su migración; no se hizo aquí para no mezclar cambios de
+esquema con esta fase.
+
+## 8. Reglas de recompensas — HECHO (Fase 6)
+
+**Corrección del diagnóstico:** la auditoría apuntó a `ReglaRecompensaForm.tsx`
+y a `src/modules/admin/recompensaActions.ts`, pero son de OTRO sistema (las
+reglas por N referidos de `/admin/referidos`, modelo `ReglaRecompensa`). El
+formulario embebido que había que sacar es el del Growth Engine (`GrowthRule`)
+al final de `/admin/crecimiento`. El de referidos se dejó intacto: funciona y
+ya tiene su sitio.
+
+**Lo que se encontró al abrirlo:**
+
+1. `crearGrowthRuleAction` validaba y, si algo no cuadraba, hacía `return` sin
+   decir nada. El administrador llenaba la regla, pulsaba «Crear» y no pasaba
+   NADA: ni regla ni mensaje.
+2. **No se podía editar una regla.** Solo crear, pausar y borrar. Cambiar
+   «50 puntos» por «100» obligaba a rehacerla y perder el registro anterior.
+3. Se podía guardar una regla de tipo «beneficio digital» sin elegir el
+   beneficio: se disparaba y no entregaba nada.
+
+**Lo construido:**
+
+- `src/modules/growth/reglas.ts` — núcleo puro (sin Prisma ni React): valida,
+  normaliza y SIEMPRE devuelve un motivo legible. Ahí viven también las
+  etiquetas en español y `resumirRegla`, que antes estaban duplicadas en la
+  página.
+- `actualizarGrowthRuleAction` — nueva, con la misma barrera multiempresa que
+  las demás (una regla de otra empresa no se puede tocar ni ver).
+- Páginas: `/admin/crecimiento/recompensas` (lista con estado, editar, pausar,
+  eliminar), `/nueva` y `/[id]/editar`. `/admin/crecimiento` conserva la
+  configuración del programa y resume las reglas con enlace a su página.
+- `ReglaRecompensaForm` (cliente): oculta los campos que no aplican al tipo
+  elegido —un beneficio digital no lleva «cuánto», un disparador que no sea «N
+  referidos» no lleva umbral— y muestra los errores.
+- `tests/growth-reglas.test.ts` — 9 pruebas sobre el núcleo: cada rechazo trae
+  una frase para la persona; el beneficio sin promoción se rechaza; una promo
+  elegida por error no se arrastra al cambiar de tipo; el descuento porcentual
+  se topa en 100; el umbral solo existe en «N referidos» y se redondea (medio
+  referido no existe).
 
 ## 9. Aplicaciones — CONFLICTO QUE REQUIERE TU DECISIÓN
 

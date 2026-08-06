@@ -53,7 +53,7 @@ Payload del JSON:
 {
   "sub": "<id estable del usuario en MembeGo>",
   "email": "empleado@correo.com",
-  "rol": "ADMIN_EMPRESA | GERENTE | RECEPCION | EMPLEADO | SUPERADMIN",
+  "rol": "SUPERADMIN | ADMINISTRADOR | ADMIN_EMPRESA | GERENTE | SUPERVISOR | CAJERO | RECEPCION | MARKETING | EMPLEADO",
   "companyId": "<ID de la empresa en MembeGo — el tenant del satélite>",
   "exp": 1799999999
 }
@@ -79,12 +79,50 @@ function verificarTokenMembego(token: string, secreto: string) {
 }
 ```
 
+**Vector de prueba (para que el satélite se autoverifique sin depender de
+MembeGo):** con el secreto literal `secreto-de-prueba`, este payload produce
+exactamente este token. Si el verificador del satélite no lo acepta (poniendo el
+reloj antes de `exp`, que es el 17 de marzo de 2030), el fallo está en su
+implementación y NO en el secreto compartido.
+
+```
+secreto: secreto-de-prueba
+
+JSON:  {"sub":"623d642c-ae5f-445a-99eb-220b55eb0e1c","email":"dueno@ejemplo.com","rol":"ADMIN_EMPRESA","companyId":"cmre1hz570000jp04ad5i0roi","exp":1900000000}
+
+TOKEN: eyJzdWIiOiI2MjNkNjQyYy1hZTVmLTQ0NWEtOTllYi0yMjBiNTVlYjBlMWMiLCJlbWFpbCI6ImR1ZW5vQGVqZW1wbG8uY29tIiwicm9sIjoiQURNSU5fRU1QUkVTQSIsImNvbXBhbnlJZCI6ImNtcmUxaHo1NzAwMDBqcDA0YWQ1aTByb2kiLCJleHAiOjE5MDAwMDAwMDB9.02d8a44d97acc2b4eee1804fbb0a78b351adee9ad8018c335888fe08ac8bc326
+```
+
+Errores que producen «token inválido» aunque el secreto sea correcto:
+
+- Firmar/verificar sobre el **JSON** en vez de sobre la **cadena base64url**.
+  La firma cubre el texto `eyJzdWIi…` tal cual viaja, no el objeto decodificado.
+- Partir el token con `split('.')` y quedarse con 3 partes esperando un JWT:
+  esto **no es un JWT** (no hay cabecera). Son dos partes; usa `lastIndexOf('.')`.
+- Decodificar con `base64` estándar en vez de `base64url` (`-` y `_` en vez de
+  `+` y `/`, sin `=` de relleno).
+- Comparar la firma en mayúsculas: el hex va en **minúsculas**.
+- Leer el secreto de un `.env` con espacios o salto de línea al final: el HMAC
+  cambia entero. Compara `length` y `md5` a ambos lados, nunca el secreto.
+- Reloj del servidor atrasado/adelantado más de 90 s: todo token nace vencido.
+
 Reglas para el satélite:
 
 - El token expira en **90 segundos**: verifícalo al llegar y crea TU sesión
   (cookie propia). No guardes el token.
 - `companyId` es el **tenant**: toda la sesión queda acotada a esa empresa.
 - Mapea `sub` → usuario local (créalo al primer ingreso con `email`/`rol`).
+- **Lista COMPLETA de roles que puede traer el token** (`src/types/index.ts`):
+  `SUPERADMIN`, `ADMINISTRADOR`, `ADMIN_EMPRESA` (heredado: equivale a
+  `ADMINISTRADOR` en cuentas viejas), `GERENTE`, `SUPERVISOR`, `CAJERO`,
+  `RECEPCION`, `MARKETING`, `EMPLEADO`. `CLIENTE` existe en MembeGo pero NUNCA
+  llega por SSO: los clientes no entran al satélite.
+- Mapeo sugerido para un satélite operativo (car wash):
+  `SUPERADMIN→superadmin` · `ADMINISTRADOR`/`ADMIN_EMPRESA`→`administrador` ·
+  `GERENTE`/`SUPERVISOR`→`supervisor` · `RECEPCION`/`CAJERO`→`recepcionista` ·
+  `EMPLEADO`→`operario` · `MARKETING`→ el que corresponda (o el mínimo).
+  **Un rol desconocido debe caer al permiso MÍNIMO, nunca al máximo**: si
+  MembeGo añade un rol mañana, el satélite no puede regalar acceso de admin.
 - Si el rol de MembeGo cambia, el siguiente SSO trae el rol nuevo: actualiza.
 
 ## 2) Webhooks — MembeGo empuja los eventos que te competen
@@ -121,13 +159,88 @@ Reglas para el satélite:
 
 | `tipo`                    | Cuándo | Claves útiles en `payload` |
 |---------------------------|--------|----------------------------|
-| `cliente.registrado`      | Un cliente se registra/afilia a la empresa | `clienteId`, `cliente.nombre` |
+| `cliente.registrado`      | Un cliente se registra/afilia a la empresa | `clienteId`, `cliente.nombre`, `cliente.email`, `cliente.telefono` |
 | `cliente.primera_visita`  | Primera visita del cliente | `clienteId` |
 | `cliente.visita`          | Visita/canje registrado | `clienteId` |
-| `cliente.compro_servicio` | Compra confirmada (membresía u oferta) | `clienteId`, `compra.tipo`, `compra.monto`, `membresia.plan` |
+| `cliente.compro_servicio` | Compra confirmada (membresía u oferta) | `clienteId`, `compra.tipo`, `compra.monto`, y según el tipo: `membresia.*` o `promocion.*` |
 | `cliente.primera_compra`  | Primera compra confirmada | igual que arriba |
-| `membresia.activada`      | Membresía quedó activa | `clienteId`, `membresia.plan` |
+| `membresia.activada`      | Membresía quedó activa | `clienteId`, `membresia.id`, `membresia.planId`, `membresia.plan` |
 | `referido.convirtio`      | Un referido completó su conversión | `clienteId` |
+
+### Payloads exactos (v1.1)
+
+**Unidades y tipos, para que no haya que adivinar:**
+
+- **`compra.monto` viene en PESOS con decimales** (`250` o `250.5`), NUNCA en
+  centavos. Es el monto NETO ya cobrado (precio menos descuento de bienvenida).
+- Los nombres (`membresia.plan`, `promocion.titulo`) son ETIQUETAS y pueden
+  cambiar. Para casar contra tu catálogo usa siempre los IDs
+  (`membresia.planId`, `promocion.id`), que son estables.
+- `clienteId` es el identificador del cliente EN MEMBEGO y es el mismo en todos
+  los eventos: úsalo como llave.
+- Los campos de contacto pueden venir en `null` (un cliente puede registrarse
+  sin teléfono). Nunca faltan como clave, pero pueden ser nulos.
+
+```jsonc
+// cliente.registrado
+{
+  "id": "evt_...", "tipo": "cliente.registrado", "companyId": "cmp_...",
+  "payload": {
+    "clienteId": "cli_...",
+    "cliente": { "nombre": "Juan Pérez", "compras": 0, "visitas": 0,
+                 "email": "juan@correo.com", "telefono": "8095551234" }
+  },
+  "emitidoEn": "2026-08-03T19:40:12.345Z"
+}
+
+// cliente.compro_servicio — MEMBRESÍA
+{
+  "id": "evt_...", "tipo": "cliente.compro_servicio", "companyId": "cmp_...",
+  "payload": {
+    "clienteId": "cli_...",
+    "cliente": { "nombre": "Juan Pérez", "compras": 1,
+                 "email": "juan@correo.com", "telefono": "8095551234" },
+    "membresia": { "id": "mem_...", "planId": "pln_...", "plan": "Plan Gold",
+                   "precio": 1500, "esDePago": true,
+                   "vigenteHasta": "2026-09-03T19:40:12.345Z" },
+    "compra": { "tipo": "membresia", "monto": 1500 }
+  },
+  "emitidoEn": "2026-08-03T19:40:12.345Z"
+}
+
+// cliente.compro_servicio — PROMOCIÓN / OFERTA
+{
+  "id": "evt_...", "tipo": "cliente.compro_servicio", "companyId": "cmp_...",
+  "payload": {
+    "clienteId": "cli_...",
+    "cliente": { "nombre": "Juan Pérez",
+                 "email": "juan@correo.com", "telefono": "8095551234" },
+    "compra": { "tipo": "promocion", "monto": 250,
+                "promocion": "Lavado Premium", "promocionId": "pro_..." },
+    "promocion": { "id": "pro_...", "titulo": "Lavado Premium",
+                   "slug": "lavado-premium" }
+  },
+  "emitidoEn": "2026-08-03T19:40:12.345Z"
+}
+
+// membresia.activada
+{
+  "id": "evt_...", "tipo": "membresia.activada", "companyId": "cmp_...",
+  "payload": {
+    "clienteId": "cli_...",
+    "cliente": { "nombre": "Juan Pérez", "compras": 1,
+                 "email": "juan@correo.com", "telefono": "8095551234" },
+    "membresia": { "id": "mem_...", "planId": "pln_...", "plan": "Plan Gold",
+                   "precio": 1500, "esDePago": true,
+                   "vigenteHasta": "2026-09-03T19:40:12.345Z" }
+  },
+  "emitidoEn": "2026-08-03T19:40:12.345Z"
+}
+```
+
+`compra.tipo` distingue el caso: `"membresia"` o `"promocion"`. Los IDs del
+ejemplo llevan prefijos ilustrativos; en la realidad son cuid sin prefijo
+(`cmd7k2p9x0001qz3f8b2h4t1a`).
 
 El catálogo crecerá (bajas, vencimientos, citas…); los tipos nuevos llegan por
 el mismo endpoint — ignora los `tipo` que no conozcas y responde 200.

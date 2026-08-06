@@ -51,6 +51,17 @@ model Cliente {
   /// Se le registra igual para que su historial exista y no haya que llevarlo
   /// en un cuaderno aparte. Puede vincularse después a una cuenta real.
   esLocal            Boolean   @default(false)
+  /// CustomerId de CardNET (tokenización). El manual §4.1.2.1 lo pide
+  /// explícitamente: «se deberá procesar y almacenar como mínimo el
+  /// CustomerId, con el cual se podrán realizar otras operaciones».
+  ///
+  /// Por qué importa guardarlo: sin él hay que hacer un POST /Customer en cada
+  /// pago para volver a obtenerlo, y CADA POST invalida el UniqueID de la
+  /// ventana de captura que estuviera abierta. Con el id guardado, la sesión
+  /// se pide por GET —que no invalida nada— tal como indica el §4.1.2.2.
+  ///
+  /// NO es un dato de tarjeta: es una referencia opaca del proveedor.
+  cardnetCustomerId  String?
   fechaNacimiento    DateTime?
   avatarUrl          String?
   // F5/Onboarding paso 2 (B2C): perfil ampliado del cliente.

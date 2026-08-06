@@ -392,15 +392,25 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
   }
 }
 
-export async function getPromotionDetail(promotionId: string): Promise<PromotionPublic | null> {
-  if (!promotionId) return null
+/**
+ * Detalle público por SLUG o por ID.
+ *
+ * Se busca por las dos formas a la vez: los enlaces viejos llevan el id y
+ * siguen circulando por WhatsApp meses después, así que tienen que funcionar
+ * para siempre. Preguntar por ambas en una sola consulta evita además tener
+ * que adivinar cuál es cuál.
+ */
+export async function getPromotionDetail(
+  claveOId: string
+): Promise<PromotionPublic | null> {
+  if (!claveOId) return null
 
   const now = new Date()
 
   try {
     return await sinEmpresa('marketplace: detalle público de promoción', async (tx) => {
-      const promotion = await tx.promocion.findUnique({
-        where: { id: promotionId },
+      const promotion = await tx.promocion.findFirst({
+        where: { OR: [{ id: claveOId }, { slug: claveOId }] },
         select: {
           id: true,
           titulo: true,
@@ -488,6 +498,8 @@ export async function getPromotionDetail(promotionId: string): Promise<Promotion
  *  Solo promociones PÚBLICAS (activa, publicada, no privada, no vencida). */
 export interface PromotionOg {
   id: string
+  /** Para construir la URL canónica al compartir. */
+  slug: string | null
   titulo: string
   descripcion: string
   imagenUrl: string | null
@@ -501,22 +513,26 @@ export interface PromotionOg {
   ogDescripcion: string | null
 }
 
-export async function getPromotionOg(promotionId: string): Promise<PromotionOg | null> {
-  if (!promotionId) return null
+export async function getPromotionOg(claveOId: string): Promise<PromotionOg | null> {
+  if (!claveOId) return null
   try {
     const now = new Date()
     const p = await sinEmpresa('marketplace: vista previa pública (Open Graph)', (tx) =>
       tx.promocion.findFirst({
         where: {
-          id: promotionId,
           activo: true,
           archivada: false,
           visibilidad: 'publica',
           company: { isPublished: true, isActive: true, esDemo: false },
-          OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
+          // Dos condiciones OR distintas (identidad y vigencia) tienen que ir
+          // dentro de AND: en el mismo objeto, la segunda pisaría a la primera.
+          AND: [
+            { OR: [{ id: claveOId }, { slug: claveOId }] },
+            { OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }] },
+          ],
         },
         select: {
-          id: true, titulo: true, descripcion: true, imagenUrl: true, tipo: true,
+          id: true, slug: true, titulo: true, descripcion: true, imagenUrl: true, tipo: true,
           beneficioTipo: true, descuento: true,
           company: { select: { name: true, logoUrl: true } },
         },
@@ -528,13 +544,13 @@ export async function getPromotionOg(promotionId: string): Promise<PromotionOg |
     // vista previa sigue funcionando con los textos base.
     const share = await sinEmpresa('marketplace: textos de compartir (Open Graph)', (tx) =>
       tx.promocion
-        .findUnique({ where: { id: promotionId }, select: { shareConfig: true } })
+        .findUnique({ where: { id: p.id }, select: { shareConfig: true } })
         .then((r) => (r?.shareConfig ?? {}) as { ogTitulo?: unknown; ogDescripcion?: unknown })
         .catch(() => ({}) as { ogTitulo?: unknown; ogDescripcion?: unknown })
     )
     const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
     return {
-      id: p.id, titulo: p.titulo, descripcion: p.descripcion, imagenUrl: p.imagenUrl,
+      id: p.id, slug: p.slug, titulo: p.titulo, descripcion: p.descripcion, imagenUrl: p.imagenUrl,
       tipo: p.tipo, beneficioTipo: p.beneficioTipo, descuento: p.descuento,
       empresa: p.company.name, logoUrl: p.company.logoUrl,
       ogTitulo: texto(share.ogTitulo), ogDescripcion: texto(share.ogDescripcion),

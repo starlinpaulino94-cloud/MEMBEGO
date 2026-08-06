@@ -1,4 +1,5 @@
 import 'server-only'
+import { anotarFallo } from '@/lib/prisma-errors'
 import {
   urlsTokens,
   apiCandidatos,
@@ -7,6 +8,12 @@ import {
   desenvolverRespuesta,
   extraerPerfiles,
   sinSensibles,
+  esIpValida,
+  marcarCustomerIdConCuenta,
+  leerCustomerIdDeCuenta,
+  variantesDeRuta,
+  reintentarConOtraGrafia,
+  referenciaCobro,
   MONEDA_DOP_TOKENS,
   type AmbienteTokens,
   type ResultadoCompraToken,
@@ -133,28 +140,46 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     }
   }
 
+  // Referencia CORTA para todos los campos que CardNET arrastra hasta la
+  // autorización del adquirente. Ver `referenciaCobro`: nuestro cuid de 25
+  // caracteres viaja bien por el Purchase, pero el tramo siguiente es otro
+  // sistema — y es ese el que respondió `BadRequest`.
+  const referencia = referenciaCobro(input.orden)
+
   const cuerpo: Record<string, unknown> = {
     TrxToken: input.trxToken,
-    Order: input.orden,
+    Order: referencia,
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
     Capture: true,
-    CustomerIP: input.clienteIp,
+    // Identificador único de la compra (manual §2.6 · §7.2).
+    //
+    // OJO: mandábamos el id completo (25 caracteres) y CardNET lo archivó como
+    // cadena VACÍA — o sea que la idempotencia que creíamos tener no existía.
+    // Ahora va la referencia corta. Si vuelve a llegar vacía en la respuesta,
+    // el campo es decorativo y hay que quitarlo; si llega con valor, sirve.
+    // El expediente que se guarda permite comprobar exactamente eso.
+    UniqueID: referencia,
+    // `getClientIdentifier` devuelve la cadena 'unknown' cuando no hay
+    // `x-forwarded-for`. Mandar eso como IP al antifraude de CardNET es peor
+    // que no mandar nada: un valor con formato inválido puede rechazar el
+    // cobro y el rechazo llegaría disfrazado de "tarjeta declinada".
+    ...(esIpValida(input.clienteIp) ? { CustomerIP: input.clienteIp } : {}),
     DataDo: {
       Tax: String(input.tax ?? 0),
-      Invoice: input.invoice ?? input.orden,
+      Invoice: input.invoice ? referenciaCobro(input.invoice) : referencia,
     },
   }
 
-  const { ok, status, json } = await postTokens('/Purchase', cuerpo)
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Purchase', cuerpo, true)
   if (status === 0) {
     return {
       aprobada: false,
       autorizacion: null,
       codigo: '',
       motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.',
-      crudo: sinSensibles(json),
+      crudo: evidencia(status, json),
     }
   }
 
@@ -164,8 +189,23 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
   return {
     ...interpretado,
     aprobada,
-    crudo: sinSensibles(json),
+    crudo: evidencia(status, json),
   }
+}
+
+/**
+ * Expediente del cobro: la respuesta del proveedor SIN sensibles, más el status
+ * HTTP con el que llegó.
+ *
+ * El status importa tanto como el cuerpo. Un 404 (ruta equivocada), un 401
+ * (llave mal formateada) y un 200 con la transacción declinada producen los
+ * tres el MISMO texto en pantalla —«No se pudo procesar el pago»— porque
+ * ninguno trae un código de respuesta que sepamos leer. Guardando el status,
+ * una consulta a `pago_intentos` distingue los tres casos en un segundo; sin
+ * él, solo queda volver a reproducir el fallo a ciegas. Pasó.
+ */
+function evidencia(status: number, json: Record<string, unknown>): Record<string, unknown> {
+  return { _http: status, ...sinSensibles(json) }
 }
 
 // ── Fase 2: tarjeta guardada (cobros recurrentes) ───────────────────────────
@@ -257,6 +297,44 @@ async function postTokens(
 }
 
 /**
+ * Variantes de MAYÚSCULA/minúscula del primer segmento de la ruta.
+ *
+ * El servicio no es consistente: el manual y el Postman escriben `/Customer`,
+ * pero el ambiente de pruebas responde 200 a `/customer` y hay evidencia de
+ * que la otra grafía devuelve 404. Un 404 hace que `llamarTokens` descarte el
+ * host entero y termine sin respuesta — el síntoma es un 502 nuestro con el
+ * mensaje «No se pudo iniciar la ventana de pago», que no dice nada de la
+ * causa real.
+ *
+ * En vez de apostar por una grafía, se prueban las dos.
+ */
+/**
+ * Llama probando las grafías de la ruta. La primera que no dé 404 manda: un
+ * 401 o un 500 son respuestas del servicio (la ruta existe), y reintentarlas
+ * con otra grafía solo enturbiaría el diagnóstico.
+ */
+async function llamarTokensConRuta(
+  metodo: 'GET' | 'POST',
+  path: string,
+  cuerpo: Record<string, unknown> | null,
+  /**
+   * `true` cuando la llamada MUEVE DINERO. Cambia una sola cosa: si no hubo
+   * respuesta (timeout/red), no se repite con la otra grafía — el cobro pudo
+   * haberse procesado allá y perdido la respuesta de vuelta. Ver
+   * `reintentarConOtraGrafia`.
+   */
+  esCobro = false
+): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  let ultima: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
+  for (const variante of variantesDeRuta(path)) {
+    const r = await llamarTokens(metodo, variante, cuerpo)
+    if (r.ok || !reintentarConOtraGrafia(r.status, esCobro)) return r
+    ultima = r
+  }
+  return ultima ?? { ok: false, status: 0, json: { _error: 'sin respuesta' } }
+}
+
+/**
  * PERFILES DE PAGO del Customer (`GET /Customer/{id}`).
  *
  * CONFIRMADO POR CARDNET: tras la captura hospedada, el token de la tarjeta
@@ -274,20 +352,79 @@ export async function consultarPerfilesPago(customerId: string): Promise<PerfilP
  * el mismo email invalida el UniqueID de la ventana y la mata con
  * INTERNAL_SERVER_ERROR).
  */
-export async function consultarClienteCardnet(
-  customerId: string
-): Promise<{ email: string | null; perfiles: PerfilPagoCardnet[] }> {
-  if (!customerId) return { email: null, perfiles: [] }
-  const { ok, json } = await llamarTokens('GET', `/Customer/${encodeURIComponent(customerId)}`, null)
-  if (!ok) return { email: null, perfiles: [] }
+export async function consultarClienteCardnet(customerId: string): Promise<{
+  email: string | null
+  perfiles: PerfilPagoCardnet[]
+  /**
+   * Datos de la ventana de captura. El manual §4.1.2.2 punto 4 es explícito:
+   * «este objeto Customer informa un CaptureURL y UniqueID que debe ser
+   * utilizado luego para mostrarle al usuario la interfaz de captura». O sea
+   * que la sesión sale de ESTA consulta, no de un POST aparte.
+   */
+  captureUrl: string | null
+  uniqueId: string | null
+}> {
+  const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null }
+  if (!customerId) return vacio
+  const { ok, json } = await llamarTokensConRuta(
+    'GET',
+    `/Customer/${encodeURIComponent(customerId)}`,
+    null
+  )
+  if (!ok) return vacio
   const { datos } = desenvolverRespuesta(json)
-  const email =
-    typeof datos.Email === 'string' && datos.Email
-      ? datos.Email
-      : typeof datos.email === 'string' && datos.email
-        ? datos.email
-        : null
-  return { email, perfiles: extraerPerfiles(json) }
+  const s = (...ks: string[]) => {
+    for (const k of ks) {
+      const v = datos[k]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+    return null
+  }
+  const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
+  return {
+    email: s('Email', 'email'),
+    perfiles: extraerPerfiles(json),
+    // El formato documentado lleva barra final; la respuesta a veces no la trae.
+    captureUrl: captureUrl ? (captureUrl.endsWith('/') ? captureUrl : `${captureUrl}/`) : null,
+    uniqueId: s('UniqueID', 'UniqueId', 'uniqueId'),
+  }
+}
+
+/**
+ * CustomerId del cliente, según el §4.1.2.1: se registra UNA vez y se guarda.
+ *
+ * El POST solo ocurre la primera vez. Es la diferencia que importa: cada
+ * `POST /Customer` emite un `UniqueID` nuevo e INVALIDA el anterior, así que
+ * hacerlo en cada pago mata la ventana de captura que el cliente tenga
+ * abierta — el síntoma es un INTERNAL_SERVER_ERROR sin ninguna pista.
+ *
+ * `guardar` persiste el id para que la próxima vez ni siquiera haya POST.
+ */
+export async function obtenerCustomerId(input: {
+  email: string
+  guardado: string | null
+  guardar: (valorAGuardar: string) => Promise<void>
+}): Promise<string | null> {
+  const cfg = getTokensConfig()
+  if (!cfg) return null
+
+  // El id guardado solo sirve para LA MISMA cuenta de CardNET que lo emitió.
+  // Al cambiar de juego de llaves se cambia de cuenta, y un CustomerId de la
+  // cuenta vieja abre la ventana con un session_id que la nueva no reconoce:
+  // INTERNAL_SERVER_ERROR, sin ninguna pista de que la causa es un dato viejo.
+  // Por eso se guarda etiquetado con la cuenta y se descarta si no coincide.
+  const yaLoTengo = leerCustomerIdDeCuenta(input.guardado, cfg.publicKey, cfg.privateKey)
+  if (yaLoTengo) return yaLoTengo
+
+  const cliente = await crearClienteCardnet({ email: input.email })
+  if (!cliente?.customerId) return null
+  // Best-effort: si la escritura falla, el cobro sigue — solo se pagará un
+  // POST de más la próxima vez. Pero queda anotado: si falla siempre, el
+  // síntoma vuelve a ser una ventana que muere sin explicación.
+  await input
+    .guardar(marcarCustomerIdConCuenta(cliente.customerId, cfg.publicKey, cfg.privateKey))
+    .catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
+  return cliente.customerId
 }
 
 /**
@@ -338,43 +475,18 @@ export async function consultarClienteDiagnostico(
 }
 
 /**
- * SESIÓN DE CAPTURA (paso previo OBLIGATORIO a abrir el iframe).
+ * NOTA HISTÓRICA · `crearSesionCaptura` se eliminó.
  *
- * El manual de tokenización (§4) es claro: NO se puede abrir el iframe con un
- * `session_id` inventado — eso da `TK004 INVALID_SESSION_IDENTIFIER` (el 500
- * que veíamos). Hay que crear un Customer en el servidor; CardNET devuelve un
- * `CaptureURL` y un `UniqueID` válidos, y con ESOS se abre el iframe.
+ * Abría la ventana con el `CaptureURL`/`UniqueID` de un `POST /Customer`. Es
+ * una lectura equivocada del manual: el §4.1.2.2 dice que esos datos salen del
+ * **GET** al Customer (ver `consultarClienteCardnet`). Y como cada POST emite
+ * una sesión nueva e invalida la anterior, llamarla al abrir la ventana era
+ * una forma segura de matar la sesión de otra pestaña —o la propia, si algo
+ * más tocaba al Customer— con un `INTERNAL_SERVER_ERROR` sin explicación.
  *
- * Devuelve lo que el navegador necesita (CaptureURL + UniqueID). NUNCA la llave
- * privada. VERIFICAR-QA: la grafía exacta de los campos de respuesta.
+ * No se restaura. El registro del Customer va por `obtenerCustomerId`, que
+ * hace el POST UNA vez en la vida del cliente y guarda el id.
  */
-export async function crearSesionCaptura(input: {
-  email: string
-}): Promise<{ captureUrl: string; uniqueId: string; customerId: string } | null> {
-  const { ok, json } = await postTokens('/customer', {
-    Email: input.email,
-    Enable: 'true',
-  })
-  if (!ok) return null
-  // La respuesta viene envuelta en { Response: {...}, Errors: [...] }. Un
-  // CS005 ("Email ya registrado") NO es fallo: el proveedor devuelve igual el
-  // customer y un UniqueID fresco para la sesión.
-  const { datos } = desenvolverRespuesta(json)
-  const s = (...ks: string[]) => {
-    for (const k of ks) {
-      const v = datos[k]
-      if (typeof v === 'string' && v) return v
-      if (typeof v === 'number') return String(v)
-    }
-    return ''
-  }
-  const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
-  const uniqueId = s('UniqueID', 'UniqueId', 'uniqueId')
-  const customerId = s('CustomerId', 'customerId', 'Id', 'id')
-  if (!captureUrl || !uniqueId) return null
-  // El CaptureURL llega sin barra final; el formato documentado la lleva.
-  return { captureUrl: captureUrl.endsWith('/') ? captureUrl : `${captureUrl}/`, uniqueId, customerId }
-}
 
 /**
  * Crea (o registra) un Customer en CardNET. Devuelve el CustomerId con el que
@@ -385,7 +497,7 @@ export async function crearClienteCardnet(input: {
   nombre?: string
   apellido?: string
 }): Promise<{ customerId: string } | null> {
-  const { ok, json } = await postTokens('/Customer', {
+  const { ok, json } = await llamarTokensConRuta('POST', '/Customer', {
     Email: input.email,
     ...(input.nombre ? { FirstName: input.nombre } : {}),
     ...(input.apellido ? { LastName: input.apellido } : {}),
@@ -398,6 +510,28 @@ export async function crearClienteCardnet(input: {
     | number
   const customerId = String(id).trim()
   return customerId ? { customerId } : null
+}
+
+/**
+ * DIAGNÓSTICO del registro de Customer: hace exactamente lo mismo que
+ * `crearClienteCardnet` pero devuelve el status y la respuesta CRUDA de cada
+ * grafía de ruta probada.
+ *
+ * Existe porque un fallo aquí se veía como un 502 mudo («No se pudo iniciar la
+ * ventana de pago») que obligaba a adivinar. Con esto, el fallo se lee.
+ */
+export async function registrarClienteDiagnostico(email: string): Promise<
+  { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+> {
+  const cfg = getTokensConfig()
+  if (!cfg) return []
+  const salida: { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[] = []
+  for (const ruta of variantesDeRuta('/Customer')) {
+    const r = await llamarTokens('POST', ruta, { Email: email, Enable: 'true' })
+    salida.push({ ruta, ok: r.ok, status: r.status, respuesta: sinSensibles(r.json) })
+    if (r.ok) break
+  }
+  return salida
 }
 
 /**
@@ -419,23 +553,26 @@ export async function cobrarConCredencialGuardada(input: {
   orden: string
   clienteIp: string
 }): Promise<CobrarConTokenSalida> {
+  const referencia = referenciaCobro(input.orden)
   const cuerpo: Record<string, unknown> = {
     ...(input.token ? { TrxToken: input.token } : {}),
     CustomerId: input.customerId,
     ...(input.paymentProfileId ? { PaymentProfileId: input.paymentProfileId } : {}),
-    Order: input.orden,
+    Order: referencia,
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
     Capture: true,
-    CustomerIP: input.clienteIp,
+    // Mismo criterio que en el cobro con token: una IP con formato inválido
+    // puede tumbar la autorización y el fallo llega disfrazado de rechazo.
+    ...(esIpValida(input.clienteIp) ? { CustomerIP: input.clienteIp } : {}),
     // Marca de credencial archivada / recurrente (nombres del ZTRANS).
     Environment: 'Ecommerce_COF',
-    DataDo: { Tax: '0', Invoice: input.orden },
+    DataDo: { Tax: '0', Invoice: referencia },
   }
-  const { ok, json } = await postTokens('/Purchase', cuerpo)
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Purchase', cuerpo, true)
   const interpretado = interpretarCompraToken(json)
-  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: sinSensibles(json) }
+  return { ...interpretado, aprobada: ok && interpretado.aprobada, crudo: evidencia(status, json) }
 }
 
 /**

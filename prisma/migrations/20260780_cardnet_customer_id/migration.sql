@@ -1,0 +1,19 @@
+-- CardNET · CustomerId del cliente (MANUAL DE TOKENIZACIÓN v1.7 §4.1.2.1).
+--
+-- «Como resultado del registro de dicho usuario, se recibirá un objeto Customer,
+--  el cual se deberá procesar y almacenar como mínimo el CustomerId».
+--
+-- POR QUÉ HACE FALTA: sin guardarlo, cada apertura de la ventana de pago tenía
+-- que hacer un POST /Customer para volver a obtenerlo. Y cada POST emite un
+-- UniqueID nuevo e INVALIDA el anterior: bastaba otra pestaña, un reintento o
+-- una consulta de diagnóstico para que la ventana abriera con una sesión ya
+-- muerta, y CardNET respondiera INTERNAL_SERVER_ERROR sin más explicación.
+--
+-- Con el id guardado, la sesión se pide por GET —que no invalida nada— tal
+-- como indica el §4.1.2.2.
+--
+-- NO es un dato de tarjeta: es una referencia opaca del proveedor. El número
+-- de tarjeta sigue sin tocar esta base en ningún momento.
+--
+-- Idempotente: se puede correr varias veces sin efecto.
+ALTER TABLE "clientes" ADD COLUMN IF NOT EXISTS "cardnetCustomerId" TEXT;

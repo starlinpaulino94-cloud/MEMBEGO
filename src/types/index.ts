@@ -1,3 +1,21 @@
+/**
+ * Todos los roles, como VALOR además de como tipo: hay listas (por ejemplo
+ * quién puede abrir un sistema satélite) que se definen por exclusión y con la
+ * lista escrita a mano se olvidan roles nuevos.
+ */
+export const ROLES_APP = [
+  'SUPERADMIN',
+  'ADMINISTRADOR',
+  'GERENTE',
+  'CAJERO',
+  'RECEPCION',
+  'MARKETING',
+  'SUPERVISOR',
+  'EMPLEADO',
+  'CLIENTE',
+  'ADMIN_EMPRESA',
+] as const
+
 export type AppRole =
   | 'SUPERADMIN'
   | 'ADMINISTRADOR'

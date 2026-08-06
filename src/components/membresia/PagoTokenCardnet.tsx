@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, Loader2, CheckCircle2, ShieldCheck, AlertCircle, Lock } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  tokenDe,
+  refsGuardado,
+  textoSeguroWidget,
+  imagenSeguraWidget,
+} from '@/lib/payments/cardnet-widget'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -78,6 +84,8 @@ interface Props {
 
 interface SesionCaptura {
   captureUrl: string
+  /** Script del widget, del MISMO origen que `captureUrl` (lo deriva el servidor). */
+  scriptUrl: string
   uniqueId: string
   publicKey: string
   creadaEn: number
@@ -101,90 +109,23 @@ type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'aprobado' | 'e
 // nivel informativo que permite el linter del proyecto.
 const rastro = (...datos: unknown[]) => console.warn(...datos)
 
-const CLAVES_TOKEN = ['Token', 'token', 'TrxToken', 'trxToken', 'PWToken'] as const
-// Anidaciones típicas donde los proveedores esconden el payload real.
-const CLAVES_ANIDADAS = ['data', 'Data', 'detail', 'payload', 'Response', 'response'] as const
-
-/**
- * Extrae el token del payload de `tokenCreated`, sea string, JSON en string,
- * objeto plano u objeto anidado (hasta 3 niveles). El proveedor no documenta
- * la forma exacta, así que se buscan todas las variantes conocidas.
- */
-function tokenDe(data: unknown, nivel = 0): string {
-  if (typeof data === 'string') {
-    const s = data.trim()
-    if ((s.startsWith('{') || s.startsWith('[')) && nivel < 3) {
-      try {
-        return tokenDe(JSON.parse(s), nivel + 1)
-      } catch {
-        return ''
-      }
-    }
-    // En el primer nivel (callback directo del SDK) un string ES el token.
-    return nivel === 0 ? s : ''
-  }
-  if (data && typeof data === 'object' && nivel < 4) {
-    const o = data as Record<string, unknown>
-    for (const k of CLAVES_TOKEN) {
-      const v = o[k]
-      if (typeof v === 'string' && v.trim().length > 8) return v.trim()
-    }
-    for (const k of CLAVES_ANIDADAS) {
-      if (o[k]) {
-        const t = tokenDe(o[k], nivel + 1)
-        if (t) return t
-      }
-    }
-  }
-  return ''
-}
-
-/**
- * Referencias REUTILIZABLES para guardar la tarjeta (Fase 2). Salen del mismo
- * payload de `tokenCreated`. VERIFICAR-QA: los nombres exactos se confirman con
- * CardNET; se cubren las grafías probables. Nunca incluye datos de tarjeta.
- */
-function refsGuardado(data: unknown): {
-  customerId: string | null
-  paymentProfileId: string | null
-  token: string | null
-  marca: string | null
-  ultimos4: string | null
-} {
-  const o = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
-  // El payload puede venir plano o envuelto (Response/data/…): se busca en ambos.
-  const capas = [o, ...CLAVES_ANIDADAS.map((k) => o[k])].filter(
-    (c): c is Record<string, unknown> => Boolean(c) && typeof c === 'object'
-  )
-  const g = (...ks: string[]) => {
-    for (const capa of capas) {
-      for (const k of ks) {
-        const v = capa[k]
-        if (typeof v === 'string' && v) return v
-        if (typeof v === 'number') return String(v)
-      }
-    }
-    return null
-  }
-  return {
-    customerId: g('CustomerId', 'customerId'),
-    paymentProfileId: g('PaymentProfileId', 'paymentProfileId', 'ProfileId'),
-    token: g('Token', 'token', 'TrxToken', 'PWToken'),
-    marca: g('Brand', 'CardBrand', 'marca'),
-    ultimos4: g('Last4', 'LastFour', 'ultimos4'),
-  }
-}
-
 export function PagoTokenCardnet({
   membershipId,
   montoTexto,
   publicKey,
-  scriptUrl,
+  scriptUrl: scriptUrlProp,
   companyName,
   logoUrl,
   urlExito,
 }: Props) {
   const router = useRouter()
+  /**
+   * De dónde se carga el widget. Arranca con el valor de la configuración y
+   * lo reemplaza el que devuelve la sesión, que sale del `CaptureURL` real de
+   * CardNET. Así el SDK y el iframe quedan siempre en el mismo origen: es la
+   * condición para que el token pueda volver del iframe a esta página.
+   */
+  const [scriptUrl, setScriptUrl] = useState(scriptUrlProp)
   const [estado, setEstado] = useState<Estado>('cargando')
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [guardar, setGuardar] = useState(false)
@@ -243,7 +184,18 @@ export function PagoTokenCardnet({
           else router.refresh()
         } else {
           setEstado('error')
-          setMensaje(data.motivo ?? 'La tarjeta fue rechazada.')
+          // SOLO se dice "rechazada" si el servidor rechazó DE VERDAD. Antes,
+          // cualquier otro final (sesión vencida, límite de intentos, un 500,
+          // una respuesta ilegible) caía aquí con el mismo texto, y culpaba a
+          // la tarjeta de fallos que no eran de la tarjeta. Eso mandó una
+          // depuración entera a buscar en la pasarela un problema que estaba
+          // de este lado.
+          setMensaje(
+            data.motivo ??
+              (data.estado === 'rechazado'
+                ? 'La tarjeta fue rechazada.'
+                : `No se pudo procesar el pago (${data.estado ?? `HTTP ${resp.status}`}). Intenta de nuevo.`)
+          )
         }
       } catch {
         setEstado('error')
@@ -333,6 +285,7 @@ export function PagoTokenCardnet({
       const data = (await resp.json().catch(() => ({}))) as {
         ok?: boolean
         captureUrl?: string
+        scriptUrl?: string
         uniqueId?: string
         publicKey?: string
         conteoPerfiles?: number
@@ -341,6 +294,7 @@ export function PagoTokenCardnet({
       if (!data.ok || !data.captureUrl || !data.uniqueId) return null
       return {
         captureUrl: data.captureUrl,
+        scriptUrl: data.scriptUrl || scriptUrlProp,
         uniqueId: data.uniqueId,
         publicKey: data.publicKey || publicKey,
         creadaEn: Date.now(),
@@ -350,7 +304,7 @@ export function PagoTokenCardnet({
     } catch {
       return null
     }
-  }, [publicKey])
+  }, [publicKey, scriptUrlProp])
 
   // PRE-CREA la sesión en segundo plano apenas la pasarela está lista: así el
   // clic en "Pagar" abre la ventana al instante en vez de esperar al proveedor.
@@ -358,7 +312,14 @@ export function PagoTokenCardnet({
     if ((estado !== 'listo' && estado !== 'error') || sesionRef.current) return
     let cancelado = false
     void pedirSesion().then((s) => {
-      if (!cancelado && s) sesionRef.current = s
+      if (cancelado || !s) return
+      sesionRef.current = s
+      // Si CardNET sirve la captura desde otro host del que se cargó el SDK,
+      // se recarga el widget desde el host correcto ANTES de que el cliente
+      // haga clic. Con los dos en orígenes distintos el token no vuelve.
+      // Forma funcional: compara contra el valor vigente sin tener que leerlo
+      // aquí, así el efecto no depende de `scriptUrl` y no se reengancha solo.
+      if (s.scriptUrl) setScriptUrl((actual) => (s.scriptUrl === actual ? actual : s.scriptUrl))
     })
     return () => {
       cancelado = true
@@ -396,7 +357,18 @@ export function PagoTokenCardnet({
       }
       if (data.estado === 'rechazado') {
         setEstado('error')
+        // Aquí sí es un rechazo real: el servidor cobró y la pasarela dijo que
+        // no. Este camino ya estaba bien acotado; el del cobro directo no.
         setMensaje(data.motivo ?? 'La tarjeta fue rechazada.')
+        return true
+      }
+      if (data.estado === 'pendiente_activacion') {
+        // Terminal: la tarjeta existe pero CardNET la dejó deshabilitada hasta
+        // que el cliente ingrese el código que le cobró su banco. Seguir
+        // sondeando no la habilita, y dejar la pantalla girando en silencio es
+        // peor que decirle qué hacer.
+        setEstado('error')
+        setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
         return true
       }
       if (data.estado === 'sin_pendiente') {
@@ -616,12 +588,17 @@ export function PagoTokenCardnet({
     conteoAntesRef.current = sesion.conteoPerfiles
     customerIdRef.current = sesion.customerId
 
+    // Los textos van SANEADOS: el widget los arrastra a la URL de la ventana
+    // de captura sin escaparlos, y un `&` —como el de «CARTOWN Wash &
+    // Detailing»— parte la consulta y CardNET responde 500.
+    const marca = textoSeguroWidget(companyName, 'Pago seguro')
+    const imagen = imagenSeguraWidget(logoUrl)
     sdk.SetProperties({
-      name: companyName ?? 'Pago seguro',
+      name: marca,
       email: '',
-      ...(logoUrl ? { image: logoUrl } : {}),
-      button_label: `Pagar ${montoTexto}`,
-      description: companyName ? `Membresía ${companyName}` : 'Membresía',
+      ...(imagen ? { image: imagen } : {}),
+      button_label: textoSeguroWidget(`Pagar ${montoTexto}`, 'Pagar'),
+      description: textoSeguroWidget(`Membresia ${marca}`, 'Membresia'),
       currency: 'DOP',
       lang: 'ESP',
       // OBLIGATORIO según el manual (§3.2): el widget inserta el token en el

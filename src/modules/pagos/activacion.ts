@@ -140,6 +140,9 @@ export async function activarMembresia(
   }
   const factsMembresia = {
     plan: membership.plan.nombre,
+    // `plan` es el NOMBRE (puede cambiar); `planId` es la identidad estable
+    // con la que un sistema satélite casa el plan contra su catálogo.
+    planId: membership.planId,
     id: membership.id,
     precio: montoNeto,
     esDePago: montoNeto > 0,

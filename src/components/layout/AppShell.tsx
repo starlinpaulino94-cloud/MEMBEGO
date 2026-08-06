@@ -47,6 +47,8 @@ export function AppShell({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
+  /** Quién abrió el menú, para devolverle el foco al cerrarlo. */
+  const abridorRef = useRef<HTMLElement | null>(null)
   const hasBottomNav = BOTTOM_NAV_ROLES.includes(role)
 
   // DXS · Riel colapsado (desktop): SSR/1er render expandido (sin mismatch de
@@ -73,12 +75,43 @@ export function AppShell({
     }
   }, [mobileOpen])
 
-  // A11y del drawer: cerrar con Escape y mover el foco al abrirlo.
+  // A11y del drawer: Escape cierra, el foco entra al abrir, se queda dentro
+  // mientras está abierto (si no, tabular se escapa al contenido de atrás que
+  // el diálogo dice estar tapando) y vuelve al botón que lo abrió al cerrar.
   useEffect(() => {
-    if (!mobileOpen) return
-    drawerRef.current?.querySelector<HTMLElement>('a, button')?.focus()
+    if (!mobileOpen) {
+      abridorRef.current?.focus()
+      abridorRef.current = null
+      return
+    }
+    abridorRef.current = document.activeElement as HTMLElement | null
+    const enfocables = () =>
+      Array.from(
+        drawerRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((el) => el.offsetParent !== null)
+
+    enfocables()[0]?.focus()
+
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMobileOpen(false)
+      if (e.key === 'Escape') {
+        setMobileOpen(false)
+        return
+      }
+      if (e.key !== 'Tab') return
+      const lista = enfocables()
+      if (lista.length === 0) return
+      const primero = lista[0]
+      const ultimo = lista[lista.length - 1]
+      const activo = document.activeElement
+      if (e.shiftKey && (activo === primero || !drawerRef.current?.contains(activo))) {
+        e.preventDefault()
+        ultimo.focus()
+      } else if (!e.shiftKey && activo === ultimo) {
+        e.preventDefault()
+        primero.focus()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -105,6 +138,7 @@ export function AppShell({
 
       {/* Mobile drawer */}
       <div
+        inert={!mobileOpen}
         className={cn(
           'fixed inset-0 z-50 lg:hidden',
           mobileOpen ? 'pointer-events-auto' : 'pointer-events-none'

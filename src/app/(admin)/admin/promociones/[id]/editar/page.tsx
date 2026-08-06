@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { prisma } from '@/lib/prisma'
+import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { PromocionForm } from '@/components/admin/PromocionForm'
 import { SharePreviewCard } from '@/components/share/SharePreviewCard'
 
@@ -51,10 +52,10 @@ export default async function EditarPromocionPage({
           Vista previa al compartir
         </h2>
         <SharePreviewCard
-          imageSrc={`/promocion/${promo.id}/opengraph-image?v=${promo.updatedAt.getTime()}`}
+          imageSrc={`${rutaPublicaPromo(promo)}/opengraph-image?v=${promo.updatedAt.getTime()}`}
           titulo={share.ogTitulo || promo.titulo}
           descripcion={share.ogDescripcion || promo.descripcion || ''}
-          urlMostrada={`membego.com/promocion/${promo.id.slice(0, 10)}…`}
+          urlMostrada={`membego.com${rutaPublicaPromo(promo)}`}
         />
       </section>
     </div>
