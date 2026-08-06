@@ -126,6 +126,35 @@ export type DecisionPlan =
  * Vehículo sin categoría: nivel 1 (base) y precio base, fail-open: un
  * vehículo histórico jamás bloquea más que uno nuevo.
  */
+// ── Uso de la membresía con un vehículo (§13) ────────────────────────────────
+
+export type AutorizacionVehiculo =
+  | { autorizado: true }
+  | { autorizado: false; mensaje: string }
+
+/**
+ * ¿Puede usarse la membresía con este vehículo?
+ *
+ * REGLA DE COMPATIBILIDAD primero: una membresía SIN vehículos asociados
+ * (todas las anteriores al rediseño) autoriza siempre — el QR funciona como
+ * siempre. Y escanear sin elegir vehículo también autoriza: la asociación
+ * protege contra el uso con OTRO vehículo identificado, no convierte el
+ * escaneo diario en un interrogatorio.
+ */
+export function vehiculoAutorizadoEnMembresia(
+  asociados: Array<{ vehiculoId: string; etiqueta: string }>,
+  vehiculoId: string | null | undefined
+): AutorizacionVehiculo {
+  if (asociados.length === 0) return { autorizado: true }
+  if (!vehiculoId) return { autorizado: true }
+  if (asociados.some((a) => a.vehiculoId === vehiculoId)) return { autorizado: true }
+  const etiquetas = asociados.map((a) => a.etiqueta).join(', ')
+  return {
+    autorizado: false,
+    mensaje: `Esta membresía está asociada a: ${etiquetas}. Para usarla con otro vehículo, el cliente debe actualizarla con el negocio.`,
+  }
+}
+
 export function decidirPlan(plan: PlanReglas, vehiculo: VehiculoInfo | null): DecisionPlan {
   const precio = plan.precioCategoria ?? plan.precioBase
   const precioOrigen: 'CATEGORIA' | 'BASE' = plan.precioCategoria != null ? 'CATEGORIA' : 'BASE'

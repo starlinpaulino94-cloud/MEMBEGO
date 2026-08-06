@@ -14,6 +14,7 @@ import assert from 'node:assert/strict'
 import {
   requisitosParaAccion,
   decidirPlan,
+  vehiculoAutorizadoEnMembresia,
   type VehiculoInfo,
   type PlanReglas,
 } from '../src/modules/elegibilidad/decidir'
@@ -132,4 +133,25 @@ test('decidirPlan: sin vehículo (negocio sin paso de vehículo) → precio base
   const plan: PlanReglas = { id: 'p', precioBase: 800, precioCategoria: null, nivelTarifarioMax: null }
   const d = decidirPlan(plan, null)
   assert.ok(d.puedeComprar && d.precio === 800 && d.precioOrigen === 'BASE')
+})
+
+// ── Uso de la membresía con un vehículo (§13) ────────────────────────────────
+
+test('COMPATIBILIDAD: membresía SIN vehículos asociados autoriza siempre (QR como siempre)', () => {
+  assert.deepEqual(vehiculoAutorizadoEnMembresia([], 'cualquiera'), { autorizado: true })
+  assert.deepEqual(vehiculoAutorizadoEnMembresia([], null), { autorizado: true })
+})
+
+test('§13: escanear sin elegir vehículo autoriza; el vehículo asociado autoriza', () => {
+  const asociados = [{ vehiculoId: 'v1', etiqueta: 'Toyota Corolla (A123456)' }]
+  assert.equal(vehiculoAutorizadoEnMembresia(asociados, null).autorizado, true)
+  assert.equal(vehiculoAutorizadoEnMembresia(asociados, '').autorizado, true)
+  assert.equal(vehiculoAutorizadoEnMembresia(asociados, 'v1').autorizado, true)
+})
+
+test('§13: OTRO vehículo identificado se rechaza con la placa del asociado en el mensaje', () => {
+  const asociados = [{ vehiculoId: 'v1', etiqueta: 'Toyota Corolla (A123456)' }]
+  const r = vehiculoAutorizadoEnMembresia(asociados, 'v2')
+  assert.equal(r.autorizado, false)
+  if (!r.autorizado) assert.match(r.mensaje, /A123456/)
 })

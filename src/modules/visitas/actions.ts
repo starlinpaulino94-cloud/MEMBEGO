@@ -1,6 +1,7 @@
 'use server'
 
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
+import { vehiculoAutorizadoEnMembresia } from '@/modules/elegibilidad/decidir'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
@@ -49,6 +50,12 @@ export interface ClienteLookup {
   fechaInicio: string | null
   fechaVencimiento: string | null
   vehiculos: { id: string; label: string }[]
+  /**
+   * Onboarding v2 (§13): vehículo(s) a los que ESTA membresía está asociada,
+   * con placa y categoría para que el empleado confirme de un vistazo. Vacío
+   * en las membresías anteriores al rediseño: nada cambia para ellas.
+   */
+  vehiculosMembresia: { id: string; label: string }[]
   puedeUsar: boolean
   mensaje?: string
   alertas: string[]
@@ -150,7 +157,24 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
               },
             },
             membership: {
-              include: { plan: true },
+              include: {
+                plan: true,
+                // Onboarding v2 (§13): vehículos asociados a la membresía.
+                vehiculos: {
+                  include: {
+                    vehiculo: {
+                      select: {
+                        id: true,
+                        marca: true,
+                        modelo: true,
+                        placa: true,
+                        placaNormalizada: true,
+                        tipoVehiculo: { select: { nombre: true } },
+                      },
+                    },
+                  },
+                },
+              },
             },
             // Fase E5: el mismo QR puede pertenecer a una compra de promoción.
             compra: {
@@ -362,6 +386,16 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
           id: v.id,
           label: `${v.marca} ${v.modelo} (${v.anio})${v.placa ? ` · ${v.placa}` : ''}`,
         })),
+        vehiculosMembresia: (m.vehiculos ?? []).map((mv) => ({
+          id: mv.vehiculo.id,
+          label: [
+            `${mv.vehiculo.marca} ${mv.vehiculo.modelo}`,
+            mv.vehiculo.placaNormalizada ?? mv.vehiculo.placa ?? 'sin placa',
+            mv.vehiculo.tipoVehiculo?.nombre,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        })),
         puedeUsar,
         mensaje,
         alertas,
@@ -457,11 +491,34 @@ export async function confirmarVisita(
               },
             },
           },
+          // Onboarding v2 (§13): vehículos a los que la membresía está asociada.
+          vehiculos: {
+            include: {
+              vehiculo: {
+                select: { id: true, marca: true, modelo: true, placa: true, placaNormalizada: true },
+              },
+            },
+          },
         },
       })
     )
     if (!membership) {
       return { error: 'La membresía no fue encontrada. Puede haber sido eliminada.' }
+    }
+
+    // §13: una membresía comprada para un vehículo no se usa con OTRO
+    // vehículo identificado. Regla pura (misma en todas partes), con la
+    // compatibilidad dentro: sin asociaciones (membresías anteriores al
+    // rediseño) o sin vehículo elegido, autoriza siempre.
+    const autorizacion = vehiculoAutorizadoEnMembresia(
+      (membership.vehiculos ?? []).map((mv) => ({
+        vehiculoId: mv.vehiculo.id,
+        etiqueta: `${mv.vehiculo.marca} ${mv.vehiculo.modelo} (${mv.vehiculo.placaNormalizada ?? mv.vehiculo.placa ?? 'sin placa'})`,
+      })),
+      vehiculoId
+    )
+    if (!autorizacion.autorizado) {
+      return { error: autorizacion.mensaje }
     }
 
     if (

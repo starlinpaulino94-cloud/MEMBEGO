@@ -116,7 +116,11 @@ export function ConfirmVisit({
   encolar?: EncolarVisita
 }) {
   const [servicio, setServicio] = useState('')
-  const [vehiculoId, setVehiculoId] = useState('')
+  // §13: si la membresía está asociada a UN vehículo, viene preseleccionado —
+  // el empleado confirma la placa de un vistazo en vez de elegir a ciegas.
+  const [vehiculoId, setVehiculoId] = useState(() =>
+    cliente.vehiculosMembresia?.length === 1 ? cliente.vehiculosMembresia[0].id : ''
+  )
   const [sucursalId, setSucursalId] = useState('')
   /**
    * La acción, envuelta para que un fallo de RED no se pierda.
@@ -156,6 +160,10 @@ export function ConfirmVisit({
   // nueva en el servidor, o viceversa): nunca dejar que un campo faltante
   // tumbe la pantalla del scanner.
   const vehiculos = cliente.vehiculos ?? []
+  // Onboarding v2 (§13): vehículo(s) a los que ESTA membresía está asociada.
+  // Vacío en membresías anteriores al rediseño: la pantalla queda como siempre.
+  const vehiculosMembresia = cliente.vehiculosMembresia ?? []
+  const asociadosIds = new Set(vehiculosMembresia.map((v) => v.id))
   const planBeneficios = cliente.planBeneficios ?? []
   const alertas = cliente.alertas ?? []
   const visitasRecientes = cliente.visitasRecientes ?? []
@@ -419,6 +427,20 @@ export function ConfirmVisit({
             </Select>
           </div>
 
+          {/* §13: el empleado ve para QUÉ vehículo es la membresía (placa y
+              categoría incluidas) y confirma de un vistazo. Solo aparece en
+              membresías con vehículo asociado (compras del rediseño). */}
+          {vehiculosMembresia.length > 0 && (
+            <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
+              <p className="font-semibold text-foreground">
+                Membresía para{vehiculosMembresia.length > 1 ? ' estos vehículos' : ''}:
+              </p>
+              {vehiculosMembresia.map((v) => (
+                <p key={v.id} className="mt-0.5 text-muted-foreground">{v.label}</p>
+              ))}
+            </div>
+          )}
+
           {vehiculos.length > 0 && (
             <div className="space-y-1.5">
               <Label className="text-xs">Vehículo</Label>
@@ -428,7 +450,12 @@ export function ConfirmVisit({
                 </SelectTrigger>
                 <SelectContent>
                   {vehiculos.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.label}
+                      {vehiculosMembresia.length > 0 && !asociadosIds.has(v.id)
+                        ? ' — no asociado a la membresía'
+                        : ''}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
