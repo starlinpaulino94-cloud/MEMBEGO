@@ -1,6 +1,6 @@
 'use server'
 
-import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
@@ -831,7 +831,7 @@ export async function registrarImpresion(visitId: string): Promise<ImpresionStat
     if (!visit) return { error: 'Visita no encontrada.' }
 
     const companyId = visit.membership?.cliente.companyId
-    const registrarAuditoria = (tx: Parameters<typeof conEmpresa>[1]) =>
+    const registrarAuditoria = (tx: Tx) =>
       tx.auditLog.create({
         data: {
           companyId: companyId ?? null,

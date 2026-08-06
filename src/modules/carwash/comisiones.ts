@@ -115,6 +115,8 @@ export async function devengarComision(
     // Sin lavador asignado no hay a quién pagarle. No es un error: muchos
     // negocios no asignan al inicio, y forzarlo trabaría la entrega.
     if (!cola?.atendidoPorId || cola.servicios.length === 0) return null
+    // A const: dentro del closure de conEmpresa se pierde el estrechamiento.
+    const atendidoPorId = cola.atendidoPorId
 
     const calculo = calcularComision(
       cola.servicios.map((s) => ({
@@ -133,7 +135,7 @@ export async function devengarComision(
         data: {
           companyId,
           colaId,
-          userId: cola.atendidoPorId,
+          userId: atendidoPorId,
           base: calculo.base,
           monto: calculo.monto,
           detalle: calculo.detalle,

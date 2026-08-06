@@ -529,9 +529,10 @@ export async function registrarCuentaGeneral(
       })
       // Teléfono del formulario → ficha recién creada (la reparación no lo tiene).
       if (sesion.metadata.clienteId && telefono) {
+        const nuevoClienteId = sesion.metadata.clienteId
         await sinEmpresa('registro: actualizar teléfono de la ficha recién creada', (tx) =>
           tx.cliente
-            .update({ where: { id: sesion.metadata.clienteId }, data: { telefono } })
+            .update({ where: { id: nuevoClienteId }, data: { telefono } })
             .catch(anotarFallo('registro:cliente.update'))
         )
       }

@@ -78,16 +78,18 @@ export async function comprarGiftCard(
         }
         destinatarioContacto = digits
       }
-      const existente = destinatarioContacto.includes('@')
+      // A const: dentro de los closures de conEmpresa se pierde el estrechamiento.
+      const contacto = destinatarioContacto
+      const existente = contacto.includes('@')
         ? await conEmpresa(companyId, (tx) =>
             tx.cliente.findFirst({
-              where: { companyId, email: { equals: destinatarioContacto, mode: 'insensitive' } },
+              where: { companyId, email: { equals: contacto, mode: 'insensitive' } },
               select: { id: true },
             })
           )
         : await conEmpresa(companyId, (tx) =>
             tx.cliente.findFirst({
-              where: { companyId, telefono: { contains: destinatarioContacto } },
+              where: { companyId, telefono: { contains: contacto } },
               select: { id: true },
             })
           )

@@ -153,6 +153,8 @@ export class LiveActionSink implements ActionSink {
     if (!code || !input.subjectId) {
       return { ok: true, detail: { simulated: true, reason: 'sin código o sin sujeto' } }
     }
+    // A const: el closure de conEmpresa pierde el estrechamiento del guard.
+    const subjectId = input.subjectId
     const benefit = await conEmpresa(input.companyId, (tx) =>
       tx.benefit.findFirst({
         where: { companyId: input.companyId, code },
@@ -168,7 +170,7 @@ export class LiveActionSink implements ActionSink {
         data: {
           companyId: input.companyId,
           benefitId: benefit.id,
-          subscriberId: input.subjectId,
+          subscriberId: subjectId,
           subscriberKind: 'CLIENT',
           sourceModule: 'automation',
           expiresAt: dias > 0 ? new Date(Date.now() + dias * 86_400_000) : null,

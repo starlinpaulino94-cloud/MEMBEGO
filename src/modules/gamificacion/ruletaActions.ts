@@ -166,9 +166,10 @@ export async function crearRuletaPremio(
 
   // Si vincula una promoción, debe ser de la misma empresa.
   if (parsed.data.promocionId) {
+    const promocionId = parsed.data.promocionId
     const promo = await conEmpresa(companyId, (tx) =>
       tx.promocion.findFirst({
-        where: { id: parsed.data.promocionId, companyId },
+        where: { id: promocionId, companyId },
         select: { id: true },
       })
     )
@@ -209,9 +210,10 @@ export async function actualizarRuletaPremio(
   if ('error' in parsed) return { error: parsed.error }
 
   if (parsed.data.promocionId) {
+    const promocionId = parsed.data.promocionId
     const promo = await conEmpresa(companyId, (tx) =>
       tx.promocion.findFirst({
-        where: { id: parsed.data.promocionId, companyId },
+        where: { id: promocionId, companyId },
         select: { id: true },
       })
     )

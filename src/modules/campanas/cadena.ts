@@ -96,13 +96,17 @@ export async function entregarPaso(
   if (!paso.promocionId) {
     return { error: 'Este paso aún no se ha aplicado en su empresa.' }
   }
+  // A consts: dentro del closure de conEmpresa se pierde el estrechamiento del
+  // guard y `string | null` rompe el `where`.
+  const promocionId = paso.promocionId
+  const pasoCompanyId = paso.companyId
   if (paso.campana.estado === 'ARCHIVADA') {
     return { error: 'La campaña está archivada.' }
   }
 
-  const promo = await conEmpresa(paso.companyId, (tx) =>
+  const promo = await conEmpresa(pasoCompanyId, (tx) =>
     tx.promocion.findUnique({
-      where: { id: paso.promocionId },
+      where: { id: promocionId },
       select: { id: true, companyId: true, precio: true, usosPorCompra: true, activo: true },
     })
   )
@@ -250,10 +254,11 @@ export async function avanzarCadenaTrasCanje(compraId: string): Promise<Resultad
       })
     )
     if (!compra?.campanaPasoId || !compra.cliente) return { sinCambios: true }
+    const campanaPasoId = compra.campanaPasoId
 
     const paso = await sinEmpresa('campanas: paso por id (cross-tenant)', (tx) =>
       tx.campanaPaso.findUnique({
-        where: { id: compra.campanaPasoId },
+        where: { id: campanaPasoId },
         select: { orden: true, campanaId: true, companyId: true },
       })
     )
@@ -349,7 +354,7 @@ export async function vincularCompraSiEsPaso(
     const paso = await sinEmpresa('campanas: paso por promoción (cross-tenant)', (tx) =>
       tx.campanaPaso.findFirst({
         where: { promocionId },
-        select: { id: true, orden: true, campanaId: true, campana: { select: { modo: true, estado: true } } },
+        select: { id: true, orden: true, campanaId: true, companyId: true, campana: { select: { modo: true, estado: true } } },
       })
     )
     if (!paso || paso.campana.modo !== 'CADENA' || paso.campana.estado !== 'APLICADA') return

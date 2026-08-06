@@ -1,4 +1,4 @@
-import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 
 /**
  * Bitácora de actividad (AuditLog).
@@ -120,7 +120,7 @@ export async function getAuditoria(
   const hasta = filtro.hasta ? limiteDia(filtro.hasta, true) : null
   const q = filtro.q?.trim()
 
-  const fn = (tx: Parameters<typeof conEmpresa>[1]) =>
+  const fn = (tx: Tx) =>
     tx.auditLog.findMany({
       where: {
         ...(companyId ? { companyId } : filtro.empresa ? { companyId: filtro.empresa } : {}),

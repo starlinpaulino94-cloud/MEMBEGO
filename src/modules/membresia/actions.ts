@@ -39,7 +39,7 @@ export async function seleccionarPlan(
 
     const result = await conEmpresa(companyId, async (tx) => {
       const cliente = await tx.cliente.findUnique({
-        where: { id: user.metadata.clienteId },
+        where: { id: clientId },
         include: {
           company: {
             select: {

@@ -297,7 +297,9 @@ export async function reclamarOferta(
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { error: 'Inicia sesión con tu cuenta de cliente.' }
     }
-    if (!(await formSubmitLimiter(`oferta:${user.metadata.clienteId}`))) {
+    // A const: los closures de conEmpresa pierden el estrechamiento del guard.
+    const clienteId = user.metadata.clienteId
+    if (!(await formSubmitLimiter(`oferta:${clienteId}`))) {
       return { error: 'Demasiados intentos. Espera un momento.' }
     }
 
@@ -313,7 +315,7 @@ export async function reclamarOferta(
       tx.ofertaInvitado.updateMany({
         where: {
           ofertaId: oferta.id,
-          clienteId: user.metadata.clienteId,
+          clienteId,
           reclamadaAt: null,
         },
         data: { reclamadaAt: new Date() },
@@ -323,7 +325,7 @@ export async function reclamarOferta(
       const existe = await conEmpresa(oferta.companyId, (tx) =>
         tx.ofertaInvitado.findUnique({
           where: {
-            ofertaId_clienteId: { ofertaId: oferta.id, clienteId: user.metadata.clienteId },
+            ofertaId_clienteId: { ofertaId: oferta.id, clienteId },
           },
           select: { reclamadaAt: true },
         })

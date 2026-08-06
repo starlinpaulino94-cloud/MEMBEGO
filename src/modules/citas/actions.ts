@@ -47,7 +47,12 @@ export async function reservarCita(
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { error: 'No autorizado.' }
     }
-    if (!(await formSubmitLimiter(`cita:${user.metadata.clienteId}`))) {
+    // A un const: dentro del closure de sinEmpresa/conEmpresa, TS pierde el
+    // estrechamiento de user.metadata.clienteId (la función podría llamarse
+    // después), y `string | null` rompe el `where` — que a su vez colapsa el
+    // tipo del select y esconde la relación `company`.
+    const clienteId = user.metadata.clienteId
+    if (!(await formSubmitLimiter(`cita:${clienteId}`))) {
       return { error: 'Demasiados intentos. Espera un momento.' }
     }
 
@@ -61,7 +66,7 @@ export async function reservarCita(
 
     const cliente = await sinEmpresa('citas: buscar cliente por id (se usa su empresa después)', (tx) =>
       tx.cliente.findUnique({
-        where: { id: user.metadata.clienteId },
+        where: { id: clienteId },
         select: {
           id: true,
           nombre: true,
@@ -220,10 +225,11 @@ export async function cancelarCitaCliente(
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { error: 'No autorizado.' }
     }
+    const clienteId = user.metadata.clienteId
     const citaId = String(formData.get('citaId') ?? '').trim()
     const cita = await sinEmpresa('citas: buscar cita por id y cliente (se usa su empresa después)', (tx) =>
       tx.cita.findFirst({
-        where: { id: citaId, clienteId: user.metadata.clienteId },
+        where: { id: citaId, clienteId },
         include: {
           cliente: { select: { nombre: true } },
           company: { select: { zonaHoraria: true } },

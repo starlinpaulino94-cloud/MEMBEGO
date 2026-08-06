@@ -120,6 +120,7 @@ export async function registrarEmpresa(
       throw new Error(createError?.message ?? 'No se pudo crear la cuenta.')
     }
     supabaseId = created.user.id
+    const nuevoSupabaseId = supabaseId
 
     await ensureEmailIdentity(supabaseId, email)
 
@@ -127,7 +128,7 @@ export async function registrarEmpresa(
     const dbUser = await conEmpresa(company.id, (tx) =>
       tx.user.create({
         data: {
-          supabaseId,
+          supabaseId: nuevoSupabaseId,
           email,
           name: nombrePropietario,
           role: 'ADMINISTRADOR',
@@ -160,8 +161,9 @@ export async function registrarEmpresa(
       await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('registro:rollback-auth-user'))
     }
     if (companyId) {
-      await conEmpresa(companyId, (tx) =>
-        tx.company.delete({ where: { id: companyId } })
+      const idEmpresa = companyId
+      await conEmpresa(idEmpresa, (tx) =>
+        tx.company.delete({ where: { id: idEmpresa } })
       ).catch(anotarFallo('registro:company.delete'))
     }
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }

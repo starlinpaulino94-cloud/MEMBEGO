@@ -221,7 +221,7 @@ export async function evaluarRecompensas(referenteClienteId: string, companyId: 
     })
   )
 
-  const notificacionesACrear = []
+  const notificacionesACrear: Prisma.NotificacionCreateManyInput[] = []
 
   for (const regla of reglas) {
     const valor = Number(regla.valorRecompensa)

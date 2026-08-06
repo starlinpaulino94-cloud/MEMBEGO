@@ -22,13 +22,14 @@ export async function registrarShare(canal: string): Promise<{ ok: boolean }> {
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { ok: false }
     }
-    if (!(await shareLimiter(`share:${user.metadata.clienteId}`))) {
+    const clienteId = user.metadata.clienteId
+    if (!(await shareLimiter(`share:${clienteId}`))) {
       return { ok: false }
     }
 
     const cliente = await sinEmpresa('referidos: buscar cliente por id (empresa desconocida)', (tx) =>
       tx.cliente.findUnique({
-        where: { id: user.metadata.clienteId },
+        where: { id: clienteId },
         select: { id: true, companyId: true },
       })
     )

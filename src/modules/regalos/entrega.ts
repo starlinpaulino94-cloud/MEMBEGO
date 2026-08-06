@@ -56,9 +56,10 @@ export async function entregarCompraABeneficiario(compra: {
     if (!compra.beneficiarioClienteId || compra.beneficiarioClienteId === compra.clienteId) {
       return false
     }
+    const beneficiarioClienteId = compra.beneficiarioClienteId
     return await conEmpresa(compra.companyId, async (tx) => {
       const beneficiario = await tx.cliente.findFirst({
-        where: { id: compra.beneficiarioClienteId, companyId: compra.companyId },
+        where: { id: beneficiarioClienteId, companyId: compra.companyId },
         select: { id: true },
       })
       // Beneficiario borrado: la compra queda con el comprador (mejor que perderla).
@@ -112,17 +113,19 @@ export async function resolverRegaloPagado(vinculo: {
 
     let etiqueta = 'tu regalo'
     if (regalo.promocionId) {
+      const promocionId = regalo.promocionId
       const p = await conEmpresa(regalo.companyId, (tx) =>
         tx.promocion.findUnique({
-          where: { id: regalo.promocionId },
+          where: { id: promocionId },
           select: { titulo: true },
         })
       )
       etiqueta = p?.titulo ?? etiqueta
     } else if (regalo.planId) {
+      const planId = regalo.planId
       const p = await conEmpresa(regalo.companyId, (tx) =>
         tx.plan.findUnique({
-          where: { id: regalo.planId },
+          where: { id: planId },
           select: { nombre: true },
         })
       )

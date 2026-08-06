@@ -217,16 +217,18 @@ export async function enviarTransferencia(
 
     // Si ese contacto YA es cliente del negocio, el regalo va directo a su
     // cuenta (misma experiencia que si lo hubieran buscado por nombre).
-    const existente = destinatarioContacto.includes('@')
+    // A const: dentro de los closures de conEmpresa se pierde el estrechamiento.
+    const contacto = destinatarioContacto
+    const existente = contacto.includes('@')
       ? await conEmpresa(companyId, (tx) =>
           tx.cliente.findFirst({
-            where: { companyId, email: { equals: destinatarioContacto, mode: 'insensitive' } },
+            where: { companyId, email: { equals: contacto, mode: 'insensitive' } },
             select: { id: true },
           })
         )
       : await conEmpresa(companyId, (tx) =>
           tx.cliente.findFirst({
-            where: { companyId, telefono: { contains: destinatarioContacto } },
+            where: { companyId, telefono: { contains: contacto } },
             select: { id: true },
           })
         )
@@ -480,11 +482,12 @@ export async function responderRegalo(
   let membershipDestinoId: string | null = null
 
   if (regalo.compraOrigenId && regalo.promocionId) {
+    const compraOrigenId = regalo.compraOrigenId
     // Compra ESPEJO en la wallet del receptor: hereda promoción, precio y
     // vencimiento del origen → el canje con QR funciona sin cambios.
     const origenCompra = await conEmpresa(regalo.companyId, (tx) =>
       tx.productoCompra.findUnique({
-        where: { id: regalo.compraOrigenId },
+        where: { id: compraOrigenId },
         select: { precioCongelado: true, fechaVencimiento: true, promocion: { select: { titulo: true } } },
       })
     )
