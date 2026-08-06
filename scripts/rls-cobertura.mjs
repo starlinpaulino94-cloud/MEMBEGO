@@ -58,6 +58,7 @@ const BLANCA = new Map([
   ['app/api/admin-reset-password/route.ts', 'esquema auth, protegido por bootstrap'],
   ['app/api/health/route.ts', 'centinelas de information_schema (ops)'],
   ['app/api/stats/route.ts', 'conteos de pg_class (catálogo de sistema)'],
+  ['app/api/pagos/cardnet-token/estado/route.ts', 'diagnóstico/ops (login-gated): solo lee el propio Cliente del usuario en la rama ?sesion=1'],
   ['modules/observabilidad/metricas.ts', 'métricas de plataforma cross-tenant (sinEmpresa)'],
 ])
 

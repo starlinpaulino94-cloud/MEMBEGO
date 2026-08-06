@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
 import {
   diagnosticarSonda,
@@ -19,6 +19,10 @@ import {
  * hay salida a internet, enseña el código y el cuerpo crudos, y traduce el
  * resultado a una frase accionable. Sin esto, cada diagnóstico costaba un día
  * de ida y vuelta por WhatsApp.
+ *
+ * Es del superadmin y cruza inquilinos por diseño (ve los sistemas y colas de
+ * TODAS las empresas), así que sus consultas van con `sinEmpresa` — el caso que
+ * `src/lib/tenant.ts` nombra explícitamente para el panel del superadmin.
  */
 
 const TIMEOUT_SONDA_MS = 10_000
@@ -46,55 +50,57 @@ export interface ResumenSistema {
 
 /** Estado de cada sistema conectado y de su cola de eventos. */
 export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
-  const sistemas = await prisma.sistemaConectado
-    .findMany({ orderBy: { slug: 'asc' } })
-    .catch(() => [])
-
-  const resumenes: ResumenSistema[] = []
-  for (const s of sistemas) {
-    // Un groupBy por estado y una lectura del pendiente más viejo: el detalle
-    // fila por fila no aporta nada cuando hay decenas de eventos iguales.
-    const porEstado = await prisma.eventoSaliente
-      .groupBy({
-        by: ['estado'],
-        where: { sistemaId: s.id },
-        _count: { _all: true },
-        _max: { intentos: true },
-      })
+  return sinEmpresa('panel del superadmin: estado de las integraciones y colas de todas las empresas', async (tx) => {
+    const sistemas = await tx.sistemaConectado
+      .findMany({ orderBy: { slug: 'asc' } })
       .catch(() => [])
 
-    const cuenta = (estado: string) =>
-      porEstado.find((g) => g.estado === estado)?._count._all ?? 0
+    const resumenes: ResumenSistema[] = []
+    for (const s of sistemas) {
+      // Un groupBy por estado y una lectura del pendiente más viejo: el detalle
+      // fila por fila no aporta nada cuando hay decenas de eventos iguales.
+      const porEstado = await tx.eventoSaliente
+        .groupBy({
+          by: ['estado'],
+          where: { sistemaId: s.id },
+          _count: { _all: true },
+          _max: { intentos: true },
+        })
+        .catch(() => [])
 
-    const masViejo = await prisma.eventoSaliente
-      .findFirst({
-        where: { sistemaId: s.id, estado: 'PENDIENTE' },
-        orderBy: { createdAt: 'asc' },
-        select: { createdAt: true, ultimoError: true, intentos: true },
+      const cuenta = (estado: string) =>
+        porEstado.find((g) => g.estado === estado)?._count._all ?? 0
+
+      const masViejo = await tx.eventoSaliente
+        .findFirst({
+          where: { sistemaId: s.id, estado: 'PENDIENTE' },
+          orderBy: { createdAt: 'asc' },
+          select: { createdAt: true, ultimoError: true, intentos: true },
+        })
+        .catch(() => null)
+
+      resumenes.push({
+        id: s.id,
+        slug: s.slug,
+        nombre: s.nombre,
+        categoria: s.categoria,
+        urlBase: s.urlBase,
+        urlWebhook: s.urlWebhook,
+        activo: s.activo,
+        secretoLargo: s.secreto.length,
+        pendientes: cuenta('PENDIENTE'),
+        enviados: cuenta('ENVIADO'),
+        fallidos: cuenta('FALLIDO'),
+        ultimoError: masViejo?.ultimoError ?? null,
+        maxIntentos: Math.max(
+          0,
+          ...porEstado.map((g) => (g.estado === 'PENDIENTE' ? (g._max.intentos ?? 0) : 0))
+        ),
+        esperandoDesde: masViejo?.createdAt ?? null,
       })
-      .catch(() => null)
-
-    resumenes.push({
-      id: s.id,
-      slug: s.slug,
-      nombre: s.nombre,
-      categoria: s.categoria,
-      urlBase: s.urlBase,
-      urlWebhook: s.urlWebhook,
-      activo: s.activo,
-      secretoLargo: s.secreto.length,
-      pendientes: cuenta('PENDIENTE'),
-      enviados: cuenta('ENVIADO'),
-      fallidos: cuenta('FALLIDO'),
-      ultimoError: masViejo?.ultimoError ?? null,
-      maxIntentos: Math.max(
-        0,
-        ...porEstado.map((g) => (g.estado === 'PENDIENTE' ? (g._max.intentos ?? 0) : 0))
-      ),
-      esperandoDesde: masViejo?.createdAt ?? null,
-    })
-  }
-  return resumenes
+    }
+    return resumenes
+  })
 }
 
 /** Un toque a la URL, sin lanzar nunca: los fallos de red son un resultado. */
@@ -132,21 +138,33 @@ export interface ResultadoSonda {
  * reventaba con 500 por una empresa inexistente. Ese 500 no decía nada del
  * satélite — lo causaba la sonda. Se reutiliza la empresa del último evento
  * encolado para ese sistema: es exactamente la que mandan los eventos reales.
+ *
+ * Las lecturas de BD (sistema + último evento) van en `sinEmpresa` y se cierran
+ * ANTES de tocar la red: la sonda hace hasta dos fetches con 10 s de timeout
+ * cada uno, y no hay razón para sostener una transacción abierta durante eso.
  */
 export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda | { error: string }> {
-  const sistema = await prisma.sistemaConectado
-    .findUnique({ where: { id: sistemaId }, select: { urlWebhook: true, secreto: true } })
-    .catch(() => null)
+  const { sistema, ultimo } = await sinEmpresa(
+    'panel del superadmin: sonda del webhook de un sistema conectado',
+    async (tx) => {
+      const sistema = await tx.sistemaConectado
+        .findUnique({ where: { id: sistemaId }, select: { urlWebhook: true, secreto: true } })
+        .catch(() => null)
+      const ultimo = sistema
+        ? await tx.eventoSaliente
+            .findFirst({
+              where: { sistemaId },
+              orderBy: { createdAt: 'desc' },
+              select: { companyId: true },
+            })
+            .catch(() => null)
+        : null
+      return { sistema, ultimo }
+    }
+  )
+
   if (!sistema) return { error: 'Sistema no encontrado.' }
   if (!sistema.urlWebhook) return { error: 'Este sistema no tiene URL de webhook registrada.' }
-
-  const ultimo = await prisma.eventoSaliente
-    .findFirst({
-      where: { sistemaId },
-      orderBy: { createdAt: 'desc' },
-      select: { companyId: true },
-    })
-    .catch(() => null)
 
   const cuerpo = JSON.stringify({
     id: `ping-${Date.now()}`,
@@ -182,11 +200,13 @@ export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda 
  * válidos y el satélite los descarta por id si ya los tenía.
  */
 export async function revivirFallidos(sistemaId: string): Promise<number> {
-  const r = await prisma.eventoSaliente
-    .updateMany({
-      where: { sistemaId, estado: 'FALLIDO' },
-      data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null },
-    })
-    .catch(() => ({ count: 0 }))
-  return r.count
+  return sinEmpresa('panel del superadmin: reencolar los eventos FALLIDO de un sistema', async (tx) => {
+    const r = await tx.eventoSaliente
+      .updateMany({
+        where: { sistemaId, estado: 'FALLIDO' },
+        data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null },
+      })
+      .catch(() => ({ count: 0 }))
+    return r.count
+  })
 }
