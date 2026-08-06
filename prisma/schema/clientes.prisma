@@ -142,6 +142,19 @@ model Vehiculo {
   anio      Int
   color     String
   placa     String?
+  /// Onboarding v2 · identidad técnica del vehículo: `pais + placaNormalizada`
+  /// (mayúsculas, solo A-Z0-9 — ver `modules/onboarding/vehiculo.ts`). Nullable
+  /// a propósito: los vehículos históricos sin placa siguen siendo válidos
+  /// (regla de compatibilidad) y el backfill corre aparte. El UNIQUE llegará
+  /// en una fase posterior, cuando la auditoría (npm run auditar:placas)
+  /// confirme que no hay duplicados en producción.
+  placaNormalizada String?
+  /// País de emisión de la placa (ISO 3166-1 alfa-2).
+  pais             String   @default("DO")
+  /// Vehículo por defecto para precios, promociones y compra (§8). El primero
+  /// registrado lo será; el cliente puede cambiarlo. Los vehículos históricos
+  /// quedan en false y nada cambia para ellos.
+  esPrincipal      Boolean  @default(false)
   createdAt DateTime @default(now())
 
   visits Visit[]
@@ -159,7 +172,15 @@ model Vehiculo {
   cuentaVehiculos CuentaVehiculo[]
   incidencias     Incidencia[]
 
+  // Onboarding v2 · membresías a las que este vehículo está asociado.
+  membresias MembresiaVehiculo[]
+
   @@index([clienteId])
+  // Selector de vehículo del cliente (planes, checkout) y búsqueda del principal.
+  @@index([clienteId, esPrincipal])
+  // Detección de duplicados por identidad técnica. NO unique todavía: primero
+  // la auditoría de producción; el constraint llega en su propia migración.
+  @@index([pais, placaNormalizada])
   @@map("vehiculos")
 }
 
