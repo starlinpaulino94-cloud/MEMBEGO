@@ -25,7 +25,8 @@
     "db:doctor:sql": "node scripts/db-doctor.mjs --sql",
     "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts",
     "rls:probar": "node scripts/probar-rls.mjs",
-    "rls:cobertura": "node scripts/rls-cobertura.mjs"
+    "rls:cobertura": "node scripts/rls-cobertura.mjs",
+    "auditar:placas": "node scripts/auditar-placas.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

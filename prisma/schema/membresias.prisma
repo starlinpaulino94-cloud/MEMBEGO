@@ -60,8 +60,21 @@ model Plan {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  // Onboarding v2 · reglas de vehículo del plan. TODOS los defaults reproducen
+  // el comportamiento actual (regla de compatibilidad): sin nivel máximo
+  // (null = acepta cualquier vehículo) y un vehículo por membresía. `precio`
+  // se mantiene como precio base: si el plan no tiene filas en
+  // PlanPrecioCategoria, se cobra ese, igual que hoy.
+  /// Nivel tarifario máximo que acepta (ver TipoVehiculo.nivelTarifario).
+  nivelTarifarioMax   Int?
+  /// Cuántos vehículos pueden asociarse a una membresía de este plan.
+  maxVehiculos        Int      @default(1)
+  /// Precio de cada vehículo adicional; null = no se ofrecen adicionales.
+  precioVehiculoExtra Decimal? @db.Decimal(10, 2)
+
   memberships            Membership[]
   membershipsSolicitadas Membership[] @relation("PlanSolicitado")
+  preciosPorCategoria    PlanPrecioCategoria[]
 
   @@index([companyId])
   @@map("plans")
@@ -123,6 +136,9 @@ model Membership {
   qrTokens     QrToken[]
 
   transacciones Transaction[]
+  // Onboarding v2 · vehículos asociados a esta membresía (§13). Vacío en las
+  // membresías existentes: siguen valiendo sin vehículo (compatibilidad).
+  vehiculos     MembresiaVehiculo[]
 
   @@unique([clienteId, companyId])
   @@index([estado])
@@ -134,6 +150,51 @@ model Membership {
   // empresa por estado y vencimiento (activas, por vencer, pendientes).
   @@index([companyId, estado, fechaVencimiento])
   @@map("memberships")
+}
+
+// Onboarding v2 · PRECIO POR CATEGORÍA DE VEHÍCULO (§11 · opción B).
+// Espejo de `ServicioPrecio` (servicios × tipo de vehículo, el patrón que el
+// POS ya usa en producción), aplicado a los planes: "Plan 4 lavados — sedán
+// RD$1,000 / SUV RD$1,300". Un plan SIN filas aquí cobra su `precio` base y
+// se comporta exactamente como hoy (fail-open).
+//
+// RLS: sin `companyId` propio, igual que ServicioPrecio — la política se
+// deduce por la FK a `plans` (Nivel 1 del script de aislamiento).
+model PlanPrecioCategoria {
+  id             String       @id @default(cuid())
+  planId         String
+  plan           Plan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  tipoVehiculoId String
+  tipoVehiculo   TipoVehiculo @relation(fields: [tipoVehiculoId], references: [id], onDelete: Cascade)
+  precio         Decimal      @db.Decimal(10, 2)
+  activo         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([planId, tipoVehiculoId])
+  @@index([tipoVehiculoId])
+  @@map("plan_precios_categoria")
+}
+
+// Onboarding v2 · VEHÍCULOS DE UNA MEMBRESÍA (§13). La membresía identifica a
+// qué vehículo(s) protege; el escáner puede confirmar placa y categoría al
+// validar el QR. Las membresías EXISTENTES no tienen filas aquí y siguen
+// funcionando sin vehículo: la asociación aplica a compras nuevas (regla de
+// compatibilidad), nunca retroactivamente.
+model MembresiaVehiculo {
+  id           String     @id @default(cuid())
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  vehiculoId   String
+  vehiculo     Vehiculo   @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  /// Nivel tarifario CONGELADO al asociar (`nivelDeCompra`): renivelar la
+  /// categoría después no cambia lo ya comprado.
+  nivelTarifarioComprado Int @default(1)
+  createdAt    DateTime   @default(now())
+
+  @@unique([membershipId, vehiculoId])
+  @@index([vehiculoId])
+  @@map("membresia_vehiculos")
 }
 
 /// Fase 2 CardNET (tokenización HOSPEDADA): tarjeta guardada para cobros

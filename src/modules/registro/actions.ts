@@ -14,10 +14,14 @@ import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, clasificarErrorPrisma } from '@/lib/prisma-errors'
 import { primerErrorZod } from '@/lib/validacion'
 import { capturarErrorInesperado } from '@/lib/sentry'
 import { registroSchema } from '@/modules/registro/schema'
+import { validarVehiculoNuevo, normalizarPlaca } from '@/modules/registro/vehiculo-nuevo'
+import { capacidadesEfectivas } from '@/modules/capacidades/catalogo'
+import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
+import { PAIS_PLACA_DEFECTO } from '@/modules/onboarding/vehiculo'
 
 export interface RegistroState {
   error?: string
@@ -105,6 +109,9 @@ export async function registrarCliente(
     anioRaw: String(formData.get('anio') ?? ''),
     color: String(formData.get('color') ?? ''),
     placa: String(formData.get('placa') ?? ''),
+    tipoVehiculoId: String(formData.get('tipoVehiculoId') ?? ''),
+    pais: String(formData.get('pais') ?? ''),
+    flujoV2: String(formData.get('flujoV2') ?? ''),
   })
   if (!parsed.success) return { error: primerErrorZod(parsed.error) }
   const {
@@ -122,6 +129,9 @@ export async function registrarCliente(
     anioRaw,
     color,
     placa,
+    tipoVehiculoId,
+    pais,
+    flujoV2,
   } = parsed.data
   // F5.2: auto-seguir con opción de desmarcar. El hidden "off" va primero;
   // si el checkbox está marcado, el último valor es "on".
@@ -136,12 +146,12 @@ export async function registrarCliente(
   // select explícito: si la BD de producción aún no tiene una columna recién
   // agregada al modelo Company, un findUnique sin select falla y bloquea TODO
   // el registro. Con select, solo dependemos de columnas que siempre existen.
-  let company: { id: string; name: string; slug: string; type: string } | null = null
+  let company: { id: string; name: string; slug: string; type: string; capacidades: unknown } | null = null
   try {
     company = await sinEmpresa('registro: buscar empresa por slug (catálogo global)', (tx) =>
       tx.company.findUnique({
         where: { slug: companySlug },
-        select: { id: true, name: true, slug: true, type: true },
+        select: { id: true, name: true, slug: true, type: true, capacidades: true },
       })
     )
   } catch (e) {
@@ -150,6 +160,59 @@ export async function registrarCliente(
   }
   if (!company) {
     return { error: 'Empresa no encontrada.' }
+  }
+
+  // ── Onboarding v2: vehículo obligatorio y completo (solo asistente) ────────
+  //
+  // La categoría del negocio se resuelve EN EL SERVIDOR (tipo + overrides de
+  // capacidades): el navegador no decide si el vehículo es obligatorio. El
+  // formulario clásico (flujoV2 vacío, bandera de emergencia) conserva su
+  // comportamiento de siempre — regla de compatibilidad.
+  const requiereVehiculo = flujoRequiereVehiculo(
+    capacidadesEfectivas(company.type, company.capacidades).categoria
+  )
+  const companyIdVerificado = company.id
+  let vehiculoV2: import('@/modules/registro/vehiculo-nuevo').VehiculoNuevoValidado | null = null
+  if (flujoV2 === '1' && requiereVehiculo) {
+    const r = validarVehiculoNuevo({ tipoVehiculoId, marca, modelo, anioRaw, color, placa, pais })
+    if (!r.ok) return { error: r.error }
+    vehiculoV2 = r.vehiculo
+
+    // La categoría debe ser de ESTA empresa y estar activa (no fiarse del id
+    // que mandó el navegador).
+    const tipoValido = await conEmpresa(companyIdVerificado, (tx) =>
+      tx.tipoVehiculo.findFirst({
+        where: { id: r.vehiculo.tipoVehiculoId, companyId: companyIdVerificado, activo: true },
+        select: { id: true },
+      })
+    ).catch(() => null)
+    if (!tipoValido) {
+      return { error: 'La categoría de vehículo elegida ya no está disponible. Vuelve a elegirla.' }
+    }
+
+    // Placa ya registrada en OTRA cuenta → no se duplica el vehículo (§18).
+    // Cross-empresa a propósito (la placa es identidad global) pero excluyendo
+    // a la MISMA persona: quien se afilia a otra empresa con su propio carro
+    // no es un duplicado. Chequeo previo sin unique todavía (el constraint
+    // llega tras la auditoría de producción).
+    const placaAjena = await sinEmpresa(
+      'registro: detectar placa duplicada (la placa es identidad global del vehículo)',
+      (tx) =>
+        tx.vehiculo.findFirst({
+          where: {
+            pais: r.vehiculo.pais,
+            placaNormalizada: r.vehiculo.placaNormalizada,
+            cliente: { email: { not: email } },
+          },
+          select: { id: true },
+        })
+    ).catch(() => null)
+    if (placaAjena) {
+      return {
+        error:
+          'Esta placa ya está registrada en otra cuenta. Si el vehículo es tuyo, escríbenos desde Ayuda para reclamarlo.',
+      }
+    }
   }
 
   const admin = createAdminClient()
@@ -190,12 +253,33 @@ export async function registrarCliente(
         })
       )
 
-      if (marca && modelo && anioRaw && color) {
+      if (vehiculoV2) {
+        // Asistente v2: vehículo completo, validado arriba. Primer vehículo de
+        // esta ficha → principal (§8).
+        await conEmpresa(company.id, (tx) =>
+          tx.vehiculo.create({
+            data: { clienteId: cliente.id, ...vehiculoV2, esPrincipal: true },
+          })
+        )
+      } else if (marca && modelo && anioRaw && color) {
+        // Formulario clásico (bandera de emergencia): vehículo opcional como
+        // siempre, pero las filas NUEVAS ya nacen con placa normalizada y
+        // principal — higiene de datos sin cambiar el comportamiento.
         const anio = Number(anioRaw)
         if (!Number.isNaN(anio)) {
           await conEmpresa(company.id, (tx) =>
             tx.vehiculo.create({
-              data: { clienteId: cliente.id, marca, modelo, anio, color, placa: placa || null },
+              data: {
+                clienteId: cliente.id,
+                marca,
+                modelo,
+                anio,
+                color,
+                placa: placa || null,
+                placaNormalizada: normalizarPlaca(placa) || null,
+                pais: PAIS_PLACA_DEFECTO,
+                esPrincipal: true,
+              },
             })
           )
         }
@@ -276,6 +360,14 @@ export async function registrarCliente(
         qrBienvenida: await qrBienvenidaDe(cliente.id, campanaBienvenida),
       }
     } catch (e) {
+      // El unique de placa cierra la carrera que el chequeo previo no puede:
+      // quien pierde la carrera recibe el mismo mensaje claro, no un genérico.
+      if (clasificarErrorPrisma(e).codigo === 'P2002') {
+        return {
+          error:
+            'Esta placa ya está registrada en otra cuenta. Si el vehículo es tuyo, escríbenos desde Ayuda para reclamarlo.',
+        }
+      }
       capturarErrorInesperado('registro:afiliacion', e)
       return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
     }
@@ -341,8 +433,15 @@ export async function registrarCliente(
 
       // QR se genera solo al activar la membresía, no en el registro
 
-      // Optional vehicle
-      if (marca && modelo && anioRaw && color) {
+      if (vehiculoV2) {
+        // Asistente v2: vehículo completo, validado antes de crear la cuenta.
+        // Primer vehículo del cliente → principal (§8).
+        await tx.vehiculo.create({
+          data: { clienteId: cliente.id, ...vehiculoV2, esPrincipal: true },
+        })
+      } else if (marca && modelo && anioRaw && color) {
+        // Formulario clásico (bandera de emergencia): vehículo opcional como
+        // siempre, con higiene de datos en las filas nuevas.
         const anio = Number(anioRaw)
         if (!Number.isNaN(anio)) {
           await tx.vehiculo.create({
@@ -353,6 +452,9 @@ export async function registrarCliente(
               anio,
               color,
               placa: placa || null,
+              placaNormalizada: normalizarPlaca(placa) || null,
+              pais: PAIS_PLACA_DEFECTO,
+              esPrincipal: true,
             },
           })
         }
@@ -434,6 +536,13 @@ export async function registrarCliente(
   } catch (e) {
     // Roll back the Supabase user if DB write failed
     await admin.auth.admin.deleteUser(supabaseId).catch(e => console.error('[registro-cleanup]', e))
+    // Carrera de placa duplicada perdida contra el unique: mensaje claro.
+    if (clasificarErrorPrisma(e).codigo === 'P2002') {
+      return {
+        error:
+          'Esta placa ya está registrada en otra cuenta. Si el vehículo es tuyo, escríbenos desde Ayuda para reclamarlo.',
+      }
+    }
     capturarErrorInesperado('registro:crear', e)
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }

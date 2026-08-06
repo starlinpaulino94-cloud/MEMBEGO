@@ -160,9 +160,19 @@ model TipoVehiculo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Onboarding v2 · la asociación vehículo↔membresía se decide comparando
+  /// este número (`modules/onboarding/niveles.ts`), NUNCA el nombre de la
+  /// categoría. Sedán 1, SUV 2-3, pickup 3, comercial 4… lo configura cada
+  /// empresa. Default 1 = las categorías existentes siguen cabiendo en todo.
+  nivelTarifario Int     @default(1)
+  /// Presentación en las tarjetas del asistente de registro.
+  descripcion    String?
+  iconoUrl       String?
+
   precios      ServicioPrecio[]
   vehiculos    Vehiculo[]
   colaEntradas ColaVehiculo[]
+  planPrecios  PlanPrecioCategoria[]
 
   @@unique([companyId, nombre])
   @@index([companyId, activo, orden])

@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth'
+import { isRegistroV2Enabled } from '@/lib/registroV2'
 import { RegisterGeneralForm } from '@/components/auth/RegisterGeneralForm'
+import { AsistenteRegistro } from '@/components/auth/AsistenteRegistro'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,5 +27,10 @@ export default async function RegistroCuentaPage() {
     redirect('/cliente/explorar')
   }
 
+  // Registro general: solo el perfil (flujo declarativo sin vehículo). El
+  // formulario clásico queda como salida de emergencia de la bandera.
+  if (isRegistroV2Enabled()) {
+    return <AsistenteRegistro modo="general" />
+  }
   return <RegisterGeneralForm />
 }

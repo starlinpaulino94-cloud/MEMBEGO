@@ -6,9 +6,11 @@ import {
   CreditCard,
   ArrowLeft,
   Sparkles,
+  Car,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
+import { planesElegibles } from '@/modules/elegibilidad'
 import { Button } from '@/components/ui/button'
 import { PlanesGrid, type PlanItem } from '@/components/cliente/PlanesGrid'
 import { EmptyState } from '@/components/system/EmptyState'
@@ -21,48 +23,57 @@ export const metadata = {
 
 const PENDIENTE_PAGO_ESTADOS = ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA']
 
-export default async function PlanesPage() {
+export default async function PlanesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ vehiculo?: string }>
+}) {
   const user = await requireRole('CLIENTE')
+  const { vehiculo: vehiculoParam } = await searchParams
 
-  if (!user.metadata.clienteId) {
+  if (!user.metadata.clienteId || !user.metadata.companyId) {
     return (
       <main className="container max-w-5xl py-8">
         <p className="text-muted-foreground">Tu cuenta no está completamente configurada.</p>
       </main>
     )
   }
+  const clienteId = user.metadata.clienteId
+  const companyId = user.metadata.companyId
 
   let cliente
   try {
-    cliente = await prisma.cliente.findUnique({
-      where: { id: user.metadata.clienteId },
-      select: {
-        id: true,
-        nombre: true,
-        vehiculos: {
-          select: { id: true, marca: true, modelo: true },
-          orderBy: { createdAt: 'desc' },
-        },
-        company: {
-          select: {
-            id: true, name: true, moneda: true, idioma: true,
-            bienvenidaActiva: true, bienvenidaTipo: true, bienvenidaValor: true,
+    cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: {
+          id: true,
+          nombre: true,
+          vehiculos: {
+            select: { id: true, marca: true, modelo: true },
+            orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'desc' }],
+          },
+          company: {
+            select: {
+              id: true, name: true, moneda: true, idioma: true,
+              bienvenidaActiva: true, bienvenidaTipo: true, bienvenidaValor: true,
+            },
+          },
+          memberships: {
+            select: {
+              id: true,
+              estado: true,
+              planId: true,
+              planIdSolicitado: true,
+              fechaInicio: true,
+              plan: { select: { nombre: true, precio: true } },
+              planSolicitado: { select: { nombre: true } },
+            },
+            take: 1,
           },
         },
-        memberships: {
-          select: {
-            id: true,
-            estado: true,
-            planId: true,
-            planIdSolicitado: true,
-            fechaInicio: true,
-            plan: { select: { nombre: true, precio: true } },
-            planSolicitado: { select: { nombre: true } },
-          },
-          take: 1,
-        },
-      },
-    })
+      })
+    )
   } catch (e) {
     console.error('[cliente-planes]', e)
     return (
@@ -80,34 +91,47 @@ export default async function PlanesPage() {
     )
   }
 
-  const planesRaw = await prisma.plan
-    .findMany({
-      where: { companyId: cliente.company.id, activo: true },
-      select: {
-        id: true, nombre: true, precio: true, esIlimitado: true,
-        descripcion: true, lavadosIncluidos: true, beneficios: true, vigenciaDias: true,
-        condiciones: true,
-      },
-      orderBy: { precio: 'asc' },
-    })
-    .catch((e) => {
-      console.error('[cliente-planes] plans', e)
-      return []
-    })
+  const membership = cliente.memberships[0] ?? null
 
-  const planes: PlanItem[] = planesRaw.map((p) => ({
+  // ── Motor de elegibilidad: ÚNICA fuente de planes y precios (§9/§10) ───────
+  // La respuesta trae solo lo autorizado: planes con el precio de la categoría
+  // del vehículo elegido, o vacía si faltan requisitos. REGLA DE
+  // COMPATIBILIDAD: quien ya tiene una membresía en la empresa (miembro de
+  // antes del rediseño) recibe VITRINA en vez de bloqueo — sigue viendo la
+  // oferta como siempre; solo la compra nueva exige vehículo.
+  const resultado = await planesElegibles({
+    companyId,
+    clienteId,
+    vehiculoId: vehiculoParam,
+    vitrinaSinRequisitos: !!membership,
+  }).catch((e) => {
+    console.error('[cliente-planes] elegibilidad', e)
+    return null
+  })
+
+  if (!resultado) {
+    return (
+      <main className="container max-w-5xl py-8">
+        <p className="text-muted-foreground">No pudimos cargar los planes. Intenta más tarde.</p>
+      </main>
+    )
+  }
+
+  const planes: PlanItem[] = resultado.planes.map((p) => ({
     id: p.id,
     nombre: p.nombre,
-    precio: Number(p.precio),
+    precio: p.decision.precio,
     esIlimitado: p.esIlimitado,
     descripcion: p.descripcion,
     lavadosIncluidos: p.lavadosIncluidos,
     beneficios: p.beneficios,
     vigenciaDias: p.vigenciaDias,
     condiciones: p.condiciones,
+    comprable: p.decision.puedeComprar,
+    nivelSuperior: !p.decision.puedeComprar,
+    precioDeCategoria: p.decision.precioOrigen === 'CATEGORIA',
   }))
 
-  const membership = cliente.memberships[0] ?? null
   const isActive = membership?.estado === 'ACTIVA'
   const elegibleBienvenida = !membership || membership.fechaInicio == null
   const bienvenida =
@@ -122,6 +146,10 @@ export default async function PlanesPage() {
   const pendingPayment =
     membership && PENDIENTE_PAGO_ESTADOS.includes(membership.estado) ? membership : null
   const pendingChange = isActive && membership?.planIdSolicitado ? membership : null
+
+  // §10: cliente NUEVO sin vehículo → no se enseñan planes; se le lleva al
+  // registro de vehículo y vuelve aquí (`next`).
+  const faltanRequisitos = !resultado.requisitos.canProceed && !resultado.vitrina
 
   return (
     <main className="container max-w-5xl py-8">
@@ -199,12 +227,41 @@ export default async function PlanesPage() {
           </div>
         )}
 
-        {/* El plan activo ya se señala en su propia tarjeta (badge "Tu plan");
-            un banner extra aquí era redundante y quitaba protagonismo al grid. */}
+        {/* Miembro de antes del rediseño sin vehículo: puede seguir viendo la
+            vitrina, con la invitación (no obligación) a registrar su vehículo
+            para precios exactos y compra en línea. */}
+        {resultado.vitrina && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted">
+                <Car className="h-4.5 w-4.5 text-muted-foreground" />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                Registra tu vehículo para ver el precio exacto de tu categoría y comprar en línea.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline" className="shrink-0">
+              <Link href="/cliente/vehiculos/nuevo?next=/cliente/planes">Registrar vehículo</Link>
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* ── Grid de planes ────────────────────────────────────────────────── */}
-      {planes.length === 0 ? (
+      {/* ── Contenido ─────────────────────────────────────────────────────── */}
+      {faltanRequisitos ? (
+        /* §10: sin vehículo no hay planes ni precios — la consulta ya volvió
+           vacía (esto no es CSS). El asistente lo resuelve y regresa aquí. */
+        <EmptyState
+          icon={Car}
+          title="Registra tu vehículo para ver los planes"
+          description="Los planes y precios dependen de la categoría de tu vehículo. Regístralo en un minuto y te los mostramos al instante."
+          action={
+            <Button asChild>
+              <Link href="/cliente/vehiculos/nuevo?next=/cliente/planes">Registrar mi vehículo</Link>
+            </Button>
+          }
+        />
+      ) : planes.length === 0 ? (
         <EmptyState
           icon={Sparkles}
           title="Sin planes disponibles"
@@ -227,6 +284,8 @@ export default async function PlanesPage() {
             prefs={cliente.company}
             bienvenida={bienvenida}
             vehiculos={cliente.vehiculos}
+            vehiculoSeleccionadoId={resultado.vehiculo?.id ?? null}
+            vitrina={resultado.vitrina}
           />
 
           {/* Confianza: reduce la fricción de compra sin agregar ruido. */}

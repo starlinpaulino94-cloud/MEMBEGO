@@ -8,6 +8,8 @@ import { formSubmitLimiter } from '@/lib/rate-limit'
 import { rutaValida } from '@/modules/storage/comprobantes'
 import { calcularDescuentoBienvenida } from '@/lib/bienvenida'
 import { generarCodigo } from '@/lib/codes'
+import { categoriaDeEmpresa, vehiculosDe } from '@/modules/elegibilidad'
+import { requisitosParaAccion, decidirPlan } from '@/modules/elegibilidad/decidir'
 
 export interface SeleccionState {
   error?: string
@@ -33,6 +35,8 @@ export async function seleccionarPlan(
 
     const planId = String(formData.get('planId') ?? '')
     if (!planId) return { error: 'Selecciona un plan.' }
+    // Onboarding v2: vehículo al que se aplicará la membresía (§10/§13).
+    const vehiculoIdForm = String(formData.get('vehiculoId') ?? '')
 
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Empresa requerida.' }
@@ -72,6 +76,69 @@ export async function seleccionarPlan(
         return {
           error: 'Ya tienes una membresía activa en esta empresa. Espera a que venza para cambiar.',
         } as SeleccionState
+      }
+
+      // ── Onboarding v2 · reglas de vehículo (§10/§12/§13) ────────────────────
+      //
+      // REGLA DE COMPATIBILIDAD: la exigencia aplica SOLO a la PRIMERA
+      // membresía (compra nueva). Si ya existe una fila (renovación, reabrir
+      // una cancelada/vencida, pendiente de pago), el cliente está protegido:
+      // no se le exige vehículo, como siempre. Las mismas reglas puras que la
+      // página de planes (decidir.ts) — el checkout no inventa las suyas (§9).
+      const categoria = await categoriaDeEmpresa(tx, cliente.companyId)
+      const vehiculos = await vehiculosDe(tx, cliente.id)
+      const completos = vehiculos.filter((v) => v.placaNormalizada && v.tipoVehiculoId)
+      const esCompraNueva = !existing
+
+      let vehiculoSel: (typeof vehiculos)[number] | null = null
+      if (esCompraNueva) {
+        const requisitos = requisitosParaAccion({ accion: 'COMPRAR_PLAN', categoria, vehiculos })
+        if (!requisitos.canProceed) {
+          return {
+            error:
+              'Para comprar una membresía aquí primero registra tu vehículo con su placa. Entra a Planes y complétalo en un minuto.',
+          } as SeleccionState
+        }
+        if (vehiculoIdForm) {
+          vehiculoSel = completos.find((v) => v.id === vehiculoIdForm) ?? null
+          if (!vehiculoSel && vehiculos.some((v) => v.id === vehiculoIdForm)) {
+            return {
+              error:
+                'Ese vehículo necesita placa y categoría para asociarlo a la membresía. Complétalo o elige otro.',
+            } as SeleccionState
+          }
+        }
+        // Sin elección explícita: el principal completo (vehiculosDe ordena
+        // principal-primero y completos conserva ese orden).
+        vehiculoSel = vehiculoSel ?? completos[0] ?? null
+
+        if (vehiculoSel) {
+          const precioCategoria = vehiculoSel.tipoVehiculoId
+            ? await tx.planPrecioCategoria.findFirst({
+                where: { planId: plan.id, tipoVehiculoId: vehiculoSel.tipoVehiculoId, activo: true },
+                select: { precio: true },
+              })
+            : null
+          const decision = decidirPlan(
+            {
+              id: plan.id,
+              precioBase: Number(plan.precio),
+              precioCategoria: precioCategoria ? Number(precioCategoria.precio) : null,
+              nivelTarifarioMax: plan.nivelTarifarioMax,
+            },
+            vehiculoSel
+          )
+          if (!decision.puedeComprar) {
+            return {
+              error:
+                'Este plan es para vehículos de una categoría menor que el tuyo. Elige un plan para tu categoría o consulta en el local para actualizarlo.',
+            } as SeleccionState
+          }
+        }
+      } else if (vehiculoIdForm) {
+        // Cliente protegido (membresía previa): la asociación es voluntaria y
+        // jamás bloquea — solo se toma si el vehículo está completo.
+        vehiculoSel = completos.find((v) => v.id === vehiculoIdForm) ?? null
       }
 
       // O-13: beneficio de bienvenida — solo para la PRIMERA activación. Una
@@ -116,6 +183,23 @@ export async function seleccionarPlan(
           },
         })
         membershipId = created.id
+      }
+
+      // ── §13: la membresía identifica su(s) vehículo(s) ─────────────────────
+      // Se reemplaza la asociación anterior (el plan/vehículo elegido puede
+      // cambiar mientras la solicitud siga pendiente) y se CONGELA el nivel
+      // tarifario de la compra: renivelar categorías después no altera lo ya
+      // comprado. Las membresías protegidas sin vehículo siguen sin filas aquí
+      // y funcionan igual que siempre.
+      if (vehiculoSel) {
+        await tx.membresiaVehiculo.deleteMany({ where: { membershipId } })
+        await tx.membresiaVehiculo.create({
+          data: {
+            membershipId,
+            vehiculoId: vehiculoSel.id,
+            nivelTarifarioComprado: vehiculoSel.nivelTarifario ?? 1,
+          },
+        })
       }
 
       return { success: true, membershipId }

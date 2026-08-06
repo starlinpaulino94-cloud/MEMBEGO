@@ -39,6 +39,12 @@ export interface PlanItem {
   beneficios: string[]
   vigenciaDias: number
   condiciones: string | null
+  /** Onboarding v2 · decisión del motor de elegibilidad (default: comprable). */
+  comprable?: boolean
+  /** El vehículo elegido excede el nivel del plan (§12: se explica, no se esconde). */
+  nivelSuperior?: boolean
+  /** El precio mostrado es el de la categoría del vehículo (no el base). */
+  precioDeCategoria?: boolean
 }
 
 interface Props {
@@ -52,6 +58,10 @@ interface Props {
   bienvenida?: { tipo: string; valor: number } | null
   /** Vehículos registrados del cliente: activan la recomendación automática. */
   vehiculos?: VehiculoLite[]
+  /** Vehículo con el que el SERVIDOR calculó los precios (onboarding v2). */
+  vehiculoSeleccionadoId?: string | null
+  /** Modo vitrina: precios base visibles, compra en línea deshabilitada. */
+  vitrina?: boolean
 }
 
 /**
@@ -119,14 +129,26 @@ export function PlanesGrid({
   prefs,
   bienvenida = null,
   vehiculos = [],
+  vehiculoSeleccionadoId = null,
+  vitrina = false,
 }: Props) {
   const router = useRouter()
   const init: SeleccionState = {}
   const [selectState, selectAction] = useActionState(seleccionarPlan, init)
 
   // Vehículo activo → plan recomendado (null si ningún plan lo menciona).
-  const [vehiculoId, setVehiculoId] = useState(vehiculos[0]?.id ?? '')
+  // Arranca en el que usó el SERVIDOR para calcular precios; al cambiarlo se
+  // navega con ?vehiculo= para que el backend recalcule planes y precios (§10:
+  // el recálculo no es cosa del cliente).
+  const [vehiculoId, setVehiculoId] = useState(
+    vehiculoSeleccionadoId ?? vehiculos[0]?.id ?? ''
+  )
   const vehiculo = vehiculos.find((v) => v.id === vehiculoId) ?? null
+
+  function elegirVehiculo(id: string) {
+    setVehiculoId(id)
+    router.replace(`/cliente/planes?vehiculo=${encodeURIComponent(id)}`, { scroll: false })
+  }
   const recomendadoId = useMemo(
     () => (vehiculo ? planRecomendadoPara(vehiculo, planes) : null),
     [vehiculo, planes]
@@ -166,7 +188,7 @@ export function PlanesGrid({
           <VehicleSelector
             vehiculos={vehiculos}
             selectedId={vehiculoId}
-            onSelect={setVehiculoId}
+            onSelect={elegirVehiculo}
             className="text-sm"
           />
           {recomendadoId ? (
@@ -286,6 +308,11 @@ export function PlanesGrid({
                         Equivale a {formatMoney(precioPorUso, prefs)} por uso
                       </p>
                     )}
+                    {plan.precioDeCategoria && vehiculo && (
+                      <p className="mt-1 text-xs font-medium text-foreground/70">
+                        Precio para tu {titleCase(vehiculo.modelo)}
+                      </p>
+                    )}
                     {descuento > 0 && (
                       <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
                         <Gift className="h-3.5 w-3.5" />
@@ -397,9 +424,35 @@ export function PlanesGrid({
                         Para cambiar a este plan, solicítalo en el local: el equipo lo aplica por ti.
                       </p>
                     </div>
+                  ) : vitrina ? (
+                    /* Vitrina (miembro sin vehículo): la compra en línea pide
+                       registrar el vehículo — el precio exacto depende de él. */
+                    <div className="space-y-1.5">
+                      <Button asChild variant="outline" className="min-h-12 w-full">
+                        <a href="/cliente/vehiculos/nuevo?next=/cliente/planes">
+                          Registra tu vehículo para comprar
+                        </a>
+                      </Button>
+                      <p className="text-center text-[11px] text-muted-foreground">
+                        Precio base referencial: con tu vehículo verás el de tu categoría.
+                      </p>
+                    </div>
+                  ) : plan.comprable === false && plan.nivelSuperior ? (
+                    /* §12: nivel superior — se explica y se ofrecen salidas,
+                       nunca un botón muerto sin motivo. */
+                    <div className="space-y-1.5">
+                      <Button disabled variant="outline" className="min-h-12 w-full">
+                        Para vehículos de otra categoría
+                      </Button>
+                      <p className="text-center text-[11px] text-muted-foreground">
+                        Tu vehículo excede este plan. Elige un plan de tu categoría o
+                        consulta en el local para actualizarlo.
+                      </p>
+                    </div>
                   ) : (
                     <form action={selectAction}>
                       <input type="hidden" name="planId" value={plan.id} />
+                      {vehiculoId && <input type="hidden" name="vehiculoId" value={vehiculoId} />}
                       <SubmitButton
                         variant={isRecommended ? 'default' : 'outline'}
                         className={cn(
