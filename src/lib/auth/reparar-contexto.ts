@@ -1,4 +1,3 @@
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getEmpresaPrincipal } from '@/modules/marketplace/marcaUnica'
