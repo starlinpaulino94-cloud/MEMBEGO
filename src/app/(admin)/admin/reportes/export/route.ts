@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { leerRango } from '@/modules/reportes/rango'
 import { getReporte, reporteToCsv } from '@/modules/reportes/queries'
 
@@ -22,9 +22,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Tu cuenta no está vinculada a una empresa.' }, { status: 400 })
   }
 
-  const empresa = await prisma.company
-    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-    .catch(() => null)
+  const empresa = await conEmpresa(companyId, (tx) =>
+    tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+  ).catch(() => null)
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())

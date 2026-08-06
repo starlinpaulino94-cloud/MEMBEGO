@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { paymentLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import {
@@ -63,18 +63,22 @@ export async function POST(req: NextRequest) {
   }
 
   const clienteId = user.metadata.clienteId
+  const companyId = user.metadata.companyId
 
   try {
-    const cliente = await prisma.cliente
-      .findUnique({ where: { id: clienteId }, select: { cardnetCustomerId: true } })
-      .catch(() => null)
+    // El acceso a la ficha del cliente va con contexto de empresa (RLS Capa 2).
+    // Cada op es su propia transacción corta: las llamadas a CardNET quedan
+    // FUERA, para no sostener una transacción abierta durante la red.
+    const cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({ where: { id: clienteId }, select: { cardnetCustomerId: true } })
+    ).catch(() => null)
 
     const email = user.email || `${clienteId}@membego.local`
 
     const guardar = async (valor: string | null) => {
-      await prisma.cliente
-        .update({ where: { id: clienteId }, data: { cardnetCustomerId: valor } })
-        .catch(anotarSinRomper(clienteId))
+      await conEmpresa(companyId, (tx) =>
+        tx.cliente.update({ where: { id: clienteId }, data: { cardnetCustomerId: valor } })
+      ).catch(anotarSinRomper(clienteId))
     }
 
     /**

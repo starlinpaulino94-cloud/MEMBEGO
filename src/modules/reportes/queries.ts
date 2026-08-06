@@ -10,7 +10,7 @@
  * cifra sin decirlo haría imposible cuadrar el reporte con la caja del día.
  */
 
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, type Tx } from '@/lib/tenant'
 import type { Prisma } from '@prisma/client'
 import { diaLocal, diasDelRango, variacion, type Rango } from './rango'
 
@@ -84,11 +84,12 @@ function whereAplicadas(companyId: string, desde: Date, hasta: Date): Prisma.Tra
 }
 
 async function sumarVentas(
+  tx: Tx,
   companyId: string,
   desde: Date,
   hasta: Date
 ): Promise<{ ingresos: number; operaciones: number }> {
-  const agg = await prisma.transaction.aggregate({
+  const agg = await tx.transaction.aggregate({
     where: { ...whereAplicadas(companyId, desde, hasta), tipo: 'SALE' },
     _sum: { monto: true },
     _count: { _all: true },
@@ -96,38 +97,40 @@ async function sumarVentas(
   return { ingresos: Number(agg._sum.monto ?? 0), operaciones: agg._count._all }
 }
 
-async function sumarMembresias(companyId: string, desde: Date, hasta: Date): Promise<number> {
+async function sumarMembresias(tx: Tx, companyId: string, desde: Date, hasta: Date): Promise<number> {
   // `updatedAt` es lo único que hay para fechar el cobro: la membresía no
   // guarda una fecha de pago propia. Se documenta porque significa que editar
   // una membresía vieja la mueve de periodo.
-  const agg = await prisma.membership.aggregate({
+  const agg = await tx.membership.aggregate({
     where: { companyId, pagoConfirmado: true, updatedAt: { gte: desde, lt: hasta } },
     _sum: { montoPagado: true },
   })
   return Number(agg._sum.montoPagado ?? 0)
 }
 
-async function contarEntregas(companyId: string, desde: Date, hasta: Date): Promise<number> {
-  return prisma.transaction.count({
+async function contarEntregas(tx: Tx, companyId: string, desde: Date, hasta: Date): Promise<number> {
+  return tx.transaction.count({
     where: { ...whereAplicadas(companyId, desde, hasta), tipo: { in: [...TIPOS_ENTREGA] } },
   })
 }
 
 async function contarClientesNuevos(
+  tx: Tx,
   companyId: string,
   desde: Date,
   hasta: Date
 ): Promise<number> {
-  return prisma.cliente.count({ where: { companyId, createdAt: { gte: desde, lt: hasta } } })
+  return tx.cliente.count({ where: { companyId, createdAt: { gte: desde, lt: hasta } } })
 }
 
 /** Serie diaria: se rellenan los días sin actividad para no mentir con la gráfica. */
 async function serieDiaria(
+  tx: Tx,
   companyId: string,
   rango: Rango,
   timeZone: string
 ): Promise<PuntoSerie[]> {
-  const filas = await prisma.transaction.findMany({
+  const filas = await tx.transaction.findMany({
     where: whereAplicadas(companyId, rango.desde, rango.hasta),
     select: { createdAt: true, tipo: true, monto: true },
     // Tope defensivo: un periodo enorme no debe traer la tabla completa a
@@ -152,8 +155,8 @@ async function serieDiaria(
   return [...porDia.values()]
 }
 
-async function desglosePorTipo(companyId: string, desde: Date, hasta: Date) {
-  const grupos = await prisma.transaction.groupBy({
+async function desglosePorTipo(tx: Tx, companyId: string, desde: Date, hasta: Date) {
+  const grupos = await tx.transaction.groupBy({
     by: ['tipo'],
     where: whereAplicadas(companyId, desde, hasta),
     _count: { _all: true },
@@ -168,8 +171,8 @@ async function desglosePorTipo(companyId: string, desde: Date, hasta: Date) {
     .sort((a, b) => b.operaciones - a.operaciones)
 }
 
-async function desglosePorMetodo(companyId: string, desde: Date, hasta: Date) {
-  const grupos = await prisma.transaction.groupBy({
+async function desglosePorMetodo(tx: Tx, companyId: string, desde: Date, hasta: Date) {
+  const grupos = await tx.transaction.groupBy({
     by: ['metodoCobro'],
     where: { ...whereAplicadas(companyId, desde, hasta), metodoCobro: { not: null } },
     _count: { _all: true },
@@ -184,8 +187,8 @@ async function desglosePorMetodo(companyId: string, desde: Date, hasta: Date) {
     .sort((a, b) => b.ingresos - a.ingresos)
 }
 
-async function topClientes(companyId: string, desde: Date, hasta: Date) {
-  const grupos = await prisma.transaction.groupBy({
+async function topClientes(tx: Tx, companyId: string, desde: Date, hasta: Date) {
+  const grupos = await tx.transaction.groupBy({
     by: ['clienteId'],
     where: { ...whereAplicadas(companyId, desde, hasta), clienteId: { not: null } },
     _count: { _all: true },
@@ -193,7 +196,7 @@ async function topClientes(companyId: string, desde: Date, hasta: Date) {
     take: 8,
   })
   if (grupos.length === 0) return []
-  const clientes = await prisma.cliente.findMany({
+  const clientes = await tx.cliente.findMany({
     where: { id: { in: grupos.map((g) => String(g.clienteId)) } },
     select: { id: true, nombre: true },
   })
@@ -204,14 +207,14 @@ async function topClientes(companyId: string, desde: Date, hasta: Date) {
   }))
 }
 
-async function activasPorPlan(companyId: string) {
-  const grupos = await prisma.membership.groupBy({
+async function activasPorPlan(tx: Tx, companyId: string) {
+  const grupos = await tx.membership.groupBy({
     by: ['planId'],
     where: { companyId, estado: 'ACTIVA' },
     _count: { _all: true },
   })
   if (grupos.length === 0) return []
-  const planes = await prisma.plan.findMany({
+  const planes = await tx.plan.findMany({
     where: { id: { in: grupos.map((g) => g.planId) } },
     select: { id: true, nombre: true },
   })
@@ -246,6 +249,9 @@ export async function getReporte(
   const fallos = { n: 0 }
   const cero = { ingresos: 0, operaciones: 0 }
 
+  // Todo el reporte va con el contexto de empresa puesto (RLS Capa 2). El
+  // `where: { companyId }` de cada consulta NO se quita: RLS es la segunda
+  // barrera, no la primera.
   const [
     ventas,
     ventasAnt,
@@ -260,25 +266,27 @@ export async function getReporte(
     porMetodo,
     clientes,
     planes,
-  ] = await Promise.all([
-    seguro(sumarVentas(companyId, rango.desde, rango.hasta), cero, fallos),
-    seguro(sumarVentas(companyId, rango.anterior.desde, rango.anterior.hasta), cero, fallos),
-    seguro(sumarMembresias(companyId, rango.desde, rango.hasta), 0, fallos),
-    seguro(sumarMembresias(companyId, rango.anterior.desde, rango.anterior.hasta), 0, fallos),
-    seguro(contarEntregas(companyId, rango.desde, rango.hasta), 0, fallos),
-    seguro(contarEntregas(companyId, rango.anterior.desde, rango.anterior.hasta), 0, fallos),
-    seguro(contarClientesNuevos(companyId, rango.desde, rango.hasta), 0, fallos),
-    seguro(
-      contarClientesNuevos(companyId, rango.anterior.desde, rango.anterior.hasta),
-      0,
-      fallos
-    ),
-    seguro(serieDiaria(companyId, rango, timeZone), [] as PuntoSerie[], fallos),
-    seguro(desglosePorTipo(companyId, rango.desde, rango.hasta), [], fallos),
-    seguro(desglosePorMetodo(companyId, rango.desde, rango.hasta), [], fallos),
-    seguro(topClientes(companyId, rango.desde, rango.hasta), [], fallos),
-    seguro(activasPorPlan(companyId), [], fallos),
-  ])
+  ] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      seguro(sumarVentas(tx, companyId, rango.desde, rango.hasta), cero, fallos),
+      seguro(sumarVentas(tx, companyId, rango.anterior.desde, rango.anterior.hasta), cero, fallos),
+      seguro(sumarMembresias(tx, companyId, rango.desde, rango.hasta), 0, fallos),
+      seguro(sumarMembresias(tx, companyId, rango.anterior.desde, rango.anterior.hasta), 0, fallos),
+      seguro(contarEntregas(tx, companyId, rango.desde, rango.hasta), 0, fallos),
+      seguro(contarEntregas(tx, companyId, rango.anterior.desde, rango.anterior.hasta), 0, fallos),
+      seguro(contarClientesNuevos(tx, companyId, rango.desde, rango.hasta), 0, fallos),
+      seguro(
+        contarClientesNuevos(tx, companyId, rango.anterior.desde, rango.anterior.hasta),
+        0,
+        fallos
+      ),
+      seguro(serieDiaria(tx, companyId, rango, timeZone), [] as PuntoSerie[], fallos),
+      seguro(desglosePorTipo(tx, companyId, rango.desde, rango.hasta), [], fallos),
+      seguro(desglosePorMetodo(tx, companyId, rango.desde, rango.hasta), [], fallos),
+      seguro(topClientes(tx, companyId, rango.desde, rango.hasta), [], fallos),
+      seguro(activasPorPlan(tx, companyId), [], fallos),
+    ])
+  )
 
   return {
     ingresosCaja: kpi(ventas.ingresos, ventasAnt.ingresos),
