@@ -348,9 +348,12 @@ export function AsistenteRegistro({
 
       <Card className="border-white/10 bg-white/5 text-white">
         <CardContent className="pt-6">
-          {/* Cada paso es un form: Enter avanza (teclado y móvil). */}
+          {/* Cada paso es un form: Enter avanza (teclado y móvil). noValidate:
+              la validación es la nuestra (mensajes propios, consistentes);
+              sin esto, type=email dispara el tooltip nativo del navegador y
+              se salta nuestros mensajes. */}
           {paso !== 'confirmar' ? (
-            <form onSubmit={avanzar} className="space-y-5" key={paso}>
+            <form onSubmit={avanzar} noValidate className="space-y-5" key={paso}>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{t.titulo}</h1>
                 {t.ayuda && <p className="mt-1 text-sm text-white/60">{t.ayuda}</p>}

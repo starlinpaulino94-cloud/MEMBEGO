@@ -153,7 +153,8 @@ export function AgregarVehiculoWizard({
 
       <Card>
         <CardContent className="pt-6">
-          <form onSubmit={paso === 'confirmar' ? enviar : avanzar} className="space-y-5" key={paso}>
+          {/* noValidate: la validación es la del dominio (mensajes propios). */}
+          <form onSubmit={paso === 'confirmar' ? enviar : avanzar} noValidate className="space-y-5" key={paso}>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">{TITULOS[paso]}</h1>
 
             {(error || state.error) && (

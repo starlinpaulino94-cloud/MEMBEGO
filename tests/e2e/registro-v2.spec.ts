@@ -20,9 +20,11 @@ test.describe('Asistente de registro (general)', () => {
     await expect(page.getByRole('heading', { name: /cómo te llamas/i })).toBeVisible()
     await expect(page.getByText(/paso 1 de 5/i)).toBeVisible()
 
-    // Avanzar sin datos → error comprensible, no un submit mudo.
+    // Avanzar sin datos → error comprensible, no un submit mudo. (Con filter:
+    // el route-announcer de Next también tiene role=alert y rompería el modo
+    // estricto.)
     await page.getByRole('button', { name: /continuar/i }).click()
-    await expect(page.getByRole('alert')).toContainText(/nombre/i)
+    await expect(page.getByRole('alert').filter({ hasText: /nombre/i })).toBeVisible()
 
     await page.locator('#nombre').fill('María Prueba')
     await page.getByRole('button', { name: /continuar/i }).click()
@@ -31,7 +33,7 @@ test.describe('Asistente de registro (general)', () => {
     await expect(page.getByRole('heading', { name: /correo/i })).toBeVisible()
     await page.locator('#email').fill('esto-no-es-un-correo')
     await page.getByRole('button', { name: /continuar/i }).click()
-    await expect(page.getByRole('alert')).toContainText(/correo/i)
+    await expect(page.getByRole('alert').filter({ hasText: /correo/i })).toBeVisible()
     await page.locator('#email').fill('maria@example.com')
     await page.getByRole('button', { name: /continuar/i }).click()
 
