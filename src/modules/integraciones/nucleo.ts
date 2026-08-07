@@ -77,3 +77,42 @@ export function verificarTokenSSO(
     return null
   }
 }
+
+/** Token de ENTRADA (satélite → MembeGo). Mismo formato; el satélite puede no
+ *  conocer el `sub` de un usuario que nunca entró por nuestro SSO, así que
+ *  basta `sub` O `email` (además de `companyId` y `exp`). */
+export interface DatosSSOEntrante {
+  /** supabaseId que NUESTRO token saliente le entregó al satélite (preferido). */
+  sub?: string
+  /** Único en MembeGo; suficiente si el satélite no guarda el sub. */
+  email?: string
+  companyId: string
+  exp: number
+}
+
+/**
+ * Verificación del token ENTRANTE (SSO satélite → MembeGo). Igual de estricta
+ * en firma y vigencia que `verificarTokenSSO`; solo relaja la identidad a
+ * `sub` O `email`. Es una función aparte a propósito: la verificación de
+ * NUESTROS tokens (la que copian los satélites) no debe aflojarse jamás.
+ */
+export function verificarTokenSSOEntrante(
+  secreto: string,
+  token: string,
+  ahoraEpoch = Math.floor(Date.now() / 1000)
+): DatosSSOEntrante | null {
+  const punto = token.lastIndexOf('.')
+  if (punto <= 0) return null
+  const cuerpo = token.slice(0, punto)
+  const firma = token.slice(punto + 1)
+  if (!firmaValida(secreto, cuerpo, firma)) return null
+  try {
+    const datos = JSON.parse(Buffer.from(cuerpo, 'base64url').toString('utf8')) as DatosSSOEntrante
+    if (typeof datos.exp !== 'number' || datos.exp < ahoraEpoch) return null
+    if (!datos.companyId) return null
+    if (!datos.sub && !datos.email) return null
+    return datos
+  } catch {
+    return null
+  }
+}
