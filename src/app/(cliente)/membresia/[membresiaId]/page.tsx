@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth'
+import { safeInternalPath } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { differenceInCalendarDays } from 'date-fns'
@@ -65,12 +66,22 @@ function iconoNegocio(type: string) {
   return Store
 }
 
-export default async function MembershipDetail({ params }: { params: Promise<{ membresiaId: string }> }) {
+export default async function MembershipDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ membresiaId: string }>
+  searchParams: Promise<{ retorno?: string }>
+}) {
   const { membresiaId } = await params
+  const { retorno: retornoParam } = await searchParams
   const user = await getUser()
   if (!user || user.metadata.role !== 'CLIENTE') {
     redirect('/login')
   }
+  // Fase 4 · contexto de ubicación: quien llegó desde el mapa vuelve al detalle
+  // de la empresa (sanitizado contra open redirect); el resto a "Mis membresías".
+  const retorno = safeInternalPath(retornoParam, '/mis-membresias')
 
   let membership = null
   try {
@@ -210,10 +221,10 @@ export default async function MembershipDetail({ params }: { params: Promise<{ m
   return (
     <main className="container max-w-2xl py-8">
       <Link
-        href="/mis-membresias"
+        href={retorno}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Mis membresías
+        <ArrowLeft className="h-4 w-4" /> {retornoParam ? 'Volver' : 'Mis membresías'}
       </Link>
 
       {/* Cabecera simple: la tarjeta visual vive en Mis membresías */}

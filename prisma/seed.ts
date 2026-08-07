@@ -28,6 +28,8 @@ async function main() {
   console.log(`   Planes nuevos: ${result.plans}`)
   console.log(`   Usuarios: ${result.users}`)
   console.log(`   Clientes: ${result.clientes}`)
+  console.log('\n📋 Detalles:')
+  for (const d of result.details) console.log(`   ${d}`)
   console.log('\n📋 Cuentas de prueba:')
   console.log('   superadmin@membego.com / admin123')
   console.log('   admin.cartown@membego.com / admin123')

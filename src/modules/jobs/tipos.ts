@@ -79,12 +79,26 @@ export interface CargaRecompensas {
   referidoId: string
 }
 
+/**
+ * Lote del fan-out de una campaña dirigida (docs/GEOLOCALIZACION.md §28).
+ * Un trabajo por lote; si el lote quedó lleno, el worker se encadena a sí
+ * mismo con el siguiente desplazamiento (mismo patrón que `notificar`).
+ */
+export interface CargaCampanaDirigida {
+  tipo: 'campana-dirigida'
+  companyId: string
+  campanaId: string
+  /** Desplazamiento del lote sobre el orden estable por `id`. */
+  desde: number
+}
+
 export type CargaTrabajo =
   | CargaNotificar
   | CargaAutomatizaciones
   | CargaEmail
   | CargaEvento
   | CargaRecompensas
+  | CargaCampanaDirigida
 
 /** Tipos aceptados por el endpoint `/api/jobs` (cada caso del ejecutor). */
 export const TIPOS_TRABAJO = [
@@ -93,6 +107,7 @@ export const TIPOS_TRABAJO = [
   'email',
   'evento-estrategia',
   'recompensas-referido',
+  'campana-dirigida',
 ] as const
 
 /** Ruta del endpoint que ejecuta los trabajos. */

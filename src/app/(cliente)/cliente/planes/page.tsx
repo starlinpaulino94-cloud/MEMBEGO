@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { conEmpresa } from '@/lib/tenant'
+import { safeInternalPath } from '@/lib/utils'
 import { planesElegibles } from '@/modules/elegibilidad'
 import { Button } from '@/components/ui/button'
 import { PlanesGrid, type PlanItem } from '@/components/cliente/PlanesGrid'
@@ -26,10 +27,16 @@ const PENDIENTE_PAGO_ESTADOS = ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA']
 export default async function PlanesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vehiculo?: string }>
+  searchParams: Promise<{ vehiculo?: string; retorno?: string }>
 }) {
   const user = await requireRole('CLIENTE')
-  const { vehiculo: vehiculoParam } = await searchParams
+  const { vehiculo: vehiculoParam, retorno: retornoParam } = await searchParams
+  // Fase 4: quien viene del mapa conserva el contexto de ubicación (el botón
+  // volver de la membresía lo devuelve al detalle de la empresa).
+  const retorno = safeInternalPath(retornoParam, '/cliente/empresas')
+  const conRetorno = retornoParam != null
+  const planesHref = conRetorno ? `/cliente/planes?retorno=${encodeURIComponent(retorno)}` : '/cliente/planes'
+  const vehiculoNext = `/cliente/vehiculos/nuevo?next=${encodeURIComponent(planesHref)}`
 
   if (!user.metadata.clienteId || !user.metadata.companyId) {
     return (
@@ -241,7 +248,7 @@ export default async function PlanesPage({
               </p>
             </div>
             <Button asChild size="sm" variant="outline" className="shrink-0">
-              <Link href="/cliente/vehiculos/nuevo?next=/cliente/planes">Registrar vehículo</Link>
+              <Link href={vehiculoNext}>Registrar vehículo</Link>
             </Button>
           </div>
         )}
@@ -257,7 +264,7 @@ export default async function PlanesPage({
           description="Los planes y precios dependen de la categoría de tu vehículo. Regístralo en un minuto y te los mostramos al instante."
           action={
             <Button asChild>
-              <Link href="/cliente/vehiculos/nuevo?next=/cliente/planes">Registrar mi vehículo</Link>
+              <Link href={vehiculoNext}>Registrar mi vehículo</Link>
             </Button>
           }
         />
@@ -286,6 +293,7 @@ export default async function PlanesPage({
             vehiculos={cliente.vehiculos}
             vehiculoSeleccionadoId={resultado.vehiculo?.id ?? null}
             vitrina={resultado.vitrina}
+            retorno={conRetorno ? retorno : undefined}
           />
 
           {/* Confianza: reduce la fricción de compra sin agregar ruido. */}

@@ -114,6 +114,12 @@ Con eso, el recorrido que habría que escribir —en este orden de valor— es:
 3. Un cliente compra una promoción y le llega su QR.
 4. Un canje descuenta el uso y deja la compra consumida.
 5. Abrir y cerrar una sesión de caja cuadrando el efectivo.
+6. **Conversión desde el mapa (Fase 4)**: un car wash sin vehículo lo registra
+   desde la oferta del mapa y vuelve al negocio; adquiere una promoción y el
+   contexto de ubicación se conserva hasta volver al mapa. Ya está escrito y
+   gateado en `tests/e2e/fase4-conversion.spec.ts` (se activa solo cuando
+   existe `E2E_SUPABASE_URL`); es el criterio de aceptación §15 de
+   `docs/GEOLOCALIZACION.md`.
 
 Mientras tanto, decir "E2E del recorrido completo del cliente" sería falso.
 Estas 28 pruebas cubren la puerta de entrada; el interior sigue sin red.

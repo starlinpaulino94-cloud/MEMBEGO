@@ -28,15 +28,17 @@ import { FollowButton } from '@/components/public/FollowButton'
 import { ShareButton } from '@/components/public/ShareButton'
 import { ResenasSection } from '@/components/marketplace/ResenasSection'
 import type { CompanyResenas } from '@/modules/resenas/queries'
-import type { PlanPublic, CompanyPostsPublic } from '@/modules/marketplace/queries'
 import type {
   CompanyPublic,
   CompanyStats,
   PromotionPublic,
 } from '@/modules/marketplace/types'
+import type { PlanPublic, CompanyPostsPublic, SucursalPublic } from '@/modules/marketplace/queries'
+import type { CtaPlanes } from '@/modules/marketplace/conversion'
 import type { RegionalPrefs } from '@/lib/format'
 import { formatMoney } from '@/lib/format'
 import { landingUrlFor } from '@/lib/site'
+import { SucursalesSection } from './SucursalesSection'
 
 const TIPO_LABEL: Record<string, string> = {
   carwash: 'Car Wash',
@@ -68,6 +70,19 @@ export interface CompanyProfileProps {
   resenas?: CompanyResenas | null
   /** Formulario "Escribe tu reseña" (solo si el visitante puede opinar). */
   resenaFormSlot?: React.ReactNode
+
+  // ── Fase 4 · detalle sucursal-consciente (conversión desde el mapa) ─────────
+  /** Sucursales públicas de la empresa (activas, visibles en el mapa). */
+  sucursales?: SucursalPublic[]
+  /** Sucursal activa (viene de `?sucursal=` en el mapa). Su ficha se resalta. */
+  sucursalActiva?: SucursalPublic | null
+  /** CTA de la sección de planes resuelto por elegibilidad (null = informativo). */
+  planesCta?: CtaPlanes | null
+  /** Ruta de regreso del detalle de promoción (se añade como `?retorno=`). */
+  promoRetorno?: string
+  /** Sobrescribe el botón volver (p. ej. "Cerca de mí" cuando vino del mapa). */
+  backHref?: string
+  backLabel?: string
 }
 
 export function CompanyProfile({
@@ -81,13 +96,21 @@ export function CompanyProfile({
   planesHref = null,
   resenas = null,
   resenaFormSlot,
+  sucursales,
+  sucursalActiva,
+  planesCta,
+  promoRetorno,
+  backHref,
+  backLabel,
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
 
   // Rutas dependientes del contexto. En 'app' todo permanece dentro de la
-  // aplicación; en 'public' se usan las rutas de la Landing.
-  const backHref = isApp ? '/cliente/empresas' : '/empresas'
+  // aplicación; en 'public' se usan las rutas de la Landing. Fase 4: si el
+  // visitante vino del mapa (`backHref`/`backLabel`), volver lleva al mapa.
+  const backHrefFinal = backHref ?? (isApp ? '/cliente/empresas' : '/empresas')
+  const backLabelFinal = backLabel ?? 'Empresas'
   const discoverHref = isApp ? '/cliente/explorar' : '/empresas'
   const promoHrefBase = isApp ? '/cliente/promociones' : '/promocion'
   const registroHref = `/registro/${company.slug}`
@@ -101,6 +124,7 @@ export function CompanyProfile({
 
   // Navegación por secciones (solo las que tienen contenido).
   const seccionesNav = [
+    sucursales && sucursales.length > 0 && { id: 'sucursales', label: 'Sucursales' },
     planes.length > 0 && { id: 'membresias', label: 'Membresías' },
     promotions.length > 0 && { id: 'promociones', label: 'Promociones' },
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
@@ -155,10 +179,10 @@ export function CompanyProfile({
         )}
         <div className="absolute left-0 top-0 p-4 sm:p-6">
           <Link
-            href={backHref}
+            href={backHrefFinal}
             className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-3.5 py-1.5 text-sm font-medium text-white backdrop-blur transition-colors hover:bg-white/25"
           >
-            <ArrowLeft className="h-4 w-4" /> Empresas
+            <ArrowLeft className="h-4 w-4" /> {backLabelFinal}
           </Link>
         </div>
       </section>
@@ -240,12 +264,12 @@ export function CompanyProfile({
             {/* CTA */}
             <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
               {isApp ? (
-                planesHref && (
+                (planesCta?.href || planesHref) && (
                   <Link
-                    href={planesHref}
+                    href={planesCta?.href ?? planesHref!}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-sm transition hover:bg-primary sm:w-auto"
                   >
-                    Ver planes <ArrowRight className="h-4 w-4" />
+                    {planesCta?.label ?? 'Ver planes'} <ArrowRight className="h-4 w-4" />
                   </Link>
                 )
               ) : (
@@ -294,6 +318,13 @@ export function CompanyProfile({
           )}
         </div>
 
+        {/* Sucursales: la ficha resaltada es la que eligió el usuario en el mapa. */}
+        {sucursales && sucursales.length > 0 && (
+          <div className="mt-10">
+            <SucursalesSection sucursales={sucursales} sucursalActiva={sucursalActiva ?? null} />
+          </div>
+        )}
+
         {/* Navegación de secciones (mini web) */}
         {seccionesNav.length > 1 && (
           <nav className="sticky top-16 z-30 mt-6 -mx-4 overflow-x-auto border-b border-border bg-white/90 px-4 backdrop-blur sm:mx-0 sm:rounded-full sm:border sm:px-2">
@@ -322,6 +353,11 @@ export function CompanyProfile({
                 Elige el plan que mejor se adapte a ti y recibe tu membresía
                 digital con QR.
               </p>
+              {sucursalActiva && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+                  <Check className="h-3.5 w-3.5" /> Canjeable en {sucursalActiva.nombre}
+                </p>
+              )}
             </div>
 
             <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -329,7 +365,10 @@ export function CompanyProfile({
                 const featured = planes.length > 1 && i === Math.floor(planes.length / 2)
                 // CTA del plan según contexto: público -> registro; app -> plan
                 // interno (solo si es la empresa del usuario), si no, sin CTA.
-                const planCtaHref = isApp ? planesHref : registroHref
+                // Fase 4: si faltan requisitos, el CTA resuelve primero el paso
+                // (vehículo) y regresa al detalle; se muestra igual en cada plan.
+                const planCtaHref = isApp ? (planesCta?.href ?? planesHref) : registroHref
+                const planCtaLabel = planesCta?.label ?? 'Elegir plan'
                 return (
                   <div
                     key={plan.id}
@@ -397,9 +436,9 @@ export function CompanyProfile({
                             ? 'bg-primary text-primary-foreground hover:bg-primary'
                             : 'bg-muted text-foreground hover:bg-muted'
                         }`}
-                      >
-                        Elegir plan <ArrowRight className="h-4 w-4" />
-                      </Link>
+                        >
+                          {planCtaLabel} <ArrowRight className="h-4 w-4" />
+                        </Link>
                     )}
 
                     {/* Fase E8: página pública y compartible del plan */}
@@ -425,6 +464,11 @@ export function CompanyProfile({
             <p className="mt-2 text-muted-foreground">
               Beneficios exclusivos disponibles ahora mismo.
             </p>
+            {sucursalActiva && (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+                <Check className="h-3.5 w-3.5" /> Canjeable en {sucursalActiva.nombre}
+              </p>
+            )}
             <div className="mt-6">
               <PromotionGrid
                 promotions={promotions}
@@ -432,6 +476,7 @@ export function CompanyProfile({
                 variant="default"
                 hrefBase={promoHrefBase}
                 exploreHref={discoverHref}
+                retorno={promoRetorno}
               />
             </div>
           </section>

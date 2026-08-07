@@ -45,6 +45,24 @@ export async function ejecutarTrabajo(carga: CargaTrabajo): Promise<ResultadoTra
       return despacharEvento(carga)
     case 'recompensas-referido':
       return procesarRecompensas(carga)
+    case 'campana-dirigida':
+      return procesarLoteCampanaDirigida(carga)
+  }
+}
+
+/**
+ * Lote del fan-out de una campaña geosegmentada. Si el lote quedó lleno, el
+ * propio worker encadena el siguiente (idempotente por desplazamiento fijo).
+ */
+async function procesarLoteCampanaDirigida(
+  carga: import('@/modules/jobs/tipos').CargaCampanaDirigida
+): Promise<ResultadoTrabajo> {
+  const { procesarLoteCampana } = await import('@/modules/geo/segmentacion/entrega')
+  const r = await procesarLoteCampana(carga.campanaId, carga.desde)
+  return {
+    procesados: r.procesados,
+    continua: r.continua,
+    detalle: r.excludos > 0 ? `${r.excludos} excluidos por frecuencia` : undefined,
   }
 }
 

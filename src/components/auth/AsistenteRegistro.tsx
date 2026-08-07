@@ -20,6 +20,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ComoNosConociste } from '@/components/adquisicion/ComoNosConociste'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import {
+  SelectorUbicacionVivienda,
+  UBICACION_SELECCIONADA_VACIA,
+  type UbicacionSeleccionada,
+} from '@/components/geo/SelectorUbicacionVivienda'
 import { landingUrlFor } from '@/lib/site'
 import { isGoogleAuthEnabled } from '@/lib/auth/googleAuth'
 
@@ -48,6 +53,7 @@ type PasoId =
   | 'email'
   | 'password'
   | 'telefono'
+  | 'ubicacion'
   | 'vehCategoria'
   | 'vehMarca'
   | 'vehModelo'
@@ -60,6 +66,8 @@ interface Datos {
   nombre: string
   email: string
   telefono: string
+  ubicacion: UbicacionSeleccionada
+  geoConsentMarketing: string
   tipoVehiculoId: string
   marca: string
   modelo: string
@@ -72,6 +80,8 @@ const DATOS_VACIOS: Datos = {
   nombre: '',
   email: '',
   telefono: '',
+  ubicacion: UBICACION_SELECCIONADA_VACIA,
+  geoConsentMarketing: '',
   tipoVehiculoId: '',
   marca: '',
   modelo: '',
@@ -87,6 +97,10 @@ const TITULOS: Record<PasoId, { titulo: string; ayuda?: string }> = {
   telefono: {
     titulo: '¿Cuál es tu teléfono?',
     ayuda: 'Lo usamos para confirmar tus citas y beneficios.',
+  },
+  ubicacion: {
+    titulo: '¿Dónde vives?',
+    ayuda: 'Es opcional: úsalo para encontrar negocios y ofertas cerca de ti.',
   },
   vehCategoria: { titulo: '¿Qué tipo de vehículo tienes?' },
   vehMarca: { titulo: '¿Qué marca es?' },
@@ -134,6 +148,7 @@ export function AsistenteRegistro({
       'email',
       'password',
       'telefono',
+      'ubicacion',
       ...(requiereVehiculo
         ? (['vehCategoria', 'vehMarca', 'vehModelo', 'vehAnio', 'vehColor', 'vehPlaca'] as PasoId[])
         : []),
@@ -235,6 +250,9 @@ export function AsistenteRegistro({
         return (datos.telefono.match(/\d/g)?.length ?? 0) >= 7
           ? null
           : 'Escribe un teléfono válido, por ejemplo 809-555-0000.'
+      case 'ubicacion':
+        // Opcional por diseño (§20): se puede omitir sin bloquear el registro.
+        return null
       case 'vehCategoria':
         // Sin categorías configuradas no se puede exigir una (la página ya
         // omite los pasos de vehículo en ese caso; esto es defensa extra).
@@ -286,6 +304,19 @@ export function AsistenteRegistro({
     form.set('email', datos.email)
     form.set('password', password)
     form.set('telefono', datos.telefono)
+    const u = datos.ubicacion
+    form.set('geoCountryId', u.countryId)
+    form.set('geoRegionId', u.regionId)
+    form.set('geoRegionName', u.regionNameRaw)
+    form.set('geoCityId', u.cityId)
+    form.set('geoCityName', u.cityNameRaw)
+    form.set('geoSectorId', u.sectorId)
+    form.set('geoSectorName', u.sectorNameRaw)
+    form.set('geoLat', u.latitud)
+    form.set('geoLng', u.longitud)
+    form.set('geoSource', u.geoSource)
+    form.set('geoConsentHome', u.consentHome ? 'on' : 'off')
+    form.set('geoConsentMarketing', datos.geoConsentMarketing === 'on' ? 'on' : 'off')
     if (refCode) form.set('refCode', refCode)
     if (glCode) form.set('glCode', glCode)
     if (requiereVehiculo) {
@@ -311,7 +342,7 @@ export function AsistenteRegistro({
   const estiloPrimario = colorPrimario ? { backgroundColor: colorPrimario } : undefined
 
   const campo = (
-    id: keyof Datos,
+    id: { [K in keyof Datos]: Datos[K] extends string ? K : never }[keyof Datos],
     props: React.ComponentProps<typeof Input> = {}
   ) => (
     <Input
@@ -352,7 +383,24 @@ export function AsistenteRegistro({
               la validación es la nuestra (mensajes propios, consistentes);
               sin esto, type=email dispara el tooltip nativo del navegador y
               se salta nuestros mensajes. */}
-          {paso !== 'confirmar' ? (
+          {paso === 'ubicacion' ? (
+            /* ── Ubicación: selector multi-paso opcional (con su propia navegación) ── */
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">{t.titulo}</h1>
+                {t.ayuda && <p className="mt-1 text-sm text-white/60">{t.ayuda}</p>}
+              </div>
+              <SelectorUbicacionVivienda
+                oscuro
+                value={datos.ubicacion}
+                onChange={(v) => {
+                  setError(null)
+                  setDatos((d) => ({ ...d, ubicacion: v }))
+                }}
+                onDone={() => avanzar()}
+              />
+            </div>
+          ) : paso !== 'confirmar' ? (
             <form onSubmit={avanzar} noValidate className="space-y-5" key={paso}>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{t.titulo}</h1>
@@ -599,6 +647,9 @@ export function AsistenteRegistro({
                 <Resumen etiqueta="Nombre" valor={datos.nombre} />
                 <Resumen etiqueta="Correo" valor={datos.email} />
                 <Resumen etiqueta="Teléfono" valor={datos.telefono} />
+                {resumenUbicacion(datos.ubicacion) && (
+                  <Resumen etiqueta="Ubicación" valor={resumenUbicacion(datos.ubicacion)} />
+                )}
                 {requiereVehiculo && (
                   <>
                     <Resumen etiqueta="Vehículo" valor={`${datos.marca} ${datos.modelo} ${datos.anio}`} />
@@ -657,6 +708,22 @@ export function AsistenteRegistro({
                 <span>Quiero recibir novedades y ofertas de MembeGo por correo (opcional).</span>
               </label>
 
+              {datos.ubicacion.countryId && (
+                <label className="flex items-start gap-2 text-sm text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={datos.geoConsentMarketing === 'on'}
+                    onChange={(e) =>
+                      setDatos((d) => ({ ...d, geoConsentMarketing: e.target.checked ? 'on' : '' }))
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                  />
+                  <span>
+                    Usar mi ciudad y sector para enviarme ofertas de negocios de mi zona (opcional).
+                  </span>
+                </label>
+              )}
+
               <div className="flex items-center gap-3">
                 <Button
                   type="button"
@@ -692,4 +759,9 @@ function Resumen({ etiqueta, valor }: { etiqueta: string; valor: string }) {
       <dd className="text-right font-medium">{valor || '—'}</dd>
     </div>
   )
+}
+
+function resumenUbicacion(u: UbicacionSeleccionada): string {
+  const partes = [u.sectorNameRaw, u.cityNameRaw, u.regionNameRaw].filter(Boolean)
+  return partes.join(', ')
 }

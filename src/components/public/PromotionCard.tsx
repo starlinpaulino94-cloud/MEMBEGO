@@ -14,6 +14,8 @@ interface PromotionCardProps {
    * app se pasa '/cliente/promociones' para no salir del contexto autenticado.
    */
   hrefBase?: string
+  /** Ruta a la que volver desde el detalle (se añade como `?retorno=`). */
+  retorno?: string
 }
 
 function fechaCorta(d: string | Date) {
@@ -22,17 +24,23 @@ function fechaCorta(d: string | Date) {
   )
 }
 
+function detalleHref(hrefBase: string, id: string, retorno?: string) {
+  const base = `${hrefBase}/${id}`
+  return retorno ? `${base}?retorno=${encodeURIComponent(retorno)}` : base
+}
+
 export function PromotionCard({
   promotion,
   variant = 'default',
   hrefBase = '/promocion',
+  retorno,
 }: PromotionCardProps) {
   const isExpired =
     promotion.vigenciaHasta && new Date(promotion.vigenciaHasta) < new Date()
 
   if (variant === 'compact') {
     return (
-      <Link href={`${hrefBase}/${promotion.id}`} className="group block">
+      <Link href={detalleHref(hrefBase, promotion.id, retorno)} className="group block">
         <div className="card-interactive overflow-hidden rounded-2xl border border-border/60 bg-card">
           <div className="relative h-24 w-full overflow-hidden bg-gradient-to-br from-blue-600 to-sky-500">
             {promotion.imagenUrl ? (
@@ -76,7 +84,7 @@ export function PromotionCard({
   // Tarjeta-anuncio (Temu-style): imagen con gradiente, badge de descuento
   // protagonista, urgencia con contador y CTA gigante siempre visible.
   return (
-    <Link href={`${hrefBase}/${promotion.id}`} className="group block h-full">
+    <Link href={detalleHref(hrefBase, promotion.id, retorno)} className="group block h-full">
       <div className="card-interactive relative flex h-full flex-col overflow-hidden rounded-3xl border border-border/60 bg-card">
         {/* Imagen protagonista */}
         <div className="relative h-44 w-full overflow-hidden bg-gradient-to-br from-rose-500 via-orange-500 to-amber-500">

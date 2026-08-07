@@ -11,6 +11,7 @@ import {
   CalendarDays,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
+import { safeInternalPath } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,11 +38,19 @@ function fmtFechaHora(d: Date) {
 
 export default async function MiCompraPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ retorno?: string }>
 }) {
   const user = await requireRole('CLIENTE')
   const { id } = await params
+  const { retorno: retornoParam } = await searchParams
+  // Fase 4 · contexto de ubicación: quien adquirió desde el mapa vuelve al
+  // detalle de la empresa (sanitizado contra open redirect); el resto a la
+  // lista de sus beneficios.
+  const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
+  const retornoQs = retornoParam ? `&retorno=${encodeURIComponent(retorno)}` : ''
 
   const compra = await prisma.productoCompra.findUnique({
     where: { id },
@@ -134,10 +143,10 @@ export default async function MiCompraPage({
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link
-        href="/cliente/mis-promociones"
+        href={retorno}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Mis promociones
+        <ArrowLeft className="h-4 w-4" /> {retornoParam ? 'Volver' : 'Mis promociones'}
       </Link>
 
       {/* Cabecera */}
@@ -236,7 +245,7 @@ export default async function MiCompraPage({
               puedes ir cuando prefieras.
             </p>
             <Button asChild className="w-full gap-2 font-bold sm:w-auto">
-              <Link href={`/cliente/citas?compra=${compra.id}`}>
+              <Link href={`/cliente/citas?compra=${compra.id}${retornoQs}`}>
                 <CalendarDays className="h-4 w-4" /> Agendar mi cita
               </Link>
             </Button>

@@ -1,0 +1,402 @@
+// ──────────────────────────────────────────────────────────────────────────
+// GEOLOCALIZACIÓN, MAPA Y CAMPAÑAS GEOSEGMENTADAS  (docs/GEOLOCALIZACION.md)
+//
+// El dominio geográfico de MembeGo: catálogo normalizado (país → región →
+// ciudad → sector), ubicaciones del cliente (cross-empresa, G-1), sucursales
+// geolocalizadas (se amplían en identidad.prisma), consentimiento de ubicación
+// y el constructor de audiencias (segmentos + campañas dirigidas).
+//
+// Decisiones aprobadas (2026-08-06, docs/GEOLOCALIZACION.md §16): G-1 la
+// ubicación de la persona cuelga de `User`; G-2 Leaflet + OSM; G-3 Geoapify
+// con fallback Nominatim; G-4 PostGIS habilitado (columnas `geography` se
+// sincronizan por trigger en SQL manual, Prisma no las modela).
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+/// Para qué usa la persona su ubicación guardada. La separación entre tipos
+/// es el corazón de la privacidad (docs/GEOLOCALIZACION.md §9): aceptar
+/// marketing no implica guardar la vivienda ni viceversa.
+enum CustomerLocationType {
+  HOME
+  WORK
+  OTHER
+}
+
+/// Cómo llegó la ubicación a la tabla.
+enum CustomerLocationSource {
+  MANUAL // escrita a mano, sin geocodificar
+  MAP_SELECTION // pin arrastrado en el mapa
+  GEOCODED_ADDRESS // dirección geocodificada (Geoapify/Nominatim)
+  DEVICE_LOCATION // GPS puntual que el usuario decidió guardar como vivienda
+  ADMIN_ASSIGNED // asignada por un admin del superadmin
+}
+
+/// Grado de confianza de la ubicación. Sin coordenadas confirmadas se usa
+/// solo para segmentación por ciudad/sector; nunca para radio/distancia.
+enum LocationVerificationStatus {
+  UNVERIFIED // solo ciudad/sector
+  CONFIRMED // con coordenadas aproximadas y verificación visual
+}
+
+/// Tipos de consentimiento de ubicación. NUNCA se mezclan (§9): la
+/// segmentación de marketing exige MARKETING_GEO; el mapa funcional basta con
+/// FUNCTIONAL_USAGE; guardar la vivienda exige HOME_STORAGE.
+enum GeoConsentTipo {
+  FUNCTIONAL_USAGE // usar ubicación (guardada o actual) para negocios cercanos
+  HOME_STORAGE // guardar vivienda/ubicaciones en el perfil
+  MARKETING_GEO // usar ciudad/sector/radio para campañas
+  DEVICE_LOCATION_SESSION // usar el GPS actual SOLO para la búsqueda en curso
+}
+
+enum GeoConsentEstado {
+  ACTIVE
+  REVOKED
+}
+
+/// Ciclo de vida de un segmento guardado. Solo se evalúa el que está ACTIVO.
+enum SegmentoEstado {
+  BORRADOR
+  ACTIVO
+  ARCHIVADO
+}
+
+/// Estado de una campaña dirigida.
+enum CampanaDirigidaEstado {
+  BORRADOR
+  PROGRAMADA
+  ACTIVA
+  PAUSADA
+  FINALIZADA
+}
+
+/// Canales de entrega de una campaña dirigida. PUSH_FUTURO reserva el slot sin
+/// habilitarlo: los canales se filtran contra el catálogo soportado en código.
+enum CampanaCanal {
+  IN_APP
+  EMAIL
+  PUSH_FUTURO
+}
+
+// ─────────────────────────────────────────────
+// CATÁLOGO GEOGRÁFICO NORMALIZADO (país → región → ciudad → sector)
+// ─────────────────────────────────────────────
+
+model Country {
+  id          String   @id @default(cuid())
+  isoCode     String   @unique // ISO 3166-1 alfa-2, ej. "DO"
+  name        String
+  /// Etiqueta del campo de 2º nivel, ej. "Provincia" | "Estado" | "Departamento".
+  regionLabel String
+  isOperative Boolean  @default(true) // países donde opera MembeGo
+  createdAt   DateTime @default(now())
+
+  regions           Region[]
+  customerLocations CustomerLocation[]
+  sucursales        Sucursal[]
+
+  @@map("geo_countries")
+}
+
+model Region {
+  id             String  @id @default(cuid())
+  countryId      String
+  country        Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  name           String
+  /// Nombre normalizado (mayúsculas, sin tildes) = clave de segmentación (§30).
+  normalizedName String
+  isOperative    Boolean @default(true)
+
+  cities            City[]
+  customerLocations CustomerLocation[]
+  sucursales        Sucursal[]
+
+  @@unique([countryId, normalizedName])
+  @@index([countryId, isOperative])
+  @@map("geo_regions")
+}
+
+model City {
+  id             String  @id @default(cuid())
+  regionId       String
+  region         Region  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  name           String
+  normalizedName String
+  isOperative    Boolean @default(true)
+
+  sectors           Sector[]
+  customerLocations CustomerLocation[]
+  sucursales        Sucursal[]
+
+  @@unique([regionId, normalizedName])
+  @@index([regionId, isOperative])
+  @@index([normalizedName])
+  @@map("geo_cities")
+}
+
+model Sector {
+  id             String  @id @default(cuid())
+  cityId         String
+  city           City    @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  name           String
+  normalizedName String
+  /// Punto de referencia aproximado del sector (para centrar el mapa).
+  latitud        Float?
+  longitud       Float?
+  /// Confirmado con datos oficiales (ONE) u OSM. Los escritos a mano por
+  /// usuarios quedan false y pasan por revisión del superadmin.
+  isVerified     Boolean @default(false)
+  isOperative    Boolean @default(true)
+
+  customerLocations CustomerLocation[]
+  sucursales        Sucursal[]
+
+  @@unique([cityId, normalizedName])
+  @@index([cityId, isOperative])
+  @@map("geo_sectors")
+}
+
+// ─────────────────────────────────────────────
+// UBICACIONES DEL CLIENTE (G-1 · cross-empresa, cuelgan de User)
+// ─────────────────────────────────────────────
+
+/// Ubicación declarada por la persona. Multi-ubicación (HOME/WORK/OTHER) con
+/// una sola primaria por usuario (validado en LocationService). Las empresas
+/// JAMÁS leen esta tabla (docs/GEOLOCALIZACION.md §7.7): la segmentación
+/// devuelve agregados e IDs, nunca coordenadas.
+model CustomerLocation {
+  id     String                @id @default(cuid())
+  userId String
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  label String? // "Casa", "Trabajo", "Otra"
+  type  CustomerLocationType   @default(HOME)
+
+  countryId String?
+  country   Country?           @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  regionId  String?
+  region    Region?            @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  cityId    String?
+  city      City?              @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  sectorId  String?
+  sector    Sector?            @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+
+  // Textos originales como respaldo (regla §30): el catálogo puede no tener
+  // aún el valor, pero el dato del usuario no se pierde.
+  regionNameRaw String? // texto original de provincia/estado
+  cityNameRaw   String?
+  sectorNameRaw String?
+
+  /// Dirección de referencia (avenida, #, residencial, punto de referencia).
+  formattedAddress String?
+  /// Coordenadas aproximadas, SOLO si el usuario las confirmó (MAP_SELECTION /
+  /// GEOCODED_ADDRESS / DEVICE_LOCATION guardada como vivienda). Sin ellas,
+  /// verificationStatus = UNVERIFIED y la ubicación no participa en radio.
+  latitud  Float?
+  longitud Float?
+  // PostGIS (G-4): columna `geography` sincronizada por trigger (§6), no la
+  // gestiona Prisma.
+
+  isPrimary          Boolean                  @default(false)
+  source             CustomerLocationSource
+  verificationStatus LocationVerificationStatus @default(UNVERIFIED)
+  /// Separación de consentimientos (§33): guardar la vivienda ≠ usarla para
+  /// campañas. MARKETING_GEO se valida aparte en LocationConsentService.
+  consentForPersonalization Boolean              @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isPrimary])
+  @@index([cityId])
+  @@index([sectorId])
+  @@map("customer_locations")
+}
+
+// ─────────────────────────────────────────────
+// CONSENTIMIENTO DE UBICACIÓN (auditable)
+// ─────────────────────────────────────────────
+
+/// Rastro auditable de cada autorización/revocación. Un registro por tipo por
+/// usuario; revocar = marcar REVOKED con `revokedAt` (nunca se borra).
+model GeoConsent {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tipo      GeoConsentTipo
+  estado    GeoConsentEstado @default(ACTIVE)
+  /// Versión del texto aceptado (ej. "1.0") para saber QUÉ aceptó la persona.
+  version   String
+  /// "onboarding" | "perfil" | "mapa" | "campana"
+  canal     String
+  grantedAt DateTime         @default(now())
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+
+  @@unique([userId, tipo])
+  @@index([userId, estado])
+  @@map("geo_consents")
+}
+
+// ─────────────────────────────────────────────
+// SEGMENTOS GUARDADOS Y CAMPAÑAS DIRIGIDAS
+// ─────────────────────────────────────────────
+
+/// Constructor de audiencias. La audiencia se RECALCULA al ejecutar (§24);
+/// nunca se guarda una lista estática de personas.
+model SavedSegment {
+  id          String         @id @default(cuid())
+  companyId   String
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdById String? // userId del admin que lo creó (sin relación: puede borrarse)
+  estado      SegmentoEstado @default(BORRADOR)
+  /// Números agregados de la última estimación (§23) — nunca datos personales.
+  ultimaAudienciaEstimada Int?
+  ultimaEvaluacionAt      DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  conditions SegmentCondition[]
+  conditionGroups SegmentConditionGroup[]
+  campaigns  CampanaDirigida[]
+
+  @@index([companyId, estado])
+  @@map("saved_segments")
+}
+
+/// Condición atómica de un segmento. Mismo patrón que RuleCondition/Group
+/// (prisma/schema/motores.prisma, decisión G-5): `campo` dot-path + `operador`
+/// + `valor` JSON, con árbol AND/OR/NOT anidable.
+model SegmentCondition {
+  id        String                  @id @default(cuid())
+  segmentId String
+  segment   SavedSegment            @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     SegmentConditionGroup?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  /// Dot-path del contexto de segmentación, ej. "cliente.ubicacion.sectorId".
+  campo    String
+  /// "eq" | "in" | "not_in" | "radius" | "within_region" | "has_membership" | ...
+  operador String
+  valor    Json     @default("{}")
+  orden    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([segmentId, orden])
+  @@index([groupId])
+  @@map("segment_conditions")
+}
+
+/// Nodo interno del árbol booleano de un segmento (AND/OR/NOT, anidable).
+model SegmentConditionGroup {
+  id        String                  @id @default(cuid())
+  segmentId String
+  segment   SavedSegment            @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    SegmentConditionGroup?  @relation("SegmentGroupTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  SegmentConditionGroup[] @relation("SegmentGroupTree")
+  operator  String                  @default("AND") // AND | OR | NOT
+  orden     Int                     @default(0)
+  createdAt DateTime                @default(now())
+
+  conditions SegmentCondition[]
+
+  @@index([segmentId])
+  @@index([parentId])
+  @@map("segment_condition_groups")
+}
+
+/// Campaña a una audiencia dirigida (segmento guardado o radio alrededor de
+/// una sucursal). Nuevo modelo a propósito: NO reescribe MarketingCampaign ni
+/// Campana/CampanaGlobal (docs/GEOLOCALIZACION.md §3.6).
+model CampanaDirigida {
+  id        String                 @id @default(cuid())
+  companyId String
+  company   Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  segmentId String?
+  segment   SavedSegment?          @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  nombre    String
+  mensaje   String                 @db.Text
+  canales   CampanaCanal[]         // canales habilitados (validados contra el catálogo)
+  programadaEn DateTime?
+  estado    CampanaDirigidaEstado  @default(BORRADOR)
+  /// Controles de frecuencia (§28).
+  maxPorDia   Int? @default(1)
+  maxPorSemana Int? @default(2)
+  prioridad   Int  @default(0)
+  /// Radio alrededor de una sucursal (§25). null = sin geografía (usa segmento).
+  sucursalId String?
+  sucursal   Sucursal?              @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  radioKm    Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  snapshots CampanaAudienciaSnapshot[]
+  entregas  CampanaEntrega[]
+
+  @@index([companyId, estado])
+  @@map("campanas_dirigidas")
+}
+
+/// Instantánea de audiencia calculada al programar/activar (§23, §24).
+/// Solo números agregados — nunca listas de personas.
+model CampanaAudienciaSnapshot {
+  id        String          @id @default(cuid())
+  campanaId String
+  campana   CampanaDirigida @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  totalElegibles  Int
+  totalExcluidos  Int
+  sinConsentimiento Int
+  porCiudad    Json            @default("{}") // { cityId: count }
+  porSector    Json            @default("{}")
+  advertencias Json            @default("[]") // audiencia pequeña/grande, sin canal, etc.
+  calculadaAt  DateTime        @default(now())
+
+  @@index([campanaId])
+  @@map("campana_audiencia_snapshots")
+}
+
+/// Entrega a un cliente (fan-out en lotes vía src/modules/jobs/cola).
+model CampanaEntrega {
+  id        String          @id @default(cuid())
+  campanaId String
+  campana   CampanaDirigida @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  /// `clienteId` es la de la empresa de la campaña (no hay relación: la entrega
+  /// es el rastro de un envío, no un dato que se borre con el cliente).
+  clienteId String
+  canal     CampanaCanal
+  estado    String          @default("PENDIENTE") // PENDIENTE | ENVIADA | FALLIDA | EXCLUIDA
+  motivoExclusion String?
+  enviadaAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([campanaId, estado])
+  @@index([clienteId])
+  @@map("campana_entregas")
+}
+
+/// Evento de búsqueda en el mapa (analítica AGREGADA, §35) — nunca recorridos.
+model LocationSearchEvent {
+  id       String   @id @default(cuid())
+  userId   String? // null = anónimo; no se guarda para identificar recorridos
+  /// "CURRENT" | "HOME" | "MANUAL"
+  contexto String
+  countryId String?
+  cityId    String?
+  sectorId  String?
+  /// Aproximada; se redondea (≈1km) para métricas (§35).
+  latitud  Float?
+  longitud Float?
+  radioKm  Int?
+  filtros  Json     @default("{}")
+  resultCount Int  @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([contexto, createdAt])
+  @@index([cityId, createdAt])
+  @@map("location_search_events")
+}

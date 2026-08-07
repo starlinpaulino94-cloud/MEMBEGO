@@ -22,6 +22,9 @@ import { validarVehiculoNuevo, normalizarPlaca } from '@/modules/registro/vehicu
 import { capacidadesEfectivas } from '@/modules/capacidades/catalogo'
 import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
 import { PAIS_PLACA_DEFECTO } from '@/modules/onboarding/vehiculo'
+import { leerUbicacionDeForm } from '@/modules/registro/geo-form'
+import { LocationService } from '@/modules/geo/ubicaciones/service'
+import { LocationConsentService } from '@/modules/geo/consentimiento/service'
 
 export interface RegistroState {
   error?: string
@@ -88,7 +91,7 @@ export async function registrarCliente(
   try {
   // Rate limit server-side por IP: evita creación masiva de cuentas / spam.
   // El límite del navegador no cuenta como protección (se salta recargando).
-  const { ipAddress } = await getRequestMeta()
+  const { ipAddress, userAgent } = await getRequestMeta()
   if (!(await registerLimiter(ipAddress ?? 'unknown'))) {
     return { error: 'Demasiados registros desde esta conexión. Intenta de nuevo en unos minutos.' }
   }
@@ -354,6 +357,9 @@ export async function registrarCliente(
         telefono,
       })
 
+      // Ubicación + consentimientos geo (fail-open, nunca bloquea).
+      await guardarUbicacionYConsentimientos(existingUser.id, formData, { ipAddress, userAgent })
+
       return {
         success: true,
         codigoInvitacion: await codigoInvitacionDe(cliente.id),
@@ -524,6 +530,9 @@ export async function registrarCliente(
       telefono,
     })
 
+    // Ubicación + consentimientos geo (fail-open, nunca bloquea).
+    await guardarUbicacionYConsentimientos(result.dbUser.id, formData, { ipAddress, userAgent })
+
     const [codigoInvitacion, qrBienvenida] = await Promise.all([
       codigoInvitacionDe(result.cliente.id),
       qrBienvenidaDe(result.cliente.id, campanaBienvenida),
@@ -553,6 +562,56 @@ export async function registrarCliente(
 }
 
 /**
+ * Guarda la vivienda y los consentimientos geo tras crear la cuenta
+ * (docs/GEOLOCALIZACION.md §8.1, §9 y §33).
+ *
+ * REGLA DE NO-BLOQUEO (fail-open): la ubicación es opcional y NUNCA detiene el
+ * registro. Si el usuario la llenó y autorizó guardarla (`geoConsentHome`),
+ * se registran los consentimientos HOME_STORAGE + FUNCTIONAL_USAGE y se crea
+ * la ubicación primaria. El consentimiento de marketing (MARKETING_GEO) es
+ * independiente: no guardar la vivienda no impide aceptarlo ni viceversa.
+ */
+async function guardarUbicacionYConsentimientos(
+  dbUserId: string,
+  formData: FormData,
+  meta: { ipAddress: string | null; userAgent: string | null }
+): Promise<void> {
+  try {
+    const entradas = Object.fromEntries(formData.entries()) as Record<string, string>
+    const resultado = leerUbicacionDeForm(entradas)
+    if (!resultado.ok) {
+      console.warn('[registro:geo] ubicación no guardada:', resultado.error)
+      return
+    }
+
+    const { guardar, marketingGeo, ubicacion } = resultado
+
+    if (guardar) {
+      // El orden importa: guardar la vivienda exige HOME_STORAGE activo.
+      await LocationConsentService.otorgar(dbUserId, 'HOME_STORAGE', {
+        canal: 'onboarding',
+        ...meta,
+      })
+      await LocationConsentService.otorgar(dbUserId, 'FUNCTIONAL_USAGE', {
+        canal: 'onboarding',
+        ...meta,
+      })
+      await LocationService.guardar(dbUserId, { ...ubicacion, isPrimary: true })
+    }
+
+    if (marketingGeo) {
+      await LocationConsentService.otorgar(dbUserId, 'MARKETING_GEO', {
+        canal: 'onboarding',
+        ...meta,
+      })
+    }
+  } catch (e) {
+    // Fail-open: un error aquí NUNCA bloquea el registro (docs §2, §20).
+    console.error('[registro:geo] no se pudo guardar la ubicación (fail-open):', e)
+  }
+}
+
+/**
  * Registro general en MembeGo, SIN empresa: crea la cuenta (Supabase + User
  * CLIENTE) sin afiliarse a ninguna empresa, sin seguirla y sin membresía.
  * El usuario luego explora empresas dentro de la app y se afilia cuando
@@ -563,7 +622,7 @@ export async function registrarCuentaGeneral(
   formData: FormData
 ): Promise<RegistroState> {
   try {
-    const { ipAddress } = await getRequestMeta()
+    const { ipAddress, userAgent } = await getRequestMeta()
     if (!(await registerLimiter(ipAddress ?? 'unknown'))) {
       return { error: 'Demasiados registros desde esta conexión. Intenta de nuevo en unos minutos.' }
     }
@@ -667,6 +726,9 @@ export async function registrarCuentaGeneral(
       if (sesion.metadata.clienteId) {
         await capturarCanalRegistro(sesion.metadata.clienteId, canalDeclarado)
       }
+
+      // Ubicación + consentimientos geo (fail-open, nunca bloquea).
+      await guardarUbicacionYConsentimientos(dbUser.id, formData, { ipAddress, userAgent })
 
       if (verificarCorreo) {
         await sendVerificationEmail(admin, email, nombre)

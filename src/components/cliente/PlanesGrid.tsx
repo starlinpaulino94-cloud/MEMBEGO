@@ -62,6 +62,8 @@ interface Props {
   vehiculoSeleccionadoId?: string | null
   /** Modo vitrina: precios base visibles, compra en línea deshabilitada. */
   vitrina?: boolean
+  /** Fase 4 · contexto de ubicación: se encadena al detalle de membresía. */
+  retorno?: string
 }
 
 /**
@@ -131,10 +133,18 @@ export function PlanesGrid({
   vehiculos = [],
   vehiculoSeleccionadoId = null,
   vitrina = false,
+  retorno,
 }: Props) {
   const router = useRouter()
   const init: SeleccionState = {}
   const [selectState, selectAction] = useActionState(seleccionarPlan, init)
+
+  // Fase 4 · contexto de ubicación: el detalle de la membresía devuelve al
+  // detalle de la empresa del mapa. `?retorno=` viaja sanitizado desde la URL.
+  const retornoQs = retorno ? `?retorno=${encodeURIComponent(retorno)}` : ''
+  const vehiculoNext = retorno
+    ? `/cliente/vehiculos/nuevo?next=${encodeURIComponent(`/cliente/planes${retornoQs}`)}`
+    : '/cliente/vehiculos/nuevo?next=/cliente/planes'
 
   // Vehículo activo → plan recomendado (null si ningún plan lo menciona).
   // Arranca en el que usó el SERVIDOR para calcular precios; al cambiarlo se
@@ -147,7 +157,9 @@ export function PlanesGrid({
 
   function elegirVehiculo(id: string) {
     setVehiculoId(id)
-    router.replace(`/cliente/planes?vehiculo=${encodeURIComponent(id)}`, { scroll: false })
+    const q = new URLSearchParams({ vehiculo: id })
+    if (retorno) q.set('retorno', retorno)
+    router.replace(`/cliente/planes?${q.toString()}`, { scroll: false })
   }
   const recomendadoId = useMemo(
     () => (vehiculo ? planRecomendadoPara(vehiculo, planes) : null),
@@ -169,10 +181,10 @@ export function PlanesGrid({
   useEffect(() => {
     if (selectState.success && selectState.membershipId) {
       toast.success('Plan seleccionado. Sube tu comprobante.')
-      router.push(`/membresia/${selectState.membershipId}`)
+      router.push(`/membresia/${selectState.membershipId}${retornoQs}`)
     }
     if (selectState.error) toast.error(selectState.error)
-  }, [selectState, router])
+  }, [selectState, router, retornoQs])
 
   const tabs = planes.map((p) => {
     const { base, variante } = parseNombre(p.nombre)
@@ -429,7 +441,7 @@ export function PlanesGrid({
                        registrar el vehículo — el precio exacto depende de él. */
                     <div className="space-y-1.5">
                       <Button asChild variant="outline" className="min-h-12 w-full">
-                        <a href="/cliente/vehiculos/nuevo?next=/cliente/planes">
+                        <a href={vehiculoNext}>
                           Registra tu vehículo para comprar
                         </a>
                       </Button>

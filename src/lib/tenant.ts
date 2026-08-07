@@ -96,3 +96,24 @@ export async function sinEmpresa<T>(motivo: string, fn: (tx: Tx) => Promise<T>):
     return fn(tx)
   })
 }
+
+/**
+ * Ejecuta `fn` con la variable `app.user_id` puesta. Es el análogo de
+ * `conEmpresa` para los datos DE LA PERSONA (RLS · GEO ·
+ * `prisma/migrations_manual/2026-08-rls-geo.sql`): `customer_locations`,
+ * `geo_consents` y `location_search_events` solo los ve su dueño.
+ *
+ * Hoy la aplicación se conecta como `postgres` (se salta RLS), así que esto no
+ * cambia nada todavía; el día que `DATABASE_URL` pase a `membego_app`, el
+ * código que use `conUsuario` queda protegido y el que no, dejará de ver datos
+ * —ruidosamente— en vez de filtrarlos. Mismo patrón que `conEmpresa`.
+ */
+export async function conUsuario<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  if (!userId || !RE_ID.test(userId)) {
+    throw new Error(`conUsuario: userId inválido (${JSON.stringify(userId)})`)
+  }
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT set_config('app.user_id', ${userId}, true)`
+    return fn(tx)
+  })
+}

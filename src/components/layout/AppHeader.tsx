@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { ExternalLink, Menu, Search, X } from 'lucide-react'
+import { Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { navForRole, filtrarNavOculto, allLinks } from '@/components/layout/nav-config'
 import { NotificationBell } from '@/components/layout/NotificationBell'
@@ -25,7 +25,6 @@ export function AppHeader({
   companies,
   onMenuClick,
   hiddenNav,
-  sistemaExterno,
 }: {
   role: AppRole
   notifCount?: number
@@ -33,8 +32,6 @@ export function AppHeader({
   onMenuClick: () => void
   /** Rutas a ocultar por no tener contenido todavía (cliente). */
   hiddenNav?: string[]
-  /** Sistema satélite conectado (p. ej. el car wash): acceso directo por SSO. */
-  sistemaExterno?: { slug: string; nombre: string } | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -193,20 +190,6 @@ export function AppHeader({
 
       {/* Acciones */}
       <div className="flex shrink-0 items-center gap-1">
-        {/* Acceso directo al sistema satélite (SSO de salida, token de 90 s).
-            target _blank: el satélite es otra app; MembeGo queda abierta. */}
-        {sistemaExterno && (
-          <a
-            href={`/api/integraciones/abrir/${encodeURIComponent(sistemaExterno.slug)}`}
-            target="_blank"
-            rel="noopener"
-            className="mr-1 inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            title={`Abrir ${sistemaExterno.nombre}`}
-          >
-            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-            <span className="hidden sm:inline">{sistemaExterno.nombre}</span>
-          </a>
-        )}
         {companies && <CompanySwitcher companies={companies} />}
         <ThemeToggle />
         <NotificationBell initialCount={notifCount} />

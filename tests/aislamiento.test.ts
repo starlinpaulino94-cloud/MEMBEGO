@@ -154,7 +154,8 @@ function archivosTs(dir: string, acc: string[] = []): string[] {
 }
 
 function exento(ruta: string): boolean {
-  return Object.keys(EXENTOS).some((prefijo) => ruta.includes(prefijo))
+  const normalizada = ruta.replaceAll('\\', '/')
+  return Object.keys(EXENTOS).some((prefijo) => normalizada.includes(prefijo))
 }
 
 /**

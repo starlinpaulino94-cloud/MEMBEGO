@@ -63,6 +63,11 @@ export async function GET(request: NextRequest) {
       console.error('[cron-automatizaciones] estrategias', e)
       return { reencolados: 0 }
     })
+    const { activarCampanasProgramadas } = await import('@/modules/geo/segmentacion/campanas')
+    const campanas = await activarCampanasProgramadas().catch((e) => {
+      console.error('[cron-automatizaciones] campañas dirigidas', e)
+      return { activadas: 0, bloqueadas: 0 }
+    })
     return NextResponse.json({
       ok: true,
       reparto,
@@ -70,6 +75,7 @@ export async function GET(request: NextRequest) {
       seguimiento,
       integraciones,
       estrategias,
+      campanas,
     })
   } catch (e) {
     console.error('[cron-automatizaciones]', e)

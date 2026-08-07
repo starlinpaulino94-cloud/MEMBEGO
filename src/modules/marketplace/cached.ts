@@ -148,5 +148,5 @@ export {
   getPlanOg,
   getCompanyPlanesPublic,
 } from '@/modules/marketplace/queries'
-export { getCompanyPostsPublic } from '@/modules/marketplace/queries'
+export { getCompanyPostsPublic, getSucursalesPublic } from '@/modules/marketplace/queries'
 export type { PlatformStats } from '@/modules/marketplace/queries'

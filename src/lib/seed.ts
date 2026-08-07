@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { prisma } from './prisma'
 import { SEED_COMPANIES } from './data/companies'
 import { BUSINESS_CATEGORIES } from './data/categories'
+import { seedCatalogoGeo } from '@/modules/geo/catalogo/seed'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 /**
@@ -133,7 +134,13 @@ export async function runSeed(): Promise<SeedResult> {
   let usersCount = 0
   let clientesCount = 0
 
-  // 0. Categorías de negocio del marketplace (idempotente por slug)
+  // 0. Catálogo geográfico normalizado de RD (ONE/OSM, idempotente).
+  const geo = await seedCatalogoGeo()
+  details.push(
+    `Geo: ${geo.countries} país · ${geo.regions} provincias · ${geo.cities} municipios · ${geo.sectors} sectores (${geo.sectorsVerificados} verificados)`
+  )
+
+  // 1. Categorías de negocio del marketplace (idempotente por slug)
   for (const cat of BUSINESS_CATEGORIES) {
     await prisma.businessCategory.upsert({
       where: { slug: cat.slug },

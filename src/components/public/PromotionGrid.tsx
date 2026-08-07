@@ -15,6 +15,8 @@ interface PromotionGridProps {
   hrefBase?: string
   /** Destino del CTA del estado vacío (depende del contexto: landing vs app). */
   exploreHref?: string
+  /** Ruta de regreso desde el detalle (se añade como `?retorno=`). */
+  retorno?: string
 }
 
 export function PromotionGrid({
@@ -24,6 +26,7 @@ export function PromotionGrid({
   emptyMessage = 'No se encontraron promociones',
   hrefBase,
   exploreHref = '/empresas',
+  retorno,
 }: PromotionGridProps) {
   const cols =
     variant === 'compact'
@@ -58,7 +61,7 @@ export function PromotionGrid({
   return (
     <div className={`grid ${cols} gap-5`}>
       {promotions.map((promotion) => (
-        <PromotionCard key={promotion.id} promotion={promotion} variant={variant} hrefBase={hrefBase} />
+        <PromotionCard key={promotion.id} promotion={promotion} variant={variant} hrefBase={hrefBase} retorno={retorno} />
       ))}
     </div>
   )

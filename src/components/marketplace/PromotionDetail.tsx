@@ -14,14 +14,19 @@ export interface PromotionDetailProps {
   promotion: PromotionPublic
   /** Fase E5: CTA de compra directa (lo inyecta la página del cliente). */
   comprarSlot?: React.ReactNode
+  /**
+   * Fase 4: ruta a la que volver en lugar del índice (viniendo del detalle de
+   * empresa desde el mapa se regresa ahí, sin perder el contexto de ubicación).
+   */
+  retorno?: string
 }
 
-export function PromotionDetail({ mode, promotion, comprarSlot }: PromotionDetailProps) {
+export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: PromotionDetailProps) {
   const isApp = mode === 'app'
   const isExpired =
     promotion.vigenciaHasta && new Date(promotion.vigenciaHasta) < new Date()
 
-  const backHref = isApp ? '/cliente/promociones' : '/promociones'
+  const backHref = retorno ?? (isApp ? '/cliente/promociones' : '/promociones')
   const empresaHref = isApp
     ? `/cliente/empresas/${promotion.company.slug}`
     : `/empresas/${promotion.company.slug}`

@@ -31,6 +31,7 @@ export function ComprarPromoButton({
   agotada,
   yaAdquirida = false,
   unSoloUso = false,
+  retorno,
 }: {
   promocionId: string
   precio: number
@@ -39,12 +40,16 @@ export function ComprarPromoButton({
   yaAdquirida?: boolean
   /** El límite por cliente es 1 (mostrar "un solo uso"). */
   unSoloUso?: boolean
+  /** Fase 4 · contexto de ubicación: se encadena al detalle de la compra. */
+  retorno?: string
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(solicitarCompraPromocion, init)
   const [confirmar, setConfirmar] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
   const esGratis = precio <= 0
+  // Ruta interna ya sanitizada por la página; solo se anexa cuando vino del mapa.
+  const retornoQs = retorno ? `?retorno=${encodeURIComponent(retorno)}` : ''
 
   useEffect(() => {
     if (state.success && state.compraId) {
@@ -55,18 +60,19 @@ export function ComprarPromoButton({
       )
       // Activada: pasamos por el paso OPCIONAL de agendar cita (esa pantalla
       // se salta sola si la empresa no tiene agenda). Si quedó pendiente de
-      // pago, va directo al detalle a completar la transferencia.
+      // pago, va directo al detalle a completar la transferencia. `retorno`
+      // preserva el contexto del mapa a lo largo de ese camino.
       router.push(
         state.activada
-          ? `/cliente/mis-promociones/${state.compraId}/agendar`
-          : `/cliente/mis-promociones/${state.compraId}`
+          ? `/cliente/mis-promociones/${state.compraId}/agendar${retornoQs}`
+          : `/cliente/mis-promociones/${state.compraId}${retornoQs}`
       )
     } else if (state.error) {
       toast.error(state.error)
       // Ya tiene una compra viva de esta promo: llevarlo a esa compra.
-      if (state.compraId) router.push(`/cliente/mis-promociones/${state.compraId}`)
+      if (state.compraId) router.push(`/cliente/mis-promociones/${state.compraId}${retornoQs}`)
     }
-  }, [state, router])
+  }, [state, router, retornoQs])
 
   if (yaAdquirida) {
     return (

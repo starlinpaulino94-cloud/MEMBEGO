@@ -68,6 +68,9 @@ export function claveDedup(carga: CargaTrabajo): string {
       return `evt:${carga.eventoId}`
     case 'recompensas-referido':
       return `recomp:${carga.companyId}:${carga.referidoId}`
+    case 'campana-dirigida':
+      // El lote es la unidad idempotente: cada desplazamiento se procesa una vez.
+      return `camp:${carga.campanaId}:${carga.desde}`
   }
 }
 

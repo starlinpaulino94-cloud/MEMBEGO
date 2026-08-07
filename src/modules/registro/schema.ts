@@ -44,6 +44,21 @@ export const registroSchema = z.object({
   tipoVehiculoId: z.string().trim().default(''),
   pais: z.string().trim().default(''),
   flujoV2: z.string().trim().default(''),
+  // Ubicación (docs/GEOLOCALIZACION.md §4): opcional, nunca bloquea el
+  // registro. El parser real está en `geo-form.ts` (leerUbicacionDeForm);
+  // aquí solo se pasan como strings para que zod no las rechace.
+  geoCountryId: z.string().trim().default(''),
+  geoRegionId: z.string().trim().default(''),
+  geoRegionName: z.string().trim().default(''),
+  geoCityId: z.string().trim().default(''),
+  geoCityName: z.string().trim().default(''),
+  geoSectorId: z.string().trim().default(''),
+  geoSectorName: z.string().trim().default(''),
+  geoLat: z.string().trim().default(''),
+  geoLng: z.string().trim().default(''),
+  geoSource: z.string().trim().default(''),
+  geoConsentHome: z.string().trim().default(''),
+  geoConsentMarketing: z.string().trim().default(''),
 })
 
 export type RegistroInput = z.infer<typeof registroSchema>

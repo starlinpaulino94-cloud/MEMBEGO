@@ -86,20 +86,6 @@ export function LoginForm({
     google_rate: 'Demasiados registros desde esta conexión. Intenta de nuevo en unos minutos.',
   }
   const errorGoogle = errorParam ? (GOOGLE_ERRORS[errorParam] ?? null) : null
-  // SSO de entrada desde un sistema satélite (car wash): el motivo es GRUESO a
-  // propósito — suficiente para saber a quién le toca arreglarlo, sin decirle a
-  // nadie si una cuenta existe. El detalle exacto queda en el log del servidor.
-  const SSO_MOTIVOS: Record<string, string> = {
-    token: 'El enlace de acceso no es válido o ya venció. Vuelve a intentarlo desde el otro sistema.',
-    sistema: 'El sistema que intentó abrir tu sesión no está habilitado.',
-    cuenta: 'Tu usuario no está disponible en esta empresa. Inicia sesión normalmente.',
-    sesion: 'No pudimos abrir tu sesión automáticamente. Entra con tu correo y contraseña.',
-  }
-  const errorSso =
-    errorParam === 'sso'
-      ? (SSO_MOTIVOS[searchParams.get('motivo') ?? ''] ??
-         'No pudimos abrirte la sesión desde el otro sistema. Inicia sesión aquí.')
-      : null
 
   return (
     <Card className="border-white/10 bg-white/5 text-white">
@@ -140,11 +126,6 @@ export function LoginForm({
         {errorGoogle && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{errorGoogle}</AlertDescription>
-          </Alert>
-        )}
-        {errorSso && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{errorSso}</AlertDescription>
           </Alert>
         )}
         <form onSubmit={handleSubmit} className="space-y-4">

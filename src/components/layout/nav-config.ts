@@ -134,6 +134,8 @@ const ADMIN_NAV: NavGroup[] = [
       { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
       { href: '/admin/seguimiento', label: 'Seguimiento', icon: QrCode },
       { href: '/admin/audiencia', label: 'Audiencia', icon: TrendingUp },
+      { href: '/admin/audiencia/segmentos', label: 'Segmentos', icon: Users },
+      { href: '/admin/audiencia/campanas', label: 'Campañas', icon: Megaphone },
       { href: '/admin/adquisicion', label: 'Origen de clientes', icon: Compass },
       { href: '/admin/actividad', label: 'Actividad', icon: History },
       { href: '/admin/crecimiento', label: 'Crecimiento', icon: Rocket },
@@ -187,6 +189,7 @@ const CLIENTE_NAV: NavGroup[] = [
     // cliente vive dentro de SU negocio). Las rutas siguen activas por URL
     // para cuando el marketplace se abra con más empresas.
     items: [
+      { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
       { href: '/cliente/promociones', label: 'Promociones', icon: Megaphone },
       { href: '/cliente/mis-promociones', label: 'Mis beneficios', icon: Ticket },
       { href: '/cliente/regalos', label: 'Regalos', icon: HeartHandshake },

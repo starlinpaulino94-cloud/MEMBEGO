@@ -72,6 +72,25 @@ enum AuditAccion {
   SUPERADMIN_RETIRADO
   /// El superadmin generó un enlace para entrar como otro usuario.
   ENTRAR_COMO_GENERADO
+  // Módulo de Geolocalización (docs/GEOLOCALIZACION.md).
+  /// La persona guardó/actualizó una ubicación declarada (CustomerLocation).
+  UBICACION_GUARDADA
+  /// La persona eliminó una de sus ubicaciones declaradas.
+  UBICACION_ELIMINADA
+  /// La persona otorgó un consentimiento de ubicación (GeoConsent).
+  CONSENTIMIENTO_GEO_OTORGADO
+  /// La persona revocó un consentimiento de ubicación.
+  CONSENTIMIENTO_GEO_REVOCADO
+  /// El admin de empresa guardó/actualizó la geolocalización de una sucursal.
+  SUCURSAL_UBICACION_GUARDADA
+  /// El admin verificó visualmente las coordenadas de una sucursal.
+  SUCURSAL_UBICACION_VERIFICADA
+  /// El superadmin aprobó un sector/ciudad del catálogo propuesto por un usuario.
+  CATALOGO_GEO_APROBADO
+  /// Se evaluó un segmento de audiencia (auditoría de la estimación).
+  SEGMENTO_EVALUADO
+  /// Se envió una campaña dirigida a un segmento.
+  CAMPANA_DIRIGIDA_ENVIADA
 }
 
 // ─────────────────────────────────────────────
@@ -105,6 +124,10 @@ model User {
   notasCliente    ClienteNota[]
   intereses       UserInteres[]
   empresasAcceso  UserCompanyAccess[]
+
+  // Geolocalización (G-1): la ubicación es de la PERSONA, cross-empresa.
+  customerLocations CustomerLocation[]
+  geoConsents       GeoConsent[]
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
   transaccionesComoEmpleado Transaction[]              @relation("TransactionEmpleado")
@@ -310,6 +333,10 @@ model Company {
   ruletaPremios      RuletaPremio[]
   ruletaJugadas      RuletaJugada[]
 
+  // Geolocalización: constructor de audiencias y campañas dirigidas.
+  savedSegments     SavedSegment[]
+  campanasDirigidas CampanaDirigida[]
+
   // Módulo de Citas.
   agendaConfig   AgendaConfig?
   citas          Cita[]
@@ -364,7 +391,39 @@ model Sucursal {
   colaVehiculos   ColaVehiculo[]
   bahias          Bahia[]
 
+  // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
+  // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.
+  countryId String?
+  country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  regionId  String?
+  region    Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  cityId    String?
+  city      City?    @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  sectorId  String?
+  sector    Sector?  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  // Textos originales como respaldo (regla §30).
+  ciudadTexto String?
+  sectorTexto String?
+  latitud     Float?
+  longitud    Float?
+  // PostGIS (G-4): columna `geography` sincronizada por trigger (§6), no la
+  // gestiona Prisma.
+
+  // Publicación en el mapa y radio de servicio.
+  mostrarEnMapa       Boolean  @default(true)
+  radioServicioKm     Int? // radio de atención (segmentación por radio, §25)
+  ubicacionVerificada Boolean  @default(false) // coordenadas validadas visualmente por el admin (§8)
+  ubicacionActualizadaAt DateTime?
+  /// Horario estructurado (amplía el texto libre de Company.horario).
+  horarioDetallado Json?
+
+  // Campañas geosegmentadas por radio alrededor de esta sucursal.
+  campanasDirigidas CampanaDirigida[]
+
   @@index([companyId])
+  @@index([companyId, activa, mostrarEnMapa])
+  @@index([cityId])
+  @@index([sectorId])
   @@map("sucursales")
 }
 

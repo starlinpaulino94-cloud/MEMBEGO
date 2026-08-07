@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { CalendarDays, CheckCircle2, Clock, MapPin } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
+import { safeInternalPath } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import { getAgendaConfig } from '@/modules/citas/queries'
 import { Button } from '@/components/ui/button'
@@ -23,11 +24,18 @@ export const metadata = { title: '¿Agendas tu cita?' }
  */
 export default async function AgendarTrasAdquirirPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ retorno?: string }>
 }) {
   const user = await requireRole('CLIENTE')
   const { id } = await params
+  const { retorno: retornoParam } = await searchParams
+  // Fase 4 · contexto de ubicación: "Omitir" lleva al detalle de la compra con
+  // el retorno encadenado (el back de ese detalle vuelve al mapa).
+  const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
+  const retornoQs = retornoParam ? `?retorno=${encodeURIComponent(retorno)}` : ''
 
   const compra = await prisma.productoCompra.findUnique({
     where: { id },
@@ -42,7 +50,7 @@ export default async function AgendarTrasAdquirirPage({
   })
   if (!compra || compra.clienteId !== user.metadata.clienteId) notFound()
 
-  const destino = `/cliente/mis-promociones/${compra.id}`
+  const destino = `/cliente/mis-promociones/${compra.id}${retornoQs}`
 
   // Nada que ofrecer si la agenda está apagada para esta empresa.
   const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
@@ -101,7 +109,7 @@ export default async function AgendarTrasAdquirirPage({
 
       <div className="w-full space-y-2.5">
         <Button asChild size="xl" className="w-full gap-2 font-bold shadow-glow">
-          <Link href={`/cliente/citas?compra=${compra.id}`}>
+          <Link href={`/cliente/citas?compra=${compra.id}${retornoParam ? `&retorno=${encodeURIComponent(retorno)}` : ''}`}>
             <CalendarDays className="h-5 w-5" /> Agendar mi cita
           </Link>
         </Button>

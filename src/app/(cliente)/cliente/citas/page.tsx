@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CalendarDays, CalendarX2, Clock } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CalendarX2, Clock } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { prisma } from '@/lib/prisma'
 import {
@@ -13,7 +13,7 @@ import { ReservarCita } from '@/components/citas/ReservarCita'
 import { CancelarCitaButton } from '@/components/citas/CancelarCitaButton'
 import { CitaEstadoBadge } from '@/components/citas/CitaEstadoBadge'
 import { EmptyState } from '@/components/system/EmptyState'
-import { cn } from '@/lib/utils'
+import { cn, safeInternalPath } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -26,10 +26,14 @@ const ACTIVAS = ['PENDIENTE', 'CONFIRMADA']
 export default async function CitasClientePage({
   searchParams,
 }: {
-  searchParams: Promise<{ fecha?: string; compra?: string }>
+  searchParams: Promise<{ fecha?: string; compra?: string; retorno?: string }>
 }) {
   const user = await requireRole('CLIENTE')
-  const { fecha, compra } = await searchParams
+  const { fecha, compra, retorno: retornoParam } = await searchParams
+  // Fase 4 · contexto de ubicación: quien agendó desde el mapa puede volver al
+  // detalle de la empresa (sanitizado contra open redirect).
+  const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
+  const retornoParamQs = retornoParam ? `&retorno=${encodeURIComponent(retorno)}` : ''
 
   if (!user.metadata.clienteId) {
     return (
@@ -99,6 +103,14 @@ export default async function CitasClientePage({
 
   return (
     <main className="container max-w-3xl space-y-8 py-8">
+      {retornoParam && (
+        <Link
+          href={retorno}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Volver
+        </Link>
+      )}
       <header className="animate-fade-up">
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
           Citas · {cliente.company.name}
@@ -142,7 +154,7 @@ export default async function CitasClientePage({
             {diasAbiertos.map((d) => (
               <Link
                 key={d.ymd}
-                href={`/cliente/citas?fecha=${d.ymd}${compraParam}`}
+                href={`/cliente/citas?fecha=${d.ymd}${compraParam}${retornoParamQs}`}
                 aria-current={d.ymd === fechaSel ? 'date' : undefined}
                 className={cn(
                   'shrink-0 rounded-xl border px-3.5 py-2 text-sm font-semibold capitalize transition',

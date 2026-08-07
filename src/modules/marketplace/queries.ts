@@ -822,6 +822,59 @@ export async function getCompanyPlanesPublic(companyId: string): Promise<PlanPub
   }
 }
 
+// ─── Sucursales públicas (Fase 4 · detalle sucursal-consciente) ─────────────
+
+export interface SucursalPublic {
+  id: string
+  nombre: string
+  direccion: string | null
+  telefono: string | null
+  latitud: number | null
+  longitud: number | null
+  ciudadTexto: string | null
+  sectorTexto: string | null
+  ubicacionVerificada: boolean
+  /** Horario estructurado (parsed); null = desconocido. */
+  horarioDetallado: Record<string, unknown> | null
+}
+
+/**
+ * Sucursales visibles al público de una empresa (activas, con coordenadas y
+ * marcadas para el mapa). El detalle del mapa llega con `?sucursal=`; aquí se
+ * resuelve la ficha. Es la misma vitrina que alimenta "Cerca de mí".
+ */
+export async function getSucursalesPublic(companyId: string): Promise<SucursalPublic[]> {
+  try {
+    const sucursales = await sinEmpresa('marketplace: sucursales públicas de empresa', (tx) =>
+      tx.sucursal.findMany({
+        where: { companyId, activa: true, mostrarEnMapa: true },
+        select: {
+          id: true,
+          nombre: true,
+          direccion: true,
+          telefono: true,
+          latitud: true,
+          longitud: true,
+          ciudadTexto: true,
+          sectorTexto: true,
+          ubicacionVerificada: true,
+          horarioDetallado: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    )
+    return sucursales.map((s) => ({
+      ...s,
+      // El horario viaja como objeto JSON (Prisma lo expone como JsonValue);
+      // la UI lo interpreta con las reglas del módulo geo/cercanos/horario.
+      horarioDetallado: (s.horarioDetallado as Record<string, unknown> | null) ?? null,
+    }))
+  } catch (error) {
+    console.error('[getSucursalesPublic] Error:', error)
+    return []
+  }
+}
+
 // ─── F3.3: Publicaciones públicas de la empresa ──────────────────────────────
 
 export interface CompanyPostPublic {
