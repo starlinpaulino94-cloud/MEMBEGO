@@ -1,6 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
-import { conUsuario } from '@/lib/tenant'
+import { conUsuario, sinEmpresa } from '@/lib/tenant'
 import { redondearCoordenada } from './core'
 
 /**
@@ -42,9 +41,16 @@ export async function registrarBusquedaGeo(ev: BusquedaGeoEvent): Promise<void> 
     }
 
     if (ev.userId) {
+      // Con dueño: `app.user_id` puesto, la fila queda bajo la RLS de la persona.
       await conUsuario(ev.userId, (tx) => tx.locationSearchEvent.create({ data: row }))
     } else {
-      await prisma.locationSearchEvent.create({ data: row })
+      // Visitante sin sesión: la fila no tiene dueño (ni `userId` ni `companyId`),
+      // así que no hay inquilino ni persona a la que acotarla. Es analítica
+      // anónima y agregada — coordenadas ya redondeadas arriba.
+      await sinEmpresa(
+        'geo: evento de búsqueda anónimo (sin usuario ni empresa), coordenadas redondeadas',
+        (tx) => tx.locationSearchEvent.create({ data: row })
+      )
     }
   } catch (e) {
     console.error('[geo] registrarBusquedaGeo:', e)

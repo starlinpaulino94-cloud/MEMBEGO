@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, Loader2, MapPin, Plus, Search, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Search, X } from 'lucide-react'
 import {
   listarPaisesOperativos,
   listarRegionesDePais,
@@ -10,7 +10,7 @@ import {
 } from '@/modules/geo/catalogo/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { MapaConfirmarVivienda, type CoordsConfirmadas, type FuenteCoordenadas } from './MapaConfirmarVivienda'
+import { MapaConfirmarVivienda, type FuenteCoordenadas } from './MapaConfirmarVivienda'
 import { cn } from '@/lib/utils'
 
 /**
@@ -91,12 +91,14 @@ export function SelectorUbicacionVivienda({
   const [mini, setMini] = useState<MiniPaso>('pais')
   const [d, setD] = useState<UbicacionSeleccionada>(value)
 
-  const [paises, setPaises] = useState<Opcion[]>([])
-  const [regiones, setRegiones] = useState<Opcion[]>([])
-  const [ciudades, setCiudades] = useState<Opcion[]>([])
-  const [sectores, setSectores] = useState<Opcion[]>([])
-  const [regionLabel, setRegionLabel] = useState('Provincia')
-  const [cargando, setCargando] = useState(false)
+  /**
+   * Listas del catálogo cacheadas por clave (`pais`, `region:<countryId>`, …).
+   * Un solo efecto las pide; `cargando`, `opciones` y `regionLabel` se DERIVAN
+   * de esta caché en vez de escribirse desde el efecto. Dos razones: el
+   * indicador de carga ya no provoca un render en cascada, y volver atrás en
+   * los mini-pasos no vuelve a pedir lo que ya se pidió.
+   */
+  const [listas, setListas] = useState<Record<string, Opcion[]>>({})
 
   const [busqueda, setBusqueda] = useState('')
   const [manual, setManual] = useState(false)
@@ -107,81 +109,56 @@ export function SelectorUbicacionVivienda({
   const [refCoords, setRefCoords] = useState<{ lat: number; lng: number } | null>(null)
 
   // ── Datos del catálogo por mini-paso ──────────────────────────────────────
-  useEffect(() => {
-    if (mini !== 'pais') return
-    let activo = true
-    setCargando(true)
-    listarPaisesOperativos()
-      .then((rs) => activo && setPaises(rs.map((r) => ({ ...r }))))
-      .catch(() => {})
-      .finally(() => activo && setCargando(false))
-    return () => {
-      activo = false
-    }
-  }, [mini])
+
+  /**
+   * Clave de la lista que toca en este mini-paso. `null` = el paso no consulta
+   * el catálogo (el mapa) o le falta el padre del que colgaría, porque el
+   * usuario omitió provincia o ciudad: entonces no hay nada que pedir y la
+   * lista se muestra vacía con la opción de escribirla a mano.
+   */
+  const claveLista = useMemo<string | null>(() => {
+    if (mini === 'pais') return 'pais'
+    if (mini === 'region') return d.countryId ? `region:${d.countryId}` : null
+    if (mini === 'ciudad') return d.regionId ? `ciudad:${d.regionId}` : null
+    if (mini === 'sector') return d.cityId ? `sector:${d.cityId}` : null
+    return null
+  }, [mini, d.countryId, d.regionId, d.cityId])
 
   useEffect(() => {
-    if (mini !== 'region' || !d.countryId) return
+    if (!claveLista || listas[claveLista]) return
     let activo = true
-    setCargando(true)
-    listarRegionesDePais(d.countryId)
-      .then((rs) => activo && setRegiones(rs))
-      .catch(() => {})
-      .finally(() => activo && setCargando(false))
+    const idPadre = claveLista.slice(claveLista.indexOf(':') + 1)
+    const pedir = claveLista.startsWith('region:')
+      ? listarRegionesDePais(idPadre)
+      : claveLista.startsWith('ciudad:')
+        ? listarCiudadesDeRegion(idPadre)
+        : claveLista.startsWith('sector:')
+          ? listarSectoresDeCiudad(idPadre)
+          : listarPaisesOperativos()
+    const guardar = (rs: Opcion[]) => {
+      if (activo) setListas((prev) => ({ ...prev, [claveLista]: rs }))
+    }
+    // Un fallo del catálogo no bloquea el registro: lista vacía y el usuario
+    // sigue con "escribir otra" u "omitir" (la ubicación nunca es obligatoria).
+    pedir.then(guardar).catch(() => guardar([]))
     return () => {
       activo = false
     }
-  }, [mini, d.countryId])
+  }, [claveLista, listas])
 
-  useEffect(() => {
-    if (mini !== 'ciudad') return
-    let activo = true
-    setCargando(true)
-    if (d.regionId) {
-      listarCiudadesDeRegion(d.regionId)
-        .then((cs) => activo && setCiudades(cs))
-        .catch(() => {})
-        .finally(() => activo && setCargando(false))
-    } else {
-      setCiudades([])
-      setCargando(false)
-    }
-    return () => {
-      activo = false
-    }
-  }, [mini, d.regionId])
-
-  useEffect(() => {
-    if (mini !== 'sector') return
-    let activo = true
-    setCargando(true)
-    if (d.cityId) {
-      listarSectoresDeCiudad(d.cityId)
-        .then((ss) => activo && setSectores(ss))
-        .catch(() => {})
-        .finally(() => activo && setCargando(false))
-    } else {
-      setSectores([])
-      setCargando(false)
-    }
-    return () => {
-      activo = false
-    }
-  }, [mini, d.cityId])
+  /** Cargando = el paso pide catálogo y su lista todavía no llegó. */
+  const cargando = claveLista !== null && listas[claveLista] === undefined
 
   // Etiqueta del 2º nivel según el país (Provincia/Estado/Departamento…).
-  useEffect(() => {
-    const pais = paises.find((p) => p.id === d.countryId)
-    if (pais?.regionLabel) setRegionLabel(pais.regionLabel)
-  }, [paises, d.countryId])
+  const regionLabel =
+    (listas.pais ?? []).find((p) => p.id === d.countryId)?.regionLabel ?? 'Provincia'
 
   const opciones = useMemo(() => {
-    const lista =
-      mini === 'pais' ? paises : mini === 'region' ? regiones : mini === 'ciudad' ? ciudades : sectores
+    const lista = (claveLista ? listas[claveLista] : undefined) ?? []
     const q = busqueda.trim().toLowerCase()
     if (!q) return lista
     return lista.filter((o) => o.name.toLowerCase().includes(q))
-  }, [mini, paises, regiones, ciudades, sectores, busqueda])
+  }, [claveLista, listas, busqueda])
 
   function irA(p: MiniPaso) {
     setMini(p)
@@ -213,7 +190,7 @@ export function SelectorUbicacionVivienda({
       longitud: '',
       geoSource: '',
     })
-    setRegionLabel(op.regionLabel ?? 'Provincia')
+    // `regionLabel` se deriva de `d.countryId` — no hace falta fijarla aquí.
     setRefCoords(null)
     irA('region')
   }

@@ -92,7 +92,7 @@ function condicionPromo(alias: Prisma.Sql, ahora: Date, gratis: boolean): Prisma
 }
 
 /** Condiciones compartidas de negocio (sin parte geográfica). */
-function condicionesFiltros(f: FiltrosCercanos, ahora: Date): Prisma.Sql[] {
+function condicionesFiltros(f: FiltrosCercanos): Prisma.Sql[] {
   const conds: Prisma.Sql[] = [
     Prisma.sql`s.activa = true`,
     Prisma.sql`s."mostrarEnMapa" = true`,
@@ -191,7 +191,7 @@ export async function buscarCercanosRaw(
         ${distanciaDesde(postgis, Prisma.sql`${lat}`, Prisma.sql`${lng}`, Prisma.sql`s`)} AS "distanciaM",
         ${columnaFavorita(userId)}
       ${joinsSucursales(filtros, ahora, userId)}
-      WHERE ${Prisma.join(condicionesFiltros(filtros, ahora), ' AND ')}
+      WHERE ${Prisma.join(condicionesFiltros(filtros), ' AND ')}
       AND ${postgis
         ? Prisma.sql`s.location IS NOT NULL AND ST_DWithin(
             s.location,
@@ -227,7 +227,7 @@ export async function buscarEnViewportRaw(
         ${distanciaDesde(postgis, Prisma.sql`${latCentro}`, Prisma.sql`${lngCentro}`, Prisma.sql`s`)} AS "distanciaM",
         ${columnaFavorita(userId)}
       ${joinsSucursales(filtros, ahora, userId)}
-      WHERE ${Prisma.join(condicionesFiltros(filtros, ahora), ' AND ')}
+      WHERE ${Prisma.join(condicionesFiltros(filtros), ' AND ')}
       AND ${postgis
         ? Prisma.sql`ST_Intersects(s.location::geometry, ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}, 4326))`
         : Prisma.sql`(s.latitud BETWEEN ${south} AND ${north} AND s.longitud BETWEEN ${west} AND ${east})`}

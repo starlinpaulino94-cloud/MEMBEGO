@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { createRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { normalizarNombre } from '@/modules/geo/catalogo/normalizar'
 import { GeocodingService } from '@/modules/geo/geocodificacion/service'
@@ -29,6 +29,13 @@ const autocompleteLimiter = createRateLimiter({
   name: 'geo-autocompletar',
 })
 
+/**
+ * Ciudad y sector son catálogo MUNDIAL: no tienen `companyId`, así que no hay
+ * inquilino al que acotar la consulta. Va con `sinEmpresa` y el motivo escrito,
+ * igual que `modules/geo/catalogo/queries.ts`.
+ */
+const MOTIVO = 'geo: catálogo mundial (ciudad/sector), sin dueño por empresa'
+
 function jsonError(status: number, codigo: string, mensaje: string) {
   return NextResponse.json({ codigo, mensaje }, { status })
 }
@@ -51,12 +58,14 @@ export async function GET(req: NextRequest) {
   const sugerencias: SugerenciaUbicacion[] = []
 
   // 1) Ciudades del catálogo.
-  const ciudades = await prisma.city.findMany({
-    where: { isOperative: true, normalizedName: { contains: termino } },
-    orderBy: { normalizedName: 'asc' },
-    take: 4,
-    select: { id: true, name: true },
-  })
+  const ciudades = await sinEmpresa(MOTIVO, (tx) =>
+    tx.city.findMany({
+      where: { isOperative: true, normalizedName: { contains: termino } },
+      orderBy: { normalizedName: 'asc' },
+      take: 4,
+      select: { id: true, name: true },
+    })
+  )
   for (const c of ciudades) {
     sugerencias.push({
       id: `ciudad:${c.id}`,
@@ -70,22 +79,24 @@ export async function GET(req: NextRequest) {
   }
 
   // 2) Sectores del catálogo (con punto de referencia para centrar el mapa).
-  const sectores = await prisma.sector.findMany({
-    where: {
-      isOperative: true,
-      ...(cityId ? { cityId } : {}),
-      normalizedName: { contains: termino },
-    },
-    orderBy: [{ isVerified: 'desc' }, { name: 'asc' }],
-    take: 6,
-    select: {
-      id: true,
-      name: true,
-      latitud: true,
-      longitud: true,
-      city: { select: { id: true, name: true } },
-    },
-  })
+  const sectores = await sinEmpresa(MOTIVO, (tx) =>
+    tx.sector.findMany({
+      where: {
+        isOperative: true,
+        ...(cityId ? { cityId } : {}),
+        normalizedName: { contains: termino },
+      },
+      orderBy: [{ isVerified: 'desc' }, { name: 'asc' }],
+      take: 6,
+      select: {
+        id: true,
+        name: true,
+        latitud: true,
+        longitud: true,
+        city: { select: { id: true, name: true } },
+      },
+    })
+  )
   for (const s of sectores) {
     sugerencias.push({
       id: `sector:${s.id}`,
