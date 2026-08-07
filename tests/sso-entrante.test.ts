@@ -13,6 +13,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import {
   firmarHmac,
   verificarTokenSSO,
@@ -70,4 +71,30 @@ test('saliente NO se aflojó: sigue exigiendo sub', () => {
 
   const conSub = token({ sub: 'u1', email: 'a@b.c', rol: 'EMPLEADO', companyId: 'c1', exp: AHORA + 60 })
   assert.ok(verificarTokenSSO(SECRETO, conSub, AHORA))
+})
+
+// ── Compatibilidad con el satélite (car wash) ───────────────────────────────
+//
+// Réplica EXACTA de cómo firma el car wash hoy (api/ir-a-membego.ts en
+// starlinpaulino94-cloud/car-wash-membego). Se duplica a propósito: es un
+// repo aparte, y esta prueba existe para que un cambio en NUESTRO verificador
+// que rompa su formato falle aquí en vez de en producción un lunes.
+function firmarComoCarWash(payload: Record<string, unknown>, secreto = SECRETO): string {
+  const cuerpo = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+  const firma = createHmac('sha256', secreto).update(cuerpo, 'utf8').digest('hex')
+  return `${cuerpo}.${firma}`
+}
+
+test('compatibilidad: el pase real del car wash (con sub y sin sub) se acepta', () => {
+  const exp = Math.floor(Date.now() / 1000) + 90
+
+  const conSub = firmarComoCarWash({ email: 'staff@carwash.com', companyId: 'cmre1hz57', exp, sub: 'uuid-1' })
+  const a = verificarTokenSSOEntrante(SECRETO, conSub)
+  assert.ok(a, 'pase con sub')
+  assert.equal(a!.sub, 'uuid-1')
+  assert.equal(a!.companyId, 'cmre1hz57')
+
+  // Su construirUrl omite `sub` cuando no lo tiene: el email debe bastar.
+  const soloEmail = firmarComoCarWash({ email: 'staff@carwash.com', companyId: 'cmre1hz57', exp })
+  assert.ok(verificarTokenSSOEntrante(SECRETO, soloEmail), 'pase solo con email')
 })

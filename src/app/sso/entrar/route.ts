@@ -28,19 +28,34 @@ export const dynamic = 'force-dynamic'
  * ver (auth)/confirmar). NUNCA se crean cuentas desde aquí: un token válido
  * de un usuario inexistente termina en /login con aviso.
  *
- * Todos los rechazos aterrizan en /login?error=sso sin detalle — el detalle
- * (qué falló exactamente) va al log del servidor, no al navegador de un
- * atacante probando tokens.
+ * Los rechazos aterrizan en /login?error=sso&motivo=<grueso>: lo justo para
+ * que el satélite sepa a quién le toca arreglarlo. El detalle exacto va al log
+ * del servidor, nunca al navegador.
  */
+/**
+ * Motivos GRUESOS del rechazo, para que el satélite y el usuario sepan a quién
+ * le toca arreglarlo sin convertir esto en un oráculo:
+ *   token   — firma/vigencia/formato (no dice nada de ninguna cuenta)
+ *   sistema — slug desconocido o inactivo
+ *   cuenta  — usuario inexistente o ajeno a la empresa. Solo se llega aquí con
+ *             una firma VÁLIDA, o sea con el secreto compartido en la mano:
+ *             quien puede provocar este motivo ya podría preguntarlo de mil
+ *             formas, así que no filtra nada nuevo.
+ *   sesion  — falló abrir la sesión de nuestro lado (culpa nuestra)
+ */
+type MotivoSSO = 'token' | 'sistema' | 'cuenta' | 'sesion'
+
 export async function GET(req: NextRequest) {
-  const rechazo = NextResponse.redirect(new URL('/login?error=sso', getAppUrl()))
+  const rechazar = (motivo: MotivoSSO) =>
+    NextResponse.redirect(new URL(`/login?error=sso&motivo=${motivo}`, getAppUrl()))
 
   // Rate limit por IP: este endpoint acepta credenciales al portador.
-  if (!(await loginLimiter(getClientIdentifier(req)))) return rechazo
+  if (!(await loginLimiter(getClientIdentifier(req)))) return rechazar('token')
 
   const slug = req.nextUrl.searchParams.get('sistema') ?? ''
   const token = req.nextUrl.searchParams.get('token') ?? ''
-  if (!slug || !token) return rechazo
+  if (!slug) return rechazar('sistema')
+  if (!token) return rechazar('token')
 
   try {
     const sistema = await sinEmpresa('sso entrante: sistema conectado por slug (catálogo global)', (tx) =>
@@ -51,13 +66,13 @@ export async function GET(req: NextRequest) {
     )
     if (!sistema || !sistema.activo) {
       console.warn('[sso-entrar] sistema desconocido o inactivo:', slug)
-      return rechazo
+      return rechazar('sistema')
     }
 
     const datos = verificarTokenSSOEntrante(sistema.secreto, token)
     if (!datos) {
       console.warn('[sso-entrar] token inválido o vencido (sistema:', slug, ')')
-      return rechazo
+      return rechazar('token')
     }
 
     // ── Resolver al usuario de MembeGo: sub preferido, email como respaldo ──
@@ -74,7 +89,7 @@ export async function GET(req: NextRequest) {
     )
     if (!user) {
       console.warn('[sso-entrar] usuario no encontrado (sistema:', slug, ')')
-      return rechazo
+      return rechazar('cuenta')
     }
 
     // ── El usuario debe pertenecer a la empresa del token ───────────────────
@@ -96,7 +111,7 @@ export async function GET(req: NextRequest) {
       : false
     if (!perteneceStaff && !perteneceCliente) {
       console.warn('[sso-entrar] usuario no pertenece a la empresa del token (sistema:', slug, ')')
-      return rechazo
+      return rechazar('cuenta')
     }
 
     // ── Abrir sesión: el mismo mecanismo probado del enlace de correo ───────
@@ -108,7 +123,7 @@ export async function GET(req: NextRequest) {
     const tokenHash = enlace?.properties?.hashed_token
     if (errorEnlace || !tokenHash) {
       console.error('[sso-entrar] generateLink falló:', errorEnlace)
-      return rechazo
+      return rechazar('sesion')
     }
 
     const carrier = NextResponse.next()
@@ -119,13 +134,13 @@ export async function GET(req: NextRequest) {
     })
     if (errorOtp) {
       console.error('[sso-entrar] verifyOtp falló:', errorOtp)
-      return rechazo
+      return rechazar('sesion')
     }
 
     const dest = ROLE_HOME[user.role as AppRole] ?? '/mis-membresias'
     return redirectWithCookies(new URL(dest, getAppUrl()), carrier)
   } catch (e) {
     console.error('[sso-entrar] error inesperado:', e)
-    return rechazo
+    return rechazar('sesion')
   }
 }
