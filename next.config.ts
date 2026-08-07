@@ -121,19 +121,50 @@ const nextConfig: NextConfig = {
   },
 }
 
+/**
+ * Sentry en tiempo de BUILD (crear la release y subir los mapas de fuente).
+ *
+ * La organización y el proyecto se leen del entorno para poder corregirlos en
+ * Vercel sin tocar código: cuando no cuadran con el token, el CLI responde
+ * "Project not found" y el despliegue se llena de rojo aunque la app compile
+ * perfectamente. Los valores de siempre quedan como respaldo.
+ *
+ * `SENTRY_UPLOAD=off` apaga la subida por completo aunque haya token — útil
+ * para recuperar los ~2 min de build que se van en una subida que no llega.
+ */
+const sentryOrg = process.env.SENTRY_ORG || 'flash-tecnologi'
+const sentryProject = process.env.SENTRY_PROJECT || 'membego'
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN
+const subirASentry =
+  Boolean(sentryAuthToken && sentryOrg && sentryProject) && process.env.SENTRY_UPLOAD !== 'off'
+
 export default withSentryConfig(nextConfig, {
-  org: 'flash-tecnologi',
-  project: 'membego',
-  authToken: process.env.SENTRY_AUTH_TOKEN,
+  org: sentryOrg,
+  project: sentryProject,
+  authToken: sentryAuthToken,
 
   silent: !process.env.CI,
   widenClientFileUpload: true,
   tunnelRoute: '/monitoring',
   sourcemaps: {
-    // Sin SENTRY_AUTH_TOKEN no hay a dónde subirlos: generarlos solo consume
-    // memoria del build (el OOM de Vercel). Con token, todo sigue igual.
-    disable: !process.env.SENTRY_AUTH_TOKEN,
+    // Sin subida no hay a dónde mandarlos: generarlos solo consume memoria del
+    // build (el OOM de Vercel). Con subida activa, todo sigue igual.
+    disable: !subirASentry,
     deleteSourcemapsAfterUpload: true,
+  },
+  release: {
+    // Antes esto se intentaba SIEMPRE, aunque los mapas estuvieran desactivados:
+    // de ahí el `releases new` → "Project not found" en cada despliegue. Si no
+    // vamos a subir nada, tampoco hay release que crear.
+    create: subirASentry,
+    finalize: subirASentry,
+  },
+  // Un fallo hablando con Sentry NUNCA debe tumbar un despliegue de producción:
+  // la telemetría es accesoria, la app no. El plugin trae varios caminos que
+  // lanzan por defecto (y tumban el build); con este manejador se avisa una vez
+  // y la compilación sigue.
+  errorHandler: (err) => {
+    console.warn('[sentry] no se pudo completar la subida; el build continúa:', err.message)
   },
   // Ubicación nueva de estas opciones desde @sentry/nextjs 10 (antes vivían
   // en la raíz y emitían deprecation warnings en cada build).
