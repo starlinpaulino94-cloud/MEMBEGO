@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import {
   RADIO_POR_DEFECTO,
@@ -59,18 +59,28 @@ export function coordenadasValidas(
   return okLat && okLng ? { lat, lng } : null
 }
 
+/**
+ * Ciudad y sector son catálogo MUNDIAL: no tienen `companyId`, así que no hay
+ * inquilino al que acotar la consulta. Solo se leen nombres y el punto de
+ * referencia de la zona — nunca la ubicación de una persona (esa va por
+ * `LocationService`, que sí acota con `conUsuario`).
+ */
+const MOTIVO = 'geo: catálogo mundial (ciudad/sector), sin dueño por empresa'
+
 /** Punto de referencia de un sector del catálogo, con etiqueta completa. */
 async function buscarSectorConEtiqueta(sectorId: string) {
-  return prisma.sector.findUnique({
-    where: { id: sectorId },
-    select: {
-      id: true,
-      name: true,
-      latitud: true,
-      longitud: true,
-      city: { select: { id: true, name: true, region: { select: { id: true, name: true } } } },
-    },
-  })
+  return sinEmpresa(MOTIVO, (tx) =>
+    tx.sector.findUnique({
+      where: { id: sectorId },
+      select: {
+        id: true,
+        name: true,
+        latitud: true,
+        longitud: true,
+        city: { select: { id: true, name: true, region: { select: { id: true, name: true } } } },
+      },
+    })
+  )
 }
 
 export async function resolverUbicacionActiva(
@@ -139,10 +149,12 @@ export async function resolverUbicacionActiva(
       const sector = await buscarSectorConEtiqueta(input.sectorId)
       if (sector) partesEtiqueta.push(sector.name, sector.city.name)
     } else if (input.cityId) {
-      const city = await prisma.city.findUnique({
-        where: { id: input.cityId },
-        select: { id: true, name: true },
-      })
+      const city = await sinEmpresa(MOTIVO, (tx) =>
+        tx.city.findUnique({
+          where: { id: input.cityId as string },
+          select: { id: true, name: true },
+        })
+      )
       if (city) partesEtiqueta.push(city.name)
     }
     return {
@@ -176,19 +188,21 @@ export async function resolverUbicacionActiva(
   }
 
   if (input.cityId) {
-    const city = await prisma.city.findUnique({
-      where: { id: input.cityId },
-      select: {
-        id: true,
-        name: true,
-        sectors: {
-          where: { isOperative: true, latitud: { not: null }, longitud: { not: null } },
-          orderBy: { name: 'asc' },
-          take: 1,
-          select: { id: true, name: true, latitud: true, longitud: true },
+    const city = await sinEmpresa(MOTIVO, (tx) =>
+      tx.city.findUnique({
+        where: { id: input.cityId as string },
+        select: {
+          id: true,
+          name: true,
+          sectors: {
+            where: { isOperative: true, latitud: { not: null }, longitud: { not: null } },
+            orderBy: { name: 'asc' },
+            take: 1,
+            select: { id: true, name: true, latitud: true, longitud: true },
+          },
         },
-      },
-    })
+      })
+    )
     if (city) {
       const ref = city.sectors[0]
       if (ref && typeof ref.latitud === 'number' && typeof ref.longitud === 'number') {

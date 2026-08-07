@@ -53,6 +53,7 @@ const BLANCA = new Map([
   ['lib/prisma.ts', 'el propio cliente Prisma (proxy + logging)'],
   ['lib/prisma-errors.ts', 'utilidades de clasificación de errores, sin consultas propias'],
   ['lib/seed.ts', 'script CLI de seed, corre como postgres fuera de request context'],
+  ['modules/geo/catalogo/seed.ts', 'script CLI de seed del catálogo mundial (país/provincia/ciudad/sector, sin companyId), corre como postgres fuera de request context'],
   ['lib/tenant.ts', 'los propios envoltorios conEmpresa/sinEmpresa'],
   ['lib/supabase/identity.ts', 'esquema auth (no public), no aplica RLS de inquilino'],
   ['app/api/admin-reset-password/route.ts', 'esquema auth, protegido por bootstrap'],

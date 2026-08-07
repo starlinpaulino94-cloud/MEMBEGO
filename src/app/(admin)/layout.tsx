@@ -7,6 +7,7 @@ import { ADMIN_ROLES } from '@/types'
 import { getUnreadCount } from '@/modules/notificaciones/actions'
 import { BannerDemo } from '@/components/system/BannerDemo'
 import { nombreSiEsDemo } from '@/modules/demo'
+import { sistemaExternoParaHeader } from '@/modules/integraciones/sso'
 
 /**
  * Empresas entre las que este usuario puede cambiar: superadmin ve todas;
@@ -69,7 +70,7 @@ export default async function AdminLayout({
   children: React.ReactNode
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const [notifCount, empresas, hiddenNav, demo] = await Promise.all([
+  const [notifCount, empresas, hiddenNav, demo, sistemaExterno] = await Promise.all([
     getUnreadCount().catch(() => 0),
     empresasDisponibles(
       user.metadata.role,
@@ -78,6 +79,7 @@ export default async function AdminLayout({
     ),
     navOcultaPorApps(user.metadata.companyId),
     nombreSiEsDemo(user.metadata.companyId),
+    sistemaExternoParaHeader(user),
   ])
   return (
     <AppShell
@@ -90,6 +92,7 @@ export default async function AdminLayout({
       userEmail={user.email}
       notifCount={notifCount}
       hiddenNav={hiddenNav}
+      sistemaExterno={sistemaExterno}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el
