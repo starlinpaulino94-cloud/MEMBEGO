@@ -214,6 +214,9 @@ Lucide, sistema único. Tamaños normalizados:
   componer a mano un flex con un `h2` de tamaño propio.
 - **TabsNav** — navegación secundaria de una sección. No trae router: cada
   pestaña se pinta con `render`, así sirve para enlaces o estado local.
+- **FormSection** — agrupa un formulario largo por intención. Usa `<fieldset>`
+  y `<legend>` de verdad: el lector de pantalla anuncia la sección al entrar en
+  cada campo. **FormActions** fija las acciones al fondo.
 - **MobileBottomSheet** — lista que convive con un mapa a pantalla completa.
   Dos estados (asomada / abierta) y un tirador que es un botón real; **no** es
   un diálogo, porque el mapa de detrás sigue siendo interactivo.
@@ -349,7 +352,7 @@ verificar enlaces.
 | 6 | Wallet, membresías, beneficios, QR | ✅ |
 | 7 | Perfil, vehículos, ubicaciones | ✅ |
 | 8 | Dashboard administrativo | ✅ |
-| 9 | Clientes, membresías, planes | ⬜ |
+| 9 | Clientes, membresías, planes | ✅ |
 | 10 | Promociones, crecimiento, referidos | ⬜ |
 | 11 | Marketing, campañas, audiencia | ⬜ |
 | 12 | Operaciones: scanner, pagos, sucursales | ⬜ |

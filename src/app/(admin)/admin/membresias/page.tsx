@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { MembresíasTable, type MembershipRow } from '@/components/admin/MembresíasTable'
 import type { PlanOption } from '@/components/admin/CambiarPlanDialog'
 import { PageHeader } from '@/components/ui/page-header'
+import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/format'
 import type { MembershipEstado } from '@/types'
 
@@ -92,7 +93,16 @@ export default async function MembresiasPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Membresías" description={`${memberships.length} registros`} />
+      <PageHeader
+        eyebrow="Clientes"
+        title="Membresías"
+        description={`Quién tiene qué. ${memberships.length} ${memberships.length === 1 ? 'membresía comprada' : 'membresías compradas'} por tus clientes.`}
+        action={
+          <Button asChild variant="outline">
+            <Link href="/admin/planes">Ver planes</Link>
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         <FilterLink label="Todas" href="/admin/membresias" active={!estadoFilter} />

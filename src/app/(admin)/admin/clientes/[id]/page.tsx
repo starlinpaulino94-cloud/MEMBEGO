@@ -21,6 +21,8 @@ import { NotasCliente } from '@/components/admin/NotasCliente'
 import { AnularTransaccionesClienteButton } from '@/components/registros/AnularTransaccionesClienteButton'
 import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButton'
 import { FileText, MessageCircle, Mail, StickyNote } from 'lucide-react'
+import { PageHeader } from '@/components/ui/page-header'
+import { TabsNav } from '@/components/ui/tabs-nav'
 import type { MembershipEstado } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -39,13 +41,29 @@ function fmtFechaHora(d: Date | null) {
   return formatDateTime(d)
 }
 
+/**
+ * Vistas de la ficha del cliente (§45).
+ *
+ * Van por URL —no por estado de cliente— para que un enlace a "las visitas de
+ * Juan" siga siendo un enlace: se comparte por WhatsApp con el equipo y abre
+ * donde debe. La consulta es la MISMA para todas: los datos ya venían en un
+ * solo `include` y separarlos por pestaña sería reescribir la carga de datos
+ * para ahorrar poco en una ficha que se abre de una en una.
+ */
+const VISTAS = ['resumen', 'visitas', 'notas', 'ajustes'] as const
+type Vista = (typeof VISTAS)[number]
+
 export default async function ClienteDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ vista?: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
+  const { vista: vistaRaw } = await searchParams
+  const vista: Vista = VISTAS.includes(vistaRaw as Vista) ? (vistaRaw as Vista) : 'resumen'
   const companyId = companyFilter(user)
 
   const fetchCliente = () =>
@@ -109,49 +127,63 @@ export default async function ClienteDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/admin/clientes"
-        className="text-sm text-primary hover:underline"
-      >
-        ← Volver a clientes
-      </Link>
+      <PageHeader
+        eyebrow={
+          <Link href="/admin/clientes" className="hover:underline">
+            Clientes
+          </Link>
+        }
+        title={cliente.nombre}
+        description={[cliente.email, cliente.telefono].filter(Boolean).join(' · ')}
+        action={
+          <>
+            {cliente.telefono && (
+              <a
+                href={`https://wa.me/${cliente.telefono.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-3 text-small font-medium text-success transition hover:bg-success/15"
+              >
+                <MessageCircle className="h-4 w-4" aria-hidden /> WhatsApp
+              </a>
+            )}
+            {cliente.email && (
+              <a
+                href={`mailto:${cliente.email}`}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-small font-medium text-muted-foreground transition hover:bg-muted"
+              >
+                <Mail className="h-4 w-4" aria-hidden /> Correo
+              </a>
+            )}
+            {membership && <EstadoBadge estado={membership.estado as MembershipEstado} />}
+          </>
+        }
+        nav={
+          <TabsNav
+            aria-label="Secciones del cliente"
+            items={[
+              { clave: 'resumen', label: 'Resumen' },
+              { clave: 'visitas', label: 'Visitas', badge: cliente.visits.length },
+              { clave: 'notas', label: 'Notas', badge: cliente.notas.length },
+              { clave: 'ajustes', label: 'Ajustes' },
+            ].map((t) => ({
+              label: t.label,
+              badge: t.badge,
+              active: vista === t.clave,
+              render: ({ className, children }) => (
+                <Link
+                  href={`/admin/clientes/${cliente.id}${t.clave === 'resumen' ? '' : `?vista=${t.clave}`}`}
+                  className={className}
+                >
+                  {children}
+                </Link>
+              ),
+            }))}
+          />
+        }
+      />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {cliente.nombre}
-          </h1>
-          <p className="text-muted-foreground">
-            {cliente.email}
-            {cliente.telefono ? ` · ${cliente.telefono}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Contacto rápido */}
-          {cliente.telefono && (
-            <a
-              href={`https://wa.me/${cliente.telefono.replace(/\D/g, '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-success/25 bg-success/10 px-3 py-1.5 text-sm font-medium text-success transition hover:bg-success/15"
-            >
-              <MessageCircle className="h-4 w-4" /> WhatsApp
-            </a>
-          )}
-          {cliente.email && (
-            <a
-              href={`mailto:${cliente.email}`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-muted"
-            >
-              <Mail className="h-4 w-4" /> Correo
-            </a>
-          )}
-          {membership && (
-            <EstadoBadge estado={membership.estado as MembershipEstado} />
-          )}
-        </div>
-      </div>
-
+      {vista === 'resumen' && (
       <div className="grid gap-6 lg:grid-cols-3">
         {/* QR + info */}
         <Card>
@@ -283,9 +315,10 @@ export default async function ClienteDetailPage({
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Vehicles */}
-      {cliente.vehiculos.length > 0 && (
+      {vista === 'resumen' && cliente.vehiculos.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Vehículos</CardTitle>
@@ -307,6 +340,7 @@ export default async function ClienteDetailPage({
       )}
 
       {/* Notas internas (CRM) */}
+      {vista === 'notas' && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -325,8 +359,10 @@ export default async function ClienteDetailPage({
           />
         </CardContent>
       </Card>
+      )}
 
       {/* Visits */}
+      {vista === 'visitas' && (
       <Card>
         <CardHeader>
           <CardTitle>Visitas recientes</CardTitle>
@@ -353,10 +389,15 @@ export default async function ClienteDetailPage({
           )}
         </CardContent>
       </Card>
+      )}
 
-      {/* Limpieza contable: anulación masiva de sus transacciones (cuentas de
-          prueba, montos erróneos). Disponible para el admin de la empresa. */}
-      <div className="rounded-2xl border border-warning/30 bg-warning/5 p-5">
+      {/* AJUSTES · Las operaciones destructivas viven en su propia pestaña.
+          Antes estaban en el mismo scroll que el teléfono del cliente: anular
+          todas sus transacciones o borrar su cuenta quedaba a un gesto de
+          distancia de leer un dato. Separarlas no las esconde —siguen a un
+          clic— pero deja de ponerlas en el camino de lectura. */}
+      {vista === 'ajustes' && (
+      <div className="rounded-xl border border-warning/40 bg-warning/5 p-5">
         <h2 className="text-sm font-semibold text-foreground">Limpieza contable</h2>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
           Si este cliente es una cuenta de <strong>prueba</strong> (o sus cobros
@@ -367,11 +408,12 @@ export default async function ClienteDetailPage({
         </p>
         <AnularTransaccionesClienteButton clienteId={cliente.id} nombre={cliente.nombre} />
       </div>
+      )}
 
       {/* Zona de peligro: eliminación definitiva, SOLO superadmin. Los admins
           de empresa no pueden borrar clientes (protección de datos/historial). */}
-      {user.metadata.role === 'SUPERADMIN' && (
-        <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5">
+      {vista === 'ajustes' && user.metadata.role === 'SUPERADMIN' && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
           <h2 className="text-sm font-semibold text-foreground">Zona de peligro</h2>
           <p className="mt-1 mb-4 text-sm text-muted-foreground">
             Elimina al cliente con sus membresías, QR, visitas y datos

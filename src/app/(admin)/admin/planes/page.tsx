@@ -77,9 +77,14 @@ export default async function PlanesPage() {
 
   return (
     <div className="space-y-6">
+      {/* §46 · Planes y Membresías se confundían porque sus cabeceras decían
+          casi lo mismo. Un plan es el PRODUCTO que la empresa vende; una
+          membresía es la instancia que un cliente compró. La descripción lo
+          dice explícitamente y cada una enlaza a la otra. */}
       <PageHeader
+        eyebrow="Producto"
         title="Planes"
-        description="Crea y administra los planes de membresía de tu empresa."
+        description="Lo que vendes. Define precio, usos y beneficios; los clientes los compran y se convierten en membresías."
         action={
           <div className="flex items-center gap-2">
             {empresa && (
