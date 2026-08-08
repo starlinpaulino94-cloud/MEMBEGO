@@ -10,6 +10,7 @@ import {
   ScanLine,
   Wallet,
   Building2,
+  Car,
   FlaskConical,
   Landmark,
   Package,
@@ -248,6 +249,10 @@ const CLIENTE_NAV: NavGroup[] = [
     label: 'Cuenta',
     items: [
       { href: '/cliente/perfil', label: 'Perfil', icon: User },
+      // Fase 7: entra al menú ahora que existe la pantalla. En la Fase 0 se
+      // quedó fuera a propósito — solo había `/cliente/vehiculos/nuevo` y
+      // enlazar a una página inexistente habría sido peor que no enlazar.
+      { href: '/cliente/vehiculos', label: 'Mis vehículos', icon: Car },
       { href: '/cliente/ayuda', label: 'Ayuda', icon: LifeBuoy },
     ],
   },
