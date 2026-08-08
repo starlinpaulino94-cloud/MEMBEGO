@@ -26,6 +26,22 @@
 -- Idempotente: se puede correr varias veces sin efecto.
 -- ============================================================================
 
+-- ── 0. Requisitos ───────────────────────────────────────────────────────────
+-- Este archivo TOCA columnas que crea la fase geo. Sin ellas el error que sale
+-- es `column "latitud" of relation "sucursales" does not exist`, que no dice
+-- nada útil. Mejor parar aquí con la instrucción exacta.
+DO $requisitos$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sucursales'
+       AND column_name = 'latitud'
+  ) THEN
+    RAISE EXCEPTION
+      'Falta la fase geo. Aplica primero prisma/migrations_manual/2026-08-geo-puesta-al-dia.sql y vuelve a correr este archivo.';
+  END IF;
+END $requisitos$;
+
 -- ── 1. Extensión (no-op si ya está) ─────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS postgis;
 

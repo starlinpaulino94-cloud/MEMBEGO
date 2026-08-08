@@ -34,6 +34,22 @@
 --    archivo. Se deja documentado aquí porque es el tipo de paso que se olvida.
 -- ============================================================================
 
+-- ── 0. Requisitos ───────────────────────────────────────────────────────────
+-- Sin las tablas de la fase geo sale `relation "saved_segments" does not
+-- exist`; sin el rol `membego_app` (Capa 2 de RLS sin instalar) sale un error
+-- de rol. Ninguno de los dos explica qué hacer, así que se comprueba antes.
+DO $requisitos$
+BEGIN
+  IF to_regclass('public.saved_segments') IS NULL THEN
+    RAISE EXCEPTION
+      'Falta la fase geo. Aplica primero prisma/migrations_manual/2026-08-geo-puesta-al-dia.sql y vuelve a correr este archivo.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'membego_app') THEN
+    RAISE EXCEPTION
+      'No existe el rol membego_app: la Capa 2 de RLS no está instalada en esta base. Este archivo no aplica todavía; aplica antes prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql.';
+  END IF;
+END $requisitos$;
+
 -- ── 1. Tablas de empresa: política de inquilino (companyId directa) ─────────
 DROP POLICY IF EXISTS membego_inquilino ON "saved_segments";
 CREATE POLICY membego_inquilino ON "saved_segments" FOR ALL TO membego_app
