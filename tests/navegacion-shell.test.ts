@@ -183,7 +183,7 @@ const RAICES = ['src', 'packages/ui/src']
 const MICRO = /text-\[(\d+(?:\.\d+)?)px\]/g
 
 /** Techo actual. Bajarlo conforme las fases vayan saldando la deuda. */
-const TECHO_MICRO_TEXTOS = 194
+const TECHO_MICRO_TEXTOS = 193
 
 function archivosTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {

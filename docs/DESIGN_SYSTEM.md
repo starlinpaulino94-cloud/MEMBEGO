@@ -348,7 +348,7 @@ verificar enlaces.
 | 5 | Cerca de mí, mapa | ✅ |
 | 6 | Wallet, membresías, beneficios, QR | ✅ |
 | 7 | Perfil, vehículos, ubicaciones | ✅ |
-| 8 | Dashboard administrativo | ⬜ |
+| 8 | Dashboard administrativo | ✅ |
 | 9 | Clientes, membresías, planes | ⬜ |
 | 10 | Promociones, crecimiento, referidos | ⬜ |
 | 11 | Marketing, campañas, audiencia | ⬜ |
