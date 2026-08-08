@@ -3,7 +3,8 @@ import { Store, AlertCircle, Search } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { getMisEmpresas } from '@/modules/social/queries'
 import { MisEmpresasList } from '@/components/cliente/MisEmpresasList'
-import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/system/EmptyState'
+import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
 
 export const dynamic = 'force-dynamic'
@@ -22,47 +23,40 @@ export default async function MisEmpresasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Mis empresas</h1>
-          <p className="text-muted-foreground">
-            Las empresas que sigues. Sus promociones y novedades llegan a ti
-            automáticamente.
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/cliente/explorar">
-            <Search className="mr-2 h-4 w-4" /> Descubrir empresas
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Mis empresas"
+        description="Las que sigues. Sus promociones y novedades te llegan solas."
+        action={
+          <Button asChild variant="outline">
+            <Link href="/cliente/explorar">
+              <Search aria-hidden /> Descubrir empresas
+            </Link>
+          </Button>
+        }
+      />
 
       {loadError ? (
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <AlertCircle className="h-8 w-8 text-destructive" />
-            <p className="font-medium text-foreground">
-              No pudimos cargar tus empresas.
-            </p>
+        <EmptyState
+          icon={AlertCircle}
+          title="No pudimos cargar tus empresas"
+          description="Hubo un problema de conexión. Vuelve a intentarlo en unos segundos."
+          action={
             <Button asChild variant="outline">
               <Link href="/cliente/empresas">Reintentar</Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : empresas.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 text-center text-muted-foreground">
-            <Store className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-            <p className="font-medium">Aún no sigues ninguna empresa</p>
-            <p className="text-sm">
-              Sigue empresas para recibir sus promociones, beneficios y
-              novedades sin buscarlas.
-            </p>
-            <Button asChild className="mt-4">
+        <EmptyState
+          icon={Store}
+          title="Aún no sigues ninguna empresa"
+          description="Sigue negocios para recibir sus promociones y novedades sin tener que buscarlas."
+          action={
+            <Button asChild size="lg">
               <Link href="/cliente/explorar">Explorar empresas</Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <MisEmpresasList empresas={empresas} />
       )}

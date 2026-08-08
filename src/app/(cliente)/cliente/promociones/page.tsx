@@ -20,7 +20,9 @@ import {
 } from '@/modules/social/queries'
 import { PromotionCard } from '@/components/public/PromotionCard'
 import { EmptyState } from '@/components/system/EmptyState'
-import { CompanyCard } from '@/components/public/CompanyCard'
+import { BusinessCard } from '@/components/marketplace/BusinessCard'
+import { PageHeader } from '@/components/ui/page-header'
+import { SectionHeader } from '@/components/ui/section-header'
 import { SavePromoButton } from '@/components/cliente/SavePromoButton'
 import { Button } from '@/components/ui/button'
 import type { PromotionPublic } from '@/modules/marketplace/types'
@@ -50,46 +52,41 @@ function PromoGridConGuardar({
   )
 }
 
+/**
+ * Sección del feed de ofertas.
+ *
+ * DS 2.0 · Fase 4: antes cada sección recibía su propio `iconBg` e `iconClass`
+ * y acababa eligiendo colores sueltos —`fill-rose-500`, `fill-amber-400`— sin
+ * más razón que decorar. Ahora el icono es siempre de marca y lo que distingue
+ * a una sección de otra es su TÍTULO, que es lo que la gente lee.
+ */
 function SeccionPromos({
   icon: Icon,
-  iconBg,
-  iconClass,
   titulo,
   descripcion,
-  count,
   promociones,
   guardadasIds,
 }: {
   icon: LucideIcon
-  iconBg: string
-  iconClass: string
   titulo: string
   descripcion?: string
-  count?: number
   promociones: PromotionPublic[]
   guardadasIds: Set<string>
 }) {
   if (promociones.length === 0) return null
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-3">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
-          <Icon className={`h-4.5 w-4.5 ${iconClass}`} />
-        </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-foreground">{titulo}</h2>
-            {count != null && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                {count}
-              </span>
-            )}
-          </div>
-          {descripcion && (
-            <p className="text-sm text-muted-foreground">{descripcion}</p>
-          )}
-        </div>
-      </div>
+    <section>
+      <SectionHeader
+        title={titulo}
+        description={descripcion}
+        action={
+          <span className="inline-flex items-center gap-1.5 text-caption">
+            <Icon className="h-4 w-4 text-primary" aria-hidden />
+            {promociones.length}
+            <span className="sr-only">ofertas</span>
+          </span>
+        }
+      />
       <PromoGridConGuardar promociones={promociones} guardadasIds={guardadasIds} />
     </section>
   )
@@ -122,29 +119,20 @@ export default async function PromocionesDisponiblesPage() {
     feed.recomendadas.length === 0
 
   return (
-    <main className="container max-w-5xl py-8">
-      {/* ── Cabecera ──────────────────────────────────────────────────────── */}
-      <header className="mb-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
-              Beneficios
-            </p>
-            <h1 className="mt-1.5 text-h1 tracking-tight text-foreground">
-              Ofertas para ti
-            </h1>
-            <p className="mt-1 text-small text-muted-foreground">
-              Lo de tus empresas favoritas primero. Todo canjeable con tu QR.
-            </p>
-          </div>
-          <Button asChild variant="outline" className="shrink-0">
+    <div>
+      <PageHeader
+        eyebrow="Beneficios"
+        title="Ofertas para ti"
+        description="Lo de tus empresas favoritas primero. Todo canjeable con tu QR."
+        action={
+          <Button asChild variant="outline">
             <Link href="/cliente/explorar">
-              <Compass className="mr-2 h-4 w-4" />
+              <Compass aria-hidden />
               Explorar empresas
             </Link>
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       {loadError || feed == null ? (
         <EmptyState
@@ -162,10 +150,7 @@ export default async function PromocionesDisponiblesPage() {
           {/* Guardadas */}
           <SeccionPromos
             icon={Heart}
-            iconBg="bg-destructive/10"
-            iconClass="fill-rose-500 text-destructive"
             titulo="Guardadas"
-            count={guardadas.length}
             promociones={guardadas}
             guardadasIds={guardadasIds}
           />
@@ -173,11 +158,8 @@ export default async function PromocionesDisponiblesPage() {
           {/* Mis empresas: donde soy cliente + las que sigo */}
           <SeccionPromos
             icon={Star}
-            iconBg="bg-warning/12"
-            iconClass="fill-amber-400 text-warning-foreground"
             titulo="De tus empresas"
             descripcion="Donde eres cliente y las que sigues. Tus favoritas primero."
-            count={feed.misEmpresas.length}
             promociones={feed.misEmpresas}
             guardadasIds={guardadasIds}
           />
@@ -185,10 +167,7 @@ export default async function PromocionesDisponiblesPage() {
           {/* Destacadas */}
           <SeccionPromos
             icon={Flame}
-            iconBg="bg-warning/12"
-            iconClass="text-warning-foreground"
             titulo="Destacadas"
-            count={feed.destacadas.length}
             promociones={feed.destacadas}
             guardadasIds={guardadasIds}
           />
@@ -196,11 +175,8 @@ export default async function PromocionesDisponiblesPage() {
           {/* Nuevas */}
           <SeccionPromos
             icon={Sparkles}
-            iconBg="bg-primary/10"
-            iconClass="text-primary"
             titulo="Nuevas"
             descripcion="Publicadas en los últimos 14 días."
-            count={feed.nuevas.length}
             promociones={feed.nuevas}
             guardadasIds={guardadasIds}
           />
@@ -208,11 +184,8 @@ export default async function PromocionesDisponiblesPage() {
           {/* Expiran pronto */}
           <SeccionPromos
             icon={Clock}
-            iconBg="bg-destructive/10"
-            iconClass="text-destructive"
             titulo="Expiran pronto"
             descripcion="Aprovéchalas antes de que venzan."
-            count={feed.expiranPronto.length}
             promociones={feed.expiranPronto}
             guardadasIds={guardadasIds}
           />
@@ -220,11 +193,8 @@ export default async function PromocionesDisponiblesPage() {
           {/* Recomendadas */}
           <SeccionPromos
             icon={ThumbsUp}
-            iconBg="bg-primary/10"
-            iconClass="text-primary"
             titulo="Recomendadas para ti"
             descripcion="De empresas parecidas a las que sigues."
-            count={feed.recomendadas.length}
             promociones={feed.recomendadas}
             guardadasIds={guardadasIds}
           />
@@ -245,34 +215,42 @@ export default async function PromocionesDisponiblesPage() {
 
           {/* Descubrir empresas */}
           {feed.empresasRecomendadas.length > 0 && (
-            <section className="space-y-4">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                    <Compass className="h-4.5 w-4.5 text-primary" />
-                  </span>
-                  <div>
-                    <h2 className="text-base font-bold text-foreground">
-                      Descubrir empresas
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      También podrían interesarte.
-                    </p>
-                  </div>
-                </div>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/cliente/explorar">Ver todas</Link>
-                </Button>
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <section>
+              <SectionHeader
+                title="Descubrir empresas"
+                description="También podrían interesarte."
+                action={
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href="/cliente/explorar">Ver todas</Link>
+                  </Button>
+                }
+              />
+              <ul className="grid gap-3 sm:grid-cols-2">
                 {feed.empresasRecomendadas.map((c) => (
-                  <CompanyCard key={c.id} company={c} hrefBase="/cliente/empresas" />
+                  <li key={c.id} className="flex">
+                    <BusinessCard
+                      variant="compact"
+                      hrefBase="/cliente/empresas"
+                      className="w-full"
+                      company={{
+                        id: c.id,
+                        name: c.name,
+                        slug: c.slug,
+                        type: c.type,
+                        logoUrl: c.logoUrl,
+                        bannerUrl: c.bannerUrl,
+                        ciudad: c.ciudad,
+                        activePromotionsCount: c.activePromotionsCount,
+                        totalMembersCount: c.totalMembersCount,
+                      }}
+                    />
+                  </li>
                 ))}
-              </div>
+              </ul>
             </section>
           )}
         </div>
       )}
-    </main>
+    </div>
   )
 }

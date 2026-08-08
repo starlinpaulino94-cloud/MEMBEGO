@@ -39,6 +39,12 @@ import { Button } from '@membego/ui/ui/button'    // ← equivalente (4 usos)
 existe como carpeta** — es un alias. El paquete se publica aparte para que la
 futura app móvil consuma los mismos componentes y los mismos tokens.
 
+**Dos capas, una frontera:** en `packages/ui` van los *primitives*, que no
+dependen de ningún framework — por eso `TabsNav` recibe un `render` en vez de
+usar `next/link`. En `src/components` van los *componentes de producto*, que sí
+conocen la aplicación (`BusinessCard` necesita `next/image`). Los de producto se
+apoyan en los primitives y en los tokens; nunca al revés.
+
 Los valores de diseño viven en dos sitios que **deben mantenerse sincronizados**:
 
 | Archivo | Para qué |
@@ -194,6 +200,9 @@ Lucide, sistema único. Tamaños normalizados:
   de una tarjeta o tabla que ya tiene borde) y `card` (cuando el vacío ES la
   pantalla).
 - **StatCard** — KPIs. No inventar tarjetas de métricas nuevas.
+- **BusinessCard** — la ÚNICA tarjeta de negocio, en
+  `src/components/marketplace/`. Variantes `standard | compact | featured |
+  map`. Admite distancia y abierto/cerrado cuando quien la usa los conoce.
 - **DataTable** — base de todas las tablas. Extenderla, no reimplementarla.
 - **PageHeader** — cabecera de pantalla: el **único `h1`**. Admite `eyebrow`
   (contexto o vuelta al listado) y `nav` (pestañas de la sección). El título no
@@ -325,7 +334,7 @@ verificar enlaces.
 | 1 | Shell global: sidebar, header, layouts | ✅ |
 | 2 | Auth, login, registro, onboarding interactivo | ✅ |
 | 3 | Home del cliente | ✅ |
-| 4 | Explorar, empresas, promociones | ⬜ |
+| 4 | Explorar, empresas, promociones | ✅ |
 | 5 | Cerca de mí, mapa | ⬜ |
 | 6 | Wallet, membresías, beneficios, QR | ⬜ |
 | 7 | Perfil, vehículos, ubicaciones | ⬜ |

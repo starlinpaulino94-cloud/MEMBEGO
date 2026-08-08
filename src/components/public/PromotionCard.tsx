@@ -41,8 +41,8 @@ export function PromotionCard({
   if (variant === 'compact') {
     return (
       <Link href={detalleHref(hrefBase, promotion.id, retorno)} className="group block">
-        <div className="card-interactive overflow-hidden rounded-2xl border border-border/60 bg-card">
-          <div className="relative h-24 w-full overflow-hidden bg-gradient-to-br from-blue-600 to-sky-500">
+        <div className="card-interactive overflow-hidden rounded-xl border border-border bg-card">
+          <div className="relative h-24 w-full overflow-hidden bg-gradient-brand">
             {promotion.imagenUrl ? (
               <Image
                 src={promotion.imagenUrl}
@@ -52,11 +52,11 @@ export function PromotionCard({
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
-                <Gift className="h-6 w-6 text-white/60" />
+                <Gift className="h-6 w-6 text-white/70" aria-hidden />
               </div>
             )}
             {promotion.descuento && (
-              <span className="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-0.5 text-xs font-bold text-info shadow-sm">
+              <span className="absolute right-2 top-2 rounded-full bg-card px-2 py-0.5 text-caption font-bold text-primary elevation-1">
                 {formatDescuento(promotion.descuento, promotion.tipo)}
               </span>
             )}
@@ -85,9 +85,9 @@ export function PromotionCard({
   // protagonista, urgencia con contador y CTA gigante siempre visible.
   return (
     <Link href={detalleHref(hrefBase, promotion.id, retorno)} className="group block h-full">
-      <div className="card-interactive relative flex h-full flex-col overflow-hidden rounded-3xl border border-border/60 bg-card">
+      <div className="card-interactive relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
         {/* Imagen protagonista */}
-        <div className="relative h-44 w-full overflow-hidden bg-gradient-to-br from-rose-500 via-orange-500 to-amber-500">
+        <div className="relative h-44 w-full overflow-hidden bg-gradient-brand">
           {promotion.imagenUrl ? (
             <Image
               src={promotion.imagenUrl}
@@ -99,7 +99,7 @@ export function PromotionCard({
             <>
               <div className="absolute inset-0 bg-grid-light opacity-50" />
               <div className="absolute inset-0 flex items-center justify-center">
-                <Gift className="h-10 w-10 text-white/50" />
+                <Gift className="h-10 w-10 text-white/60" aria-hidden />
               </div>
             </>
           )}
@@ -108,7 +108,7 @@ export function PromotionCard({
 
           {/* Descuento: protagonista del anuncio */}
           {promotion.descuento && !isExpired && (
-            <span className="absolute left-3 top-3 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 px-3 py-1.5 text-lg font-black tracking-tight text-white shadow-glow">
+            <span className="absolute left-3 top-3 rounded-lg bg-primary px-3 py-1.5 text-h3 font-black tracking-tight text-primary-foreground elevation-2">
               {formatDescuento(promotion.descuento, promotion.tipo)}
             </span>
           )}
@@ -116,34 +116,34 @@ export function PromotionCard({
           {/* Badges de estado (derecha) */}
           <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
             {promotion.isFeatured && !isExpired && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning px-2.5 py-1 text-caption font-bold uppercase tracking-wide text-warning-foreground">
                 <Star className="h-3 w-3 fill-current" aria-hidden /> Patrocinada
               </span>
             )}
             {porVencer && (
-              <span className="animate-pulse rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm [animation-duration:2s]">
+              <span className="rounded-full bg-destructive px-2.5 py-1 text-caption font-bold uppercase tracking-wide text-white">
                 Por vencer
               </span>
             )}
             {agotada && !isExpired && (
-              <span className="rounded-full bg-slate-800/90 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+              <span className="rounded-full bg-foreground/85 px-2.5 py-1 text-caption font-bold uppercase tracking-wide text-background">
                 Agotada
               </span>
             )}
           </div>
 
           {/* Empresa: chip glass sobre la imagen */}
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-white/90 py-1 pl-1 pr-3 shadow-sm backdrop-blur">
+          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-card/90 py-1 pl-1 pr-3 backdrop-blur elevation-1">
             {promotion.company.logoUrl ? (
               <span className="relative block h-5 w-5 overflow-hidden rounded-full">
                 <Image src={promotion.company.logoUrl} alt="" fill className="object-cover" />
               </span>
             ) : (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[12px] font-bold leading-none text-primary-foreground">
                 {promotion.company.name.slice(0, 1).toUpperCase()}
               </span>
             )}
-            <span className="max-w-36 truncate text-xs font-medium text-slate-900">
+            <span className="max-w-36 truncate text-caption font-medium text-foreground">
               {promotion.company.name}
             </span>
           </div>
@@ -151,7 +151,7 @@ export function PromotionCard({
           {/* Expirada */}
           {isExpired && (
             <div className="absolute inset-0 flex items-center justify-center bg-foreground/55 backdrop-blur-[2px]">
-              <span className="rounded-full border border-white/30 px-4 py-1.5 text-sm font-semibold text-white">
+              <span className="rounded-full border border-white/40 px-4 py-1.5 text-small font-semibold text-white">
                 Expirada
               </span>
             </div>
@@ -160,7 +160,7 @@ export function PromotionCard({
 
         {/* Contenido */}
         <div className="flex flex-1 flex-col p-5">
-          <h3 className="line-clamp-2 text-[17px] font-bold leading-snug tracking-tight text-foreground">
+          <h3 className="line-clamp-2 text-h3 text-foreground">
             {promotion.titulo}
           </h3>
 
@@ -192,8 +192,8 @@ export function PromotionCard({
               <PromoCountdown hasta={promotion.vigenciaHasta} />
             ) : promotion.vigenciaHasta ? (
               <span
-                className={`inline-flex items-center gap-1.5 text-xs ${
-                  isExpired ? 'font-medium text-destructive' : 'text-muted-foreground'
+                className={`inline-flex items-center gap-1.5 text-caption ${
+                  isExpired ? 'font-medium text-destructive' : ''
                 }`}
               >
                 <Clock className="h-3.5 w-3.5" aria-hidden />
@@ -205,12 +205,10 @@ export function PromotionCard({
           {/* CTA gigante, siempre visible (no solo al hover) */}
           <div className="mt-auto pt-4">
             <span
-              className={`inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-2xl text-sm font-bold text-white shadow-md transition group-hover:opacity-95 group-active:scale-[0.99] ${
+              className={`inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-lg text-small font-bold transition group-hover:opacity-90 group-active:scale-[0.99] ${
                 isExpired || agotada
-                  ? 'bg-slate-400'
-                  : promotion.descuento
-                    ? 'bg-gradient-to-r from-rose-500 to-orange-500'
-                    : 'bg-gradient-to-r from-primary to-teal-400'
+                  ? 'bg-muted text-muted-foreground'
+                  : 'bg-primary text-primary-foreground'
               }`}
             >
               {isExpired ? 'Ver detalle' : agotada ? 'Agotada · ver detalle' : 'Aprovechar ahora'}
