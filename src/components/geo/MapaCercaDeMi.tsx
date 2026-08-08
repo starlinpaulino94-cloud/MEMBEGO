@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/system/EmptyState'
+import { MobileBottomSheet } from '@/components/ui/mobile-bottom-sheet'
 import { cn } from '@/lib/utils'
 import { formatearDistancia } from '@/modules/geo/cercanos/distancia'
 import { aceptarConsentimientoGeo } from '@/modules/geo/consentimiento/actions'
@@ -91,6 +92,8 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   const [seleccionado, setSeleccionado] = useState<string | null>(null)
   const [usandoGPS, setUsandoGPS] = useState(false)
   const [mapListo, setMapListo] = useState(false)
+  /** Hoja inferior (solo móvil): asomada por defecto, para que el mapa mande. */
+  const [hojaAbierta, setHojaAbierta] = useState(false)
 
   // Búsqueda de zona (MANUAL)
   const [busqueda, setBusqueda] = useState('')
@@ -420,10 +423,16 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
-      {/* ── Mapa ──────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-3xl border border-border/70 shadow-card">
-        <div ref={containerRef} className="h-[52vh] min-h-[340px] w-full lg:h-[calc(100vh-260px)]" />
+    <div className="lg:grid lg:gap-4 lg:px-8 lg:py-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+      {/* ── Mapa ──────────────────────────────────────────────────────────────
+          En móvil ocupa el alto útil completo (menos el header del shell y la
+          barra inferior) y sin bordes: es la pantalla. En escritorio vuelve a
+          ser un panel con su tarjeta al lado. */}
+      <section className="relative overflow-hidden lg:rounded-xl lg:border lg:border-border">
+        <div
+          ref={containerRef}
+          className="h-[calc(100svh-3.5rem-4.5rem)] w-full lg:h-[calc(100vh-8rem)]"
+        />
 
         {/* Selector de contexto (pills sobre el mapa) */}
         <div className="absolute left-3 top-3 z-[500] flex flex-wrap gap-2">
@@ -432,7 +441,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
               type="button"
               onClick={usarVivienda}
               className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-md backdrop-blur transition',
+                'flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-small font-semibold elevation-2 backdrop-blur transition',
                 contexto === 'HOME' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card/95 text-foreground'
               )}
             >
@@ -444,7 +453,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
             onClick={usarUbicacionActual}
             disabled={usandoGPS}
             className={cn(
-              'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-md backdrop-blur transition disabled:opacity-60',
+              'flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-small font-semibold elevation-2 backdrop-blur transition disabled:opacity-60',
               contexto === 'CURRENT' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card/95 text-foreground'
             )}
           >
@@ -492,7 +501,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
                     <MapPin className="h-4 w-4 shrink-0 text-primary" />
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{s.etiqueta}</span>
-                      <span className="block text-xs capitalize text-muted-foreground">{s.tipo}</span>
+                      <span className="block text-caption capitalize">{s.tipo}</span>
                     </span>
                   </button>
                 </li>
@@ -503,14 +512,14 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
 
         {/* Radio (zoom) */}
         {ubicacion && (
-          <div className="absolute bottom-3 left-1/2 z-[500] flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-full border border-border/70 bg-card/95 p-1 shadow-md backdrop-blur">
+          <div className="absolute bottom-3 left-1/2 z-[500] flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-full border border-border bg-card/95 p-1 elevation-2 backdrop-blur">
             {RADIOS.map((km) => (
               <button
                 key={km}
                 type="button"
                 onClick={() => aplicarRadio(km)}
                 className={cn(
-                  'rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
+                  'min-h-9 rounded-full px-3 text-caption font-semibold transition',
                   radioKm === km ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -521,7 +530,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
               type="button"
               onClick={() => aplicarRadio(null)}
               className={cn(
-                'rounded-full px-2.5 py-1 text-[11px] font-semibold transition',
+                'min-h-9 rounded-full px-3 text-caption font-semibold transition',
                 radioKm === null ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -532,9 +541,9 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
 
         {/* Estado: consentimiento / errores */}
         {error?.codigo === 'consentimiento_requerido' && (
-          <div className="absolute inset-x-3 bottom-16 z-[500] mx-auto max-w-md rounded-2xl border border-border/70 bg-card/95 p-4 shadow-xl backdrop-blur">
+          <div className="absolute inset-x-3 bottom-16 z-[500] mx-auto max-w-md rounded-xl border border-border bg-card/95 p-4 elevation-3 backdrop-blur">
             <p className="text-sm font-semibold">Autoriza el uso de tu ubicación</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-caption">
               Solo usamos tu ubicación para mostrarte negocios cercanos. Nunca la compartimos con otras empresas.
             </p>
             <div className="mt-3 flex gap-2">
@@ -544,14 +553,15 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           </div>
         )}
         {error && error.codigo !== 'consentimiento_requerido' && (
-          <div className="absolute inset-x-3 bottom-16 z-[500] mx-auto max-w-md rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground shadow-xl backdrop-blur">
+          <div className="absolute inset-x-3 bottom-16 z-[500] mx-auto max-w-md rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-warning-foreground elevation-3 backdrop-blur">
             {error.mensaje}
           </div>
         )}
       </section>
 
-      {/* ── Filtros + Lista ─────────────────────────────────────────────────── */}
-      <section className="flex flex-col gap-3">
+      {/* ── Filtros + Lista ───────────────────────────────────────────────────
+          Escritorio: columna fija al lado del mapa. */}
+      <section className="hidden flex-col gap-3 lg:flex">
         <div className="flex flex-wrap gap-2">
           {FILTROS.map((f) => (
             <button
@@ -559,7 +569,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
               type="button"
               onClick={() => toggleFiltro(f.key)}
               className={cn(
-                'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                'inline-flex min-h-11 items-center rounded-full border px-3.5 text-small font-semibold transition',
                 filtros[f.key]
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-border bg-card text-muted-foreground hover:text-foreground'
@@ -579,7 +589,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
               </span>
             )}
           </p>
-          <p className="shrink-0 text-xs text-muted-foreground">
+          <p className="shrink-0 text-caption">
             {cargando ? 'Actualizando…' : `${resultados.length} negocio${resultados.length === 1 ? '' : 's'}`}
           </p>
         </div>
@@ -599,74 +609,144 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           </ul>
         )}
       </section>
+
+      {/* ── Móvil: los mismos resultados, en hoja inferior ───────────────── */}
+      <MobileBottomSheet
+        abierta={hojaAbierta}
+        onToggle={setHojaAbierta}
+        titulo="Negocios cerca"
+        resumen={
+          cargando
+            ? 'Actualizando…'
+            : `${resultados.length} ${resultados.length === 1 ? 'resultado' : 'resultados'}`
+        }
+      >
+        {resultados.length === 0 && !cargando && !error ? (
+          <p className="py-6 text-center text-small text-muted-foreground">
+            Sin negocios aquí. Muévete en el mapa o quita filtros.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2.5 pb-4">
+            {resultados.map((s) => (
+              <TarjetaNegocio
+                key={s.id}
+                s={s}
+                activa={seleccionado === s.id}
+                onAbrir={(x) => {
+                  marcarEnMapa(x)
+                  setHojaAbierta(false)
+                }}
+              />
+            ))}
+          </ul>
+        )}
+      </MobileBottomSheet>
     </div>
   )
 }
 
-function TarjetaNegocio({ s, activa, onAbrir }: { s: SucursalCercana; activa: boolean; onAbrir: (s: SucursalCercana) => void }) {
+/**
+ * Resultado del mapa.
+ *
+ * NO usa `BusinessCard`: esto es una SUCURSAL, no una empresa. Lleva distancia
+ * al punto activo, si está abierta ahora, su oferta destacada y dos acciones
+ * propias —centrarla en el mapa y cómo llegar—. Forzarla dentro de la tarjeta
+ * de empresa habría sido deformar las dos.
+ */
+function TarjetaNegocio({
+  s,
+  activa,
+  onAbrir,
+}: {
+  s: SucursalCercana
+  activa: boolean
+  onAbrir: (s: SucursalCercana) => void
+}) {
+  // Deja que el sistema operativo elija su app de mapas; en escritorio abre
+  // Google Maps. Con nombre además de coordenadas, el destino se reconoce.
+  const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${s.latitud},${s.longitud}&destination_place_id=`
+
   return (
     <li
       id={`cercano-${s.id}`}
       className={cn(
-        'flex items-start gap-3 rounded-2xl border bg-card p-3 shadow-card transition',
-        activa ? 'border-primary/60 ring-2 ring-primary/15' : 'border-border/70 hover:border-border'
+        'rounded-xl border bg-card p-3 transition',
+        activa ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/40'
       )}
     >
-      <Link href={s.urlDetalle} className="flex min-w-0 flex-1 items-start gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted text-sm font-bold">
-          {s.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.logoUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            s.empresaNombre.charAt(0).toUpperCase()
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-semibold text-foreground">{s.empresaNombre}</p>
-            {s.promedioRating !== null && (
-              <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                <Star className="h-3 w-3 fill-warning text-warning" />
-                {s.promedioRating.toFixed(1)}
-              </span>
+      <div className="flex items-start gap-3">
+        <Link href={s.urlDetalle} className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted text-small font-bold">
+            {s.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.logoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              s.empresaNombre.charAt(0).toUpperCase()
             )}
           </div>
-          <p className="truncate text-xs text-muted-foreground">
-            {s.sector ?? s.ciudad ?? s.direccion ?? s.nombre}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary" className="text-[10px]">{formatearDistancia(s.distanciaM)}</Badge>
-            {s.abierto === true && (
-              <Badge variant="success" className="text-[10px]">
-                <Clock className="h-3 w-3" /> Abierto
-              </Badge>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-h4 text-foreground">{s.empresaNombre}</p>
+              {s.promedioRating !== null && (
+                <span className="inline-flex shrink-0 items-center gap-0.5 text-caption tabular-nums">
+                  <Star className="h-3.5 w-3.5 fill-warning text-warning" aria-hidden />
+                  {s.promedioRating.toFixed(1)}
+                </span>
+              )}
+            </div>
+            <p className="truncate text-caption">
+              {s.sector ?? s.ciudad ?? s.direccion ?? s.nombre}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge variant="secondary">{formatearDistancia(s.distanciaM)}</Badge>
+              {s.abierto === true && (
+                <Badge variant="success">
+                  <Clock className="h-3 w-3" aria-hidden /> Abierto
+                </Badge>
+              )}
+              {s.abierto === false && <Badge variant="outline">Cerrado</Badge>}
+              {s.cantidadOfertas > 0 && (
+                <Badge variant="warning">
+                  {s.cantidadOfertas} oferta{s.cantidadOfertas > 1 ? 's' : ''}
+                </Badge>
+              )}
+              {s.esFavorita && <Badge variant="info">Favorita</Badge>}
+            </div>
+            {s.ofertaDestacada && (
+              <p className="mt-1.5 truncate text-caption font-medium text-primary">
+                {s.ofertaDestacada}
+              </p>
             )}
-            {s.abierto === false && <Badge variant="outline" className="text-[10px]">Cerrado</Badge>}
-            {s.cantidadOfertas > 0 && (
-              <Badge variant="warning" className="text-[10px]">
-                {s.cantidadOfertas} oferta{s.cantidadOfertas > 1 ? 's' : ''}
-              </Badge>
-            )}
-            {s.esFavorita && <Badge variant="info" className="text-[10px]">Favorita</Badge>}
           </div>
-          {s.ofertaDestacada && (
-            <p className="mt-1.5 truncate text-xs font-medium text-primary">{s.ofertaDestacada}</p>
-          )}
-        </div>
-      </Link>
-      <button
-        type="button"
-        data-mapa
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          onAbrir(s)
-        }}
-        className="shrink-0 rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-primary"
-        aria-label={`Ver ${s.empresaNombre} en el mapa`}
+        </Link>
+
+        <button
+          type="button"
+          data-mapa
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onAbrir(s)
+          }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-primary"
+          aria-label={`Centrar ${s.empresaNombre} en el mapa`}
+        >
+          <MapPin className="h-5 w-5" aria-hidden />
+        </button>
+      </div>
+
+      {/* Cómo llegar: la acción que faltaba. Un mapa sin ruta obliga a copiar
+          la dirección a mano y salir de la aplicación por su cuenta. */}
+      <a
+        href={comoLlegar}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2.5 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-border text-small font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <MapPin className="h-4 w-4" />
-      </button>
+        <Navigation className="h-4 w-4 text-primary" aria-hidden />
+        Cómo llegar
+        <span className="sr-only"> a {s.empresaNombre} (se abre en otra pestaña)</span>
+      </a>
     </li>
   )
 }

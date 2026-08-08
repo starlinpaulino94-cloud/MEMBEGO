@@ -211,6 +211,9 @@ Lucide, sistema único. Tamaños normalizados:
   componer a mano un flex con un `h2` de tamaño propio.
 - **TabsNav** — navegación secundaria de una sección. No trae router: cada
   pestaña se pinta con `render`, así sirve para enlaces o estado local.
+- **MobileBottomSheet** — lista que convive con un mapa a pantalla completa.
+  Dos estados (asomada / abierta) y un tirador que es un botón real; **no** es
+  un diálogo, porque el mapa de detrás sigue siendo interactivo.
 
 ## Shell global
 
@@ -234,6 +237,10 @@ La convención vive en `AppShell`, no en cada pantalla:
 **Una pantalla no declara su propio `max-w-*` ni su padding lateral.** Si lo
 hace, se desalinea con el resto del producto. Lo que sí decide cada pantalla es
 la separación entre sus secciones: `space-y-8`.
+
+Única excepción: una experiencia **a sangre**, como el mapa de "Cerca de mí".
+Ahí la pantalla cancela el padding del shell con márgenes negativos que
+replican sus valores exactos — si el shell cambia, esa pantalla también.
 
 ### Contexto: ¿dónde estoy?
 
@@ -335,7 +342,7 @@ verificar enlaces.
 | 2 | Auth, login, registro, onboarding interactivo | ✅ |
 | 3 | Home del cliente | ✅ |
 | 4 | Explorar, empresas, promociones | ✅ |
-| 5 | Cerca de mí, mapa | ⬜ |
+| 5 | Cerca de mí, mapa | ✅ |
 | 6 | Wallet, membresías, beneficios, QR | ⬜ |
 | 7 | Perfil, vehículos, ubicaciones | ⬜ |
 | 8 | Dashboard administrativo | ⬜ |

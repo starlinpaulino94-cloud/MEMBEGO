@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { MapPin, Gift, Users, Star, Navigation } from 'lucide-react'
+import { MapPin, Gift, Users, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoney } from '@/lib/format'
 
@@ -18,9 +18,6 @@ import { formatMoney } from '@/lib/format'
  * `render` justo para eso—, y esta tarjeta necesita `next/link` y
  * `next/image` para funcionar bien. Es un componente de PRODUCTO: se apoya en
  * los tokens y los primitives, pero conoce la aplicación. Esa es la frontera.
- *
- * Los datos opcionales (distancia, abierto/cerrado) tienen hueco pero no se
- * inventan: los rellena quien los tenga — el mapa en la Fase 5.
  */
 
 export interface BusinessCardData {
@@ -47,17 +44,20 @@ const TIPO_LABEL: Record<string, string> = {
   salon: 'Salón',
 }
 
-export type BusinessCardVariant = 'standard' | 'compact' | 'featured' | 'map'
+/**
+ * `map` se creó en la Fase 4 pensando en los resultados del mapa y se retiró
+ * en la Fase 5 al construirlos: un resultado del mapa es una SUCURSAL —con
+ * distancia, si está abierta ahora y su propia acción de cómo llegar—, no una
+ * empresa. Tiene su tarjeta en `MapaCercaDeMi`. Mejor dos piezas honestas que
+ * una deformada para cubrir las dos.
+ */
+export type BusinessCardVariant = 'standard' | 'compact' | 'featured'
 
 interface BusinessCardProps {
   company: BusinessCardData
   /** Base de la ruta del perfil: '/empresas' en público, '/cliente/empresas' dentro. */
   hrefBase?: string
   variant?: BusinessCardVariant
-  /** Distancia en km, cuando se conoce (mapa, "cerca de mí"). */
-  distanciaKm?: number | null
-  /** Estado de apertura, cuando hay horario fiable. */
-  abierto?: boolean | null
   /** Acción secundaria: seguir, guardar… Se pinta fuera del enlace. */
   action?: React.ReactNode
   className?: string
@@ -96,16 +96,8 @@ function Logo({
   )
 }
 
-/** Metadatos de una línea: tipo · ciudad · distancia · abierto. */
-function Meta({
-  company,
-  distanciaKm,
-  abierto,
-}: {
-  company: BusinessCardData
-  distanciaKm?: number | null
-  abierto?: boolean | null
-}) {
+/** Metadatos de una línea: tipo · ciudad. */
+function Meta({ company }: { company: BusinessCardData }) {
   return (
     <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-caption">
       <span>{TIPO_LABEL[company.type] ?? company.type}</span>
@@ -115,26 +107,6 @@ function Meta({
           <span className="inline-flex items-center gap-1">
             <MapPin className="h-3.5 w-3.5" aria-hidden />
             {company.ciudad}
-          </span>
-        </>
-      )}
-      {typeof distanciaKm === 'number' && (
-        <>
-          <span aria-hidden>·</span>
-          <span className="inline-flex items-center gap-1 tabular-nums">
-            <Navigation className="h-3.5 w-3.5" aria-hidden />
-            {distanciaKm < 1
-              ? `${Math.round(distanciaKm * 1000)} m`
-              : `${distanciaKm.toFixed(1)} km`}
-          </span>
-        </>
-      )}
-      {abierto !== null && abierto !== undefined && (
-        <>
-          <span aria-hidden>·</span>
-          {/* El estado no va solo en color: lleva su palabra. */}
-          <span className={abierto ? 'font-medium text-success' : 'font-medium'}>
-            {abierto ? 'Abierto' : 'Cerrado'}
           </span>
         </>
       )}
@@ -177,8 +149,6 @@ export function BusinessCard({
   company,
   hrefBase = '/empresas',
   variant = 'standard',
-  distanciaKm,
-  abierto,
   action,
   className,
 }: BusinessCardProps) {
@@ -186,7 +156,7 @@ export function BusinessCard({
   const precio = company.desdePlan
 
   // ── compact: filas de lista, resultados del mapa, carriles ────────────────
-  if (variant === 'compact' || variant === 'map') {
+  if (variant === 'compact') {
     return (
       <div
         className={cn(
@@ -205,7 +175,7 @@ export function BusinessCard({
             <span className="absolute inset-0" aria-hidden />
             <h3 className="truncate text-h4 text-foreground">{company.name}</h3>
           </Link>
-          <Meta company={company} distanciaKm={distanciaKm} abierto={abierto} />
+          <Meta company={company} />
         </div>
         {precio && (
           <div className="shrink-0 text-right">
@@ -260,7 +230,7 @@ export function BusinessCard({
                   {company.name}
                 </Link>
               </h3>
-              <Meta company={company} distanciaKm={distanciaKm} abierto={abierto} />
+              <Meta company={company} />
             </div>
           </div>
           {precio && (
