@@ -81,12 +81,19 @@ export function SelectorUbicacionVivienda({
   onChange,
   onDone,
   oscuro = false,
+  sinEncabezado = false,
 }: {
   value: UbicacionSeleccionada
   onChange: (v: UbicacionSeleccionada) => void
   onDone: () => void
   /** Estilo del asistente de registro (fondo oscuro); por defecto claro. */
   oscuro?: boolean
+  /**
+   * El contenedor ya pone su propio título y su nota de "es opcional" (así lo
+   * hace el asistente de registro). Con esto no se repiten: en la pantalla de
+   * país se veía "¿Dónde vives?" dos veces seguidas.
+   */
+  sinEncabezado?: boolean
 }) {
   const [mini, setMini] = useState<MiniPaso>('pais')
   const [d, setD] = useState<UbicacionSeleccionada>(value)
@@ -97,8 +104,14 @@ export function SelectorUbicacionVivienda({
    * de esta caché en vez de escribirse desde el efecto. Dos razones: el
    * indicador de carga ya no provoca un render en cascada, y volver atrás en
    * los mini-pasos no vuelve a pedir lo que ya se pidió.
+   *
+   * `'error'` se guarda aparte de la lista vacía A PROPÓSITO: "el catálogo no
+   * tiene tu ciudad" y "no pudimos hablar con el servidor" piden cosas
+   * distintas de la persona (escribirla a mano vs. reintentar). Meterlos en el
+   * mismo saco dejaba al usuario mirando "Sin resultados" sin salida.
    */
-  const [listas, setListas] = useState<Record<string, Opcion[]>>({})
+  type EstadoLista = Opcion[] | 'error'
+  const [listas, setListas] = useState<Record<string, EstadoLista>>({})
 
   const [busqueda, setBusqueda] = useState('')
   const [manual, setManual] = useState(false)
@@ -135,30 +148,40 @@ export function SelectorUbicacionVivienda({
         : claveLista.startsWith('sector:')
           ? listarSectoresDeCiudad(idPadre)
           : listarPaisesOperativos()
-    const guardar = (rs: Opcion[]) => {
+    const guardar = (rs: EstadoLista) => {
       if (activo) setListas((prev) => ({ ...prev, [claveLista]: rs }))
     }
-    // Un fallo del catálogo no bloquea el registro: lista vacía y el usuario
-    // sigue con "escribir otra" u "omitir" (la ubicación nunca es obligatoria).
-    pedir.then(guardar).catch(() => guardar([]))
+    pedir.then(guardar).catch(() => guardar('error'))
     return () => {
       activo = false
     }
   }, [claveLista, listas])
 
+  const estado = claveLista ? listas[claveLista] : undefined
   /** Cargando = el paso pide catálogo y su lista todavía no llegó. */
-  const cargando = claveLista !== null && listas[claveLista] === undefined
+  const cargando = claveLista !== null && estado === undefined
+  const fallo = estado === 'error'
+
+  /** Vuelve a pedir la lista de este paso (olvida lo cacheado). */
+  function reintentar() {
+    if (!claveLista) return
+    setListas((prev) => {
+      const siguiente = { ...prev }
+      delete siguiente[claveLista]
+      return siguiente
+    })
+  }
 
   // Etiqueta del 2º nivel según el país (Provincia/Estado/Departamento…).
-  const regionLabel =
-    (listas.pais ?? []).find((p) => p.id === d.countryId)?.regionLabel ?? 'Provincia'
+  const paises = Array.isArray(listas.pais) ? listas.pais : []
+  const regionLabel = paises.find((p) => p.id === d.countryId)?.regionLabel ?? 'Provincia'
 
   const opciones = useMemo(() => {
-    const lista = (claveLista ? listas[claveLista] : undefined) ?? []
+    const lista = Array.isArray(estado) ? estado : []
     const q = busqueda.trim().toLowerCase()
     if (!q) return lista
     return lista.filter((o) => o.name.toLowerCase().includes(q))
-  }, [claveLista, listas, busqueda])
+  }, [estado, busqueda])
 
   function irA(p: MiniPaso) {
     setMini(p)
@@ -257,6 +280,8 @@ export function SelectorUbicacionVivienda({
 
   const etiqueta2 = mini === 'region' ? regionLabel : ETIQUETAS[mini]
   const pasoIdx = ORDEN_MINIPASOS.indexOf(mini)
+  /** País y provincia salen de la división oficial: no se escriben a mano. */
+  const puedeEscribirAMano = mini === 'ciudad' || mini === 'sector'
 
   const btnClase = oscuro
     ? 'border-white/15 bg-white/5 text-white hover:bg-white/10'
@@ -289,14 +314,20 @@ export function SelectorUbicacionVivienda({
         ))}
       </div>
 
-      <p className={cn('text-xs', oscuro ? 'text-white/50' : 'text-muted-foreground')}>
-        La usamos para mostrarte ofertas cercanas. Siempre puedes omitirla.
-      </p>
+      {!sinEncabezado && (
+        <p className={cn('text-xs', oscuro ? 'text-white/50' : 'text-muted-foreground')}>
+          La usamos para mostrarte ofertas cercanas. Siempre puedes omitirla.
+        </p>
+      )}
 
       <div>
-        <h2 className={cn('text-lg font-bold tracking-tight', oscuro ? 'text-white' : 'text-foreground')}>
-          {mini === 'pais' ? '¿Dónde vives?' : `¿${etiqueta2} de tu vivienda?`}
-        </h2>
+        {/* En país el título repetiría el del contenedor; los demás mini-pasos
+            sí necesitan su propia pregunta ("¿Provincia de tu vivienda?"). */}
+        {!(sinEncabezado && mini === 'pais') && (
+          <h2 className={cn('text-lg font-bold tracking-tight', oscuro ? 'text-white' : 'text-foreground')}>
+            {mini === 'pais' ? '¿Dónde vives?' : `¿${etiqueta2} de tu vivienda?`}
+          </h2>
+        )}
         {mini === 'region' && (
           <p className={cn('mt-1 text-sm', oscuro ? 'text-white/60' : 'text-muted-foreground')}>
             Elige tu {regionLabel.toLowerCase()}.
@@ -416,7 +447,27 @@ export function SelectorUbicacionVivienda({
                 ))}
                 {opciones.length === 0 && !cargando && (
                   <li className={cn('px-1 py-2 text-sm', oscuro ? 'text-white/50' : 'text-muted-foreground')}>
-                    Sin resultados. Puedes escribirla manualmente.
+                    {fallo ? (
+                      <span className="flex flex-wrap items-center gap-2">
+                        No pudimos cargar la lista.
+                        <button
+                          type="button"
+                          onClick={reintentar}
+                          className="underline underline-offset-2 hover:opacity-80"
+                        >
+                          Reintentar
+                        </button>
+                      </span>
+                    ) : puedeEscribirAMano ? (
+                      // Solo se ofrece escribir a mano en ciudad y sector; decirlo
+                      // en país o provincia dejaba al usuario buscando un botón
+                      // que no existe.
+                      'Sin resultados. Puedes escribirla manualmente.'
+                    ) : mini === 'pais' ? (
+                      'Todavía no hay países disponibles. Puedes omitir este paso y añadir tu ubicación más tarde desde tu perfil.'
+                    ) : (
+                      `Sin ${etiqueta2.toLowerCase()}s para elegir. Puedes omitir este paso.`
+                    )}
                   </li>
                 )}
               </ul>
@@ -427,7 +478,7 @@ export function SelectorUbicacionVivienda({
                 </p>
               )}
 
-              {(mini === 'ciudad' || mini === 'sector') && (
+              {puedeEscribirAMano && (
                 <button
                   type="button"
                   onClick={() => setManual(true)}

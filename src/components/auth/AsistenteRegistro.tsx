@@ -392,6 +392,7 @@ export function AsistenteRegistro({
               </div>
               <SelectorUbicacionVivienda
                 oscuro
+                sinEncabezado
                 value={datos.ubicacion}
                 onChange={(v) => {
                   setError(null)
