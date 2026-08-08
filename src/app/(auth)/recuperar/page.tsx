@@ -61,10 +61,10 @@ export default function RecuperarPage() {
   }
 
   return (
-    <Card className="border-white/10 bg-white/5 text-white">
+    <Card className="border-border">
       <CardHeader>
         <CardTitle className="text-2xl">Recuperar contraseña</CardTitle>
-        <CardDescription className="text-white/60">
+        <CardDescription>
           Te enviaremos un enlace para restablecer tu contraseña.
         </CardDescription>
       </CardHeader>
@@ -77,7 +77,7 @@ export default function RecuperarPage() {
                 restablecer tu contraseña. Revisa tu bandeja de entrada.
               </AlertDescription>
             </Alert>
-            <p className="text-center text-sm text-white/60">
+            <p className="text-center text-small text-muted-foreground">
               <a href="/login" className="text-primary hover:underline">
                 Volver a iniciar sesión
               </a>
@@ -99,7 +99,6 @@ export default function RecuperarPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-white/10 text-white"
                   placeholder="tu@correo.com"
                 />
               </div>
@@ -112,7 +111,7 @@ export default function RecuperarPage() {
                 Enviar enlace
               </Button>
             </form>
-            <p className="mt-4 text-center text-sm text-white/60">
+            <p className="mt-4 text-center text-small text-muted-foreground">
               <a href="/login" className="text-primary hover:underline">
                 Volver a iniciar sesión
               </a>

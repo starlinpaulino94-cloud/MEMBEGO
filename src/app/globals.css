@@ -303,6 +303,31 @@
   --border: oklch(0.914 0.005 264);
   --input: oklch(0.914 0.005 264);
   --ring: oklch(0.55 0.22 255);
+
+  /* Este bloque tiene que redefinir TODO lo que redefine `.dark`, aunque el
+     valor coincida con `:root`. Las variables CSS se resuelven en el ancestro
+     más cercano que las declare: con la app en modo oscuro, `.dark` vive en
+     <html> y `.theme-landing` en un <div> de dentro, así que cualquier token
+     que este bloque NO declare se lee del bloque OSCURO. El síntoma era un
+     esqueleto de carga casi negro sobre una tarjeta blanca.
+     Hay una prueba que verifica que los dos bloques cubran el mismo conjunto:
+     tests/tema-landing.test.ts. */
+  --primary-hover: oklch(0.488 0.203 255);
+  --primary-soft: oklch(0.938 0.032 255);
+  --overlay: oklch(0.14 0.02 264 / 45%);
+  --skeleton: oklch(0.945 0.004 264);
+  --glass-surface: oklch(1 0 0 / 65%);
+  --glass-border: oklch(1 0 0 / 45%);
+  --sidebar: oklch(0.14 0.035 260);
+  --sidebar-foreground: oklch(0.80 0.010 260);
+  --sidebar-primary: oklch(0.72 0.15 255);
+  --sidebar-primary-foreground: oklch(0.16 0.03 255);
+  --sidebar-accent: oklch(0.20 0.035 260);
+  --sidebar-accent-foreground: oklch(0.92 0.008 260);
+  --sidebar-border: oklch(0.22 0.030 260);
+  --sidebar-ring: oklch(0.72 0.15 255);
+  --sidebar-hover: oklch(1 0 0 / 6%);
+  --sidebar-active: oklch(1 0 0 / 10%);
 }
 
 @layer base {

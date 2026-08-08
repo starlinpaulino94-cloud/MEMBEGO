@@ -20,24 +20,24 @@ export default function LoginPage() {
           </p>
         </div>
       )}
-      <Suspense fallback={<div className="text-white/60">Cargando...</div>}>
+      <Suspense fallback={<div className="text-small text-muted-foreground">Cargando…</div>}>
         <LoginForm />
       </Suspense>
 
       {/* Additional Context */}
       <div className="mt-8 space-y-6">
         <div className="text-center">
-          <p className="text-white/60 text-sm mb-4">¿Aún no tienes cuenta?</p>
+          <p className="mb-4 text-small text-muted-foreground">¿Aún no tienes cuenta?</p>
           <a
             href={landingUrlFor('/empresas')}
-            className="inline-block rounded-lg border border-white/20 px-6 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+            className="inline-flex min-h-11 items-center rounded-lg border border-border px-6 text-small font-semibold text-foreground transition-colors hover:bg-muted"
           >
             Explorar Empresas
           </a>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-center">
-          <p className="text-white/70 text-xs">
+        <div className="rounded-lg border border-border bg-muted/40 p-4 text-center">
+          <p className="text-caption">
             Descubre promociones y beneficios exclusivos antes de registrarte
           </p>
           <a

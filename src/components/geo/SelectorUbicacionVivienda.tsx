@@ -80,14 +80,11 @@ export function SelectorUbicacionVivienda({
   value,
   onChange,
   onDone,
-  oscuro = false,
   sinEncabezado = false,
 }: {
   value: UbicacionSeleccionada
   onChange: (v: UbicacionSeleccionada) => void
   onDone: () => void
-  /** Estilo del asistente de registro (fondo oscuro); por defecto claro. */
-  oscuro?: boolean
   /**
    * El contenedor ya pone su propio título y su nota de "es opcional" (así lo
    * hace el asistente de registro). Con esto no se repiten: en la pantalla de
@@ -283,12 +280,8 @@ export function SelectorUbicacionVivienda({
   /** País y provincia salen de la división oficial: no se escriben a mano. */
   const puedeEscribirAMano = mini === 'ciudad' || mini === 'sector'
 
-  const btnClase = oscuro
-    ? 'border-white/15 bg-white/5 text-white hover:bg-white/10'
-    : 'border-border/70 bg-card text-foreground hover:bg-muted'
-  const btnActivo = oscuro
-    ? 'border-primary bg-primary/15 ring-2 ring-primary'
-    : 'border-primary bg-primary/10 ring-2 ring-primary/40'
+  const btnClase = 'border-border bg-card text-foreground hover:border-primary/40 hover:bg-muted'
+  const btnActivo = 'border-primary bg-primary/10 ring-2 ring-primary/40'
 
   return (
     <div className="space-y-4">
@@ -303,19 +296,15 @@ export function SelectorUbicacionVivienda({
               i < pasoIdx
                 ? 'bg-primary'
                 : i === pasoIdx
-                  ? oscuro
-                    ? 'bg-white/40'
-                    : 'bg-muted-foreground/40'
-                  : oscuro
-                    ? 'bg-white/10'
-                    : 'bg-muted'
+                  ? 'bg-primary/40'
+                  : 'bg-muted'
             )}
           />
         ))}
       </div>
 
       {!sinEncabezado && (
-        <p className={cn('text-xs', oscuro ? 'text-white/50' : 'text-muted-foreground')}>
+        <p className={'text-caption'}>
           La usamos para mostrarte ofertas cercanas. Siempre puedes omitirla.
         </p>
       )}
@@ -324,27 +313,27 @@ export function SelectorUbicacionVivienda({
         {/* En país el título repetiría el del contenedor; los demás mini-pasos
             sí necesitan su propia pregunta ("¿Provincia de tu vivienda?"). */}
         {!(sinEncabezado && mini === 'pais') && (
-          <h2 className={cn('text-lg font-bold tracking-tight', oscuro ? 'text-white' : 'text-foreground')}>
+          <h2 className={'text-h3 text-foreground'}>
             {mini === 'pais' ? '¿Dónde vives?' : `¿${etiqueta2} de tu vivienda?`}
           </h2>
         )}
         {mini === 'region' && (
-          <p className={cn('mt-1 text-sm', oscuro ? 'text-white/60' : 'text-muted-foreground')}>
+          <p className={'mt-1 text-small text-muted-foreground'}>
             Elige tu {regionLabel.toLowerCase()}.
           </p>
         )}
         {mini === 'ciudad' && (
-          <p className={cn('mt-1 text-sm', oscuro ? 'text-white/60' : 'text-muted-foreground')}>
+          <p className={'mt-1 text-small text-muted-foreground'}>
             Tu municipio o ciudad. Puedes escribirla si no aparece.
           </p>
         )}
         {mini === 'sector' && (
-          <p className={cn('mt-1 text-sm', oscuro ? 'text-white/60' : 'text-muted-foreground')}>
+          <p className={'mt-1 text-small text-muted-foreground'}>
             Tu barrio, sector o zona. También puedes escribirla.
           </p>
         )}
         {mini === 'mapa' && (
-          <p className={cn('mt-1 text-sm', oscuro ? 'text-white/60' : 'text-muted-foreground')}>
+          <p className={'mt-1 text-small text-muted-foreground'}>
             Marca una zona aproximada (opcional). No es obligatorio y no pedimos tu GPS.
           </p>
         )}
@@ -365,7 +354,7 @@ export function SelectorUbicacionVivienda({
             }}
           />
 
-          <label className={cn('flex items-start gap-2 text-sm', oscuro ? 'text-white/70' : 'text-foreground/80')}>
+          <label className={'flex items-start gap-2 text-small text-foreground'}>
             <input
               type="checkbox"
               checked={d.consentHome}
@@ -386,14 +375,13 @@ export function SelectorUbicacionVivienda({
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmarManual())}
                 placeholder={mini === 'ciudad' ? 'Escribe tu ciudad o municipio' : 'Escribe tu sector o zona'}
                 className={cn(
-                  'h-11',
-                  oscuro && 'bg-white/10 text-white placeholder:text-white/40'
+                  'h-11'
                 )}
               />
               <button
                 type="button"
                 onClick={() => setManual(false)}
-                className={cn('inline-flex items-center gap-1 text-xs underline', oscuro ? 'text-white/50' : 'text-muted-foreground')}
+                className={'inline-flex items-center gap-1 text-caption underline'}
               >
                 <X className="h-3 w-3" /> Elegir de la lista
               </button>
@@ -407,8 +395,7 @@ export function SelectorUbicacionVivienda({
                   onChange={(e) => setBusqueda(e.target.value)}
                   placeholder={mini === 'pais' ? 'Buscar país' : `Buscar ${etiqueta2.toLowerCase()}`}
                   className={cn(
-                    'h-11 pl-9',
-                    oscuro && 'bg-white/10 text-white placeholder:text-white/40'
+                    'h-11 pl-9'
                   )}
                 />
               </div>
@@ -446,7 +433,7 @@ export function SelectorUbicacionVivienda({
                   </li>
                 ))}
                 {opciones.length === 0 && !cargando && (
-                  <li className={cn('px-1 py-2 text-sm', oscuro ? 'text-white/50' : 'text-muted-foreground')}>
+                  <li className={'px-1 py-2 text-small text-muted-foreground'}>
                     {fallo ? (
                       <span className="flex flex-wrap items-center gap-2">
                         No pudimos cargar la lista.
@@ -473,7 +460,7 @@ export function SelectorUbicacionVivienda({
               </ul>
 
               {cargando && (
-                <p className={cn('flex items-center gap-1.5 text-xs', oscuro ? 'text-white/50' : 'text-muted-foreground')}>
+                <p className={'flex items-center gap-1.5 text-caption'}>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando…
                 </p>
               )}
@@ -502,7 +489,6 @@ export function SelectorUbicacionVivienda({
           type="button"
           variant="ghost"
           onClick={() => (mini === 'pais' ? onDone() : irA(ORDEN_MINIPASOS[stepAtras()]))}
-          className={oscuro ? 'text-white/70 hover:text-white' : undefined}
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" /> Atrás
         </Button>
@@ -512,7 +498,6 @@ export function SelectorUbicacionVivienda({
             type="button"
             variant="ghost"
             onClick={omitirPaso}
-            className={oscuro ? 'text-white/60 hover:text-white' : undefined}
           >
             {mini === 'mapa' ? 'Solo ciudad y sector' : 'Omitir'}
           </Button>

@@ -72,6 +72,18 @@ sigue existiendo para forzar el tema claro en la landing.
 - **Dark mode:** automático vía variables (`.dark`). No hardcodear blancos ni
   negros. `text-white` solo sobre navy, gradientes o imágenes.
 
+### Superficies de un solo tema
+
+La landing pública y la autenticación son **claras siempre**, aunque la persona
+tenga la app en oscuro. Lo consigue la clase `theme-landing` en el contenedor.
+
+**Regla no obvia:** ese bloque debe redefinir **todo** lo que redefine `.dark`,
+aunque el valor coincida con `:root`. Las variables CSS se resuelven en el
+ancestro más cercano que las declare, y `.dark` vive en `<html>`, por encima
+del `<div>` con `theme-landing`: cualquier token que el bloque no declare se lee
+del oscuro y aterriza en una página clara. Lo verifica
+`tests/tema-landing.test.ts`.
+
 ### Alias semánticos
 
 `brand-primary`, `brand-primary-hover`, `brand-primary-soft`, `surface`,
@@ -311,7 +323,7 @@ verificar enlaces.
 |---|---|---|
 | 0 | Design System 2.0 + arquitectura de navegación | ✅ |
 | 1 | Shell global: sidebar, header, layouts | ✅ |
-| 2 | Auth, login, registro, onboarding interactivo | ⬜ |
+| 2 | Auth, login, registro, onboarding interactivo | ✅ |
 | 3 | Home del cliente | ⬜ |
 | 4 | Explorar, empresas, promociones | ⬜ |
 | 5 | Cerca de mí, mapa | ⬜ |
