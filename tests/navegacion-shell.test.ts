@@ -183,7 +183,7 @@ const RAICES = ['src', 'packages/ui/src']
 const MICRO = /text-\[(\d+(?:\.\d+)?)px\]/g
 
 /** Techo actual. Bajarlo conforme las fases vayan saldando la deuda. */
-const TECHO_MICRO_TEXTOS = 198
+const TECHO_MICRO_TEXTOS = 195
 
 function archivosTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {
@@ -230,7 +230,7 @@ test('los textos por debajo de 12px no aumentan', () => {
  * Igual que la guardia tipográfica: no exige cero, fija el número actual como
  * techo. Cada página lo salda en su fase.
  */
-const TECHO_MAIN_ANIDADO = 7
+const TECHO_MAIN_ANIDADO = 5
 
 test('las páginas del área cliente no anidan otro <main>', () => {
   const paginas = archivosTsx(join('src', 'app', '(cliente)')).filter((f) =>

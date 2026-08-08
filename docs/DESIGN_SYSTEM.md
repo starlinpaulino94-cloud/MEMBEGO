@@ -199,7 +199,10 @@ Lucide, sistema único. Tamaños normalizados:
   Prohibido "No hay datos" sin siguiente paso. Dos variantes: `plain` (dentro
   de una tarjeta o tabla que ya tiene borde) y `card` (cuando el vacío ES la
   pantalla).
-- **StatCard** — KPIs. No inventar tarjetas de métricas nuevas.
+- **StatCard** — KPIs. No inventar tarjetas de métricas nuevas. Acentos
+  **semánticos**: `brand | success | warning | danger`. Los de tono (`sky`,
+  `green`, `amber`, `red`, `indigo`, `violet`) están obsoletos —son de antes
+  de los tokens— y se retiran cuando la Fase 8 migre sus 31 llamadas.
 - **BusinessCard** — la ÚNICA tarjeta de negocio, en
   `src/components/marketplace/`. Variantes `standard | compact | featured |
   map`. Admite distancia y abierto/cerrado cuando quien la usa los conoce.
@@ -343,7 +346,7 @@ verificar enlaces.
 | 3 | Home del cliente | ✅ |
 | 4 | Explorar, empresas, promociones | ✅ |
 | 5 | Cerca de mí, mapa | ✅ |
-| 6 | Wallet, membresías, beneficios, QR | ⬜ |
+| 6 | Wallet, membresías, beneficios, QR | ✅ |
 | 7 | Perfil, vehículos, ubicaciones | ⬜ |
 | 8 | Dashboard administrativo | ⬜ |
 | 9 | Clientes, membresías, planes | ⬜ |

@@ -219,10 +219,10 @@ export default async function MembershipDetail({
   }
 
   return (
-    <main className="container max-w-2xl py-8">
+    <div className="mx-auto max-w-2xl">
       <Link
         href={retorno}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="mb-6 inline-flex min-h-11 items-center gap-1.5 text-small text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> {retornoParam ? 'Volver' : 'Mis membresías'}
       </Link>
@@ -230,8 +230,8 @@ export default async function MembershipDetail({
       {/* Cabecera simple: la tarjeta visual vive en Mis membresías */}
       <header className="mb-8 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{company.name}</p>
-          <h1 className="mt-0.5 truncate text-h2 text-foreground">
+          <p className="text-overline">{company.name}</p>
+          <h1 className="mt-0.5 text-h1 text-balance text-foreground">
             {membership.plan.nombre}
           </h1>
         </div>
@@ -283,7 +283,7 @@ export default async function MembershipDetail({
               )}
               <div className="relative flex items-end justify-between gap-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-white/80">
                     Total a pagar
                   </p>
                   <p className="mt-1 text-4xl font-bold tracking-tight">
@@ -375,7 +375,7 @@ export default async function MembershipDetail({
 
         {/* Historial de visitas: timeline con fechas relativas e iconos del rubro */}
         {visits.length > 0 ? (
-          <section className="rounded-3xl border border-border/60 bg-card p-6 shadow-sm">
+          <section className="rounded-xl border border-border bg-card p-6 elevation-1">
             <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/15">
                 <History className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
@@ -420,7 +420,7 @@ export default async function MembershipDetail({
             </div>
           </section>
         ) : (
-          <div className="rounded-3xl border border-dashed border-border/80 bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center text-small text-muted-foreground">
             <Gauge className="mx-auto mb-2 h-6 w-6 text-muted-foreground/50" />
             Cuando uses tu membresía, tus visitas aparecerán aquí.
           </div>
@@ -492,7 +492,7 @@ export default async function MembershipDetail({
 
         {/* Envíos QR */}
         {enviosQr.length > 0 && (
-          <section className="rounded-3xl border border-border/60 bg-card p-6 shadow-sm">
+          <section className="rounded-xl border border-border bg-card p-6 elevation-1">
             <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/15">
                 <Share2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
@@ -517,6 +517,6 @@ export default async function MembershipDetail({
           </section>
         )}
       </div>
-    </main>
+    </div>
   )
 }

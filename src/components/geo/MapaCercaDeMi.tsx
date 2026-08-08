@@ -207,6 +207,22 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
     refrescarRef.current = refrescarViewport
   }, [refrescarViewport])
 
+  /**
+   * Seleccionar un negocio, venga del pin o de la lista.
+   *
+   * En escritorio basta con desplazar su fila a la vista. En MÓVIL no: la
+   * lista vive en la hoja inferior, que arranca asomada, así que el
+   * `scrollIntoView` de antes no hacía nada visible — tocar un pin no
+   * mostraba nada. Por eso existe la tarjeta del seleccionado.
+   */
+  const seleccionar = useCallback((s: SucursalCercana) => {
+    setSeleccionado(s.id)
+    document.getElementById(`cercano-${s.id}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    })
+  }, [])
+
   // ── Dibujar marcadores (clusters) y popups desde `resultados` ──────────────
   const pintarMarcadores = useCallback((cluster: { clear: () => void; add: (m: unknown) => void }, items: SucursalCercana[]) => {
     cluster.clear()
@@ -241,11 +257,11 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
       const m = L.marker([s.latitud, s.longitud], { icon: pin(s.tieneOfertas) })
       // Sin `bindPopup`: el popup de Leaflet es HTML plano, sin logo, sin
       // distancia y sin acciones. La tarjeta del seleccionado lo sustituye.
-      m.on('click', () => seleccionarRef.current(s))
+      m.on('click', () => seleccionar(s))
       markerRef.current.set(s.id, m)
       cluster.add(m)
     }
-  }, [])
+  }, [seleccionar])
 
   // ── Inicialización del mapa (una vez) ──────────────────────────────────────
   useEffect(() => {
@@ -458,29 +474,6 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
       setError({ codigo: 'error', mensaje: res.error ?? 'No pudimos guardar tu autorización.' })
     }
   }
-
-  /**
-   * Seleccionar un negocio, venga del pin o de la lista.
-   *
-   * En escritorio basta con desplazar su fila a la vista. En MÓVIL no: la
-   * lista vive en la hoja inferior, que arranca asomada, así que el
-   * `scrollIntoView` de antes no hacía nada visible — tocar un pin no
-   * mostraba nada. Por eso existe la tarjeta del seleccionado.
-   */
-  const seleccionar = useCallback((s: SucursalCercana) => {
-    setSeleccionado(s.id)
-    document.getElementById(`cercano-${s.id}`)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'nearest',
-    })
-  }, [])
-
-  // Los marcadores se dibujan una sola vez y capturarían la primera versión
-  // del manejador; la ref mantiene viva la actual.
-  const seleccionarRef = useRef(seleccionar)
-  useEffect(() => {
-    seleccionarRef.current = seleccionar
-  }, [seleccionar])
 
   /** Un solo tipo a la vez: son categorías excluyentes, no acumulables. */
   const alternarTipo = (tipo: string) => {
