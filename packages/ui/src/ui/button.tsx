@@ -32,13 +32,25 @@ const buttonVariants = cva(
         glass:
           "glass-surface text-foreground hover:bg-card/80 active:scale-[0.98]",
       },
+      /**
+       * DS 2.0 · Alturas y área táctil.
+       *
+       * `tokens.minTouchTarget` declara 44px desde hace tiempo y nada lo
+       * consumía: el tamaño por defecto era de 36px. Toda la escala sube un
+       * paso, y `lg` (44px) es EL tamaño de las superficies táctiles —
+       * scanner, área de cliente, hojas inferiores, formularios en móvil.
+       *
+       * `default` se queda en 40px a propósito: 44 en cada botón de una
+       * tabla de administración convierte el panel en un mando a distancia.
+       * Es el compromiso entre densidad de escritorio y dedo.
+       */
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm:      "h-8 rounded-lg gap-1.5 px-3 has-[>svg]:px-2.5 text-xs",
+        default: "h-10 px-4 py-2 has-[>svg]:px-3",
+        sm:      "h-9 rounded-lg gap-1.5 px-3 has-[>svg]:px-2.5 text-[13px]",
         lg:      "h-11 rounded-xl px-6 has-[>svg]:px-4 text-base",
         xl:      "h-12 rounded-xl px-8 has-[>svg]:px-5 text-base font-semibold",
-        icon:    "size-9 rounded-xl",
-        "icon-sm": "size-8 rounded-lg",
+        icon:    "size-10 rounded-xl",
+        "icon-sm": "size-9 rounded-lg",
       },
     },
     defaultVariants: {

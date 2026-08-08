@@ -61,20 +61,51 @@ export interface NavGroup {
 }
 
 /**
- * Navegación del panel de empresa — reagrupada por ÁREA DE TRABAJO en 7 zonas
- * claras (Auditoría del panel · Fase A). Cada grupo responde a una intención:
- * ¿quién es mi cliente? (Clientes) · ¿cuánto entra? (Ingresos) · ¿qué comunico
- * y ofrezco? (Marketing) · el mostrador (Operación) · ¿qué dicen los números?
- * (Análisis) · configurar el negocio (Configuración).
+ * DS 2.0 · Un contexto de trabajo del menú.
  *
- * Decisiones de la Fase A:
- * - "Referidos" e "Invitaciones" eran el MISMO concepto ("Invita y Gana"): se
- *   fusionan en una sola entrada que abre las campañas (/admin/invitaciones);
- *   el panel de rendimiento (/admin/referidos) queda enlazado desde ahí.
- * - Cada ítem tiene un ícono único (antes Regalos VIP/Referidos compartían Gift
- *   y Banners/Personalización compartían Sparkles).
- * - La fusión de la CREACIÓN de ofertas (Promociones/Banners/Regalos VIP) es la
- *   Fase D; aquí solo se reagrupan bajo "Marketing".
+ * Existe por el superadmin: su navegación son 45 enlaces porque mezcla los
+ * módulos de la plataforma con el panel completo de una empresa. Son dos
+ * trabajos distintos y no deberían pintarse a la vez. Con contextos, el
+ * menú muestra uno y ofrece cambiar al otro.
+ *
+ * Los demás roles tienen UN solo contexto, así que el selector ni aparece.
+ */
+export interface NavContext {
+  id: string
+  label: string
+  groups: NavGroup[]
+}
+
+/**
+ * Navegación del panel de empresa — OCHO DOMINIOS DE TRABAJO (DS 2.0 · Fase 0).
+ *
+ * La reagrupación anterior (Fase A) ya había ordenado los módulos por área,
+ * pero seguían siendo 33 enlaces pintados a la vez. El cambio de esta fase no
+ * es sumar ni quitar destinos —las 33 rutas siguen todas aquí— sino que el
+ * menú presente DOMINIOS y no el inventario completo de funcionalidades.
+ *
+ * Tres movimientos respecto a la versión anterior, y por qué:
+ *
+ * - PLANES sale de "Configuración" y entra en "Beneficios". Un plan es el
+ *   producto que la empresa vende, no un ajuste del sistema. Tenerlo junto a
+ *   Empleados y Personalización era lo que hacía que Planes y Membresías se
+ *   sintieran el mismo concepto: ahora Planes vive con lo que se ofrece y
+ *   Membresías con quién lo tiene.
+ *
+ * - PAGOS, COMPROBANTES y REGISTROS salen de "Ingresos" y entran en
+ *   "Operaciones". Los tres son trabajo de mostrador —confirmar, emitir,
+ *   registrar—, no lectura de números. "Analítica" queda para leer.
+ *
+ * - Las dos entradas llamadas "Campañas" se desambiguan. Existían
+ *   /admin/campanas y /admin/audiencia/campanas con etiqueta IDÉNTICA en el
+ *   mismo menú. La segunda pasa a "Campañas segmentadas" y se queda en el
+ *   menú a propósito: hoy ninguna página enlaza hacia ella, así que quitarla
+ *   la dejaría accesible solo escribiendo la URL. Cuando la Fase 11 le dé
+ *   pestañas al hub de Audiencia, podrá salir del menú sin quedar huérfana.
+ *
+ * Se conservan las decisiones de la Fase A: "Referidos" e "Invitaciones"
+ * siguen fusionadas en "Invita y Gana"; "Ofertas" sigue siendo el punto de
+ * entrada único al hub que agrupa Promociones, Banners y Regalos VIP.
  */
 const ADMIN_NAV: NavGroup[] = [
   {
@@ -86,112 +117,117 @@ const ADMIN_NAV: NavGroup[] = [
     id: 'clientes',
     label: 'Clientes',
     items: [
-      { href: '/admin/clientes', label: 'Clientes', icon: Users },
+      { href: '/admin/clientes', label: 'Directorio', icon: Users },
       { href: '/admin/membresias', label: 'Membresías', icon: CreditCard },
+      { href: '/admin/audiencia/segmentos', label: 'Segmentos', icon: SlidersHorizontal },
       { href: '/admin/citas', label: 'Citas', icon: CalendarDays },
-      { href: '/admin/regalos', label: 'Regalos P2P', icon: HeartHandshake },
+      { href: '/admin/actividad', label: 'Actividad', icon: History },
     ],
   },
   {
-    id: 'ingresos',
-    label: 'Ingresos',
+    id: 'beneficios',
+    label: 'Beneficios',
     items: [
-      { href: '/admin/pagos', label: 'Pagos', icon: Wallet },
-      { href: '/admin/facturas', label: 'Comprobantes', icon: ReceiptText },
-      { href: '/admin/registros', label: 'Registros', icon: FileText },
-      { href: '/admin/metodos-pago', label: 'Métodos de pago', icon: Landmark },
+      { href: '/admin/planes', label: 'Planes', icon: Package },
+      { href: '/admin/ofertas', label: 'Ofertas', icon: Tag },
+      { href: '/admin/invitaciones', label: 'Invita y Gana', icon: Share2 },
+      { href: '/admin/gamificacion', label: 'Ruleta de premios', icon: Trophy },
+      { href: '/admin/crecimiento', label: 'Crecimiento', icon: Rocket },
+      { href: '/admin/regalos', label: 'Regalos P2P', icon: HeartHandshake },
     ],
   },
   {
     id: 'marketing',
     label: 'Marketing',
     items: [
-      // "Ofertas" es el punto de entrada ÚNICO (Auditoría · Fase D): el hub
-      // /admin/ofertas agrupa Promociones (pública), Banners (relámpago) y
-      // Regalos VIP. Los tres siguen siendo módulos/tablas independientes,
-      // accesibles desde el hub y por URL directa.
-      { href: '/admin/ofertas', label: 'Ofertas', icon: Tag },
+      { href: '/admin/campanas', label: 'Campañas', icon: Flag },
       { href: '/admin/publicaciones', label: 'Publicaciones', icon: Newspaper },
-      { href: '/admin/invitaciones', label: 'Invita y Gana', icon: Share2 },
-      { href: '/admin/gamificacion', label: 'Ruleta de premios', icon: Trophy },
       { href: '/admin/notificaciones', label: 'Notificaciones', icon: Bell },
       { href: '/admin/automatizaciones', label: 'Automatizaciones', icon: Zap },
-      { href: '/admin/campanas', label: 'Campañas', icon: Flag },
     ],
   },
   {
-    id: 'operacion',
-    label: 'Operación',
+    id: 'operaciones',
+    label: 'Operaciones',
     items: [
       { href: '/admin/scanner', label: 'Escanear QR', icon: ScanLine },
+      { href: '/admin/pagos', label: 'Pagos', icon: Wallet },
+      { href: '/admin/facturas', label: 'Comprobantes', icon: ReceiptText },
+      { href: '/admin/registros', label: 'Registros', icon: FileText },
       { href: '/admin/sucursales', label: 'Sucursales', icon: Building2 },
     ],
   },
   {
-    id: 'analisis',
-    label: 'Análisis',
+    id: 'analitica',
+    label: 'Analítica',
     items: [
       { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
-      { href: '/admin/seguimiento', label: 'Seguimiento', icon: QrCode },
       { href: '/admin/audiencia', label: 'Audiencia', icon: TrendingUp },
-      { href: '/admin/audiencia/segmentos', label: 'Segmentos', icon: Users },
-      { href: '/admin/audiencia/campanas', label: 'Campañas', icon: Megaphone },
+      { href: '/admin/audiencia/campanas', label: 'Campañas segmentadas', icon: Megaphone },
       { href: '/admin/adquisicion', label: 'Origen de clientes', icon: Compass },
-      { href: '/admin/actividad', label: 'Actividad', icon: History },
-      { href: '/admin/crecimiento', label: 'Crecimiento', icon: Rocket },
+      { href: '/admin/seguimiento', label: 'Seguimiento', icon: QrCode },
     ],
   },
   {
-    // Plataforma modular · E2: puerta de entrada al segundo nivel (los
-    // sistemas del negocio). El launchpad muestra las apps de la empresa.
-    id: 'aplicaciones',
-    label: 'Aplicaciones',
-    items: [{ href: '/admin/aplicaciones', label: 'Aplicaciones', icon: LayoutGrid }],
-  },
-  {
-    id: 'configuracion',
-    label: 'Configuración',
+    id: 'empresa',
+    label: 'Empresa',
     items: [
       { href: '/admin/perfil', label: 'Perfil público', icon: Store },
       { href: '/admin/personalizacion', label: 'Personalización', icon: Palette },
-      { href: '/admin/planes', label: 'Planes', icon: Package },
       { href: '/admin/empleados', label: 'Empleados', icon: UserCog },
-      { href: '/admin/comunicacion', label: 'Comunicación', icon: MessageCircle },
+      { href: '/admin/metodos-pago', label: 'Métodos de pago', icon: Landmark },
+      // Plataforma modular · E2: launchpad de los sistemas del negocio.
+      { href: '/admin/aplicaciones', label: 'Aplicaciones', icon: LayoutGrid },
+    ],
+  },
+  {
+    id: 'soporte',
+    label: 'Soporte',
+    items: [
       { href: '/admin/tickets', label: 'Tickets', icon: LifeBuoy },
+      { href: '/admin/comunicacion', label: 'Comunicación', icon: MessageCircle },
     ],
   },
 ]
 
+/**
+ * Navegación del cliente — CINCO DOMINIOS (DS 2.0 · Fase 0).
+ *
+ * Mismas 14 rutas que antes, reordenadas para que los dominios coincidan con
+ * los de la barra inferior en móvil: quien navega en el teléfono y luego en
+ * el escritorio encuentra las cosas en el mismo sitio conceptual.
+ *
+ * DECISIÓN QUE NO SE TOCA: "Explorar empresas" (/cliente/explorar) y "Mis
+ * empresas" (/cliente/empresas) siguen FUERA del menú. No es un olvido — es
+ * la decisión de marca única: el cliente vive dentro de SU negocio. Ambas
+ * rutas existen, funcionan y están enlazadas desde el Home, el selector de
+ * empresa y el final del registro. Abrir el marketplace en el menú es una
+ * decisión de producto que corresponde a la Fase 4, cuando esas pantallas
+ * estén rediseñadas, no a un cambio de configuración de navegación.
+ */
 const CLIENTE_NAV: NavGroup[] = [
   {
     id: 'inicio',
     label: 'Inicio',
     // Enlace directo a la vista real (evita el salto de redirect por
     // /cliente/dashboard -> /mis-membresias).
-    items: [
-      { href: '/cliente/inicio', label: 'Inicio', icon: LayoutDashboard },
-      { href: '/mis-membresias', label: 'Mis membresías', icon: WalletCards },
-      { href: '/cliente/citas', label: 'Mis citas', icon: CalendarDays },
-    ],
+    items: [{ href: '/cliente/inicio', label: 'Inicio', icon: LayoutDashboard }],
   },
   {
-    id: 'membresia',
-    label: 'Membresía',
+    id: 'cerca',
+    label: 'Cerca de mí',
     items: [
-      { href: '/cliente/planes', label: 'Planes', icon: Package },
-      { href: '/cliente/pagos', label: 'Mis pagos', icon: Wallet },
+      { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
+      { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
     ],
   },
   {
     id: 'beneficios',
-    label: 'Beneficios',
-    // Marca única: sin "Explorar empresas" ni "Mis empresas" en el menú (el
-    // cliente vive dentro de SU negocio). Las rutas siguen activas por URL
-    // para cuando el marketplace se abra con más empresas.
+    label: 'Mis beneficios',
     items: [
-      { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
-      { href: '/cliente/promociones', label: 'Promociones', icon: Megaphone },
+      { href: '/mis-membresias', label: 'Mis membresías', icon: WalletCards },
       { href: '/cliente/mis-promociones', label: 'Mis beneficios', icon: Ticket },
+      { href: '/cliente/planes', label: 'Planes', icon: Package },
       { href: '/cliente/regalos', label: 'Regalos', icon: HeartHandshake },
       // Unificación: el antiguo módulo "Referidos" vive dentro de Invita y Gana.
       { href: '/cliente/invita-y-gana', label: 'Invita y Gana', icon: Gift },
@@ -199,20 +235,33 @@ const CLIENTE_NAV: NavGroup[] = [
     ],
   },
   {
+    id: 'actividad',
+    label: 'Actividad',
+    items: [
+      { href: '/cliente/citas', label: 'Mis citas', icon: CalendarDays },
+      { href: '/cliente/pagos', label: 'Mis pagos', icon: Wallet },
+      { href: '/cliente/historial', label: 'Historial', icon: History },
+    ],
+  },
+  {
     id: 'cuenta',
     label: 'Cuenta',
     items: [
-      { href: '/cliente/historial', label: 'Historial', icon: History },
       { href: '/cliente/perfil', label: 'Perfil', icon: User },
       { href: '/cliente/ayuda', label: 'Ayuda', icon: LifeBuoy },
     ],
   },
 ]
 
-// El superadmin ve su sección de plataforma + el panel de empresa completo.
-// Derivado por composición de ADMIN_NAV: añadir una sección al panel admin la
-// añade automáticamente aquí (antes era una copia manual que divergía).
-const SUPERADMIN_NAV: NavGroup[] = [
+/**
+ * Plataforma Membego — lo que solo el superadmin puede hacer.
+ *
+ * Es el PRIMER contexto del superadmin. El segundo es el panel de empresa
+ * completo (ADMIN_NAV), que sigue derivándose por composición: añadir una
+ * sección al panel admin la añade automáticamente allí, sin copias manuales
+ * que diverjan.
+ */
+const SUPERADMIN_PLATAFORMA: NavGroup[] = [
   {
     id: 'inicio',
     label: 'Inicio',
@@ -236,7 +285,14 @@ const SUPERADMIN_NAV: NavGroup[] = [
       { href: '/superadmin/reportes', label: 'Reportes globales', icon: BarChart3 },
     ],
   },
-  // Panel de empresa completo, sin el grupo "Inicio" (el superadmin ya tiene el suyo).
+]
+
+// Lista plana del superadmin: plataforma + panel de empresa (sin el "Inicio"
+// del admin, que duplicaría el suyo). Sigue siendo la unión de TODO lo que
+// puede abrir — la usan el buscador de comandos y la resolución de títulos,
+// que necesitan el universo completo aunque el menú pinte un solo contexto.
+const SUPERADMIN_NAV: NavGroup[] = [
+  ...SUPERADMIN_PLATAFORMA,
   ...ADMIN_NAV.filter((g) => g.id !== 'inicio'),
 ]
 
@@ -275,6 +331,32 @@ export function filtrarNavOculto(groups: NavGroup[], hidden: string[]): NavGroup
   return groups
     .map((g) => ({ ...g, items: g.items.filter((it) => !set.has(it.href)) }))
     .filter((g) => g.items.length > 0)
+}
+
+/**
+ * Contextos de trabajo del menú lateral.
+ *
+ * Solo el superadmin tiene más de uno: "Plataforma Membego" (sus 12 módulos
+ * globales) y "Panel de empresa" (los 33 del admin). Antes se pintaban los
+ * 45 enlaces juntos, mezclando dos trabajos que no se hacen a la vez.
+ *
+ * Para todos los demás roles devuelve un único contexto, de modo que el
+ * selector no llega ni a renderizarse. `navForRole` sigue devolviendo la
+ * lista plana completa: el buscador de comandos y el título del header
+ * necesitan el universo entero, no el contexto visible.
+ */
+export function navContextsForRole(role: AppRole): NavContext[] {
+  if (role === 'SUPERADMIN') {
+    return [
+      { id: 'plataforma', label: 'Plataforma Membego', groups: SUPERADMIN_PLATAFORMA },
+      {
+        id: 'empresa',
+        label: 'Panel de empresa',
+        groups: ADMIN_NAV.filter((g) => g.id !== 'inicio'),
+      },
+    ]
+  }
+  return [{ id: 'principal', label: 'Principal', groups: navForRole(role) }]
 }
 
 /** Resolve the sidebar navigation for any role. */

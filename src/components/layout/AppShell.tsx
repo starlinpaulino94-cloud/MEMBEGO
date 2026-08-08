@@ -122,11 +122,14 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop sidebar — fija, colapsable a riel de iconos (DXS) */}
+      {/* Desktop sidebar — fija, colapsable a riel de iconos (DXS).
+          DS 2.0 · 256px (w-64): con la tipografía del menú a 14.5px e iconos
+          de 18px, los 240px anteriores truncaban etiquetas como
+          "Campañas segmentadas" o "Métodos de pago". */}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-200 ease-out lg:block',
-          rail ? 'w-[68px]' : 'w-60'
+          rail ? 'w-[68px]' : 'w-64'
         )}
       >
         <AppSidebar
@@ -186,7 +189,7 @@ export function AppShell({
       <div
         className={cn(
           'transition-[padding] duration-200 ease-out',
-          rail ? 'lg:pl-[68px]' : 'lg:pl-60'
+          rail ? 'lg:pl-[68px]' : 'lg:pl-64'
         )}
       >
         <AppHeader
