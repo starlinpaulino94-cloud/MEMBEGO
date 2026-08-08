@@ -324,7 +324,7 @@ verificar enlaces.
 | 0 | Design System 2.0 + arquitectura de navegación | ✅ |
 | 1 | Shell global: sidebar, header, layouts | ✅ |
 | 2 | Auth, login, registro, onboarding interactivo | ✅ |
-| 3 | Home del cliente | ⬜ |
+| 3 | Home del cliente | ✅ |
 | 4 | Explorar, empresas, promociones | ⬜ |
 | 5 | Cerca de mí, mapa | ⬜ |
 | 6 | Wallet, membresías, beneficios, QR | ⬜ |

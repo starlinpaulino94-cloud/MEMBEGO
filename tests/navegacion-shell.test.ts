@@ -218,6 +218,34 @@ test('los textos por debajo de 12px no aumentan', () => {
   )
 })
 
+/**
+ * GUARDIA DEL CONTENEDOR DE PÁGINA (DS 2.0 · Fase 1).
+ *
+ * `AppShell` ya envuelve el contenido en un `<main>` con el ancho máximo y el
+ * padding del sistema. Una página que declara los suyos produce dos fallos a
+ * la vez: `<main>` anidado —que es HTML inválido y confunde a los lectores de
+ * pantalla, que buscan UN contenido principal— y doble padding, que la
+ * desalinea del resto del producto.
+ *
+ * Igual que la guardia tipográfica: no exige cero, fija el número actual como
+ * techo. Cada página lo salda en su fase.
+ */
+const TECHO_MAIN_ANIDADO = 10
+
+test('las páginas del área cliente no anidan otro <main>', () => {
+  const paginas = archivosTsx(join('src', 'app', '(cliente)')).filter((f) =>
+    f.endsWith('page.tsx')
+  )
+  const infractoras = paginas.filter((f) => /<main[\s>]/.test(readFileSync(f, 'utf8')))
+
+  assert.ok(
+    infractoras.length <= TECHO_MAIN_ANIDADO,
+    `${infractoras.length} páginas declaran su propio <main> dentro del de AppShell ` +
+      `(techo ${TECHO_MAIN_ANIDADO}). El contenedor lo pone el shell.\n` +
+      infractoras.join('\n')
+  )
+})
+
 test('el shell global respeta el suelo tipográfico', () => {
   // El shell sí está migrado por completo: aquí la exigencia es cero.
   const archivos = archivosTsx(join('src', 'components', 'layout'))
