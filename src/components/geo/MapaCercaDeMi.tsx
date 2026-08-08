@@ -46,6 +46,16 @@ interface EstadoError {
 }
 
 const RADIOS = [1, 3, 5, 10, 20] as const
+
+/** Nombre legible del tipo de negocio; si es desconocido, se muestra tal cual. */
+const TIPO_LABEL: Record<string, string> = {
+  carwash: 'Car Wash',
+  restaurante: 'Restaurante',
+  gimnasio: 'Gimnasio',
+  salon: 'Salón',
+  spa: 'Spa',
+  barberia: 'Barbería',
+}
 type FiltroBooleano = 'soloConOfertas' | 'soloGratis' | 'soloMembresias' | 'abiertosAhora'
 const FILTROS: { key: FiltroBooleano; label: string }[] = [
   { key: 'soloConOfertas', label: 'Con ofertas' },
@@ -94,6 +104,13 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   const [mapListo, setMapListo] = useState(false)
   /** Hoja inferior (solo móvil): asomada por defecto, para que el mapa mande. */
   const [hojaAbierta, setHojaAbierta] = useState(false)
+  /**
+   * Categorías presentes ALREDEDOR, no el catálogo entero: ofrecer "Gimnasio"
+   * donde no hay ninguno es un callejón sin salida. Solo se recalcula cuando
+   * NO hay tipo filtrado — si no, al elegir "Car Wash" el resto de chips
+   * desaparecería y no habría forma de volver.
+   */
+  const [tiposVistos, setTiposVistos] = useState<string[]>([])
 
   // Búsqueda de zona (MANUAL)
   const [busqueda, setBusqueda] = useState('')
@@ -101,6 +118,12 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   const [buscandoZona, setBuscandoZona] = useState(false)
   const [abiertaSugerencias, setAbiertaSugerencias] = useState(false)
   const zonaTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /** Valor vivo de los filtros para `buscar`, sin meterlo en sus dependencias. */
+  const filtrosRef = useRef<FiltrosCercanos>({})
+  useEffect(() => {
+    filtrosRef.current = filtros
+  }, [filtros])
 
   const ocultarZona = () => {
     setSugerencias([])
@@ -136,7 +159,11 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           setError({ codigo, mensaje: data?.mensaje ?? 'No pudimos cargar los negocios cercanos.' })
           return null
         }
-        setResultados(data.resultados ?? [])
+        const items: SucursalCercana[] = data.resultados ?? []
+        setResultados(items)
+        if (!filtrosRef.current.tiposNegocio?.length) {
+          setTiposVistos([...new Set(items.map((x) => x.tipo).filter(Boolean))].sort())
+        }
         if (data.ubicacion?.etiqueta) setUbicacion(data.ubicacion.etiqueta)
         if (
           opts?.reCentrar &&
@@ -186,19 +213,35 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
     markerRef.current.clear()
     const L = LRef.current
     if (!L) return
-    const icon = L.divIcon({
-      className: '',
-      html: '<div style="font-size:24px;line-height:1;transform:translate(-2px,-8px) drop-shadow(0 2px 2px rgba(0,0,0,.3))">📍</div>',
-      iconSize: [24, 24],
-      iconAnchor: [12, 24],
-    })
-    for (const s of items) {
-      const m = L.marker([s.latitud, s.longitud], { icon })
-      m.bindPopup(`<strong>${s.empresaNombre}</strong><br/>${s.nombre}${s.direccion ? ` · ${s.direccion}` : ''}`)
-      m.on('click', () => {
-        setSeleccionado(s.id)
-        document.getElementById(`cercano-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    /**
+     * Pin de marca (§38). Antes era el emoji 📍 dentro de un `divIcon`: se
+     * dibujaba distinto en cada sistema operativo, no llevaba la marca y no
+     * distinguía un negocio con ofertas de uno sin ellas.
+     *
+     * Es un SVG con `currentColor`, así que hereda el color del contenedor y
+     * los estados se resuelven con una clase en vez de con tres iconos. El
+     * punto ámbar marca los que tienen ofertas vivas — la única razón para
+     * mirar el mapa antes que la lista.
+     */
+    const pin = (conOfertas: boolean) =>
+      L.divIcon({
+        className: '',
+        html: `<span class="mg-pin${conOfertas ? ' mg-pin--oferta' : ''}">
+          <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+            <path fill="currentColor" stroke="white" stroke-width="1.5"
+              d="M12 1.7c-4 0-7.2 3.2-7.2 7.2 0 5.4 6.4 12.5 6.7 12.8a.7.7 0 0 0 1 0c.3-.3 6.7-7.4 6.7-12.8 0-4-3.2-7.2-7.2-7.2Z"/>
+            <circle cx="12" cy="8.9" r="2.6" fill="white"/>
+          </svg>
+        </span>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 29],
       })
+
+    for (const s of items) {
+      const m = L.marker([s.latitud, s.longitud], { icon: pin(s.tieneOfertas) })
+      // Sin `bindPopup`: el popup de Leaflet es HTML plano, sin logo, sin
+      // distancia y sin acciones. La tarjeta del seleccionado lo sustituye.
+      m.on('click', () => seleccionarRef.current(s))
       markerRef.current.set(s.id, m)
       cluster.add(m)
     }
@@ -416,8 +459,42 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
     }
   }
 
-  const marcarEnMapa = (s: SucursalCercana) => {
+  /**
+   * Seleccionar un negocio, venga del pin o de la lista.
+   *
+   * En escritorio basta con desplazar su fila a la vista. En MÓVIL no: la
+   * lista vive en la hoja inferior, que arranca asomada, así que el
+   * `scrollIntoView` de antes no hacía nada visible — tocar un pin no
+   * mostraba nada. Por eso existe la tarjeta del seleccionado.
+   */
+  const seleccionar = useCallback((s: SucursalCercana) => {
     setSeleccionado(s.id)
+    document.getElementById(`cercano-${s.id}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    })
+  }, [])
+
+  // Los marcadores se dibujan una sola vez y capturarían la primera versión
+  // del manejador; la ref mantiene viva la actual.
+  const seleccionarRef = useRef(seleccionar)
+  useEffect(() => {
+    seleccionarRef.current = seleccionar
+  }, [seleccionar])
+
+  /** Un solo tipo a la vez: son categorías excluyentes, no acumulables. */
+  const alternarTipo = (tipo: string) => {
+    setFiltros((f) => {
+      const activo = f.tiposNegocio?.[0] === tipo
+      const { tiposNegocio: _ignorado, ...resto } = f
+      return activo ? resto : { ...resto, tiposNegocio: [tipo] }
+    })
+  }
+
+  const negocioSeleccionado = resultados.find((r) => r.id === seleccionado) ?? null
+
+  const marcarEnMapa = (s: SucursalCercana) => {
+    seleccionar(s)
     const map = mapRef.current
     if (map) map.flyTo([s.latitud, s.longitud], Math.max(map.getZoom(), 15), { duration: 0.6 })
   }
@@ -510,9 +587,41 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           )}
         </div>
 
+        {/* Categorías — §38. La API ya aceptaba `tiposNegocio`; solo faltaba
+            exponerlo. Va sobre el mapa para que exista también en móvil, donde
+            la columna de filtros no se pinta. */}
+        {tiposVistos.length > 1 && (
+          <div className="absolute inset-x-0 top-16 z-[500] px-3">
+            <ul className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+              {tiposVistos.map((tipo) => {
+                const activo = filtros.tiposNegocio?.[0] === tipo
+                return (
+                  <li key={tipo} className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => alternarTipo(tipo)}
+                      aria-pressed={activo}
+                      className={cn(
+                        'inline-flex min-h-9 items-center rounded-full border px-3.5 text-caption font-semibold elevation-2 backdrop-blur transition',
+                        activo
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-card/95 text-foreground'
+                      )}
+                    >
+                      {TIPO_LABEL[tipo] ?? tipo}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
         {/* Radio (zoom) */}
         {ubicacion && (
-          <div className="absolute bottom-3 left-1/2 z-[500] flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-full border border-border bg-card/95 p-1 elevation-2 backdrop-blur">
+          // `bottom-[4.75rem]` en móvil: la hoja asomada se come las 4 rem
+          // inferiores del mapa y este control quedaba debajo del tirador.
+          <div className="absolute bottom-[4.75rem] left-1/2 z-[500] flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-full border border-border bg-card/95 p-1 elevation-2 backdrop-blur lg:bottom-3">
             {RADIOS.map((km) => (
               <button
                 key={km}
@@ -539,10 +648,22 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           </div>
         )}
 
+        {/* Negocio seleccionado — §38 "card del negocio seleccionado".
+            Solo en móvil: en escritorio su fila ya se resalta en la columna
+            de al lado, y una tarjeta encima taparía el mapa sin aportar. */}
+        {negocioSeleccionado && !error && (
+          <div className="absolute inset-x-3 bottom-[8.5rem] z-[600] lg:hidden">
+            <TarjetaSeleccionado
+              s={negocioSeleccionado}
+              onCerrar={() => setSeleccionado(null)}
+            />
+          </div>
+        )}
+
         {/* Estado: consentimiento / errores */}
         {error?.codigo === 'consentimiento_requerido' && (
-          <div className="absolute inset-x-3 bottom-16 z-[500] mx-auto max-w-md rounded-xl border border-border bg-card/95 p-4 elevation-3 backdrop-blur">
-            <p className="text-sm font-semibold">Autoriza el uso de tu ubicación</p>
+          <div className="absolute inset-x-3 bottom-[8.5rem] z-[500] mx-auto max-w-md rounded-xl border border-border bg-card/95 p-4 elevation-3 backdrop-blur lg:bottom-16">
+            <p className="text-h4">Autoriza el uso de tu ubicación</p>
             <p className="mt-1 text-caption">
               Solo usamos tu ubicación para mostrarte negocios cercanos. Nunca la compartimos con otras empresas.
             </p>
@@ -553,7 +674,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           </div>
         )}
         {error && error.codigo !== 'consentimiento_requerido' && (
-          <div className="absolute inset-x-3 bottom-16 z-[500] mx-auto max-w-md rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-warning-foreground elevation-3 backdrop-blur">
+          <div className="absolute inset-x-3 bottom-[8.5rem] z-[500] mx-auto max-w-md rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-warning-foreground elevation-3 backdrop-blur lg:bottom-16">
             {error.mensaje}
           </div>
         )}
@@ -562,23 +683,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
       {/* ── Filtros + Lista ───────────────────────────────────────────────────
           Escritorio: columna fija al lado del mapa. */}
       <section className="hidden flex-col gap-3 lg:flex">
-        <div className="flex flex-wrap gap-2">
-          {FILTROS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => toggleFiltro(f.key)}
-              className={cn(
-                'inline-flex min-h-11 items-center rounded-full border px-3.5 text-small font-semibold transition',
-                filtros[f.key]
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <ChipsFiltro filtros={filtros} onToggle={toggleFiltro} />
 
         <div className="flex items-center justify-between text-sm">
           <p className="text-muted-foreground">
@@ -621,6 +726,11 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
             : `${resultados.length} ${resultados.length === 1 ? 'resultado' : 'resultados'}`
         }
       >
+        {/* Los filtros vivían SOLO en la columna de escritorio: en un teléfono
+            no había forma de acotar la búsqueda. */}
+        <div className="sticky top-0 z-10 -mx-4 bg-card px-4 pb-3 pt-1">
+          <ChipsFiltro filtros={filtros} onToggle={toggleFiltro} />
+        </div>
         {resultados.length === 0 && !cargando && !error ? (
           <p className="py-6 text-center text-small text-muted-foreground">
             Sin negocios aquí. Muévete en el mapa o quita filtros.
@@ -748,5 +858,111 @@ function TarjetaNegocio({
         <span className="sr-only"> a {s.empresaNombre} (se abre en otra pestaña)</span>
       </a>
     </li>
+  )
+}
+
+/** Chips de filtro booleano. Mismos controles en escritorio y en la hoja. */
+function ChipsFiltro({
+  filtros,
+  onToggle,
+}: {
+  filtros: FiltrosCercanos
+  onToggle: (k: FiltroBooleano) => void
+}) {
+  return (
+    <ul className="no-scrollbar flex gap-2 overflow-x-auto lg:flex-wrap lg:overflow-visible">
+      {FILTROS.map((f) => {
+        const activo = Boolean(filtros[f.key])
+        return (
+          <li key={f.key} className="shrink-0">
+            <button
+              type="button"
+              onClick={() => onToggle(f.key)}
+              aria-pressed={activo}
+              className={cn(
+                'inline-flex min-h-11 items-center rounded-full border px-3.5 text-small font-semibold transition',
+                activo
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {f.label}
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/**
+ * Tarjeta del negocio seleccionado, flotando sobre el mapa en móvil.
+ *
+ * Responde a lo que uno pregunta al tocar un pin: qué es, a qué distancia, si
+ * está abierto, si tiene oferta — y las dos acciones que siguen. Sustituye al
+ * popup de Leaflet, que era HTML plano sin logo, sin distancia y sin salida.
+ */
+function TarjetaSeleccionado({
+  s,
+  onCerrar,
+}: {
+  s: SucursalCercana
+  onCerrar: () => void
+}) {
+  const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${s.latitud},${s.longitud}`
+
+  return (
+    <div className="mx-auto max-w-md rounded-xl border border-border bg-card p-3 elevation-3">
+      <div className="flex items-start gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted text-small font-bold">
+          {s.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={s.logoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            s.empresaNombre.charAt(0).toUpperCase()
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-h4 text-foreground">{s.empresaNombre}</p>
+          <p className="truncate text-caption">
+            {s.sector ?? s.ciudad ?? s.direccion ?? s.nombre}
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary">{formatearDistancia(s.distanciaM)}</Badge>
+            {s.abierto === true && <Badge variant="success">Abierto</Badge>}
+            {s.abierto === false && <Badge variant="outline">Cerrado</Badge>}
+            {s.cantidadOfertas > 0 && (
+              <Badge variant="warning">
+                {s.cantidadOfertas} oferta{s.cantidadOfertas > 1 ? 's' : ''}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onCerrar}
+          aria-label="Cerrar"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </div>
+
+      {s.ofertaDestacada && (
+        <p className="mt-2 truncate text-caption font-medium text-primary">{s.ofertaDestacada}</p>
+      )}
+
+      <div className="mt-3 flex gap-2">
+        <Button asChild size="lg" className="flex-1">
+          <Link href={s.urlDetalle}>Ver negocio</Link>
+        </Button>
+        <Button asChild size="lg" variant="outline" className="flex-1">
+          <a href={comoLlegar} target="_blank" rel="noopener noreferrer">
+            <Navigation aria-hidden />
+            Cómo llegar
+          </a>
+        </Button>
+      </div>
+    </div>
   )
 }

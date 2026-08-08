@@ -612,6 +612,42 @@
     background-clip: text;
   }
 
+  /* ── Pin del mapa (DS 2.0 · Fase 5) ─────────────────────────────────
+     El SVG del marcador pinta con `currentColor`, así que el color y los
+     estados se resuelven aquí con clases en vez de generar un icono por
+     variante. Vive fuera de React: Leaflet inserta el HTML del `divIcon`
+     directamente en el DOM, donde las clases de Tailwind generadas bajo
+     demanda no llegarían. */
+  .mg-pin {
+    display: block;
+    color: var(--primary);
+    filter: drop-shadow(0 2px 3px rgb(15 23 42 / 0.35));
+    transition: transform var(--duration-fast) var(--ease-out-expo);
+  }
+  .mg-pin:hover {
+    transform: scale(1.12);
+  }
+  /* Punto ámbar: este negocio tiene ofertas vivas — la única razón para
+     mirar el mapa antes que la lista. */
+  .mg-pin--oferta {
+    position: relative;
+  }
+  .mg-pin--oferta::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--warning);
+    border: 2px solid var(--card);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mg-pin { transition: none; }
+    .mg-pin:hover { transform: none; }
+  }
+
   /* Animated underline */
   .link-underline {
     position: relative;
