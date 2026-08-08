@@ -420,3 +420,64 @@ export const ROLE_ICONS: Record<AppRole, LucideIcon> = {
 export function allLinks(groups: NavGroup[]): NavLink[] {
   return groups.flatMap((g) => g.items)
 }
+
+/** Etiquetas de los sub-segmentos comunes para el último nivel del breadcrumb. */
+const ETIQUETAS_SEGMENTO: Record<string, string> = {
+  nuevo: 'Nuevo',
+  nueva: 'Nueva',
+  nuevos: 'Nuevos',
+  editar: 'Editar',
+  plantillas: 'Plantillas',
+  segmentos: 'Segmentos',
+  campanas: 'Campañas',
+}
+
+export interface Miga {
+  /** Dominio de trabajo: "Marketing", "Operaciones"… */
+  dominio: string | null
+  /** Módulo dentro del dominio, con su ruta para volver. */
+  seccion: NavLink | null
+  /** Subpágina: "Nuevo", "Editar", "Detalle"… */
+  hoja: string | null
+}
+
+/**
+ * Resuelve dónde está el usuario, en los términos de la arquitectura de
+ * navegación: DOMINIO → módulo → subpágina.
+ *
+ * El header mostraba antes "MembeGo / Campañas", que responde a "¿qué página
+ * es esta?" pero no a "¿dónde estoy?". Con ocho dominios, saber que Campañas
+ * vive en Marketing es justamente lo que evita la sensación de haber abierto
+ * una página suelta de una lista enorme.
+ *
+ * La sección se elige por el `href` MÁS LARGO que casa con la ruta, para que
+ * /admin/audiencia/campanas resuelva a "Campañas segmentadas" y no a
+ * "Audiencia", que también casa por prefijo.
+ */
+export function migasDeRuta(groups: NavGroup[], pathname: string): Miga {
+  let mejor: { grupo: NavGroup; item: NavLink } | null = null
+  for (const grupo of groups) {
+    for (const item of grupo.items) {
+      if (pathname !== item.href && !pathname.startsWith(item.href + '/')) continue
+      if (!mejor || item.href.length > mejor.item.href.length) mejor = { grupo, item }
+    }
+  }
+  if (!mejor) return { dominio: null, seccion: null, hoja: null }
+
+  // Un dominio de un solo módulo (Inicio) no aporta nada repetido dos veces.
+  const dominio =
+    mejor.grupo.items.length > 1 && mejor.grupo.label !== mejor.item.label
+      ? mejor.grupo.label
+      : null
+
+  const resto = pathname.slice(mejor.item.href.length).split('/').filter(Boolean)
+  if (resto.length === 0) return { dominio, seccion: mejor.item, hoja: null }
+
+  // Último segmento legible: etiqueta conocida, o "Detalle" para los ids.
+  const conNombre = [...resto].reverse().find((s) => ETIQUETAS_SEGMENTO[s])
+  return {
+    dominio,
+    seccion: mejor.item,
+    hoja: conNombre ? ETIQUETAS_SEGMENTO[conNombre] : 'Detalle',
+  }
+}

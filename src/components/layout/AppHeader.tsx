@@ -4,20 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ExternalLink, Menu, Search, X } from 'lucide-react'
 import Link from 'next/link'
-import { navForRole, filtrarNavOculto, allLinks } from '@/components/layout/nav-config'
+import {
+  navForRole,
+  filtrarNavOculto,
+  allLinks,
+  migasDeRuta,
+} from '@/components/layout/nav-config'
 import { NotificationBell } from '@/components/layout/NotificationBell'
 import { CommandPalette } from '@/components/layout/CommandPalette'
+import { MenuUsuario } from '@/components/layout/MenuUsuario'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CompanySwitcher, type CompanyOption } from '@/components/cliente/CompanySwitcher'
 import type { AppRole } from '@/types'
-
-/** Etiquetas de los sub-segmentos comunes para el breadcrumb jerárquico. */
-const SEGMENT_LABELS: Record<string, string> = {
-  nuevo: 'Nuevo',
-  nueva: 'Nueva',
-  editar: 'Editar',
-  plantillas: 'Plantillas',
-}
 
 export function AppHeader({
   role,
@@ -26,6 +24,9 @@ export function AppHeader({
   onMenuClick,
   hiddenNav,
   sistemaExterno,
+  userEmail,
+  userName,
+  ayudaHref,
 }: {
   role: AppRole
   notifCount?: number
@@ -35,6 +36,10 @@ export function AppHeader({
   hiddenNav?: string[]
   /** Sistema satélite conectado (p. ej. el car wash): acceso directo por SSO. */
   sistemaExterno?: { slug: string; nombre: string } | null
+  userEmail?: string
+  userName?: string | null
+  /** Destino de "Ayuda"; sin él, la entrada no se muestra. */
+  ayudaHref?: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -42,26 +47,16 @@ export function AppHeader({
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const links = useMemo(
-    () => allLinks(filtrarNavOculto(navForRole(role), hiddenNav ?? [])),
+  const groups = useMemo(
+    () => filtrarNavOculto(navForRole(role), hiddenNav ?? []),
     [role, hiddenNav]
   )
+  const links = useMemo(() => allLinks(groups), [groups])
 
-  // Breadcrumb jerárquico: sección del nav + sub-segmento actual si existe
-  // (nuevo/editar/plantillas/detalle). El nombre de la sección enlaza de vuelta.
-  const crumb = useMemo(() => {
-    const matches = links
-      .filter((l) => pathname === l.href || pathname.startsWith(l.href + '/'))
-      .sort((a, b) => b.href.length - a.href.length)
-    const section = matches[0] ?? null
-    if (!section) return { section: null, child: null }
-    const rest = pathname.slice(section.href.length).split('/').filter(Boolean)
-    if (rest.length === 0) return { section, child: null }
-    // Último segmento legible: etiqueta conocida, o "Detalle" para ids.
-    const named = [...rest].reverse().find((s) => SEGMENT_LABELS[s])
-    const child = named ? SEGMENT_LABELS[named] : 'Detalle'
-    return { section, child }
-  }, [links, pathname])
+  // Breadcrumb: DOMINIO / módulo / subpágina. El dominio es lo que estaba
+  // faltando — antes decía "MembeGo / Campañas", que dice qué página es pero
+  // no dónde está. Ahora dice "Marketing / Campañas".
+  const migas = useMemo(() => migasDeRuta(groups, pathname), [groups, pathname])
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -101,37 +96,45 @@ export function AppHeader({
       <button
         type="button"
         onClick={onMenuClick}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted lg:hidden"
+        className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted lg:hidden"
         aria-label="Abrir menú"
       >
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Breadcrumb jerárquico: MembeGo / Sección / Subpágina */}
+      {/* Breadcrumb: Dominio / Módulo / Subpágina.
+          En móvil se reduce al módulo actual — el dominio es contexto útil en
+          escritorio, pero ahí compite con el buscador por un espacio que no
+          hay. */}
       <nav aria-label="Ruta de navegación" className="hidden min-w-0 items-baseline gap-2 md:flex">
-        <span className="text-caption">MembeGo</span>
-        {crumb.section && (
+        {migas.dominio && (
           <>
-            <span className="text-border" aria-hidden>/</span>
-            {crumb.child ? (
-              <Link
-                href={crumb.section.href}
-                className="truncate text-h4 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {crumb.section.label}
-              </Link>
-            ) : (
-              <span className="truncate text-h4 text-foreground" aria-current="page">
-                {crumb.section.label}
-              </span>
-            )}
+            <span className="shrink-0 text-caption">{migas.dominio}</span>
+            <span className="shrink-0 text-border" aria-hidden>
+              /
+            </span>
           </>
         )}
-        {crumb.child && (
-          <>
-            <span className="text-border" aria-hidden>/</span>
+        {migas.seccion &&
+          (migas.hoja ? (
+            <Link
+              href={migas.seccion.href}
+              className="truncate text-h4 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {migas.seccion.label}
+            </Link>
+          ) : (
             <span className="truncate text-h4 text-foreground" aria-current="page">
-              {crumb.child}
+              {migas.seccion.label}
+            </span>
+          ))}
+        {migas.hoja && (
+          <>
+            <span className="shrink-0 text-border" aria-hidden>
+              /
+            </span>
+            <span className="truncate text-h4 text-foreground" aria-current="page">
+              {migas.hoja}
             </span>
           </>
         )}
@@ -152,7 +155,7 @@ export function AppHeader({
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="Buscar…"
-            className="h-9 w-full rounded-xl border border-transparent bg-muted/70 pl-9 pr-12 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted-foreground/50 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20"
+            className="h-10 w-full rounded-xl border border-transparent bg-muted/70 pl-9 pr-12 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted-foreground/50 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20"
           />
           {query ? (
             <button
@@ -164,7 +167,7 @@ export function AppHeader({
               <X className="h-4 w-4" />
             </button>
           ) : (
-            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/60 sm:block">
+            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[12px] leading-none text-muted-foreground sm:block">
               /
             </kbd>
           )}
@@ -200,16 +203,27 @@ export function AppHeader({
             href={`/api/integraciones/abrir/${encodeURIComponent(sistemaExterno.slug)}`}
             target="_blank"
             rel="noopener"
-            className="mr-1 inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            className="mr-1 inline-flex h-10 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             title={`Abrir ${sistemaExterno.nombre}`}
           >
-            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+            <ExternalLink className="h-4 w-4 text-muted-foreground" aria-hidden />
             <span className="hidden sm:inline">{sistemaExterno.nombre}</span>
           </a>
         )}
         {companies && <CompanySwitcher companies={companies} />}
         <ThemeToggle />
         <NotificationBell initialCount={notifCount} />
+        {/* Perfil y sesión. Antes solo vivían en el pie del menú lateral, que
+            en móvil está detrás del drawer: cerrar sesión exigía abrir el menú
+            y bajar hasta el final. */}
+        {userEmail && (
+          <MenuUsuario
+            role={role}
+            userEmail={userEmail}
+            userName={userName}
+            ayudaHref={ayudaHref}
+          />
+        )}
       </div>
 
       {/* Cmd+K / Ctrl+K */}

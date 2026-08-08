@@ -24,10 +24,20 @@ function leerRail(): boolean {
   }
 }
 
+/**
+ * Destino de "Ayuda" en el menú de usuario, por rol. Solo el cliente tiene
+ * hoy una pantalla de ayuda propia; el personal la pide por Soporte, que ya
+ * está en su menú lateral. Sin destino, la entrada no se pinta.
+ */
+function ayudaParaRol(role: AppRole): string | null {
+  return role === 'CLIENTE' ? '/cliente/ayuda' : null
+}
+
 export function AppShell({
   role,
   title,
   userEmail,
+  userName,
   notifCount = 0,
   companies,
   qrHref,
@@ -38,6 +48,8 @@ export function AppShell({
   role: AppRole
   title: string
   userEmail: string
+  /** Nombre de la persona cuando se conoce; si no, manda el correo. */
+  userName?: string | null
   notifCount?: number
   companies?: CompanyOption[]
   /** Destino del dock central "Mi QR" en la barra inferior (cliente). */
@@ -136,6 +148,7 @@ export function AppShell({
           role={role}
           title={title}
           userEmail={userEmail}
+          userName={userName}
           rail={rail}
           onToggleRail={toggleRail}
           hiddenNav={hiddenNav}
@@ -170,15 +183,16 @@ export function AppShell({
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="absolute right-3 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-white"
+            className="absolute right-2 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-white"
             aria-label="Cerrar menú"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
           <AppSidebar
             role={role}
             title={title}
             userEmail={userEmail}
+            userName={userName}
             onNavigate={() => setMobileOpen(false)}
             hiddenNav={hiddenNav}
           />
@@ -199,7 +213,16 @@ export function AppShell({
           onMenuClick={() => setMobileOpen(true)}
           hiddenNav={hiddenNav}
           sistemaExterno={sistemaExterno}
+          userEmail={userEmail}
+          userName={userName}
+          ayudaHref={ayudaParaRol(role)}
         />
+        {/* Contenedor de página — la convención de espaciado vive AQUÍ, no en
+            cada pantalla. Ancho máximo 1280px, padding 16/24/32 según tamaño
+            y 32px arriba y abajo. Una página no debe volver a declarar su
+            propio `max-w-*` ni su padding lateral: si lo hace, se desalinea
+            con el resto del producto. Lo que sí decide cada pantalla es la
+            separación entre SUS secciones (`space-y-8`). */}
         <main
           className={cn(
             'mx-auto max-w-7xl px-4 py-8 md:px-6 lg:px-8',

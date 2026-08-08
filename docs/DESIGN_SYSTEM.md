@@ -183,6 +183,56 @@ Lucide, sistema único. Tamaños normalizados:
   pantalla).
 - **StatCard** — KPIs. No inventar tarjetas de métricas nuevas.
 - **DataTable** — base de todas las tablas. Extenderla, no reimplementarla.
+- **PageHeader** — cabecera de pantalla: el **único `h1`**. Admite `eyebrow`
+  (contexto o vuelta al listado) y `nav` (pestañas de la sección). El título no
+  se trunca: ajusta con `text-balance`.
+- **SectionHeader** — cabecera de una sección dentro de la pantalla (`h2`). No
+  componer a mano un flex con un `h2` de tamaño propio.
+- **TabsNav** — navegación secundaria de una sección. No trae router: cada
+  pestaña se pinta con `render`, así sirve para enlaces o estado local.
+
+## Shell global
+
+El armazón vive en `src/components/layout/` y **ninguna pantalla lo reimplementa**.
+
+| Pieza | Qué resuelve |
+|---|---|
+| `AppShell` | Rejilla, drawer móvil, riel colapsable, contenedor de página |
+| `AppSidebar` | Dominios, contextos, permisos, ruta activa, persistencia |
+| `AppHeader` | Breadcrumb, buscador, empresa, tema, notificaciones, perfil |
+| `MenuUsuario` | Identidad, ayuda y cerrar sesión |
+| `BottomNav` | Navegación táctil del cliente (4 destinos + dock del QR) |
+
+### Espaciado de página
+
+La convención vive en `AppShell`, no en cada pantalla:
+
+- Ancho máximo `max-w-7xl` (1280px), centrado.
+- Padding lateral `px-4 sm:px-6 lg:px-8`; vertical `py-8`.
+
+**Una pantalla no declara su propio `max-w-*` ni su padding lateral.** Si lo
+hace, se desalinea con el resto del producto. Lo que sí decide cada pantalla es
+la separación entre sus secciones: `space-y-8`.
+
+### Contexto: ¿dónde estoy?
+
+El breadcrumb del header dice **dominio → módulo → subpágina**: "Marketing /
+Campañas / Nuevo". El dominio es la parte que importa — sin él la cabecera dice
+qué página es, pero no dónde está dentro del producto.
+
+Lo resuelve `migasDeRuta()` en `nav-config.ts`, que elige la sección por el
+`href` **más largo** que casa con la ruta. Si una sección tiene varias vistas,
+va con `TabsNav` bajo el título, no con más entradas en el menú lateral.
+
+### Alturas de control
+
+| Elemento | Alto |
+|---|---|
+| Botón e input por defecto | 40px |
+| Botón `lg` — superficies táctiles | 44px |
+| Controles del header y del menú | 40px |
+| Enlace del menú lateral | 36px mínimo |
+| Pestaña de `TabsNav` | 44px |
 
 ## Animación
 
@@ -260,7 +310,7 @@ verificar enlaces.
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Design System 2.0 + arquitectura de navegación | ✅ |
-| 1 | Shell global: sidebar, header, layouts | ⬜ |
+| 1 | Shell global: sidebar, header, layouts | ✅ |
 | 2 | Auth, login, registro, onboarding interactivo | ⬜ |
 | 3 | Home del cliente | ⬜ |
 | 4 | Explorar, empresas, promociones | ⬜ |

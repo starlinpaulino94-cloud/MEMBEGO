@@ -92,12 +92,19 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
     <div className="relative">
       <button
         onClick={handleOpen}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-        aria-label="Notificaciones"
+        className="relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        aria-label={count > 0 ? `Notificaciones (${count} sin leer)` : 'Notificaciones'}
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-5 w-5" />
         {count > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white">
+          // El contador crece a 18px para que su texto quepa a 12px, el suelo
+          // del sistema. A 10px se leía mal justo donde importa: cuántas cosas
+          // tienes pendientes. `aria-hidden` porque la cuenta ya va en el
+          // `aria-label` del botón — si no, el lector la anuncia dos veces.
+          <span
+            aria-hidden
+            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[12px] font-bold leading-none text-white"
+          >
             {count > 9 ? '9+' : count}
           </span>
         )}
