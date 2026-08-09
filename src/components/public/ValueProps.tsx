@@ -36,10 +36,10 @@ export function ValueProps() {
     <section className="bg-card py-16 sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h2 className="text-h1 text-foreground">
             Todo tu club de beneficios, en un solo lugar
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <p className="mt-4 text-body text-muted-foreground">
             MembeGo digitaliza las membresías de tus negocios favoritos: sin
             tarjetas físicas, sin papeleo, con todo a la mano.
           </p>

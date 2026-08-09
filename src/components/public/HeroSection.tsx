@@ -17,7 +17,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
   return (
     <section className="relative overflow-hidden bg-slate-950">
       {/* Base de marca + glows + textura */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-900" />
+      <div className="absolute inset-0 surface-hero" />
       <div className="absolute inset-0 bg-grid-light mask-fade" />
       <div className="absolute -top-32 -right-24 h-[28rem] w-[28rem] animate-pulse-glow rounded-full bg-primary/25 blur-3xl" />
       <div className="absolute -bottom-40 -left-24 h-[28rem] w-[28rem] animate-pulse-glow rounded-full bg-primary/25 blur-3xl delay-500" />
@@ -31,7 +31,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
               Tu membresía y tus beneficios, digitales
             </span>
 
-            <h1 className="mt-6 animate-slide-up text-5xl font-extrabold leading-[1.02] tracking-tight delay-75 sm:text-6xl lg:text-7xl">
+            <h1 className="mt-6 animate-slide-up text-display delay-75">
               Tus beneficios,
               <br />
               <span className="bg-gradient-to-r from-white via-sky-100 to-sky-300 bg-clip-text text-transparent">
@@ -39,7 +39,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
               </span>
             </h1>
 
-            <p className="mt-6 max-w-xl animate-slide-up text-lg leading-relaxed text-white/80/90 delay-100">
+            <p className="mt-6 max-w-xl animate-slide-up text-body leading-relaxed text-white/80 delay-100">
               Olvídate de las tarjetas físicas. Activa tu membresía, recibe tu
               código QR único y disfruta beneficios, promociones y planes
               exclusivos — todo desde tu teléfono.
@@ -66,7 +66,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
               <div className="mt-12 flex animate-slide-up flex-wrap gap-x-10 gap-y-5 delay-200">
                 {metrics.map((m) => (
                   <div key={m.label}>
-                    <div className="text-3xl font-bold tracking-tight sm:text-4xl">
+                    <div className="text-h1">
                       {fmt(m.value)}
                     </div>
                     <div className="mt-0.5 text-sm text-primary/80">{m.label}</div>
@@ -85,12 +85,12 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
               {/* Sombra/carta trasera para profundidad */}
               <div className="absolute inset-0 translate-x-5 translate-y-6 rounded-[1.75rem] bg-white/5 ring-1 ring-white/10 backdrop-blur" />
 
-              <div className="relative rounded-[1.75rem] bg-gradient-to-br from-blue-600 to-indigo-700 p-6 shadow-premium-lg ring-1 ring-white/20">
+              <div className="relative rounded-2xl bg-gradient-brand p-6 shadow-premium-lg ring-1 ring-white/20">
                 <div className="flex items-center justify-between text-white">
-                  <span className="text-lg font-bold tracking-tight">MembeGo</span>
+                  <span className="text-h3">MembeGo</span>
                   <ShieldCheck className="h-6 w-6 text-white" />
                 </div>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-white/70">
+                <p className="mt-1 text-overline tracking-[0.2em] text-white/70">
                   Membresía digital
                 </p>
 
@@ -111,11 +111,11 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
 
                 <div className="mt-6 flex items-end justify-between text-white">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wider text-white/70">Titular</p>
+                    <p className="text-overline tracking-wider text-white/70">Titular</p>
                     <p className="font-semibold">Tu nombre</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[11px] uppercase tracking-wider text-white/70">Plan</p>
+                    <p className="text-overline tracking-wider text-white/70">Plan</p>
                     <p className="font-semibold">Premium</p>
                   </div>
                 </div>

@@ -11,13 +11,13 @@ export function ForBusinessCTA() {
   return (
     <section className="bg-card py-16 sm:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-blue-900 px-6 py-12 sm:px-12">
+        <div className="overflow-hidden rounded-2xl surface-hero px-6 py-12 sm:px-12">
           <div className="grid items-center gap-10 lg:grid-cols-2">
             <div className="text-white">
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              <h2 className="text-h1">
                 ¿Tienes un negocio?
               </h2>
-              <p className="mt-4 max-w-lg text-lg text-muted-foreground/40">
+              <p className="mt-4 max-w-lg text-body text-muted-foreground/40">
                 Convierte a tus clientes en miembros fieles. Ofrece membresías
                 digitales, promociones y un programa de referidos que hace crecer
                 tu comunidad.

@@ -373,7 +373,7 @@ verificar enlaces.
 | 15 | Soporte | ✅ |
 | 16 | Superadmin | ✅ |
 | 17 | Empleado | ✅ |
-| 18 | Páginas públicas | ⬜ |
+| 18 | Páginas públicas | ✅ |
 | 19 | Dark mode, accesibilidad, QA visual | ⬜ |
 | 20 | Eliminar el frontend visual heredado | ⬜ |
 
@@ -518,6 +518,33 @@ cerrar el turno— y se toca con una mano. Ahora mide 44px.
 **El aviso de cola sin conexión usaba `amber-500` con su `dark:` escrito a
 mano.** Es el mensaje que dice "tienes registros sin enviar": si se ve mal en
 oscuro, se pierde dinero de verdad.
+
+### Fase 18 · la cara pública, una sola marca
+
+**Había seis degradados distintos para la misma cabecera.** `from-blue-800 via-
+blue-700 to-indigo-900`, `from-blue-700 via-sky-600 to-indigo-800`, `from-blue-
+600 to-sky-500`, `from-blue-600 to-indigo-700`, `from-blue-700 to-indigo-800` y
+`from-slate-900 to-blue-900`. Nadie los eligió distintos: se fueron escribiendo
+a mano página a página. La web pública cambiaba de azul al navegar.
+
+Ahora es **`.surface-hero`**, definida una vez, con tres topes de la escala de
+marca que **todos** aguantan texto blanco: 6,34:1 · 8,35:1 · 10,13:1.
+
+**`.bg-gradient-brand` no admite texto blanco pequeño.** Su extremo cian da
+**2,33:1** contra blanco, muy por debajo de AA — y el documento lo recomendaba
+para héroes. Queda para chips, iconos y superficies decorativas; las cabeceras
+con párrafos encima usan `.surface-hero`. Está anotado junto a la propia regla.
+
+**Seis clases con dos opacidades encadenadas.** `text-white/80/90`,
+`bg-primary/10/50`, `bg-primary/40/20`. Tailwind no las parsea: **descarta la
+clase entera**, sin aviso, sin romper el build y sin fallar ninguna prueba. Tres
+estaban en la portada, dejando el subtítulo del héroe en blanco puro y sin
+jerarquía frente al titular. La guardia las vigila en todo `src`, no solo aquí.
+
+**La landing usa los mismos nueve roles.** Los héroes pasan de tres breakpoints
+(`text-4xl sm:text-5xl lg:text-7xl`) a `.text-display`, que ya es fluida de 40 a
+72px. Los siete `rounded-3xl` —fuera del vocabulario— bajan a `rounded-2xl`.
+Área pública a **cero** micro-textos y **cero** tamaños fuera de escala.
 
 ### Decisiones de producto resueltas fuera de fase
 

@@ -4,7 +4,7 @@ import { Skeleton, SkeletonCard } from '@/components/ui/skeleton'
 export default function Loading() {
   return (
     <div className="min-h-screen bg-card">
-      <div className="bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-900 px-4 pb-16 pt-14 sm:px-6 lg:px-8">
+      <div className="surface-hero px-4 pb-16 pt-14 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl space-y-4">
           <Skeleton className="h-10 w-72 max-w-full bg-white/10" />
           <Skeleton className="h-5 w-96 max-w-full bg-white/10" />

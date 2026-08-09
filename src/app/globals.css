@@ -594,8 +594,37 @@
 
   /* MDS · Gradiente de marca de la app (esmeralda → cyan). El de la landing
      (azul → cyan) ya existe como .text-gradient. */
+  /* ATENCIÓN: este degradado NO admite texto blanco pequeño. Su extremo cian
+     (`cyan-brand-500`) da 2.33:1 contra blanco, muy por debajo del 4.5:1 de
+     AA. Sirve para superficies decorativas, iconos y botones con texto grande;
+     para una cabecera con párrafos encima está `.surface-hero`. */
   .bg-gradient-brand {
     background-image: linear-gradient(135deg, var(--color-primary-600), var(--color-cyan-brand-500));
+  }
+
+  /**
+   * Superficie de CABECERA pública — una sola, para todas las páginas.
+   *
+   * Había SEIS degradados distintos para el mismo papel repartidos por la web
+   * pública: `from-blue-800 via-blue-700 to-indigo-900`, `from-blue-700 via-
+   * sky-600 to-indigo-800`, `from-blue-600 to-sky-500`, `from-blue-600 to-
+   * indigo-700`, `from-blue-700 to-indigo-800` y `from-slate-900 to-blue-900`.
+   * Nadie los eligió distintos a propósito: se fueron escribiendo a mano página
+   * a página. El resultado es que la cara pública del producto cambiaba de azul
+   * al navegar, que es justo lo contrario de lo que hace una marca.
+   *
+   * Los tres topes salen de la escala de marca y TODOS aguantan texto blanco:
+   * 6.34:1, 8.35:1 y 10.13:1 contra blanco. Se puede escribir encima sin
+   * comprobar nada, que es la razón de que exista como utilidad y no como una
+   * cadena de clases que copiar.
+   */
+  .surface-hero {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-primary-700),
+      var(--color-primary-800) 55%,
+      var(--color-primary-900)
+    );
   }
   .text-gradient-brand {
     background: linear-gradient(135deg, var(--color-primary-600), var(--color-cyan-brand-500));

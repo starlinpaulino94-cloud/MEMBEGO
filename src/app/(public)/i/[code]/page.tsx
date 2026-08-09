@@ -62,11 +62,11 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
   if (data.expirado || !data.expiresAt) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-card px-4">
-        <div className="w-full max-w-md rounded-3xl border border-border/80 p-8 text-center shadow-premium">
+        <div className="w-full max-w-md rounded-2xl border border-border/80 p-8 text-center shadow-premium">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
             <Gift className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Esta invitación expiró</h1>
+          <h1 className="text-h1 text-foreground">Esta invitación expiró</h1>
           <p className="mt-2 text-muted-foreground">
             La oferta de {data.referente} ya no está disponible, pero {data.empresa.name} tiene
             otras promociones esperándote.
@@ -101,7 +101,7 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-3xl border border-border/80 bg-card shadow-premium">
+        <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-premium">
           {/* Imagen principal del beneficio */}
           <div className="relative h-52 w-full bg-muted">
             {data.beneficio?.imagenUrl ? (
@@ -111,7 +111,7 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
                 <Gift className="h-20 w-20 text-white/90" />
               </div>
             )}
-            <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-foreground shadow">
+            <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-caption font-bold text-foreground shadow">
               <Sparkles className="h-3.5 w-3.5 text-primary" /> Invitación exclusiva
             </span>
           </div>
@@ -119,8 +119,8 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
           <div className="space-y-6 p-6">
             {/* Título llamativo */}
             <div className="text-center">
-              <p className="text-4xl">🎉</p>
-              <h1 className="mt-1 text-2xl font-bold text-foreground">
+              <p className="text-4xl" role="img" aria-label="Celebración">🎉</p>
+              <h1 className="mt-1 text-h1 text-foreground">
                 {data.titulo ?? `¡${data.referente} te regala un beneficio!`}
               </h1>
               <p className="mt-2 text-muted-foreground">
@@ -134,7 +134,7 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
               <p className="text-sm font-semibold text-success">Solo por aceptar recibirás</p>
               <div className="mt-2 flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
-                <span className="text-lg font-bold text-foreground">{beneficioTitulo}</span>
+                <span className="text-h3 text-foreground">{beneficioTitulo}</span>
               </div>
               {data.beneficio?.descripcion && (
                 <p className="mt-1 text-sm text-muted-foreground">{data.beneficio.descripcion}</p>
@@ -150,7 +150,7 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
             {/* CTA principal */}
             <Link
               href={ctaHref}
-              className="block w-full rounded-2xl bg-primary px-6 py-4 text-center text-lg font-bold text-primary-foreground shadow-glow transition hover:opacity-95"
+              className="block w-full rounded-2xl bg-primary px-6 py-4 text-center text-h3 text-primary-foreground shadow-glow transition hover:opacity-95"
             >
               Quiero aprovechar esta promoción
             </Link>
@@ -168,7 +168,7 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
                 </span>
               )}
               {data.recompensaReferente && (
-                <span className="text-xs">
+                <span className="text-caption">
                   Al registrarte, {data.referente} también recibe {data.recompensaReferente}.
                 </span>
               )}

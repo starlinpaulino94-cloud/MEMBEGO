@@ -67,13 +67,13 @@ export default function CaracteristicasPage() {
     <div className="min-h-screen bg-card">
       <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-caption font-medium text-muted-foreground">
             <Rocket className="h-3.5 w-3.5 text-primary" /> Todo en una plataforma
           </span>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight text-foreground">
+          <h1 className="mt-4 text-h1 text-foreground">
             Características de MembeGo
           </h1>
-          <p className="mt-3 text-lg text-muted-foreground">
+          <p className="mt-3 text-body text-muted-foreground">
             Membresías, promociones, QR, referidos y analítica — el sistema completo
             para que las empresas conecten con sus clientes y crezcan.
           </p>
@@ -97,8 +97,8 @@ export default function CaracteristicasPage() {
           })}
         </div>
 
-        <div className="mt-14 flex flex-col items-center gap-4 rounded-3xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-10 text-center">
-          <h2 className="text-2xl font-bold text-foreground">
+        <div className="mt-14 flex flex-col items-center gap-4 rounded-2xl border border-border/80 bg-gradient-to-br from-primary/10 via-card to-card p-10 text-center">
+          <h2 className="text-h1 text-foreground">
             ¿Listo para ofrecer membresías digitales?
           </h2>
           <p className="max-w-lg text-muted-foreground">

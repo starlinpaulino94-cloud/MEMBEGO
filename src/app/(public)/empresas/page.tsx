@@ -62,15 +62,15 @@ export default async function EmpresasPage({ searchParams }: EmpresasPageProps) 
         </div>
       )}
       {/* Header */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-900 pb-16 pt-14">
+      <section className="relative overflow-hidden surface-hero pb-16 pt-14">
         <div className="absolute inset-0 bg-grid-light mask-fade" />
         <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-primary/25 blur-3xl" />
         <div className="relative mx-auto max-w-7xl space-y-7 px-4 sm:px-6 lg:px-8">
           <div className="text-white">
-            <h1 className="animate-slide-up text-4xl font-extrabold tracking-tight sm:text-5xl">
+            <h1 className="animate-slide-up text-display">
               Explora empresas
             </h1>
-            <p className="mt-3 max-w-xl animate-slide-up text-lg text-white/80/90 delay-75">
+            <p className="mt-3 max-w-xl animate-slide-up text-body text-white/80 delay-75">
               Descubre negocios afiliados, sus planes de membresía y promociones
               exclusivas.
             </p>

@@ -14,7 +14,7 @@ export function CategoriesSection({ categories }: CategoriesSectionProps) {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
+            <h2 className="text-h1 text-foreground">
               Explora por categoría
             </h2>
             <p className="mt-2 text-muted-foreground">
@@ -40,7 +40,7 @@ export function CategoriesSection({ categories }: CategoriesSectionProps) {
                 {c.name}
               </span>
               {c.companyCount > 0 && (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-caption font-medium text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary">
                   {c.companyCount}
                 </span>
               )}

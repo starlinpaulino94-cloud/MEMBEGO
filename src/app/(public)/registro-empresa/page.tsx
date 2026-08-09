@@ -29,16 +29,16 @@ export default function RegistroEmpresaPage() {
   return (
     <div className="min-h-screen bg-card">
       {/* Header */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-sky-600 to-indigo-800 py-14">
+      <section className="relative overflow-hidden surface-hero py-14">
         <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-primary/30 blur-3xl" />
         <div className="relative mx-auto max-w-7xl px-4 text-white sm:px-6 lg:px-8">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-white/80 ring-1 ring-inset ring-white/20">
             <Store className="h-4 w-4" /> Para negocios
           </span>
-          <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl">
+          <h1 className="mt-4 text-display">
             Registra tu empresa en MembeGo
           </h1>
-          <p className="mt-2 max-w-xl text-lg text-white/80">
+          <p className="mt-2 max-w-xl text-body text-white/80">
             Crea tu cuenta en un minuto. Después te guiamos paso a paso para
             completar tu perfil, crear tu primer plan y tu primera promoción.
           </p>
@@ -50,12 +50,12 @@ export default function RegistroEmpresaPage() {
         <div className="grid gap-10 lg:grid-cols-2">
           {/* Beneficios */}
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            <h2 className="text-h1 text-foreground">
               Qué obtienes
             </h2>
             {BENEFICIOS.map((b) => (
               <div key={b.titulo} className="flex gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-sky-500 text-white">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-brand text-white">
                   <b.icon className="h-5 w-5" />
                 </div>
                 <div>
@@ -77,7 +77,7 @@ export default function RegistroEmpresaPage() {
           </div>
 
           {/* Formulario */}
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
             <RegistroEmpresaForm />
           </div>
         </div>

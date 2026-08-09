@@ -172,7 +172,7 @@ export function PromotionCard({
 
           {/* Precio de venta directa (si es comprable) */}
           {promotion.venta && !isExpired && (
-            <p className="mt-2.5 text-2xl font-extrabold tabular-nums tracking-tight text-foreground">
+            <p className="mt-2.5 text-h1 tabular-nums text-foreground">
               {formatMoney(promotion.venta.precio)}
             </p>
           )}
@@ -180,7 +180,7 @@ export function PromotionCard({
           {promotion.codigo && (
             <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 px-2.5 py-1">
               <span className="text-caption">Código</span>
-              <code className="font-mono text-xs font-bold text-foreground">
+              <code className="font-mono text-caption font-bold text-foreground">
                 {promotion.codigo}
               </code>
             </div>

@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ codigo: s
 function Marco({ children }: { children: React.ReactNode }) {
   return (
     <main className="container flex min-h-[70vh] max-w-lg items-center py-10">
-      <div className="w-full rounded-3xl border border-border/70 bg-card p-8 text-center shadow-premium">
+      <div className="w-full rounded-2xl border border-border/70 bg-card p-8 text-center shadow-premium">
         {children}
       </div>
     </main>
@@ -45,7 +45,7 @@ export default async function OfertaPage({
         <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
           <Gift className="h-8 w-8 text-primary" />
         </span>
-        <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-foreground">
+        <h1 className="mt-4 text-h1 text-foreground">
           Tienes un regalo esperándote
         </h1>
         <p className="mt-2 text-muted-foreground">
@@ -76,7 +76,7 @@ export default async function OfertaPage({
     return (
       <Marco>
         <Lock className="mx-auto h-10 w-10 text-muted-foreground/50" />
-        <h1 className="mt-4 text-xl font-bold text-foreground">Esta oferta ya no existe</h1>
+        <h1 className="mt-4 text-h2 text-foreground">Esta oferta ya no existe</h1>
         <p className="mt-2 text-muted-foreground">El enlace no corresponde a un regalo vigente.</p>
       </Marco>
     )
@@ -89,7 +89,7 @@ export default async function OfertaPage({
     return (
       <Marco>
         <Lock className="mx-auto h-10 w-10 text-muted-foreground/50" />
-        <h1 className="mt-4 text-xl font-bold text-foreground">
+        <h1 className="mt-4 text-h2 text-foreground">
           Tu cuenta no aplica para esta promoción
         </h1>
         <p className="mt-2 text-muted-foreground">
@@ -110,7 +110,7 @@ export default async function OfertaPage({
     return (
       <Marco>
         <CalendarClock className="mx-auto h-10 w-10 text-muted-foreground/50" />
-        <h1 className="mt-4 text-xl font-bold text-foreground">Este regalo ya no está disponible</h1>
+        <h1 className="mt-4 text-h2 text-foreground">Este regalo ya no está disponible</h1>
         <p className="mt-2 text-muted-foreground">
           La oferta fue pausada o su vigencia terminó. Contacta a {oferta.company.name} si
           tienes dudas.
@@ -126,10 +126,10 @@ export default async function OfertaPage({
       <span className="mx-auto flex h-16 w-16 animate-float items-center justify-center rounded-2xl bg-primary/10">
         <Gift className="h-8 w-8 text-primary" />
       </span>
-      <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
+      <p className="mt-4 text-overline tracking-[0.22em] text-primary">
         Regalo exclusivo · {oferta.company.name}
       </p>
-      <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">
+      <h1 className="mt-2 text-h1 text-foreground">
         {oferta.titulo}
       </h1>
       {oferta.descripcion && (
@@ -138,20 +138,20 @@ export default async function OfertaPage({
 
       <div className="mt-5 grid grid-cols-2 gap-2">
         <div className="rounded-2xl bg-muted/50 p-3">
-          <p className="flex items-center justify-center gap-1.5 text-lg font-bold text-foreground">
+          <p className="flex items-center justify-center gap-1.5 text-h3 text-foreground">
             <Ticket className="h-4 w-4 text-muted-foreground" />
             {oferta.usosPorPeriodo} {PERIODO_LABEL[oferta.periodo]}
           </p>
-          <p className="text-xs text-muted-foreground">usos incluidos</p>
+          <p className="text-caption text-muted-foreground">usos incluidos</p>
         </div>
         <div className="rounded-2xl bg-muted/50 p-3">
-          <p className="flex items-center justify-center gap-1.5 text-lg font-bold text-foreground">
+          <p className="flex items-center justify-center gap-1.5 text-h3 text-foreground">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
             {oferta.vigenciaHasta
               ? new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium' }).format(oferta.vigenciaHasta)
               : 'Sin fecha límite'}
           </p>
-          <p className="text-xs text-muted-foreground">válido hasta</p>
+          <p className="text-caption text-muted-foreground">válido hasta</p>
         </div>
       </div>
 

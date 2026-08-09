@@ -155,7 +155,7 @@ export function RegistroEmpresaForm() {
         Registrar mi empresa
       </Button>
 
-      <p className="text-center text-xs text-muted-foreground">
+      <p className="text-center text-caption text-muted-foreground">
         Tu empresa no será visible en el marketplace hasta que completes tu
         perfil y la publiques desde tu panel.
       </p>

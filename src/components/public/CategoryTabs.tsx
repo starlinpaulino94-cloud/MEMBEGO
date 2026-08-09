@@ -59,7 +59,7 @@ export function CategoryTabs({ categories, isLoading = false }: CategoryTabsProp
           {category.name}
           {category.companyCount > 0 && (
             <span
-              className={`rounded-full px-1.5 text-xs tabular-nums ${
+              className={`rounded-full px-1.5 text-caption tabular-nums ${
                 activeCategory === category.slug
                   ? 'bg-white/20 text-white'
                   : 'bg-background text-muted-foreground'

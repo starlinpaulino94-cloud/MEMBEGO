@@ -19,7 +19,7 @@ export default function PublicError({
 
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
-      <h2 className="text-xl font-bold text-foreground">Algo salió mal</h2>
+      <h2 className="text-h2 text-foreground">Algo salió mal</h2>
       <p className="text-sm text-muted-foreground">No pudimos cargar esta página. Intenta de nuevo.</p>
       <div className="flex gap-3">
         <Button onClick={() => reset()} variant="outline">Reintentar</Button>

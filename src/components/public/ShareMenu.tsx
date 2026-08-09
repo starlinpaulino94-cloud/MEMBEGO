@@ -169,7 +169,7 @@ export function ShareMenu({ title, text, path, onShared, label = 'Compartir' }: 
 function BrandGlyph({ label, bg }: { label: string; bg: string }) {
   return (
     <span
-      className="flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold text-white"
+      className="flex h-5 w-5 items-center justify-center rounded text-caption font-bold text-white"
       style={{ backgroundColor: bg }}
     >
       {label}

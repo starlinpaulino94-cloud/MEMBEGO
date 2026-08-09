@@ -51,7 +51,7 @@ export function PublicFooter() {
           <div>
             <Link href="/" className="flex items-center gap-2">
               <Image src="/logo.svg" alt="MembeGo" width={28} height={28} />
-              <span className="text-lg font-bold tracking-tight text-white">
+              <span className="text-h3 text-white">
                 Membe<span className="text-gradient">Go</span>
               </span>
             </Link>
@@ -86,7 +86,7 @@ export function PublicFooter() {
 
           {COLUMNAS.map((col) => (
             <div key={col.titulo}>
-              <h4 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <h4 className="mb-4 text-caption font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {col.titulo}
               </h4>
               <ul className="space-y-2.5 text-sm">
