@@ -48,7 +48,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
             <div className="mt-9 flex animate-slide-up flex-col gap-3 delay-150 sm:flex-row">
               <Link
                 href="/registro"
-                className="group inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3.5 font-semibold text-info shadow-glow-strong transition-all hover:bg-info/10 active:scale-[0.98]"
+                className="group inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3.5 font-semibold text-primary shadow-glow-strong transition-all hover:bg-primary/10 active:scale-[0.98]"
               >
                 Crear mi cuenta gratis
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

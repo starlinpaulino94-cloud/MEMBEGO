@@ -202,9 +202,9 @@ const MICRO = /text-\[(\d+(?:\.\d+)?)px\]/g
  * Techo actual. Bajarlo conforme las fases vayan saldando la deuda.
  *
  * 218 en la Fase 0 · 193 tras la Fase 13 · 186 tras la Fase 16, que dejó el
- * área de superadministrador a cero.
+ * área de superadministrador a cero · 185 al cerrar los acentos de `--info`.
  */
-const TECHO_MICRO_TEXTOS = 186
+const TECHO_MICRO_TEXTOS = 185
 
 function archivosTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {

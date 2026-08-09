@@ -73,6 +73,18 @@ sigue existiendo para forzar el tema claro en la landing.
 | Peligro | `text-destructive`, `bg-destructive/10` |
 | Info | `text-info`, `bg-info/10` |
 
+**`--info` es un ESTADO, no un acento.** Es un cian (`#0097b3`, tono 215), a
+0,165 de distancia perceptual del azul de marca — no hay confusión posible
+entre los dos. Su sitio son los avisos neutros: `Badge`, `StatusBanner`,
+`StatusChip` y `AppIcon` con `variant="info"`.
+
+Lo que **no** es: el color de un hover, de un elemento seleccionado ni de un
+chip de icono. Pasar el ratón por una tarjeta no informa de nada, y "esto es lo
+que elegiste" lo dice `primary` en toda la app — pestañas, chips del mapa, ítem
+activo del menú. Se saldaron 42 clases repartidas en 21 archivos.
+`tests/token-info.test.ts` lo vigila, incluida la separación mínima de 30° de
+tono entre `--info` y `--primary`.
+
 - **El verde es exclusivamente `--success`.** Si un verde en pantalla no
   significa "esto salió bien", está mal puesto.
 - **Dark mode:** automático vía variables (`.dark`). No hardcodear blancos ni

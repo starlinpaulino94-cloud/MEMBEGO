@@ -23,7 +23,7 @@ export function CategoriesSection({ categories }: CategoriesSectionProps) {
           </div>
           <Link
             href="/empresas"
-            className="hidden items-center gap-1 text-sm font-semibold text-primary hover:text-info sm:inline-flex"
+            className="hidden items-center gap-1 text-sm font-semibold text-primary hover:text-primary sm:inline-flex"
           >
             Ver todas <ArrowRight className="h-4 w-4" />
           </Link>
@@ -34,13 +34,13 @@ export function CategoriesSection({ categories }: CategoriesSectionProps) {
             <Link
               key={c.id}
               href={`/empresas?category=${c.slug}`}
-              className="group flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 transition-all hover:border-primary/40 hover:bg-info/10 hover:shadow-sm"
+              className="group flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3.5 transition-all hover:border-primary/40 hover:bg-primary/10 hover:shadow-sm"
             >
-              <span className="font-medium text-foreground group-hover:text-info">
+              <span className="font-medium text-foreground group-hover:text-primary">
                 {c.name}
               </span>
               {c.companyCount > 0 && (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground group-hover:bg-info/15 group-hover:text-info">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary">
                   {c.companyCount}
                 </span>
               )}

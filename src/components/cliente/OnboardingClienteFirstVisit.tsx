@@ -31,7 +31,7 @@ export function OnboardingClienteFirstVisit({ onboarding }: { onboarding: Onboar
       <button
         type="button"
         onClick={snooze}
-        className="absolute right-3 top-3 z-10 rounded-full p-1 text-primary transition hover:bg-info/15 hover:text-info"
+        className="absolute right-3 top-3 z-10 rounded-full p-1 text-primary transition hover:bg-primary/15 hover:text-primary"
         aria-label="Recordármelo en otro momento"
         title="Recordármelo en otro momento"
       >

@@ -66,7 +66,7 @@ export function CompanySwitcher({ companies }: { companies: CompanyOption[] }) {
               <Link
                 href="/cliente/explorar"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-primary transition hover:bg-info/10"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-primary transition hover:bg-primary/10"
               >
                 <Plus className="h-4 w-4" />
                 Unirme a otra empresa

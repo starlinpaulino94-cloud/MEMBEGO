@@ -75,7 +75,7 @@ export function WizardCliente({
             <li
               key={item.key}
               className={`flex items-center justify-between gap-3 rounded-xl border p-4 transition ${
-                isCurrent ? 'border-info/30 bg-info/10 shadow-sm' : 'border-border bg-card'
+                isCurrent ? 'border-primary/30 bg-primary/10 shadow-sm' : 'border-border bg-card'
               }`}
             >
               <div className="flex items-center gap-3">

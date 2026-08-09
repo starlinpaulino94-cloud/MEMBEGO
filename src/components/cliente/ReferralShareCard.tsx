@@ -151,7 +151,7 @@ export function ReferralShareCard({ url, companyName }: Props) {
             target={c.id === 'email' || c.id === 'sms' ? undefined : '_blank'}
             rel="noopener noreferrer"
             onClick={() => track(c.id)}
-            className="flex flex-col items-center gap-1 rounded-lg border border-border bg-card p-2.5 text-xs text-muted-foreground transition hover:border-info/30 hover:bg-info/10"
+            className="flex flex-col items-center gap-1 rounded-lg border border-border bg-card p-2.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:bg-primary/10"
           >
             <c.icon className="h-4 w-4" />
             {c.nombre}

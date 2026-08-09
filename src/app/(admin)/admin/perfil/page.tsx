@@ -64,7 +64,7 @@ export default async function PerfilEmpresaPage({
                 <Link
                   key={c.id}
                   href={`/admin/perfil?empresa=${c.id}`}
-                  className="flex items-center justify-between rounded-xl border border-border bg-card p-4 transition hover:border-info/30 hover:shadow-sm"
+                  className="flex items-center justify-between rounded-xl border border-border bg-card p-4 transition hover:border-primary/30 hover:shadow-sm"
                 >
                   <div>
                     <p className="font-semibold text-foreground">{c.name}</p>

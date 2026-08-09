@@ -62,7 +62,7 @@ export default async function HomePage() {
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/registro"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-info transition hover:bg-info/10"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-primary transition hover:bg-primary/10"
             >
               Crear mi cuenta gratis <ArrowRight className="h-4 w-4" />
             </Link>
