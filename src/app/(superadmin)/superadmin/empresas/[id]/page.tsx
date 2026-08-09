@@ -39,7 +39,7 @@ export default async function EmpresaDetailPage({
   const { company, stats, actividadReciente, topPlanes, membresiasPorEstado } = data
   const Icon = company.type === 'carwash' ? Car : UtensilsCrossed
   const iconBg = company.type === 'carwash' ? 'bg-info/10' : 'bg-warning/15'
-  const iconColor = company.type === 'carwash' ? 'text-primary' : 'text-warning-foreground'
+  const iconColor = company.type === 'carwash' ? 'text-primary' : 'text-warning'
 
   return (
     <div className="space-y-6 animate-fade-up">

@@ -169,7 +169,7 @@ export function ReglaRecompensaForm({
               ))}
             </select>
             {promos.length === 0 && (
-              <p className="mt-1 text-xs text-warning-foreground">
+              <p className="mt-1 text-xs text-warning">
                 No tienes promociones activas para entregar.{' '}
                 <Link href="/admin/promociones" className="font-medium underline">
                   Crea una primero

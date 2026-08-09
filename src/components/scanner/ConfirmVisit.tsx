@@ -342,7 +342,7 @@ export function ConfirmVisit({
           {alertas.map((alerta) => (
             <div
               key={alerta}
-              className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning-foreground"
+              className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning"
             >
               <AlertTriangle className="h-4 w-4 shrink-0" />
               {alerta}

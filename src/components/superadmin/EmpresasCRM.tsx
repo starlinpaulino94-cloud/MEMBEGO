@@ -122,7 +122,7 @@ function CompanyIcon({ type, logoUrl }: { type: string; logoUrl: string | null }
   }
   const bg = type === 'carwash' ? 'bg-info/10' : 'bg-warning/15'
   const Icon = type === 'carwash' ? Car : UtensilsCrossed
-  const color = type === 'carwash' ? 'text-primary' : 'text-warning-foreground'
+  const color = type === 'carwash' ? 'text-primary' : 'text-warning'
   return (
     <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', bg)}>
       <Icon className={cn('h-5 w-5', color)} />

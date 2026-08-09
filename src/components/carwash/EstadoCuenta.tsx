@@ -44,7 +44,7 @@ function fmtFecha(d: Date) {
 }
 
 const CHIP: Record<string, string> = {
-  PENDIENTE: 'bg-warning/15 text-warning-foreground',
+  PENDIENTE: 'bg-warning/15 text-warning',
   FACTURADO: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
   PAGADO: 'bg-success/15 text-success',
   ANULADO: 'bg-muted text-muted-foreground',

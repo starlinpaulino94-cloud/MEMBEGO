@@ -14,8 +14,8 @@ const VARIANT: Record<StatusVariant, { icon: LucideIcon; box: string; icono: str
   warning: {
     icon: AlertTriangle,
     box: 'border-warning/30 bg-warning/15',
-    icono: 'text-warning-foreground',
-    titulo: 'text-warning-foreground',
+    icono: 'text-warning',
+    titulo: 'text-warning',
   },
   info: {
     icon: Info,

@@ -662,7 +662,7 @@ export default async function PagosPage({
                     ))}
 
                   {c.comprobanteNota && (
-                    <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning-foreground">
+                    <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning">
                       <p className="font-medium">Nota del cliente:</p>
                       <p>{c.comprobanteNota}</p>
                     </div>
@@ -755,13 +755,13 @@ export default async function PagosPage({
                       </a>
                     )
                   ) : (
-                    <p className="rounded-lg bg-warning/15 p-3 text-xs text-warning-foreground">
+                    <p className="rounded-lg bg-warning/15 p-3 text-xs text-warning">
                       El cliente aún no ha subido el comprobante del nuevo plan.
                     </p>
                   )}
 
                   {c.comprobanteNota && (
-                    <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning-foreground">
+                    <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning">
                       <p className="font-medium">Nota del cliente:</p>
                       <p>{c.comprobanteNota}</p>
                     </div>
@@ -908,7 +908,7 @@ export default async function PagosPage({
                 )}
 
                 {m.comprobanteNota && (
-                  <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning-foreground">
+                  <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning">
                     <p className="font-medium">Nota del cliente:</p>
                     <p>{m.comprobanteNota}</p>
                   </div>
@@ -986,7 +986,7 @@ export default async function PagosPage({
                       <td className="max-w-64 px-4 py-3 text-xs text-muted-foreground">{s.situacion}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${dias >= 7 ? 'bg-destructive/10 text-destructive' : dias >= 3 ? 'bg-warning/15 text-warning-foreground' : 'bg-muted text-muted-foreground'}`}
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${dias >= 7 ? 'bg-destructive/10 text-destructive' : dias >= 3 ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'}`}
                         >
                           {dias === 0 ? 'hoy' : `${dias} día${dias !== 1 ? 's' : ''}`}
                         </span>

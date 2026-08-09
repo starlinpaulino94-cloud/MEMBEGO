@@ -63,7 +63,7 @@ export default async function CuentasPage({
         // Migración sin correr: se DICE, no se finge una lista vacía. Un módulo
         // que parece vacío se abandona; uno que explica qué falta se arregla.
         <div className="flex items-start gap-2 rounded-2xl border border-warning/30 bg-warning/10 p-5 text-sm">
-          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning-foreground" />
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
           <div>
             <p className="font-bold text-foreground">Falta correr la migración</p>
             <p className="mt-1 text-muted-foreground">

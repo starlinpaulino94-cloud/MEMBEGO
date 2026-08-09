@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 
 const DIFICULTAD_STYLE: Record<PlanPlantillaCard['dificultad'], string> = {
   baja: 'bg-success/10 text-success',
-  media: 'bg-warning/15 text-warning-foreground',
+  media: 'bg-warning/15 text-warning',
   alta: 'bg-destructive/10 text-destructive',
 }
 

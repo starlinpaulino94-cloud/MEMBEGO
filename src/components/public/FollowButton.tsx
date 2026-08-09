@@ -142,8 +142,8 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
           title={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
           className={`inline-flex items-center justify-center rounded-xl border p-3 transition disabled:opacity-60 ${
             esFavorita
-              ? 'border-warning/30 bg-warning/15 text-warning-foreground'
-              : 'border-border bg-card text-muted-foreground hover:text-warning-foreground'
+              ? 'border-warning/30 bg-warning/15 text-warning'
+              : 'border-border bg-card text-muted-foreground hover:text-warning'
           }`}
         >
           <Star className={`h-4 w-4 ${esFavorita ? 'fill-amber-400' : ''}`} />

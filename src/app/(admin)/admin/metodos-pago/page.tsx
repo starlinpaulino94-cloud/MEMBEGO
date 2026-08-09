@@ -96,7 +96,7 @@ export default async function MetodosPagoPage() {
                       </div>
                     ) : (
                       <div className="rounded-lg bg-warning/15 p-2">
-                        <Building2 className="h-5 w-5 text-warning-foreground" />
+                        <Building2 className="h-5 w-5 text-warning" />
                       </div>
                     )}
                     <div>

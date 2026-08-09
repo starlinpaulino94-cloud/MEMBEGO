@@ -29,7 +29,7 @@ const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDi
 const ESTADO_CHIP: Record<string, string> = {
   APPLIED: 'bg-success/15 text-success',
   CANCELLED: 'bg-destructive/10 text-destructive',
-  REVERTED: 'bg-warning/15 text-warning-foreground',
+  REVERTED: 'bg-warning/15 text-warning',
   ERROR: 'bg-destructive/10 text-destructive',
 }
 

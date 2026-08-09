@@ -371,6 +371,7 @@ export function SelectorUbicacionVivienda({
               <Input
                 autoFocus
                 value={manualText}
+                aria-label={mini === 'ciudad' ? 'Ciudad o municipio' : 'Sector o zona'}
                 onChange={(e) => setManualText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), confirmarManual())}
                 placeholder={mini === 'ciudad' ? 'Escribe tu ciudad o municipio' : 'Escribe tu sector o zona'}
@@ -392,6 +393,7 @@ export function SelectorUbicacionVivienda({
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
                 <Input
                   value={busqueda}
+                  aria-label={mini === 'pais' ? 'Buscar país' : `Buscar ${etiqueta2.toLowerCase()}`}
                   onChange={(e) => setBusqueda(e.target.value)}
                   placeholder={mini === 'pais' ? 'Buscar país' : `Buscar ${etiqueta2.toLowerCase()}`}
                   className={cn(

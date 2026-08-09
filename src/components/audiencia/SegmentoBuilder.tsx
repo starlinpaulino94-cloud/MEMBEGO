@@ -318,8 +318,14 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
             <option value="NOT">{etiquetaOperadorGrupo('NOT')}</option>
           </select>
           {!esRaiz && (
-            <Button type="button" variant="ghost" size="icon" onClick={onQuitarCampo}>
-              <X className="h-4 w-4" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onQuitarCampo}
+              aria-label="Quitar este grupo de condiciones"
+            >
+              <X className="h-4 w-4" aria-hidden />
             </Button>
           )}
         </div>
@@ -455,8 +461,14 @@ function FilaCondicion({ cond, opciones, onChange, onQuitar }: FilaProps) {
         onChange={(valor) => onChange({ ...cond, valor })}
       />
 
-      <Button type="button" variant="ghost" size="icon" onClick={onQuitar}>
-        <Trash2 className="h-4 w-4" />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onQuitar}
+        aria-label="Quitar esta condición"
+      >
+        <Trash2 className="h-4 w-4" aria-hidden />
       </Button>
     </div>
   )

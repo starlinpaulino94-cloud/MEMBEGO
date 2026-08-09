@@ -79,7 +79,7 @@ export default async function SuperadminPlanesPage() {
                     <CardTitle className="text-base">{plan.nombre}</CardTitle>
                     <div className="flex gap-1">
                       {plan.esIlimitado && (
-                        <Badge className="bg-warning/15 text-warning-foreground text-caption">
+                        <Badge className="bg-warning/15 text-warning text-caption">
                           <InfinityIcon className="mr-1 h-3 w-3" />Ilimitado
                         </Badge>
                       )}

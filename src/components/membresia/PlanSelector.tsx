@@ -69,7 +69,7 @@ export function PlanSelector({
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xl font-semibold">{plan.nombre}</h3>
                 {plan.esIlimitado && (
-                  <Badge className="bg-warning/15 text-warning-foreground">
+                  <Badge className="bg-warning/15 text-warning">
                     Ilimitado
                   </Badge>
                 )}

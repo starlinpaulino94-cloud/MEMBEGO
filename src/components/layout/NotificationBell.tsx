@@ -26,7 +26,7 @@ const TIPO_ICON: Record<string, { icon: LucideIcon; cls: string }> = {
   PAGO_APROBADO: { icon: CheckCircle2, cls: 'bg-success/10 text-success' },
   PAGO_RECHAZADO: { icon: XCircle, cls: 'bg-destructive/10 text-destructive' },
   NUEVO_COMPROBANTE: { icon: FileText, cls: 'bg-info/10 text-info' },
-  MEMBRESIA_POR_VENCER: { icon: AlertTriangle, cls: 'bg-warning/15 text-warning-foreground' },
+  MEMBRESIA_POR_VENCER: { icon: AlertTriangle, cls: 'bg-warning/15 text-warning' },
   MEMBRESIA_ACTIVADA: { icon: BadgeCheck, cls: 'bg-success/10 text-success' },
   PROMOCION_NUEVA: { icon: Gift, cls: 'bg-primary/10 text-primary' },
   SISTEMA: { icon: Bell, cls: 'bg-muted text-muted-foreground' },

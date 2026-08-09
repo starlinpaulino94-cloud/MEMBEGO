@@ -24,7 +24,7 @@ function Reloj({ minutos, estimado }: { minutos: number; estimado: number | null
   const clase = excedido
     ? 'text-destructive'
     : cerca
-      ? 'text-warning-foreground'
+      ? 'text-warning'
       : 'text-muted-foreground'
   return (
     <span className={`inline-flex items-center gap-1 text-sm font-bold tabular-nums ${clase}`}>
@@ -202,7 +202,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
                   <div className="min-w-0">
                     <Identidad v={v} />
                   </div>
-                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-bold text-success-foreground">
+                  <span className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-bold text-success">
                     <CheckCircle2 className="h-4 w-4" />
                     {v.total > 0 ? fmtRD(v.total) : 'Listo'}
                   </span>

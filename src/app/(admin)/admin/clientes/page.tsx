@@ -118,6 +118,7 @@ export default async function ClientesPage({
       <Form action="/admin/clientes" className="flex max-w-md gap-2">
         <Input
           name="q"
+          aria-label="Buscar clientes"
           defaultValue={busqueda}
           placeholder="Buscar por nombre, correo o teléfono…"
           className="min-h-10"

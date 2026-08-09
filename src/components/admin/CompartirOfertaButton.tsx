@@ -94,7 +94,7 @@ export function CompartirOfertaButton({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-10 z-50 w-64 rounded-xl border border-border bg-popover py-1.5 shadow-lg">
             {advertencia && (
-              <p className="mx-2 mb-1 flex items-start gap-1.5 rounded-lg bg-warning/15 px-2.5 py-2 text-xs text-warning-foreground">
+              <p className="mx-2 mb-1 flex items-start gap-1.5 rounded-lg bg-warning/15 px-2.5 py-2 text-xs text-warning">
                 <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {advertencia}
               </p>

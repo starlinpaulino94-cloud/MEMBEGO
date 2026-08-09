@@ -384,7 +384,7 @@ verificar enlaces.
 | 16 | Superadmin | ✅ |
 | 17 | Empleado | ✅ |
 | 18 | Páginas públicas | ✅ |
-| 19 | Dark mode, accesibilidad, QA visual | ⬜ |
+| 19 | Dark mode, accesibilidad, QA visual | ✅ |
 | 20 | Eliminar el frontend visual heredado | ⬜ |
 
 ### Correcciones desde verificación visual
@@ -555,6 +555,38 @@ jerarquía frente al titular. La guardia las vigila en todo `src`, no solo aquí
 (`text-4xl sm:text-5xl lg:text-7xl`) a `.text-display`, que ya es fluida de 40 a
 72px. Los siete `rounded-3xl` —fuera del vocabulario— bajan a `rounded-2xl`.
 Área pública a **cero** micro-textos y **cero** tamaños fuera de escala.
+
+### Fase 19 · el contraste se calcula, no se mira
+
+**Cuatro pares de token no llegaban a AA**, todos en tema claro:
+
+| Par | Antes | Ahora |
+|---|---|---|
+| Texto de alerta sobre tarjeta | **2,28:1** | 4,65:1 |
+| Texto informativo | 3,44:1 | 4,59:1 |
+| Texto de éxito | 3,62:1 | 4,64:1 |
+| Borde de tarjeta | 1,29:1 | 1,48:1 |
+
+Los valores se habían elegido mirando el RELLENO (`bg-success/10`), pero el uso
+real es el contrario: 150 `text-success`, 118 `text-warning`, 30 `text-info`
+frente a 23 rellenos sólidos en total. El token estaba optimizado para su caso
+raro.
+
+**103 sitios usaban `text-*-foreground` como texto sobre tarjeta o tinte.** Ese
+token es el color que va ENCIMA del relleno sólido. Sobre una tarjeta daba
+**1,06:1 en oscuro** —invisible— y `success`/`info` fallaban también en claro
+con 1,03:1. Nadie lo reportó porque el texto no desaparece: se funde con el
+fondo, y quien lo ve asume que ahí no había nada escrito. Solo 6 usos eran
+correctos (sobre su relleno sólido) y se conservaron.
+
+**Campos sin nombre accesible: 0 de cara al usuario.** Un `<Label>` sin
+`htmlFor` se ve como etiqueta y no lo es; un `placeholder` desaparece al
+escribir. Quedan 101 en el panel interno, con techo que solo baja.
+
+`scripts/contraste.mjs` y `scripts/campos-sin-etiqueta.mjs` se ejecutan a mano
+y como guardia. Los dos incluyen una **prueba de la prueba**: si el parser se
+rompe devolvería cero y la guardia pasaría por estar ciega, que es peor que
+fallar.
 
 ### Decisiones de producto resueltas fuera de fase
 

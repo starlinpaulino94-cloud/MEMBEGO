@@ -152,7 +152,7 @@ export default async function HistorialPage({
                         </Badge>
                       )}
                       {v.transaccion && v.transaccion.estado !== 'APPLIED' && (
-                        <Badge variant="secondary" className="bg-warning/15 text-[10px] text-warning-foreground">
+                        <Badge variant="secondary" className="bg-warning/15 text-[10px] text-warning">
                           {v.transaccion.estado === 'REVERTED'
                             ? 'Revertida'
                             : v.transaccion.estado === 'CANCELLED'

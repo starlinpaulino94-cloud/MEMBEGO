@@ -249,7 +249,7 @@ export default async function ClienteDetailPage({
                 {/* Comprobante de pago */}
                 {membership.comprobanteUrl && (
                   <div className="rounded-lg border border-warning/30 bg-warning/15 p-4 space-y-3">
-                    <p className="text-sm font-medium text-warning-foreground flex items-center gap-2">
+                    <p className="text-sm font-medium text-warning flex items-center gap-2">
                       <FileText className="h-4 w-4" />
                       Comprobante enviado por el cliente
                     </p>
@@ -344,7 +344,7 @@ export default async function ClienteDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <StickyNote className="h-4 w-4 text-warning-foreground" /> Notas internas
+            <StickyNote className="h-4 w-4 text-warning" /> Notas internas
           </CardTitle>
         </CardHeader>
         <CardContent>

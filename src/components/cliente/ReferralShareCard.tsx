@@ -108,7 +108,12 @@ export function ReferralShareCard({ url, companyName }: Props) {
     <div className="space-y-3">
       {/* Enlace + copiar */}
       <div className="flex gap-2">
-        <Input readOnly value={url} className="bg-card font-mono text-sm" />
+        <Input
+          readOnly
+          value={url}
+          aria-label="Tu enlace de invitación"
+          className="bg-card font-mono text-sm"
+        />
         <Button type="button" onClick={copiar} variant="outline" className="shrink-0">
           {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
         </Button>

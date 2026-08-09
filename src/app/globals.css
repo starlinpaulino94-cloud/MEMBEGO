@@ -170,22 +170,40 @@
   /* Destructive */
   --destructive: oklch(0.577 0.245 27.325);
 
-  /* Estados semánticos */
-  --success: oklch(0.60 0.15 160);
+  /**
+   * ESTADOS SEMÁNTICOS · ajustados en la Fase 19 para que sirvan como TEXTO.
+   *
+   * Los valores anteriores se eligieron mirando el RELLENO (`bg-success/10`) y
+   * fallaban como texto sobre tarjeta: éxito 3.62:1, alerta **2.28:1**, info
+   * 3.44:1, contra el 4.5:1 que exige AA. Y el uso real es justo el contrario
+   * —150 `text-success`, 118 `text-warning`, 30 `text-info` frente a 23
+   * rellenos sólidos en total—, así que el token estaba optimizado para su
+   * caso raro.
+   *
+   * Ahora los tres pasan AA como texto (4.64 · 4.65 · 4.59) y también admiten
+   * blanco encima cuando se usan como relleno sólido. Del tinte `/10` y `/15`
+   * apenas se nota la diferencia: es un 10% de un color algo más profundo.
+   *
+   * `--warning-foreground` pasa a ser CLARO en tema claro. No es una errata:
+   * `--warning` ya no es un ámbar pálido sino uno medio, así que lo que va
+   * encima tiene que ser claro. En oscuro sigue al revés —el relleno es un
+   * ámbar claro y su texto es oscuro—, exactamente como hace `--primary`.
+   */
+  --success: oklch(0.535 0.15 160);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.75 0.16 75);
-  --warning-foreground: oklch(0.25 0.06 75);
-  /* DS 2.0: con la marca en azul (255), `--info` se desplazó de 230 a 215
-     para que un aviso informativo no se confunda con un CTA. Retirarlo del
-     vocabulario y resolver los avisos con superficie neutra + icono sería
-     más limpio todavía, pero son 138 usos en páginas: se evalúa en la fase
-     de cada módulo, no aquí. */
-  --info: oklch(0.62 0.12 215);
+  --warning: oklch(0.565 0.16 75);
+  --warning-foreground: oklch(0.99 0 0);
+  /* Cian, no azul: a 215 no se confunde con la marca (255). Ver
+     `tests/token-info.test.ts`, que exige 30° de separación. */
+  --info: oklch(0.545 0.12 215);
   --info-foreground: oklch(0.99 0 0);
 
   /* Borders */
-  --border: oklch(0.914 0.005 264);
-  --input: oklch(0.914 0.005 264);
+  /* 0.914 dejaba el borde de tarjeta en 1.29:1 sobre blanco: una tarjeta no se
+     distinguía de la página salvo por su sombra. 0.87 lo sube a 1.48:1, que sí
+     se ve sin convertirse en una caja marcada. */
+  --border: oklch(0.87 0.006 264);
+  --input: oklch(0.87 0.006 264);
   --ring: oklch(0.55 0.22 255);
 
   /* MDS · Superficies auxiliares */
@@ -294,14 +312,17 @@
   --accent: oklch(0.945 0.025 200);
   --accent-foreground: oklch(0.40 0.14 200);
   --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.60 0.15 160);
+  /* Espejo del tema claro: la landing debe redeclarar TODO lo que redefine
+     `.dark`, incluidos los valores de la Fase 19. Si se quedaran los antiguos
+     aquí, la web pública tendría un contraste distinto al de la app. */
+  --success: oklch(0.535 0.15 160);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.75 0.16 75);
-  --warning-foreground: oklch(0.25 0.06 75);
-  --info: oklch(0.62 0.12 215);
+  --warning: oklch(0.565 0.16 75);
+  --warning-foreground: oklch(0.99 0 0);
+  --info: oklch(0.545 0.12 215);
   --info-foreground: oklch(0.99 0 0);
-  --border: oklch(0.914 0.005 264);
-  --input: oklch(0.914 0.005 264);
+  --border: oklch(0.87 0.006 264);
+  --input: oklch(0.87 0.006 264);
   --ring: oklch(0.55 0.22 255);
 
   /* Este bloque tiene que redefinir TODO lo que redefine `.dark`, aunque el

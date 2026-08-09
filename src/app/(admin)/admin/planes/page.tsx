@@ -154,7 +154,7 @@ export default async function PlanesPage() {
                   </CardTitle>
                   <div className="flex items-center gap-1.5">
                     {plan.esIlimitado && (
-                      <Badge className="bg-warning/15 text-warning-foreground">
+                      <Badge className="bg-warning/15 text-warning">
                         <InfinityIcon className="mr-1 h-3 w-3" /> Ilimitado
                       </Badge>
                     )}

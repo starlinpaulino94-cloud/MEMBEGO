@@ -115,7 +115,7 @@ export function LoginForm({
       </CardHeader>
       <CardContent>
         {verificaPendiente && (
-          <Alert className="mb-4 border-info/40 bg-info/15 text-info-foreground">
+          <Alert className="mb-4 border-info/40 bg-info/15 text-info">
             <AlertDescription>
               Te enviamos un enlace de confirmación a tu correo. Ábrelo (revisa
               también spam) para activar tu cuenta y luego inicia sesión.
@@ -123,7 +123,7 @@ export function LoginForm({
           </Alert>
         )}
         {verificado && (
-          <Alert className="mb-4 border-success/40 bg-success/15 text-success-foreground">
+          <Alert className="mb-4 border-success/40 bg-success/15 text-success">
             <AlertDescription>
               Correo confirmado. Ya puedes iniciar sesión.
             </AlertDescription>

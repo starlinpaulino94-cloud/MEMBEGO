@@ -163,8 +163,8 @@ export function ProfileForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Correo electrónico</Label>
-        <Input value={email} disabled className="bg-muted/40 text-muted-foreground" />
+        <Label htmlFor="perfil-email">Correo electrónico</Label>
+        <Input id="perfil-email" value={email} disabled className="bg-muted/40 text-muted-foreground" />
         <p className="text-xs text-muted-foreground">
           El correo no se puede modificar desde aquí.
         </p>

@@ -227,7 +227,7 @@ export default async function ReportesPage({
                     i.tono === 'bueno'
                       ? 'text-success'
                       : i.tono === 'malo'
-                        ? 'text-warning-foreground'
+                        ? 'text-warning'
                         : 'text-primary'
                   }`}
                   aria-hidden

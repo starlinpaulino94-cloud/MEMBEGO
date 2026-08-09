@@ -120,7 +120,7 @@ export function SeguimientoAcciones(props: SeguimientoAccionesProps) {
           {recordando ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <BellRing className="h-4 w-4 text-warning-foreground" />
+            <BellRing className="h-4 w-4 text-warning" />
           )}
         </Button>
       )}

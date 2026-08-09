@@ -57,7 +57,7 @@ export function AnularTransaccionesClienteButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2 border-warning/40 text-warning-foreground">
+        <Button variant="outline" className="gap-2 border-warning/40 text-warning">
           <Eraser className="h-4 w-4" /> Anular todas sus transacciones
         </Button>
       </DialogTrigger>

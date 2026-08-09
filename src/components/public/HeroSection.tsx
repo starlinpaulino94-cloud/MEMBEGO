@@ -127,7 +127,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
               <QrCode className="h-4 w-4 text-primary" /> Válida al instante
             </div>
             <div className="absolute -bottom-4 -right-3 hidden animate-float items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-medium text-foreground shadow-premium delay-300 sm:flex">
-              <Sparkles className="h-4 w-4 text-warning-foreground" /> Beneficios exclusivos
+              <Sparkles className="h-4 w-4 text-warning" /> Beneficios exclusivos
             </div>
           </div>
         </div>

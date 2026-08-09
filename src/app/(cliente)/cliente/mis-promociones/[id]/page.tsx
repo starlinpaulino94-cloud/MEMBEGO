@@ -323,7 +323,7 @@ export default async function MiCompraPage({
             </p>
 
             {metodosPago.length === 0 ? (
-              <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning-foreground">
+              <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
                 La empresa aún no configuró cuentas de transferencia. Contáctala
                 directamente para coordinar el pago.
               </p>

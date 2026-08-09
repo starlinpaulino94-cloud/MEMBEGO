@@ -10,7 +10,7 @@ import { CreditCard, Gift, Send } from 'lucide-react'
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
 const GIFTCARD_CHIP: Record<string, string> = {
-  PENDIENTE_PAGO: 'bg-warning/15 text-warning-foreground',
+  PENDIENTE_PAGO: 'bg-warning/15 text-warning',
   ACTIVA: 'bg-success/15 text-success',
   AGOTADA: 'bg-muted text-muted-foreground',
   CANCELADA: 'bg-destructive/10 text-destructive',
