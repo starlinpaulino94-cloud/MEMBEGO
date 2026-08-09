@@ -209,16 +209,27 @@ export async function buscarCercanosRaw(
 
 /**
  * Búsqueda por viewport del mapa (pan/zoom, §13). Devuelve las sucursales
- * visibles; la distancia se mide desde el centro del rectángulo.
+ * visibles.
+ *
+ * LA DISTANCIA SE MIDE DESDE `ancla` —dónde está la persona—, y solo cae al
+ * centro del rectángulo si no hay ancla. Medir siempre desde el centro del
+ * mapa era engañoso: la tarjeta dice "a 2,3 km" y el cliente lo lee como "a
+ * 2,3 km DE MÍ", pero bastaba arrastrar el mapa a otra provincia para que ese
+ * número pasara a contar desde un punto donde no está nadie. La cifra solo
+ * sirve para decidir si vale la pena ir; medida desde otro sitio, no sirve.
  */
 export async function buscarEnViewportRaw(
-  params: BaseBusqueda & { viewport: ViewportMapa; limit?: number },
+  params: BaseBusqueda & {
+    viewport: ViewportMapa
+    limit?: number
+    ancla?: { lat: number; lng: number } | null
+  },
   postgis = false
 ): Promise<FilaSucursalCercana[]> {
-  const { viewport, limit = 100, filtros = {}, userId = null, ahora = new Date() } = params
+  const { viewport, limit = 100, filtros = {}, userId = null, ahora = new Date(), ancla = null } = params
   const { west, south, east, north } = viewport
-  const latCentro = (south + north) / 2
-  const lngCentro = (west + east) / 2
+  const latCentro = ancla?.lat ?? (south + north) / 2
+  const lngCentro = ancla?.lng ?? (west + east) / 2
 
   return sinEmpresa(MOTIVO, (tx) => {
     return tx.$queryRaw<FilaSucursalCercana[]>`
@@ -295,7 +306,11 @@ export async function buscarCercanos(
 
 /** Punto de entrada para la vista de mapa (toda la región visible). */
 export async function buscarEnViewport(
-  params: BaseBusqueda & { viewport: ViewportMapa; limit?: number }
+  params: BaseBusqueda & {
+    viewport: ViewportMapa
+    limit?: number
+    ancla?: { lat: number; lng: number } | null
+  }
 ): Promise<{ resultados: SucursalCercana[] }> {
   const postgis = await detectarPostGIS()
   const filas = await buscarEnViewportRaw(params, postgis)

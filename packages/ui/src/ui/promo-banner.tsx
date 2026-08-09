@@ -20,8 +20,17 @@ const promoBannerVariants = cva(
   {
     variants: {
       tono: {
-        /** Gradiente esmeralda→cyan de marca — beneficios y bienvenida. */
-        brand: 'bg-gradient-to-br from-emerald-600 to-cyan-500',
+        /**
+         * Gradiente azul→cyan de marca — beneficios y bienvenida.
+         *
+         * Era `from-emerald-600 to-cyan-500`. El verde dejó de ser color de
+         * marca en el DS 2.0 y sobrevive solo como semántica de éxito, pero
+         * este banner —la pieza más grande del home del cliente— seguía
+         * pintándolo, así que lo primero que veía un cliente al entrar
+         * contradecía al resto de la app. Ahora arranca en el azul de marca y
+         * mantiene el cyan del cierre, que sí es del sistema.
+         */
+        brand: 'bg-gradient-to-br from-blue-600 to-cyan-500',
         /** Flash sale / oferta limitada — urgencia cálida. */
         hot: 'bg-gradient-to-br from-orange-500 to-rose-600',
         /** Premium / VIP — dorado sobre navy. */

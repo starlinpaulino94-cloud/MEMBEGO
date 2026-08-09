@@ -165,16 +165,49 @@ export async function GET(req: NextRequest) {
       radioKm,
     })
   } catch (e) {
-    if (e instanceof ErrorContextoUbicacion) {
-      return jsonError(422, e.codigo, e.message)
+    /**
+     * MOVER EL MAPA NO PUEDE FALLAR.
+     *
+     * Una búsqueda por viewport ya dice dónde mirar: el rectángulo visible. No
+     * necesita el ancla del contexto para nada —`buscarEnViewport` ni la usa—,
+     * así que si el ancla no resuelve, se sigue con el centro del rectángulo.
+     *
+     * Sin esto, el mapa se rompía en cuanto alguien pulsaba "Mi ubicación" y
+     * después arrastraba: el refresco por viewport viaja con `contexto=CURRENT`
+     * y sin coordenadas, y el resolutor respondía "No recibimos una ubicación
+     * válida de tu dispositivo" — un mensaje que además culpaba al GPS, que no
+     * tenía nada que ver.
+     *
+     * Sin viewport (búsqueda por radio) el error SÍ es real: sin ancla no hay
+     * centro desde el que medir, y ahí el aviso es legítimo.
+     */
+    if (!viewport) {
+      if (e instanceof ErrorContextoUbicacion) {
+        return jsonError(422, e.codigo, e.message)
+      }
+      return jsonError(500, 'error_interno', 'No pudimos resolver la ubicación.')
     }
-    return jsonError(500, 'error_interno', 'No pudimos resolver la ubicación.')
+    ubicacion = {
+      contexto: 'MANUAL' as const,
+      lat: (viewport.south + viewport.north) / 2,
+      lng: (viewport.west + viewport.east) / 2,
+      // Sin etiqueta a propósito: el cliente solo pisa la suya cuando llega
+      // una, así que "Mi ubicación actual" sobrevive al arrastre.
+      radioKm: undefined,
+    }
   }
 
   const base = { filtros, userId: dbUserId }
   let result: ResultadoCercanos
   if (viewport) {
-    const { resultados } = await buscarEnViewport({ ...base, viewport })
+    // La distancia se mide desde donde está la persona (el ancla ya resuelta),
+    // no desde el centro de lo que se esté mirando: es lo que hace que "a 2 km"
+    // signifique algo cuando decides si vas.
+    const { resultados } = await buscarEnViewport({
+      ...base,
+      viewport,
+      ancla: { lat: ubicacion.lat, lng: ubicacion.lng },
+    })
     result = { resultados, hayMas: false, total: resultados.length, ubicacion }
   } else {
     const { resultados, hayMas, total } = await buscarCercanos({

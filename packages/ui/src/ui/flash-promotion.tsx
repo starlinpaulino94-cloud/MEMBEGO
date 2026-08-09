@@ -22,7 +22,7 @@ import { cn } from '../cn'
  */
 const TONOS = {
   hot: 'from-orange-500 to-rose-600',
-  brand: 'from-emerald-600 to-cyan-500',
+  brand: 'from-blue-600 to-cyan-500',
   premium: 'from-amber-500 to-yellow-400 text-amber-950',
   celebracion: 'from-violet-600 to-fuchsia-500',
 } as const
