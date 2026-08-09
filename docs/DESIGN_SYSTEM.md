@@ -61,8 +61,18 @@ azul. Ahora `--primary` es el mismo azul en las dos, y `.theme-landing` solo
 sigue existiendo para forzar el tema claro en la landing.
 
 - **Marca:** `--primary` (azul eléctrico), con `--primary-hover` y
-  `--primary-soft` para los estados. Gradiente: `.bg-gradient-brand`
-  (azul → cian), con moderación — hero, CTA protagonista, dock del QR.
+  `--primary-soft` para los estados.
+- **Degradados — dos, y no son intercambiables:**
+
+| Clase | Para qué | Texto blanco encima |
+|---|---|---|
+| `.surface-hero` | Cabeceras públicas con texto | ✅ 6,34:1 · 8,35:1 · 10,13:1 |
+| `.bg-gradient-brand` | Chips, iconos, dock del QR | ❌ su extremo cian da **2,33:1** |
+
+  Este documento recomendaba `.bg-gradient-brand` para héroes hasta la Fase 18.
+  Era una combinación ilegible por escrito: sobre el cian, el texto blanco
+  pequeño no llega ni a la mitad del mínimo de AA. Si necesitas escribir encima
+  de un degradado, es `.surface-hero`.
 - **Superficies:** `--background`, `--card`, `--muted`, `--border`.
 - **Estados semánticos** — usar SIEMPRE estos, nunca `text-green-600` suelto:
 
