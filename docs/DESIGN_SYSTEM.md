@@ -375,6 +375,15 @@ Lo que salió del primer despliegue mirado con ojos, no con pruebas.
 | Distancia medida desde el centro del mapa | `buscarEnViewportRaw` usaba el centro del rectángulo | Se mide desde el ancla (`ancla` en la consulta): "a 2 km" vuelve a significar "de ti" |
 | El menú lateral se plegaba | Grupos colapsables con estado en `localStorage` | Eliminado. Para ganar espacio está el riel de iconos |
 | Banner del home en verde | `PromoBanner tono="brand"` seguía en `emerald→cyan` | Azul de marca. Igual en `FlashPromotion` y `FeedNovedades` |
+| "0 negocios" en el mapa pese a tener la ubicación puesta | `ensureSucursalPrincipal` copiaba dirección y teléfono pero **no las coordenadas**: el pin se guardaba en `Company` y la sucursal quedaba en null | Se propaga el punto; backfill en `migrations_manual/2026-08-sucursal-principal-coordenadas.sql` |
+
+**El pin del perfil no llegaba al mapa.** `Company.latitud/longitud` y
+`Sucursal.latitud/longitud` son campos distintos, y "Cerca de mí" consulta
+SUCURSALES exigiendo coordenadas. El dueño marcaba su ubicación exacta en
+`/admin/perfil`, se guardaba en la empresa, y el negocio no aparecía nunca en el
+mapa. No daba error: decía "0 negocios", que es justo lo que diría si de verdad
+no hubiera ninguno cerca — por eso se leyó como un problema de datos antes de
+ser un bug.
 
 **El menú no se pliega.** Un menú que cambia de forma al navegar hace que nada
 esté donde lo dejaste, y llegar a cualquier sitio costaba dos clics. La
