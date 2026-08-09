@@ -358,7 +358,7 @@ verificar enlaces.
 | 12 | Operaciones: scanner, pagos, sucursales | ✅ |
 | 13 | Reportes | ✅ |
 | 14 | Empresa, empleados, configuración | ✅ |
-| 15 | Soporte | ⬜ |
+| 15 | Soporte | ✅ |
 | 16 | Superadmin | ⬜ |
 | 17 | Empleado | ⬜ |
 | 18 | Páginas públicas | ⬜ |
@@ -421,6 +421,36 @@ la zona de cobertura.
 **"Zona de cobertura" se rellenaba con la URL del mapa.** El campo iba justo
 debajo del enlace de Google Maps, con la misma pinta y sin explicar qué
 esperaba. Ahora dice que es texto y no un enlace.
+
+### Fase 15 · soporte por cola, no por estado
+
+**La bandeja enseñaba cuatro tarjetas que no cuadraban.** "Total / Nuevos / En
+proceso / Resueltos" contaba TRES de los cinco estados: un ticket en
+`ESPERANDO_CLIENTE` no salía en ninguna y el desglose no sumaba el total. Un
+desglose que no cuadra enseña a no mirarlo. Ninguna era pulsable, además, y
+justo debajo había un desplegable para filtrar por lo mismo.
+
+Las sustituyen tres **colas** —mismo criterio que la Fase 12 aplicó a los
+pagos—, que además llevan a su lista:
+
+| Cola | Estados | Qué significa |
+|---|---|---|
+| Te toca a ti | `NUEVO`, `EN_PROCESO` | El trabajo |
+| Esperando al cliente | `ESPERANDO_CLIENTE` | No es trabajo, pero se vigila |
+| Cerrados | `RESUELTO`, `CERRADO` | Historial |
+
+`tests/soporte-colas.test.ts` exige que **todo estado esté en exactamente una
+cola**: si mañana se añade uno al enum y nadie lo asigna, sus tickets
+desaparecerían de la bandeja sin dar error.
+
+**Al cliente no se le decía cuándo le tocaba contestar.** `ESPERANDO_CLIENTE` se
+mostraba como "Esperando cliente" —escrito desde el punto de vista de quien
+atiende— entre otras cuatro insignias. Ahora dice "Te toca contestar" y la fila
+se resalta.
+
+**El botón de WhatsApp usaba `bg-success`**: el verde de "salió bien" como color
+de una marca ajena, con `hover:bg-success` encima, así que no respondía al pasar
+por encima. Pasa al azul de marca.
 
 ### Decisiones de producto resueltas fuera de fase
 

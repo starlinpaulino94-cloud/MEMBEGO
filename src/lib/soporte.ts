@@ -152,6 +152,48 @@ export function estadoBadgeClass(e: string): string {
   )[e] ?? 'bg-muted text-muted-foreground'
 }
 
+/**
+ * COLAS DE TRABAJO — la bandeja de soporte no es un histograma de estados.
+ *
+ * Los cinco estados existen y siguen siendo útiles dentro de un ticket, pero un
+ * administrador que abre esta pantalla tiene UNA pregunta: *¿qué está esperando
+ * por mí?* Cinco números repartidos por igual no la contestan; obligan a hacer
+ * la suma mentalmente cada vez.
+ *
+ * Las tres colas responden por quién tiene la pelota:
+ *
+ *  · PENDIENTES  — le toca al negocio (nuevo o ya en proceso). Es el trabajo.
+ *  · ESPERANDO   — le toca al cliente. No es trabajo, pero se vigila: un ticket
+ *                  que lleva semanas aquí normalmente es un cliente que se fue.
+ *  · CERRADOS    — resuelto o cerrado. Historial.
+ *
+ * Mismo criterio que la Fase 12 aplicó a los pagos. Y cubren los CINCO estados:
+ * las tarjetas anteriores contaban tres, así que un ticket en
+ * ESPERANDO_CLIENTE no aparecía en ninguna y los números no cuadraban con el
+ * total.
+ */
+export const COLAS_TICKET = {
+  pendientes: ['NUEVO', 'EN_PROCESO'],
+  esperando: ['ESPERANDO_CLIENTE'],
+  cerrados: ['RESUELTO', 'CERRADO'],
+} as const satisfies Record<string, readonly TicketEstadoT[]>
+
+export type ColaTicket = keyof typeof COLAS_TICKET
+
+export const COLA_LABEL: Record<ColaTicket, string> = {
+  pendientes: 'Te toca a ti',
+  esperando: 'Esperando al cliente',
+  cerrados: 'Cerrados',
+}
+
+/** A qué cola pertenece un estado. */
+export function colaDeEstado(estado: string): ColaTicket | null {
+  for (const [cola, estados] of Object.entries(COLAS_TICKET)) {
+    if ((estados as readonly string[]).includes(estado)) return cola as ColaTicket
+  }
+  return null
+}
+
 export function categoriaLabel(c: string): string {
   return (
     {
