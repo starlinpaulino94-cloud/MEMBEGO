@@ -377,7 +377,7 @@ export function ConfirmVisit({
               {cliente.mensaje ?? 'No se puede registrar esta visita.'}
             </AlertDescription>
           </Alert>
-          <Button onClick={onScanNext ?? onDone} className="w-full">
+          <Button onClick={onScanNext ?? onDone} size="xl" className="w-full">
             Escanear siguiente
           </Button>
         </div>
@@ -469,7 +469,7 @@ export function ConfirmVisit({
 
           <div className="space-y-2 pt-1">
             {!servicio && (
-              <p className="text-center text-xs text-muted-foreground">
+              <p className="text-center text-small text-muted-foreground">
                 Selecciona el servicio para poder confirmar.
               </p>
             )}
@@ -479,13 +479,13 @@ export function ConfirmVisit({
                 variant="success"
                 disabled={pending || !servicio}
                 className="flex-1 font-semibold"
-                size="lg"
+                size="xl"
               >
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <CheckCircle2 className="mr-2 h-4 w-4" />
                 Confirmar uso
               </Button>
-              <Button type="button" variant="outline" onClick={onDone} size="lg">
+              <Button type="button" variant="outline" onClick={onDone} size="xl">
                 Cancelar
               </Button>
             </div>

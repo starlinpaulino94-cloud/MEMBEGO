@@ -355,8 +355,8 @@ verificar enlaces.
 | 9 | Clientes, membresías, planes | ✅ |
 | 10 | Promociones, crecimiento, referidos | ✅ |
 | 11 | Marketing, campañas, audiencia | ✅ |
-| 12 | Operaciones: scanner, pagos, sucursales | ⬜ |
-| 13 | Reportes | ⬜ |
+| 12 | Operaciones: scanner, pagos, sucursales | ✅ |
+| 13 | Reportes | ✅ |
 | 14 | Empresa, empleados, configuración | ⬜ |
 | 15 | Soporte | ⬜ |
 | 16 | Superadmin | ⬜ |
@@ -364,6 +364,24 @@ verificar enlaces.
 | 18 | Páginas públicas | ⬜ |
 | 19 | Dark mode, accesibilidad, QA visual | ⬜ |
 | 20 | Eliminar el frontend visual heredado | ⬜ |
+
+### Decisiones de producto resueltas fuera de fase
+
+| Decisión | Resolución | Dónde vive |
+|---|---|---|
+| Abrir el marketplace | Sí, pero sin categorías vacías | `categoriasVisibles()` en `modules/marketplace/types.ts` |
+| Cambiar el vehículo principal | Permitido; **no** re-tarifa nada | `marcarVehiculoPrincipal()` en `modules/cliente/vehiculosActions.ts` |
+
+**Marca única no es un interruptor.** `esMarcaUnica()` es una consulta:
+devuelve `true` mientras haya una sola empresa publicada. El marketplace se
+abre solo al publicar la segunda — no hay flag que encender ni despliegue que
+hacer.
+
+**"Principal" es una etiqueta, no una tarifa.** Decide cuál vehículo se enseña
+primero y cuál viene preseleccionado al comprar. El precio sigue al vehículo
+que el cliente elige en el selector, y las renovaciones cobran
+`membership.plan.precio` sin mirar el vehículo: marcar otro principal no puede
+encarecerle a nadie lo que ya tiene.
 
 ### Deuda conocida que se salda por fases
 

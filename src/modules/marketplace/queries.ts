@@ -1,4 +1,5 @@
 import { sinEmpresa } from '@/lib/tenant'
+import { categoriasVisibles } from './types'
 import type {
   CompanyPublic,
   PromotionPublic,
@@ -649,6 +650,15 @@ export async function getPlanOg(planId: string): Promise<PlanOg | null> {
   }
 }
 
+/**
+ * Categorías del marketplace, ya filtradas por `categoriasVisibles`: solo las
+ * que tienen al menos una empresa publicada (la regla y su porqué, en types).
+ *
+ * SE FILTRA AQUÍ, EN EL ORIGEN, Y NO EN CADA PANTALLA. Antes solo lo hacía
+ * `/cliente/inicio`, así que las mismas categorías vacías que la portada
+ * escondía reaparecían en `/cliente/explorar` y en `/empresas`. Con el filtro
+ * en la consulta, ninguna pantalla futura puede olvidarlo.
+ */
 export async function getCategoriesPublic(): Promise<CategoryPublic[]> {
   try {
     const categories = await sinEmpresa('marketplace: catálogo global de categorías', (tx) =>
@@ -675,15 +685,17 @@ export async function getCategoriesPublic(): Promise<CategoryPublic[]> {
       })
     )
 
-    return categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      icon: c.icon,
-      description: c.description,
-      order: c.order,
-      companyCount: c._count.companies,
-    })) as CategoryPublic[]
+    return categoriasVisibles(
+      categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        icon: c.icon,
+        description: c.description,
+        order: c.order,
+        companyCount: c._count.companies,
+      }))
+    ) as CategoryPublic[]
   } catch (error) {
     console.error('[getCategoriesPublic] Error:', error)
     return []

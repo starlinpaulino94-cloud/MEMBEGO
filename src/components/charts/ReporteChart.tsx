@@ -41,12 +41,12 @@ export function ReporteChart({ data }: { data: Punto[] }) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-border/60" vertical={false} />
           <XAxis
             dataKey="etiqueta"
-            tick={{ fontSize: 11, fill: 'currentColor' }}
+            tick={{ fontSize: 12, fill: 'currentColor' }}
             stroke="currentColor"
             interval={salto}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: 'currentColor' }}
+            tick={{ fontSize: 12, fill: 'currentColor' }}
             stroke="currentColor"
             allowDecimals={false}
           />
@@ -62,12 +62,16 @@ export function ReporteChart({ data }: { data: Punto[] }) {
             labelClassName="font-semibold text-foreground"
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
+          {/* Azul como serie principal (§55). La segunda usaba `fill-success`
+              —el verde de "salió bien"— para "entregas sin cobro", que no es
+              un éxito: es la otra mitad de la misma métrica. Un tono claro de
+              la marca dice "misma familia, segunda parte" sin sentenciar. */}
           <Bar dataKey="ventas" name="Ventas" stackId="a" className="fill-primary" />
           <Bar
             dataKey="entregas"
             name="Entregas sin cobro"
             stackId="a"
-            className="fill-success"
+            className="fill-primary-300"
             radius={[4, 4, 0, 0]}
           />
         </BarChart>

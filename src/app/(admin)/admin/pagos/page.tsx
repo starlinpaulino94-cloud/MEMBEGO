@@ -24,9 +24,10 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/ui/page-header'
+import { TabsNav } from '@/components/ui/tabs-nav'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBanner } from '@/components/ui/status-banner'
-import { FileText, ExternalLink, ArrowRight, Store, MessageCircle, Mail, Clock } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Clock, ExternalLink, FileText, Mail, MessageCircle, Store } from 'lucide-react'
 import type { MembershipEstado } from '@/types'
 
 import { leerPaginacion } from '@/lib/paginacion'
@@ -79,6 +80,33 @@ interface PendienteRow {
   fechaInicio: Date | null
 }
 
+/**
+ * COLAS DE TRABAJO (§53).
+ *
+ * El brief pide pestañas por ESTADO —pendientes, confirmados, rechazados—,
+ * pero esta pantalla no lista pagos: lista COLAS DE TRABAJO. Un pago
+ * confirmado ya no está aquí, y los cinco grupos que sí están necesitan
+ * acciones distintas: confirmar un cobro en sucursal no se parece a validar
+ * una transferencia ni a aprobar un cambio de plan.
+ *
+ * Aplicar los estados del brief al pie de la letra habría dado tres pestañas
+ * —una vacía y dos que mezclan trabajos distintos— así que las pestañas van
+ * sobre las colas reales. La intención del §53 se cumple igual: dejas de
+ * recorrer cinco bloques apilados para encontrar el que te toca.
+ *
+ * Antes las colas vacías se ocultaban del todo, así que la pantalla cambiaba
+ * de forma según el día. Con pestañas siempre están las cinco, con su
+ * recuento: ver "Cambios de plan 0" es información, no ruido.
+ */
+const COLAS = [
+  { clave: 'sucursal', label: 'En sucursal' },
+  { clave: 'transferencias', label: 'Transferencias' },
+  { clave: 'compras', label: 'Compras' },
+  { clave: 'cambios', label: 'Cambios de plan' },
+  { clave: 'seguimiento', label: 'Sin completar' },
+] as const
+type Cola = (typeof COLAS)[number]['clave']
+
 export default async function PagosPage({
   searchParams,
 }: {
@@ -87,6 +115,10 @@ export default async function PagosPage({
   const user = await requireRole(ADMIN_ROLES)
   const companyId = companyFilter(user)
   const sp = await searchParams
+  const colaRaw = sp.cola
+  const cola: Cola = COLAS.some((c) => c.clave === colaRaw)
+    ? (colaRaw as Cola)
+    : 'sucursal'
   // Cinco colas independientes en una misma pantalla: cada una lleva su propio
   // prefijo para que avanzar en una no mueva a las demás.
   const pagTr = leerPaginacion(sp, 25, 'tr')
@@ -366,6 +398,14 @@ export default async function PagosPage({
     totalPendientes + totalCompras + totalCambios + totalSucursal
   const sinPendientes = totalPorValidar === 0 && totalSeguimiento === 0
 
+  const conteos: Record<Cola, number> = {
+    sucursal: totalSucursal,
+    transferencias: totalPendientes,
+    compras: totalCompras,
+    cambios: totalCambios,
+    seguimiento: totalSeguimiento,
+  }
+
   return (
     <div className="space-y-6">
       {loadError && (
@@ -377,29 +417,39 @@ export default async function PagosPage({
       <PageHeader
         title="Validación de pagos"
         description={`${totalPorValidar} pago${totalPorValidar !== 1 ? 's' : ''} por validar · ${totalSeguimiento} en seguimiento`}
+        nav={
+          <TabsNav
+            aria-label="Colas de pago"
+            items={COLAS.map((c) => ({
+              label: c.label,
+              badge: conteos[c.clave],
+              active: cola === c.clave,
+              render: ({ className, children }) => (
+                <Link href={`/admin/pagos?cola=${c.clave}`} className={className}>
+                  {children}
+                </Link>
+              ),
+            }))}
+          />
+        }
       />
-
-      {/* Resumen: todo lo que espera acción, por origen. */}
-      <div className="flex flex-wrap gap-2 text-xs">
-        {[
-          { label: 'En sucursal', n: totalSucursal },
-          { label: 'Transferencias', n: totalPendientes + totalCompras },
-          { label: 'Cambios de plan', n: totalCambios },
-          { label: 'Sin completar', n: totalSeguimiento },
-        ].map((k) => (
-          <span
-            key={k.label}
-            className={`rounded-full border px-3 py-1 font-medium ${k.n > 0 ? 'border-primary/30 bg-primary/5 text-foreground' : 'border-border/60 text-muted-foreground'}`}
-          >
-            {k.label}: <strong className="tabular-nums">{k.n}</strong>
-          </span>
-        ))}
-      </div>
 
       {/* Pagos EN SUCURSAL por cobrar/confirmar: antes eran invisibles aquí
           (solo los veía la Caja). Confirmar desde el panel activa y factura
           igual que la caja; la referencia sirve para cobrarlo en el POS. */}
-      {totalSucursal > 0 && (
+      {conteos[cola] === 0 && !loadError && (
+        <EmptyState
+          icon={<CheckCircle2 />}
+          title={`Nada pendiente en «${COLAS.find((c) => c.clave === cola)?.label}»`}
+          description={
+            totalPorValidar + totalSeguimiento > 0
+              ? 'Otras colas sí tienen trabajo: cámbialas arriba.'
+              : 'No hay pagos esperando acción en ninguna cola.'
+          }
+        />
+      )}
+
+      {cola === 'sucursal' && totalSucursal > 0 && (
         <div className="space-y-3">
           <h2 className="flex items-center gap-2 text-h4 text-foreground">
             <Store className="h-4 w-4 text-primary" aria-hidden />
@@ -531,7 +581,7 @@ export default async function PagosPage({
       )}
 
       {/* Fase E5: compras de promociones por validar */}
-      {totalCompras > 0 && (
+      {cola === 'compras' && totalCompras > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
             Compras de promociones ({totalCompras})
@@ -637,7 +687,7 @@ export default async function PagosPage({
       )}
 
       {/* Cambios de plan solicitados */}
-      {totalCambios > 0 && (
+      {cola === 'cambios' && totalCambios > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
             Cambios de plan solicitados ({totalCambios})
@@ -745,7 +795,7 @@ export default async function PagosPage({
         </Card>
       )}
 
-      {totalPendientes > 0 && (
+      {cola === 'transferencias' && totalPendientes > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
             Transferencias por validar ({totalPendientes})
@@ -896,7 +946,7 @@ export default async function PagosPage({
 
       {/* Seguimiento: iniciaron un pago y no lo completaron. Contacto directo
           (WhatsApp/correo) para recuperar la venta; los más antiguos primero. */}
-      {totalSeguimiento > 0 && (
+      {cola === 'seguimiento' && totalSeguimiento > 0 && (
         <div className="space-y-3">
           <h2 className="flex items-center gap-2 text-h4 text-foreground">
             <Clock className="h-4 w-4 text-warning" aria-hidden />

@@ -15,12 +15,13 @@ import {
 } from '@/modules/reportes/queries'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
+import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ReporteChart } from '@/components/charts/ReporteChart'
-import { Download, TrendingDown, TrendingUp } from 'lucide-react'
+import { Download, Lightbulb, TrendingDown, TrendingUp } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,6 +89,57 @@ export default async function ReportesPage({
 
   const hayActividad = r.serie.some((p) => p.ventas > 0 || p.entregas > 0)
 
+  /**
+   * INSIGHTS (§55) — leer el reporte por ti.
+   *
+   * No consulta nada nuevo: interpreta las MISMAS cifras que ya están arriba.
+   * Un panel de KPIs dice qué pasó; lo que falta es qué significa. "Ingresos
+   * -18%" pide una frase que diga si eso es la tendencia o el ruido de una
+   * semana corta.
+   *
+   * Solo salen los que tienen algo que decir: sin variación significativa, la
+   * sección no aparece. Un insight que siempre está encendido es decoración.
+   */
+  const UMBRAL = 10
+  const insights: { texto: string; tono: 'bueno' | 'malo' | 'neutro' }[] = []
+
+  const mayorIngreso =
+    r.ingresosCaja.variacion != null && Math.abs(r.ingresosCaja.variacion) >= UMBRAL
+      ? r.ingresosCaja
+      : null
+  if (mayorIngreso?.variacion != null) {
+    const sube = mayorIngreso.variacion > 0
+    insights.push({
+      texto: sube
+        ? `Los ingresos de caja subieron ${mayorIngreso.variacion}% frente al periodo anterior de la misma duración.`
+        : `Los ingresos de caja bajaron ${Math.abs(mayorIngreso.variacion)}% frente al periodo anterior de la misma duración.`,
+      tono: sube ? 'bueno' : 'malo',
+    })
+  }
+
+  if (r.clientesNuevos.variacion != null && Math.abs(r.clientesNuevos.variacion) >= UMBRAL) {
+    const sube = r.clientesNuevos.variacion > 0
+    insights.push({
+      texto: sube
+        ? `Entraron ${r.clientesNuevos.variacion}% más clientes nuevos que en el periodo anterior.`
+        : `Entraron ${Math.abs(r.clientesNuevos.variacion)}% menos clientes nuevos que en el periodo anterior.`,
+      tono: sube ? 'bueno' : 'malo',
+    })
+  }
+
+  // Proporción de entregas sin cobro: alta puede ser normal (membresías) o
+  // señal de fuga. La frase lo enuncia sin sentenciar.
+  const totalOps = r.operaciones.valor + r.entregas.valor
+  if (totalOps >= 10) {
+    const pctEntregas = Math.round((r.entregas.valor / totalOps) * 100)
+    if (pctEntregas >= 60) {
+      insights.push({
+        texto: `${pctEntregas}% de las operaciones fueron entregas sin cobro. Es lo esperable si tu negocio va por membresías; si no, conviene revisar de dónde salen.`,
+        tono: 'neutro',
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -111,7 +163,7 @@ export default async function ReportesPage({
       )}
 
       {/* Filtros: presets como enlaces (compartibles) + rango a mano. */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap gap-1">
           {PRESETS.map((p) => {
             const activo = rango.preset === p.clave
@@ -119,7 +171,7 @@ export default async function ReportesPage({
               <Link
                 key={p.clave}
                 href={`/admin/reportes?rango=${p.clave}`}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                className={`inline-flex min-h-10 items-center rounded-lg px-3 text-small font-semibold transition-colors ${
                   activo
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -133,15 +185,15 @@ export default async function ReportesPage({
         </div>
 
         <Form action="/admin/reportes" className="ml-auto flex flex-wrap items-end gap-2">
-          <label className="text-xs text-muted-foreground">
+          <label className="text-caption">
             Desde
-            <Input type="date" name="desde" defaultValue={rango.desdeDia} className="mt-1 h-9" />
+            <Input type="date" name="desde" defaultValue={rango.desdeDia} className="mt-1" />
           </label>
-          <label className="text-xs text-muted-foreground">
+          <label className="text-caption">
             Hasta
-            <Input type="date" name="hasta" defaultValue={rango.hastaDia} className="mt-1 h-9" />
+            <Input type="date" name="hasta" defaultValue={rango.hastaDia} className="mt-1" />
           </label>
-          <Button type="submit" variant="secondary" className="h-9">
+          <Button type="submit" variant="secondary">
             Aplicar
           </Button>
         </Form>
@@ -150,25 +202,46 @@ export default async function ReportesPage({
       {/* KPIs con comparación contra el periodo anterior del mismo largo. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {tarjetas.map((t) => (
-          <Card key={t.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="truncate text-2xl font-bold tabular-nums text-foreground">
-                {t.formato(t.kpi.valor)}
-              </p>
-              <Variacion kpi={t.kpi} />
-            </CardContent>
-          </Card>
+          <div key={t.label} className="rounded-xl border border-border bg-card p-5">
+            <p className="text-overline">{t.label}</p>
+            <p className="mt-1.5 truncate text-h1 tabular-nums text-foreground">
+              {t.formato(t.kpi.valor)}
+            </p>
+            <Variacion kpi={t.kpi} />
+          </div>
         ))}
       </div>
 
+      {/* Insights: qué significan los números de arriba. */}
+      {insights.length > 0 && (
+        <section>
+          <SectionHeader title="Qué dicen estos números" />
+          <ul className="space-y-2">
+            {insights.map((i) => (
+              <li
+                key={i.texto}
+                className="flex items-start gap-2.5 rounded-xl border border-border bg-card p-4"
+              >
+                <Lightbulb
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${
+                    i.tono === 'bueno'
+                      ? 'text-success'
+                      : i.tono === 'malo'
+                        ? 'text-warning-foreground'
+                        : 'text-primary'
+                  }`}
+                  aria-hidden
+                />
+                <p className="text-small text-foreground">{i.texto}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Actividad por día</CardTitle>
+          <CardTitle className="text-h4">Actividad por día</CardTitle>
         </CardHeader>
         <CardContent>
           {hayActividad ? (
@@ -184,7 +257,7 @@ export default async function ReportesPage({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Operaciones por tipo</CardTitle>
+            <CardTitle className="text-h4">Operaciones por tipo</CardTitle>
           </CardHeader>
           <CardContent>
             {r.porTipo.length === 0 ? (
@@ -213,7 +286,7 @@ export default async function ReportesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Cómo pagaron</CardTitle>
+            <CardTitle className="text-h4">Cómo pagaron</CardTitle>
           </CardHeader>
           <CardContent>
             {r.porMetodo.length === 0 ? (
@@ -240,7 +313,7 @@ export default async function ReportesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Clientes más activos</CardTitle>
+            <CardTitle className="text-h4">Clientes más activos</CardTitle>
           </CardHeader>
           <CardContent>
             {r.topClientes.length === 0 ? (
@@ -262,7 +335,7 @@ export default async function ReportesPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Membresías activas por plan</CardTitle>
+            <CardTitle className="text-h4">Membresías activas por plan</CardTitle>
             <p className="text-xs text-muted-foreground">
               Foto de hoy: no depende del periodo elegido.
             </p>
