@@ -23,6 +23,17 @@ export const metadata = {
  * filas de una lista sin categoría, sin cuál es el principal y sin decir a qué
  * membresías estaban asociados.
  */
+/**
+ * El texto anterior —"El principal se aplica por defecto al comprar"— insinuaba
+ * que la etiqueta decide lo que pagas, y no es así: solo viene marcado de
+ * entrada. El precio sigue al vehículo que se elige en el selector de compra,
+ * porque un camión no puede pagar tarifa de moto por haberse registrado
+ * segundo. Decirlo en la cabecera evita la pregunta a soporte.
+ */
+const DESCRIPCION =
+  'Los que usas en tus visitas. El principal viene preseleccionado al comprar; ' +
+  'el precio siempre sigue al vehículo que elijas.'
+
 export default async function VehiculosPage() {
   const user = await requireRole('CLIENTE')
   const vehiculos = user.metadata.clienteId
@@ -38,7 +49,7 @@ export default async function VehiculosPage() {
           </Link>
         }
         title="Mis vehículos"
-        description="Los que usas en tus visitas. El principal se aplica por defecto al comprar."
+        description={DESCRIPCION}
         action={
           vehiculos.length > 0 ? (
             <Button asChild>

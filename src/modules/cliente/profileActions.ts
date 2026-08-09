@@ -126,7 +126,12 @@ export async function eliminarVehiculo(
     const v = await sinEmpresa('cliente: buscar mi vehículo', (tx) =>
       tx.vehiculo.findUnique({
         where: { id: vehiculoId },
-        select: { id: true, clienteId: true, cliente: { select: { companyId: true } } },
+        select: {
+          id: true,
+          clienteId: true,
+          esPrincipal: true,
+          cliente: { select: { companyId: true } },
+        },
       })
     )
     const clienteId = user.metadata.clienteId!
@@ -136,7 +141,24 @@ export async function eliminarVehiculo(
     const visitas = await conEmpresa(companyId, (tx) => tx.visit.count({ where: { vehiculoId } }))
     if (visitas > 0) return { error: 'No se puede eliminar: tiene visitas asociadas.' }
 
-    await conEmpresa(companyId, (tx) => tx.vehiculo.delete({ where: { id: vehiculoId } }))
+    await conEmpresa(companyId, async (tx) => {
+      await tx.vehiculo.delete({ where: { id: vehiculoId } })
+
+      // Borrar el principal dejaba al cliente sin ninguno: la lista perdía su
+      // orden y la compra se quedaba sin vehículo preseleccionado. Hereda el
+      // más antiguo de los que quedan — el criterio de siempre, el primero que
+      // registró.
+      if (v.esPrincipal) {
+        const sucesor = await tx.vehiculo.findFirst({
+          where: { clienteId },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        })
+        if (sucesor) {
+          await tx.vehiculo.update({ where: { id: sucesor.id }, data: { esPrincipal: true } })
+        }
+      }
+    })
 
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')

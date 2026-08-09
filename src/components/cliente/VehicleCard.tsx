@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Car, Star, WalletCards } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { DeleteVehiculoButton } from '@/components/cliente/DeleteVehiculoButton'
+import { SetPrincipalVehiculoButton } from '@/components/cliente/SetPrincipalVehiculoButton'
 import type { VehiculoCliente } from '@/modules/cliente/queries'
 
 /**
@@ -32,11 +33,15 @@ export function VehicleCard({ vehiculo }: { vehiculo: VehiculoCliente }) {
             <h3 className="text-h3 text-foreground">
               {vehiculo.marca} {vehiculo.modelo}
             </h3>
-            {vehiculo.esPrincipal && (
+            {/* Un estado o la forma de cambiarlo, nunca los dos: esta fila
+                siempre responde "¿es este mi vehículo de cabecera?". */}
+            {vehiculo.esPrincipal ? (
               <Badge variant="secondary" className="gap-1">
                 <Star className="h-3 w-3 fill-current" aria-hidden />
                 Principal
               </Badge>
+            ) : (
+              <SetPrincipalVehiculoButton vehiculoId={vehiculo.id} label={etiqueta} />
             )}
           </div>
 

@@ -75,6 +75,23 @@ export interface CategoryPublic {
   companyCount: number
 }
 
+/**
+ * Categorías que el cliente puede VER: solo las que llevan a algún sitio.
+ *
+ * Una categoría vacía es una promesa que no se cumple — se toca "Restaurantes",
+ * llega una lista en blanco, y el cliente aprende que el buscador no sirve. El
+ * catálogo de cara al público es el mapa del negocio, no el inventario de la
+ * tabla.
+ *
+ * Vive aquí, y no dentro de la consulta, porque es una REGLA DE PRODUCTO y se
+ * prueba sin base de datos. El panel no la usa: al asignarle categorías a una
+ * empresa hay que ver el catálogo entero, o una categoría vacía nunca podría
+ * dejar de estarlo.
+ */
+export function categoriasVisibles<T extends { companyCount: number }>(categorias: T[]): T[] {
+  return categorias.filter((c) => c.companyCount > 0)
+}
+
 export interface CompanyStats {
   totalMembers: number
   activePromotions: number

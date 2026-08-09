@@ -116,3 +116,67 @@ export async function agregarVehiculoCliente(
     return { error: 'No se pudo guardar el vehículo. Intenta de nuevo.' }
   }
 }
+
+/**
+ * Marcar OTRO vehículo como principal (§41).
+ *
+ * QUÉ ES "PRINCIPAL" — Y QUÉ NO ES. Es el vehículo que se enseña primero y el
+ * que viene preseleccionado al comprar. Nada más. NO cambia el precio de
+ * ninguna membresía:
+ *
+ *  · Lo ya comprado no se re-tarifa. Renovar cobra `membership.plan.precio`
+ *    (modules/pagos/activacion.ts) sin mirar el vehículo, así que marcar otro
+ *    principal no puede encarecerle a nadie lo que ya tiene.
+ *  · En una compra NUEVA el precio sigue al vehículo que el cliente elige en
+ *    el selector de `PlanesGrid`, que viaja como `vehiculoId` hasta el cobro.
+ *    Ser principal solo decide cuál viene marcado de entrada; cambiar la
+ *    selección cambia el precio en pantalla, como debe ser — un camión no
+ *    puede pagar tarifa de moto por haberse registrado segundo.
+ *
+ * Por eso esta acción es segura y no necesita tocar el motor de elegibilidad:
+ * mueve una etiqueta, no una tarifa.
+ */
+export async function marcarVehiculoPrincipal(
+  _prev: VehiculoActionState,
+  formData: FormData
+): Promise<VehiculoActionState> {
+  try {
+    const user = await getUser()
+    if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
+      return { error: 'No autorizado.' }
+    }
+    const clienteId = user.metadata.clienteId
+
+    const vehiculoId = String(formData.get('vehiculoId') ?? '').trim()
+    if (!vehiculoId) return { error: 'Vehículo no especificado.' }
+
+    // El vehículo tiene que ser SUYO. Sin esta comprobación, un id ajeno en el
+    // formulario reordenaría el garaje de otra persona.
+    const propio = await sinEmpresa('cliente: buscar mi vehículo', (tx) =>
+      tx.vehiculo.findUnique({
+        where: { id: vehiculoId },
+        select: { id: true, clienteId: true, esPrincipal: true, cliente: { select: { companyId: true } } },
+      })
+    )
+    if (!propio || propio.clienteId !== clienteId) return { error: 'No autorizado.' }
+    if (propio.esPrincipal) return { success: true, vehiculoId }
+
+    // Los dos escritos van juntos —`conEmpresa` ya abre una transacción—: si
+    // se quedara a medias, el cliente acabaría con dos principales o ninguno.
+    await conEmpresa(propio.cliente.companyId, async (tx) => {
+      await tx.vehiculo.updateMany({
+        where: { clienteId, esPrincipal: true },
+        data: { esPrincipal: false },
+      })
+      await tx.vehiculo.update({ where: { id: vehiculoId }, data: { esPrincipal: true } })
+    })
+
+    revalidatePath('/cliente/vehiculos')
+    revalidatePath('/cliente/perfil')
+    revalidatePath('/cliente/planes')
+    return { success: true, vehiculoId }
+  } catch (e) {
+    capturarErrorInesperado('cliente:marcarVehiculoPrincipal', e)
+    return { error: 'No se pudo cambiar el vehículo principal. Intenta de nuevo.' }
+  }
+}

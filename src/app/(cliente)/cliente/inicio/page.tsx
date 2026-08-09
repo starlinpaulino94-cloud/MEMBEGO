@@ -203,10 +203,9 @@ export default async function InicioCliente() {
   // única `/cliente/explorar` redirige a planes y la búsqueda no llevaría a
   // ninguna respuesta.
   const mostrarDescubrimiento = !marcaUnica
-  const chips = categorias
-    .filter((c) => c.companyCount > 0)
-    .slice(0, 8)
-    .map((c) => ({ slug: c.slug, nombre: c.name }))
+  // `getCategoriesPublic()` ya descarta las categorías sin empresas: aquí solo
+  // se recorta a las ocho primeras para que la fila quepa sin desbordarse.
+  const chips = categorias.slice(0, 8).map((c) => ({ slug: c.slug, nombre: c.name }))
 
   const zona = ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
   const nombre = momentos.nombre?.trim().split(' ')[0] ?? null
