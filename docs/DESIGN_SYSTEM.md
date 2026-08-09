@@ -357,7 +357,7 @@ verificar enlaces.
 | 11 | Marketing, campañas, audiencia | ✅ |
 | 12 | Operaciones: scanner, pagos, sucursales | ✅ |
 | 13 | Reportes | ✅ |
-| 14 | Empresa, empleados, configuración | ⬜ |
+| 14 | Empresa, empleados, configuración | ✅ |
 | 15 | Soporte | ⬜ |
 | 16 | Superadmin | ⬜ |
 | 17 | Empleado | ⬜ |
@@ -394,6 +394,33 @@ empresas y gotas idénticas obliga a tocar pin por pin; reconocer la marca es a
 lo que se va al mapa. Sin logo, la inicial. El HTML del `divIcon` lo inserta
 Leaflet por fuera de React, así que `logoUrl` y `empresaNombre` **se escapan**
 antes de entrar (`escaparHtml`, `escaparCss`, `urlImagenSegura`).
+
+### Fase 14 · lo que el panel de empresa no decía
+
+**`/admin/sucursales` no decía cuál sale en el mapa.** La pantalla prometía
+"para que aparezcan en el mapa de tus clientes" y luego una sucursal sin
+coordenadas se veía idéntica a una que sí las tiene. Ahora cada tarjeta lo dice,
+con la salida delante ("Añadir ubicación"): avisar de un problema sin decir cómo
+arreglarlo solo cambia el desconcierto de sitio.
+
+El cartel es un espejo del filtro SQL del mapa, así que la regla vive en
+`sucursalVisibleEnMapa()` y `tests/geo-visibilidad.test.ts` vigila que no se
+separen — mentir en ese cartel sería peor que no ponerlo.
+
+**Las invitaciones pendientes no decían cuándo caducan.** `expiraEn` se
+consultaba y se tiraba. Una invitación que vence en silencio llega a soporte
+como "no me llegó nada". `listInvitacionesPendientes` resuelve `caducada` en la
+capa de datos: `Date.now()` en el render es impuro y el compilador lo rechaza.
+
+**El perfil público era cinco `Card` y un botón al final.** Pasa a `FormSection`
+(`fieldset`/`legend` de verdad) y `FormActions` pegado al fondo — guardar un
+cambio del primer campo obligaba a recorrer el formulario entero. La razón
+social sale de "Ubicación", donde estaba metida entre el enlace de Google Maps y
+la zona de cobertura.
+
+**"Zona de cobertura" se rellenaba con la URL del mapa.** El campo iba justo
+debajo del enlace de Google Maps, con la misma pinta y sin explicar qué
+esperaba. Ahora dice que es texto y no un enlace.
 
 ### Decisiones de producto resueltas fuera de fase
 
