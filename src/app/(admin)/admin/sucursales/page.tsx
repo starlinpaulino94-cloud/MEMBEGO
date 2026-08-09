@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/system/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/ui/page-header'
@@ -56,25 +57,23 @@ export default async function SucursalesPage() {
       />
 
       {sucursales.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-16 text-center text-muted-foreground">
-            <MapPin className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-            <p className="font-medium">Sin sucursales configuradas</p>
-            <p className="text-sm">
-              Agrega sucursales para que el escáner pueda registrar desde qué ubicación se confirmó cada visita.
-            </p>
-            <Link href="/admin/sucursales/nueva" className="mt-4 block">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Agregar primera sucursal
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={MapPin}
+          title="Sin sucursales configuradas"
+          description="Añade tus sucursales para que el escáner registre desde qué ubicación se confirmó cada visita, y para que aparezcan en el mapa de tus clientes."
+          action={
+            <Button asChild size="lg">
+              <Link href="/admin/sucursales/nueva">
+                <Plus aria-hidden />
+                Añadir primera sucursal
+              </Link>
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {sucursales.map((s) => (
-            <Card key={s.id} className={`border-border/60 shadow-card transition hover:shadow-card-hover ${!s.activa ? 'opacity-60' : ''}`}>
+            <Card key={s.id} className={`card-interactive ${!s.activa ? 'opacity-60' : ''}`}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">

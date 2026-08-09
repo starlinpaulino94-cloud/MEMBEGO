@@ -257,7 +257,7 @@ export function ConfirmPromo({
             <XCircle className="h-4 w-4" />
             <AlertDescription>{compra.mensaje ?? 'No se puede canjear esta promoción.'}</AlertDescription>
           </Alert>
-          <Button onClick={onScanNext ?? onDone} className="w-full">
+          <Button onClick={onScanNext ?? onDone} size="xl" className="w-full">
             Escanear siguiente
           </Button>
         </div>
@@ -302,7 +302,7 @@ export function ConfirmPromo({
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Confirmar canje
             </Button>
-            <Button type="button" variant="outline" onClick={onDone} size="lg">
+            <Button type="button" variant="outline" onClick={onDone} size="xl">
               Cancelar
             </Button>
           </div>
