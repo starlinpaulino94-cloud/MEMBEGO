@@ -70,11 +70,22 @@ const FILTROS: { key: FiltroBooleano; label: string }[] = [
 /**
  * Mapa "Cerca de mí" (docs/GEOLOCALIZACION.md §13).
  *
- * El VIEWPORT del mapa es la única fuente de verdad: cada vez que el usuario
- * mueve/zoom (debounce de 700 ms) se consulta `/api/geo/cercanos?viewport=…`,
- * y la lista de tarjetas se reconstruye con el MISMO resultado — mapa y lista
- * nunca se contradicen. Los filtros y el radio solo re-centran/refiltran el
- * viewport (el radio cambia el zoom; "Ciudad" lo suelta a nivel de ciudad).
+ * DOS MODOS DE BÚSQUEDA, Y LA UI DICE EN CUÁL ESTÁ:
+ *
+ *  · POR RADIO — al elegir "3 km" se busca dentro de esa distancia del ancla
+ *    (tu GPS o tu vivienda) y el mapa se encuadra en consecuencia.
+ *  · POR VIEWPORT — al mover o hacer zoom a mano (debounce de 700 ms) manda lo
+ *    que se ve: `/api/geo/cercanos?viewport=…` devuelve el rectángulo visible.
+ *    Eso deja sin efecto el radio, así que la píldora se apaga y pasa a
+ *    "Ciudad".
+ *
+ * Esa última regla no es cosmética. Antes el radio solo cambiaba el zoom y la
+ * búsqueda siempre era por viewport, así que con "3 km" marcado podía salir un
+ * negocio a 29 km: el control prometía un filtro que nadie aplicaba. Un control
+ * que miente deja de servir para orientarse.
+ *
+ * En los dos modos la lista de tarjetas se reconstruye con el MISMO resultado
+ * que pinta los marcadores — mapa y lista nunca se contradicen.
  *
  * Privacidad (§9): el GPS no se usa sin el gesto del usuario; "Usar mi
  * ubicación" pide permiso al navegador y registra DEVICE_LOCATION_SESSION.
@@ -243,6 +254,11 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   const refrescarViewport = useCallback(() => {
     const map = mapRef.current
     if (!map) return
+    // Mover el mapa a mano deja sin efecto el radio elegido: lo que se ve manda.
+    // Si la píldora siguiera marcada estaría prometiendo un filtro que esta
+    // búsqueda no aplica —"3 km" con un resultado a 29 km—, y una vez que un
+    // control miente, deja de servir para orientarse.
+    setRadioKm(null)
     const b = map.getBounds()
     const vp = {
       west: round(b.getWest()),
@@ -460,13 +476,39 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
 
   // ── Acciones de contexto ────────────────────────────────────────────────────
 
-  /** Radio: convierte a zoom (el viewport resultante dispara la búsqueda). */
+  /**
+   * Radio: busca DE VERDAD dentro de esa distancia, además de encuadrar.
+   *
+   * Antes solo cambiaba el zoom y dejaba que el `moveend` resultante disparara
+   * una búsqueda por viewport. Dos problemas: el `moveend` programático se
+   * ignora a propósito (`moviendoRef`), así que la lista podía no refrescarse;
+   * y una búsqueda por viewport devuelve TODO lo que se ve, sin mirar el radio.
+   * De ahí que con "3 km" marcado apareciera un negocio a 29 km — la píldora
+   * prometía un filtro que nadie aplicaba.
+   */
   const aplicarRadio = (km: number | null) => {
     setRadioKm(km)
-    if (!mapRef.current || !ubicacion) return
+    const map = mapRef.current
+    if (!map || !ubicacion) return
+
     const zoom = km ? (ZOOM_POR_RADIO[km] ?? 12) : 12
     moviendoRef.current = true
-    mapRef.current.setView(mapRef.current.getCenter(), zoom)
+    map.setView(map.getCenter(), zoom)
+
+    // "Ciudad" (null) es explícitamente "sin radio": ahí sí manda el viewport.
+    if (km === null) {
+      refrescarViewport()
+      return
+    }
+    const p = new URLSearchParams()
+    p.set('contexto', contexto)
+    p.set('radioKm', String(km))
+    if (anclaRef.current) {
+      p.set('lat', String(anclaRef.current.lat))
+      p.set('lng', String(anclaRef.current.lng))
+    }
+    if (Object.keys(filtros).length) p.set('filtros', JSON.stringify(filtros))
+    void buscar(p)
   }
 
   /** "Usar mi ubicación actual" — GPS puntual con consentimiento de sesión. */
@@ -745,14 +787,17 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         {ubicacion && (
           // `bottom-[4.75rem]` en móvil: la hoja asomada se come las 4 rem
           // inferiores del mapa y este control quedaba debajo del tirador.
-          <div className="absolute bottom-[4.75rem] left-1/2 z-[500] flex -translate-x-1/2 flex-wrap justify-center gap-1 rounded-full border border-border bg-card/95 p-1 elevation-2 backdrop-blur lg:bottom-3">
+          // `flex-wrap` partía las seis opciones en dos filas y el control
+          // acababa siendo un bloque que tapaba medio mapa. En una sola línea
+          // que se desplaza, ocupa el alto de una píldora y se sigue leyendo.
+          <div className="no-scrollbar absolute bottom-[4.75rem] left-1/2 z-[500] flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 gap-1 overflow-x-auto rounded-full border border-border bg-card/95 p-1 elevation-2 backdrop-blur lg:bottom-3">
             {RADIOS.map((km) => (
               <button
                 key={km}
                 type="button"
                 onClick={() => aplicarRadio(km)}
                 className={cn(
-                  'min-h-9 rounded-full px-3 text-caption font-semibold transition',
+                  'min-h-9 shrink-0 rounded-full px-3 text-caption font-semibold transition',
                   radioKm === km ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
@@ -763,7 +808,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
               type="button"
               onClick={() => aplicarRadio(null)}
               className={cn(
-                'min-h-9 rounded-full px-3 text-caption font-semibold transition',
+                'min-h-9 shrink-0 rounded-full px-3 text-caption font-semibold transition',
                 radioKm === null ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               )}
             >

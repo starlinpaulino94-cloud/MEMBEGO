@@ -116,24 +116,10 @@ export async function listTicketsAdmin(
     : sinEmpresa('soporte: todos los tickets (superadmin sin empresa)', fn)
 }
 
-export async function ticketStats(companyId: string | null, isSuperadmin: boolean) {
-  const base: Record<string, unknown> = {}
-  if (companyId) base.companyId = companyId
-  else if (!isSuperadmin) base.companyId = '__none__'
-
-  const fn = (tx: Tx) =>
-    Promise.all([
-      tx.supportTicket.count({ where: { ...base, estado: 'NUEVO' } }),
-      tx.supportTicket.count({ where: { ...base, estado: 'EN_PROCESO' } }),
-      tx.supportTicket.count({ where: { ...base, estado: 'RESUELTO' } }),
-      tx.supportTicket.count({ where: base }),
-    ])
-
-  const [nuevos, enProceso, resueltos, total] = companyId
-    ? await conEmpresa(companyId, fn)
-    : await sinEmpresa('soporte: estadísticas globales de tickets (superadmin)', fn)
-  return { nuevos, enProceso, resueltos, total }
-}
+// `ticketStats` vivía aquí: cuatro conteos para las tarjetas de la bandeja.
+// Contaba tres de los cinco estados —ESPERANDO_CLIENTE y CERRADO quedaban
+// fuera—, así que el desglose no sumaba el total. Las pestañas de cola cuentan
+// sobre los tickets ya cargados, sin cuatro consultas extra.
 
 /** Detalle de un ticket. includeInternal controla si se ven las notas internas. */
 export async function getTicketDetail(id: string, includeInternal: boolean) {
