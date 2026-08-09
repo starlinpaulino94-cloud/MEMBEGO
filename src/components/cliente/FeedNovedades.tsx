@@ -44,7 +44,7 @@ const TIPO_META: Record<string, TipoMeta> = {
   BENEFICIO: {
     label: 'Beneficio',
     icon: BadgeCheck,
-    bg: 'bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500',
+    bg: 'bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500',
     chip: 'bg-white/20 text-white',
     cta: 'Obtener beneficio',
   },

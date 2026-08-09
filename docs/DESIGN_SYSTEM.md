@@ -365,6 +365,27 @@ verificar enlaces.
 | 19 | Dark mode, accesibilidad, QA visual | ⬜ |
 | 20 | Eliminar el frontend visual heredado | ⬜ |
 
+### Correcciones desde verificación visual
+
+Lo que salió del primer despliegue mirado con ojos, no con pruebas.
+
+| Hallazgo | Causa | Resolución |
+|---|---|---|
+| "Mi ubicación" fallaba al arrastrar | El refresco por viewport viajaba con `contexto=CURRENT` **sin** coordenadas | El cliente reenvía el ancla; el servidor cae al centro del viewport en vez de dar error |
+| Distancia medida desde el centro del mapa | `buscarEnViewportRaw` usaba el centro del rectángulo | Se mide desde el ancla (`ancla` en la consulta): "a 2 km" vuelve a significar "de ti" |
+| El menú lateral se plegaba | Grupos colapsables con estado en `localStorage` | Eliminado. Para ganar espacio está el riel de iconos |
+| Banner del home en verde | `PromoBanner tono="brand"` seguía en `emerald→cyan` | Azul de marca. Igual en `FlashPromotion` y `FeedNovedades` |
+
+**El menú no se pliega.** Un menú que cambia de forma al navegar hace que nada
+esté donde lo dejaste, y llegar a cualquier sitio costaba dos clics. La
+respuesta al espacio es el riel de iconos, no esconder dominios de uno en uno.
+
+**Los marcadores del mapa llevan el logo del negocio.** Un mapa con varias
+empresas y gotas idénticas obliga a tocar pin por pin; reconocer la marca es a
+lo que se va al mapa. Sin logo, la inicial. El HTML del `divIcon` lo inserta
+Leaflet por fuera de React, así que `logoUrl` y `empresaNombre` **se escapan**
+antes de entrar (`escaparHtml`, `escaparCss`, `urlImagenSegura`).
+
 ### Decisiones de producto resueltas fuera de fase
 
 | Decisión | Resolución | Dónde vive |

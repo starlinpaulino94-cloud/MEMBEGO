@@ -1,9 +1,9 @@
 'use client'
 
-import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout } from '@/modules/auth/actions'
 import { Logo } from '@/components/layout/Logo'
@@ -17,47 +17,29 @@ import {
 import type { AppRole } from '@/types'
 
 /**
- * Clave de persistencia del estado ABIERTO (ids de grupo, por rol).
+ * EL MENÚ NO SE PLIEGA.
  *
- * DS 2.0 · Fase 0: la versión anterior (`…collapsed.v1`) guardaba lo
- * CERRADO, porque el menú arrancaba con todo abierto y el usuario solo podía
- * plegar. Ahora arranca plegado salvo el dominio activo, así que lo que hay
- * que recordar es lo que el usuario decidió abrir. Se sube la versión de la
- * clave a propósito: reutilizarla habría interpretado los grupos plegados de
- * antes como grupos abiertos, justo al revés.
+ * Hasta ahora los grupos colapsaban y solo se abría el dominio activo. La idea
+ * era acortar la lista; el efecto real era que llegar a cualquier sitio costaba
+ * dos clics —abrir el grupo, luego el enlace— y que el menú cambiaba de forma
+ * al navegar, así que nada estaba nunca donde lo dejaste. Para un menú de este
+ * tamaño, esconder cuesta más de lo que ahorra.
+ *
+ * Ahora todo está siempre visible y los encabezados de grupo son eso:
+ * encabezados. Quien necesite más espacio tiene el riel de iconos (el botón de
+ * colapsar de la cabecera), que sigue intacto — esa es la respuesta al espacio,
+ * no plegar dominios de uno en uno.
+ *
+ * Se eliminó también la persistencia en localStorage (`membego.nav.abiertos.v2`):
+ * sin estado que recordar, no hay nada que guardar. Las claves viejas quedan
+ * huérfanas en los navegadores que las tengan y no se leen nunca más.
  */
-const STORAGE_KEY = 'membego.nav.abiertos.v2'
-
-const emptySubscribe = () => () => {}
-
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/')
 }
 
 function groupHasActive(pathname: string, group: NavGroup) {
   return group.items.some((item) => isActive(pathname, item.href))
-}
-
-function loadAbiertos(role: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return new Set()
-    const parsed = JSON.parse(raw) as Record<string, string[]>
-    return new Set(parsed[role] ?? [])
-  } catch {
-    return new Set()
-  }
-}
-
-function saveAbiertos(role: string, abiertos: Set<string>) {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? (JSON.parse(raw) as Record<string, string[]>) : {}
-    parsed[role] = Array.from(abiertos)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
-  } catch {
-    /* almacenamiento no disponible: el menú funciona sin persistencia */
-  }
 }
 
 export function AppSidebar({
@@ -109,29 +91,6 @@ export function AppSidebar({
 
   const identidad = userName?.trim() || userEmail
   const inicial = (identidad[0] ?? 'U').toUpperCase()
-
-  // Estado ABIERTO por grupo. En SSR y primer render solo se abre el dominio
-  // activo (mounted=false ⇒ sin mismatch de hidratación); tras montar se suma
-  // lo que el usuario había abierto. Sus toggles pisan vía `override`.
-  const mounted = useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false
-  )
-  const [override, setOverride] = useState<Set<string> | null>(null)
-  const stored = useMemo(
-    () => (mounted ? loadAbiertos(role) : new Set<string>()),
-    [mounted, role]
-  )
-  const abiertos = override ?? stored
-
-  function toggleGroup(id: string) {
-    const next = new Set(abiertos)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    saveAbiertos(role, next)
-    setOverride(next)
-  }
 
   // ── DXS · Modo riel: iconos con tooltip; máximo espacio para el contenido ──
   if (rail) {
@@ -268,58 +227,27 @@ export function AppSidebar({
       <nav className="flex-1 overflow-y-auto px-2.5 pb-4 pt-3">
         {groups.map((group, gi) => {
           const hasActive = groupHasActive(pathname, group)
-          // DS 2.0 · Abierto SOLO el dominio activo, más lo que el usuario
-          // haya abierto a mano. Antes arrancaban todos abiertos y el panel
-          // pintaba 33 enlaces de golpe; ahora son ~13. El dominio activo se
-          // fuerza abierto siempre: el contexto nunca se esconde.
-          const isOpen = hasActive || abiertos.has(group.id)
-          const single = group.items.length === 1
+          // Un grupo de un solo ítem en cabeza de lista no se anuncia: la
+          // etiqueta repetiría el nombre del enlace que tiene debajo.
+          const sinTitulo = group.items.length === 1 && gi === 0
 
           return (
             <div key={group.id} className={cn('mb-1', gi > 0 && 'mt-2')}>
-              {/* Cabecera del grupo: los grupos de un solo ítem no colapsan. */}
-              {single ? (
-                gi > 0 && (
-                  <p className="mb-1 px-2.5 text-[12px] font-semibold uppercase tracking-[0.1em] text-sidebar-foreground/70">
-                    {group.label}
-                  </p>
-                )
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.id)}
-                  aria-expanded={isOpen}
-                  aria-controls={`nav-group-${group.id}`}
+              {/* Encabezado del grupo: rótulo, no control. El dominio activo se
+                  resalta para ubicar de un vistazo dónde estás. */}
+              {!sinTitulo && (
+                <p
                   className={cn(
-                    'group/header mb-0.5 flex min-h-9 w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12px] font-semibold uppercase tracking-[0.1em] transition-colors duration-150',
-                    hasActive
-                      ? 'text-sidebar-primary'
-                      : 'text-sidebar-foreground/70 hover:text-white'
+                    'mb-1 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-[0.1em]',
+                    hasActive ? 'text-sidebar-primary' : 'text-sidebar-foreground/70'
                   )}
                 >
-                  <span>{group.label}</span>
-                  <ChevronDown
-                    className={cn(
-                      'h-3.5 w-3.5 shrink-0 transition-transform duration-200',
-                      !isOpen && '-rotate-90',
-                      hasActive
-                        ? 'text-sidebar-primary/80'
-                        : 'text-sidebar-foreground/50 group-hover/header:text-sidebar-foreground/80'
-                    )}
-                  />
-                </button>
+                  {group.label}
+                </p>
               )}
 
-              {/* Ítems (colapso animado con grid-rows) */}
-              <div
-                id={`nav-group-${group.id}`}
-                className={cn(
-                  'grid transition-[grid-template-rows] duration-200 ease-out',
-                  isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-                )}
-              >
-                <ul className="min-h-0 space-y-px overflow-hidden">
-                  {group.items.map((item) => {
+              <ul className="space-y-px">
+                {group.items.map((item) => {
                     const active = isActive(pathname, item.href)
                     const Icon = item.icon
                     return (
@@ -355,8 +283,7 @@ export function AppSidebar({
                       </li>
                     )
                   })}
-                </ul>
-              </div>
+              </ul>
             </div>
           )
         })}

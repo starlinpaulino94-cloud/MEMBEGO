@@ -34,9 +34,28 @@ export function formatearDistancia(distanciaM: number | null | undefined): strin
   if (distanciaM === null || distanciaM === undefined || !Number.isFinite(distanciaM)) {
     return 'a poca distancia'
   }
+  return `A ${soloMagnitud(distanciaM)}`
+}
+
+/**
+ * Solo la magnitud: "850 m", "2.4 km". Para cuando la frase ya pone la
+ * preposición ("A 850 m de ti") y `formatearDistancia` produciría "A A 850 m".
+ * Devuelve null si no hay distancia, para que quien la use decida si calla o
+ * escribe otra cosa — nunca un número inventado.
+ */
+export function formatearMagnitudDistancia(
+  distanciaM: number | null | undefined
+): string | null {
+  if (distanciaM === null || distanciaM === undefined || !Number.isFinite(distanciaM)) {
+    return null
+  }
+  return soloMagnitud(distanciaM)
+}
+
+function soloMagnitud(distanciaM: number): string {
   if (distanciaM < 1000) {
-    return `A ${Math.round(distanciaM / 10) * 10} m`
+    return `${Math.round(distanciaM / 10) * 10} m`
   }
   const km = distanciaM / 1000
-  return `A ${km >= 10 ? km.toFixed(0) : km.toFixed(1)} km`
+  return `${km >= 10 ? km.toFixed(0) : km.toFixed(1)} km`
 }

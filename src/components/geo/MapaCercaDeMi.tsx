@@ -24,7 +24,10 @@ import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/system/EmptyState'
 import { MobileBottomSheet } from '@/components/ui/mobile-bottom-sheet'
 import { cn } from '@/lib/utils'
-import { formatearDistancia } from '@/modules/geo/cercanos/distancia'
+import {
+  formatearDistancia,
+  formatearMagnitudDistancia,
+} from '@/modules/geo/cercanos/distancia'
 import { aceptarConsentimientoGeo } from '@/modules/geo/consentimiento/actions'
 import type {
   ContextoUbicacion,
@@ -81,6 +84,41 @@ const FILTROS: { key: FiltroBooleano; label: string }[] = [
 
 const round = (n: number) => Number(n.toFixed(6))
 
+/**
+ * SANEO PARA EL HTML DEL MARCADOR.
+ *
+ * Leaflet monta el `divIcon` con `innerHTML`, así que el nombre y el logo del
+ * negocio —datos que escribe cada empresa en su panel— entran como marcado, no
+ * como texto. Sin escapar, un nombre con comillas rompe el atributo y abre la
+ * puerta a inyectar HTML en la página de cualquiera que mire el mapa.
+ */
+function escaparHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** Escape para el interior de `url('…')` en un atributo `style`. */
+function escaparCss(s: string): string {
+  return s.replace(/[\\'"()\s]/g, (c) => `\\${c}`)
+}
+
+/**
+ * Solo URLs de imagen http(s) o data URI de imagen. Descarta `javascript:` y
+ * cualquier esquema raro que llegue de la base de datos.
+ */
+function urlImagenSegura(url: string | null): string | null {
+  if (!url) return null
+  const limpia = url.trim()
+  if (/^https?:\/\//i.test(limpia)) return limpia
+  if (/^data:image\/[a-z+.-]+;base64,[a-z0-9+/=]+$/i.test(limpia)) return limpia
+  if (limpia.startsWith('/') && !limpia.startsWith('//')) return limpia
+  return null
+}
+
 export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
@@ -91,6 +129,15 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const moviendoRef = useRef(false)
+  /**
+   * Ancla resuelta de la búsqueda actual (lat/lng). El refresco por viewport la
+   * reenvía para que el servidor pueda seguir resolviendo el contexto: con
+   * `contexto=CURRENT` y sin coordenadas, el GPS de la sesión se perdía en el
+   * primer arrastre. Es el estado que faltaba, no un caché.
+   */
+  const anclaRef = useRef<{ lat: number; lng: number } | null>(null)
+  /** Vigila el cambio de tema para swapear las teselas claras/oscuras. */
+  const observadorTemaRef = useRef<MutationObserver | null>(null)
 
   const [contexto, setContexto] = useState<ContextoUbicacion>(userId ? 'HOME' : 'MANUAL')
   const [radioKm, setRadioKm] = useState<number | null>(5)
@@ -165,6 +212,14 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           setTiposVistos([...new Set(items.map((x) => x.tipo).filter(Boolean))].sort())
         }
         if (data.ubicacion?.etiqueta) setUbicacion(data.ubicacion.etiqueta)
+        // El servidor es quien resuelve el ancla de HOME y de las zonas del
+        // catálogo; guardarla aquí es lo que permite reenviarla al arrastrar.
+        if (
+          typeof data.ubicacion?.lat === 'number' &&
+          typeof data.ubicacion?.lng === 'number'
+        ) {
+          anclaRef.current = { lat: data.ubicacion.lat, lng: data.ubicacion.lng }
+        }
         if (
           opts?.reCentrar &&
           typeof data.ubicacion?.lat === 'number' &&
@@ -198,6 +253,13 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
     const p = new URLSearchParams()
     p.set('contexto', contexto)
     p.set('viewport', JSON.stringify(vp))
+    // El ancla viaja siempre que se conozca: `contexto=CURRENT` sin coordenadas
+    // hacía que el servidor respondiera "no recibimos una ubicación válida de
+    // tu dispositivo" en cuanto se arrastraba el mapa tras usar el GPS.
+    if (anclaRef.current) {
+      p.set('lat', String(anclaRef.current.lat))
+      p.set('lng', String(anclaRef.current.lng))
+    }
     if (Object.keys(filtros).length) p.set('filtros', JSON.stringify(filtros))
     void buscar(p)
   }, [contexto, filtros, buscar])
@@ -230,38 +292,55 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
     const L = LRef.current
     if (!L) return
     /**
-     * Pin de marca (§38). Antes era el emoji 📍 dentro de un `divIcon`: se
-     * dibujaba distinto en cada sistema operativo, no llevaba la marca y no
-     * distinguía un negocio con ofertas de uno sin ellas.
+     * Marcador de negocio (§38): el LOGO de la empresa dentro de un disco.
      *
-     * Es un SVG con `currentColor`, así que hereda el color del contenedor y
-     * los estados se resuelven con una clase en vez de con tres iconos. El
-     * punto ámbar marca los que tienen ofertas vivas — la única razón para
-     * mirar el mapa antes que la lista.
+     * Antes era una gota con el color de marca, idéntica para todos. En un mapa
+     * con varias empresas eso obliga a tocar pin por pin para saber cuál es
+     * cuál — y reconocer la marca es justo a lo que se va al mapa.
+     *
+     * El HTML se construye a mano porque Leaflet lo inserta por fuera de React,
+     * así que todo lo que venga de la base de datos SE ESCAPA: `logoUrl` y
+     * `empresaNombre` acaban dentro de un atributo `style` y de un nodo de
+     * texto, y una comilla suelta ahí es una inyección.
      */
-    const pin = (conOfertas: boolean) =>
-      L.divIcon({
+    const icono = (s: SucursalCercana, activo: boolean) => {
+      const clases = [
+        'mg-pin',
+        s.tieneOfertas ? 'mg-pin--oferta' : '',
+        activo ? 'mg-pin--activo' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      const url = urlImagenSegura(s.logoUrl)
+      const interior = url
+        ? `<span class="mg-pin__logo" style="background-image:url('${escaparCss(url)}')"></span>`
+        : `<span class="mg-pin__inicial">${escaparHtml((s.empresaNombre[0] ?? '?').toUpperCase())}</span>`
+
+      return L.divIcon({
         className: '',
-        html: `<span class="mg-pin${conOfertas ? ' mg-pin--oferta' : ''}">
-          <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
-            <path fill="currentColor" stroke="white" stroke-width="1.5"
-              d="M12 1.7c-4 0-7.2 3.2-7.2 7.2 0 5.4 6.4 12.5 6.7 12.8a.7.7 0 0 0 1 0c.3-.3 6.7-7.4 6.7-12.8 0-4-3.2-7.2-7.2-7.2Z"/>
-            <circle cx="12" cy="8.9" r="2.6" fill="white"/>
-          </svg>
+        html: `<span class="${clases}" title="${escaparHtml(s.empresaNombre)}">
+          ${interior}${s.tieneOfertas ? '<span class="mg-pin__oferta"></span>' : ''}
         </span>`,
-        iconSize: [30, 30],
-        iconAnchor: [15, 29],
+        iconSize: [38, 38],
+        iconAnchor: [19, 40],
       })
+    }
 
     for (const s of items) {
-      const m = L.marker([s.latitud, s.longitud], { icon: pin(s.tieneOfertas) })
+      const activo = s.id === seleccionado
+      const m = L.marker([s.latitud, s.longitud], {
+        icon: icono(s, activo),
+        // El seleccionado se dibuja por encima de sus vecinos.
+        zIndexOffset: activo ? 1000 : 0,
+      })
       // Sin `bindPopup`: el popup de Leaflet es HTML plano, sin logo, sin
       // distancia y sin acciones. La tarjeta del seleccionado lo sustituye.
       m.on('click', () => seleccionar(s))
       markerRef.current.set(s.id, m)
       cluster.add(m)
     }
-  }, [seleccionar])
+  }, [seleccionar, seleccionado])
 
   // ── Inicialización del mapa (una vez) ──────────────────────────────────────
   useEffect(() => {
@@ -276,10 +355,48 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           zoomControl: false,
           attributionControl: true,
         }).setView(DEFAULT_CENTER, 12)
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map)
+        /**
+         * BASEMAP · CARTO en vez de las teselas estándar de OpenStreetMap.
+         *
+         * Las de OSM están dibujadas para leerse solas: carreteras en naranja
+         * fuerte, áreas comerciales en rosa, bosques en verde saturado. Sobre
+         * ese ruido, nuestros marcadores compiten con el mapa en lugar de
+         * destacar. Positron y Dark Matter son basemaps deliberadamente
+         * apagados —grises, sin relleno de color— pensados justo para esto:
+         * que el dato encima sea lo que se ve.
+         *
+         * Siguen siendo datos de OpenStreetMap, así que la atribución mantiene
+         * a OSM además de CARTO — es un requisito de la licencia, no un
+         * detalle de cortesía.
+         */
+        const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        const CARTO = '&copy; <a href="https://carto.com/attributions">CARTO</a>'
+        const teselas = (oscuro: boolean) =>
+          L.tileLayer(
+            `https://{s}.basemaps.cartocdn.com/${oscuro ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`,
+            { attribution: `${OSM} ${CARTO}`, maxZoom: 20, subdomains: 'abcd' }
+          )
+
+        const esOscuro = () => document.documentElement.classList.contains('dark')
+        let oscuroActual = esOscuro()
+        let capa = teselas(oscuroActual).addTo(map)
+
+        // El tema se cambia desde el header sin recargar, así que el mapa tiene
+        // que enterarse: sin esto, alternar a oscuro dejaba un mapa blanco
+        // brillante dentro de una app oscura.
+        const observador = new MutationObserver(() => {
+          if (esOscuro() === oscuroActual) return
+          oscuroActual = !oscuroActual
+          map.removeLayer(capa)
+          capa = teselas(oscuroActual).addTo(map)
+          capa.bringToBack()
+        })
+        observador.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['class'],
+        })
+        observadorTemaRef.current = observador
+
         L.control.zoom({ position: 'bottomright' }).addTo(map)
 
         // Cluster (o capa simple si markercluster no cargó en runtime).
@@ -322,6 +439,8 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
       cancelled = true
       if (debounceRef.current) clearTimeout(debounceRef.current)
       if (zonaTimer.current) clearTimeout(zonaTimer.current)
+      observadorTemaRef.current?.disconnect()
+      observadorTemaRef.current = null
       if (mapRef.current) {
         mapRef.current.remove()
         mapRef.current = null
@@ -368,6 +487,9 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         setContexto('CURRENT')
         setUbicacion('Mi ubicación actual')
         setRadioKm(3)
+        // Antes de cualquier `moveend`: el re-centrado dispara el refresco por
+        // viewport, que necesita el ancla ya puesta.
+        anclaRef.current = { lat, lng }
         const p = new URLSearchParams()
         p.set('contexto', 'CURRENT')
         p.set('lat', String(lat))
@@ -504,8 +626,14 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           className="h-[calc(100svh-3.5rem-4.5rem)] w-full lg:h-[calc(100vh-8rem)]"
         />
 
-        {/* Selector de contexto (pills sobre el mapa) */}
-        <div className="absolute left-3 top-3 z-[500] flex flex-wrap gap-2">
+        {/* ── Controles flotantes ────────────────────────────────────────────
+            Un solo bloque en la esquina, no dos capas sueltas con posiciones
+            absolutas independientes. Antes las pills iban en `top-3` y el
+            buscador en `top-14`: al envolverse las pills en pantallas estrechas
+            se montaban encima del campo. Apilados en un contenedor, el hueco lo
+            reparte el `gap` y no hay colisión posible. */}
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-[500] flex flex-col gap-2 sm:w-[min(340px,calc(100%-24px))]">
+        <div className="pointer-events-auto flex flex-wrap gap-2">
           {userId && (
             <button
               type="button"
@@ -533,7 +661,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         </div>
 
         {/* Búsqueda de zona (MANUAL) */}
-        <div className="absolute left-3 top-14 z-[500] w-[min(320px,calc(100%-24px))]">
+        <div className="pointer-events-auto">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
             <Input
@@ -582,9 +710,11 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
 
         {/* Categorías — §38. La API ya aceptaba `tiposNegocio`; solo faltaba
             exponerlo. Va sobre el mapa para que exista también en móvil, donde
-            la columna de filtros no se pinta. */}
+            la columna de filtros no se pinta. Dentro del mismo apilado que las
+            pills y el buscador: antes flotaba en `top-16` y se solapaba con
+            ellos en cuanto el buscador bajaba de línea. */}
         {tiposVistos.length > 1 && (
-          <div className="absolute inset-x-0 top-16 z-[500] px-3">
+          <div className="pointer-events-auto">
             <ul className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
               {tiposVistos.map((tipo) => {
                 const activo = filtros.tiposNegocio?.[0] === tipo
@@ -609,6 +739,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
             </ul>
           </div>
         )}
+        </div>
 
         {/* Radio (zoom) */}
         {ubicacion && (
@@ -920,8 +1051,17 @@ function TarjetaSeleccionado({
           <p className="truncate text-caption">
             {s.sector ?? s.ciudad ?? s.direccion ?? s.nombre}
           </p>
+          {/* La distancia es LA pregunta que se hace al tocar un pin —¿me
+              queda cerca?—, así que va como dato propio y no como una insignia
+              gris más entre otras tres. "de ti" es literal: se mide desde la
+              ubicación activa, no desde el centro del mapa. */}
+          {formatearMagnitudDistancia(s.distanciaM) && (
+            <p className="mt-1 flex items-center gap-1.5 text-small font-semibold text-primary">
+              <Navigation className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              A {formatearMagnitudDistancia(s.distanciaM)} de ti
+            </p>
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary">{formatearDistancia(s.distanciaM)}</Badge>
             {s.abierto === true && <Badge variant="success">Abierto</Badge>}
             {s.abierto === false && <Badge variant="outline">Cerrado</Badge>}
             {s.cantidadOfertas > 0 && (
