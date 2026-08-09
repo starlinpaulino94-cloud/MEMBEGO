@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { FormSection, FormActions } from '@/components/ui/form-section'
 import { LogoUpload } from '@/components/superadmin/LogoUpload'
 import {
   CategoryMultiSelect,
@@ -96,12 +96,12 @@ export function PerfilPublicoForm({
       {/* Empresa a editar: el admin de empresa se valida por sesión; el
           superadmin usa este campo (verificado en la action). */}
       <input type="hidden" name="companyId" value={company.id} />
-      {/* Identidad visual */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Identidad visual</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+
+      <FormSection
+        title="Identidad visual"
+        description="Lo primero que ve un cliente en tu página y en el marketplace."
+      >
+        <div className="space-y-6">
           <div className="space-y-1.5">
             <Label>Logo</Label>
             <LogoUpload
@@ -146,15 +146,14 @@ export function PerfilPublicoForm({
               initialImages={company.galleryImages}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      {/* Información */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Información del negocio</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-2">
+      <FormSection
+        title="Información del negocio"
+        description="Qué ofreces, cuándo abres y en qué filtros del directorio apareces."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="description">Descripción</Label>
             <Textarea
@@ -175,8 +174,17 @@ export function PerfilPublicoForm({
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="razonSocial">Razón social (opcional)</Label>
+            <Input
+              id="razonSocial"
+              name="razonSocial"
+              defaultValue={company.razonSocial ?? ''}
+              placeholder="Nombre legal de la empresa"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
             <Label>Categorías del marketplace</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-caption text-muted-foreground">
               Determinan en qué filtros del directorio apareces.
             </p>
             <CategoryMultiSelect
@@ -184,15 +192,17 @@ export function PerfilPublicoForm({
               defaultSelected={selectedCategoryIds}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      {/* Ubicación */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ubicación</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-2">
+      {/* La razón social vivía aquí abajo, entre el enlace de Google Maps y la
+          zona de cobertura: un dato legal metido en medio de la dirección. Se
+          fue arriba, con el resto de lo que identifica al negocio. */}
+      <FormSection
+        title="Ubicación"
+        description="Dónde estás. El punto del mapa es lo que te hace aparecer en «Cerca de mí»."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="direccion">Dirección</Label>
             <Input
@@ -236,17 +246,15 @@ export function PerfilPublicoForm({
               placeholder="https://maps.app.goo.gl/…"
             />
           </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="razonSocial">Razón social (opcional)</Label>
-            <Input
-              id="razonSocial"
-              name="razonSocial"
-              defaultValue={company.razonSocial ?? ''}
-              placeholder="Nombre legal de la empresa"
-            />
-          </div>
+          {/* El campo iba justo debajo del enlace de Google Maps, con la misma
+              pinta y sin decir qué esperaba, así que se rellenaba pegando otra
+              vez la URL del mapa. Ahora la ayuda dice explícitamente que es
+              texto, no un enlace. */}
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="zonaCobertura">Zona de cobertura (opcional)</Label>
+            <p className="text-caption text-muted-foreground">
+              En qué zonas atiendes, escrito con tus palabras. No es un enlace.
+            </p>
             <Input
               id="zonaCobertura"
               name="zonaCobertura"
@@ -255,18 +263,22 @@ export function PerfilPublicoForm({
             />
           </div>
           {/* Selector de coordenadas con mapa (Leaflet+OSM) */}
-          <div className="sm:col-span-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Punto exacto en el mapa</Label>
+            <p className="text-caption text-muted-foreground">
+              Sin este punto tu negocio no sale en «Cerca de mí». Se copia a tu
+              sucursal principal al guardar.
+            </p>
             <MapaUbicacion lat={company.latitud} lng={company.longitud} />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      {/* Contacto y redes */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contacto y redes sociales</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-2">
+      <FormSection
+        title="Contacto y redes sociales"
+        description="Por dónde te escriben. Aparece en tu página pública."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="telefono">Teléfono</Label>
             <Input
@@ -335,22 +347,22 @@ export function PerfilPublicoForm({
               placeholder="https://tiktok.com/@…"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
       {/* Paso 4: configuración regional, marca y políticas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Configuración</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-5 sm:grid-cols-2">
+      <FormSection
+        title="Configuración"
+        description="Moneda, formato y las políticas que el cliente acepta al comprarte."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="moneda">Moneda</Label>
             <select
               id="moneda"
               name="moneda"
               defaultValue={company.moneda}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+              className="min-h-10 w-full rounded-lg border border-input bg-transparent px-3 text-small text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {MONEDAS.map((m) => (
                 <option key={m.code} value={m.code}>{m.label}</option>
@@ -363,7 +375,7 @@ export function PerfilPublicoForm({
               id="idioma"
               name="idioma"
               defaultValue={company.idioma}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+              className="min-h-10 w-full rounded-lg border border-input bg-transparent px-3 text-small text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {IDIOMAS.map((i) => (
                 <option key={i.code} value={i.code}>{i.label}</option>
@@ -415,10 +427,14 @@ export function PerfilPublicoForm({
               rows={3}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      <SubmitBtn />
+      {/* El botón estaba suelto al final de cinco secciones: para guardar un
+          cambio del primer campo había que recorrer el formulario entero. */}
+      <FormActions>
+        <SubmitBtn />
+      </FormActions>
     </form>
   )
 }

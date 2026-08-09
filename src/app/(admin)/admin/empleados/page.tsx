@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { INVITABLE_ROLES, type AppRole } from '@/types'
+import { formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 // Todos los roles de equipo (para listar el equipo completo, no solo empleados).
 const TEAM_ROLES: AppRole[] = [...INVITABLE_ROLES, 'ADMIN_EMPRESA']
@@ -27,7 +29,15 @@ export default async function EmpleadosPage() {
   const puedeInvitar = !!user.metadata.companyId && FULL_ADMIN_ROLES.includes(user.metadata.role)
 
   let miembros: EmpleadoRow[] = []
-  let invitacionesPendientes: { id: string; email: string; rol: AppRole; expiraEn: Date }[] = []
+  // `caducada` lo resuelve `listInvitacionesPendientes`: `Date.now()` dentro
+  // del render es impuro y el compilador de React lo rechaza.
+  let invitacionesPendientes: {
+    id: string
+    email: string
+    rol: AppRole
+    expiraEn: Date
+    caducada: boolean
+  }[] = []
   let loadError = false
   try {
     const [team, invs] = await Promise.all([
@@ -88,22 +98,38 @@ export default async function EmpleadosPage() {
 
             {invitacionesPendientes.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                  Invitaciones pendientes
-                </p>
+                <p className="text-overline">Invitaciones pendientes</p>
+                {/* `expiraEn` se consultaba y no se enseñaba. Una invitación
+                    que caduca sin avisar se convierte en "no me llegó nada":
+                    el admin no tenía forma de saber si tocaba reenviarla. */}
                 <ul className="divide-y divide-border rounded-lg border border-border">
-                  {invitacionesPendientes.map((inv) => (
-                    <li
-                      key={inv.id}
-                      className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                    >
-                      <span className="min-w-0 truncate">
-                        <span className="font-medium text-foreground">{inv.email}</span>
-                        <span className="ml-2 text-muted-foreground">· {roleLabel(inv.rol)}</span>
-                      </span>
-                      <CancelarInvitacionButton id={inv.id} />
-                    </li>
-                  ))}
+                  {invitacionesPendientes.map((inv) => {
+                    const { caducada } = inv
+                    return (
+                      <li
+                        key={inv.id}
+                        className="flex items-center justify-between gap-3 px-3 py-2.5"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-small font-medium text-foreground">
+                            {inv.email}
+                          </span>
+                          <span
+                            className={cn(
+                              'block truncate text-caption',
+                              caducada ? 'text-destructive' : 'text-muted-foreground'
+                            )}
+                          >
+                            {roleLabel(inv.rol)} ·{' '}
+                            {caducada
+                              ? 'Caducada — vuelve a invitar'
+                              : `Vence el ${formatDate(inv.expiraEn)}`}
+                          </span>
+                        </span>
+                        <CancelarInvitacionButton id={inv.id} />
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             )}

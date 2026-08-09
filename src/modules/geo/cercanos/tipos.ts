@@ -95,3 +95,27 @@ export type RadioCercano = (typeof RADIOS_CERCANOS)[number]
 
 export const RADIO_POR_DEFECTO = 5
 export const RADIO_POR_DEFECTO_CURRENT = 3
+
+/**
+ * ¿Sale esta sucursal en "Cerca de mí"?
+ *
+ * ESPEJO EN TYPESCRIPT DEL FILTRO SQL de `condicionesFiltros`
+ * (modules/geo/cercanos/queries.ts). Las condiciones que dependen de la EMPRESA
+ * —activa, publicada, no demo— no están aquí: esto responde por la sucursal,
+ * que es lo que el admin puede arreglar desde `/admin/sucursales`.
+ *
+ * Existe porque el panel prometía "para que aparezcan en el mapa de tus
+ * clientes" y luego no decía cuáles lo hacían. Una sucursal sin coordenadas se
+ * veía idéntica a una que sí las tiene, y el mapa respondía "0 negocios" —que
+ * parece una respuesta correcta, no un fallo—, así que no había forma de
+ * enterarse. La prueba `geo-visibilidad` vigila que este espejo no se separe
+ * del SQL.
+ */
+export function sucursalVisibleEnMapa(s: {
+  activa: boolean
+  mostrarEnMapa: boolean
+  latitud: number | null
+  longitud: number | null
+}): boolean {
+  return s.activa && s.mostrarEnMapa && s.latitud !== null && s.longitud !== null
+}
