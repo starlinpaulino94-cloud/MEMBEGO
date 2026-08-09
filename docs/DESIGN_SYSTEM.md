@@ -356,7 +356,7 @@ verificar enlaces.
 | 10 | Promociones, crecimiento, referidos | ✅ |
 | 11 | Marketing, campañas, audiencia | ✅ |
 | 12 | Operaciones: scanner, pagos, sucursales | ✅ |
-| 13 | Reportes | ⬜ |
+| 13 | Reportes | ✅ |
 | 14 | Empresa, empleados, configuración | ⬜ |
 | 15 | Soporte | ⬜ |
 | 16 | Superadmin | ⬜ |
