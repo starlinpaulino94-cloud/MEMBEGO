@@ -42,10 +42,10 @@ export default async function SuperadminDemoPage() {
         <div>
           <p className="text-overline">Plataforma</p>
           <h1 className="text-h1 mt-1 flex items-center gap-2 text-foreground">
-            <FlaskConical className="h-6 w-6 text-amber-500" />
+            <FlaskConical className="h-6 w-6 text-warning" />
             Empresas de demostración
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-2xl text-small text-muted-foreground">
             Empresas para entrenar al personal. Por dentro funcionan exactamente igual que una
             real —registro de clientes, membresías, QR, pista, caja, reportes— porque si se
             comportaran distinto, el entrenamiento enseñaría un sistema que no es el que van a

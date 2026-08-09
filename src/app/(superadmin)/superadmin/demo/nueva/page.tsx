@@ -19,12 +19,12 @@ export default async function NuevaEmpresaDemoPage() {
     <div className="mx-auto max-w-2xl space-y-4 animate-fade-up">
       <Link
         href="/superadmin/demo"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-small text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Volver a demostración
       </Link>
 
-      <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-100">
+      <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-foreground">
         <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
         <p>
           Esta empresa nace marcada como <strong>de práctica</strong>: no cobrará con tarjeta, no

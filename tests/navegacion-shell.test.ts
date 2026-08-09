@@ -198,8 +198,13 @@ test('toda ruta del menú resuelve a su propia sección', () => {
 const RAICES = ['src', 'packages/ui/src']
 const MICRO = /text-\[(\d+(?:\.\d+)?)px\]/g
 
-/** Techo actual. Bajarlo conforme las fases vayan saldando la deuda. */
-const TECHO_MICRO_TEXTOS = 193
+/**
+ * Techo actual. Bajarlo conforme las fases vayan saldando la deuda.
+ *
+ * 218 en la Fase 0 · 193 tras la Fase 13 · 186 tras la Fase 16, que dejó el
+ * área de superadministrador a cero.
+ */
+const TECHO_MICRO_TEXTOS = 186
 
 function archivosTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {

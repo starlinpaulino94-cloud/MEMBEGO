@@ -12,6 +12,7 @@ import {
   Calendar,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
+import { formatDate } from '@/lib/format'
 import { getEmpresaDashboard } from '@/modules/empresas/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,7 +22,7 @@ import { EmpresaDashboard } from '@/components/superadmin/EmpresaDashboard'
 export const dynamic = 'force-dynamic'
 
 function fmtDate(d: Date) {
-  return new Date(d).toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })
+  return formatDate(d, null, { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
 export default async function EmpresaDetailPage({
@@ -44,7 +45,7 @@ export default async function EmpresaDetailPage({
     <div className="space-y-6 animate-fade-up">
       <Link
         href="/superadmin/empresas"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-small text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Volver a empresas
       </Link>
@@ -81,9 +82,9 @@ export default async function EmpresaDetailPage({
                   </Badge>
                 </div>
                 {company.description && (
-                  <p className="mt-0.5 text-sm text-muted-foreground">{company.description}</p>
+                  <p className="mt-0.5 text-small text-muted-foreground">{company.description}</p>
                 )}
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-muted-foreground">
                   {company.ciudad && (
                     <span className="flex items-center gap-1">
                       <MapPin className="h-3 w-3" /> {company.ciudad}

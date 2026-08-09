@@ -17,6 +17,8 @@ import { prisma } from '@/lib/prisma'
 import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { COLAS_TICKET } from '@/lib/soporte'
+import { formatDate } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,13 +38,22 @@ const ACCION_LABEL: Record<string, string> = {
   EMPRESA_DEMO_REINICIADA: 'Empresa de demostración reiniciada',
 }
 
+/**
+ * Hora de la actividad, vía `formatDate`.
+ *
+ * Antes construía su propio `Intl.DateTimeFormat` con el locale y la zona
+ * clavados. Es el panel de la PLATAFORMA, así que los valores por defecto son
+ * los correctos — pero escribirlos a mano significa que el día que la
+ * plataforma opere en otra zona haya que acordarse de este archivo. El
+ * formateador del sistema ya tiene esos mismos defaults.
+ */
 function fmtHora(d: Date) {
-  return new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo',
+  return formatDate(d, null, {
     day: 'numeric',
     month: 'short',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date(d))
+  })
 }
 
 const SELECT_EMPRESA = {
@@ -109,7 +120,7 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
                 <Image src={c.logoUrl} alt="" fill className="object-cover" />
               </span>
             ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-teal-500 text-[10px] font-bold text-white">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-brand text-overline text-white">
                 {c.name.slice(0, 2).toUpperCase()}
               </span>
             )}
@@ -136,8 +147,8 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
             { label: 'Activas', value: c.activas },
           ].map((s) => (
             <div key={s.label} className="rounded-xl bg-muted/40 py-3">
-              <p className="text-2xl font-bold tabular-nums text-foreground">{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
+              <p className="text-h2 tabular-nums text-foreground">{s.value}</p>
+              <p className="text-caption text-muted-foreground">{s.label}</p>
             </div>
           ))}
         </div>
@@ -145,7 +156,7 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
         {c.pendientes > 0 && (
           <Link
             href="/superadmin/operaciones"
-            className="mt-3 flex items-center justify-end gap-1 text-xs font-medium text-warning-foreground hover:underline"
+            className="mt-3 flex items-center justify-end gap-1 text-caption font-medium text-warning-foreground hover:underline"
           >
             {c.pendientes} pago{c.pendientes !== 1 ? 's' : ''} pendiente
             {c.pendientes !== 1 ? 's' : ''} <ArrowRight className="h-3 w-3" />
@@ -175,8 +186,14 @@ export default async function SuperadminDashboard() {
         })
         .catch(() => []),
       nuevosReales(hace30d),
+      // Cuenta la cola "Te toca a ti", no "todo lo no cerrado". El enlace lleva
+      // a /admin/tickets, que desde la Fase 15 abre en esa cola: si aquí se
+      // contara también ESPERANDO_CLIENTE, el panel diría "7" y la bandeja
+      // enseñaría 5 — el aviso y su destino tienen que hablar del mismo
+      // trabajo. Y un ticket esperando al cliente no es trabajo pendiente de
+      // la plataforma.
       prisma.supportTicket
-        .count({ where: { estado: { in: ['NUEVO', 'EN_PROCESO', 'ESPERANDO_CLIENTE'] } } })
+        .count({ where: { estado: { in: [...COLAS_TICKET.pendientes] } } })
         .catch(() => 0),
       prisma.auditLog
         .findMany({
@@ -247,49 +264,49 @@ export default async function SuperadminDashboard() {
         <div className="grid gap-3 sm:grid-cols-3">
           <Link
             href="/superadmin/operaciones"
-            className={`card-interactive flex items-center justify-between rounded-2xl border p-4 ${
+            className={`card-interactive flex items-center justify-between rounded-xl border p-4 ${
               totalPendientes > 0
                 ? 'border-warning/30 bg-warning/10'
                 : 'border-border/60 bg-card shadow-card'
             }`}
           >
-            <span className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+            <span className="flex items-center gap-2.5 text-small font-medium text-foreground">
               <Clock className={`h-4 w-4 ${totalPendientes > 0 ? 'text-warning' : 'text-muted-foreground'}`} />
               Pagos por validar
             </span>
-            <span className="inline-flex items-center gap-1 text-lg font-bold tabular-nums text-foreground">
+            <span className="inline-flex items-center gap-1 text-h3 tabular-nums text-foreground">
               {totalPendientes} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
             </span>
           </Link>
           <Link
             href="/superadmin/empresas"
-            className={`card-interactive flex items-center justify-between rounded-2xl border p-4 ${
+            className={`card-interactive flex items-center justify-between rounded-xl border p-4 ${
               sinPublicar > 0
                 ? 'border-info/30 bg-info/10'
                 : 'border-border/60 bg-card shadow-card'
             }`}
           >
-            <span className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+            <span className="flex items-center gap-2.5 text-small font-medium text-foreground">
               <EyeOff className={`h-4 w-4 ${sinPublicar > 0 ? 'text-info' : 'text-muted-foreground'}`} />
               Empresas sin publicar
             </span>
-            <span className="inline-flex items-center gap-1 text-lg font-bold tabular-nums text-foreground">
+            <span className="inline-flex items-center gap-1 text-h3 tabular-nums text-foreground">
               {sinPublicar} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
             </span>
           </Link>
           <Link
             href="/admin/tickets"
-            className={`card-interactive flex items-center justify-between rounded-2xl border p-4 ${
+            className={`card-interactive flex items-center justify-between rounded-xl border p-4 ${
               ticketsAbiertos > 0
                 ? 'border-destructive/30 bg-destructive/10'
                 : 'border-border/60 bg-card shadow-card'
             }`}
           >
-            <span className="flex items-center gap-2.5 text-sm font-medium text-foreground">
+            <span className="flex items-center gap-2.5 text-small font-medium text-foreground">
               <LifeBuoy className={`h-4 w-4 ${ticketsAbiertos > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
               Tickets abiertos
             </span>
-            <span className="inline-flex items-center gap-1 text-lg font-bold tabular-nums text-foreground">
+            <span className="inline-flex items-center gap-1 text-h3 tabular-nums text-foreground">
               {ticketsAbiertos} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
             </span>
           </Link>
@@ -303,7 +320,7 @@ export default async function SuperadminDashboard() {
             <h2 className="text-h4 text-foreground">Empresas</h2>
             <Link
               href="/superadmin/empresas"
-              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-small font-medium text-primary hover:underline"
             >
               Administrar <ArrowRight className="h-3.5 w-3.5" />
             </Link>
@@ -321,17 +338,17 @@ export default async function SuperadminDashboard() {
             <div className="mt-6">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-h4 flex items-center gap-2 text-foreground">
-                  <FlaskConical className="h-4 w-4 text-amber-500" />
+                  <FlaskConical className="h-4 w-4 text-warning" />
                   Empresas de demostración
                 </h2>
                 <Link
                   href="/superadmin/demo"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                  className="inline-flex items-center gap-1 text-small font-medium text-primary hover:underline"
                 >
                   Administrar <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
-              <p className="mb-3 text-xs text-muted-foreground">
+              <p className="mb-3 text-caption text-muted-foreground">
                 Son para entrenar al personal. Sus clientes, cobros y números no cuentan en las
                 estadísticas de la plataforma.
               </p>
@@ -350,7 +367,7 @@ export default async function SuperadminDashboard() {
           <Card className="border-border/60 shadow-card">
             <CardContent className="pt-5">
               {actividad.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
+                <p className="py-6 text-center text-small text-muted-foreground">
                   La actividad de todas las empresas aparecerá aquí.
                 </p>
               ) : (
@@ -364,12 +381,12 @@ export default async function SuperadminDashboard() {
                         <p className="truncate font-medium text-foreground">
                           {ACCION_LABEL[a.accion] ?? a.accion}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground">
+                        <p className="truncate text-caption text-muted-foreground">
                           {a.company?.name ?? 'Plataforma'}
                           {a.user?.name ? ` · ${a.user.name}` : ''}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs text-muted-foreground/70">
+                      <span className="shrink-0 text-caption text-muted-foreground/70">
                         {fmtHora(a.createdAt)}
                       </span>
                     </li>

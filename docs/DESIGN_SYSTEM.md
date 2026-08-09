@@ -359,7 +359,7 @@ verificar enlaces.
 | 13 | Reportes | ✅ |
 | 14 | Empresa, empleados, configuración | ✅ |
 | 15 | Soporte | ✅ |
-| 16 | Superadmin | ⬜ |
+| 16 | Superadmin | ✅ |
 | 17 | Empleado | ⬜ |
 | 18 | Páginas públicas | ⬜ |
 | 19 | Dark mode, accesibilidad, QA visual | ⬜ |
@@ -451,6 +451,31 @@ se resalta.
 **El botón de WhatsApp usaba `bg-success`**: el verde de "salió bien" como color
 de una marca ajena, con `hover:bg-success` encima, así que no respondía al pasar
 por encima. Pasa al azul de marca.
+
+### Fase 16 · el panel de plataforma, dentro del sistema
+
+**El aviso y su destino contaban cosas distintas.** "Salud de la plataforma"
+decía *N tickets abiertos* sumando `NUEVO + EN_PROCESO + ESPERANDO_CLIENTE`,
+pero desde la Fase 15 el enlace abre la bandeja en la cola "Te toca a ti", que
+son solo los dos primeros. El panel decía 7 y aparecían 5. Nada fallaba — por
+eso habría durado. Ahora cuenta `COLAS_TICKET.pendientes`, y hay una prueba que
+lo ata: escribir la lista de estados a mano vuelve a separarlos sin dar error.
+
+**El color semántico estaba escrito a mano.** `emerald-600 dark:emerald-400`,
+`amber`, `red` — con su variante oscura repetida en cada rama, que es el
+síntoma: los tokens ya resuelven el modo oscuro solos. En observabilidad el
+color *es* el dato (¿está sano esto?), así que dos pantallas no pueden decir
+"todo normal" en verdes distintos.
+
+**Deuda saldada, medida:** el área pasa de 7 micro-textos bajo el suelo a **0**,
+de 42 `text-xs` a 0 y de 16 tamaños fuera de escala a 0. El techo global baja de
+**193 a 186**. Las cuatro fechas que construían su propio `Intl.DateTimeFormat`
+—con locale y zona clavados en el archivo, sobre un servidor que corre en UTC—
+pasan por `formatDate`.
+
+`tests/superadmin-coherencia.test.ts` vigila las cuatro cosas: la cola del
+aviso, el suelo tipográfico (aquí ya sin techo: es cero), los colores literales
+y los formateadores a mano.
 
 ### Decisiones de producto resueltas fuera de fase
 

@@ -76,7 +76,7 @@ export default async function CapacidadesSuperadminPage({
       ) : (
         <section className="rounded-2xl border border-border/70 bg-card p-5">
           <h2 className="mb-1 text-lg font-bold text-foreground">{seleccionada.name}</h2>
-          <p className="mb-5 text-sm text-muted-foreground">
+          <p className="mb-5 text-small text-muted-foreground">
             Categoría actual: {CATEGORIA_LABELS[efectivas.categoria]} ·{' '}
             {efectivas.activas.size} capacidades activas
           </p>

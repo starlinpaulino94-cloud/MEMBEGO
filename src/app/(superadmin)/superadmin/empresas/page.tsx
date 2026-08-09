@@ -47,8 +47,8 @@ export default async function SuperadminEmpresas() {
     <div className="space-y-6 animate-fade-up">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Empresas</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-h1 text-foreground">Empresas</h1>
+          <p className="text-small text-muted-foreground">
             CRM de empresas registradas en la plataforma
           </p>
         </div>

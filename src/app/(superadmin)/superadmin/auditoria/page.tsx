@@ -91,11 +91,11 @@ export default async function AuditoriaPage({
             </option>
           ))}
         </select>
-        <label className="text-xs text-muted-foreground">
+        <label className="text-caption text-muted-foreground">
           Desde
           <Input type="date" name="desde" defaultValue={desde ?? ''} className="mt-1" />
         </label>
-        <label className="text-xs text-muted-foreground">
+        <label className="text-caption text-muted-foreground">
           Hasta
           <Input type="date" name="hasta" defaultValue={hasta ?? ''} className="mt-1" />
         </label>
@@ -122,7 +122,7 @@ export default async function AuditoriaPage({
       ) : (
         <>
           <BitacoraTabla items={items} timeZone="America/Santo_Domingo" mostrarEmpresa />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             {items.length === 200
               ? 'Mostrando las 200 acciones más recientes — afina con los filtros.'
               : `${items.length} acción${items.length !== 1 ? 'es' : ''} registrada${items.length !== 1 ? 's' : ''}.`}
