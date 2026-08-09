@@ -102,12 +102,12 @@ export function LoginForm({
       : null
 
   return (
-    <Card className="border-white/10 bg-white/5 text-white">
+    <Card className="border-border">
       <CardHeader>
         <CardTitle className="text-2xl">
           {isStaff ? 'Acceso del equipo' : 'Iniciar sesión'}
         </CardTitle>
-        <CardDescription className="text-white/60">
+        <CardDescription>
           {isStaff
             ? 'Panel para administradores y empleados.'
             : 'Accede a tu cuenta de MembeGo.'}
@@ -161,7 +161,6 @@ export function LoginForm({
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-white/10 text-white"
               placeholder="tu@correo.com"
             />
           </div>
@@ -172,7 +171,6 @@ export function LoginForm({
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-white/10 text-white"
               placeholder="••••••••"
             />
           </div>
@@ -187,21 +185,21 @@ export function LoginForm({
         </form>
         {!isStaff && isGoogleAuthEnabled() && (
           <div className="mt-4 space-y-4">
-            <div className="flex items-center gap-3 text-xs text-white/50">
-              <span className="h-px flex-1 bg-white/10" />
+            <div className="flex items-center gap-3 text-caption">
+              <span className="h-px flex-1 bg-border" />
               o
-              <span className="h-px flex-1 bg-white/10" />
+              <span className="h-px flex-1 bg-border" />
             </div>
             <GoogleSignInButton />
           </div>
         )}
-        <p className="mt-4 text-center text-sm text-white/60">
+        <p className="mt-4 text-center text-small text-muted-foreground">
           <Link href="/recuperar" className="text-primary hover:underline">
             ¿Olvidaste tu contraseña?
           </Link>
         </p>
         {!isStaff && (
-          <p className="mt-2 text-center text-sm text-white/60">
+          <p className="mt-2 text-center text-small text-muted-foreground">
             ¿No tienes cuenta?{' '}
             <Link href="/registro/cuenta" className="text-primary hover:underline">
               Regístrate
@@ -209,7 +207,7 @@ export function LoginForm({
           </p>
         )}
         {isStaff && (
-          <p className="mt-2 text-center text-xs text-white/50">
+          <p className="mt-2 text-center text-caption">
             ¿Eres cliente?{' '}
             <Link href="/login" className="text-primary hover:underline">
               Entra por aquí

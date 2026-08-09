@@ -89,10 +89,10 @@ export function RegisterGeneralForm() {
   }, [state.success, state.pendingVerification, router])
 
   return (
-    <Card className="border-white/10 bg-white/5 text-white">
+    <Card className="border-border">
       <CardHeader>
         <CardTitle className="text-2xl">Crear cuenta MembeGo</CardTitle>
-        <CardDescription className="text-white/60">
+        <CardDescription>
           Una sola cuenta para todas las empresas. Sin compromiso: sigues o te
           unes a las que tú quieras, cuando quieras.
         </CardDescription>
@@ -111,7 +111,7 @@ export function RegisterGeneralForm() {
               id="nombre"
               name="nombre"
               required
-              className="bg-white/10 text-white placeholder:text-white/50"
+             
             />
           </div>
           <div className="space-y-2">
@@ -121,7 +121,7 @@ export function RegisterGeneralForm() {
               name="email"
               type="email"
               required
-              className="bg-white/10 text-white placeholder:text-white/50"
+             
             />
           </div>
           <div className="space-y-2">
@@ -131,7 +131,6 @@ export function RegisterGeneralForm() {
               name="password"
               required
               minLength={6}
-              className="bg-white/10 text-white"
             />
           </div>
           <div className="space-y-2">
@@ -141,23 +140,23 @@ export function RegisterGeneralForm() {
               name="telefono"
               type="tel"
               required
-              className="bg-white/10 text-white placeholder:text-white/50"
+             
               placeholder="809-555-0000"
             />
-            <p className="text-xs text-white/50">
+            <p className="text-caption">
               Lo usamos para confirmar tus citas y beneficios.
             </p>
           </div>
 
-          <ComoNosConociste selectClassName="border-white/20 bg-white/10 text-white" />
+          <ComoNosConociste />
 
-          <label className="flex items-start gap-2 text-sm text-white/70">
+          <label className="flex items-start gap-2 text-small text-foreground">
             <input
               type="checkbox"
               name="terminos"
               value="on"
               required
-              className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+              className="mt-0.5 h-4 w-4 rounded border-input"
             />
             <span>
               Acepto los{' '}
@@ -172,13 +171,13 @@ export function RegisterGeneralForm() {
             </span>
           </label>
 
-          <label className="flex items-start gap-2 text-sm text-white/70">
+          <label className="flex items-start gap-2 text-small text-foreground">
             <input type="hidden" name="marketingConsent" value="off" />
             <input
               type="checkbox"
               name="marketingConsent"
               value="on"
-              className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+              className="mt-0.5 h-4 w-4 rounded border-input"
             />
             <span>
               Quiero recibir novedades y ofertas de MembeGo por correo (opcional).
@@ -194,13 +193,13 @@ export function RegisterGeneralForm() {
             {redirecting ? 'Entrando…' : 'Crear cuenta'}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-white/60">
+        <p className="mt-4 text-center text-small text-muted-foreground">
           ¿Ya tienes cuenta?{' '}
           <a href="/login" className="text-primary hover:underline">
             Inicia sesión
           </a>
         </p>
-        <p className="mt-2 text-center text-sm text-white/60">
+        <p className="mt-2 text-center text-small text-muted-foreground">
           ¿Prefieres registrarte directo en una empresa?{' '}
           <Link href="/registro" className="text-primary hover:underline">
             Elige una aquí

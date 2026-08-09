@@ -49,12 +49,14 @@ Cinco principios que deciden cualquier duda de diseño:
   comercial sin ser ruidosa. Habla de tú, celebra logros, nunca regaña.
 - **Emociones objetivo**: confianza (mis pagos están seguros), exclusividad
   (soy VIP aquí), anticipación (algo expira, corro a usarlo), alegría (gané).
-- **Dos identidades, un sistema**:
-  - **App (cliente/empresa/empleado)**: esmeralda `primary` sobre fondos
-    neutros; modo oscuro casi negro con acentos neón (el FAB verde brilla).
-  - **Landing pública / marketing**: azul eléctrico + blanco
-    (`.theme-landing`), gradiente azul→cyan del logo. Misma tipografía,
-    mismos radios, mismas sombras — solo cambia el acento.
+- **Una identidad, un sistema** (DS 2.0 · Fase 0): azul eléctrico `primary`
+  sobre fondos neutros, gradiente azul→cyan del logo, en la app Y en la
+  landing. Antes eran dos: la app era esmeralda y solo la web pública era
+  azul. `.theme-landing` sigue existiendo, pero ya no para cambiar el color
+  —los valores coinciden— sino para forzar el tema claro en la landing aunque
+  el visitante tenga la app en oscuro.
+- **El verde dejó de ser marca.** Sobrevive únicamente como `--success`: si un
+  verde en pantalla no significa "esto salió bien", está mal puesto.
 - **Fotografía**: real, con gente y negocios locales; luz cálida; nunca stock
   corporativo de oficinas.
 - **Ilustración**: minimal con gradientes suaves de marca (SVG); Lottie para
@@ -126,13 +128,14 @@ tono debe ser exacto en ambos temas.
 
 - **Secundario**: cyan de marca (`--color-cyan-brand-300/500/700`) — cierra el
   gradiente del logo; jamás como color de acción.
-- **Landing**: azul eléctrico `#2563eb` (`landingPrimary` en tokens).
+- **Azul de marca**: `#2563eb` = `primary[600]`. `landingPrimary` sigue
+  exportándose como alias, pero está obsoleto: ya no hay un azul de la landing
+  distinto del de marca.
 - **Gradientes oficiales**: `.bg-gradient-brand` / `.text-gradient-brand`
-  (esmeralda→cyan, app) y `.text-gradient` (azul→cyan, landing). No inventar
-  otros.
-- **Glow / neón**: `.shadow-glow` y `.shadow-glow-strong` usan
-  `--glow-color` (verde en la app, azul en landing). Solo para el CTA
-  protagonista o el FAB — un glow por pantalla.
+  (azul→cyan) y `.text-gradient` (azul→cyan, landing). No inventar otros.
+- **Glow / neón**: `.shadow-glow` y `.shadow-glow-strong` usan `--glow-color`,
+  azul en todo el producto. Solo para el CTA protagonista o el FAB — un glow
+  por pantalla.
 
 ### 4.3 Estados interactivos
 
@@ -337,7 +340,7 @@ el sistema y pesan cero.
 
 | ✅ Do | ❌ Don't |
 | --- | --- |
-| Un CTA primario por pantalla | Tres botones verdes compitiendo |
+| Un CTA primario por pantalla | Tres botones de marca compitiendo |
 | `PromoBadge tono="urgencia"` para "Expira hoy" | Un `Badge destructive` (eso es un error del sistema) |
 | Skeleton que calca el layout | Spinner centrado en página |
 | `rounded-2xl` en tarjetas | Radios distintos por página |

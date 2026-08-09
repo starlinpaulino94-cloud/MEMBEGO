@@ -22,7 +22,7 @@ export function CompanyRegistroHeader({
   const accent = colorPrimario || '#0ea5e9'
 
   return (
-    <div className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+    <div className="mb-6 overflow-hidden rounded-2xl border border-border bg-card">
       {bannerUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={bannerUrl} alt="" className="h-24 w-full object-cover" />
@@ -44,8 +44,8 @@ export function CompanyRegistroHeader({
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-xs text-white/60">Crea tu cuenta en</p>
-          <p className="truncate text-lg font-bold text-white">{name}</p>
+          <p className="text-caption">Crea tu cuenta en</p>
+          <p className="truncate text-h3 text-foreground">{name}</p>
         </div>
       </div>
 

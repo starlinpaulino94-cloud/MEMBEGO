@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent } from '@/components/ui/card'
+import { FormSection, FormActions } from '@/components/ui/form-section'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   crearCampanaAction,
   actualizarCampanaAction,
@@ -96,9 +97,15 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
   }
 
   return (
-    <form action={onFormAction} className="max-w-2xl space-y-6">
-      <Card>
-        <CardContent className="space-y-4 p-5">
+    // §49 · Las secciones siguen el orden en que se piensa una campaña: qué
+    // digo → a quién → cuándo. Antes eran tarjetas sueltas sin nombre, así que
+    // "Audiencia" era el único bloque que se anunciaba y el resto había que
+    // deducirlo mirando los campos.
+    <form action={onFormAction} className="max-w-2xl space-y-8">
+      <FormSection
+        title="Contenido"
+        description="Qué le llega al cliente y por dónde."
+      >
           <div>
             <Label htmlFor="nombre">Nombre de la campaña</Label>
             <Input
@@ -141,12 +148,12 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
               </label>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </FormSection>
 
-      <Card>
-        <CardContent className="space-y-4 p-5">
-          <h2 className="font-semibold">Audiencia</h2>
+      <FormSection
+        title="Audiencia"
+        description="A quién llega. Un segmento guardado, o todos los clientes en un radio alrededor de una sucursal."
+      >
           <div className="flex gap-4 text-sm">
             <label className="flex items-center gap-2">
               <input
@@ -211,11 +218,13 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </FormSection>
 
-      <Card>
-        <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
+      <FormSection
+        title="Frecuencia"
+        description="Cuántos envíos tolera un cliente antes de que la campaña deje de ayudar."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="maxPorDia">Máximo por día</Label>
             <Input
@@ -236,14 +245,20 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
               onChange={(e) => setMaxPorSemana(Number(e.target.value))}
             />
           </div>
+        </div>
+      </FormSection>
+
+      <FormSection title="Programación" description="Cuándo sale y con qué prioridad.">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="programadaEn">Programar para (opcional)</Label>
+            <Label htmlFor="programadaEn">Programar para</Label>
             <Input
               id="programadaEn"
               type="datetime-local"
               value={programadaEn}
               onChange={(e) => setProgramadaEn(e.target.value)}
             />
+            <p className="mt-1 text-caption">Opcional. Sin fecha, sale al lanzarla.</p>
           </div>
           <div>
             <Label htmlFor="prioridad">Prioridad (0–10)</Label>
@@ -256,22 +271,25 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
               onChange={(e) => setPrioridad(Number(e.target.value))}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      {state.error && <p className="text-sm font-medium text-destructive">{state.error}</p>}
+      {state.error && (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      )}
 
       {campanaId ? <input type="hidden" name="campanaId" value={campanaId} /> : null}
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={pending || !nombre.trim() || !mensaje.trim()}>
-          {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+        <Button type="submit" loading={pending} disabled={!nombre.trim() || !mensaje.trim()}>
           {campanaId ? 'Guardar cambios' : 'Crear campaña'}
         </Button>
-      </div>
+      </FormActions>
     </form>
   )
 }

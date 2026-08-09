@@ -337,6 +337,18 @@ export function AsistenteRegistro({
 
   const pct = Math.round(((idx + 1) / pasos.length) * 100)
   const t = TITULOS[paso]
+
+  /**
+   * Reconocimiento conversacional: una vez que sabemos el nombre, el asistente
+   * lo usa. Aparece SOLO en el paso siguiente al nombre, no en todos — repetir
+   * "Encantado, Starlin" siete veces convierte una atención en un tic, que es
+   * justo lo que separa un asistente guiado de un chatbot.
+   */
+  const primerNombre = datos.nombre.trim().split(/\s+/)[0] ?? ''
+  const saludo =
+    pasos[idx - 1] === 'nombre' && primerNombre.length > 1
+      ? `Encantado, ${primerNombre}.`
+      : null
   const tipoElegido = tiposVehiculo.find((tv) => tv.id === datos.tipoVehiculoId)
   const sugerenciasMarca = buscarMarcas(datos.marca)
   const estiloPrimario = colorPrimario ? { backgroundColor: colorPrimario } : undefined
@@ -354,7 +366,7 @@ export function AsistenteRegistro({
       }}
       autoFocus
       aria-invalid={!!error}
-      className="h-12 bg-white/10 text-lg text-white placeholder:text-white/40"
+      className="h-12 text-lg"
       {...props}
     />
   )
@@ -363,13 +375,13 @@ export function AsistenteRegistro({
     <div className="space-y-4">
       {/* Progreso */}
       <div aria-label={`Paso ${idx + 1} de ${pasos.length}`} className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs text-white/60">
+        <div className="flex items-center justify-between text-caption">
           <span>
             Paso {idx + 1} de {pasos.length}
           </span>
           <span>{pct}%</span>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full rounded-full bg-primary transition-all duration-300"
             style={{ width: `${pct}%`, ...(colorPrimario ? { backgroundColor: colorPrimario } : {}) }}
@@ -377,7 +389,7 @@ export function AsistenteRegistro({
         </div>
       </div>
 
-      <Card className="border-white/10 bg-white/5 text-white">
+      <Card className="border-border">
         <CardContent className="pt-6">
           {/* Cada paso es un form: Enter avanza (teclado y móvil). noValidate:
               la validación es la nuestra (mensajes propios, consistentes);
@@ -387,11 +399,11 @@ export function AsistenteRegistro({
             /* ── Ubicación: selector multi-paso opcional (con su propia navegación) ── */
             <div className="space-y-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{t.titulo}</h1>
-                {t.ayuda && <p className="mt-1 text-sm text-white/60">{t.ayuda}</p>}
+                {saludo && <p className="mb-1 text-small text-primary">{saludo}</p>}
+                <h1 className="text-h1 text-balance">{t.titulo}</h1>
+                {t.ayuda && <p className="mt-1.5 text-small text-muted-foreground">{t.ayuda}</p>}
               </div>
               <SelectorUbicacionVivienda
-                oscuro
                 sinEncabezado
                 value={datos.ubicacion}
                 onChange={(v) => {
@@ -404,8 +416,9 @@ export function AsistenteRegistro({
           ) : paso !== 'confirmar' ? (
             <form onSubmit={avanzar} noValidate className="space-y-5" key={paso}>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{t.titulo}</h1>
-                {t.ayuda && <p className="mt-1 text-sm text-white/60">{t.ayuda}</p>}
+                {saludo && <p className="mb-1 text-small text-primary">{saludo}</p>}
+                <h1 className="text-h1 text-balance">{t.titulo}</h1>
+                {t.ayuda && <p className="mt-1.5 text-small text-muted-foreground">{t.ayuda}</p>}
               </div>
 
               {error && (
@@ -447,7 +460,7 @@ export function AsistenteRegistro({
                     minLength={6}
                     autoComplete="new-password"
                     aria-invalid={!!error}
-                    className="h-12 bg-white/10 text-lg text-white"
+                    className="h-12 text-lg"
                   />
                 </div>
               )}
@@ -481,25 +494,25 @@ export function AsistenteRegistro({
                         className={`rounded-xl border p-4 text-left transition ${
                           activo
                             ? 'border-primary bg-primary/15 ring-2 ring-primary'
-                            : 'border-white/15 bg-white/5 hover:bg-white/10'
+                            : 'border-border bg-card hover:border-primary/40 hover:bg-muted/60'
                         }`}
                       >
                         {tv.iconoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={tv.iconoUrl} alt="" className="mb-2 h-8 w-8 object-contain" />
                         ) : (
-                          <Car className="mb-2 h-6 w-6 text-white/70" aria-hidden />
+                          <Car className="mb-2 h-6 w-6 text-muted-foreground" aria-hidden />
                         )}
                         <p className="font-semibold">{tv.nombre}</p>
                         {tv.descripcion && (
-                          <p className="mt-0.5 text-xs text-white/60">{tv.descripcion}</p>
+                          <p className="mt-0.5 text-caption">{tv.descripcion}</p>
                         )}
                         {activo && <Check className="mt-1 h-4 w-4 text-primary" aria-hidden />}
                       </button>
                     )
                   })}
                   {tiposVehiculo.length === 0 && (
-                    <p className="col-span-2 text-sm text-white/60">
+                    <p className="col-span-2 text-small text-muted-foreground">
                       Este negocio aún no tiene categorías configuradas. Continúa: podrás
                       completar tu vehículo más adelante.
                     </p>
@@ -523,14 +536,14 @@ export function AsistenteRegistro({
                         className={`rounded-full border px-3 py-1.5 text-sm transition ${
                           datos.marca === m
                             ? 'border-primary bg-primary/20'
-                            : 'border-white/15 bg-white/5 hover:bg-white/10'
+                            : 'border-border bg-card hover:border-primary/40 hover:bg-muted/60'
                         }`}
                       >
                         {m}
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-white/50">
+                  <p className="text-caption">
                     ¿No aparece? Escríbela tal cual — vale cualquier marca.
                   </p>
                 </div>
@@ -570,7 +583,7 @@ export function AsistenteRegistro({
                         className={`rounded-full border px-3 py-1.5 text-sm transition ${
                           datos.color === c
                             ? 'border-primary bg-primary/20'
-                            : 'border-white/15 bg-white/5 hover:bg-white/10'
+                            : 'border-border bg-card hover:border-primary/40 hover:bg-muted/60'
                         }`}
                       >
                         {c}
@@ -585,7 +598,7 @@ export function AsistenteRegistro({
                   <Label htmlFor="placa" className="sr-only">Placa</Label>
                   {campo('placa', { placeholder: 'A123456', autoComplete: 'off' })}
                   {datos.placa.trim() && normalizarPlaca(datos.placa) !== datos.placa.trim() && (
-                    <p className="text-xs text-white/50">
+                    <p className="text-caption">
                       Se guardará como <span className="font-mono">{normalizarPlaca(datos.placa)}</span>.
                     </p>
                   )}
@@ -598,7 +611,7 @@ export function AsistenteRegistro({
                     type="button"
                     variant="ghost"
                     onClick={retroceder}
-                    className="text-white/70 hover:text-white"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <ArrowLeft className="mr-1.5 h-4 w-4" /> Atrás
                   </Button>
@@ -612,8 +625,8 @@ export function AsistenteRegistro({
                 <>
                   {isGoogleAuthEnabled() && (
                     <div className="space-y-3 pt-2">
-                      <div className="flex items-center gap-3 text-xs text-white/50">
-                        <span className="h-px flex-1 bg-white/10" /> o <span className="h-px flex-1 bg-white/10" />
+                      <div className="flex items-center gap-3 text-caption">
+                        <span className="h-px flex-1 bg-border" /> o <span className="h-px flex-1 bg-border" />
                       </div>
                       <GoogleSignInButton
                         companySlug={modo === 'empresa' ? companySlug : null}
@@ -621,7 +634,7 @@ export function AsistenteRegistro({
                       />
                     </div>
                   )}
-                  <p className="pt-1 text-center text-sm text-white/60">
+                  <p className="pt-1 text-center text-small text-muted-foreground">
                     ¿Ya tienes cuenta?{' '}
                     <a href="/login" className="text-primary hover:underline">Inicia sesión</a>
                   </p>
@@ -632,8 +645,11 @@ export function AsistenteRegistro({
             /* ── Confirmación: resumen + consentimientos + envío ───────────── */
             <form onSubmit={enviar} className="space-y-5">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">{t.titulo}</h1>
-                <p className="mt-1 text-sm text-white/60">
+                {primerNombre.length > 1 && (
+                  <p className="mb-1 text-small text-primary">Ya casi, {primerNombre}.</p>
+                )}
+                <h1 className="text-h1 text-balance">{t.titulo}</h1>
+                <p className="mt-1.5 text-small text-muted-foreground">
                   {modo === 'empresa' ? `Tu cuenta en ${companyName}.` : 'Tu cuenta MembeGo.'}
                 </p>
               </div>
@@ -644,7 +660,7 @@ export function AsistenteRegistro({
                 </Alert>
               )}
 
-              <dl className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+              <dl className="space-y-2 rounded-xl border border-border bg-muted/40 p-4 text-sm">
                 <Resumen etiqueta="Nombre" valor={datos.nombre} />
                 <Resumen etiqueta="Correo" valor={datos.email} />
                 <Resumen etiqueta="Teléfono" valor={datos.telefono} />
@@ -661,29 +677,29 @@ export function AsistenteRegistro({
                 )}
               </dl>
 
-              <ComoNosConociste selectClassName="border-white/20 bg-white/10 text-white" />
+              <ComoNosConociste />
 
               {modo === 'empresa' && (
-                <label className="flex items-start gap-2 text-sm text-white/70">
+                <label className="flex items-start gap-2 text-small text-muted-foreground">
                   <input type="hidden" name="seguirEmpresa" value="off" />
                   <input
                     type="checkbox"
                     name="seguirEmpresa"
                     value="on"
                     defaultChecked
-                    className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                    className="mt-0.5 h-4 w-4 rounded border-input"
                   />
                   <span>Seguir a {companyName} para recibir sus promociones y novedades.</span>
                 </label>
               )}
 
-              <label className="flex items-start gap-2 text-sm text-white/70">
+              <label className="flex items-start gap-2 text-small text-muted-foreground">
                 <input
                   type="checkbox"
                   name="terminos"
                   value="on"
                   required
-                  className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                  className="mt-0.5 h-4 w-4 rounded border-input"
                 />
                 <span>
                   Acepto los{' '}
@@ -698,26 +714,26 @@ export function AsistenteRegistro({
                 </span>
               </label>
 
-              <label className="flex items-start gap-2 text-sm text-white/70">
+              <label className="flex items-start gap-2 text-small text-muted-foreground">
                 <input type="hidden" name="marketingConsent" value="off" />
                 <input
                   type="checkbox"
                   name="marketingConsent"
                   value="on"
-                  className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                  className="mt-0.5 h-4 w-4 rounded border-input"
                 />
                 <span>Quiero recibir novedades y ofertas de MembeGo por correo (opcional).</span>
               </label>
 
               {datos.ubicacion.countryId && (
-                <label className="flex items-start gap-2 text-sm text-white/70">
+                <label className="flex items-start gap-2 text-small text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={datos.geoConsentMarketing === 'on'}
                     onChange={(e) =>
                       setDatos((d) => ({ ...d, geoConsentMarketing: e.target.checked ? 'on' : '' }))
                     }
-                    className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                    className="mt-0.5 h-4 w-4 rounded border-input"
                   />
                   <span>
                     Usar mi ciudad y sector para enviarme ofertas de negocios de mi zona (opcional).
@@ -731,7 +747,7 @@ export function AsistenteRegistro({
                   variant="ghost"
                   onClick={retroceder}
                   disabled={pending || redirecting}
-                  className="text-white/70 hover:text-white"
+                  className="text-muted-foreground hover:text-foreground"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Atrás
                 </Button>
@@ -756,7 +772,7 @@ export function AsistenteRegistro({
 function Resumen({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-white/50">{etiqueta}</dt>
+      <dt className="text-muted-foreground">{etiqueta}</dt>
       <dd className="text-right font-medium">{valor || '—'}</dd>
     </div>
   )

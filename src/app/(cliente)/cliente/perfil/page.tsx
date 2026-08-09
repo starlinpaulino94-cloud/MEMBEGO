@@ -5,11 +5,12 @@ import { prisma } from '@/lib/prisma'
 import { ProfileForm } from '@/components/cliente/ProfileForm'
 import { IdMembegoCard } from '@/components/cliente/IdMembegoCard'
 import { ensureCodigoCorto } from '@/lib/referidos'
-import { VehiculoForm } from '@/components/cliente/VehiculoForm'
-import { DeleteVehiculoButton } from '@/components/cliente/DeleteVehiculoButton'
 import { WhatsAppButton } from '@/components/cliente/WhatsAppButton'
 import { ChangePasswordForm } from '@/components/cliente/ChangePasswordForm'
+import { UbicacionViviendaForm } from '@/components/cliente/UbicacionViviendaForm'
+import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import {
   Car,
   User,
@@ -20,6 +21,8 @@ import {
   LifeBuoy,
   WalletCards,
   Gift,
+  MapPin,
+  Lock,
   ChevronRight,
 } from 'lucide-react'
 
@@ -60,7 +63,13 @@ export default async function PerfilPage() {
   const isCarwash = cliente.company.type === 'carwash'
 
   // Resumen del hero (realce, nunca bloquea la página).
-  const [whatsapp, membresiasActivas, empresasSeguidas, beneficiosActivos] = await Promise.all([
+  const [
+    whatsapp,
+    membresiasActivas,
+    empresasSeguidas,
+    beneficiosActivos,
+    ubicacion,
+  ] = await Promise.all([
     prisma.whatsAppConfig.findUnique({ where: { companyId: cliente.companyId } }).catch(() => null),
     prisma.membership
       .count({
@@ -77,7 +86,13 @@ export default async function PerfilPage() {
     prisma.productoCompra
       .count({ where: { clienteId: cliente.id, estado: 'ACTIVA', usosRestantes: { gt: 0 } } })
       .catch(() => 0),
+    user.metadata.dbUserId
+      ? LocationService.primaria(user.metadata.dbUserId).catch(() => null)
+      : Promise.resolve(null),
   ])
+
+  const zonaActual =
+    ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
 
   // Regalos P2P · R1: el @ID con el que otros pueden enviarle regalos. Se
   // genera la primera vez; si la BD aún no está migrada, la tarjeta se oculta
@@ -95,6 +110,16 @@ export default async function PerfilPage() {
   const accesos = [
     { icon: Receipt, label: 'Mis pagos', desc: 'Estado e historial', href: '/cliente/pagos' },
     { icon: History, label: 'Historial', desc: 'Tus visitas y canjes', href: '/cliente/historial' },
+    ...(isCarwash
+      ? [
+          {
+            icon: Car,
+            label: 'Mis vehículos',
+            desc: 'Los que usas en tus visitas',
+            href: '/cliente/vehiculos',
+          },
+        ]
+      : []),
     { icon: Building2, label: 'Mis empresas', desc: 'Las que sigues', href: '/cliente/empresas' },
     { icon: LifeBuoy, label: 'Ayuda', desc: 'Soporte y tickets', href: '/cliente/ayuda' },
   ]
@@ -102,7 +127,7 @@ export default async function PerfilPage() {
   return (
     <div className="space-y-6 animate-fade-up">
       {/* ── Hero de identidad ─────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-3xl border border-border/70 bg-card shadow-card">
+      <section className="relative overflow-hidden rounded-xl border border-border bg-card elevation-1">
         <div aria-hidden className="absolute inset-x-0 top-0 h-20 bg-gradient-brand opacity-90" />
         <div className="relative px-5 pb-5 pt-9">
           <div className="flex items-end justify-between gap-3">
@@ -111,10 +136,10 @@ export default async function PerfilPage() {
               <img
                 src={cliente.avatarUrl}
                 alt=""
-                className="h-20 w-20 rounded-2xl border-4 border-card object-cover shadow-premium"
+                className="h-20 w-20 rounded-2xl border-4 border-card object-cover elevation-2"
               />
             ) : (
-              <span className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 border-card bg-gradient-to-br from-primary to-teal-400 text-xl font-bold text-primary-foreground shadow-premium">
+              <span className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 border-card bg-gradient-brand text-h3 font-bold text-white elevation-2">
                 {iniciales}
               </span>
             )}
@@ -127,7 +152,7 @@ export default async function PerfilPage() {
             )}
           </div>
           <h1 className="mt-3 text-h1 text-foreground">{cliente.nombre}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-small text-muted-foreground">
             {cliente.email} · {cliente.company.name}
           </p>
 
@@ -137,11 +162,11 @@ export default async function PerfilPage() {
               <Link
                 key={r.label}
                 href={r.href}
-                className="card-lift rounded-2xl border border-border/70 bg-background/60 p-3 text-center active:scale-[0.98]"
+                className="card-lift rounded-xl border border-border bg-background/60 p-3 text-center active:scale-[0.98]"
               >
                 <r.icon className="mx-auto h-4 w-4 text-primary" aria-hidden />
-                <p className="mt-1 text-lg font-bold tabular-nums text-foreground">{r.valor}</p>
-                <p className="text-[11px] text-muted-foreground">{r.label}</p>
+                <p className="mt-1 text-h3 tabular-nums text-foreground">{r.valor}</p>
+                <p className="text-caption">{r.label}</p>
               </Link>
             ))}
           </div>
@@ -154,14 +179,14 @@ export default async function PerfilPage() {
           <Link
             key={a.href}
             href={a.href}
-            className={`card-lift animate-fade-up flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-card active:scale-[0.98] ${['', 'delay-75', 'delay-150', 'delay-200'][i] ?? ''}`}
+            className={`card-lift animate-fade-up flex items-center gap-3 rounded-xl border border-border bg-card p-4 elevation-1 active:scale-[0.98] ${['', 'delay-75', 'delay-150', 'delay-200'][i] ?? ''}`}
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <a.icon className="h-5 w-5" aria-hidden />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-foreground">{a.label}</span>
-              <span className="block truncate text-xs text-muted-foreground">{a.desc}</span>
+              <span className="block text-small font-semibold text-foreground">{a.label}</span>
+              <span className="block truncate text-caption">{a.desc}</span>
             </span>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" aria-hidden />
           </Link>
@@ -177,7 +202,7 @@ export default async function PerfilPage() {
       {/* Cuenta */}
       <Card className="border-border/60 shadow-card">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-h4">
             <User className="h-4 w-4 text-muted-foreground" />
             Cuenta
           </CardTitle>
@@ -205,7 +230,7 @@ export default async function PerfilPage() {
       {/* Seguridad */}
       <Card className="border-border/60 shadow-card">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-h4">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
             Seguridad
           </CardTitle>
@@ -215,47 +240,69 @@ export default async function PerfilPage() {
         </CardContent>
       </Card>
 
-      {/* Vehículos (solo carwash) */}
+      {/* Ubicación — §42. La acción de guardarla NO existía fuera del
+          registro: quien se saltó ese paso o se mudó no tenía forma de
+          ponerla, y el enlace "Cambiar" del Inicio moría aquí. */}
+      <Card className="border-border/60 shadow-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-h4">
+            <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden />
+            Mi ubicación
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UbicacionViviendaForm zonaActual={zonaActual} />
+        </CardContent>
+      </Card>
+
+      {/* Vehículos (solo carwash) — el formulario embebido se fue a su propia
+          pantalla: el perfil resume y enlaza, no gestiona. */}
       {isCarwash && (
         <Card className="border-border/60 shadow-card">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Car className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="flex items-center gap-2 text-h4">
+              <Car className="h-4 w-4 text-muted-foreground" aria-hidden />
               Mis vehículos
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            {cliente.vehiculos.length > 0 && (
-              <ul className="divide-y divide-border/60">
-                {cliente.vehiculos.map((v) => {
-                  const label = `${v.marca} ${v.modelo} (${v.anio})${v.placa ? ` · ${v.placa}` : ''}`
-                  return (
-                    <li key={v.id} className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-lg bg-muted p-2">
-                          <Car className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{v.marca} {v.modelo} ({v.anio})</p>
-                          <p className="text-xs text-muted-foreground">
-                            {v.color}{v.placa ? ` · ${v.placa}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <DeleteVehiculoButton vehiculoId={v.id} label={label} />
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-
-            <div className="rounded-xl border border-dashed border-border p-5">
-              <p className="mb-4 text-sm font-medium text-foreground">Agregar vehículo</p>
-              <VehiculoForm />
-            </div>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-small text-muted-foreground">
+              {cliente.vehiculos.length === 0
+                ? 'Todavía no has añadido ninguno.'
+                : cliente.vehiculos
+                    .slice(0, 2)
+                    .map((v) => `${v.marca} ${v.modelo}`)
+                    .join(', ') +
+                  (cliente.vehiculos.length > 2
+                    ? ` y ${cliente.vehiculos.length - 2} más`
+                    : '')}
+            </p>
+            <Button asChild variant="outline">
+              <Link href="/cliente/vehiculos">
+                {cliente.vehiculos.length === 0 ? 'Añadir vehículo' : 'Gestionar'}
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       )}
+
+      {/* Privacidad — §42. Enlace, no ajuste: las políticas son documentos. */}
+      <Card className="border-border/60 shadow-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-h4">
+            <Lock className="h-4 w-4 text-muted-foreground" aria-hidden />
+            Privacidad
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-small text-muted-foreground">
+            Qué datos guardamos y para qué los usamos.
+          </p>
+          <Button asChild variant="outline">
+            <Link href="/privacy">Ver política</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }

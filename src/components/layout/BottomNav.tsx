@@ -71,7 +71,7 @@ function TabLink({ item, pathname }: { item: BottomNavItem; pathname: string }) 
         prefetch={false}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'group flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] font-medium transition-colors duration-150 active:scale-[0.96]',
+          'group flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[12px] font-medium transition-colors duration-150 active:scale-[0.96]',
           active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
         )}
       >
@@ -138,7 +138,7 @@ export function BottomNav({
             prefetch={false}
             aria-label="Mi código QR"
             aria-current={qrActivo ? 'page' : undefined}
-            className="group flex min-h-14 flex-col items-center justify-end gap-0.5 pb-1.5 text-[11px] font-semibold"
+            className="group flex min-h-14 flex-col items-center justify-end gap-0.5 pb-1.5 text-[12px] font-semibold"
           >
             <span
               className={cn(

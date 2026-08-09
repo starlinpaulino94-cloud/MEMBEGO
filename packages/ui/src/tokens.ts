@@ -10,18 +10,26 @@
  * (y viceversa). Ver docs/MDS.md § Tokens.
  */
 
-/** Escala de marca (esmeralda). 700 es el primary de modo claro; 500 el de oscuro. */
+/**
+ * Escala de marca (azul Membego). 600 es el primary de modo claro; en modo
+ * oscuro se aclara hasta ~400 para mantener contraste sobre el lienzo negro.
+ *
+ * DS 2.0 · Fase 0: esta escala era esmeralda. El azul ya era la marca en la
+ * web pública (vivía aparte como `landingPrimary`) y ahora es el color base
+ * de todo el producto. El verde quedó exclusivamente como estado de éxito,
+ * en `state.success`.
+ */
 export const primary = {
-  50: '#ecfdf3',
-  100: '#d4f7e3',
-  200: '#a9eec7',
-  300: '#6fe0a5',
-  400: '#3dd684',
-  500: '#22c55e',
-  600: '#17a24d',
-  700: '#15803d',
-  800: '#136433',
-  900: '#0f4d28',
+  50: '#eff4ff',
+  100: '#dbe6fe',
+  200: '#bfd3fe',
+  300: '#93b4fd',
+  400: '#608cfa',
+  500: '#3b6bf6',
+  600: '#2563eb',
+  700: '#1d4ed8',
+  800: '#1e40af',
+  900: '#1e3a8a',
 } as const
 
 /** Secundario: cyan del degradado del logo. */
@@ -31,16 +39,29 @@ export const cyanBrand = {
   700: '#0e7f96',
 } as const
 
-/** Semánticos de estado (modo claro). */
+/**
+ * Semánticos de estado (modo claro).
+ *
+ * DS 2.0 · `info` se desplazó de #2563eb a un cian: ese hex es ahora el
+ * azul DE MARCA (`primary.600`), y un aviso informativo no debe parecer un
+ * CTA. El verde de `success` es el único verde que sobrevive en el sistema.
+ */
 export const state = {
   success: '#16a34a',
   warning: '#f59e0b',
   danger: '#dc2626',
-  info: '#2563eb',
+  info: '#0e91b8',
 } as const
 
-/** Azul eléctrico de la landing pública (identidad azul + blanco). */
-export const landingPrimary = '#2563eb'
+/**
+ * Azul eléctrico de la marca.
+ *
+ * @deprecated Desde DS 2.0 es exactamente `primary[600]`: la landing y la
+ * aplicación comparten color, así que ya no hay un "azul de la landing"
+ * distinto del de marca. Se conserva como alias para no romper importaciones;
+ * en código nuevo usar `primary[600]`.
+ */
+export const landingPrimary = primary[600]
 
 /** Navy profundo del logo (sidebar / fondos hero). */
 export const navy = '#0b1220'
@@ -70,20 +91,31 @@ export const typography = {
   scale: {
     displayXl: { size: 72, weight: 800, lineHeight: 1.05, tracking: -0.03 },
     display: { size: 48, weight: 800, lineHeight: 1.05, tracking: -0.03 },
-    headingXl: { size: 30, weight: 800, lineHeight: 1.15, tracking: -0.02 },
-    headingL: { size: 22, weight: 700, lineHeight: 1.25, tracking: -0.015 },
+    headingXl: { size: 32, weight: 800, lineHeight: 1.15, tracking: -0.02 },
+    headingL: { size: 24, weight: 700, lineHeight: 1.25, tracking: -0.015 },
     headingM: { size: 17, weight: 700, lineHeight: 1.3, tracking: -0.01 },
     headingS: { size: 15, weight: 600, lineHeight: 1.35, tracking: 0 },
     bodyXl: { size: 17, weight: 400, lineHeight: 1.6, tracking: 0 },
     bodyL: { size: 16, weight: 400, lineHeight: 1.6, tracking: 0 },
-    bodyM: { size: 15, weight: 400, lineHeight: 1.6, tracking: 0 },
-    bodyS: { size: 13, weight: 400, lineHeight: 1.5, tracking: 0 },
-    caption: { size: 12, weight: 400, lineHeight: 1.4, tracking: 0 },
-    overline: { size: 11, weight: 600, lineHeight: 1.4, tracking: 0.08 },
+    bodyM: { size: 16, weight: 400, lineHeight: 1.6, tracking: 0 },
+    bodyS: { size: 14, weight: 400, lineHeight: 1.5, tracking: 0 },
+    caption: { size: 12.5, weight: 400, lineHeight: 1.45, tracking: 0 },
+    overline: { size: 12, weight: 600, lineHeight: 1.4, tracking: 0.08 },
     button: { size: 14, weight: 500, lineHeight: 1, tracking: 0 },
     label: { size: 13, weight: 500, lineHeight: 1.4, tracking: 0 },
+    /** Navegación lateral — rol propio: era el peor infractor con 13px. */
+    nav: { size: 14.5, weight: 500, lineHeight: 1.4, tracking: 0 },
   },
 } as const
+
+/**
+ * Suelo tipográfico del sistema (px). DS 2.0 · Fase 0.
+ *
+ * NADA de la interfaz baja de aquí: ni microcopy, ni etiquetas, ni
+ * navegación. La auditoría encontró 218 tamaños escritos a mano por debajo
+ * de este valor; se migran módulo a módulo en las fases siguientes.
+ */
+export const minFontSize = 12
 
 /** Motion (MMS): duraciones (ms) y curvas. Espejo de los tokens CSS. */
 export const motion = {
@@ -112,6 +144,7 @@ export const tokens = {
   typography,
   motion,
   minTouchTarget,
+  minFontSize,
 } as const
 
 export type MdsTokens = typeof tokens

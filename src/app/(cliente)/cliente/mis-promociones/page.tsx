@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { getRegalosCliente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
 import { Card, CardContent } from '@/components/ui/card'
+import { StatCard } from '@/components/ui/stat-card'
+import { EmptyState } from '@/components/system/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { compraEstadoVisual } from '@/components/cliente/compra-estado'
@@ -54,14 +56,14 @@ function Item({ compra }: { compra: CompraItem }) {
         <p className="truncate font-semibold text-foreground">
           {compra.promocion?.titulo ?? 'Promoción'}
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-caption">
           {compra.company.name} · {fmtFecha(compra.createdAt)}
           {compra.estado === 'ACTIVA' && (
             <> · {compra.usosRestantes} de {compra.usosIncluidos} uso{compra.usosIncluidos !== 1 ? 's' : ''} disponible{compra.usosRestantes !== 1 ? 's' : ''}</>
           )}
         </p>
       </div>
-      <Badge variant={ui.badge} className="shrink-0 gap-1 text-[10px]">
+      <Badge variant={ui.badge} className="shrink-0 gap-1">
         <Icon className="h-3 w-3" />
         {ui.label}
       </Badge>
@@ -82,8 +84,8 @@ function Section({
   if (items.length === 0) return null
   return (
     <div className="space-y-2">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        <Icon className="h-4 w-4" /> {titulo}
+      <h2 className="flex items-center gap-2 text-overline">
+        <Icon className="h-4 w-4" aria-hidden /> {titulo}
       </h2>
       <Card>
         <CardContent className="p-0">
@@ -176,35 +178,23 @@ export default async function MisPromocionesPage() {
       )}
 
       {compras.length === 0 && regalos.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 text-center text-muted-foreground">
-            <Sparkles className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-            <p className="font-medium">Aún no has adquirido promociones</p>
-            <p className="mt-1 text-sm">
-              Explora las promociones disponibles y adquiere la que te convenga.
-            </p>
-            <Button asChild className="mt-5">
-              <Link href="/cliente/promociones">Ver promociones</Link>
+        <EmptyState
+          icon={Sparkles}
+          title="Aún no tienes beneficios"
+          description="Cuando adquieras una promoción o recibas un regalo, aparecerán aquí listos para usar con tu QR."
+          action={
+            <Button asChild size="lg">
+              <Link href="/cliente/promociones">Ver ofertas</Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <>
           {/* Resumen del centro de recompensas */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { valor: activas.length, label: 'Listos para usar', tono: 'text-success' },
-              { valor: usosDisponibles, label: 'Usos disponibles', tono: 'text-primary' },
-              { valor: pendientes.length, label: 'En proceso', tono: 'text-warning-foreground' },
-            ].map((s) => (
-              <div
-                key={s.label}
-                className="rounded-2xl border border-border/70 bg-card p-3 text-center shadow-card"
-              >
-                <p className={`text-xl font-bold tabular-nums ${s.tono}`}>{s.valor}</p>
-                <p className="text-[11px] text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard accent="success" icon={Ticket} label="Listos para usar" value={activas.length} />
+            <StatCard accent="brand" icon={Sparkles} label="Usos disponibles" value={usosDisponibles} />
+            <StatCard accent="warning" icon={Clock} label="En proceso" value={pendientes.length} />
           </div>
 
           <Section titulo="Listos para usar" icon={Ticket} items={activas} />

@@ -117,10 +117,10 @@ export function RegisterForm({
 
   return (
     <div className="space-y-6">
-      <Card className="border-white/10 bg-white/5 text-white">
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-2xl">Crear cuenta</CardTitle>
-          <CardDescription className="text-white/60">
+          <CardDescription>
             Regístrate en {companyName}.
           </CardDescription>
         </CardHeader>
@@ -141,7 +141,7 @@ export function RegisterForm({
                 id="nombre"
                 name="nombre"
                 required
-                className="bg-white/10 text-white placeholder:text-white/50"
+               
               />
             </div>
             <div className="space-y-2">
@@ -151,7 +151,7 @@ export function RegisterForm({
                 name="email"
                 type="email"
                 required
-                className="bg-white/10 text-white placeholder:text-white/50"
+               
               />
             </div>
             <div className="space-y-2">
@@ -161,7 +161,6 @@ export function RegisterForm({
                 name="password"
                 required
                 minLength={6}
-                className="bg-white/10 text-white"
               />
             </div>
             <div className="space-y-2">
@@ -171,29 +170,29 @@ export function RegisterForm({
                 name="telefono"
                 type="tel"
                 required
-                className="bg-white/10 text-white placeholder:text-white/50"
+               
                 placeholder="809-555-0000"
               />
-              <p className="text-xs text-white/50">
+              <p className="text-caption">
                 Lo usamos para confirmar tus citas y beneficios.
               </p>
             </div>
 
-            <ComoNosConociste selectClassName="border-white/20 bg-white/10 text-white" />
+            <ComoNosConociste />
 
             {isCarwash && (
-              <div className="space-y-4 rounded-lg border border-white/10 p-4">
-                <p className="text-sm font-medium text-white/70">
+              <div className="space-y-4 rounded-lg border border-border p-4">
+                <p className="text-small font-medium text-foreground">
                   Tu vehículo (opcional)
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="marca">Marca</Label>
-                    <Input id="marca" name="marca" className="bg-white/10 text-white placeholder:text-white/50" placeholder="Toyota" />
+                    <Input id="marca" name="marca" placeholder="Toyota" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="modelo">Modelo</Label>
-                    <Input id="modelo" name="modelo" className="bg-white/10 text-white placeholder:text-white/50" placeholder="Corolla" />
+                    <Input id="modelo" name="modelo" placeholder="Corolla" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="anio">Año</Label>
@@ -201,17 +200,16 @@ export function RegisterForm({
                       id="anio"
                       name="anio"
                       type="number"
-                      className="bg-white/10 text-white"
                       placeholder={String(new Date().getFullYear())}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="color">Color</Label>
-                    <Input id="color" name="color" className="bg-white/10 text-white placeholder:text-white/50" placeholder="Blanco" />
+                    <Input id="color" name="color" placeholder="Blanco" />
                   </div>
                   <div className="col-span-2 space-y-2">
                     <Label htmlFor="placa">Placa</Label>
-                    <Input id="placa" name="placa" className="bg-white/10 text-white placeholder:text-white/50" placeholder="A123456" />
+                    <Input id="placa" name="placa" placeholder="A123456" />
                   </div>
                 </div>
               </div>
@@ -219,14 +217,14 @@ export function RegisterForm({
 
             {/* F5.2: auto-seguir con opción de desmarcar (el hidden va primero;
                 si el checkbox está marcado, su valor "on" queda al final). */}
-            <label className="flex items-start gap-2 text-sm text-white/70">
+            <label className="flex items-start gap-2 text-small text-foreground">
               <input type="hidden" name="seguirEmpresa" value="off" />
               <input
                 type="checkbox"
                 name="seguirEmpresa"
                 value="on"
                 defaultChecked
-                className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                className="mt-0.5 h-4 w-4 rounded border-input"
               />
               <span>
                 Seguir a {companyName} para recibir sus promociones y novedades.
@@ -234,13 +232,13 @@ export function RegisterForm({
             </label>
 
             {/* Aceptación de términos (obligatoria) — se persiste con versión. */}
-            <label className="flex items-start gap-2 text-sm text-white/70">
+            <label className="flex items-start gap-2 text-small text-foreground">
               <input
                 type="checkbox"
                 name="terminos"
                 value="on"
                 required
-                className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                className="mt-0.5 h-4 w-4 rounded border-input"
               />
               <span>
                 Acepto los{' '}
@@ -257,13 +255,13 @@ export function RegisterForm({
 
             {/* Consentimiento de marketing (opcional). El hidden "off" va
                 primero; si se marca, "on" queda al final. */}
-            <label className="flex items-start gap-2 text-sm text-white/70">
+            <label className="flex items-start gap-2 text-small text-foreground">
               <input type="hidden" name="marketingConsent" value="off" />
               <input
                 type="checkbox"
                 name="marketingConsent"
                 value="on"
-                className="mt-0.5 h-4 w-4 rounded border-white/30 bg-white/10"
+                className="mt-0.5 h-4 w-4 rounded border-input"
               />
               <span>
                 Quiero recibir novedades y ofertas de MembeGo por correo (opcional).
@@ -282,13 +280,13 @@ export function RegisterForm({
           </form>
           {isGoogleAuthEnabled() && (
             <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-3 text-xs text-white/50">
-                <span className="h-px flex-1 bg-white/10" />
+              <div className="flex items-center gap-3 text-caption">
+                <span className="h-px flex-1 bg-border" />
                 o
-                <span className="h-px flex-1 bg-white/10" />
+                <span className="h-px flex-1 bg-border" />
               </div>
               <GoogleSignInButton companySlug={companySlug} refCode={refCode || null} />
-              <p className="text-center text-xs text-white/50">
+              <p className="text-center text-caption">
                 Al continuar con Google aceptas los{' '}
                 <a href={landingUrlFor('/terms')} target="_blank" className="text-primary hover:underline">
                   términos
@@ -301,7 +299,7 @@ export function RegisterForm({
               </p>
             </div>
           )}
-          <p className="mt-4 text-center text-sm text-white/60">
+          <p className="mt-4 text-center text-small text-muted-foreground">
             ¿Ya tienes cuenta?{' '}
             <a href="/login" className="text-primary hover:underline">
               Inicia sesión

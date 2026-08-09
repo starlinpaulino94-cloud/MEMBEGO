@@ -9,7 +9,7 @@
 import { Label } from '@/components/ui/label'
 import { OPCIONES_COMO_CONOCISTE } from '@/modules/adquisicion/shared'
 
-export function ComoNosConociste({ selectClassName = '' }: { selectClassName?: string }) {
+export function ComoNosConociste() {
   return (
     <div className="space-y-1.5">
       <Label htmlFor="canalDeclarado">¿Cómo nos conociste? *</Label>
@@ -18,7 +18,7 @@ export function ComoNosConociste({ selectClassName = '' }: { selectClassName?: s
         name="canalDeclarado"
         required
         defaultValue=""
-        className={`h-10 w-full rounded-xl border px-3 text-sm [&>option]:bg-background [&>option]:text-foreground ${selectClassName || 'border-input bg-background'}`}
+        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm [&>option]:bg-background [&>option]:text-foreground"
       >
         <option value="" disabled>
           Selecciona una opción

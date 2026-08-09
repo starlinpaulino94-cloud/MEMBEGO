@@ -48,27 +48,45 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
 
+  /* ── Radios ─────────────────────────────────────────────────────────
+     DS 2.0 · Una familia, un radio. Los valores ya eran correctos; lo que
+     faltaba era la regla de cuál usar:
+
+       rounded-lg   10px  inputs, botones, chips
+       rounded-xl   14px  tarjetas, paneles
+       rounded-2xl  20px  modales, hojas, drawers
+       rounded-full        avatares, pills, dock del QR
+
+     `rounded-3xl`, `rounded-md` y `rounded-sm` salen del vocabulario (69,
+     32 y 8 usos): se migran a la familia que les toque en la fase de cada
+     módulo. No se borran los tokens todavía para no romper esos usos. */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 10px);
 
-  /* ── MDS · Escala de marca (Primary 50–900, esmeralda) ──────────────
+  /* ── MDS · Escala de marca (Primary 50–900, azul Membego) ───────────
      Genera bg-primary-500, text-primary-700, etc. `--color-primary` (sin
      número) sigue siendo el token SEMÁNTICO que cambia con el tema; la
      escala numérica es fija y sirve para gradientes, ilustraciones y
-     estados que necesitan un tono exacto. */
-  --color-primary-50:  oklch(0.972 0.021 150);
-  --color-primary-100: oklch(0.940 0.045 150);
-  --color-primary-200: oklch(0.885 0.090 150);
-  --color-primary-300: oklch(0.815 0.140 150);
-  --color-primary-400: oklch(0.760 0.185 150);
-  --color-primary-500: oklch(0.723 0.219 150);
-  --color-primary-600: oklch(0.627 0.194 150);
-  --color-primary-700: oklch(0.527 0.154 150);
-  --color-primary-800: oklch(0.432 0.120 150);
-  --color-primary-900: oklch(0.350 0.090 150);
+     estados que necesitan un tono exacto.
+
+     DS 2.0 · Fase 0: la escala pasó de esmeralda (matiz 150) a azul
+     (matiz 255). El azul ya era la marca en la web pública —vivía solo
+     dentro de `.theme-landing`— y ahora es el token base: un único color
+     de marca para landing y aplicación. El verde queda EXCLUSIVAMENTE
+     como estado semántico de éxito (`--success`). */
+  --color-primary-50:  oklch(0.972 0.014 255);
+  --color-primary-100: oklch(0.938 0.032 255);
+  --color-primary-200: oklch(0.885 0.062 255);
+  --color-primary-300: oklch(0.809 0.105 255);
+  --color-primary-400: oklch(0.707 0.165 255);
+  --color-primary-500: oklch(0.623 0.208 255);
+  --color-primary-600: oklch(0.550 0.220 255);
+  --color-primary-700: oklch(0.488 0.203 255);
+  --color-primary-800: oklch(0.424 0.170 255);
+  --color-primary-900: oklch(0.379 0.135 255);
 
   /* MDS · Escala secundaria (cyan del degradado del logo) */
   --color-cyan-brand-300: oklch(0.855 0.105 200);
@@ -78,6 +96,20 @@
   /* MDS · Superficies auxiliares */
   --color-overlay: var(--overlay);
   --color-skeleton: var(--skeleton);
+
+  /* ── DS 2.0 · Alias semánticos ──────────────────────────────────────
+     Nombres nuevos que APUNTAN a los tokens existentes; no son un segundo
+     sistema. Existen para que las pantallas nuevas digan lo que quieren
+     decir (`bg-surface`, `text-brand-primary`) sin invalidar los cientos
+     de usos ya escritos de `bg-card` o `text-primary`, que siguen siendo
+     válidos. La migración de nombres es gradual, fase a fase. */
+  --color-brand-primary: var(--primary);
+  --color-brand-primary-hover: var(--primary-hover);
+  --color-brand-primary-soft: var(--primary-soft);
+  --color-surface: var(--card);
+  --color-surface-subtle: var(--muted);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
 }
 
 @theme {
@@ -115,9 +147,13 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.14 0.02 264);
 
-  /* Primary — verde esmeralda de marca (identidad MEMBEGO-GOOGLE) */
-  --primary: oklch(0.527 0.154 150);
+  /* Primary — azul eléctrico de marca (DS 2.0). Mismo valor que usaba
+     `.theme-landing`: landing y aplicación comparten por fin un color. */
+  --primary: oklch(0.55 0.22 255);
   --primary-foreground: oklch(0.99 0 0);
+  /* Estados del CTA, para no componerlos a mano con /90 en cada página. */
+  --primary-hover: oklch(0.488 0.203 255);
+  --primary-soft: oklch(0.938 0.032 255);
 
   /* Secondary */
   --secondary: oklch(0.955 0.005 264);
@@ -139,30 +175,43 @@
   --success-foreground: oklch(0.99 0 0);
   --warning: oklch(0.75 0.16 75);
   --warning-foreground: oklch(0.25 0.06 75);
-  --info: oklch(0.62 0.14 230);
+  /* DS 2.0: con la marca en azul (255), `--info` se desplazó de 230 a 215
+     para que un aviso informativo no se confunda con un CTA. Retirarlo del
+     vocabulario y resolver los avisos con superficie neutra + icono sería
+     más limpio todavía, pero son 138 usos en páginas: se evalúa en la fase
+     de cada módulo, no aquí. */
+  --info: oklch(0.62 0.12 215);
   --info-foreground: oklch(0.99 0 0);
 
   /* Borders */
   --border: oklch(0.914 0.005 264);
   --input: oklch(0.914 0.005 264);
-  --ring: oklch(0.527 0.154 150);
+  --ring: oklch(0.55 0.22 255);
 
   /* MDS · Superficies auxiliares */
   --overlay: oklch(0.14 0.02 264 / 45%);
   --skeleton: oklch(0.945 0.004 264);
   --glass-surface: oklch(1 0 0 / 65%);
   --glass-border: oklch(1 0 0 / 45%);
-  --glow-color: 34 197 94;
+  --glow-color: 59 130 246;
 
   /* Sidebar — deep navy (matches logo background) */
   --sidebar: oklch(0.14 0.035 260);
   --sidebar-foreground: oklch(0.80 0.010 260);
-  --sidebar-primary: oklch(0.723 0.219 150);
-  --sidebar-primary-foreground: oklch(0.16 0.03 150);
+  /* DS 2.0 · NO es `--primary`: el azul de marca (L .55) sobre este navy
+     (L .14) se queda en ~3.4:1, por debajo de AA. Este azul aclarado
+     (L .72) da ~7:1 contra el navy y es el que marca la selección del
+     menú. Si se toca el navy, hay que recalcular este par. */
+  --sidebar-primary: oklch(0.72 0.15 255);
+  --sidebar-primary-foreground: oklch(0.16 0.03 255);
   --sidebar-accent: oklch(0.20 0.035 260);
   --sidebar-accent-foreground: oklch(0.92 0.008 260);
   --sidebar-border: oklch(0.22 0.030 260);
-  --sidebar-ring: oklch(0.723 0.219 150);
+  --sidebar-ring: oklch(0.72 0.15 255);
+  /* DS 2.0 · Superficies de interacción del menú, antes escritas a mano
+     como `bg-white/[0.05]` y `bg-white/[0.08]` en cada enlace. */
+  --sidebar-hover: oklch(1 0 0 / 6%);
+  --sidebar-active: oklch(1 0 0 / 10%);
 }
 
 .dark {
@@ -173,9 +222,12 @@
   --card-foreground: oklch(0.96 0.005 260);
   --popover: oklch(0.19 0.005 260);
   --popover-foreground: oklch(0.96 0.005 260);
-  /* Esmeralda #22C55E; texto oscuro encima (como el FAB del prototipo) */
-  --primary: oklch(0.723 0.219 150);
-  --primary-foreground: oklch(0.16 0.03 150);
+  /* DS 2.0 · Azul aclarado para el lienzo oscuro; texto oscuro encima
+     (el azul de modo claro, L .55, no alcanza contraste sobre L .15). */
+  --primary: oklch(0.72 0.16 255);
+  --primary-foreground: oklch(0.16 0.03 255);
+  --primary-hover: oklch(0.78 0.13 255);
+  --primary-soft: oklch(0.28 0.06 255);
   --secondary: oklch(0.24 0.006 260);
   --secondary-foreground: oklch(0.92 0.008 260);
   --muted: oklch(0.24 0.006 260);
@@ -187,11 +239,11 @@
   --success-foreground: oklch(0.15 0.03 160);
   --warning: oklch(0.80 0.15 80);
   --warning-foreground: oklch(0.22 0.06 80);
-  --info: oklch(0.70 0.13 230);
-  --info-foreground: oklch(0.15 0.03 230);
+  --info: oklch(0.70 0.11 215);
+  --info-foreground: oklch(0.15 0.03 215);
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.723 0.219 150);
+  --ring: oklch(0.72 0.16 255);
 
   /* MDS · Superficies auxiliares (modo oscuro) */
   --overlay: oklch(0.05 0 0 / 60%);
@@ -201,18 +253,27 @@
 
   --sidebar: oklch(0.12 0.004 260);
   --sidebar-foreground: oklch(0.80 0.010 260);
-  --sidebar-primary: oklch(0.723 0.219 150);
-  --sidebar-primary-foreground: oklch(0.16 0.03 150);
+  --sidebar-primary: oklch(0.72 0.15 255);
+  --sidebar-primary-foreground: oklch(0.16 0.03 255);
   --sidebar-accent: oklch(0.19 0.005 260);
   --sidebar-accent-foreground: oklch(0.92 0.008 260);
   --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: oklch(0.723 0.219 150);
+  --sidebar-ring: oklch(0.72 0.15 255);
+  --sidebar-hover: oklch(1 0 0 / 6%);
+  --sidebar-active: oklch(1 0 0 / 10%);
 }
 
 /* Landing pública: identidad azul + blanco original de MembeGo. Se aplica al
    subtree del layout (public) y GANA sobre :root y .dark porque las variables
    se resuelven en el ancestro más cercano — la landing siempre se ve clara,
-   aunque la app esté en modo oscuro. */
+   aunque la app esté en modo oscuro.
+
+   DS 2.0 · Este bloque ya NO existe para forzar el azul: desde que `:root` es
+   azul, los valores de marca coinciden con los de la aplicación. Lo que sigue
+   haciendo —y por lo que NO se borra— es fijar `color-scheme: light` y repetir
+   la paleta clara, de modo que la landing no se pinte en oscuro cuando el
+   visitante tiene la app en modo oscuro o el sistema en dark. Es una sección
+   deliberadamente de un solo tema. */
 .theme-landing {
   color-scheme: light;
   --glow-color: 59 130 246;
@@ -237,11 +298,36 @@
   --success-foreground: oklch(0.99 0 0);
   --warning: oklch(0.75 0.16 75);
   --warning-foreground: oklch(0.25 0.06 75);
-  --info: oklch(0.62 0.14 230);
+  --info: oklch(0.62 0.12 215);
   --info-foreground: oklch(0.99 0 0);
   --border: oklch(0.914 0.005 264);
   --input: oklch(0.914 0.005 264);
   --ring: oklch(0.55 0.22 255);
+
+  /* Este bloque tiene que redefinir TODO lo que redefine `.dark`, aunque el
+     valor coincida con `:root`. Las variables CSS se resuelven en el ancestro
+     más cercano que las declare: con la app en modo oscuro, `.dark` vive en
+     <html> y `.theme-landing` en un <div> de dentro, así que cualquier token
+     que este bloque NO declare se lee del bloque OSCURO. El síntoma era un
+     esqueleto de carga casi negro sobre una tarjeta blanca.
+     Hay una prueba que verifica que los dos bloques cubran el mismo conjunto:
+     tests/tema-landing.test.ts. */
+  --primary-hover: oklch(0.488 0.203 255);
+  --primary-soft: oklch(0.938 0.032 255);
+  --overlay: oklch(0.14 0.02 264 / 45%);
+  --skeleton: oklch(0.945 0.004 264);
+  --glass-surface: oklch(1 0 0 / 65%);
+  --glass-border: oklch(1 0 0 / 45%);
+  --sidebar: oklch(0.14 0.035 260);
+  --sidebar-foreground: oklch(0.80 0.010 260);
+  --sidebar-primary: oklch(0.72 0.15 255);
+  --sidebar-primary-foreground: oklch(0.16 0.03 255);
+  --sidebar-accent: oklch(0.20 0.035 260);
+  --sidebar-accent-foreground: oklch(0.92 0.008 260);
+  --sidebar-border: oklch(0.22 0.030 260);
+  --sidebar-ring: oklch(0.72 0.15 255);
+  --sidebar-hover: oklch(1 0 0 / 6%);
+  --sidebar-active: oklch(1 0 0 / 10%);
 }
 
 @layer base {
@@ -354,7 +440,16 @@
 
   /* ── Escala tipográfica del sistema ─────────────────────────────────
      Usar estas clases en vez de combinar clases text- y font- a mano, para
-     que todas las pantallas compartan exactamente la misma jerarquía. */
+     que todas las pantallas compartan exactamente la misma jerarquía.
+
+     DS 2.0 · Fase 0: nueve roles, ni uno más, y el SUELO SUBIÓ A 12px.
+     Nada de la interfaz baja de ahí — ni microcopy, ni etiquetas, ni
+     navegación. La auditoría encontró 218 tamaños escritos a mano por
+     debajo de ese suelo (131 a 11px, 85 a 10px, 2 a 9px); se migran módulo
+     a módulo en las fases siguientes, no de una barrida.
+
+     Antes de escribir `text-[13px]` o `text-[15px]` en una pantalla: ya
+     existen aquí como `.text-small` y `.text-body`. */
   .text-display {          /* Héroes / landing */
     font-family: var(--font-display);
     font-size: clamp(2.5rem, 6vw, 4.5rem);
@@ -362,48 +457,48 @@
     letter-spacing: -0.03em;
     line-height: 1.05;
   }
-  .text-h1 {               /* Título de página — fluido: respira en móvil */
+  .text-h1 {               /* Título de página · 28→32px */
     font-family: var(--font-display);
-    font-size: clamp(1.55rem, 4.5vw, 1.875rem);
+    font-size: clamp(1.75rem, 4.5vw, 2rem);
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.15;
   }
-  .text-h2 {               /* Título de sección */
+  .text-h2 {               /* Título de sección · 20→24px */
     font-family: var(--font-display);
-    font-size: clamp(1.2rem, 3.5vw, 1.375rem);
+    font-size: clamp(1.25rem, 3.5vw, 1.5rem);
     font-weight: 700;
     letter-spacing: -0.015em;
     line-height: 1.25;
   }
-  .text-h3 {               /* Título de tarjeta */
+  .text-h3 {               /* Título de tarjeta · 17px */
     font-family: var(--font-display);
     font-size: 1.0625rem;
     font-weight: 700;
     letter-spacing: -0.01em;
     line-height: 1.3;
   }
-  .text-h4 {               /* Subtítulo / grupo */
+  .text-h4 {               /* Subtítulo / grupo · 15px */
     font-family: var(--font-display);
     font-size: 0.9375rem;
     font-weight: 600;
     line-height: 1.35;
   }
-  .text-body {
-    font-size: 0.9375rem;
+  .text-body {             /* Lectura · 16px */
+    font-size: 1rem;
     line-height: 1.6;
   }
-  .text-small {
-    font-size: 0.8125rem;
+  .text-small {            /* Secundario · 14px */
+    font-size: 0.875rem;
     line-height: 1.5;
   }
-  .text-caption {
-    font-size: 0.75rem;
-    line-height: 1.4;
+  .text-caption {          /* Microcopy · 12.5px — el suelo */
+    font-size: 0.78125rem;
+    line-height: 1.45;
     color: var(--muted-foreground);
   }
-  .text-overline {         /* Etiquetas de sección en mayúsculas */
-    font-size: 0.6875rem;
+  .text-overline {         /* Etiquetas de sección en mayúsculas · 12px */
+    font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -411,7 +506,17 @@
   }
 
   /* ── Elevaciones (alias semánticos de las sombras) ──────────────────
-     elevation-1: reposo · elevation-2: hover/dropdown · elevation-3: modal */
+     elevation-1: reposo · elevation-2: hover/dropdown · elevation-3: modal
+
+     DS 2.0 · ESTAS TRES SON EL VOCABULARIO. La auditoría contó quince
+     variantes de sombra en uso, pero no eran quince sombras: los valores
+     de `.shadow-card`, `.shadow-premium` y `.shadow-premium-lg` son
+     IDÉNTICOS a elevation-1/2/3 respectivamente. Ya eran alias sin
+     saberlo. Se conservan para no romper los ~110 usos existentes, pero
+     en pantallas nuevas se escribe la elevación, que dice para qué es.
+
+     `shadow-glow` queda fuera de la escala a propósito: es el acento de
+     marca, máximo UNO por pantalla (el CTA protagonista). */
   .elevation-1 {
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
   }
@@ -505,6 +610,42 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  /* ── Pin del mapa (DS 2.0 · Fase 5) ─────────────────────────────────
+     El SVG del marcador pinta con `currentColor`, así que el color y los
+     estados se resuelven aquí con clases en vez de generar un icono por
+     variante. Vive fuera de React: Leaflet inserta el HTML del `divIcon`
+     directamente en el DOM, donde las clases de Tailwind generadas bajo
+     demanda no llegarían. */
+  .mg-pin {
+    display: block;
+    color: var(--primary);
+    filter: drop-shadow(0 2px 3px rgb(15 23 42 / 0.35));
+    transition: transform var(--duration-fast) var(--ease-out-expo);
+  }
+  .mg-pin:hover {
+    transform: scale(1.12);
+  }
+  /* Punto ámbar: este negocio tiene ofertas vivas — la única razón para
+     mirar el mapa antes que la lista. */
+  .mg-pin--oferta {
+    position: relative;
+  }
+  .mg-pin--oferta::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--warning);
+    border: 2px solid var(--card);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mg-pin { transition: none; }
+    .mg-pin:hover { transform: none; }
   }
 
   /* Animated underline */

@@ -10,11 +10,14 @@ import { formatDate, formatMoney } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { StatCard } from '@/components/ui/stat-card'
+import { TabsNav } from '@/components/ui/tabs-nav'
+import { EmptyState } from '@/components/system/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { DeletePromocionButton } from '@/components/admin/DeletePromocionButton'
 import { PromoControls } from '@/components/admin/PromoControls'
 import { CompartirOfertaButton } from '@/components/admin/CompartirOfertaButton'
-import { Gift, Plus, Pencil, Lock, Globe, Eye, Share2, Heart, Archive, LayoutTemplate } from 'lucide-react'
+import { Gift, Plus, Pencil, Lock, Globe, Eye, Share2, Heart, LayoutTemplate } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +27,16 @@ function fmtDate(d: Date | null) {
 }
 
 type PromoRow = Awaited<ReturnType<typeof fetchPromos>>[number]
+
+const ESTADOS_PROMO = ['todas', 'activas', 'programadas', 'finalizadas', 'borradores'] as const
+type EstadoPromo = (typeof ESTADOS_PROMO)[number]
+const ETIQUETA_ESTADO: Record<EstadoPromo, string> = {
+  todas: 'Todas',
+  activas: 'Activas',
+  programadas: 'Programadas',
+  finalizadas: 'Finalizadas',
+  borradores: 'Borradores',
+}
 
 async function fetchPromos(companyId: string | null) {
   return prisma.promocion.findMany({
@@ -190,9 +203,18 @@ async function fetchVentas(companyId: string | null) {
   }
 }
 
-export default async function PromocionesPage() {
+export default async function PromocionesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ estado?: string }>
+}) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = companyFilter(user)
+
+  const { estado: estadoRaw } = await searchParams
+  const estadoActivo: EstadoPromo = ESTADOS_PROMO.includes(estadoRaw as EstadoPromo)
+    ? (estadoRaw as EstadoPromo)
+    : 'activas'
 
   let promociones: PromoRow[] = []
   let ventas: Awaited<ReturnType<typeof fetchVentas>> | null = null
@@ -205,8 +227,31 @@ export default async function PromocionesPage() {
     console.error('[admin-promociones]', e)
   }
 
-  const activas = promociones.filter((p) => !p.archivada)
-  const archivadas = promociones.filter((p) => p.archivada)
+  /**
+   * ESTADOS DEL §48. Antes solo había dos cubos: "no archivada" y
+   * "archivada", así que una promoción programada para el mes que viene se
+   * mezclaba con las que están corriendo ahora, y una vencida seguía en la
+   * lista principal como si nada. Los cinco estados salen de datos que ya
+   * existían —`archivada`, `activo`, `vigenciaDesde`, `vigenciaHasta`—, solo
+   * que nadie los combinaba.
+   */
+  const ahora = new Date()
+  const estadoDe = (p: PromoRow): EstadoPromo => {
+    if (p.archivada) return 'finalizadas'
+    if (!p.activo) return 'borradores'
+    if (p.vigenciaHasta && new Date(p.vigenciaHasta) < ahora) return 'finalizadas'
+    if (p.vigenciaDesde && new Date(p.vigenciaDesde) > ahora) return 'programadas'
+    return 'activas'
+  }
+
+  const porEstadoPromo = {
+    todas: promociones,
+    activas: promociones.filter((x) => estadoDe(x) === 'activas'),
+    programadas: promociones.filter((x) => estadoDe(x) === 'programadas'),
+    finalizadas: promociones.filter((x) => estadoDe(x) === 'finalizadas'),
+    borradores: promociones.filter((x) => estadoDe(x) === 'borradores'),
+  }
+  const visibles = porEstadoPromo[estadoActivo]
 
   // Destacados calculados desde el dato real (contadores de la promoción).
   const publicadas = promociones.filter(
@@ -242,154 +287,127 @@ export default async function PromocionesPage() {
             </Link>
           </div>
         }
+        nav={
+          <TabsNav
+            aria-label="Estado de las promociones"
+            items={ESTADOS_PROMO.map((e) => ({
+              label: ETIQUETA_ESTADO[e],
+              badge: porEstadoPromo[e].length,
+              active: estadoActivo === e,
+              render: ({ className, children }) => (
+                <Link href={`/admin/promociones?estado=${e}`} className={className}>
+                  {children}
+                </Link>
+              ),
+            }))}
+          />
+        }
       />
 
-      {/* Fase E5: panel de ventas del motor de compras */}
+      {/* RESUMEN · Cuatro cifras, no diez.
+          Había DIEZ tarjetas de métrica repartidas en dos rejillas, todas del
+          mismo tamaño y peso: ingresos, vendidas, por validar, conversión,
+          publicadas, QR usados, abandonos, clientes, más compartida y más
+          canjeada. Con todo igual de importante hay que leerlas todas para
+          enterarse de algo — el mismo defecto que tenía el dashboard.
+          Arriba quedan las cuatro que responden "¿cómo va esto?"; el resto
+          baja a una franja de referencia. */}
       {ventas && ventas.total > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Ingresos por promociones</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">
-                {formatMoney(ventas.ingresos)}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">pagos confirmados</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Vendidas</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{ventas.vendidas}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {ventas.activas} activas · {ventas.consumidas} consumidas · {ventas.vencidas} vencidas
-              </p>
-            </CardContent>
-          </Card>
-          <Card className={ventas.porValidar > 0 ? 'border-warning/40' : ''}>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Pagos por validar</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{ventas.porValidar}</p>
-              {ventas.porValidar > 0 ? (
-                <Link href="/admin/pagos" className="mt-1 inline-block text-xs font-medium text-primary hover:underline">
-                  Ir a validación de pagos →
-                </Link>
-              ) : (
-                <p className="mt-1 text-xs text-muted-foreground">{ventas.pendientes} en proceso de pago</p>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Conversión de ventas</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{ventas.conversion}%</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {ventas.vendidas} de {ventas.total} solicitudes
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Fase E8: panel ampliado de beneficios digitales */}
-      {ventas && ventas.total > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Publicadas</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{publicadas}</p>
-              <p className="mt-1 text-xs text-muted-foreground">visibles en el marketplace</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">QR usados</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{ventas.qrUsados}</p>
-              <p className="mt-1 text-xs text-muted-foreground">canjes registrados en el escáner</p>
-            </CardContent>
-          </Card>
-          <Card className={ventas.tasaAbandono >= 40 ? 'border-warning/40' : ''}>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Abandonos</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{ventas.tasaAbandono}%</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {ventas.abandonos} canceladas o rechazadas
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-medium text-muted-foreground">Clientes</p>
-              <p className="mt-1 text-2xl font-bold text-foreground">{ventas.clientes}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {ventas.clientesNuevos} nuevos · {ventas.clientesRecurrentes} recurrentes
-              </p>
-            </CardContent>
-          </Card>
-          {masCompartida && masCompartida.shareCount > 0 && (
-            <Card className="sm:col-span-2">
-              <CardContent className="flex items-center gap-3 p-5">
-                <Share2 className="h-5 w-5 shrink-0 text-primary" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">Más compartida</p>
-                  <p className="truncate font-semibold text-foreground">{masCompartida.titulo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {masCompartida.shareCount} veces compartida
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {masCanjeada && masCanjeada.canjes > 0 && (
-            <Card className="sm:col-span-2">
-              <CardContent className="flex items-center gap-3 p-5">
-                <Gift className="h-5 w-5 shrink-0 text-success" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-muted-foreground">Más canjeada</p>
-                  <p className="truncate font-semibold text-foreground">{masCanjeada.titulo}</p>
-                  <p className="text-xs text-muted-foreground">{masCanjeada.canjes} canjes</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {activas.length === 0 && archivadas.length === 0 ? (
-        <Card>
-          <CardContent className="py-16 text-center text-muted-foreground">
-            <Gift className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-            <p className="font-medium">Sin promociones publicadas</p>
-            <p className="text-sm">Crea tu primera promoción para tus clientes.</p>
-            <Link
-              href="/admin/promociones/plantillas"
-              className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
-            >
-              Empieza desde una plantilla →
-            </Link>
-          </CardContent>
-        </Card>
-      ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2">
-            {activas.map((p) => (
-              <PromoCard key={p.id} p={p} showCompany={!companyId} />
-            ))}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              accent="brand"
+              label="Ingresos por promociones"
+              value={formatMoney(ventas.ingresos)}
+              sub="Pagos confirmados"
+            />
+            <StatCard
+              accent="success"
+              label="Vendidas"
+              value={ventas.vendidas}
+              sub={`${ventas.activas} activas · ${ventas.consumidas} consumidas`}
+            />
+            <StatCard
+              accent={ventas.porValidar > 0 ? 'warning' : 'brand'}
+              label="Pagos por validar"
+              value={ventas.porValidar}
+              sub={ventas.porValidar > 0 ? 'Requiere tu atención' : 'Nada pendiente'}
+            />
+            <StatCard
+              accent="brand"
+              label="Conversión"
+              value={`${ventas.conversion}%`}
+              sub={`${ventas.vendidas} de ${ventas.total} solicitudes`}
+            />
           </div>
 
-          {archivadas.length > 0 && (
-            <details className="group">
-              <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-                <Archive className="h-4 w-4" />
-                Archivadas ({archivadas.length})
-              </summary>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                {archivadas.map((p) => (
-                  <PromoCard key={p.id} p={p} showCompany={!companyId} />
-                ))}
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              { label: 'Publicadas', valor: String(publicadas) },
+              { label: 'QR usados', valor: String(ventas.qrUsados) },
+              {
+                label: 'Abandonos',
+                valor: `${ventas.tasaAbandono}% (${ventas.abandonos})`,
+              },
+              {
+                label: 'Clientes',
+                valor: `${ventas.clientes} · ${ventas.clientesNuevos} nuevos`,
+              },
+              ...(masCanjeada && masCanjeada.canjes > 0
+                ? [{ label: 'Más canjeada', valor: `${masCanjeada.titulo} (${masCanjeada.canjes})` }]
+                : []),
+              ...(masCompartida && masCompartida.shareCount > 0
+                ? [
+                    {
+                      label: 'Más compartida',
+                      valor: `${masCompartida.titulo} (${masCompartida.shareCount})`,
+                    },
+                  ]
+                : []),
+            ].map((m) => (
+              <div key={m.label} className="min-w-0">
+                <dt className="truncate text-caption">{m.label}</dt>
+                <dd className="truncate text-h4 tabular-nums text-foreground" title={m.valor}>
+                  {m.valor}
+                </dd>
               </div>
-            </details>
-          )}
+            ))}
+          </dl>
         </>
+      )}
+
+      {visibles.length === 0 ? (
+        <EmptyState
+          icon={Gift}
+          title={
+            promociones.length === 0
+              ? 'Sin promociones todavía'
+              : `Sin promociones ${ETIQUETA_ESTADO[estadoActivo].toLowerCase()}`
+          }
+          description={
+            promociones.length === 0
+              ? 'Crea tu primera promoción para empezar a atraer clientes.'
+              : 'Cambia de pestaña para ver las que están en otro estado.'
+          }
+          action={
+            promociones.length === 0 ? (
+              <>
+                <Button asChild size="lg">
+                  <Link href="/admin/promociones/nuevo">Crear promoción</Link>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <Link href="/admin/promociones/plantillas">Empezar desde plantilla</Link>
+                </Button>
+              </>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {visibles.map((p) => (
+            <PromoCard key={p.id} p={p} showCompany={!companyId} />
+          ))}
+        </div>
       )}
     </div>
   )

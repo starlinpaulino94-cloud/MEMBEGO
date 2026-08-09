@@ -91,10 +91,10 @@ export default function ActualizarPasswordPage() {
   }
 
   return (
-    <Card className="border-white/10 bg-white/5 text-white">
+    <Card className="border-border">
       <CardHeader>
         <CardTitle className="text-2xl">Nueva contraseña</CardTitle>
-        <CardDescription className="text-white/60">
+        <CardDescription>
           Elige una contraseña nueva para tu cuenta.
         </CardDescription>
       </CardHeader>
@@ -113,7 +113,7 @@ export default function ActualizarPasswordPage() {
                 nuevo.
               </AlertDescription>
             </Alert>
-            <p className="text-center text-sm text-white/60">
+            <p className="text-center text-small text-muted-foreground">
               <a href="/recuperar" className="text-primary hover:underline">
                 Solicitar nuevo enlace
               </a>
@@ -134,7 +134,6 @@ export default function ActualizarPasswordPage() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-white/10 text-white"
                 placeholder="••••••••"
               />
             </div>
@@ -146,7 +145,6 @@ export default function ActualizarPasswordPage() {
                 minLength={6}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                className="bg-white/10 text-white"
                 placeholder="••••••••"
               />
             </div>

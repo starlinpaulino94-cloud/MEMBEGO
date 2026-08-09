@@ -48,7 +48,8 @@ const DECLARADOS = new Map<string, string>([
   ['src/components/cliente/FeedNovedades.tsx', 'CTA sobre degradado de marca'],
   ['src/components/engagement/MarketingCampaignForm.tsx', 'vista previa sobre degradado'],
   ['src/components/engagement/Gamificacion.tsx', 'barra de progreso sobre degradado'],
-  ['src/components/public/PromotionCard.tsx', 'chips sobre la foto de la promoción'],
+  // PromotionCard salió de aquí en la Fase 4: sus chips pasaron de `bg-white/90`
+  // a `bg-card/90`, que se adapta al tema. Ya no mezcla capas.
   // Terceros y controles con blanco funcional.
   ['src/components/membresia/PagoTarjetaCardnet.tsx', 'marco del formulario de CardNET'],
   ['src/components/membresia/PagoTokenCardnet.tsx', 'perilla del interruptor'],

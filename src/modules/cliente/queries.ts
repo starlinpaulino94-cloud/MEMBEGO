@@ -249,6 +249,85 @@ export interface VisitaHistorial {
   transaccion: { codigo: string; ticketNumero: string; estado: string } | null
 }
 
+/** Un vehículo del cliente, con lo que la pantalla de "Mis vehículos" enseña. */
+export interface VehiculoCliente {
+  id: string
+  marca: string
+  modelo: string
+  anio: number
+  color: string
+  placa: string | null
+  esPrincipal: boolean
+  /** Categoría del catálogo (Sedán, SUV…), si se registró. */
+  categoria: string | null
+  /** Membresías a las que está asociado: por qué borrarlo no es trivial. */
+  membresias: { id: string; planNombre: string; empresaNombre: string }[]
+}
+
+/**
+ * Vehículos del cliente para su pantalla propia (§41).
+ *
+ * Consulta APARTE de `getClientePerfil` a propósito: aquella alimenta el
+ * perfil y solo necesita marca/modelo/año para un resumen, mientras que esta
+ * pantalla enseña además la categoría, cuál es el principal y a qué
+ * membresías está asociado cada uno. Cargar todo eso en el perfil sería pagar
+ * dos joins en una pantalla que no los muestra.
+ */
+export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCliente[]> {
+  try {
+    const filas = await sinEmpresa('cliente: mis vehículos', (tx) =>
+      tx.vehiculo.findMany({
+        where: { clienteId },
+        orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'desc' }],
+        select: {
+          id: true,
+          marca: true,
+          modelo: true,
+          anio: true,
+          color: true,
+          placa: true,
+          esPrincipal: true,
+          tipoVehiculo: { select: { nombre: true } },
+          membresias: {
+            select: {
+              membership: {
+                select: {
+                  id: true,
+                  plan: { select: { nombre: true } },
+                  company: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+      })
+    )
+
+    return filas.map((v) => ({
+      id: v.id,
+      marca: v.marca,
+      modelo: v.modelo,
+      anio: v.anio,
+      color: v.color,
+      placa: v.placa,
+      esPrincipal: v.esPrincipal,
+      categoria: v.tipoVehiculo?.nombre ?? null,
+      membresias: v.membresias
+        .map((mv) => mv.membership)
+        .filter((m): m is NonNullable<typeof m> => Boolean(m))
+        .map((m) => ({
+          id: m.id,
+          planNombre: m.plan?.nombre ?? 'Plan',
+          empresaNombre: m.company?.name ?? '',
+        })),
+    }))
+  } catch (e) {
+    // La pantalla degrada a "sin vehículos" en vez de romperse: es informativa.
+    console.error('[cliente-vehiculos]', e)
+    return []
+  }
+}
+
 export interface HistorialVisitas {
   total: number
   pages: number

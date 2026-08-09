@@ -1,24 +1,35 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Compass, AlertCircle, WalletCards } from 'lucide-react'
+import { AlertCircle, Compass, MapPin, WalletCards } from 'lucide-react'
 import { differenceInDays } from 'date-fns'
 import { getUser } from '@/lib/auth'
 import { getClienteAllMemberships, getBeneficioDisponible } from '@/modules/cliente/queries'
-import { getNovedadesInicio, getOnboardingCliente } from '@/modules/social/queries'
+import {
+  getNovedadesInicio,
+  getOnboardingCliente,
+  getPromoFeed,
+  type PromoFeed,
+} from '@/modules/social/queries'
 import { getMomentosVivos, type MomentosVivos as MomentosData } from '@/modules/engagement/momentos'
 import { getCampanasVivas, type CampanaViva } from '@/modules/engagement/campanas'
 import { getPruebaSocial, type PruebaSocial as PruebaSocialData } from '@/modules/engagement/pruebaSocial'
 import { getGamificacion, type GamificacionData } from '@/modules/engagement/gamificacion'
 import { getEngagementConfig } from '@/modules/engagement/config'
 import { normalizeEngagementConfig, type EngagementConfig } from '@/lib/engagementConfig'
+import { esMarcaUnica } from '@/modules/marketplace/marcaUnica'
+import { getCategoriesPublic } from '@/modules/marketplace/cached'
+import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { PruebaSocial } from '@/components/engagement/PruebaSocial'
 import { PopupInteligente } from '@/components/engagement/PopupInteligente'
 import { EmptyState } from '@/components/system/EmptyState'
 import { CelebracionBienvenida } from '@/components/cliente/CelebracionBienvenida'
 import { DescubreMas } from '@/components/cliente/DescubreMas'
 import { OnboardingClienteFirstVisit } from '@/components/cliente/OnboardingClienteFirstVisit'
+import { BuscadorInicio } from '@/components/cliente/inicio/BuscadorInicio'
+import { OfertasParaTi } from '@/components/cliente/inicio/OfertasParaTi'
 import { Button } from '@/components/ui/button'
+import { SectionHeader } from '@/components/ui/section-header'
 import { elegirExperiencias } from '@/modules/experience/engine'
 import { ExperienciaHero } from '@/components/engagement/ExperienciaHero'
 import { WalletStack, type WalletStackItem } from '@/components/wallet/WalletStack'
@@ -26,7 +37,16 @@ import { membresiaEstadoUi } from '@/lib/estados'
 
 export const metadata = {
   title: 'Inicio',
-  description: 'Tu resumen: beneficios, campañas y novedades de tus empresas',
+  description: 'Descubre beneficios cerca de ti y consulta tus membresías',
+}
+
+const FEED_VACIO: PromoFeed = {
+  misEmpresas: [],
+  destacadas: [],
+  nuevas: [],
+  expiranPronto: [],
+  recomendadas: [],
+  empresasRecomendadas: [],
 }
 
 export default async function InicioCliente() {
@@ -51,6 +71,10 @@ export default async function InicioCliente() {
     engagement,
     novedades,
     onboarding,
+    promoFeed,
+    marcaUnica,
+    categorias,
+    ubicacion,
   ] = await Promise.all([
     getBeneficioDisponible(clienteId),
     getClienteAllMemberships(user.supabaseId, clienteId).catch((error) => {
@@ -79,6 +103,14 @@ export default async function InicioCliente() {
     dbUserId && !onboardingSeen
       ? getOnboardingCliente(dbUserId, user.supabaseId).catch(() => null)
       : Promise.resolve(null),
+    // Ofertas del Home: el mismo feed que ya alimenta /cliente/promociones.
+    dbUserId ? getPromoFeed(dbUserId).catch(() => FEED_VACIO) : Promise.resolve(FEED_VACIO),
+    // Marca única: con un solo negocio publicado no hay marketplace que
+    // explorar. Ambas consultas van cacheadas (5 min y 1 h).
+    esMarcaUnica().catch(() => true),
+    getCategoriesPublic().catch(() => []),
+    // Ubicación de la vivienda, para el contexto del saludo.
+    dbUserId ? LocationService.primaria(dbUserId).catch(() => null) : Promise.resolve(null),
   ])
 
   const loadError = membershipsRes === null
@@ -146,8 +178,86 @@ export default async function InicioCliente() {
     }
   })
 
+  /**
+   * ORDEN DEL HOME SEGÚN EL CONTEXTO — la decisión de diseño de esta pantalla.
+   *
+   * El rediseño pide que el Home priorice el descubrimiento. Pero para quien
+   * YA tiene una membresía, la app se abre por una razón concreta: enseñar el
+   * QR en el mostrador. Enterrar la wallet bajo tres carriles de ofertas hace
+   * más lento justo el gesto más frecuente.
+   *
+   * Así que el orden depende de lo que esa persona tiene delante:
+   *  · Con membresías → wallet primero, ofertas después.
+   *  · Sin membresías → ofertas primero: es lo único accionable.
+   */
+  const tieneMembresias = !loadError && memberships.length > 0
+  const hayOfertas =
+    promoFeed.misEmpresas.length +
+      promoFeed.destacadas.length +
+      promoFeed.nuevas.length +
+      promoFeed.expiranPronto.length +
+      promoFeed.recomendadas.length >
+    0
+
+  // El buscador y las categorías solo tienen sentido con marketplace: en marca
+  // única `/cliente/explorar` redirige a planes y la búsqueda no llevaría a
+  // ninguna respuesta.
+  const mostrarDescubrimiento = !marcaUnica
+  const chips = categorias
+    .filter((c) => c.companyCount > 0)
+    .slice(0, 8)
+    .map((c) => ({ slug: c.slug, nombre: c.name }))
+
+  const zona = ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
+  const nombre = momentos.nombre?.trim().split(' ')[0] ?? null
+
+  const bloqueWallet = loadError ? (
+    <EmptyState
+      icon={AlertCircle}
+      title="No pudimos cargar tus membresías"
+      description="Hubo un problema al conectar con el servidor. Intenta de nuevo en unos momentos."
+      action={
+        <Button asChild variant="outline">
+          <Link href="/mis-membresias">Reintentar</Link>
+        </Button>
+      }
+    />
+  ) : memberships.length === 0 ? (
+    <EmptyState
+      icon={WalletCards}
+      title="Tu wallet está lista"
+      description={
+        mostrarDescubrimiento
+          ? 'Activa tu primera membresía y tendrás tu QR aquí, listo para usar en el mostrador.'
+          : 'Activa un plan y tendrás tu QR aquí, listo para usar en el mostrador.'
+      }
+      action={
+        <Button asChild size="lg">
+          <Link href={mostrarDescubrimiento ? '/cliente/explorar' : '/cliente/planes'}>
+            {mostrarDescubrimiento ? 'Explorar empresas' : 'Ver planes'}
+          </Link>
+        </Button>
+      }
+    />
+  ) : (
+    <section className="space-y-4">
+      <SectionHeader
+        title="Mis membresías"
+        description="Toca una tarjeta para mostrar su QR."
+        action={
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/mis-membresias">Ver todas</Link>
+          </Button>
+        }
+      />
+      <WalletStack items={walletItems} />
+    </section>
+  )
+
+  const bloqueOfertas = hayOfertas ? <OfertasParaTi feed={promoFeed} /> : null
+
   return (
-    <main className="container max-w-5xl py-8 xl:max-w-6xl">
+    <div className="space-y-8">
       {/* Felicitación por encima de la app tras registrarse */}
       <CelebracionBienvenida />
 
@@ -156,103 +266,87 @@ export default async function InicioCliente() {
         <PopupInteligente candidato={popupExp} color={engagement.color} />
       )}
 
-      {/* ── 1 · Header de app: saludo + avatar + puntos ────── */}
-      <header className="animate-fade-up mb-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-teal-400 text-sm font-bold text-primary-foreground shadow-glow"
-            >
-              {(momentos.nombre ?? 'M').trim().slice(0, 2).toUpperCase()}
-            </span>
-            <h1 className="text-h1 min-w-0 truncate text-foreground">
-              {momentos.nombre ? `¡Hola, ${momentos.nombre.split(' ')[0]}!` : '¡Hola! 👋'}
+      {/* ── Saludo, zona y accesos ─────────────────────────────────────────── */}
+      <header className="animate-fade-up">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0">
+            <h1 className="text-h1 text-balance">
+              {nombre ? `Hola, ${nombre}` : 'Hola'}
             </h1>
+            {zona ? (
+              <p className="mt-1 flex items-center gap-1.5 text-small text-muted-foreground">
+                <MapPin className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                <span className="truncate">{zona}</span>
+                <Link
+                  href="/cliente/perfil"
+                  className="shrink-0 text-primary underline-offset-2 hover:underline"
+                >
+                  Cambiar
+                </Link>
+              </p>
+            ) : (
+              <p className="mt-1 text-small text-muted-foreground">
+                Tus beneficios y lo que hay cerca de ti.
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex shrink-0 items-center gap-2">
             {gamificacion && (
               <Link
                 href="/cliente/ruleta"
-                className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-bold text-foreground shadow-sm hover:border-primary/30 active:scale-[0.97] transition"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-small font-bold text-foreground transition hover:border-primary/40 active:scale-[0.97]"
               >
-                <span className="text-amber-500">🏆</span>
-                <span>{gamificacion.puntos.toLocaleString('es-DO')} pts</span>
+                <span aria-hidden>🏆</span>
+                <span>
+                  {gamificacion.puntos.toLocaleString('es-DO')}
+                  <span className="sr-only"> puntos</span>
+                  <span aria-hidden> pts</span>
+                </span>
               </Link>
             )}
-            <Button asChild variant="outline" size="sm" className="shrink-0">
-              <Link href="/cliente/explorar">
-                <Compass className="mr-1.5 h-4 w-4" />
-                Explorar
+            <Button asChild variant="outline">
+              <Link href="/cliente/cerca">
+                <Compass aria-hidden />
+                Cerca de mí
               </Link>
             </Button>
           </div>
         </div>
       </header>
 
-      {/* ── 2 · ACCIÓN PRINCIPAL: el Experience Engine decide (MEE) ─────────── */}
+      {/* ── Buscar y categorías (solo con marketplace) ─────────────────────── */}
+      {mostrarDescubrimiento && <BuscadorInicio categorias={chips} />}
+
+      {/* ── La acción principal: la elige el motor de experiencias (MEE) ───── */}
       {heroExp && <ExperienciaHero exp={heroExp} />}
 
-      {/* ── 3 · Prueba social (compacta, solo si hay masa suficiente) ───────── */}
+      {/* ── Wallet y ofertas, en el orden que pide el contexto ─────────────── */}
+      {tieneMembresias ? (
+        <>
+          {bloqueWallet}
+          {bloqueOfertas}
+        </>
+      ) : (
+        <>
+          {bloqueOfertas}
+          {bloqueWallet}
+        </>
+      )}
+
+      {/* ── Prueba social (compacta, solo si hay masa suficiente) ──────────── */}
       {!loadError && engagement.pruebaSocial && mostrarPruebaSocial && pruebaSocial && (
         <PruebaSocial data={pruebaSocial} color={engagement.color} />
       )}
 
-      {/* ── 4 · La wallet: el valor real de la app, a todo el ancho ─────────── */}
-      {loadError ? (
-        <EmptyState
-          icon={AlertCircle}
-          title="No pudimos cargar tus membresías"
-          description="Hubo un problema al conectar con el servidor. Intenta de nuevo en unos momentos."
-          action={
-            <Button asChild variant="outline">
-              <Link href="/mis-membresias">Reintentar</Link>
-            </Button>
-          }
-        />
-      ) : memberships.length === 0 ? (
-        <EmptyState
-          icon={WalletCards}
-          title="Tu wallet está lista"
-          description="Explora las empresas disponibles y activa tu primera membresía para empezar a disfrutar beneficios con tu QR."
-          action={
-            <>
-              <Button asChild size="lg">
-                <Link href="/cliente/explorar">Explorar empresas</Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/cliente/promociones">Ver ofertas</Link>
-              </Button>
-            </>
-          }
-        />
-      ) : (
-        <div className="space-y-4">
-          <h2 className="text-h2 text-foreground mb-3 flex items-center gap-2">
-            <WalletCards className="h-5 w-5 text-primary" />
-            Mis Tarjetas
-          </h2>
-          <WalletStack items={walletItems} />
-        </div>
-      )}
-
       {/* Onboarding B2C: después de la wallet — una tarjeta real le gana la
           primera mirada a un recordatorio de configuración. */}
-      {onboarding && (
-        <div className="mt-8">
-          <OnboardingClienteFirstVisit onboarding={onboarding} />
-        </div>
-      )}
+      {onboarding && <OnboardingClienteFirstVisit onboarding={onboarding} />}
 
-      {/* ── Descubre más: invita y gana + novedades, al final ── */}
+      {/* ── Descubre más: invita y gana + novedades, al final ──────────────── */}
       {!loadError && (
-        <div className="mt-10">
-          <DescubreMas
-            novedades={novedades}
-            mostrarInvitaYGana={heroExp?.tipo !== 'REFERIDOS'}
-          />
-        </div>
+        <DescubreMas novedades={novedades} mostrarInvitaYGana={heroExp?.tipo !== 'REFERIDOS'} />
       )}
-    </main>
+    </div>
   )
 }

@@ -9,6 +9,9 @@ import { esMarcaUnica } from '@/modules/marketplace/marcaUnica'
 import { WalletStack, type WalletStackItem } from '@/components/wallet/WalletStack'
 import { AnimatedCounter } from '@/components/system/AnimatedCounter'
 import { EmptyState } from '@/components/system/EmptyState'
+import { PageHeader } from '@/components/ui/page-header'
+import { SectionHeader } from '@/components/ui/section-header'
+import { StatCard } from '@/components/ui/stat-card'
 import { Button } from '@/components/ui/button'
 
 export const metadata = {
@@ -16,43 +19,8 @@ export const metadata = {
   description: 'Tus tarjetas de membresía y sus códigos QR',
 }
 
-/** Métrica compacta de la wallet (activas, usos, vencimiento). */
-function StatPill({
-  icon: Icon,
-  label,
-  value,
-  tone = 'default',
-  animateNumber = false,
-}: {
-  icon: typeof Gauge
-  label: string
-  value: string
-  tone?: 'default' | 'success' | 'warning'
-  animateNumber?: boolean
-}) {
-  const numero = animateNumber ? Number(value.replace(/[^\d]/g, '')) : NaN
-  const contenido =
-    animateNumber && Number.isFinite(numero) ? <AnimatedCounter value={numero} /> : value
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-card">
-      <span
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-          tone === 'success'
-            ? 'bg-success/12 text-success'
-            : tone === 'warning'
-              ? 'bg-warning/15 text-warning-foreground'
-              : 'bg-primary/10 text-primary'
-        }`}
-      >
-        <Icon className="h-4.5 w-4.5" />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-lg font-bold leading-tight text-foreground">{contenido}</p>
-        <p className="truncate text-xs text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  )
-}
+/** A partir de aquí, una membresía activa se considera "por vencer". */
+const DIAS_POR_VENCER = 7
 
 /**
  * Mis membresías = SOLO la wallet. Una idea por pantalla: tus tarjetas, su
@@ -82,22 +50,8 @@ export default async function MisMembresias() {
   }
 
   const now = new Date()
-  const activas = memberships.filter((m) => {
-    const v = m.fechaVencimiento ? new Date(m.fechaVencimiento) : null
-    return m.estado === 'ACTIVA' && (!v || v > now)
-  })
-  const usosDisponibles = activas.reduce(
-    (s, m) => s + (m.plan.esIlimitado ? 0 : m.lavadosRestantes),
-    0
-  )
-  const tieneIlimitado = activas.some((m) => m.plan.esIlimitado)
-  const proximoVencimiento = activas
-    .map((m) => (m.fechaVencimiento ? new Date(m.fechaVencimiento) : null))
-    .filter((d): d is Date => !!d && d > now)
-    .sort((a, b) => a.getTime() - b.getTime())[0]
-  const diasProximo = proximoVencimiento ? differenceInDays(proximoVencimiento, now) : null
 
-  const walletItems: WalletStackItem[] = memberships.map((m) => {
+  const aItem = (m: (typeof memberships)[number]): WalletStackItem => {
     const vencimiento = m.fechaVencimiento ? new Date(m.fechaVencimiento) : null
     const activa = m.estado === 'ACTIVA' && (!vencimiento || vencimiento > now)
     const vencida = m.estado === 'VENCIDA' || (vencimiento !== null && vencimiento <= now)
@@ -130,17 +84,45 @@ export default async function MisMembresias() {
       qrToken: m.qrToken?.token ?? null,
       isActive: activa,
     }
+  }
+
+  /**
+   * TRES GRUPOS EXCLUYENTES (§40).
+   *
+   * "Por vencer" sale de "activas", no se superpone: una tarjeta que apareciera
+   * en dos grupos obligaría a mirar dos veces para saber cuántas tienes, y el
+   * QR sería el mismo en los dos sitios. Sigue siendo utilizable — por eso va
+   * ARRIBA del todo, que es lo que pide una fecha límite.
+   */
+  const activas = memberships.filter((m) => {
+    const v = m.fechaVencimiento ? new Date(m.fechaVencimiento) : null
+    return m.estado === 'ACTIVA' && (!v || v > now)
   })
+  const porVencer = activas.filter((m) => {
+    if (!m.fechaVencimiento) return false
+    return differenceInDays(new Date(m.fechaVencimiento), now) <= DIAS_POR_VENCER
+  })
+  const porVencerIds = new Set(porVencer.map((m) => m.id))
+  const vigentes = activas.filter((m) => !porVencerIds.has(m.id))
+  const inactivas = memberships.filter((m) => !activas.some((a) => a.id === m.id))
+
+  const usosDisponibles = activas.reduce(
+    (s, m) => s + (m.plan.esIlimitado ? 0 : m.lavadosRestantes),
+    0
+  )
+  const tieneIlimitado = activas.some((m) => m.plan.esIlimitado)
+  const proximoVencimiento = activas
+    .map((m) => (m.fechaVencimiento ? new Date(m.fechaVencimiento) : null))
+    .filter((d): d is Date => !!d && d > now)
+    .sort((a, b) => a.getTime() - b.getTime())[0]
+  const diasProximo = proximoVencimiento ? differenceInDays(proximoVencimiento, now) : null
 
   return (
-    <main className="container max-w-3xl py-8">
-      {/* Cabecera mínima: una idea por pantalla */}
-      <header className="animate-fade-up mb-6">
-        <h1 className="text-h1 text-foreground">Mis membresías</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tus tarjetas y sus QR. Toca una para girarla y mostrar tu llave de acceso.
-        </p>
-      </header>
+    <div>
+      <PageHeader
+        title="Mis membresías"
+        description="Tus tarjetas y sus QR. Toca una para girarla y mostrar tu llave de acceso."
+      />
 
       {loadError ? (
         <EmptyState
@@ -178,24 +160,24 @@ export default async function MisMembresias() {
           }
         />
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-10">
           {/* Vistazo de la wallet */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatPill
+            <StatCard
               icon={WalletCards}
+              accent="success"
               label={`Membresía${activas.length !== 1 ? 's' : ''} activa${activas.length !== 1 ? 's' : ''}`}
-              value={String(activas.length)}
-              tone="success"
-              animateNumber
+              value={<AnimatedCounter value={activas.length} />}
             />
-            <StatPill
+            <StatCard
               icon={Gauge}
+              accent="brand"
               label="Usos disponibles"
-              value={tieneIlimitado ? 'Ilimitados' : String(usosDisponibles)}
-              animateNumber={!tieneIlimitado}
+              value={tieneIlimitado ? 'Ilimitados' : <AnimatedCounter value={usosDisponibles} />}
             />
-            <StatPill
+            <StatCard
               icon={CalendarClock}
+              accent={diasProximo !== null && diasProximo <= DIAS_POR_VENCER ? 'warning' : 'brand'}
               label="Próximo vencimiento"
               value={
                 diasProximo === null
@@ -204,14 +186,41 @@ export default async function MisMembresias() {
                     ? 'Hoy'
                     : `${diasProximo} día${diasProximo !== 1 ? 's' : ''}`
               }
-              tone={diasProximo !== null && diasProximo <= 7 ? 'warning' : 'default'}
             />
           </div>
 
-          {/* La wallet: protagonista única de la pantalla */}
-          <WalletStack items={walletItems} />
+          {porVencer.length > 0 && (
+            <section>
+              <SectionHeader
+                title="Por vencer"
+                description={`Se ${porVencer.length === 1 ? 'agota' : 'agotan'} en los próximos ${DIAS_POR_VENCER} días. Renuévala${porVencer.length === 1 ? '' : 's'} para no quedarte sin beneficios.`}
+              />
+              <WalletStack items={porVencer.map(aItem)} />
+            </section>
+          )}
+
+          {vigentes.length > 0 && (
+            <section>
+              {/* Sin cabecera cuando es el único grupo: el título de la página
+                  ya lo dice, y repetirlo es ruido. */}
+              {(porVencer.length > 0 || inactivas.length > 0) && (
+                <SectionHeader title="Activas" />
+              )}
+              <WalletStack items={vigentes.map(aItem)} />
+            </section>
+          )}
+
+          {inactivas.length > 0 && (
+            <section>
+              <SectionHeader
+                title="Vencidas"
+                description="Ya no dan acceso. Puedes volver a activarlas desde su detalle."
+              />
+              <WalletStack items={inactivas.map(aItem)} />
+            </section>
+          )}
         </div>
       )}
-    </main>
+    </div>
   )
 }

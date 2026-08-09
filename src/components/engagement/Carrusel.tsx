@@ -31,19 +31,17 @@ export function Carrusel({
             <Icon className={`h-4.5 w-4.5 ${iconClass}`} />
           </span>
           <div className="min-w-0">
-            <h2 className="text-base font-bold leading-tight text-foreground">{titulo}</h2>
-            {subtitulo && (
-              <p className="truncate text-xs text-muted-foreground">{subtitulo}</p>
-            )}
+            <h2 className="text-h3 text-foreground">{titulo}</h2>
+            {subtitulo && <p className="truncate text-caption">{subtitulo}</p>}
           </div>
         </div>
         {verTodoHref && (
           <Link
             href={verTodoHref}
-            className="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-primary hover:underline"
+            className="flex min-h-11 shrink-0 items-center gap-0.5 text-small font-semibold text-primary hover:underline"
           >
             Ver todo
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" aria-hidden />
           </Link>
         )}
       </div>
