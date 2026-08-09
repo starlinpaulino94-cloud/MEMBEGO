@@ -66,7 +66,7 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string; i
         <Icon className="h-3.5 w-3.5 text-success" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <p className="text-caption text-muted-foreground">{label}</p>
         <p className="text-sm font-medium text-foreground">{value}</p>
       </div>
     </div>
@@ -167,7 +167,7 @@ export function ComprobanteReceipt({
 
         {/* Status badge */}
         <div className="flex justify-center">
-          <Badge variant="success" className="text-xs px-3 py-1">
+          <Badge variant="success" className="text-caption px-3 py-1">
             <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
             QR validado y registrado
           </Badge>
@@ -188,7 +188,7 @@ export function ComprobanteReceipt({
             className="flex-col gap-1 h-auto py-3"
           >
             <Printer className="h-5 w-5" />
-            <span className="text-xs">{printCount > 0 ? 'Reimprimir' : 'Imprimir'}</span>
+            <span className="text-caption">{printCount > 0 ? 'Reimprimir' : 'Imprimir'}</span>
           </Button>
           <Button
             onClick={handleShare}
@@ -196,7 +196,7 @@ export function ComprobanteReceipt({
             className="flex-col gap-1 h-auto py-3"
           >
             <Share2 className="h-5 w-5" />
-            <span className="text-xs">Compartir</span>
+            <span className="text-caption">Compartir</span>
           </Button>
           <Button
             onClick={onDone}
@@ -204,7 +204,7 @@ export function ComprobanteReceipt({
             className="flex-col gap-1 h-auto py-3"
           >
             <CheckCircle2 className="h-5 w-5" />
-            <span className="text-xs">Finalizar</span>
+            <span className="text-caption">Finalizar</span>
           </Button>
         </div>
       </div>
@@ -235,7 +235,7 @@ export function ComprobanteReceipt({
           >
             <div className="text-center border-b border-black pb-2 mb-3">
               <p className="font-bold text-base">{cliente.empresa}</p>
-              <p className="text-xs">COMPROBANTE DE VISITA</p>
+              <p className="text-caption">COMPROBANTE DE VISITA</p>
             </div>
             <div className="space-y-1 mb-3">
               <div className="flex justify-between">
@@ -274,9 +274,9 @@ export function ComprobanteReceipt({
                 </div>
               )}
             </div>
-            <div className="border-t border-black pt-2 text-center text-xs">
+            <div className="border-t border-black pt-2 text-center text-caption">
               <p>Gracias por tu preferencia.</p>
-              <p className="mt-1 text-[10px] text-gray-500">
+              <p className="mt-1 text-caption text-gray-500">
                 Ref: {visitId.slice(-12).toUpperCase()}
               </p>
             </div>

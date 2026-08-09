@@ -105,7 +105,7 @@ export function CerrarCajaForm({
     <form action={formAction} className="space-y-3 rounded-2xl border border-warning/30 bg-warning/5 p-4">
       <input type="hidden" name="cajaSesionId" value={cajaSesionId} />
       <p className="text-sm font-semibold text-foreground">Cierre de caja (arqueo)</p>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-caption text-muted-foreground">
         Efectivo esperado: <strong className="tabular-nums">RD${esperado.toLocaleString('es-DO', { minimumFractionDigits: 2 })}</strong>.
         Cuenta el efectivo real y regístralo; la diferencia queda en el historial.
       </p>
@@ -192,7 +192,7 @@ export function OrdenCobroCard({
         <p className="mt-1 text-foreground">
           {orden.clienteNombre} · {orden.detalle} · RD${orden.monto.toLocaleString('es-DO')}
         </p>
-        {state.detalle && <p className="mt-1 text-xs text-muted-foreground">{state.detalle}</p>}
+        {state.detalle && <p className="mt-1 text-caption text-muted-foreground">{state.detalle}</p>}
       </div>
     )
   }
@@ -203,7 +203,7 @@ export function OrdenCobroCard({
         <div className="min-w-0">
           <p className="truncate font-semibold text-foreground">{orden.clienteNombre}</p>
           <p className="truncate text-sm text-muted-foreground">{orden.detalle}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
             {orden.referencia && (
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono font-bold text-foreground">
                 {orden.referencia}
@@ -218,12 +218,12 @@ export function OrdenCobroCard({
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-lg font-bold tabular-nums text-foreground">
+          <p className="text-h3 tabular-nums text-foreground">
             RD${orden.monto.toLocaleString('es-DO')}
           </p>
           <span
             className={cn(
-              'mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+              'mt-1 inline-block rounded-full px-2 py-0.5 text-caption font-bold uppercase tracking-wide',
               ESTADO_CHIP[orden.estado] ?? 'bg-muted text-muted-foreground'
             )}
           >
@@ -251,7 +251,7 @@ export function OrdenCobroCard({
                 onClick={() => setMetodo(value)}
                 aria-pressed={metodo === value}
                 className={cn(
-                  'rounded-xl border p-2.5 text-center text-xs font-semibold transition',
+                  'rounded-xl border p-2.5 text-center text-caption font-semibold transition',
                   metodo === value
                     ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary'
                     : 'border-border/70 text-muted-foreground hover:border-primary/40'
@@ -266,7 +266,7 @@ export function OrdenCobroCard({
           {metodo === 'MIXTO' && (
             <div className="space-y-2 rounded-xl border border-border/70 bg-muted/30 p-3">
               <div className="flex items-center gap-2">
-                <Label htmlFor={`efectivo-${orden.id}`} className="w-28 shrink-0 text-xs">
+                <Label htmlFor={`efectivo-${orden.id}`} className="w-28 shrink-0 text-caption">
                   En efectivo
                 </Label>
                 <Input
@@ -281,7 +281,7 @@ export function OrdenCobroCard({
                   className="h-9"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-caption text-muted-foreground">
                 Por transferencia:{' '}
                 <strong className="tabular-nums text-foreground">
                   RD${transferenciaNum.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
@@ -289,7 +289,7 @@ export function OrdenCobroCard({
                 {' '}(se registra un comprobante por cada parte).
               </p>
               {!mixtoValido && efectivoMixto !== '' && (
-                <p className="text-xs text-destructive">
+                <p className="text-caption text-destructive">
                   El efectivo debe ser mayor que 0 y menor que el total.
                 </p>
               )}

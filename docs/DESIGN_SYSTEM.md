@@ -372,7 +372,7 @@ verificar enlaces.
 | 14 | Empresa, empleados, configuración | ✅ |
 | 15 | Soporte | ✅ |
 | 16 | Superadmin | ✅ |
-| 17 | Empleado | ⬜ |
+| 17 | Empleado | ✅ |
 | 18 | Páginas públicas | ⬜ |
 | 19 | Dark mode, accesibilidad, QA visual | ⬜ |
 | 20 | Eliminar el frontend visual heredado | ⬜ |
@@ -488,6 +488,36 @@ pasan por `formatDate`.
 `tests/superadmin-coherencia.test.ts` vigila las cuatro cosas: la cola del
 aviso, el suelo tipográfico (aquí ya sin techo: es cero), los colores literales
 y los formateadores a mano.
+
+### Fase 17 · el mostrador se lee de pie
+
+El escáner y la caja no se usan como el resto del producto. Se usan **de pie,
+con el móvil en una mano, el cliente delante y prisa**. Y eran, medido, el área
+con más texto por debajo del suelo de todo el proyecto:
+
+| Área | Micro-textos por cada 1000 líneas |
+|---|---|
+| **Empleado (escáner + caja)** | **3,99** |
+| Cliente | 2,68 |
+| Administración | 2,23 |
+| Público | 1,45 |
+| Superadministrador | 1,00 |
+
+El sitio donde peor se lee era el que peor lo tenía. Ahora está a **cero**, y su
+guardia no es un techo que baja: es cero y se defiende.
+
+**Los tamaños subieron, no se normalizaron a la baja.** El nombre del cliente,
+el veredicto del escaneo y el importe pasan de `text-lg` (18px, fuera de escala)
+a `.text-h2` (20–24px). Son la respuesta de la pantalla: a un brazo de
+distancia, 17px de tarjeta habría sido peor que lo que había.
+
+**Descartar un registro pendiente medía 28px.** Es una acción destructiva —tira
+un registro que no se pudo enviar, justo los que el aviso pide revisar antes de
+cerrar el turno— y se toca con una mano. Ahora mide 44px.
+
+**El aviso de cola sin conexión usaba `amber-500` con su `dark:` escrito a
+mano.** Es el mensaje que dice "tienes registros sin enviar": si se ve mal en
+oscuro, se pierde dinero de verdad.
 
 ### Decisiones de producto resueltas fuera de fase
 

@@ -46,7 +46,7 @@ export function MovimientosCaja({
   return (
     <section className="rounded-3xl border border-border/70 bg-card p-5">
       <h2 className="mb-1 text-sm font-semibold text-foreground">Movimientos de efectivo</h2>
-      <p className="mb-4 text-xs text-muted-foreground">
+      <p className="mb-4 text-caption text-muted-foreground">
         Entradas y salidas de caja que no son cobros (fondo, retiros, gastos).
         Afectan el arqueo al cerrar.
       </p>
@@ -80,7 +80,7 @@ export function MovimientosCaja({
 
       {movimientos.items.length > 0 && (
         <>
-          <div className="mt-4 flex flex-wrap gap-3 text-xs">
+          <div className="mt-4 flex flex-wrap gap-3 text-caption">
             <span className="inline-flex items-center gap-1 text-success">
               <ArrowDownCircle className="h-3.5 w-3.5" /> Entradas {fmtRD(movimientos.entrada)}
             </span>
@@ -94,7 +94,7 @@ export function MovimientosCaja({
               <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <div className="min-w-0">
                   <p className="truncate text-foreground">{m.concepto}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-caption text-muted-foreground">
                     {fmtHora(m.createdAt)}
                     {m.registradoPor ? ` · ${m.registradoPor}` : ''}
                   </p>

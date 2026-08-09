@@ -36,7 +36,7 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
     <div
       className={`rounded-xl border px-4 py-3 text-sm ${
         r.requiereAtencion
-          ? 'border-amber-500/40 bg-amber-500/10'
+          ? 'border-warning/40 bg-warning/10'
           : 'border-border/60 bg-muted/40'
       }`}
       role="status"
@@ -45,7 +45,7 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {!enLinea ? (
-            <WifiOff className="h-4 w-4 shrink-0 text-amber-500" />
+            <WifiOff className="h-4 w-4 shrink-0 text-warning" />
           ) : (
             <CloudOff className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
@@ -62,7 +62,7 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
         </div>
 
         {enEspera > 0 && enLinea && (
-          <Button size="sm" variant="ghost" onClick={cola.reintentarAhora}>
+          <Button variant="ghost" className="min-h-11" onClick={cola.reintentarAhora}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             Reintentar
           </Button>
@@ -70,8 +70,8 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
       </div>
 
       {r.requiereAtencion && (
-        <div className="mt-3 space-y-2 border-t border-amber-500/30 pt-3">
-          <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+        <div className="mt-3 space-y-2 border-t border-warning/30 pt-3">
+          <p className="text-caption font-medium text-warning">
             {r.descartadas === 1
               ? 'Un registro no se pudo enviar. Revísalo antes de cerrar el turno:'
               : `${r.descartadas} registros no se pudieron enviar. Revísalos antes de cerrar el turno:`}
@@ -80,7 +80,7 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
             {cola.cola
               .filter((p) => p.estado === 'descartada')
               .map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                <li key={p.id} className="flex items-center justify-between gap-2 text-caption">
                   <span className="truncate">
                     {p.etiqueta ?? (p.tipo === 'visita' ? 'Visita' : 'Canje')}
                     <span className="ml-1.5 text-muted-foreground">
@@ -88,13 +88,13 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
                     </span>
                   </span>
                   <Button
-                    size="sm"
                     variant="ghost"
-                    className="h-7 shrink-0 px-2"
+                    size="icon"
+                    className="min-h-11 min-w-11 shrink-0"
                     onClick={() => cola.descartar(p.id)}
                     aria-label="Quitar de la lista"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </li>
               ))}

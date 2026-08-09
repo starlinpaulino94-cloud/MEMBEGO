@@ -176,7 +176,7 @@ function ErrorScreen({
         <Icon className={`h-7 w-7 ${tone.icon}`} />
       </div>
       <div>
-        <h3 className={`text-lg font-bold tracking-tight ${tone.title}`}>{config.title}</h3>
+        <h3 className={`text-h2 ${tone.title}`}>{config.title}</h3>
         <p className="mt-1 text-sm text-muted-foreground">{errorMessage}</p>
       </div>
       <p className="text-sm text-foreground/80">{config.action}</p>
@@ -417,7 +417,7 @@ export function ScannerClient({
             <ScanBarcode className="h-4 w-4" /> Lector físico
           </button>
         </div>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
+        <span className="hidden text-caption text-muted-foreground sm:inline">
           Atajos: <kbd className="rounded bg-muted px-1">Alt</kbd>+<kbd className="rounded bg-muted px-1">C</kbd> / <kbd className="rounded bg-muted px-1">Alt</kbd>+<kbd className="rounded bg-muted px-1">L</kbd>
         </span>
       </div>
@@ -483,7 +483,7 @@ export function ScannerClient({
           <button
             type="button"
             onClick={fijarPredeterminado}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="text-caption text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             Hacer de «{modo === 'camara' ? 'Cámara' : 'Lector físico'}» el predeterminado de la empresa
           </button>
@@ -549,20 +549,20 @@ function ReaderPanel({
           </div>
 
           {/* Indicador de compatibilidad */}
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-xs text-white/50">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-caption text-white/50">
             <span className="inline-flex items-center gap-1"><Usb className="h-3.5 w-3.5" /> USB</span>
             <span className="inline-flex items-center gap-1"><Bluetooth className="h-3.5 w-3.5" /> Bluetooth</span>
             <span className="inline-flex items-center gap-1"><Wifi className="h-3.5 w-3.5" /> Inalámbrico</span>
           </div>
           {lectorDetectado && (
-            <p className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-xs font-medium text-success">
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-caption font-medium text-success">
               <CheckCircle2 className="h-3.5 w-3.5" /> Lector físico detectado
             </p>
           )}
         </div>
       </div>
 
-      <div className="border-t border-border/60 bg-muted/30 px-6 py-3 text-center text-xs text-muted-foreground">
+      <div className="border-t border-border/60 bg-muted/30 px-6 py-3 text-center text-caption text-muted-foreground">
         Conecta tu lector QR / código de barras (USB o Bluetooth) y escanea:
         el código se procesa automáticamente, sin tocar la pantalla.
       </div>
