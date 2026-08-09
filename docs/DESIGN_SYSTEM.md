@@ -354,7 +354,7 @@ verificar enlaces.
 | 8 | Dashboard administrativo | ✅ |
 | 9 | Clientes, membresías, planes | ✅ |
 | 10 | Promociones, crecimiento, referidos | ✅ |
-| 11 | Marketing, campañas, audiencia | ⬜ |
+| 11 | Marketing, campañas, audiencia | ✅ |
 | 12 | Operaciones: scanner, pagos, sucursales | ⬜ |
 | 13 | Reportes | ⬜ |
 | 14 | Empresa, empleados, configuración | ⬜ |

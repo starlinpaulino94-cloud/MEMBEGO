@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { NavAudiencia } from '@/components/admin/NavAudiencia'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { Users, Plus } from 'lucide-react'
@@ -40,8 +41,10 @@ export default async function SegmentosPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Segmentos de audiencia"
+        eyebrow="Audiencia"
+        title="Segmentos"
         description="Crea audiencias por ciudad, sector, radio o comportamiento. Las campañas dirigidas las usan para llegar solo a quien corresponde."
+        nav={<NavAudiencia activa="/admin/audiencia/segmentos" />}
         action={
           <Button asChild>
             <Link href="/admin/audiencia/segmentos/nueva">

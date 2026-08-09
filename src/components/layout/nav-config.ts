@@ -97,12 +97,14 @@ export interface NavContext {
  *   "Operaciones". Los tres son trabajo de mostrador —confirmar, emitir,
  *   registrar—, no lectura de números. "Analítica" queda para leer.
  *
- * - Las dos entradas llamadas "Campañas" se desambiguan. Existían
+ * - Las dos entradas llamadas "Campañas" se desambiguaron. Existían
  *   /admin/campanas y /admin/audiencia/campanas con etiqueta IDÉNTICA en el
- *   mismo menú. La segunda pasa a "Campañas segmentadas" y se queda en el
- *   menú a propósito: hoy ninguna página enlaza hacia ella, así que quitarla
- *   la dejaría accesible solo escribiendo la URL. Cuando la Fase 11 le dé
- *   pestañas al hub de Audiencia, podrá salir del menú sin quedar huérfana.
+ *   mismo menú. La Fase 0 renombró la segunda y la MANTUVO aquí porque
+ *   ninguna página enlazaba hacia ella: quitarla la habría dejado accesible
+ *   solo escribiendo la URL. La Fase 11 le dio pestañas a Audiencia —resumen,
+ *   segmentos y campañas segmentadas son una sola sección— así que ya sale
+ *   del menú sin quedar huérfana. Es el motivo por el que la condición se
+ *   escribió: para poder retirarla cuando dejara de ser cierta.
  *
  * Se conservan las decisiones de la Fase A: "Referidos" e "Invitaciones"
  * siguen fusionadas en "Invita y Gana"; "Ofertas" sigue siendo el punto de
@@ -164,7 +166,6 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
       { href: '/admin/audiencia', label: 'Audiencia', icon: TrendingUp },
-      { href: '/admin/audiencia/campanas', label: 'Campañas segmentadas', icon: Megaphone },
       { href: '/admin/adquisicion', label: 'Origen de clientes', icon: Compass },
       { href: '/admin/seguimiento', label: 'Seguimiento', icon: QrCode },
     ],

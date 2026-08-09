@@ -125,12 +125,28 @@ test('el breadcrumb nombra el dominio, no solo la página', () => {
 })
 
 test('gana el href más largo, no el primero que casa por prefijo', () => {
-  // /admin/audiencia/campanas casa TAMBIÉN con /admin/audiencia. Si ganara el
+  // /admin/audiencia/segmentos casa TAMBIÉN con /admin/audiencia. Si ganara el
   // prefijo corto, el breadcrumb diría "Audiencia" estando en otra pantalla.
+  //
+  // Esta prueba usaba /admin/audiencia/campanas hasta la Fase 11, que sacó esa
+  // ruta del menú al darle pestañas a Audiencia. Al salir del menú deja de
+  // tener miga propia y resuelve a "Audiencia" — que es lo correcto: sus
+  // pestañas ya dicen en cuál de las tres vistas estás. El principio no
+  // cambió, solo la ruta que lo ejercita.
+  const grupos = navForRole('ADMINISTRADOR')
+  const m = migasDeRuta(grupos, '/admin/audiencia/segmentos')
+  assert.equal(m.seccion?.href, '/admin/audiencia/segmentos')
+  assert.equal(m.seccion?.label, 'Segmentos')
+})
+
+test('una subvista fuera del menú hereda la miga de su sección', () => {
+  // /admin/audiencia/campanas ya no está en el menú: su navegación son las
+  // pestañas de Audiencia. El breadcrumb debe decir "Audiencia", no quedarse
+  // en blanco ni inventar un nombre.
   const grupos = navForRole('ADMINISTRADOR')
   const m = migasDeRuta(grupos, '/admin/audiencia/campanas')
-  assert.equal(m.seccion?.href, '/admin/audiencia/campanas')
-  assert.equal(m.seccion?.label, 'Campañas segmentadas')
+  assert.equal(m.seccion?.href, '/admin/audiencia')
+  assert.equal(m.dominio, 'Analítica')
 })
 
 test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {

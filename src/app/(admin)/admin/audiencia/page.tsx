@@ -6,20 +6,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
+import { NavAudiencia } from '@/components/admin/NavAudiencia'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { StatCard } from '@/components/ui/stat-card'
-import {
-  Users,
-  UserPlus,
-  Star,
-  Eye,
-  Share2,
-  Heart,
-  Percent,
-  Handshake,
-} from 'lucide-react'
+import { Users, Eye, Percent, Handshake } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,74 +48,61 @@ export default async function AudienciaPage() {
       <PageHeader
         title="Audiencia"
         description="Tus seguidores y el rendimiento de tus promociones en el marketplace."
+        nav={<NavAudiencia activa="/admin/audiencia" />}
       />
 
-      {/* Seguidores */}
+      {/* CUATRO KPI, no ocho (§44). Eran dos rejillas de cuatro tarjetas
+          idénticas —seguidores, nuevos, favoritos, clientes / vistas,
+          compartidas, guardadas, CTR—. Arriba quedan las que responden
+          "¿cuánta gente y cuánto interactúa?"; el resto son cifras de apoyo. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Users}
-          accent="sky"
+          accent="brand"
           label="Seguidores"
           value={fmt(stats.seguidores)}
-        />
-        <StatCard
-          icon={UserPlus}
-          accent="green"
-          label="Nuevos seguidores"
-          sub="Últimos 30 días"
-          value={fmt(stats.nuevosSeguidores30d)}
-        />
-        <StatCard
-          icon={Star}
-          accent="amber"
-          label="Te marcaron favorita"
-          value={fmt(stats.favoritos)}
+          sub={`+${fmt(stats.nuevosSeguidores30d)} en 30 días`}
         />
         <StatCard
           icon={Handshake}
-          accent="violet"
+          accent="success"
           label="Clientes obtenidos"
           sub="Últimos 30 días"
           value={fmt(stats.clientesNuevos30d)}
         />
-      </div>
-
-      {/* Engagement de promociones */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Eye}
-          accent="sky"
+          accent="brand"
           label="Vistas de promociones"
           value={fmt(stats.vistasTotales)}
         />
         <StatCard
-          icon={Share2}
-          accent="indigo"
-          label="Compartidas"
-          value={fmt(stats.compartidasTotales)}
-        />
-        <StatCard
-          icon={Heart}
-          accent="red"
-          label="Guardadas"
-          value={fmt(stats.guardadasTotales)}
-        />
-        <StatCard
           icon={Percent}
-          accent="violet"
+          accent="brand"
           label="Interacción (CTR)"
           sub="Compartidas + guardadas / vistas"
           value={`${stats.ctr.toFixed(1)}%`}
         />
       </div>
 
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
+        {[
+          { label: 'Te marcaron favorita', valor: fmt(stats.favoritos) },
+          { label: 'Compartidas', valor: fmt(stats.compartidasTotales) },
+          { label: 'Guardadas', valor: fmt(stats.guardadasTotales) },
+        ].map((m) => (
+          <div key={m.label} className="min-w-0">
+            <dt className="truncate text-caption">{m.label}</dt>
+            <dd className="truncate text-h4 tabular-nums text-foreground">{m.valor}</dd>
+          </div>
+        ))}
+      </dl>
+
       {/* Detalle por promoción */}
       <Card>
         <CardContent className="p-0">
           <div className="border-b border-border p-5">
-            <h2 className="font-semibold text-foreground">
-              Rendimiento por promoción
-            </h2>
+            <h2 className="text-h4 text-foreground">Rendimiento por promoción</h2>
           </div>
           {stats.promos.length === 0 ? (
             <EmptyState
@@ -140,7 +119,7 @@ export default async function AudienciaPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground/70">
+                  <tr className="border-b border-border text-left text-overline">
                     <th className="px-5 py-3 font-medium">Promoción</th>
                     <th className="px-5 py-3 text-right font-medium">Vistas</th>
                     <th className="px-5 py-3 text-right font-medium">Compartidas</th>
