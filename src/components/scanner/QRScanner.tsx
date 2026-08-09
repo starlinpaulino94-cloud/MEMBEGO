@@ -253,7 +253,7 @@ export function QRScanner({
           </button>
         )}
       </div>
-      <p className="mt-3 text-center text-xs text-white/60">
+      <p className="mt-3 text-center text-caption text-white/60">
         Centra el código QR dentro del recuadro
       </p>
     </div>

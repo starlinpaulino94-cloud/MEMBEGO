@@ -253,7 +253,7 @@ export default async function SeguimientoPage({
                         <p className="text-muted-foreground">
                           {r.usadoPor ? `por ${r.usadoPor}` : ''}
                           {r.canjeInterno && (
-                            <span className="ml-1 rounded bg-info/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-primary">
+                            <span className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-overline text-primary">
                               interno
                             </span>
                           )}

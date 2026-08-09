@@ -43,13 +43,13 @@ export default async function EditarUsuarioStaffPage({
     <div className="space-y-6">
       <Link
         href="/superadmin/usuarios"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-small text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Usuarios de staff
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Editar usuario</h1>
+        <h1 className="text-h1 text-foreground">Editar usuario</h1>
         <p className="text-muted-foreground">
           Controla su rol, sus empresas y su acceso. Los cambios aplican en su
           próxima navegación.
@@ -71,7 +71,7 @@ export default async function EditarUsuarioStaffPage({
       {/* Zona de peligro: eliminación definitiva (solo superadmin) */}
       <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5">
         <h2 className="text-sm font-semibold text-foreground">Zona de peligro</h2>
-        <p className="mt-1 mb-4 text-sm text-muted-foreground">
+        <p className="mt-1 mb-4 text-small text-muted-foreground">
           Elimina la cuenta y su acceso a la plataforma. Si el usuario abrió
           sesiones de caja, la eliminación se bloquea para proteger los
           registros contables.

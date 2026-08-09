@@ -44,7 +44,7 @@ export class ScannerErrorBoundary extends Component<Props, State> {
             <AlertTriangle className="h-7 w-7 text-destructive" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-destructive">Error en el escáner</h3>
+            <h3 className="text-h2 text-destructive">Error en el escáner</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Ocurrió un problema inesperado. Reintenta; si persiste, contacta al
               administrador. El detalle técnico ya fue reportado automáticamente.
@@ -52,7 +52,7 @@ export class ScannerErrorBoundary extends Component<Props, State> {
           </div>
           {/* El stack solo en desarrollo: al empleado nunca se le muestran internals. */}
           {process.env.NODE_ENV === 'development' && error.stack && (
-            <pre className="max-h-40 overflow-auto rounded-lg bg-card p-3 text-left text-[10px] leading-tight text-muted-foreground">
+            <pre className="max-h-40 overflow-auto rounded-lg bg-card p-3 text-left text-caption leading-tight text-muted-foreground">
               {error.stack}
             </pre>
           )}

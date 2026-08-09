@@ -59,7 +59,7 @@ export default async function IntegracionesPage() {
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-caption text-muted-foreground">
         La prueba envía un evento <span className="font-mono">membego.ping</span>, que no forma
         parte del catálogo real: un satélite bien implementado lo ignora y responde 200, así que
         probar nunca ensucia sus datos.

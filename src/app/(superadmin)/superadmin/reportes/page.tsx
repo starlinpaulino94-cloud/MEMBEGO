@@ -1,4 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
+import { formatDate } from '@/lib/format'
 import { getReportesGlobales, type ReportesData } from '@/modules/admin/queries'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -10,7 +11,7 @@ function fmtMoney(n: number) {
 
 function fmtDate(d: Date | null) {
   if (!d) return '—'
-  return new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'medium' }).format(d)
+  return formatDate(d)
 }
 
 function activasTotal(data: ReportesData) {
@@ -50,7 +51,7 @@ export default async function SuperadminReportesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Reportes globales</h1>
+        <h1 className="text-h1 text-foreground">Reportes globales</h1>
         <p className="text-muted-foreground">Todas las empresas · mes en curso</p>
       </div>
 
@@ -63,7 +64,7 @@ export default async function SuperadminReportesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold text-foreground">{c.value}</p>
+              <p className="text-h2 tabular-nums text-foreground">{c.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -75,7 +76,7 @@ export default async function SuperadminReportesPage() {
         </h2>
         <div className="space-y-4">
           {empresas.length === 0 && (
-            <p className="text-sm text-muted-foreground">No hay empresas.</p>
+            <p className="text-small text-muted-foreground">No hay empresas.</p>
           )}
           {empresas.map((emp) => (
             <Card key={emp.companyId}>
@@ -153,7 +154,7 @@ export default async function SuperadminReportesPage() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-small text-muted-foreground">{label}</p>
       <p className="text-xl font-bold text-foreground">{value}</p>
     </div>
   )

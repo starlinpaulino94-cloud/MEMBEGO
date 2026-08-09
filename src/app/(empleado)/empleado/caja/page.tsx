@@ -112,7 +112,7 @@ export default async function CajaPage({
                     {c.sucursal}
                     {c.turno ? ` · ${c.turno}` : ''}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-caption text-muted-foreground">
                     {c.cerradaAt ? fmtFechaCorta(c.cerradaAt) : '—'}
                     {c.cerradaPor ? ` · ${c.cerradaPor}` : ''}
                     {difLabel ? ` · ${difLabel}` : ''}
@@ -183,7 +183,7 @@ export default async function CajaPage({
               <Store className="h-5 w-5 text-muted-foreground" aria-hidden />
               {sesion.sucursal.nombre}
             </h1>
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <UserIcon className="h-3 w-3" /> {sesion.abiertaPor.name}
               </span>
@@ -194,8 +194,8 @@ export default async function CajaPage({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Efectivo en caja (esperado)</p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">{fmtRD(esperado)}</p>
+            <p className="text-caption text-muted-foreground">Efectivo en caja (esperado)</p>
+            <p className="text-h2 tabular-nums text-foreground">{fmtRD(esperado)}</p>
           </div>
         </div>
 
@@ -208,7 +208,7 @@ export default async function CajaPage({
             { label: 'Total del turno', valor: fmtRD(resumen.total) },
           ].map((s) => (
             <div key={s.label} className="rounded-2xl bg-card/70 p-3">
-              <dt className="text-[11px] text-muted-foreground">{s.label}</dt>
+              <dt className="text-caption text-muted-foreground">{s.label}</dt>
               <dd className="mt-0.5 truncate text-sm font-bold tabular-nums text-foreground">
                 {s.valor}
               </dd>
@@ -229,7 +229,7 @@ export default async function CajaPage({
       {/* Cobrar */}
       <section className="space-y-4">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+          <h2 className="flex items-center gap-2 text-h2 text-foreground">
             <Banknote className="h-5 w-5 text-primary" aria-hidden /> Cobrar una orden
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -265,14 +265,14 @@ export default async function CajaPage({
               <div key={c.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-foreground">{c.clienteNombre}</p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="truncate text-caption text-muted-foreground">
                     {c.detalle} · <code className="font-mono">{c.codigo}</code>
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <div className="text-right">
                     <p className="font-semibold tabular-nums text-foreground">{fmtRD(c.monto)}</p>
-                    <p className="text-[10px] uppercase text-muted-foreground">
+                    <p className="text-overline text-muted-foreground">
                       {c.metodoCobro ?? ''} · {fmtHora(c.createdAt)}
                     </p>
                   </div>

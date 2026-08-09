@@ -200,7 +200,7 @@ export function ReportarProblemaForm() {
         ) : (
           <div
             onClick={() => fileRef.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted p-6 text-muted-foreground transition hover:border-info/40 hover:bg-info/10"
+            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted p-6 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10"
           >
             {uploading ? (
               <Loader2 className="h-6 w-6 animate-spin text-primary" />

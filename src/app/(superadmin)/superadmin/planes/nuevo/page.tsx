@@ -18,7 +18,7 @@ export default async function NuevoPlanPage() {
       <Link href="/superadmin/planes" className="text-sm text-primary hover:underline">
         ← Volver a planes
       </Link>
-      <h1 className="text-2xl font-bold text-foreground">Nuevo plan</h1>
+      <h1 className="text-h1 text-foreground">Nuevo plan</h1>
       <NuevoPlanForm companies={companies} />
     </div>
   )

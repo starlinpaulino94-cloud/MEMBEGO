@@ -90,7 +90,7 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string; i
     <div className="flex items-start gap-2 py-1.5">
       {Icon && <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
       <div className="min-w-0">
-        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <p className="text-caption text-muted-foreground">{label}</p>
         <p className="text-sm font-medium text-foreground">{value}</p>
       </div>
     </div>
@@ -265,7 +265,7 @@ export function ConfirmVisit({
           )}
 
           <div className="flex-1 min-w-0">
-            <p className="text-lg font-bold text-foreground leading-tight">{cliente.nombre}</p>
+            <p className="text-h2 leading-tight text-foreground">{cliente.nombre}</p>
             <p className="text-sm text-muted-foreground">{cliente.empresa}</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               <Badge
@@ -276,12 +276,12 @@ export function ConfirmVisit({
                       ? 'warning'
                       : 'secondary'
                 }
-                className="text-[10px]"
+                className="text-caption"
               >
                 {cliente.estado ?? 'Sin membresía'}
               </Badge>
               {cliente.esIlimitado && (
-                <Badge variant="warning" className="text-[10px]">
+                <Badge variant="warning" className="text-caption">
                   <Sparkles className="mr-1 h-3 w-3" /> Ilimitado
                 </Badge>
               )}
@@ -314,12 +314,12 @@ export function ConfirmVisit({
         {/* Beneficios */}
         {planBeneficios.length > 0 && (
           <div className="mt-3 border-t border-border/60 pt-3">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="mb-1.5 text-overline text-muted-foreground">
               Beneficios incluidos
             </p>
             <div className="flex flex-wrap gap-1.5">
               {planBeneficios.map((b) => (
-                <Badge key={b} variant="info" className="text-xs">
+                <Badge key={b} variant="info" className="text-caption">
                   {b}
                 </Badge>
               ))}
@@ -329,7 +329,7 @@ export function ConfirmVisit({
 
         {/* Promociones */}
         {cliente.promocionesActivas > 0 && (
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-2 flex items-center gap-2 text-caption text-muted-foreground">
             <Megaphone className="h-3.5 w-3.5 text-primary" />
             <span>{cliente.promocionesActivas} promoción{cliente.promocionesActivas !== 1 ? 'es' : ''} disponible{cliente.promocionesActivas !== 1 ? 's' : ''}</span>
           </div>
@@ -354,14 +354,14 @@ export function ConfirmVisit({
       {/* Recent visits */}
       {visitasRecientes.length > 0 && (
         <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="mb-2 flex items-center gap-1.5 text-overline text-muted-foreground">
             <Clock className="h-3.5 w-3.5" /> Últimas visitas
           </p>
           <div className="space-y-1">
             {visitasRecientes.map((v) => (
               <div key={v.id} className="flex items-center justify-between text-sm">
                 <span className="text-foreground">{v.servicio}</span>
-                <span className="text-xs text-muted-foreground">{fmtDateTime(v.fecha)}</span>
+                <span className="text-caption text-muted-foreground">{fmtDateTime(v.fecha)}</span>
               </div>
             ))}
           </div>
@@ -399,7 +399,7 @@ export function ConfirmVisit({
 
           {sucursales.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-xs">Sucursal</Label>
+              <Label className="text-caption">Sucursal</Label>
               <Select value={sucursalId} onValueChange={setSucursalId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona sucursal (opcional)" />
@@ -414,7 +414,7 @@ export function ConfirmVisit({
           )}
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Servicio *</Label>
+            <Label className="text-caption">Servicio *</Label>
             <Select value={servicio} onValueChange={setServicio}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona un servicio" />
@@ -431,7 +431,7 @@ export function ConfirmVisit({
               categoría incluidas) y confirma de un vistazo. Solo aparece en
               membresías con vehículo asociado (compras del rediseño). */}
           {vehiculosMembresia.length > 0 && (
-            <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
+            <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-caption">
               <p className="font-semibold text-foreground">
                 Membresía para{vehiculosMembresia.length > 1 ? ' estos vehículos' : ''}:
               </p>
@@ -443,7 +443,7 @@ export function ConfirmVisit({
 
           {vehiculos.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-xs">Vehículo</Label>
+              <Label className="text-caption">Vehículo</Label>
               <Select value={vehiculoId} onValueChange={setVehiculoId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona vehículo (opcional)" />
@@ -463,7 +463,7 @@ export function ConfirmVisit({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="notas" className="text-xs">Notas</Label>
+            <Label htmlFor="notas" className="text-caption">Notas</Label>
             <Textarea id="notas" name="notas" rows={2} placeholder="Observaciones opcionales…" />
           </div>
 

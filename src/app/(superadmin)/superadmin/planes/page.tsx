@@ -54,7 +54,7 @@ export default async function SuperadminPlanesPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Planes / Promociones</h1>
+          <h1 className="text-h1 text-foreground">Planes / Promociones</h1>
           <p className="text-muted-foreground">Gestión global de planes por empresa.</p>
         </div>
         <Button asChild>
@@ -69,7 +69,7 @@ export default async function SuperadminPlanesPage() {
         <section key={company.id} className="space-y-4">
           <h2 className="text-lg font-semibold text-foreground border-b pb-2">{company.name}</h2>
           {company.planes.length === 0 && (
-            <p className="text-sm text-muted-foreground">Sin planes configurados.</p>
+            <p className="text-small text-muted-foreground">Sin planes configurados.</p>
           )}
           <div className="grid gap-4 md:grid-cols-3">
             {company.planes.map((plan) => (
@@ -79,37 +79,37 @@ export default async function SuperadminPlanesPage() {
                     <CardTitle className="text-base">{plan.nombre}</CardTitle>
                     <div className="flex gap-1">
                       {plan.esIlimitado && (
-                        <Badge className="bg-warning/15 text-warning-foreground text-xs">
+                        <Badge className="bg-warning/15 text-warning-foreground text-caption">
                           <InfinityIcon className="mr-1 h-3 w-3" />Ilimitado
                         </Badge>
                       )}
                       {!plan.activo && (
-                        <Badge variant="secondary" className="text-xs">Inactivo</Badge>
+                        <Badge variant="secondary" className="text-caption">Inactivo</Badge>
                       )}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <p className="text-2xl font-bold text-foreground">
+                  <p className="text-h2 tabular-nums text-foreground">
                     RD${new Intl.NumberFormat('es-DO').format(Number(plan.precio))}
-                    <span className="text-sm font-normal text-muted-foreground">/mes</span>
+                    <span className="text-small font-normal text-muted-foreground">/mes</span>
                   </p>
                   {!plan.esIlimitado && (
-                    <p className="text-xs text-muted-foreground">{plan.lavadosIncluidos} usos incluidos</p>
+                    <p className="text-caption text-muted-foreground">{plan.lavadosIncluidos} usos incluidos</p>
                   )}
                   {plan.descripcion && (
-                    <p className="text-sm text-muted-foreground">{plan.descripcion}</p>
+                    <p className="text-small text-muted-foreground">{plan.descripcion}</p>
                   )}
                   <ul className="space-y-1">
                     {plan.beneficios.map((b) => (
-                      <li key={b} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <li key={b} className="flex items-start gap-2 text-small text-muted-foreground">
                         <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                         {b}
                       </li>
                     ))}
                   </ul>
                   <div className="flex items-center justify-between pt-2">
-                    <p className="text-xs text-muted-foreground">{plan._count.memberships} membresías</p>
+                    <p className="text-caption text-muted-foreground">{plan._count.memberships} membresías</p>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" asChild>
                         <Link href={`/superadmin/planes/${plan.id}/editar`}>

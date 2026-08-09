@@ -92,12 +92,12 @@ export async function VisitasDeHoy({
                 <p className="truncate text-sm font-medium text-foreground">
                   {v.cliente.nombre}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-caption text-muted-foreground">
                   {v.servicio}
                   {v.sucursal ? ` · ${v.sucursal.nombre}` : ''}
                 </p>
               </div>
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+              <span className="shrink-0 text-caption tabular-nums text-muted-foreground">
                 {fmtHora.format(v.fechaVisita)}
               </span>
             </li>

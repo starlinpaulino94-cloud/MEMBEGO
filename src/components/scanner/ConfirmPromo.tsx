@@ -138,11 +138,11 @@ export function ConfirmPromo({
               }}
             >
               <Printer className="h-5 w-5" />
-              <span className="text-xs">{printCount > 0 ? 'Reimprimir' : 'Imprimir'}</span>
+              <span className="text-caption">{printCount > 0 ? 'Reimprimir' : 'Imprimir'}</span>
             </Button>
             <Button variant="outline" className="flex-col gap-1 h-auto py-3" onClick={onDone}>
               <CheckCircle2 className="h-5 w-5" />
-              <span className="text-xs">Finalizar</span>
+              <span className="text-caption">Finalizar</span>
             </Button>
           </div>
         </div>
@@ -204,9 +204,9 @@ export function ConfirmPromo({
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-bold text-foreground leading-tight">{compra.nombre}</p>
+            <p className="text-h2 leading-tight text-foreground">{compra.nombre}</p>
             <p className="text-sm text-muted-foreground">{compra.empresa}</p>
-            <Badge variant="info" className="mt-1.5 text-[10px]">
+            <Badge variant="info" className="mt-1.5 text-caption">
               <Megaphone className="mr-1 h-3 w-3" /> Promoción comprada
             </Badge>
           </div>
@@ -218,7 +218,7 @@ export function ConfirmPromo({
             <div>
               <p className="font-semibold text-foreground">{compra.promoTitulo}</p>
               {compra.promoDescripcion && (
-                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{compra.promoDescripcion}</p>
+                <p className="mt-0.5 line-clamp-2 text-caption text-muted-foreground">{compra.promoDescripcion}</p>
               )}
             </div>
           </div>
@@ -277,7 +277,7 @@ export function ConfirmPromo({
 
           {sucursales.length > 0 && (
             <div className="space-y-1.5">
-              <Label className="text-xs">Sucursal</Label>
+              <Label className="text-caption">Sucursal</Label>
               <Select value={sucursalId} onValueChange={setSucursalId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona sucursal (opcional)" />
@@ -292,7 +292,7 @@ export function ConfirmPromo({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="notas-canje" className="text-xs">Notas</Label>
+            <Label htmlFor="notas-canje" className="text-caption">Notas</Label>
             <Textarea id="notas-canje" name="notas" rows={2} placeholder="Observaciones opcionales…" />
           </div>
 

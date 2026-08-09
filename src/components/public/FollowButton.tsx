@@ -62,7 +62,7 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
         onClick={() =>
           router.push(`/login?redirect=${encodeURIComponent(redirectTo)}`)
         }
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-info/30 bg-card px-5 py-3 font-semibold text-info transition hover:bg-info/10 sm:w-auto"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-card px-5 py-3 font-semibold text-primary transition hover:bg-primary/10 sm:w-auto"
       >
         <Plus className="h-4 w-4" /> Seguir empresa
       </button>
@@ -121,7 +121,7 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
         className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold transition disabled:opacity-60 sm:flex-none ${
           following
             ? 'border border-border bg-muted text-foreground hover:bg-muted'
-            : 'border border-info/30 bg-card text-info hover:bg-info/10'
+            : 'border border-primary/30 bg-card text-primary hover:bg-primary/10'
         }`}
       >
         {pending ? (

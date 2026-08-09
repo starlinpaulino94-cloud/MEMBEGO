@@ -62,8 +62,8 @@ export function PlanSelector({
               className={cn(
                 'flex flex-col rounded-2xl border-2 p-6 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
                 active
-                  ? 'border-info/40 bg-info/10'
-                  : 'border-border bg-card hover:border-info/30'
+                  ? 'border-primary/40 bg-primary/10'
+                  : 'border-border bg-card hover:border-primary/30'
               )}
             >
               <div className="mb-2 flex items-center justify-between">

@@ -564,7 +564,7 @@ export function EmpresasCRM({ empresas }: { empresas: EmpresaItem[] }) {
               onClick={() => setView('cards')}
               className={cn(
                 'rounded-l-lg px-2.5 py-1.5 transition',
-                view === 'cards' ? 'bg-info/10 text-info' : 'text-muted-foreground hover:bg-muted/50'
+                view === 'cards' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/50'
               )}
             >
               <LayoutGrid className="h-4 w-4" />
@@ -573,7 +573,7 @@ export function EmpresasCRM({ empresas }: { empresas: EmpresaItem[] }) {
               onClick={() => setView('table')}
               className={cn(
                 'rounded-r-lg px-2.5 py-1.5 transition',
-                view === 'table' ? 'bg-info/10 text-info' : 'text-muted-foreground hover:bg-muted/50'
+                view === 'table' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/50'
               )}
             >
               <List className="h-4 w-4" />

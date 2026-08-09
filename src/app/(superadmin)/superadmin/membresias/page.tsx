@@ -95,7 +95,7 @@ export default async function SuperadminMembresiasPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Solicitudes de membresía</h1>
+        <h1 className="text-h1 text-foreground">Solicitudes de membresía</h1>
         <p className="text-muted-foreground">Gestiona el estado de las membresías de clientes.</p>
       </div>
 
@@ -135,11 +135,11 @@ export default async function SuperadminMembresiasPage({
         </button>
       </form>
 
-      <p className="text-sm text-muted-foreground">{total.toLocaleString('es-DO')} resultado(s)</p>
+      <p className="text-small text-muted-foreground">{total.toLocaleString('es-DO')} resultado(s)</p>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full text-sm">
-          <thead className="border-b bg-muted text-xs text-muted-foreground">
+          <thead className="border-b bg-muted text-caption text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left">Cliente</th>
               <th className="px-4 py-3 text-left">Empresa</th>
@@ -156,7 +156,7 @@ export default async function SuperadminMembresiasPage({
               <tr key={m.id} className="hover:bg-muted">
                 <td className="px-4 py-3 font-medium text-foreground">
                   <div>{m.cliente.nombre}</div>
-                  <div className="text-xs text-muted-foreground">{m.cliente.email}</div>
+                  <div className="text-caption text-muted-foreground">{m.cliente.email}</div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{m.cliente.company.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{m.plan.nombre}</td>

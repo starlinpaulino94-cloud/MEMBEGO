@@ -73,6 +73,18 @@ sigue existiendo para forzar el tema claro en la landing.
 | Peligro | `text-destructive`, `bg-destructive/10` |
 | Info | `text-info`, `bg-info/10` |
 
+**`--info` es un ESTADO, no un acento.** Es un cian (`#0097b3`, tono 215), a
+0,165 de distancia perceptual del azul de marca — no hay confusión posible
+entre los dos. Su sitio son los avisos neutros: `Badge`, `StatusBanner`,
+`StatusChip` y `AppIcon` con `variant="info"`.
+
+Lo que **no** es: el color de un hover, de un elemento seleccionado ni de un
+chip de icono. Pasar el ratón por una tarjeta no informa de nada, y "esto es lo
+que elegiste" lo dice `primary` en toda la app — pestañas, chips del mapa, ítem
+activo del menú. Se saldaron 42 clases repartidas en 21 archivos.
+`tests/token-info.test.ts` lo vigila, incluida la separación mínima de 30° de
+tono entre `--info` y `--primary`.
+
 - **El verde es exclusivamente `--success`.** Si un verde en pantalla no
   significa "esto salió bien", está mal puesto.
 - **Dark mode:** automático vía variables (`.dark`). No hardcodear blancos ni
@@ -359,8 +371,8 @@ verificar enlaces.
 | 13 | Reportes | ✅ |
 | 14 | Empresa, empleados, configuración | ✅ |
 | 15 | Soporte | ✅ |
-| 16 | Superadmin | ⬜ |
-| 17 | Empleado | ⬜ |
+| 16 | Superadmin | ✅ |
+| 17 | Empleado | ✅ |
 | 18 | Páginas públicas | ⬜ |
 | 19 | Dark mode, accesibilidad, QA visual | ⬜ |
 | 20 | Eliminar el frontend visual heredado | ⬜ |
@@ -451,6 +463,61 @@ se resalta.
 **El botón de WhatsApp usaba `bg-success`**: el verde de "salió bien" como color
 de una marca ajena, con `hover:bg-success` encima, así que no respondía al pasar
 por encima. Pasa al azul de marca.
+
+### Fase 16 · el panel de plataforma, dentro del sistema
+
+**El aviso y su destino contaban cosas distintas.** "Salud de la plataforma"
+decía *N tickets abiertos* sumando `NUEVO + EN_PROCESO + ESPERANDO_CLIENTE`,
+pero desde la Fase 15 el enlace abre la bandeja en la cola "Te toca a ti", que
+son solo los dos primeros. El panel decía 7 y aparecían 5. Nada fallaba — por
+eso habría durado. Ahora cuenta `COLAS_TICKET.pendientes`, y hay una prueba que
+lo ata: escribir la lista de estados a mano vuelve a separarlos sin dar error.
+
+**El color semántico estaba escrito a mano.** `emerald-600 dark:emerald-400`,
+`amber`, `red` — con su variante oscura repetida en cada rama, que es el
+síntoma: los tokens ya resuelven el modo oscuro solos. En observabilidad el
+color *es* el dato (¿está sano esto?), así que dos pantallas no pueden decir
+"todo normal" en verdes distintos.
+
+**Deuda saldada, medida:** el área pasa de 7 micro-textos bajo el suelo a **0**,
+de 42 `text-xs` a 0 y de 16 tamaños fuera de escala a 0. El techo global baja de
+**193 a 186**. Las cuatro fechas que construían su propio `Intl.DateTimeFormat`
+—con locale y zona clavados en el archivo, sobre un servidor que corre en UTC—
+pasan por `formatDate`.
+
+`tests/superadmin-coherencia.test.ts` vigila las cuatro cosas: la cola del
+aviso, el suelo tipográfico (aquí ya sin techo: es cero), los colores literales
+y los formateadores a mano.
+
+### Fase 17 · el mostrador se lee de pie
+
+El escáner y la caja no se usan como el resto del producto. Se usan **de pie,
+con el móvil en una mano, el cliente delante y prisa**. Y eran, medido, el área
+con más texto por debajo del suelo de todo el proyecto:
+
+| Área | Micro-textos por cada 1000 líneas |
+|---|---|
+| **Empleado (escáner + caja)** | **3,99** |
+| Cliente | 2,68 |
+| Administración | 2,23 |
+| Público | 1,45 |
+| Superadministrador | 1,00 |
+
+El sitio donde peor se lee era el que peor lo tenía. Ahora está a **cero**, y su
+guardia no es un techo que baja: es cero y se defiende.
+
+**Los tamaños subieron, no se normalizaron a la baja.** El nombre del cliente,
+el veredicto del escaneo y el importe pasan de `text-lg` (18px, fuera de escala)
+a `.text-h2` (20–24px). Son la respuesta de la pantalla: a un brazo de
+distancia, 17px de tarjeta habría sido peor que lo que había.
+
+**Descartar un registro pendiente medía 28px.** Es una acción destructiva —tira
+un registro que no se pudo enviar, justo los que el aviso pide revisar antes de
+cerrar el turno— y se toca con una mano. Ahora mide 44px.
+
+**El aviso de cola sin conexión usaba `amber-500` con su `dark:` escrito a
+mano.** Es el mensaje que dice "tienes registros sin enviar": si se ve mal en
+oscuro, se pierde dinero de verdad.
 
 ### Decisiones de producto resueltas fuera de fase
 

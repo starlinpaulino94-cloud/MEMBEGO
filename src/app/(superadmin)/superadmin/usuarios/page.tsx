@@ -52,7 +52,7 @@ export default async function UsuariosStaffPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Usuarios de staff</h1>
+        <h1 className="text-h1 text-foreground">Usuarios de staff</h1>
         <p className="text-muted-foreground">
           Administradores y equipo de las empresas. Edita su rol, sus datos y
           las empresas que puede gestionar cada uno.
@@ -93,7 +93,7 @@ export default async function UsuariosStaffPage() {
                         <p className="truncate font-semibold text-foreground">
                           {u.name}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                        <p className="truncate text-caption text-muted-foreground">{u.email}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
@@ -114,11 +114,11 @@ export default async function UsuariosStaffPage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-caption">
                       {ROL_LABEL[u.role] ?? u.role}
                     </Badge>
                     {todas.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">Sin empresa asignada</span>
+                      <span className="text-caption text-muted-foreground">Sin empresa asignada</span>
                     ) : (
                       todas.map((n) => (
                         <Badge
@@ -126,8 +126,8 @@ export default async function UsuariosStaffPage() {
                           variant="outline"
                           className={
                             n === activa
-                              ? 'border-info/30 bg-info/10 text-xs text-info'
-                              : 'text-xs text-muted-foreground'
+                              ? 'border-info/30 bg-info/10 text-caption text-info'
+                              : 'text-caption text-muted-foreground'
                           }
                         >
                           {n}

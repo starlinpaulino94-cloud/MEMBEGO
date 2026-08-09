@@ -70,7 +70,7 @@ export function AvatarUpload({ clienteId, currentUrl, nombre, onUploaded }: Prop
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        className="group relative h-24 w-24 overflow-hidden rounded-full ring-4 ring-white shadow-md transition hover:ring-info/20"
+        className="group relative h-24 w-24 overflow-hidden rounded-full ring-4 ring-white shadow-md transition hover:ring-primary/20"
       >
         {preview ? (
           <Image

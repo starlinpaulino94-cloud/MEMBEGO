@@ -333,7 +333,7 @@ export function CompanyProfile({
                 <a
                   key={s.id}
                   href={`#${s.id}`}
-                  className="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-info/10 hover:text-info"
+                  className="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
                 >
                   {s.label}
                 </a>
@@ -693,7 +693,7 @@ export function CompanyProfile({
             <div className="mt-8 flex justify-center">
               <Link
                 href={discoverHref}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-info transition hover:bg-info/10"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-primary transition hover:bg-primary/10"
               >
                 Descubrir empresas <ArrowRight className="h-4 w-4" />
               </Link>
@@ -714,7 +714,7 @@ export function CompanyProfile({
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href={registroHref}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-info transition hover:bg-info/10"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-primary transition hover:bg-primary/10"
               >
                 Registrarme <ArrowRight className="h-4 w-4" />
               </Link>

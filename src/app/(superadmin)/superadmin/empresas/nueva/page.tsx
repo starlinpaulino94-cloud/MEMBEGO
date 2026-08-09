@@ -19,7 +19,7 @@ export default async function NuevaEmpresaPage() {
     <div className="mx-auto max-w-2xl space-y-4 animate-fade-up">
       <Link
         href="/superadmin/empresas"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-small text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Volver a empresas
       </Link>

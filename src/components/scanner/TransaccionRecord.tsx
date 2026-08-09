@@ -128,7 +128,7 @@ function Row({ label, value, icon: Icon, mono = false }: { label: string; value:
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-muted-foreground">{label}</p>
+        <p className="text-caption text-muted-foreground">{label}</p>
         <p className={cn('text-sm font-medium text-foreground break-words', mono && 'font-mono')}>{value}</p>
       </div>
     </div>
@@ -191,7 +191,7 @@ export function TransaccionRecord({
   return (
     <div className="space-y-4 animate-scale-in">
       {/* Contexto: cómo se llegó aquí */}
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-2 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
         <History className="h-3.5 w-3.5" />
         {esQrUsado ? 'QR ya utilizado — registro de la operación' : 'Consulta de transacción'}
       </div>
@@ -205,7 +205,7 @@ export function TransaccionRecord({
           <p className="font-bold text-foreground">{ui.label}</p>
           <p className="text-sm text-muted-foreground">{ui.desc}</p>
         </div>
-        <Badge variant={ui.badge} className="ml-auto shrink-0 text-[10px]">
+        <Badge variant={ui.badge} className="ml-auto shrink-0 text-caption">
           {ui.label.replace(/^Transacción /, '')}
         </Badge>
       </div>
@@ -215,15 +215,15 @@ export function TransaccionRecord({
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] text-muted-foreground">Transaction ID</p>
+              <p className="text-caption text-muted-foreground">Transaction ID</p>
               <p className="font-mono text-base font-bold text-foreground">{tx.codigo}</p>
             </div>
             <div className="text-right">
-              <p className="text-[11px] text-muted-foreground">Ticket</p>
+              <p className="text-caption text-muted-foreground">Ticket</p>
               <p className="font-mono text-sm font-semibold text-foreground">{tx.ticketNumero}</p>
             </div>
           </div>
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="mt-2 flex items-center gap-1.5 text-caption text-muted-foreground">
             <Clock className="h-3.5 w-3.5" />
             {fecha} · {hora}
           </div>
@@ -301,7 +301,7 @@ export function TransaccionRecord({
               Cancelar
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             La copia queda registrada en auditoría con empleado, fecha y motivo, y se
             imprime con la marca &laquo;COPIA&raquo;.
           </p>

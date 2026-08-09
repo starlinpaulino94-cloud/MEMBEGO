@@ -60,7 +60,7 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
         return (
           <div
             key={company.id}
-            className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition hover:border-info/30 hover:shadow-sm"
+            className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition hover:border-primary/30 hover:shadow-sm"
           >
             {/* Cabecera con banner/gradiente */}
             <div className="relative h-16 bg-gradient-to-br from-blue-600 to-sky-500">

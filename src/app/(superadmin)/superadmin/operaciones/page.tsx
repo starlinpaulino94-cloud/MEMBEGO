@@ -71,10 +71,10 @@ export default async function OperacionesPage() {
     <div className="space-y-8 animate-fade-up">
       <div>
         <p className="text-sm font-medium text-muted-foreground">Superadmin</p>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        <h1 className="text-h1 text-foreground">
           Operaciones por empresa
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-small text-muted-foreground">
           Vista unificada de promociones, referidos y WhatsApp configurados por cada empresa.
         </p>
       </div>
@@ -89,7 +89,7 @@ export default async function OperacionesPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center justify-between text-base">
                   {c.name}
-                  <Badge variant="secondary" className="text-xs capitalize">
+                  <Badge variant="secondary" className="text-caption capitalize">
                     {c.type}
                   </Badge>
                 </CardTitle>
@@ -131,7 +131,7 @@ export default async function OperacionesPage() {
                       {wa.activo ? 'Activo' : 'Inactivo'} · {wa.numero}
                     </Badge>
                   ) : (
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-caption">
                       Sin configurar
                     </Badge>
                   )}

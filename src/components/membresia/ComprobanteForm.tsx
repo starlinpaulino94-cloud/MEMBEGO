@@ -175,7 +175,7 @@ export function ComprobanteForm({ membershipId, metodosPago }: Props) {
         ) : (
           <div
             onClick={() => fileRef.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted p-8 text-muted-foreground transition hover:border-info/40 hover:bg-info/10"
+            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted p-8 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10"
           >
             {uploading ? (
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -241,7 +241,7 @@ export function ComprobanteForm({ membershipId, metodosPago }: Props) {
                 key={m.id}
                 className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-2.5 text-sm transition ${
                   metodoPagoId === m.id
-                    ? 'border-info/40 bg-info/10 text-info'
+                    ? 'border-primary/40 bg-primary/10 text-primary'
                     : 'border-border hover:border-border'
                 }`}
               >

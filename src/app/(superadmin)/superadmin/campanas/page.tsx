@@ -51,7 +51,7 @@ export default async function CampanasGlobalesPage() {
         description="Una oferta o membresía que defines una vez y se crea en todas las empresas que elijas."
       />
 
-      <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-border/70 bg-muted/20 p-4 text-small text-muted-foreground">
         <p>
           <b className="text-foreground">Cómo funciona:</b> al aplicar la campaña, cada
           empresa participante recibe su <b>propia copia</b> de la oferta. El cliente la
@@ -78,7 +78,7 @@ export default async function CampanasGlobalesPage() {
         <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
-              <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b border-border/60 text-left text-caption uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-3 font-semibold">Campaña</th>
                 <th className="px-4 py-3 font-semibold">Crea</th>
                 <th className="px-4 py-3 font-semibold">Empresas</th>
@@ -97,7 +97,7 @@ export default async function CampanasGlobalesPage() {
                       {c.nombre}
                     </Link>
                     {c.descripcion && (
-                      <p className="truncate text-xs text-muted-foreground">{c.descripcion}</p>
+                      <p className="truncate text-caption text-muted-foreground">{c.descripcion}</p>
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -108,24 +108,24 @@ export default async function CampanasGlobalesPage() {
                       {c.aplicadas}/{c.totalEmpresas}
                     </span>
                     {c.todasLasEmpresas && (
-                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                      <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-overline text-muted-foreground">
                         todas
                       </span>
                     )}
                     {c.conError > 0 && (
-                      <span className="ml-2 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase text-destructive">
+                      <span className="ml-2 rounded-full bg-destructive/10 px-2 py-0.5 text-overline text-destructive">
                         {c.conError} con error
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${CHIP_ESTADO[c.estado] ?? 'bg-muted'}`}
+                      className={`rounded-full px-2.5 py-0.5 text-overline ${CHIP_ESTADO[c.estado] ?? 'bg-muted'}`}
                     >
                       {CAMPANA_ESTADO_LABELS[c.estado as CampanaEstado] ?? c.estado}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                  <td className="whitespace-nowrap px-4 py-3 text-caption text-muted-foreground">
                     {formatDateTime(c.createdAt)}
                   </td>
                 </tr>

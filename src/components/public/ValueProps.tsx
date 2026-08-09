@@ -6,7 +6,7 @@ const FEATURES = [
     title: 'Membresía con QR único',
     description:
       'Al activar tu plan recibes un código QR digital. Lo presentas en el negocio y validan tu membresía al instante.',
-    color: 'bg-info/15 text-primary',
+    color: 'bg-primary/10 text-primary',
   },
   {
     icon: Gift,

@@ -70,7 +70,7 @@ export default async function CampanaGlobalDetallePage({
     <div className="space-y-6">
       <Link
         href="/superadmin/campanas"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-small text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" /> Campañas conjuntas
       </Link>
@@ -81,21 +81,21 @@ export default async function CampanaGlobalDetallePage({
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-full bg-muted px-3 py-1 text-xs font-bold uppercase text-muted-foreground">
+        <span className="rounded-full bg-muted px-3 py-1 text-caption font-bold uppercase text-muted-foreground">
           {CAMPANA_ESTADO_LABELS[campana.estado as CampanaEstado] ?? campana.estado}
         </span>
         {campana.todasLasEmpresas && (
-          <span className="rounded-full bg-muted px-3 py-1 text-xs font-bold uppercase text-muted-foreground">
+          <span className="rounded-full bg-muted px-3 py-1 text-caption font-bold uppercase text-muted-foreground">
             Todas las empresas
           </span>
         )}
         {campana.aplicadaAt && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-caption text-muted-foreground">
             Aplicada {formatDateTime(campana.aplicadaAt)}
           </span>
         )}
         {campana.creadaPor && (
-          <span className="text-xs text-muted-foreground">Por {campana.creadaPor.name}</span>
+          <span className="text-caption text-muted-foreground">Por {campana.creadaPor.name}</span>
         )}
       </div>
 
@@ -126,23 +126,23 @@ export default async function CampanaGlobalDetallePage({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-foreground">{p.titulo}</p>
-                <p className="text-sm text-muted-foreground">{p.company.name}</p>
+                <p className="text-small text-muted-foreground">{p.company.name}</p>
                 {p.descripcion && (
-                  <p className="mt-1 text-sm text-muted-foreground">{p.descripcion}</p>
+                  <p className="mt-1 text-small text-muted-foreground">{p.descripcion}</p>
                 )}
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-caption text-muted-foreground">
                   {i === 0
                     ? 'El cliente lo toma por su cuenta; es la puerta de entrada.'
                     : `Se entrega en cuanto el cliente usa el paso ${p.orden - 1} por primera vez.`}
                 </p>
-                {p.error && <p className="mt-1 text-xs text-destructive">Error: {p.error}</p>}
+                {p.error && <p className="mt-1 text-caption text-destructive">Error: {p.error}</p>}
               </div>
               {p.imagenUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.imagenUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
               )}
               <span
-                className={`self-start rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                className={`self-start rounded-full px-2 py-0.5 text-overline ${
                   p.aplicadaAt ? 'bg-success/15 text-success-foreground' : 'bg-muted text-muted-foreground'
                 }`}
               >
@@ -161,7 +161,7 @@ export default async function CampanaGlobalDetallePage({
         <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {resumen.map(([k, v]) => (
             <div key={k} className="flex justify-between gap-4 border-b border-border/40 py-1.5">
-              <dt className="text-sm text-muted-foreground">{k}</dt>
+              <dt className="text-small text-muted-foreground">{k}</dt>
               <dd className="text-right text-sm font-medium text-foreground">{v}</dd>
             </div>
           ))}
@@ -172,7 +172,7 @@ export default async function CampanaGlobalDetallePage({
       <section className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
-            <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b border-border/60 text-left text-caption uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-3 font-semibold">Empresa</th>
               <th className="px-4 py-3 font-semibold">Estado</th>
               <th className="px-4 py-3 font-semibold">Aplicada</th>
@@ -184,7 +184,7 @@ export default async function CampanaGlobalDetallePage({
                 <td className="px-4 py-3 text-foreground">
                   {p.company.name}
                   {!p.company.isActive && (
-                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-overline text-muted-foreground">
                       inactiva
                     </span>
                   )}
@@ -192,27 +192,27 @@ export default async function CampanaGlobalDetallePage({
                 <td className="px-4 py-3">
                   {p.error ? (
                     <span
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive"
+                      className="inline-flex items-center gap-1.5 text-caption font-semibold text-destructive"
                       title={p.error}
                     >
                       <TriangleAlert className="h-3.5 w-3.5" /> Error
                     </span>
                   ) : p.aplicadaAt ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success-foreground">
+                    <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-success-foreground">
                       <Check className="h-3.5 w-3.5" /> Creada
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5 text-caption text-muted-foreground">
                       <Clock className="h-3.5 w-3.5" /> Pendiente
                     </span>
                   )}
                   {p.error && (
-                    <p className="mt-0.5 max-w-64 truncate text-[11px] text-muted-foreground">
+                    <p className="mt-0.5 max-w-64 truncate text-caption text-muted-foreground">
                       {p.error}
                     </p>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-3 text-caption text-muted-foreground">
                   {p.aplicadaAt ? formatDateTime(p.aplicadaAt) : '—'}
                 </td>
               </tr>
