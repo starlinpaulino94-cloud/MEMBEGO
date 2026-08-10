@@ -41,6 +41,37 @@ export interface DatosSSO {
   companyId: string
   /** Epoch en segundos; después de esto el token no vale. */
   exp: number
+
+  // ── Fase 5 ────────────────────────────────────────────────────────────────
+  // Campos NUEVOS y opcionales: un satélite que no los mire sigue funcionando
+  // exactamente igual, que es lo que permite desplegar esto sin coordinar.
+
+  /**
+   * Identificador único del token. Es lo que permite el USO ÚNICO: quien lo
+   * canjea contra `/api/platform/v1/sso/redeem` gana, y el segundo choca.
+   *
+   * Mientras un satélite verifique el token por su cuenta —como hasta hoy—,
+   * hacerlo de un solo uso es responsabilidad suya: MembeGo no se entera de esa
+   * verificación. El canje contra la API es lo que traslada esa garantía aquí.
+   */
+  jti?: string
+  /**
+   * Puesto del usuario DENTRO del vertical: `MESERO`, `COCINA`, `LAVADOR`.
+   *
+   * Cadena libre. MembeGo la guarda y la transporta; interpretarla es del
+   * satélite. Un enum obligaría a desplegar el Core cada vez que un vertical
+   * inventara un puesto (§50).
+   */
+  systemRole?: string
+  /** Permisos finos que define y lee el vertical. El Core solo los lleva. */
+  permisos?: Record<string, unknown>
+  /**
+   * A dónde llevar al usuario dentro del satélite. VALIDADO contra la `urlBase`
+   * del sistema antes de firmar, y firmado con el resto — si viajara suelto en
+   * la query, cualquiera podría cambiarlo y convertir nuestro SSO en un
+   * redirector abierto con la credibilidad de MembeGo detrás.
+   */
+  returnUrl?: string
 }
 
 function base64url(s: string): string {
@@ -88,6 +119,14 @@ export interface DatosSSOEntrante {
   email?: string
   companyId: string
   exp: number
+  /**
+   * Identificador único del token (Fase 5). OPCIONAL por compatibilidad: un
+   * satélite que aún no lo mande sigue entrando, y queda un aviso en el log.
+   *
+   * Cuando viene, MembeGo garantiza el uso único — que aquí sí puede, porque
+   * es quien valida.
+   */
+  jti?: string
 }
 
 /**

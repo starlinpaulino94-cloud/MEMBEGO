@@ -29,6 +29,14 @@ export const CODIGOS_ERROR = {
   BENEFIT_NOT_ELIGIBLE: 422,
   /** Alguien se adelantó. Re-evaluar y reintentar. */
   REDEMPTION_CONFLICT: 409,
+  /** El token SSO no verifica con tu secreto, o ya venció. */
+  SSO_TOKEN_INVALID: 401,
+  /**
+   * Ya se canjeó. Un token SSO vale UNA vez: si llega este código, o hay un
+   * reintento tuyo —que no hace falta, la primera respuesta era válida— o
+   * alguien capturó la URL.
+   */
+  SSO_TOKEN_ALREADY_USED: 409,
   // 429
   RATE_LIMITED: 429,
   // 5xx

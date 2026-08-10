@@ -12,6 +12,7 @@ import {
   type MembershipsActiveResponse,
   type RedemptionRequest,
   type RedemptionResponse,
+  type SsoRedeemResponse,
   type SystemMeResponse,
   type TokenResponse,
   type TransactionRequest,
@@ -297,6 +298,21 @@ export class MembegoClient {
    */
   evaluateBenefits(peticion: EvaluateRequest): Promise<EvaluateResponse> {
     return this.pedir('POST', '/api/platform/v1/benefits/evaluate', { cuerpo: peticion })
+  }
+
+  /**
+   * Canjea el token SSO que MembeGo puso en `?token=` al abrir tu sistema.
+   *
+   * Puedes verificar el token por tu cuenta con el secreto compartido —el
+   * camino de siempre— pero entonces NO hay uso único: MembeGo no se entera de
+   * esa verificación, así que el mismo token vale las veces que se use durante
+   * sus 90 segundos, y quien capture la URL entra.
+   *
+   * Canjeándolo aquí, el primero gana y el segundo recibe
+   * `SSO_TOKEN_ALREADY_USED`.
+   */
+  redeemSso(token: string): Promise<SsoRedeemResponse> {
+    return this.pedir('POST', '/api/platform/v1/sso/redeem', { cuerpo: { token } })
   }
 
   // ── Escrituras ────────────────────────────────────────────────────────────

@@ -132,6 +132,25 @@ export interface TransactionResponse {
   recordedAt: string
 }
 
+/** Lo que devuelve `POST /sso/redeem`. */
+export interface SsoRedeemResponse {
+  sub: string
+  email: string
+  nombre: string | null
+  /** Rol en MembeGo (ADMIN_EMPRESA, CAJERO…). NO es el puesto del vertical. */
+  membegoRole: string
+  /**
+   * Puesto DENTRO de tu sistema: `MESERO`, `COCINA`… Cadena libre que MembeGo
+   * transporta y no interpreta. `null` si nadie se lo asignó a esta persona.
+   */
+  systemRole: string | null
+  permisos: Record<string, unknown> | null
+  companyId: string
+  /** A dónde llevar al usuario. Ya validada contra tu `urlBase`. */
+  returnUrl: string | null
+  expiresAt: string
+}
+
 export interface KeysResponse {
   keys: { kid: string; alg: string; use: string; publicKeyPem: string }[]
   algorithm: string | null

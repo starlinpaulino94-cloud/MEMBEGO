@@ -71,6 +71,33 @@ export async function GET(req: NextRequest) {
       return rechazar('token')
     }
 
+    // ── Un solo uso ─────────────────────────────────────────────────────────
+    //
+    // Aquí MembeGo SÍ puede garantizarlo, porque es quien valida. El `jti` es
+    // clave primaria: el primer canje entra y el segundo choca. Sin lectura
+    // previa, así que no hay ventana entre comprobar y marcar — que es donde
+    // dos peticiones simultáneas conseguirían abrir sesión las dos.
+    //
+    // OPCIONAL por compatibilidad: un satélite que aún no mande `jti` sigue
+    // entrando y queda el aviso. Rechazarlo sería romper a quien ya funciona
+    // por no haber desplegado algo que acabamos de publicar.
+    if (datos.jti) {
+      const { marcarTokenUsado } = await import('@/modules/plataforma/sso')
+      const canje = await marcarTokenUsado({
+        jti: datos.jti,
+        sistemaId: sistema.id,
+        companyId: datos.companyId,
+        direccion: 'ENTRANTE',
+        expiraAt: new Date(datos.exp * 1000),
+      })
+      if (canje === 'YA_USADO') {
+        console.warn('[sso-entrar] token reutilizado:', slug, datos.jti)
+        return rechazar('token')
+      }
+    } else {
+      console.warn('[sso-entrar] token sin jti (sin uso único):', slug)
+    }
+
     // ── El sistema debe tener acceso a la empresa del token ─────────────────
     //
     // ESTA COMPROBACIÓN NO EXISTÍA. La consulta anterior leía `categoria` del

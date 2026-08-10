@@ -42,7 +42,7 @@ export function AppShell({
   companies,
   qrHref,
   hiddenNav,
-  sistemaExterno,
+  sistemasExternos,
   children,
 }: {
   role: AppRole
@@ -57,7 +57,7 @@ export function AppShell({
   /** Rutas a ocultar por no tener contenido todavía (cliente). */
   hiddenNav?: string[]
   /** Sistema satélite conectado: el header ofrece el acceso directo por SSO. */
-  sistemaExterno?: { slug: string; nombre: string } | null
+  sistemasExternos?: { slug: string; nombre: string }[]
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -212,7 +212,7 @@ export function AppShell({
           companies={companies}
           onMenuClick={() => setMobileOpen(true)}
           hiddenNav={hiddenNav}
-          sistemaExterno={sistemaExterno}
+          sistemasExternos={sistemasExternos}
           userEmail={userEmail}
           userName={userName}
           ayudaHref={ayudaParaRol(role)}

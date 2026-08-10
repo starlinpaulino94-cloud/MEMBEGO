@@ -2,6 +2,12 @@ import 'server-only'
 import { crearTokenSSO } from '@/modules/integraciones/nucleo'
 import { mensajeDenegado } from '@/modules/plataforma/acceso'
 import { accesoASistema, sistemasDeEmpresa } from '@/modules/plataforma/registro'
+import {
+  TTL_SSO_SEGUNDOS,
+  accesoDeUsuario,
+  nuevoJti,
+  returnUrlValida,
+} from '@/modules/plataforma/sso'
 import type { SessionUser } from '@/types'
 
 /**
@@ -10,9 +16,20 @@ import type { SessionUser } from '@/types'
  * vida corta; el satélite lo verifica con el secreto compartido y crea SU
  * propia sesión. El token lleva la empresa (tenant) — el satélite acota todo
  * a esa empresa.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ AÑADIÓ LA FASE 5
+ *
+ * · `jti` — identificador único, para que el token pueda ser de un solo uso.
+ * · `systemRole` — el puesto DENTRO del vertical, que el Core transporta sin
+ *   interpretar.
+ * · `returnUrl` — validada contra la `urlBase` del sistema y firmada con el
+ *   resto. Suelta en la query, cualquiera podría cambiarla.
+ *
+ * Los tres son OPCIONALES en el payload: un satélite que no los mire funciona
+ * exactamente igual que antes, que es lo que permite desplegar esto sin
+ * coordinar una fecha con nadie.
  */
-
-const TTL_SEGUNDOS = 90
 
 /**
  * Empresa con la que el usuario entra al satélite. El SUPERADMIN de la
@@ -28,7 +45,8 @@ async function empresaDelUsuario(user: SessionUser): Promise<string | null> {
 
 export async function urlAperturaSSO(
   slug: string,
-  user: SessionUser
+  user: SessionUser,
+  opciones: { returnUrl?: string | null } = {}
 ): Promise<{ url: string } | { error: string }> {
   const companyId = await empresaDelUsuario(user)
   if (!companyId) return { error: 'Tu cuenta no tiene empresa activa.' }
@@ -42,13 +60,38 @@ export async function urlAperturaSSO(
   }
   if (!sistema?.secreto) return { error: 'Sistema no disponible.' }
 
+  // La empresa puede tener el sistema y ESTA persona no. Con `accesoPorUsuario`
+  // en false —el caso de Car Wash— nadie pierde nada: entra igual que hoy.
+  const acceso = await accesoDeUsuario({
+    userId: user.metadata.dbUserId ?? null,
+    companyId,
+    sistemaId: sistema.id,
+    accesoPorUsuario: sistema.accesoPorUsuario,
+  })
+  if (!acceso.permitido) {
+    console.warn('[sso] usuario sin acceso:', slug, acceso.motivo, 'empresa:', companyId)
+    return { error: 'Tu cuenta no tiene acceso a este sistema.' }
+  }
+
+  const jti = nuevoJti()
   const token = crearTokenSSO(sistema.secreto, {
     sub: user.supabaseId,
     email: user.email,
     rol: user.metadata.role,
     companyId,
-    exp: Math.floor(Date.now() / 1000) + TTL_SEGUNDOS,
+    exp: Math.floor(Date.now() / 1000) + TTL_SSO_SEGUNDOS,
+    jti,
+    ...(acceso.systemRole ? { systemRole: acceso.systemRole } : {}),
+    ...(acceso.permisos ? { permisos: acceso.permisos } : {}),
+    // Una `returnUrl` que no apunte al propio sistema se DESCARTA en silencio
+    // en vez de rechazar la apertura: lo que el usuario quería era entrar, y
+    // negarle la entrada por un parámetro manipulado castiga a la víctima.
+    ...(() => {
+      const destino = returnUrlValida(opciones.returnUrl, sistema.urlBase)
+      return destino ? { returnUrl: destino } : {}
+    })(),
   })
+
   const base = sistema.urlBase.replace(/\/$/, '')
   return { url: `${base}/sso/membego?token=${encodeURIComponent(token)}` }
 }
@@ -59,23 +102,35 @@ export interface SistemaExterno {
 }
 
 /**
- * Sistema satélite que el header ofrece como acceso directo ("ir al car
- * wash"): el primero que la empresa del usuario tiene habilitado. Null = sin
- * botón. Nunca lanza: un fallo aquí no puede tumbar el layout.
+ * Sistemas que este usuario puede abrir desde la cabecera: los que su empresa
+ * tiene habilitados Y a los que él tiene acceso.
  *
- * Solo se ofrece UNO aunque la empresa tenga varios habilitados. El día que eso
- * sea normal, el botón pasa a ser un menú — pero eso es el App Launcher de la
- * Fase 5, no un desplegable improvisado en la cabecera.
+ * Devuelve una LISTA. Con un solo vertical la cabecera enseña un botón; con
+ * varios, un menú. Que la función devuelva uno solo era la limitación que
+ * obligaba a elegir por él —y con dos sistemas habilitados, elegir por él es
+ * esconderle uno.
+ *
+ * Nunca lanza: un fallo aquí no puede tumbar el layout.
  */
-export async function sistemaExternoParaHeader(user: SessionUser): Promise<SistemaExterno | null> {
+export async function sistemasParaLanzador(user: SessionUser): Promise<SistemaExterno[]> {
   try {
     const companyId = await empresaDelUsuario(user)
-    if (!companyId) return null
+    if (!companyId) return []
 
-    const [primero] = await sistemasDeEmpresa(companyId)
-    return primero ? { slug: primero.slug, nombre: primero.nombre } : null
+    const sistemas = await sistemasDeEmpresa(companyId)
+    const accesibles: SistemaExterno[] = []
+    for (const s of sistemas) {
+      const acceso = await accesoDeUsuario({
+        userId: user.metadata.dbUserId ?? null,
+        companyId,
+        sistemaId: s.id,
+        accesoPorUsuario: s.accesoPorUsuario,
+      })
+      if (acceso.permitido) accesibles.push({ slug: s.slug, nombre: s.nombre })
+    }
+    return accesibles
   } catch (e) {
-    console.error('[sso] sistemaExternoParaHeader:', e)
-    return null
+    console.error('[sso] sistemasParaLanzador:', e)
+    return []
   }
 }

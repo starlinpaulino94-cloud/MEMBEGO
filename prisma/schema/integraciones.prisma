@@ -47,6 +47,17 @@ model SistemaConectado {
   /// funcionaba así) nace con TRUE, para que nadie pierda acceso.
   autoHabilitar Boolean @default(false)
 
+  /// ¿Hace falta que CADA usuario tenga acceso explícito (`UsuarioSistema`)?
+  ///
+  /// FALSE por defecto, y por el mismo motivo que `autoHabilitar`: hoy
+  /// cualquier miembro del equipo abre el satélite de su empresa, y exigir de
+  /// golpe una fila por persona dejaría a toda la plantilla de Car Wash fuera
+  /// el día del despliegue.
+  ///
+  /// Un vertical que quiera control fino lo pone en TRUE. La cadena de roles
+  /// (`systemRole`) viaja igual en los dos casos.
+  accesoPorUsuario Boolean @default(false)
+
   /// Raíz del sistema satélite (ej. https://carwash.membego.com). El SSO
   /// redirige a `{urlBase}/sso/membego?token=...`.
   urlBase String
@@ -65,8 +76,87 @@ model SistemaConectado {
   tiposNegocio   SistemaTipoNegocio[]
   habilitaciones EmpresaSistema[]
   credenciales   CredencialSistema[]
+  accesos        UsuarioSistema[]
 
   @@map("sistemas_conectados")
+}
+
+/// Acceso de UNA persona a UN sistema, dentro de UNA empresa.
+///
+/// Es el nivel que faltaba: `EmpresaSistema` dice que el restaurante tiene
+/// contratado el sistema; esto dice que María es camarera y Juan es cocina.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// EL CORE NO SABE QUÉ ES UN CAMARERO
+///
+/// `systemRole` es una CADENA LIBRE. `MESERO`, `COCINA`, `LAVADOR`, `RECEPCION`
+/// — MembeGo la guarda y la transporta dentro del token SSO, y no la interpreta
+/// jamás.
+///
+/// Convertirla en un enum obligaría a desplegar el Core cada vez que un vertical
+/// inventara un puesto, que es exactamente la dependencia que esta arquitectura
+/// existe para eliminar (§50). Los roles de MembeGo —ADMIN_EMPRESA, CAJERO…—
+/// siguen siendo suyos y viajan aparte.
+model UsuarioSistema {
+  id String @id @default(cuid())
+
+  /// `User.id` de MembeGo.
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// La misma persona puede tener roles distintos en dos empresas.
+  companyId String
+
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  /// Puesto DENTRO del vertical. Cadena libre; ver arriba.
+  systemRole String
+
+  /// ACTIVE | SUSPENDED. Suspender aquí cierra el SSO sin tocar la cuenta de
+  /// MembeGo: un camarero de baja deja de entrar al sistema del restaurante y
+  /// sigue pudiendo ver su nómina.
+  estado String @default("ACTIVE")
+
+  /// Permisos finos que el vertical define y lee. El Core los transporta.
+  permisos Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, sistemaId, companyId])
+  @@index([companyId, sistemaId, estado])
+  @@map("usuarios_sistemas")
+}
+
+/// Token SSO ya canjeado. La fila ES el canje.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// POR QUÉ UNA TABLA Y NO UN CAMPO «usado»
+///
+/// El uso único se consigue con el INSERT: el `jti` es la clave primaria, así
+/// que el segundo canje choca y se rechaza. No hay lectura previa, y por tanto
+/// no hay ventana entre comprobar y marcar — que es justo donde dos peticiones
+/// simultáneas conseguirían canjear las dos.
+///
+/// Las filas caducan con el token (90 s), pero se conservan hasta que el cron
+/// las purga: mientras existan, un token capturado en el historial del
+/// navegador no vale para nada.
+model TokenSSOUsado {
+  /// Identificador único del token, generado al emitirlo.
+  jti String @id
+
+  sistemaId String
+  companyId String
+  /// SALIENTE (MembeGo → satélite) | ENTRANTE (satélite → MembeGo).
+  direccion String
+
+  usadoAt  DateTime @default(now())
+  /// Cuándo dejó de valer el token. Después de esto la fila ya no protege nada.
+  expiraAt DateTime
+
+  @@index([expiraAt])
+  @@map("tokens_sso_usados")
 }
 
 /// Credencial con la que un sistema satélite llama a la API de MembeGo

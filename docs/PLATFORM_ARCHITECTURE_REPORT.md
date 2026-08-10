@@ -515,7 +515,7 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | ✅ `docs/platform/eventos-v2.md` |
 | **3b** | Extraer el canje del Server Action · `redemptions` · `transactions` | ✅ `docs/platform/canje.md` |
 | **4** | `@membego/contracts` + `@membego/platform-sdk` | ✅ `docs/platform/sdk.md` |
-| **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | Acceso |
+| **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | ✅ `docs/platform/sso.md` |
 | **6** | Car Wash consume la API **sin salir del monolito** | Validación del contrato |
 | **7** | Restaurant como **primer satélite real** | Prueba de la arquitectura |
 | **8** | Health · métricas de entrega · panel de sistemas | Observabilidad |
@@ -553,8 +553,8 @@ De los 20 puntos del §93, el estado real hoy:
 | 12 | Outbox / retry | 🟢 + DEAD_LETTER y replay (Fase 3) |
 | 13 | Tenant isolation | 🟡 aplicativo + habilitaciones en la API; RLS apagado |
 | 14 | Autorización por categoría | 🟢 sustituida por habilitaciones (Fase 1b) |
-| 15 | SSO | 🟢 existe, endurecer |
-| 16 | App Launcher | 🟢 existe |
+| 15 | SSO | 🟢 uso único, returnUrl y rol del vertical (Fase 5) |
+| 16 | App Launcher | 🟢 por habilitación Y acceso del usuario (Fase 5) |
 | 17 | Documentación | 🟢 `docs/platform/` + README de los paquetes |
 | 18 | Car Wash migrable | 🟡 el canje ya es un servicio reutilizable (Fase 3b) |
 | 19 | Restaurant sobre el estándar | 🔴 sin estándar |
@@ -564,7 +564,9 @@ Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
 **8 verdes, 6 amarillos, 6 rojos**. Tras la Fase 2: **11 verdes, 6 amarillos,
 3 rojos**. Tras la Fase 3: **13 verdes, 4 amarillos, 3 rojos**. Tras la 3b, con
 el canje ya expuesto sobre un servicio único: **14 verdes, 3 amarillos, 3
-rojos**. Tras la Fase 4: **16 verdes, 1 amarillo, 3 rojos**. El cimiento es mejor de lo que sugiere el
+rojos**. Tras la Fase 4: **16 verdes, 1 amarillo, 3 rojos**. La Fase 5 no
+cambia el recuento —esos dos puntos ya estaban verdes— pero cierra lo que el
+§13 pedía endurecer. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -610,5 +612,12 @@ núcleo atómico que descuenta el saldo—. `/redemptions` devuelve el `visitId`
 `@membego/platform-sdk` con token, reintentos que conservan la clave de
 idempotencia, verificación de webhooks e inbox.
 
-Siguiente: **Fase 5** — SSO de un solo uso, `UserSystemAccess` y App Launcher
-por habilitación.
+**Fase 5 completa** — `docs/platform/sso.md`: uso único con `jti` registrado en
+MembeGo, `returnUrl` validada por origen y firmada, `UsuarioSistema` con el
+puesto del vertical que el Core transporta sin interpretar, y el lanzador
+filtrando por habilitación Y acceso.
+
+Siguiente: **Fase 6** — Car Wash consumiendo los contratos sin salir del
+monolito. Es la validación del estándar hecha con el vertical que ya funciona, y
+antes de que exista un satélite real: si algo del contrato no sirve, se descubre
+aquí y no en la primera integración de verdad.

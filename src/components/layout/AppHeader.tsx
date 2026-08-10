@@ -23,7 +23,7 @@ export function AppHeader({
   companies,
   onMenuClick,
   hiddenNav,
-  sistemaExterno,
+  sistemasExternos,
   userEmail,
   userName,
   ayudaHref,
@@ -35,7 +35,7 @@ export function AppHeader({
   /** Rutas a ocultar por no tener contenido todavía (cliente). */
   hiddenNav?: string[]
   /** Sistema satélite conectado (p. ej. el car wash): acceso directo por SSO. */
-  sistemaExterno?: { slug: string; nombre: string } | null
+  sistemasExternos?: { slug: string; nombre: string }[]
   userEmail?: string
   userName?: string | null
   /** Destino de "Ayuda"; sin él, la entrada no se muestra. */
@@ -196,20 +196,25 @@ export function AppHeader({
 
       {/* Acciones */}
       <div className="flex shrink-0 items-center gap-1">
-        {/* Acceso directo al sistema satélite (SSO de salida, token de 90 s).
-            target _blank: el satélite es otra app; MembeGo queda abierta. */}
-        {sistemaExterno && (
+        {/* App Launcher: los sistemas satélite que esta empresa tiene
+            habilitados Y a los que este usuario tiene acceso.
+
+            Con uno, un botón —lo de siempre—. Con varios, la lista: elegir por
+            el usuario sería esconderle los demás. target _blank porque el
+            satélite es otra app y MembeGo se queda abierta. */}
+        {(sistemasExternos ?? []).map((s) => (
           <a
-            href={`/api/integraciones/abrir/${encodeURIComponent(sistemaExterno.slug)}`}
+            key={s.slug}
+            href={`/api/integraciones/abrir/${encodeURIComponent(s.slug)}`}
             target="_blank"
             rel="noopener"
             className="mr-1 inline-flex h-10 items-center gap-1.5 rounded-lg border border-border/70 px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            title={`Abrir ${sistemaExterno.nombre}`}
+            title={`Abrir ${s.nombre}`}
           >
             <ExternalLink className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <span className="hidden sm:inline">{sistemaExterno.nombre}</span>
+            <span className="hidden sm:inline">{s.nombre}</span>
           </a>
-        )}
+        ))}
         {companies && <CompanySwitcher companies={companies} />}
         <ThemeToggle />
         <NotificationBell initialCount={notifCount} />

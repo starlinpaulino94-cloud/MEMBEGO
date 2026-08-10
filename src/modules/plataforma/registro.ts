@@ -44,6 +44,8 @@ export interface SistemaRegistrado {
   urlWebhook: string | null
   estado: EstadoSistema
   autoHabilitar: boolean
+  /** ¿Hace falta que cada usuario tenga acceso explícito? (Fase 5) */
+  accesoPorUsuario: boolean
   tiposNegocio: string[]
   /** Habilitación de ESTA empresa. `null` = no hay fila para el par. */
   habilitacion: EstadoHabilitacion | null
@@ -59,6 +61,7 @@ interface FilaNueva {
   urlWebhook: string | null
   estado: string
   autoHabilitar: boolean
+  accesoPorUsuario: boolean
   secreto?: string
   tiposNegocio: { tipo: { codigo: string } }[]
   habilitaciones: { estado: string }[]
@@ -129,6 +132,7 @@ async function leerContexto(companyId: string, conSecreto: boolean): Promise<Con
           ...comun,
           estado: true,
           autoHabilitar: true,
+          accesoPorUsuario: true,
           tiposNegocio: { select: { tipo: { select: { codigo: true } } } },
           habilitaciones: { where: { companyId }, select: { estado: true } },
         },
@@ -148,6 +152,7 @@ async function leerContexto(companyId: string, conSecreto: boolean): Promise<Con
         secreto: f.secreto,
         estado: normalizarEstado(f.estado),
         autoHabilitar: f.autoHabilitar,
+        accesoPorUsuario: f.accesoPorUsuario,
         tiposNegocio: f.tiposNegocio.map((t) => t.tipo.codigo),
         habilitacion: normalizarHabilitacion(f.habilitaciones[0]?.estado),
       })),
@@ -178,6 +183,9 @@ async function leerContexto(companyId: string, conSecreto: boolean): Promise<Con
           secreto: f.secreto,
           estado: f.activo ? 'ACTIVE' : 'SUSPENDED',
           autoHabilitar: true,
+          // Antes de la Fase 5 no había acceso por usuario: entraba todo el
+          // equipo, y el respaldo tiene que reproducir eso y no endurecerlo.
+          accesoPorUsuario: false,
           tiposNegocio: [f.categoria],
           habilitacion: null,
         })),

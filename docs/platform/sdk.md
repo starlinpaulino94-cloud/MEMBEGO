@@ -234,5 +234,5 @@ mismo**.
 
 ## Siguiente
 
-Fase 5: SSO de un solo uso, `UserSystemAccess` y App Launcher por habilitación.
-Ver `docs/PLATFORM_ARCHITECTURE_REPORT.md` §13.
+Fase 5 —SSO de un solo uso, `UsuarioSistema` y App Launcher por habilitación—
+está en `docs/platform/sso.md`.

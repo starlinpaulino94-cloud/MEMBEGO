@@ -73,6 +73,8 @@ const MENSAJES: Record<CodigoError, string> = {
   NOT_FOUND: 'The requested resource does not exist.',
   BENEFIT_NOT_ELIGIBLE: 'The benefit cannot be redeemed right now.',
   REDEMPTION_CONFLICT: 'The benefit changed while redeeming. Re-evaluate and retry.',
+  SSO_TOKEN_INVALID: 'The SSO token does not verify with your secret, or it expired.',
+  SSO_TOKEN_ALREADY_USED: 'This SSO token was already redeemed. Tokens are single use.',
   RATE_LIMITED: 'Too many requests. Slow down and retry later.',
   INTERNAL_ERROR: 'Unexpected error. Retry later; the requestId identifies this call.',
   PLATFORM_API_UNCONFIGURED: 'The platform API is not configured on this deployment.',
