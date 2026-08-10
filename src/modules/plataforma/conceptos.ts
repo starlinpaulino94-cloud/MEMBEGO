@@ -41,6 +41,13 @@
  */
 
 import { CAPACIDADES, type Capacidad, type CategoriaNegocio } from '@/modules/capacidades/catalogo'
+import {
+  CAPABILITIES,
+  SCOPES,
+  SCOPES_POR_CAPABILITY,
+  scopesDe,
+  type Capability,
+} from '@membego/contracts'
 
 // ── Concepto 1 · FUNCIÓN DE EMPRESA ─────────────────────────────────────────
 
@@ -113,49 +120,18 @@ export const CLASIFICACION: Record<Capacidad, Concepto> = Object.fromEntries(
  * Qué necesita un SISTEMA del Core. Es el contrato de integración: lo que un
  * vertical declara en su manifest y lo que sus credenciales autorizan.
  *
- * EN INGLÉS A PROPÓSITO, y es la única parte de este archivo que lo está.
- * Estos valores viajan por el cable: van en el manifest JSON, en los scopes de
- * la credencial y en la documentación que lee quien construye un satélite.
- * Un identificador de protocolo no se traduce — el resto del dominio sí, y por
- * eso el resto de este archivo está en español.
+ * VIVE EN `@membego/contracts` Y AQUÍ SOLO SE REEXPORTA. Es el único de los
+ * tres conceptos que viaja por el cable, así que su definición tiene que ser la
+ * MISMA que la que instala un satélite — no una copia que empiece igual.
+ *
+ * Los otros dos no salen del Core: `FuncionEmpresa` y `ModuloVertical` son
+ * asuntos internos de MembeGo, y publicarlos invitaría a que un satélite
+ * razonara sobre ellos.
  */
-export const CAPABILITIES = [
-  'CUSTOMER_LOOKUP',
-  'MEMBERSHIP_LOOKUP',
-  'BENEFIT_EVALUATION',
-  'BENEFIT_REDEMPTION',
-  'PROMOTION_LOOKUP',
-  'QR_VALIDATION',
-  'BRANCH_LOOKUP',
-  'VISIT_SYNC',
-  'TRANSACTION_SYNC',
-  'LOYALTY_EVENT',
-] as const
-
-export type Capability = (typeof CAPABILITIES)[number]
-
-/**
- * Scope OAuth que cada capability exige. Un sistema que declara
- * `BENEFIT_REDEMPTION` obtiene `benefits:redeem` y nada más — Regla §26:
- * concesión mínima, no un permiso general de «integración».
- */
-export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
-  CUSTOMER_LOOKUP: ['customers:read'],
-  MEMBERSHIP_LOOKUP: ['memberships:read'],
-  BENEFIT_EVALUATION: ['benefits:read'],
-  BENEFIT_REDEMPTION: ['benefits:read', 'benefits:redeem'],
-  PROMOTION_LOOKUP: ['promotions:read'],
-  QR_VALIDATION: ['qr:validate'],
-  BRANCH_LOOKUP: ['branches:read'],
-  VISIT_SYNC: ['visits:write'],
-  TRANSACTION_SYNC: ['transactions:write'],
-  LOYALTY_EVENT: ['events:publish'],
+export {
+  CAPABILITIES,
+  SCOPES,
+  SCOPES_POR_CAPABILITY,
+  scopesDe,
+  type Capability,
 }
-
-/** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */
-export function scopesDe(capabilities: readonly Capability[]): string[] {
-  return [...new Set(capabilities.flatMap((c) => SCOPES_POR_CAPABILITY[c]))].sort()
-}
-
-/** Todos los scopes que el estándar reconoce. */
-export const SCOPES = scopesDe(CAPABILITIES)

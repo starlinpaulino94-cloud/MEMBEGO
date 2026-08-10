@@ -1,3 +1,9 @@
+import type {
+  BranchDTO,
+  CompanyDTO,
+  CustomerDTO,
+  MembershipSummaryDTO,
+} from '@membego/contracts'
 import { camposPermitidos } from '@/modules/plataforma/proyecciones'
 
 /**
@@ -28,17 +34,16 @@ import { camposPermitidos } from '@/modules/plataforma/proyecciones'
  * prohíbe proyectar, y el satélite lo guardaría sin saber que no debía.
  */
 
+/**
+ * Las FORMAS viven en `@membego/contracts` —son lo que el satélite recibe— y
+ * los MAPEADORES se quedan aquí, porque traducen filas de Prisma y eso es
+ * asunto del Core. El paquete no debe saber que existe una columna `name`.
+ */
+export type { CompanyDTO, BranchDTO, CustomerDTO, MembershipSummaryDTO }
+
+
 // ── Company ─────────────────────────────────────────────────────────────────
 
-export interface CompanyDTO {
-  id: string
-  nombre: string
-  slug: string
-  logoUrl: string | null
-  moneda: string
-  zonaHoraria: string
-  idioma: string
-}
 
 export function companyDTO(c: {
   id: string
@@ -62,13 +67,6 @@ export function companyDTO(c: {
 
 // ── Branch ──────────────────────────────────────────────────────────────────
 
-export interface BranchDTO {
-  id: string
-  companyId: string
-  nombre: string
-  direccion: string | null
-  activa: boolean
-}
 
 export function branchDTO(s: {
   id: string
@@ -88,12 +86,6 @@ export function branchDTO(s: {
 
 // ── Customer ────────────────────────────────────────────────────────────────
 
-export interface CustomerDTO {
-  id: string
-  nombre: string
-  email: string
-  telefono: string | null
-}
 
 /**
  * Sin `supabaseId`, sin `cardnetCustomerId`, sin fecha de nacimiento, sin canal
@@ -115,15 +107,6 @@ export function customerDTO(c: {
 
 // ── MembershipSummary ───────────────────────────────────────────────────────
 
-export interface MembershipSummaryDTO {
-  id: string
-  customerId: string
-  companyId: string
-  planNombre: string
-  estado: string
-  /** ISO 8601, o null si la membresía no tiene vencimiento registrado. */
-  vigenteHasta: string | null
-}
 
 /**
  * RESUMEN, y el nombre es la advertencia: sirve para PINTAR «cliente con

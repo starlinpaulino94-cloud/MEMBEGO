@@ -212,5 +212,5 @@ registra sin cliente.
 
 ## Siguiente
 
-Fase 4: `@membego/contracts` y `@membego/platform-sdk` — los tipos y el cliente
-que hoy cada satélite tendría que escribir a mano.
+Fase 4 —`@membego/contracts` y `@membego/platform-sdk`— está en
+`docs/platform/sdk.md`.

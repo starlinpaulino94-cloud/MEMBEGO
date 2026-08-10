@@ -1,6 +1,3 @@
-import { EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
-import { eventosDeSincronizacion } from '@/modules/plataforma/proyecciones'
-
 /**
  * PLATAFORMA · Fase 3 — SOBRE DE EVENTOS v2 (núcleo puro).
  *
@@ -36,52 +33,24 @@ import { eventosDeSincronizacion } from '@/modules/plataforma/proyecciones'
  * rama vieja. `legacyType` desaparece cuando no quede ninguno.
  */
 
-export const VERSION_SOBRE = 1
+import {
+  TIPO_INTERNO,
+  TIPO_V2,
+  VERSION_SOBRE,
+  tipoV2,
+  type ClavesLegado,
+  type SobreEvento,
+} from '@membego/contracts'
+import { EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
+import { eventosDeSincronizacion } from '@/modules/plataforma/proyecciones'
 
 /**
- * Nombre v2 de cada evento del bus. La clave es el nombre interno de MembeGo
- * —que NO cambia, porque lo usan las automatizaciones— y el valor es el que
- * viaja por el cable.
+ * El sobre, su versión y el mapa de nombres VIVEN EN `@membego/contracts`: son
+ * lo que un satélite recibe, así que su definición tiene que ser la misma que
+ * la que él instala. Aquí solo se reexportan y se construyen.
  */
-export const TIPO_V2: Record<string, string> = {
-  'cliente.registrado': 'customer.created',
-  'cliente.primera_visita': 'visit.first_completed',
-  'cliente.visita': 'visit.completed',
-  'cliente.compro_servicio': 'purchase.completed',
-  'cliente.primera_compra': 'purchase.first_completed',
-  'membresia.activada': 'membership.activated',
-  'referido.convirtio': 'referral.converted',
-}
+export { TIPO_V2, TIPO_INTERNO, VERSION_SOBRE, tipoV2, type SobreEvento, type ClavesLegado }
 
-/** Índice inverso, para que un satélite ya migrado pueda pedir por el nuevo. */
-export const TIPO_INTERNO: Record<string, string> = Object.fromEntries(
-  Object.entries(TIPO_V2).map(([interno, v2]) => [v2, interno])
-)
-
-export function tipoV2(interno: string): string {
-  return TIPO_V2[interno] ?? interno
-}
-
-export interface SobreEvento {
-  /** Id estable. Es la clave de deduplicación del inbox del satélite. */
-  eventId: string
-  eventType: string
-  /**
-   * Nombre anterior, mientras dure la migración. Un satélite que aún compare
-   * con él sigue funcionando sin desplegar.
-   */
-  legacyType?: string
-  version: number
-  /** ISO 8601. Cuándo ocurrió, no cuándo se envió: los reintentos no lo mueven. */
-  occurredAt: string
-  companyId: string
-  /** Sujeto del evento cuando lo hay (el cliente, casi siempre). */
-  customerId?: string
-  source: 'membego'
-  /** Hilo que une los eventos de una misma operación. */
-  traceId: string
-  data: Record<string, unknown>
-}
 
 /**
  * Construye el sobre a partir de una fila del outbox.
@@ -128,13 +97,6 @@ export function construirSobre(fila: {
  * Son duplicados exactos de los campos nuevos, no datos distintos: un satélite
  * no puede leer dos verdades. Se retiran cuando no quede ninguno usándolos.
  */
-export interface ClavesLegado {
-  id: string
-  tipo: string
-  payload: Record<string, unknown>
-  emitidoEn: string
-}
-
 export function clavesLegado(sobre: SobreEvento): ClavesLegado {
   return {
     id: sobre.eventId,

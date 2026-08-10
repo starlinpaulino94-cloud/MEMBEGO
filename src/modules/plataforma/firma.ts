@@ -1,4 +1,11 @@
 import { createPrivateKey, createPublicKey, sign, verify, type KeyObject } from 'crypto'
+import {
+  CABECERA_EVENTO,
+  CABECERA_FIRMA,
+  CABECERA_TIMESTAMP,
+  VENTANA_REPLAY_SEGUNDOS,
+  materialFirmado,
+} from '@membego/contracts'
 
 /**
  * PLATAFORMA · Fase 3 — FIRMA Ed25519 DE LOS EVENTOS SALIENTES (núcleo puro).
@@ -37,26 +44,13 @@ import { createPrivateKey, createPublicKey, sign, verify, type KeyObject } from 
  * y la ventana anti-replay no serviría de nada.
  */
 
-/** Cabeceras del contrato v2. La HMAC (`X-Membego-Firma`) sigue viajando. */
-export const CABECERA_FIRMA = 'X-Membego-Signature'
-export const CABECERA_TIMESTAMP = 'X-Membego-Timestamp'
-export const CABECERA_EVENTO = 'X-Membego-Event-Id'
 
 /**
- * Ventana anti-replay: cinco minutos. Suficiente para un reloj mal puesto y un
- * reintento lento; poco para que un webhook capturado siga sirviendo.
- *
- * La ventana sola NO impide repetir dentro de esos cinco minutos: eso lo
- * impide el inbox del receptor, que descarta un `eventId` ya visto. Son dos
- * defensas distintas y hacen falta las dos — la ventana acota el tiempo, el
- * inbox acota las veces.
+ * Las cabeceras, la ventana anti-replay y QUÉ se firma viven en
+ * `@membego/contracts`: es lo que el satélite tiene que implementar igual, y
+ * describirlo en dos sitios es cómo empiezan a diferir.
  */
-export const VENTANA_REPLAY_SEGUNDOS = 300
-
-/** Lo que se firma. Estructurado para que ningún campo se pueda mover a otro. */
-export function materialFirmado(timestamp: number, eventId: string, cuerpo: string): string {
-  return `${timestamp}.${eventId}.${cuerpo}`
-}
+export { CABECERA_FIRMA, CABECERA_TIMESTAMP, CABECERA_EVENTO, VENTANA_REPLAY_SEGUNDOS, materialFirmado }
 
 /**
  * Lee la clave privada desde el entorno. Se acepta PEM directo o en base64,

@@ -514,7 +514,7 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | **2** | `/api/platform/v1` · DTOs · OAuth2 · scopes · rate limit · `requestId` | ✅ `docs/platform/api-v1.md` (lectura; las escrituras van con la Fase 3) |
 | **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | ✅ `docs/platform/eventos-v2.md` |
 | **3b** | Extraer el canje del Server Action · `redemptions` · `transactions` | ✅ `docs/platform/canje.md` |
-| **4** | `@membego/contracts` + `@membego/platform-sdk` | SDK |
+| **4** | `@membego/contracts` + `@membego/platform-sdk` | ✅ `docs/platform/sdk.md` |
 | **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | Acceso |
 | **6** | Car Wash consume la API **sin salir del monolito** | Validación del contrato |
 | **7** | Restaurant como **primer satélite real** | Prueba de la arquitectura |
@@ -545,17 +545,17 @@ De los 20 puntos del §93, el estado real hoy:
 | 4 | Auth service-to-service | 🟢 OAuth2 client credentials (Fase 2) |
 | 5 | Scopes | 🟢 emitidos e intersecados por petición (Fase 2) |
 | 6 | API versionada | 🟢 `/api/platform/v1` (Fase 2) |
-| 7 | Contratos reutilizables | 🟡 DTOs atados a `proyecciones.ts`; falta el paquete |
+| 7 | Contratos reutilizables | 🟢 `@membego/contracts`, fuente única (Fase 4) |
 | 8 | Webhooks estándar | 🟢 existe |
 | 9 | Event envelope | 🟢 sobre v2 con alias de legado (Fase 3) |
-| 10 | Idempotencia | 🟢 `claves_idempotencia` (Fase 3) |
+| 10 | Idempotencia | 🟢 `claves_idempotencia` + inbox en el SDK (Fases 3 y 4) |
 | 11 | Audit trail | 🟢 `auditLog` |
 | 12 | Outbox / retry | 🟢 + DEAD_LETTER y replay (Fase 3) |
 | 13 | Tenant isolation | 🟡 aplicativo + habilitaciones en la API; RLS apagado |
 | 14 | Autorización por categoría | 🟢 sustituida por habilitaciones (Fase 1b) |
 | 15 | SSO | 🟢 existe, endurecer |
 | 16 | App Launcher | 🟢 existe |
-| 17 | Documentación | 🟡 `docs/platform/` iniciada |
+| 17 | Documentación | 🟢 `docs/platform/` + README de los paquetes |
 | 18 | Car Wash migrable | 🟡 el canje ya es un servicio reutilizable (Fase 3b) |
 | 19 | Restaurant sobre el estándar | 🔴 sin estándar |
 | 20 | Tercer sistema sin rediseño | 🔴 |
@@ -564,7 +564,7 @@ Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
 **8 verdes, 6 amarillos, 6 rojos**. Tras la Fase 2: **11 verdes, 6 amarillos,
 3 rojos**. Tras la Fase 3: **13 verdes, 4 amarillos, 3 rojos**. Tras la 3b, con
 el canje ya expuesto sobre un servicio único: **14 verdes, 3 amarillos, 3
-rojos**. El cimiento es mejor de lo que sugiere el
+rojos**. Tras la Fase 4: **16 verdes, 1 amarillo, 3 rojos**. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -605,4 +605,10 @@ al satélite que provoca el evento.
 un canje —`Visit.membershipId` es obligatorio y la visita nace dentro del mismo
 núcleo atómico que descuenta el saldo—. `/redemptions` devuelve el `visitId`.
 
-Siguiente: **Fase 4**, los paquetes `@membego/contracts` y `@membego/platform-sdk`.
+**Fase 4 completa** — `docs/platform/sdk.md`: `@membego/contracts` como fuente
+única del vocabulario (el Core reexporta desde ahí, no al revés) y
+`@membego/platform-sdk` con token, reintentos que conservan la clave de
+idempotencia, verificación de webhooks e inbox.
+
+Siguiente: **Fase 5** — SSO de un solo uso, `UserSystemAccess` y App Launcher
+por habilitación.

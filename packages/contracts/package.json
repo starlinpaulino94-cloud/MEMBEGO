@@ -1,0 +1,25 @@
+{
+  "name": "@membego/contracts",
+  "version": "0.1.0",
+  "description": "Vocabulario de la plataforma MembeGo: scopes, códigos de error, sobre de eventos y respuestas de la API v1. Cero dependencias.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/starlinpaulino94-cloud/membego-app.git",
+    "directory": "packages/contracts"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./scopes": "./src/scopes.ts",
+    "./errores": "./src/errores.ts",
+    "./eventos": "./src/eventos.ts",
+    "./api": "./src/api.ts"
+  }
+}

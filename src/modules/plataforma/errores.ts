@@ -34,48 +34,26 @@
  */
 
 import { NextResponse } from 'next/server'
+import {
+  CODIGOS_ERROR,
+  esReintentable,
+  exigeTokenNuevo,
+  type CodigoError,
+  type CuerpoError,
+} from '@membego/contracts'
 
-/** Códigos estables. Añadir es compatible; renombrar o quitar NO lo es. */
-export const CODIGOS_ERROR = {
-  // 400
-  INVALID_REQUEST: 400,
-  IDEMPOTENCY_KEY_REQUIRED: 400,
-  /**
-   * La misma clave con OTRO cuerpo. Es un error del cliente, no un reintento:
-   * devolver la respuesta guardada sería contestarle sobre una operación
-   * distinta de la que pidió.
-   */
-  IDEMPOTENCY_KEY_REUSED: 400,
-  // 409 — una idéntica sigue en curso; reintentar en un momento
-  IDEMPOTENCY_IN_PROGRESS: 409,
-  // 401 — el que pide no ha demostrado quién es
-  INVALID_CLIENT: 401,
-  INVALID_TOKEN: 401,
-  TOKEN_EXPIRED: 401,
-  // 403 — sabemos quién es, y no puede
-  INSUFFICIENT_SCOPE: 403,
-  COMPANY_NOT_ENTITLED: 403,
-  // 404
-  NOT_FOUND: 404,
-  /**
-   * El beneficio existe pero no se puede consumir ahora: vencido, sin usos,
-   * vehículo no autorizado, QR que no corresponde. No es un error del satélite
-   * ni una carrera — es la respuesta del negocio, y el camarero necesita verla.
-   */
-  BENEFIT_NOT_ELIGIBLE: 422,
-  /**
-   * Alguien se adelantó: el QR se usó entre la evaluación y el canje, o la
-   * membresía se agotó. Reintentable con datos frescos, a diferencia del 422.
-   */
-  REDEMPTION_CONFLICT: 409,
-  // 429
-  RATE_LIMITED: 429,
-  // 5xx
-  INTERNAL_ERROR: 500,
-  PLATFORM_API_UNCONFIGURED: 503,
-} as const
-
-export type CodigoError = keyof typeof CODIGOS_ERROR
+/**
+ * Los códigos y la forma del cuerpo VIVEN EN `@membego/contracts` y aquí solo se
+ * reexportan. Es lo que impide que la tabla del Core y la que instala un
+ * satélite se separen: no hay dos tablas.
+ */
+export {
+  CODIGOS_ERROR,
+  esReintentable,
+  exigeTokenNuevo,
+  type CodigoError,
+  type CuerpoError,
+}
 
 /**
  * Texto por defecto de cada código. Deliberadamente grueso: describe qué hacer,
@@ -98,27 +76,6 @@ const MENSAJES: Record<CodigoError, string> = {
   RATE_LIMITED: 'Too many requests. Slow down and retry later.',
   INTERNAL_ERROR: 'Unexpected error. Retry later; the requestId identifies this call.',
   PLATFORM_API_UNCONFIGURED: 'The platform API is not configured on this deployment.',
-}
-
-export interface CuerpoError {
-  error: {
-    code: CodigoError
-    message: string
-    requestId: string
-    /**
-     * Solo en INSUFFICIENT_SCOPE: qué scope faltaba. Es la única pista que se
-     * da, y se da porque el que pregunta ya está autenticado y necesita saber
-     * qué pedir en el manifest — sin esto, integrar es adivinar.
-     */
-    requiredScope?: string
-    /**
-     * Solo en BENEFIT_NOT_ELIGIBLE: por qué no se puede consumir
-     * (`SIN_USOS`, `MEMBRESIA_VENCIDA`…). Aquí sí se detalla, y no contradice
-     * la regla de no describir la configuración: es información del cliente que
-     * el satélite ya tiene delante, y sin ella el camarero no sabe qué decirle.
-     */
-    reason?: string
-  }
 }
 
 /**
