@@ -135,6 +135,35 @@
 :root {
   --radius: 0.625rem;
 
+  /**
+   * BARRA INFERIOR · el alto que el contenido tiene que respetar en móvil.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * EL FALLO QUE ESTO ARREGLA
+   *
+   * El shell reservaba `pb-24` — 96 px fijos, escritos a ojo. La barra mide 56
+   * px (`min-h-14`) MÁS `env(safe-area-inset-bottom)`, que en un móvil con
+   * barra de gestos son otros 24-48 px. En cuanto el teléfono tiene gestos,
+   * 56 + 48 = 104 > 96 y la barra se come el final de la página: el botón
+   * principal de la pantalla queda debajo, medio tapado y sin poder pulsarse.
+   *
+   * No es un caso raro. Es todo Android moderno y todo iPhone sin botón.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * POR QUÉ ES UNA VARIABLE Y NO UN NÚMERO EN CADA SITIO
+   *
+   * El alto de la barra y el hueco que se le reserva son el mismo dato escrito
+   * en dos archivos distintos. Escritos aparte se separan —ya lo hicieron— y el
+   * síntoma aparece en el móvil de un cliente, no en el navegador de quien lo
+   * programó. `--dock-inferior` es ese dato; `--espacio-dock` es lo que hay que
+   * reservar, área segura incluida.
+   *
+   * El respiro de 1rem no es decoración: sin él el CTA queda pegado al borde de
+   * la barra y se pulsa mal con el pulgar.
+   */
+  --dock-inferior: 3.5rem;
+  --espacio-dock: calc(var(--dock-inferior) + env(safe-area-inset-bottom, 0px) + 1rem);
+
   /* Surface */
   --background: oklch(0.985 0.002 264);
   --foreground: oklch(0.14 0.02 264);
@@ -392,6 +421,26 @@
 }
 
 @layer utilities {
+  /**
+   * HUECO PARA LA BARRA INFERIOR (móvil).
+   *
+   * Se usa en el `<main>` del shell. Reserva el alto real de la barra más el
+   * área segura del teléfono; en escritorio la barra no existe, así que vuelve
+   * al padding normal de página.
+   *
+   * Antes esto era `pb-24` en el shell: 96 px a ojo, insuficientes en cuanto el
+   * móvil tiene barra de gestos. El resultado era el botón principal de la
+   * pantalla medio tapado y sin poder pulsarse — se veía en el detalle de una
+   * promoción, con «Ver empresa y sus planes» cortado por la mitad.
+   */
+  .con-dock-inferior {
+    padding-bottom: var(--espacio-dock);
+  }
+  @media (min-width: 1024px) {
+    .con-dock-inferior {
+      padding-bottom: 2rem;
+    }
+  }
   /* Shadows */
   .shadow-card {
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);

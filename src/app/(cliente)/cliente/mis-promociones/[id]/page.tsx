@@ -23,6 +23,7 @@ import { compraEstadoUi, compraEstadoVisual } from '@/components/cliente/compra-
 import { Button } from '@/components/ui/button'
 import { getAgendaConfig } from '@/modules/citas/queries'
 import { getCuentasTransferencia, ofrecerTransferencia } from '@/modules/pagos/metodosDisponibles'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +70,11 @@ export default async function MiCompraPage({
       },
     },
   })
-  if (!compra || compra.clienteId !== user.metadata.clienteId) notFound()
+  // Contra TODAS las fichas de la persona, no solo la de la empresa activa: una
+  // recompensa reclamada en otro negocio queda bajo la ficha de ESE negocio, y
+  // comparando con la activa esta pantalla daba 404 — justo aquí, que es adonde
+  // el botón de adquirir redirige nada más adquirir. Ver `afiliacion.ts`.
+  if (!compra || !(await misClienteIds(user.supabaseId)).includes(compra.clienteId)) notFound()
 
   const ui = compraEstadoVisual(compra.estado, {
     usosRestantes: compra.usosRestantes,
@@ -187,11 +192,11 @@ export default async function MiCompraPage({
       <Card>
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 p-5 text-sm">
           <div>
-            <p className="text-[11px] text-muted-foreground">Precio</p>
+            <p className="text-caption">Precio</p>
             <p className="font-semibold text-foreground">{precio > 0 ? fmtRD(precio) : 'Gratis'}</p>
           </div>
           <div>
-            <p className="text-[11px] text-muted-foreground">Usos</p>
+            <p className="text-caption">Usos</p>
             <p className="font-semibold text-foreground">
               {compra.estado === 'ACTIVA' || compra.estado === 'CONSUMIDA'
                 ? `${compra.usosRestantes} de ${compra.usosIncluidos} restantes`
@@ -200,12 +205,12 @@ export default async function MiCompraPage({
           </div>
           {compra.fechaActivacion && (
             <div>
-              <p className="text-[11px] text-muted-foreground">Activada</p>
+              <p className="text-caption">Activada</p>
               <p className="font-semibold text-foreground">{fmtFechaHora(compra.fechaActivacion)}</p>
             </div>
           )}
           <div>
-            <p className="text-[11px] text-muted-foreground">Vence</p>
+            <p className="text-caption">Vence</p>
             <p className="font-semibold text-foreground">
               {compra.fechaVencimiento ? fmtFechaHora(compra.fechaVencimiento) : 'Sin vencimiento'}
             </p>

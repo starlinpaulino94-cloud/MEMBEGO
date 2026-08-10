@@ -226,8 +226,13 @@ export function AppShell({
         <main
           className={cn(
             'mx-auto max-w-7xl px-4 py-8 md:px-6 lg:px-8',
-            // Espacio para que la barra inferior no tape el contenido en móvil.
-            hasBottomNav && 'pb-24 lg:pb-8'
+            // Hueco para la barra inferior. La clase vive en `globals.css`
+            // porque necesita `env(safe-area-inset-bottom)` —que no cabe en un
+            // valor arbitrario de Tailwind— y una media query para soltarlo en
+            // escritorio, donde no hay barra. El `pb-24` que había aquí eran
+            // 96 px a ojo y se quedaba corto en cualquier teléfono con barra de
+            // gestos, tapando el botón principal de la pantalla.
+            hasBottomNav && 'con-dock-inferior'
           )}
         >
           {children}

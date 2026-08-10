@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ChevronRight, Ticket, Clock, History, Sparkles, Gift } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { prisma } from '@/lib/prisma'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { getRegalosCliente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
 import { Card, CardContent } from '@/components/ui/card'
@@ -105,10 +106,18 @@ export default async function MisPromocionesPage() {
   const clienteId = user.metadata.clienteId
   if (!clienteId) return <p className="text-muted-foreground">No autorizado.</p>
 
+  // TODAS las fichas de la persona, no solo la de la empresa activa.
+  //
+  // «Mis beneficios» es de quien lo mira, no del negocio que tenga abierto.
+  // Filtrando por la ficha activa, una recompensa reclamada en otro negocio se
+  // adquiría bien, se guardaba bien y no aparecía en ningún sitio: la persona
+  // solo veía que no estaba. Ver `afiliacion.ts`.
+  const clienteIds = await misClienteIds(user.supabaseId)
+
   const regalos = await getRegalosCliente(clienteId).catch(() => [])
   const compras = await prisma.productoCompra
     .findMany({
-      where: { clienteId },
+      where: { clienteId: { in: clienteIds } },
       select: {
         id: true,
         estado: true,

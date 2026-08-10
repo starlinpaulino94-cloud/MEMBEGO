@@ -122,7 +122,17 @@ export function OpcionesPago({
       {opciones.length > 1 && (
       <div>
         <h3 className="text-sm font-semibold text-foreground">¿Cómo prefieres pagar?</h3>
-        <div className={cn('mt-3 grid gap-3', opciones.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
+        {/* Dos columnas en el teléfono, tres a partir de `sm`. Con tres en un
+            móvil de 360px cada tarjeta se queda en ~106px y, descontado el
+            `p-4`, el título y el detalle de la forma de pago caben en unos 74px:
+            se parten en cuatro líneas y hay que adivinar cuál se está eligiendo,
+            justo en la pantalla donde se paga. */}
+        <div
+          className={cn(
+            'mt-3 grid gap-3',
+            opciones.length >= 3 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'
+          )}
+        >
           {opciones.map(({ key, icon: Icon, titulo, detalle }) => {
             const activa = opcion === key
             return (
