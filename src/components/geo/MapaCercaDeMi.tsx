@@ -29,6 +29,7 @@ import {
   formatearMagnitudDistancia,
 } from '@/modules/geo/cercanos/distancia'
 import { aceptarConsentimientoGeo } from '@/modules/geo/consentimiento/actions'
+import { OPCIONES_TESELAS, temaOscuroActivo, urlTeselas } from '@/modules/geo/mapa/teselas'
 import type {
   ContextoUbicacion,
   FiltrosCercanos,
@@ -371,29 +372,10 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           zoomControl: false,
           attributionControl: true,
         }).setView(DEFAULT_CENTER, 12)
-        /**
-         * BASEMAP · CARTO en vez de las teselas estándar de OpenStreetMap.
-         *
-         * Las de OSM están dibujadas para leerse solas: carreteras en naranja
-         * fuerte, áreas comerciales en rosa, bosques en verde saturado. Sobre
-         * ese ruido, nuestros marcadores compiten con el mapa en lugar de
-         * destacar. Positron y Dark Matter son basemaps deliberadamente
-         * apagados —grises, sin relleno de color— pensados justo para esto:
-         * que el dato encima sea lo que se ve.
-         *
-         * Siguen siendo datos de OpenStreetMap, así que la atribución mantiene
-         * a OSM además de CARTO — es un requisito de la licencia, no un
-         * detalle de cortesía.
-         */
-        const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        const CARTO = '&copy; <a href="https://carto.com/attributions">CARTO</a>'
-        const teselas = (oscuro: boolean) =>
-          L.tileLayer(
-            `https://{s}.basemaps.cartocdn.com/${oscuro ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`,
-            { attribution: `${OSM} ${CARTO}`, maxZoom: 20, subdomains: 'abcd' }
-          )
+        // Basemap compartido por los tres mapas del producto (modules/geo/mapa/teselas).
+        const teselas = (oscuro: boolean) => L.tileLayer(urlTeselas(oscuro), OPCIONES_TESELAS)
 
-        const esOscuro = () => document.documentElement.classList.contains('dark')
+        const esOscuro = temaOscuroActivo
         let oscuroActual = esOscuro()
         let capa = teselas(oscuroActual).addTo(map)
 
