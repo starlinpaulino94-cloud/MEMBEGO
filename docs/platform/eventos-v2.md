@@ -306,5 +306,5 @@ clave, de las que solo una ejecuta**.
 
 ## Siguiente
 
-Fase 3b: extraer el servicio de canje del Server Action y montar encima
-`redemptions`, `visits` y `transactions`.
+Fase 3b —el canje extraído del Server Action y expuesto en `/redemptions` y
+`/transactions`— está en `docs/platform/canje.md`.

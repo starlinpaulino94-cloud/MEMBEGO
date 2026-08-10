@@ -2,7 +2,7 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { conEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { errorApi, respuestaApi, type CodigoError } from '@/modules/plataforma/errores'
+import { errorApi, type CodigoError } from '@/modules/plataforma/errores'
 import {
   EN_CURSO,
   VIGENCIA_MS,
@@ -142,10 +142,35 @@ export async function conIdempotencia(args: {
     )
   }
 
+  // Se repite el ESTADO guardado, no un 200.
+  //
+  // Esto se descubrió probándolo: `respuestaApi` siempre responde 200, así que
+  // el reintento de un canje RECHAZADO —«sin usos»— devolvía 200 con un cuerpo
+  // de error dentro. Un satélite que mira el código HTTP habría concluido que
+  // el canje funcionó, y le habría dado al cliente un beneficio que MembeGo
+  // acababa de negarle. Un fallo que se lee como un acierto.
   return {
     modo: 'REPETIDA',
-    respuesta: respuestaApi(previa.respuesta, requestId),
+    respuesta: repetir(previa.respuesta, previa.estadoHttp, requestId),
   }
+}
+
+/**
+ * Devuelve una respuesta guardada tal cual: mismo cuerpo, mismo código.
+ *
+ * `X-Idempotent-Replay` deja claro en los logs del satélite que esa respuesta
+ * no ejecutó nada. Sin la cabecera, un canje y su reintento son indistinguibles
+ * al revisar un incidente.
+ */
+function repetir(cuerpo: unknown, estado: number, requestId: string): NextResponse {
+  return NextResponse.json(cuerpo, {
+    status: estado,
+    headers: {
+      'X-Request-Id': requestId,
+      'X-Idempotent-Replay': 'true',
+      'Cache-Control': 'no-store',
+    },
+  })
 }
 
 /**

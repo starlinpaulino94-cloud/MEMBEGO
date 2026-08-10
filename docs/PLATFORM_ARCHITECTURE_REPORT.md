@@ -512,7 +512,8 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | **0** | Esta auditoría | ✅ este documento |
 | **1** | Separar `Feature` / `Capability` / `VerticalModule`. `BusinessType` a tabla. Registry N:M. Entitlements | ✅ `docs/platform/conceptos.md` · `docs/platform/registro.md` |
 | **2** | `/api/platform/v1` · DTOs · OAuth2 · scopes · rate limit · `requestId` | ✅ `docs/platform/api-v1.md` (lectura; las escrituras van con la Fase 3) |
-| **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | ✅ `docs/platform/eventos-v2.md` (falta 3b: extraer el canje) |
+| **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | ✅ `docs/platform/eventos-v2.md` |
+| **3b** | Extraer el canje del Server Action · `redemptions` · `transactions` | ✅ `docs/platform/canje.md` |
 | **4** | `@membego/contracts` + `@membego/platform-sdk` | SDK |
 | **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | Acceso |
 | **6** | Car Wash consume la API **sin salir del monolito** | Validación del contrato |
@@ -555,13 +556,15 @@ De los 20 puntos del §93, el estado real hoy:
 | 15 | SSO | 🟢 existe, endurecer |
 | 16 | App Launcher | 🟢 existe |
 | 17 | Documentación | 🟡 `docs/platform/` iniciada |
-| 18 | Car Wash migrable | 🔴 embebido |
+| 18 | Car Wash migrable | 🟡 el canje ya es un servicio reutilizable (Fase 3b) |
 | 19 | Restaurant sobre el estándar | 🔴 sin estándar |
 | 20 | Tercer sistema sin rediseño | 🔴 |
 
 Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
 **8 verdes, 6 amarillos, 6 rojos**. Tras la Fase 2: **11 verdes, 6 amarillos,
-3 rojos**. Tras la Fase 3: **13 verdes, 4 amarillos, 3 rojos**. El cimiento es mejor de lo que sugiere el
+3 rojos**. Tras la Fase 3: **13 verdes, 4 amarillos, 3 rojos**. Tras la 3b, con
+el canje ya expuesto sobre un servicio único: **14 verdes, 3 amarillos, 3
+rojos**. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -593,13 +596,13 @@ vive su idempotencia.
 legado, firma Ed25519 junto al HMAC, cola de descarte con replay, idempotencia
 de escrituras y `POST /benefits/evaluate`.
 
-Queda la **Fase 3b**, y su motivo es concreto: el canje vive en
-`confirmarVisita`, un Server Action de 937 líneas que exige sesión de navegador
-con rol de escáner. Una credencial de API no tiene ninguna de las dos cosas.
-Exponer `redemptions`, `visits` y `transactions` requiere extraer antes un
-servicio de canje de ahí, sin cambiar su comportamiento — es la ruta del dinero y
-lo que sostiene Car Wash en producción. Su idempotencia ya está construida y
-probada.
+**Fase 3b completa** — `docs/platform/canje.md`: el canje extraído a
+`modules/visitas/canje.ts` (el Server Action pasó de 937 líneas a autenticar y
+parsear), `POST /redemptions` y `POST /transactions` encima, y supresión del eco
+al satélite que provoca el evento.
 
-Siguiente: **Fase 3b** (extraer el canje y los tres endpoints de escritura) y
-después **Fase 4**, los paquetes `@membego/contracts` y `@membego/platform-sdk`.
+`POST /visits` no existe y no es un olvido: en el modelo de MembeGo una visita ES
+un canje —`Visit.membershipId` es obligatorio y la visita nace dentro del mismo
+núcleo atómico que descuenta el saldo—. `/redemptions` devuelve el `visitId`.
+
+Siguiente: **Fase 4**, los paquetes `@membego/contracts` y `@membego/platform-sdk`.

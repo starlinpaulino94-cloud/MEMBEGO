@@ -57,6 +57,17 @@ export const CODIGOS_ERROR = {
   COMPANY_NOT_ENTITLED: 403,
   // 404
   NOT_FOUND: 404,
+  /**
+   * El beneficio existe pero no se puede consumir ahora: vencido, sin usos,
+   * vehículo no autorizado, QR que no corresponde. No es un error del satélite
+   * ni una carrera — es la respuesta del negocio, y el camarero necesita verla.
+   */
+  BENEFIT_NOT_ELIGIBLE: 422,
+  /**
+   * Alguien se adelantó: el QR se usó entre la evaluación y el canje, o la
+   * membresía se agotó. Reintentable con datos frescos, a diferencia del 422.
+   */
+  REDEMPTION_CONFLICT: 409,
   // 429
   RATE_LIMITED: 429,
   // 5xx
@@ -82,6 +93,8 @@ const MENSAJES: Record<CodigoError, string> = {
   INSUFFICIENT_SCOPE: 'The access token does not grant the required scope.',
   COMPANY_NOT_ENTITLED: 'This system is not enabled for the requested company.',
   NOT_FOUND: 'The requested resource does not exist.',
+  BENEFIT_NOT_ELIGIBLE: 'The benefit cannot be redeemed right now.',
+  REDEMPTION_CONFLICT: 'The benefit changed while redeeming. Re-evaluate and retry.',
   RATE_LIMITED: 'Too many requests. Slow down and retry later.',
   INTERNAL_ERROR: 'Unexpected error. Retry later; the requestId identifies this call.',
   PLATFORM_API_UNCONFIGURED: 'The platform API is not configured on this deployment.',
@@ -98,6 +111,13 @@ export interface CuerpoError {
      * qué pedir en el manifest — sin esto, integrar es adivinar.
      */
     requiredScope?: string
+    /**
+     * Solo en BENEFIT_NOT_ELIGIBLE: por qué no se puede consumir
+     * (`SIN_USOS`, `MEMBRESIA_VENCIDA`…). Aquí sí se detalla, y no contradice
+     * la regla de no describir la configuración: es información del cliente que
+     * el satélite ya tiene delante, y sin ella el camarero no sabe qué decirle.
+     */
+    reason?: string
   }
 }
 
@@ -117,7 +137,7 @@ export function nuevoRequestId(): string {
 export function errorApi(
   code: CodigoError,
   requestId: string,
-  extra: { message?: string; requiredScope?: string } = {}
+  extra: { message?: string; requiredScope?: string; reason?: string } = {}
 ): NextResponse<CuerpoError> {
   const cuerpo: CuerpoError = {
     error: {
@@ -125,6 +145,7 @@ export function errorApi(
       message: extra.message ?? MENSAJES[code],
       requestId,
       ...(extra.requiredScope ? { requiredScope: extra.requiredScope } : {}),
+      ...(extra.reason ? { reason: extra.reason } : {}),
     },
   }
   const cabeceras: Record<string, string> = {

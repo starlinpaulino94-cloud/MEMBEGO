@@ -62,18 +62,41 @@ function claveEventos() {
   return clavePrivada
 }
 
-/** Sistemas que la empresa tiene habilitados Y que reciben webhooks. */
+/**
+ * Sistemas que la empresa tiene habilitados Y que reciben webhooks.
+ *
+ * `excluirSlug` quita del reparto al satélite que PROVOCÓ el evento. No es un
+ * ahorro: un satélite que canjea por la API ya tiene la respuesta síncrona, y
+ * devolverle por webhook la noticia de su propia acción es un eco. Una
+ * implementación ingenua lo trata como un evento nuevo, actúa otra vez y vuelve
+ * a llamarnos — un bucle que solo se nota cuando ya se ha multiplicado.
+ */
 async function sistemasDestino(
-  companyId: string
+  companyId: string,
+  excluirSlug?: string | null
 ): Promise<{ id: string; urlWebhook: string; secreto: string }[]> {
   try {
     const sistemas = await sistemasDeEmpresa(companyId, { conSecreto: true })
     return sistemas
       .filter((s) => s.urlWebhook !== null && s.secreto !== undefined)
+      .filter((s) => !excluirSlug || s.slug !== excluirSlug)
       .map((s) => ({ id: s.id, urlWebhook: s.urlWebhook!, secreto: s.secreto! }))
   } catch {
     return []
   }
+}
+
+/**
+ * Slug del satélite que provocó el evento, si lo hubo.
+ *
+ * Viaja dentro del payload y no como columna porque el evento cruza el bus de
+ * automatizaciones (`AutomationEvent`), cuyo `payload` es Json: añadir una
+ * columna allí para un dato de integración sería meter la plataforma dentro del
+ * motor de reglas.
+ */
+function sistemaOrigenDe(payload: Record<string, unknown> | undefined): string | null {
+  const v = payload?.sistemaOrigen
+  return typeof v === 'string' && v ? v : null
 }
 
 /** POST firmado al satélite. Devuelve null si llegó, o el error si no. */
@@ -130,7 +153,7 @@ function cuerpoDe(evento: {
 export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise<void> {
   try {
     if (!(EVENTOS_REENVIADOS as readonly string[]).includes(evento.tipo)) return
-    const sistemas = await sistemasDestino(evento.companyId)
+    const sistemas = await sistemasDestino(evento.companyId, sistemaOrigenDe(evento.payload))
     if (sistemas.length === 0) return
 
     for (const sistema of sistemas) {
