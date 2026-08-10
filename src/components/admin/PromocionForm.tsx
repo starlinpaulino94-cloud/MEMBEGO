@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { OG_RECOMENDACION } from '@/lib/share/og-tamano'
 
 interface Existing {
   id: string
@@ -224,7 +225,7 @@ export function PromocionForm({
           />
           <p className="text-xs text-muted-foreground">
             Al compartir el enlace (WhatsApp, Facebook…) esta imagen se muestra
-            ENTERA como vista previa. Ideal 1200×630 px (horizontal).
+            ENTERA como vista previa. Ideal {OG_RECOMENDACION} (horizontal).
           </p>
         </div>
       </div>

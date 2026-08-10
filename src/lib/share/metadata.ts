@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { OG_SIZE } from '@/lib/share/og'
 import { SITE_NAME } from '@/lib/site'
 
 /**
@@ -19,7 +20,7 @@ export interface ShareMetadataInput {
   /** Ruta canónica del enlace (relativa a metadataBase o absoluta). */
   url: string
   siteName?: string
-  /** Imagen explícita 1200×630. Omitir si la ruta tiene opengraph-image.tsx. */
+  /** Imagen explícita en `OG_SIZE`. Omitir si la ruta tiene opengraph-image.tsx. */
   image?: string | null
   imageAlt?: string
   type?: 'website' | 'article'
@@ -47,8 +48,15 @@ export function shareMetadata({
       url,
       siteName,
       locale: 'es_DO',
+      // Las dimensiones declaradas tienen que ser las REALES de la tarjeta: con
+      // ellas WhatsApp reserva el hueco antes de descargarla. Si mienten, la
+      // vista previa salta de tamaño al cargar.
       ...(image
-        ? { images: [{ url: image, width: 1200, height: 630, alt: imageAlt ?? title }] }
+        ? {
+            images: [
+              { url: image, width: OG_SIZE.width, height: OG_SIZE.height, alt: imageAlt ?? title },
+            ],
+          }
         : {}),
     },
     twitter: {

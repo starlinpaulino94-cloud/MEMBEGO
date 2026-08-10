@@ -11,11 +11,15 @@ import { useRef, useState } from 'react'
 import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { OG_MAX_MB, OG_RECOMENDACION } from '@/lib/share/og-tamano'
 import { uniqueFileName } from '@/lib/storage'
 import { Button } from '@/components/ui/button'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
-const MAX_MB = 5
+// El tope sale del generador de la tarjeta compartida, no de un número aquí:
+// si la subida admitiera más de lo que la tarjeta acepta, el enlace se
+// compartiría sin imagen y nadie se enteraría. Ver `og-tamano.ts`.
+const MAX_MB = OG_MAX_MB
 const BUCKET = 'promociones'
 
 export function PromoImagenUpload({
@@ -91,6 +95,7 @@ export function PromoImagenUpload({
           )}
           <span className="text-sm">Subir imagen desde tu dispositivo</span>
           <span className="text-xs">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
+          <span className="text-xs opacity-80">Ideal {OG_RECOMENDACION} (horizontal)</span>
         </button>
       )}
 

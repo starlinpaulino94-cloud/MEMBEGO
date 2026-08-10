@@ -1,3 +1,5 @@
+import { OG_ASPECTO } from '@/lib/share/og-tamano'
+
 /**
  * Share Engine · "Vista previa al compartir": muestra en el panel cómo se verá
  * el enlace en WhatsApp/Facebook/Telegram ANTES de compartirlo. La imagen es
@@ -27,7 +29,14 @@ export function SharePreviewCard({
           <img
             src={imageSrc}
             alt={`Vista previa al compartir: ${titulo}`}
-            className="aspect-[1200/630] w-full bg-muted object-cover"
+            className="w-full bg-muted object-cover"
+            /* La proporción sale de `OG_SIZE`, y va en `style` y no en una clase
+               de Tailwind: Tailwind genera sus clases leyendo el código, y una
+               construida con una plantilla no existe cuando eso ocurre.
+               Escrita a mano, además, esta vista previa acabaría enseñando un
+               recorte distinto del que ve quien recibe el enlace — justo lo que
+               esta tarjeta existe para evitar. */
+            style={{ aspectRatio: OG_ASPECTO }}
             loading="lazy"
           />
           <div className="space-y-0.5 p-3">
