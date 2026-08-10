@@ -182,5 +182,5 @@ pantalla llega con el App Launcher, cuando haya más de un sistema que ofrecer.
 
 ## Siguiente
 
-Fase 2: `/api/platform/v1/*` con OAuth2 y los scopes que `conceptos.ts` ya
-declara. Ver `docs/PLATFORM_ARCHITECTURE_REPORT.md` §20 y §26.
+Fase 2 —la API entrante que usa estas habilitaciones para decidir sobre qué
+empresa puede actuar un sistema— está en `docs/platform/api-v1.md`.

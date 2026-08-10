@@ -64,8 +64,60 @@ model SistemaConectado {
   eventos        EventoSaliente[]
   tiposNegocio   SistemaTipoNegocio[]
   habilitaciones EmpresaSistema[]
+  credenciales   CredencialSistema[]
 
   @@map("sistemas_conectados")
+}
+
+/// Credencial con la que un sistema satélite llama a la API de MembeGo
+/// (`/api/platform/v1`). OAuth2 client credentials.
+///
+/// Es la dirección CONTRARIA a `SistemaConectado.secreto`, y por eso es otra
+/// tabla y otro mecanismo:
+///
+///   salida  MembeGo → satélite   webhooks firmados con el secreto compartido
+///   entrada satélite → MembeGo   ESTA credencial, y solo su HASH se guarda
+///
+/// Un volcado de esta tabla no permite autenticarse: del secreto solo queda un
+/// hash con sal (scrypt). Es la Regla §25 —«no guardar secrets en texto
+/// plano»— aplicada donde de verdad importa, porque este secreto abre datos de
+/// clientes de todas las empresas que el sistema atiende.
+model CredencialSistema {
+  id String @id @default(cuid())
+
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  /// Identificador público de la credencial. Viaja en cada petición de token.
+  clientId String @unique
+
+  /// `scrypt` con sal, en formato `scrypt$N$r$p$sal$hash`. El secreto en claro
+  /// se enseña UNA vez al crearla y no se puede recuperar: si se pierde, se
+  /// rota. Esa es la propiedad que se busca, no un inconveniente.
+  clientSecretHash String
+
+  /// Scopes concedidos (`customers:read`, `benefits:redeem`, …). El token
+  /// puede pedir menos, nunca más: los scopes efectivos de cada petición son
+  /// la intersección, recalculada en el momento. Recortar aquí surte efecto
+  /// sin esperar a que caduque ningún token.
+  scopes String[]
+
+  /// ACTIVE | REVOKED. Se comprueba en CADA petición, no solo al emitir el
+  /// token: revocar tiene que cerrar la puerta ya, no dentro de quince minutos.
+  estado String @default("ACTIVE")
+
+  /// Nombre para el panel («Restaurant System · producción»).
+  descripcion String?
+
+  /// Null = no caduca. Una fecha convierte la rotación en algo que ocurre
+  /// aunque nadie se acuerde.
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([sistemaId, estado])
+  @@map("credenciales_sistema")
 }
 
 /// Vertical de negocio al que sirve un sistema (CAR_WASH, RESTAURANTE, …).

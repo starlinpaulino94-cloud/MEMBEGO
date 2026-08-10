@@ -261,6 +261,29 @@ BEGIN
     RAISE NOTICE 'transaction_counters: ámbito global TX:* + TICKET del propio inquilino.';
   END IF;
 
+  -- ── Solo omnisciente: ni de un inquilino ni de todos ──────────────────────
+  --
+  -- `credenciales_sistema` guarda con qué se autentica cada satélite contra
+  -- `/api/platform/v1`. No lleva `companyId` —una credencial es de un SISTEMA,
+  -- que atiende a muchas empresas— y NO es un catálogo: abrirla a lectura
+  -- general dejaría que una empresa viera los hashes y los scopes de otra.
+  --
+  -- Es la única categoría que faltaba: sin ruta al inquilino Y sin lectura
+  -- pública. Y no puede quedarse sin política, porque entonces RLS la deniega
+  -- también en modo omnisciente y la API no autenticaría a NADIE: fallo
+  -- cerrado, sí, pero cerrado del todo y sin decir por qué.
+  FOREACH cond IN ARRAY ARRAY['credenciales_sistema'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Credenciales de sistema: solo en modo omnisciente.';
+
   -- ── Lo que quedó fuera ────────────────────────────────────────────────────
   --
   -- Sin política, RLS deniega. Aquí no debería quedar nada: si aparece algo, es

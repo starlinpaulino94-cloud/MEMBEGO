@@ -42,6 +42,21 @@ export function hasSupabaseJwtSecret(): boolean {
   return Boolean(process.env.SUPABASE_JWT_SECRET)
 }
 
+/**
+ * Signing key for the platform API access tokens (`/api/platform/v1`).
+ *
+ * Returns `null` when absent, and the API answers 503 instead of falling back
+ * to a derived or default key. A weak default here would be the difference
+ * between "the API is off" and "the API is on and anyone can mint a token" —
+ * and only one of those two is visible from the outside.
+ *
+ * Generate with: `openssl rand -base64 48`.
+ */
+export function getPlatformTokenSecret(): string | null {
+  const key = process.env.PLATFORM_TOKEN_SECRET
+  return key && key.length >= 32 ? key : null
+}
+
 /** Returns the list of missing required public env vars (for diagnostics). */
 export function missingPublicEnv(): string[] {
   return REQUIRED_PUBLIC.filter((k) => !process.env[k])

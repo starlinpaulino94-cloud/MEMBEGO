@@ -1,5 +1,6 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { capacidadesEfectivas } from '@/modules/capacidades/catalogo'
 import {
   decidirAcceso,
   esEstadoHabilitacion,
@@ -95,7 +96,14 @@ function normalizarHabilitacion(v: string | undefined): EstadoHabilitacion | nul
  * que es dato de inquilino y la Capa 2 debe poder filtrarlo. El catálogo de
  * sistemas es global y no la estorba.
  */
-async function leerSistemas(companyId: string, conSecreto: boolean): Promise<SistemaRegistrado[]> {
+interface ContextoEmpresa {
+  tipoNegocio: string | null
+  sistemas: SistemaRegistrado[]
+}
+
+const VACIO: ContextoEmpresa = { tipoNegocio: null, sistemas: [] }
+
+async function leerContexto(companyId: string, conSecreto: boolean): Promise<ContextoEmpresa> {
   const comun = {
     id: true,
     slug: true,
@@ -105,9 +113,18 @@ async function leerSistemas(companyId: string, conSecreto: boolean): Promise<Sis
     ...(conSecreto ? { secreto: true } : {}),
   } as const
 
+  const empresaSelect = { type: true, capacidades: true } as const
+
   try {
-    const filas = (await conEmpresa(companyId, (tx) =>
-      tx.sistemaConectado.findMany({
+    // Las dos lecturas en la MISMA transacción: la empresa y los sistemas se
+    // deciden juntos, y separarlas abriría la ventana en que la categoría ya
+    // cambió y las habilitaciones todavía no.
+    const { empresa, filas } = await conEmpresa(companyId, async (tx) => {
+      const empresa = await tx.company.findUnique({
+        where: { id: companyId },
+        select: empresaSelect,
+      })
+      const filas = (await tx.sistemaConectado.findMany({
         select: {
           ...comun,
           estado: true,
@@ -116,59 +133,84 @@ async function leerSistemas(companyId: string, conSecreto: boolean): Promise<Sis
           habilitaciones: { where: { companyId }, select: { estado: true } },
         },
         orderBy: { createdAt: 'asc' },
-      })
-    )) as FilaNueva[]
+      })) as FilaNueva[]
+      return { empresa, filas }
+    })
 
-    return filas.map((f) => ({
-      id: f.id,
-      slug: f.slug,
-      nombre: f.nombre,
-      urlBase: f.urlBase,
-      urlWebhook: f.urlWebhook,
-      secreto: f.secreto,
-      estado: normalizarEstado(f.estado),
-      autoHabilitar: f.autoHabilitar,
-      tiposNegocio: f.tiposNegocio.map((t) => t.tipo.codigo),
-      habilitacion: normalizarHabilitacion(f.habilitaciones[0]?.estado),
-    }))
-  } catch {
-    // Migración aún sin aplicar: misma regla, columnas viejas.
-    try {
-      const filas = (await conEmpresa(companyId, (tx) =>
-        tx.sistemaConectado.findMany({
-          select: { ...comun, activo: true, categoria: true },
-          orderBy: { createdAt: 'asc' },
-        })
-      )) as FilaLegado[]
-
-      return filas.map((f) => ({
+    return {
+      tipoNegocio: tipoNegocioDe(empresa),
+      sistemas: filas.map((f) => ({
         id: f.id,
         slug: f.slug,
         nombre: f.nombre,
         urlBase: f.urlBase,
         urlWebhook: f.urlWebhook,
         secreto: f.secreto,
-        estado: f.activo ? 'ACTIVE' : 'SUSPENDED',
-        autoHabilitar: true,
-        tiposNegocio: [f.categoria],
-        habilitacion: null,
-      }))
+        estado: normalizarEstado(f.estado),
+        autoHabilitar: f.autoHabilitar,
+        tiposNegocio: f.tiposNegocio.map((t) => t.tipo.codigo),
+        habilitacion: normalizarHabilitacion(f.habilitaciones[0]?.estado),
+      })),
+    }
+  } catch {
+    // Migración aún sin aplicar: misma regla, columnas viejas.
+    try {
+      const { empresa, filas } = await conEmpresa(companyId, async (tx) => {
+        const empresa = await tx.company.findUnique({
+          where: { id: companyId },
+          select: empresaSelect,
+        })
+        const filas = (await tx.sistemaConectado.findMany({
+          select: { ...comun, activo: true, categoria: true },
+          orderBy: { createdAt: 'asc' },
+        })) as FilaLegado[]
+        return { empresa, filas }
+      })
+
+      return {
+        tipoNegocio: tipoNegocioDe(empresa),
+        sistemas: filas.map((f) => ({
+          id: f.id,
+          slug: f.slug,
+          nombre: f.nombre,
+          urlBase: f.urlBase,
+          urlWebhook: f.urlWebhook,
+          secreto: f.secreto,
+          estado: f.activo ? 'ACTIVE' : 'SUSPENDED',
+          autoHabilitar: true,
+          tiposNegocio: [f.categoria],
+          habilitacion: null,
+        })),
+      }
     } catch (e) {
       console.error('[plataforma] no se pudo leer el registro de sistemas:', e)
-      return []
+      return VACIO
     }
   }
 }
 
-/** Categoría efectiva de la empresa, que es su tipo de negocio. */
-async function tipoNegocioDe(companyId: string): Promise<string | null> {
-  try {
-    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
-    return (await getCapacidadesEmpresa(companyId)).categoria
-  } catch (e) {
-    console.error('[plataforma] no se pudo resolver el tipo de negocio:', e)
-    return null
-  }
+/**
+ * Tipo de negocio efectivo de la empresa: override en `capacidades`, si no el
+ * `type` heredado. Es la misma resolución que hace `capacidadesEfectivas`, que
+ * es pura y se reutiliza tal cual.
+ *
+ * SE LEE DIRECTO Y NO POR `getCapacidadesEmpresa`, que era lo natural. Dos
+ * motivos, y el segundo se descubrió probándolo:
+ *
+ *  · Ese resolutor envuelve la lectura en `unstable_cache` con 300 s. Una
+ *    decisión de acceso tomada sobre una categoría de hace cinco minutos es una
+ *    decisión que nadie puede explicar mirando la base.
+ *
+ *  · `unstable_cache` LANZA fuera del contexto de petición de Next. La
+ *    autorización acababa en el `catch`, o sea denegando —fallo cerrado, no
+ *    abierto— pero denegando siempre y sin motivo entendible.
+ *
+ * El coste es leer dos columnas dentro de una transacción que ya estaba
+ * abierta.
+ */
+function tipoNegocioDe(empresa: { type: string | null; capacidades: unknown } | null): string | null {
+  if (!empresa) return null
+  return capacidadesEfectivas(empresa.type, empresa.capacidades).categoria
 }
 
 /**
@@ -180,10 +222,9 @@ export async function sistemasDeEmpresa(
   companyId: string,
   opciones: { conSecreto?: boolean } = {}
 ): Promise<SistemaRegistrado[]> {
-  const tipo = await tipoNegocioDe(companyId)
-  if (!tipo) return []
-  const sistemas = await leerSistemas(companyId, opciones.conSecreto === true)
-  return sistemas.filter((s) => decidirAcceso(s, tipo, s.habilitacion).permitido)
+  const { tipoNegocio, sistemas } = await leerContexto(companyId, opciones.conSecreto === true)
+  if (!tipoNegocio) return []
+  return sistemas.filter((s) => decidirAcceso(s, tipoNegocio, s.habilitacion).permitido)
 }
 
 /**
@@ -198,14 +239,17 @@ export async function accesoASistema(
   companyId: string,
   opciones: { conSecreto?: boolean } = {}
 ): Promise<{ decision: Decision; sistema: SistemaRegistrado | null }> {
-  const tipo = await tipoNegocioDe(companyId)
-  const sistemas = await leerSistemas(companyId, opciones.conSecreto === true)
+  const { tipoNegocio, sistemas } = await leerContexto(companyId, opciones.conSecreto === true)
   const sistema = sistemas.find((s) => s.slug === slug) ?? null
 
   if (!sistema) return { decision: { permitido: false, motivo: 'SISTEMA_NO_ACTIVO' }, sistema: null }
-  if (!tipo) return { decision: { permitido: false, motivo: 'VERTICAL_INCOMPATIBLE' }, sistema }
+  if (!tipoNegocio) {
+    // La empresa no existe, o su fila no se pudo leer. Cerrado, y con el motivo
+    // que menos cuenta de la configuración a quien pregunta.
+    return { decision: { permitido: false, motivo: 'VERTICAL_INCOMPATIBLE' }, sistema }
+  }
 
-  return { decision: decidirAcceso(sistema, tipo, sistema.habilitacion), sistema }
+  return { decision: decidirAcceso(sistema, tipoNegocio, sistema.habilitacion), sistema }
 }
 
 /**
