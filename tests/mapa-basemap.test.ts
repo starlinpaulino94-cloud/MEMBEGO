@@ -76,6 +76,23 @@ test('las teselas piden la versión de alta densidad', () => {
   }
 })
 
+test('el marcador nunca se queda sin nada que enseñar', () => {
+  // El logo va como `background-image`: si la URL está pero falla —un logo
+  // borrado del almacenamiento, un dominio caído— no pinta y NO avisa. Antes
+  // eran excluyentes (logo O inicial) y eso dejaba un disco vacío. Ahora la
+  // inicial va siempre debajo, así que el fallo degrada a la letra del negocio.
+  const src = readFileSync(join('src', 'components', 'geo', 'MapaCercaDeMi.tsx'), 'utf8')
+  assert.match(
+    src,
+    /const interior = url\s*\?\s*`\$\{inicial\}/,
+    'la inicial debe ir SIEMPRE debajo del logo, no como alternativa'
+  )
+
+  const css = readFileSync(join('src', 'app', 'globals.css'), 'utf8')
+  const bloque = css.slice(css.indexOf('.mg-pin__logo {'), css.indexOf('}', css.indexOf('.mg-pin__logo {')))
+  assert.ok(bloque.includes('z-index'), 'el logo debe pintarse por encima de la inicial')
+})
+
 test('la atribución cita a OpenStreetMap y a CARTO', () => {
   // Son datos de OSM servidos por CARTO: citar a los dos es la licencia, no
   // una cortesía. Es el tipo de cosa que se cae en una refactorización y nadie

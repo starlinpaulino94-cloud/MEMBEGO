@@ -329,10 +329,16 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         .filter(Boolean)
         .join(' ')
 
+      // La inicial va SIEMPRE, y el logo encima cuando lo hay. Antes eran
+      // excluyentes: con una URL presente pero rota —un logo borrado del
+      // almacenamiento, un dominio caído— el disco se quedaba vacío, porque un
+      // `background-image` que falla no pinta nada y no avisa. Con la inicial
+      // debajo, ese fallo degrada a la letra del negocio en vez de a un hueco.
       const url = urlImagenSegura(s.logoUrl)
+      const inicial = `<span class="mg-pin__inicial">${escaparHtml((s.empresaNombre[0] ?? '?').toUpperCase())}</span>`
       const interior = url
-        ? `<span class="mg-pin__logo" style="background-image:url('${escaparCss(url)}')"></span>`
-        : `<span class="mg-pin__inicial">${escaparHtml((s.empresaNombre[0] ?? '?').toUpperCase())}</span>`
+        ? `${inicial}<span class="mg-pin__logo" style="background-image:url('${escaparCss(url)}')"></span>`
+        : inicial
 
       return L.divIcon({
         className: '',
@@ -402,7 +408,14 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         const anyL = L as any
         const cluster =
           typeof anyL.markerClusterGroup === 'function'
-            ? anyL.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 })
+            ? anyL.markerClusterGroup({
+                showCoverageOnHover: false,
+                // El marcador mide 38px: agrupar solo cuando de verdad se
+                // solapan. Con 45 se juntaban logos que ni se tocaban, y un
+                // número gris en lugar de dos marcas es justo lo que uno viene
+                // a buscar al mapa.
+                maxClusterRadius: 38,
+              })
             : L.layerGroup()
 
         cluster.addTo(map)

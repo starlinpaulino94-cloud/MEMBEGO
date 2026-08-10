@@ -690,8 +690,11 @@
     box-shadow: 0 4px 12px rgb(15 23 42 / 0.4);
   }
   /* La imagen es de fondo, no un <img>: una URL rota simplemente no pinta —
-     no deja el icono de imagen partida del navegador colgando en el mapa. */
+     no deja el icono de imagen partida del navegador colgando en el mapa. Y
+     como la inicial va DEBAJO, ese fallo se ve como la letra del negocio en
+     vez de como un disco vacío. */
   .mg-pin__logo {
+    z-index: 1;
     position: absolute;
     inset: 0;
     background-size: cover;
