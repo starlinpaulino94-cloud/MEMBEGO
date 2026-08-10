@@ -510,11 +510,12 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | Fase | Alcance | Entregable |
 |---|---|---|
 | **0** | Esta auditoría | ✅ este documento |
-| **1** | Separar `Feature` / `Capability` / `VerticalModule`. `BusinessType` a tabla. Registry N:M. Entitlements | Dominio de plataforma |
-| **2** | `/api/platform/v1` · DTOs · OAuth2 · scopes · rate limit · `requestId` | API entrante |
-| **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | Eventos v2 |
-| **4** | `@membego/contracts` + `@membego/platform-sdk` | SDK |
-| **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | Acceso |
+| **1** | Separar `Feature` / `Capability` / `VerticalModule`. `BusinessType` a tabla. Registry N:M. Entitlements | ✅ `docs/platform/conceptos.md` · `docs/platform/registro.md` |
+| **2** | `/api/platform/v1` · DTOs · OAuth2 · scopes · rate limit · `requestId` | ✅ `docs/platform/api-v1.md` (lectura; las escrituras van con la Fase 3) |
+| **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | ✅ `docs/platform/eventos-v2.md` |
+| **3b** | Extraer el canje del Server Action · `redemptions` · `transactions` | ✅ `docs/platform/canje.md` |
+| **4** | `@membego/contracts` + `@membego/platform-sdk` | ✅ `docs/platform/sdk.md` |
+| **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | ✅ `docs/platform/sso.md` |
 | **6** | Car Wash consume la API **sin salir del monolito** | Validación del contrato |
 | **7** | Restaurant como **primer satélite real** | Prueba de la arquitectura |
 | **8** | Health · métricas de entrega · panel de sistemas | Observabilidad |
@@ -538,28 +539,34 @@ De los 20 puntos del §93, el estado real hoy:
 
 | | Punto | Estado |
 |---|---|---|
-| 1 | Systems Registry | 🟡 existe, falta extender |
-| 2 | System ↔ BusinessType | 🔴 es 1:1 |
-| 3 | Entitlements | 🔴 no existe |
-| 4 | Auth service-to-service | 🔴 no existe |
-| 5 | Scopes | 🔴 no existe |
-| 6 | API versionada | 🔴 no existe |
-| 7 | Contratos reutilizables | 🟡 `nucleo.ts` lo es |
+| 1 | Systems Registry | 🟢 estado de ciclo de vida (Fase 1b) |
+| 2 | System ↔ BusinessType | 🟢 N:M sobre `tipos_negocio` (Fase 1b) |
+| 3 | Entitlements | 🟢 `empresas_sistemas` (Fase 1b) |
+| 4 | Auth service-to-service | 🟢 OAuth2 client credentials (Fase 2) |
+| 5 | Scopes | 🟢 emitidos e intersecados por petición (Fase 2) |
+| 6 | API versionada | 🟢 `/api/platform/v1` (Fase 2) |
+| 7 | Contratos reutilizables | 🟢 `@membego/contracts`, fuente única (Fase 4) |
 | 8 | Webhooks estándar | 🟢 existe |
-| 9 | Event envelope | 🟡 informal |
-| 10 | Idempotencia | 🟡 `eventId`; sin escritura |
+| 9 | Event envelope | 🟢 sobre v2 con alias de legado (Fase 3) |
+| 10 | Idempotencia | 🟢 `claves_idempotencia` + inbox en el SDK (Fases 3 y 4) |
 | 11 | Audit trail | 🟢 `auditLog` |
-| 12 | Outbox / retry | 🟢 existe |
-| 13 | Tenant isolation | 🟡 aplicativo; RLS apagado |
-| 14 | Autorización por categoría | 🟢 existe |
-| 15 | SSO | 🟢 existe, endurecer |
-| 16 | App Launcher | 🟢 existe |
-| 17 | Documentación | 🔴 no existe |
-| 18 | Car Wash migrable | 🔴 embebido |
+| 12 | Outbox / retry | 🟢 + DEAD_LETTER y replay (Fase 3) |
+| 13 | Tenant isolation | 🟡 aplicativo + habilitaciones en la API; RLS apagado |
+| 14 | Autorización por categoría | 🟢 sustituida por habilitaciones (Fase 1b) |
+| 15 | SSO | 🟢 uso único, returnUrl y rol del vertical (Fase 5) |
+| 16 | App Launcher | 🟢 por habilitación Y acceso del usuario (Fase 5) |
+| 17 | Documentación | 🟢 `docs/platform/` + README de los paquetes |
+| 18 | Car Wash migrable | 🟡 el canje ya es un servicio reutilizable (Fase 3b) |
 | 19 | Restaurant sobre el estándar | 🔴 sin estándar |
 | 20 | Tercer sistema sin rediseño | 🔴 |
 
-**5 verdes, 6 amarillos, 9 rojos.** El cimiento es mejor de lo que sugiere el
+Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
+**8 verdes, 6 amarillos, 6 rojos**. Tras la Fase 2: **11 verdes, 6 amarillos,
+3 rojos**. Tras la Fase 3: **13 verdes, 4 amarillos, 3 rojos**. Tras la 3b, con
+el canje ya expuesto sobre un servicio único: **14 verdes, 3 amarillos, 3
+rojos**. Tras la Fase 4: **16 verdes, 1 amarillo, 3 rojos**. La Fase 5 no
+cambia el recuento —esos dos puntos ya estaban verdes— pero cierra lo que el
+§13 pedía endurecer. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -570,4 +577,47 @@ Empezar por la **Fase 1**, y dentro de ella por **la separación de los tres
 conceptos** hoy llamados «capacidades». Es media jornada de diseño y condiciona
 todo lo demás; hacerlo después obligaría a migrar datos ya escritos.
 
-**Detengo aquí, a la espera de tu revisión.**
+### Estado
+
+**Fase 1 completa.**
+
+- **1a** — los tres conceptos separados y probados: `docs/platform/conceptos.md`.
+- **1b** — tipos de negocio a tabla, registro N:M y habilitaciones por empresa:
+  `docs/platform/registro.md`.
+
+**Fase 2 completa** — `docs/platform/api-v1.md`: OAuth2 client credentials,
+scopes efectivos por petición, contrato de error con `requestId`, DTOs atados a
+los contratos de proyección y siete endpoints de lectura.
+
+Los cuatro endpoints que ESCRIBEN (`benefits/evaluate`, `redemptions`, `visits`,
+`transactions`) no van aquí: evaluar sin poder canjear no sirve, y canjear sin
+idempotencia es peor que no canjear. Llegan juntos con la Fase 3, que es donde
+vive su idempotencia.
+
+**Fase 3 completa** — `docs/platform/eventos-v2.md`: sobre v2 con alias de
+legado, firma Ed25519 junto al HMAC, cola de descarte con replay, idempotencia
+de escrituras y `POST /benefits/evaluate`.
+
+**Fase 3b completa** — `docs/platform/canje.md`: el canje extraído a
+`modules/visitas/canje.ts` (el Server Action pasó de 937 líneas a autenticar y
+parsear), `POST /redemptions` y `POST /transactions` encima, y supresión del eco
+al satélite que provoca el evento.
+
+`POST /visits` no existe y no es un olvido: en el modelo de MembeGo una visita ES
+un canje —`Visit.membershipId` es obligatorio y la visita nace dentro del mismo
+núcleo atómico que descuenta el saldo—. `/redemptions` devuelve el `visitId`.
+
+**Fase 4 completa** — `docs/platform/sdk.md`: `@membego/contracts` como fuente
+única del vocabulario (el Core reexporta desde ahí, no al revés) y
+`@membego/platform-sdk` con token, reintentos que conservan la clave de
+idempotencia, verificación de webhooks e inbox.
+
+**Fase 5 completa** — `docs/platform/sso.md`: uso único con `jti` registrado en
+MembeGo, `returnUrl` validada por origen y firmada, `UsuarioSistema` con el
+puesto del vertical que el Core transporta sin interpretar, y el lanzador
+filtrando por habilitación Y acceso.
+
+Siguiente: **Fase 6** — Car Wash consumiendo los contratos sin salir del
+monolito. Es la validación del estándar hecha con el vertical que ya funciona, y
+antes de que exista un satélite real: si algo del contrato no sirve, se descubre
+aquí y no en la primera integración de verdad.

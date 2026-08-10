@@ -42,6 +42,35 @@ export function hasSupabaseJwtSecret(): boolean {
   return Boolean(process.env.SUPABASE_JWT_SECRET)
 }
 
+/**
+ * Signing key for the platform API access tokens (`/api/platform/v1`).
+ *
+ * Returns `null` when absent, and the API answers 503 instead of falling back
+ * to a derived or default key. A weak default here would be the difference
+ * between "the API is off" and "the API is on and anyone can mint a token" —
+ * and only one of those two is visible from the outside.
+ *
+ * Generate with: `openssl rand -base64 48`.
+ */
+export function getPlatformTokenSecret(): string | null {
+  const key = process.env.PLATFORM_TOKEN_SECRET
+  return key && key.length >= 32 ? key : null
+}
+
+/**
+ * Ed25519 private key used to sign outbound platform events.
+ *
+ * Returns the raw value; parsing lives in `modules/plataforma/firma.ts`.
+ *
+ * Absent is a supported state, and unlike `PLATFORM_TOKEN_SECRET` it does NOT
+ * fail closed: without it, events keep going out signed with the shared-secret
+ * HMAC exactly as they do today. Failing closed here would stop delivering
+ * webhooks to satellites that never asked for the new signature.
+ */
+export function getPlatformEventPrivateKey(): string | undefined {
+  return process.env.PLATFORM_EVENT_PRIVATE_KEY
+}
+
 /** Returns the list of missing required public env vars (for diagnostics). */
 export function missingPublicEnv(): string[] {
   return REQUIRED_PUBLIC.filter((k) => !process.env[k])

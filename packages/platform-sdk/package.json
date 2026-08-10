@@ -1,0 +1,30 @@
+{
+  "name": "@membego/platform-sdk",
+  "version": "0.1.0",
+  "description": "Cliente de la plataforma MembeGo para sistemas verticales: token, reintentos con idempotencia, verificación de webhooks e inbox.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/starlinpaulino94-cloud/membego-app.git",
+    "directory": "packages/platform-sdk"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./cliente": "./src/cliente.ts",
+    "./webhooks": "./src/webhooks.ts",
+    "./inbox": "./src/inbox.ts"
+  },
+  "dependencies": {
+    "@membego/contracts": "0.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

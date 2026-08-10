@@ -1,6 +1,16 @@
 import 'server-only'
-import { sinEmpresa } from '@/lib/tenant'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
+import { getPlatformEventPrivateKey } from '@/lib/env'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
+import { esEstadoSistema, type EstadoSistema } from '@/modules/plataforma/acceso'
+import { construirSobre, cuerpoDelSobre } from '@/modules/plataforma/eventos'
+import {
+  CABECERA_EVENTO,
+  CABECERA_FIRMA,
+  CABECERA_TIMESTAMP,
+  clavePrivadaDesde,
+  firmarEd25519,
+} from '@/modules/plataforma/firma'
 import {
   diagnosticarSonda,
   type Diagnostico,
@@ -33,10 +43,16 @@ export interface ResumenSistema {
   id: string
   slug: string
   nombre: string
-  categoria: string
+  /** DRAFT | ACTIVE | SUSPENDED | RETIRED. */
+  estado: EstadoSistema
+  /** Verticales que atiende (N:M). Vacío = nadie puede entrar. */
+  tiposNegocio: string[]
+  /** ¿Toda empresa compatible entra sin habilitación explícita? */
+  autoHabilitar: boolean
+  /** Empresas con habilitación ENABLED. */
+  habilitadas: number
   urlBase: string
   urlWebhook: string | null
-  activo: boolean
   /** Huella del secreto: permite comparar con el satélite SIN exponerlo. */
   secretoLargo: number
   pendientes: number
@@ -48,12 +64,86 @@ export interface ResumenSistema {
   esperandoDesde: Date | null
 }
 
+interface FilaSistema {
+  id: string
+  slug: string
+  nombre: string
+  urlBase: string
+  urlWebhook: string | null
+  secreto: string
+  estado: EstadoSistema
+  tiposNegocio: string[]
+  autoHabilitar: boolean
+  habilitadas: number
+}
+
+/**
+ * Sistemas del catálogo con su ciclo de vida y sus verticales.
+ *
+ * Doble forma por el mismo motivo que en `modules/plataforma/registro`: entre
+ * el despliegue del código y el de la migración, las columnas nuevas no
+ * existen. Ahí el panel enseña lo que hay y lo etiqueta con el estado
+ * equivalente, en vez de quedarse en blanco justo cuando alguien está mirando
+ * por qué no salen los eventos.
+ */
+async function leerCatalogo(tx: Tx): Promise<FilaSistema[]> {
+  try {
+    const filas = await tx.sistemaConectado.findMany({
+      orderBy: { slug: 'asc' },
+      select: {
+        id: true,
+        slug: true,
+        nombre: true,
+        urlBase: true,
+        urlWebhook: true,
+        secreto: true,
+        estado: true,
+        autoHabilitar: true,
+        tiposNegocio: { select: { tipo: { select: { codigo: true } } } },
+        _count: { select: { habilitaciones: { where: { estado: 'ENABLED' } } } },
+      },
+    })
+    return filas.map((f) => ({
+      ...f,
+      estado: esEstadoSistema(f.estado) ? f.estado : 'SUSPENDED',
+      tiposNegocio: f.tiposNegocio.map((t) => t.tipo.codigo),
+      habilitadas: f._count.habilitaciones,
+    }))
+  } catch {
+    const filas = await tx.sistemaConectado
+      .findMany({
+        orderBy: { slug: 'asc' },
+        select: {
+          id: true,
+          slug: true,
+          nombre: true,
+          urlBase: true,
+          urlWebhook: true,
+          secreto: true,
+          activo: true,
+          categoria: true,
+        },
+      })
+      .catch(() => [])
+    return filas.map((f) => ({
+      id: f.id,
+      slug: f.slug,
+      nombre: f.nombre,
+      urlBase: f.urlBase,
+      urlWebhook: f.urlWebhook,
+      secreto: f.secreto,
+      estado: (f.activo ? 'ACTIVE' : 'SUSPENDED') as EstadoSistema,
+      tiposNegocio: [f.categoria],
+      autoHabilitar: true,
+      habilitadas: 0,
+    }))
+  }
+}
+
 /** Estado de cada sistema conectado y de su cola de eventos. */
 export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
   return sinEmpresa('panel del superadmin: estado de las integraciones y colas de todas las empresas', async (tx) => {
-    const sistemas = await tx.sistemaConectado
-      .findMany({ orderBy: { slug: 'asc' } })
-      .catch(() => [])
+    const sistemas = await leerCatalogo(tx)
 
     const resumenes: ResumenSistema[] = []
     for (const s of sistemas) {
@@ -83,14 +173,19 @@ export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
         id: s.id,
         slug: s.slug,
         nombre: s.nombre,
-        categoria: s.categoria,
+        estado: s.estado,
+        tiposNegocio: s.tiposNegocio,
+        autoHabilitar: s.autoHabilitar,
+        habilitadas: s.habilitadas,
         urlBase: s.urlBase,
         urlWebhook: s.urlWebhook,
-        activo: s.activo,
         secretoLargo: s.secreto.length,
         pendientes: cuenta('PENDIENTE'),
         enviados: cuenta('ENVIADO'),
-        fallidos: cuenta('FALLIDO'),
+        // Los dos nombres del mismo estado terminal: `FALLIDO` es como se
+        // llamaba antes de la Fase 3, y sigue en las filas anteriores a la
+        // migración. Contar solo uno haría desaparecer del panel media cola.
+        fallidos: cuenta('DEAD_LETTER') + cuenta('FALLIDO'),
         ultimoError: masViejo?.ultimoError ?? null,
         maxIntentos: Math.max(
           0,
@@ -166,13 +261,21 @@ export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda 
   if (!sistema) return { error: 'Sistema no encontrado.' }
   if (!sistema.urlWebhook) return { error: 'Este sistema no tiene URL de webhook registrada.' }
 
-  const cuerpo = JSON.stringify({
-    id: `ping-${Date.now()}`,
+  // La sonda manda EXACTAMENTE la forma de un evento real —sobre v2, claves de
+  // legado y las dos firmas—. Si mandara otra cosa, un satélite podría pasar la
+  // prueba y rechazar los eventos de verdad, que es la peor respuesta posible:
+  // «funciona» cuando no funciona.
+  const eventId = `ping-${Date.now()}`
+  const sobre = construirSobre({
+    id: eventId,
     tipo: 'membego.ping',
     companyId: ultimo?.companyId ?? 'ping',
     payload: { prueba: true },
-    emitidoEn: new Date().toISOString(),
+    createdAt: new Date(),
   })
+  const cuerpo = cuerpoDelSobre(sobre)
+  const timestamp = Math.floor(Date.now() / 1000)
+  const ed25519 = firmarEd25519(clavePrivadaDesde(getPlatformEventPrivateKey()), timestamp, eventId, cuerpo)
 
   // En serie y no en paralelo: si el satélite tiene límite de peticiones, dos
   // a la vez desde la misma IP pueden dar un 429 que confundiría el resultado.
@@ -182,6 +285,9 @@ export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda 
     headers: {
       'Content-Type': 'application/json',
       'X-Membego-Firma': firmarHmac(sistema.secreto, cuerpo),
+      [CABECERA_TIMESTAMP]: String(timestamp),
+      [CABECERA_EVENTO]: eventId,
+      ...(ed25519 ? { [CABECERA_FIRMA]: ed25519 } : {}),
     },
     body: cuerpo,
   })
@@ -195,15 +301,22 @@ export async function sondearWebhook(sistemaId: string): Promise<ResultadoSonda 
 }
 
 /**
- * Devuelve los FALLIDO a la cola. Se usa cuando la causa del fallo era externa
- * (el satélite estaba caído) y ya se corrigió: los eventos siguen siendo
- * válidos y el satélite los descarta por id si ya los tenía.
+ * REPLAY: devuelve la cola de descarte a PENDIENTE.
+ *
+ * Se usa cuando la causa era externa —el satélite estaba caído— y ya se
+ * corrigió. Los eventos siguen siendo válidos: conservan su `eventId`, así que
+ * un satélite que ya hubiera procesado alguno lo descarta por su inbox en vez
+ * de duplicarlo. Reencolar de más es seguro; perder un evento no lo es.
+ *
+ * Acepta los dos nombres del estado terminal: las filas anteriores a la Fase 3
+ * dicen `FALLIDO`, y dejarlas fuera haría que el botón no reviviera justo las
+ * más viejas, que son las que más falta hacen.
  */
 export async function revivirFallidos(sistemaId: string): Promise<number> {
-  return sinEmpresa('panel del superadmin: reencolar los eventos FALLIDO de un sistema', async (tx) => {
+  return sinEmpresa('panel del superadmin: reencolar la cola de descarte de un sistema', async (tx) => {
     const r = await tx.eventoSaliente
       .updateMany({
-        where: { sistemaId, estado: 'FALLIDO' },
+        where: { sistemaId, estado: { in: ['DEAD_LETTER', 'FALLIDO'] } },
         data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null },
       })
       .catch(() => ({ count: 0 }))

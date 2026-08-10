@@ -24,6 +24,10 @@
     ],
     "paths": {
       "@membego/ui/*": ["./packages/ui/src/*"],
+      "@membego/contracts": ["./packages/contracts/src/index.ts"],
+      "@membego/contracts/*": ["./packages/contracts/src/*"],
+      "@membego/platform-sdk": ["./packages/platform-sdk/src/index.ts"],
+      "@membego/platform-sdk/*": ["./packages/platform-sdk/src/*"],
       "@/components/ui/*": ["./packages/ui/src/ui/*"],
       "@/*": ["./src/*"],
       "@/app/*": ["./src/app/*"],

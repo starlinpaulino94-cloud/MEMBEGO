@@ -10,12 +10,53 @@
 model SistemaConectado {
   id     String @id @default(cuid())
   /// Identificador estable en URLs (ej. "carwash").
+  ///
+  /// El informe de plataforma proponía renombrarlo a `systemKey`. NO se hace:
+  /// este valor es parte del contrato público con el satélite —viaja en
+  /// `/sso/entrar?sistema=<slug>`— y renombrarlo obligaría a coordinar un
+  /// despliegue con cada satélite a cambio de nada más que estética.
   slug   String @unique
   nombre String
 
-  /// Categoría de negocio que atiende (CAR_WASH, BARBERIA, …). Solo las
-  /// empresas de esta categoría generan eventos hacia este sistema.
+  /// LEGADO. La categoría única que el sistema atendía. La relación real es
+  /// N:M y vive en `tiposNegocio`: un mismo sistema puede servir a varias
+  /// (un POS sirve a restaurante y a barbería) y una categoría puede tener
+  /// varios sistemas.
+  ///
+  /// Se conserva porque la migración es EXPANSIVA: primero se añade lo nuevo
+  /// y se rellena, después se retira lo viejo. Ningún código lee ya esta
+  /// columna para decidir — lo vigila `tests/plataforma-acceso.test.ts`.
   categoria String
+
+  /// Ciclo de vida: DRAFT | ACTIVE | SUSPENDED | RETIRED.
+  ///
+  /// `activo` no distinguía «aún no lanzado» de «suspendido por incidente» de
+  /// «retirado», y son tres conversaciones distintas con el satélite.
+  estado String @default("ACTIVE")
+
+  /// LEGADO, espejo de `estado = 'ACTIVE'`. La migración instala un CHECK que
+  /// impide que los dos valores se separen: mientras la columna exista, no
+  /// puede mentir. Se retira en la fase de contracción.
+  activo Boolean @default(true)
+
+  /// ¿Toda empresa compatible lo obtiene sin habilitación explícita?
+  ///
+  /// FALSE por defecto, y ese default ES la razón de ser de los entitlements:
+  /// hasta hoy registrar un sistema se lo concedía de golpe a todas las
+  /// empresas de su categoría. Solo el vertical incumbente (Car Wash, que ya
+  /// funcionaba así) nace con TRUE, para que nadie pierda acceso.
+  autoHabilitar Boolean @default(false)
+
+  /// ¿Hace falta que CADA usuario tenga acceso explícito (`UsuarioSistema`)?
+  ///
+  /// FALSE por defecto, y por el mismo motivo que `autoHabilitar`: hoy
+  /// cualquier miembro del equipo abre el satélite de su empresa, y exigir de
+  /// golpe una fila por persona dejaría a toda la plantilla de Car Wash fuera
+  /// el día del despliegue.
+  ///
+  /// Un vertical que quiera control fino lo pone en TRUE. La cadena de roles
+  /// (`systemRole`) viaja igual en los dos casos.
+  accesoPorUsuario Boolean @default(false)
 
   /// Raíz del sistema satélite (ej. https://carwash.membego.com). El SSO
   /// redirige a `{urlBase}/sso/membego?token=...`.
@@ -29,12 +70,229 @@ model SistemaConectado {
   /// .env del satélite. Nunca viaja en requests.
   secreto String
 
-  activo    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  eventos EventoSaliente[]
+  eventos        EventoSaliente[]
+  tiposNegocio   SistemaTipoNegocio[]
+  habilitaciones EmpresaSistema[]
+  credenciales   CredencialSistema[]
+  accesos        UsuarioSistema[]
 
   @@map("sistemas_conectados")
+}
+
+/// Acceso de UNA persona a UN sistema, dentro de UNA empresa.
+///
+/// Es el nivel que faltaba: `EmpresaSistema` dice que el restaurante tiene
+/// contratado el sistema; esto dice que María es camarera y Juan es cocina.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// EL CORE NO SABE QUÉ ES UN CAMARERO
+///
+/// `systemRole` es una CADENA LIBRE. `MESERO`, `COCINA`, `LAVADOR`, `RECEPCION`
+/// — MembeGo la guarda y la transporta dentro del token SSO, y no la interpreta
+/// jamás.
+///
+/// Convertirla en un enum obligaría a desplegar el Core cada vez que un vertical
+/// inventara un puesto, que es exactamente la dependencia que esta arquitectura
+/// existe para eliminar (§50). Los roles de MembeGo —ADMIN_EMPRESA, CAJERO…—
+/// siguen siendo suyos y viajan aparte.
+model UsuarioSistema {
+  id String @id @default(cuid())
+
+  /// `User.id` de MembeGo.
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// La misma persona puede tener roles distintos en dos empresas.
+  companyId String
+
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  /// Puesto DENTRO del vertical. Cadena libre; ver arriba.
+  systemRole String
+
+  /// ACTIVE | SUSPENDED. Suspender aquí cierra el SSO sin tocar la cuenta de
+  /// MembeGo: un camarero de baja deja de entrar al sistema del restaurante y
+  /// sigue pudiendo ver su nómina.
+  estado String @default("ACTIVE")
+
+  /// Permisos finos que el vertical define y lee. El Core los transporta.
+  permisos Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, sistemaId, companyId])
+  @@index([companyId, sistemaId, estado])
+  @@map("usuarios_sistemas")
+}
+
+/// Token SSO ya canjeado. La fila ES el canje.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// POR QUÉ UNA TABLA Y NO UN CAMPO «usado»
+///
+/// El uso único se consigue con el INSERT: el `jti` es la clave primaria, así
+/// que el segundo canje choca y se rechaza. No hay lectura previa, y por tanto
+/// no hay ventana entre comprobar y marcar — que es justo donde dos peticiones
+/// simultáneas conseguirían canjear las dos.
+///
+/// Las filas caducan con el token (90 s), pero se conservan hasta que el cron
+/// las purga: mientras existan, un token capturado en el historial del
+/// navegador no vale para nada.
+model TokenSSOUsado {
+  /// Identificador único del token, generado al emitirlo.
+  jti String @id
+
+  sistemaId String
+  companyId String
+  /// SALIENTE (MembeGo → satélite) | ENTRANTE (satélite → MembeGo).
+  direccion String
+
+  usadoAt  DateTime @default(now())
+  /// Cuándo dejó de valer el token. Después de esto la fila ya no protege nada.
+  expiraAt DateTime
+
+  @@index([expiraAt])
+  @@map("tokens_sso_usados")
+}
+
+/// Credencial con la que un sistema satélite llama a la API de MembeGo
+/// (`/api/platform/v1`). OAuth2 client credentials.
+///
+/// Es la dirección CONTRARIA a `SistemaConectado.secreto`, y por eso es otra
+/// tabla y otro mecanismo:
+///
+///   salida  MembeGo → satélite   webhooks firmados con el secreto compartido
+///   entrada satélite → MembeGo   ESTA credencial, y solo su HASH se guarda
+///
+/// Un volcado de esta tabla no permite autenticarse: del secreto solo queda un
+/// hash con sal (scrypt). Es la Regla §25 —«no guardar secrets en texto
+/// plano»— aplicada donde de verdad importa, porque este secreto abre datos de
+/// clientes de todas las empresas que el sistema atiende.
+model CredencialSistema {
+  id String @id @default(cuid())
+
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  /// Identificador público de la credencial. Viaja en cada petición de token.
+  clientId String @unique
+
+  /// `scrypt` con sal, en formato `scrypt$N$r$p$sal$hash`. El secreto en claro
+  /// se enseña UNA vez al crearla y no se puede recuperar: si se pierde, se
+  /// rota. Esa es la propiedad que se busca, no un inconveniente.
+  clientSecretHash String
+
+  /// Scopes concedidos (`customers:read`, `benefits:redeem`, …). El token
+  /// puede pedir menos, nunca más: los scopes efectivos de cada petición son
+  /// la intersección, recalculada en el momento. Recortar aquí surte efecto
+  /// sin esperar a que caduque ningún token.
+  scopes String[]
+
+  /// ACTIVE | REVOKED. Se comprueba en CADA petición, no solo al emitir el
+  /// token: revocar tiene que cerrar la puerta ya, no dentro de quince minutos.
+  estado String @default("ACTIVE")
+
+  /// Nombre para el panel («Restaurant System · producción»).
+  descripcion String?
+
+  /// Null = no caduca. Una fecha convierte la rotación en algo que ocurre
+  /// aunque nadie se acuerde.
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([sistemaId, estado])
+  @@map("credenciales_sistema")
+}
+
+/// Vertical de negocio al que sirve un sistema (CAR_WASH, RESTAURANTE, …).
+///
+/// Era un `as const` de cuatro valores en `modules/capacidades/catalogo.ts`.
+/// Pasa a tabla porque dar de alta un vertical nuevo no puede exigir un
+/// despliegue del Core (Regla §6); el `as const` se conserva como SEMILLA y
+/// como tipo derivado — perder el tipado estático sería un retroceso.
+model TipoNegocio {
+  id String @id @default(cuid())
+
+  /// Código estable. Es el que viaja en el manifest del satélite y el que
+  /// guarda `companies.capacidades.categoria`: no se traduce ni se renombra.
+  codigo      String  @unique
+  nombre      String
+  descripcion String?
+  icono       String?
+  /// Orden de presentación en los selectores del panel.
+  orden  Int     @default(0)
+  activo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sistemas SistemaTipoNegocio[]
+
+  @@map("tipos_negocio")
+}
+
+/// Qué verticales atiende cada sistema. La tabla que convierte el 1:1 de
+/// `SistemaConectado.categoria` en la relación N:M que el estándar exige.
+model SistemaTipoNegocio {
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  tipoId String
+  tipo   TipoNegocio @relation(fields: [tipoId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([sistemaId, tipoId])
+  @@index([tipoId])
+  @@map("sistemas_tipos_negocio")
+}
+
+/// HABILITACIÓN (entitlement) de UNA empresa sobre UN sistema.
+///
+/// Responde a la pregunta que hoy nadie contestaba: registrar el sistema de
+/// Restaurante no puede concedérselo automáticamente a todos los restaurantes
+/// de la plataforma. Compatibilidad (tipo de negocio) y concesión (esta tabla)
+/// son cosas distintas.
+///
+/// Sin relación con `Company` a propósito: igual que `EventoSaliente`, guarda
+/// `companyId` suelto para que la Capa 2 de RLS lo aísle por columna sin
+/// añadir una clave foránea a un catálogo que el superadmin administra.
+model EmpresaSistema {
+  id        String @id @default(cuid())
+  companyId String
+
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  /// AVAILABLE | ENABLED | DISABLED | SUSPENDED.
+  ///
+  /// AVAILABLE no es «encendido»: es «compatible y disponible para encender».
+  /// DISABLED y SUSPENDED DENIEGAN aunque el sistema tenga `autoHabilitar`;
+  /// una revocación explícita siempre gana a una política general.
+  estado String @default("AVAILABLE")
+
+  habilitadoAt    DateTime?
+  deshabilitadoAt DateTime?
+
+  /// Plan contratado del satélite, si el vertical cobra por niveles.
+  plan String?
+  /// Ajustes por empresa que el satélite lee al arrancar la sesión.
+  configuracion Json?
+  metadata      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, sistemaId])
+  @@index([companyId, estado])
+  @@index([sistemaId, estado])
+  @@map("empresas_sistemas")
 }
 
 /// Outbox de webhooks: cada evento que debe llegar a un satélite queda aquí
@@ -46,10 +304,25 @@ model EventoSaliente {
   sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
 
   companyId String
+  /// Nombre INTERNO del evento (`cliente.visita`). El que viaja por el cable es
+  /// el v2 (`visit.completed`), que se deriva al construir el sobre: renombrar
+  /// aquí obligaría a migrar las automatizaciones, que usan el interno.
   tipo      String
   payload   Json
 
-  /// PENDIENTE → ENVIADO | FALLIDO (agotó reintentos).
+  /// Hilo que une los eventos de una misma operación. Una visita genera hasta
+  /// cuatro eventos hacia dos sistemas; sin esto, reconstruir «qué pasó con la
+  /// visita de las 3» es cruzar registros a ojo entre logs de empresas
+  /// distintas. Null en las filas anteriores a la Fase 3: el sobre usa
+  /// entonces el propio `id`, que es un hilo de uno.
+  traceId String?
+
+  /// PENDIENTE → ENVIADO | DEAD_LETTER (agotó los reintentos).
+  ///
+  /// `DEAD_LETTER` y no `FALLIDO`: un fallo es un intento que salió mal y se
+  /// repite; esto es un evento que ya no se va a entregar solo y necesita que
+  /// alguien decida. Son dos conversaciones distintas y antes eran la misma
+  /// palabra. El payload se conserva íntegro para poder reencolarlo.
   estado      String    @default("PENDIENTE")
   intentos    Int       @default(0)
   ultimoError String?
@@ -59,4 +332,45 @@ model EventoSaliente {
   @@index([estado, createdAt])
   @@index([companyId, tipo, createdAt])
   @@map("eventos_salientes")
+}
+
+/// Clave de idempotencia de una escritura entrante (`/api/platform/v1`).
+///
+/// EL PROBLEMA QUE RESUELVE, EN UNA FRASE: un reintento de red sobre un canje
+/// consume el beneficio dos veces, y el satélite no puede distinguir «no llegó»
+/// de «llegó y se perdió la respuesta».
+///
+/// Con esta tabla, repetir la misma llamada con la misma clave devuelve la
+/// MISMA respuesta que la primera vez, sin volver a ejecutar nada. Repetirla
+/// con un cuerpo distinto es un error del cliente y se le dice.
+model ClaveIdempotencia {
+  id String @id @default(cuid())
+
+  /// Sistema llamante. La clave es única DENTRO de un sistema: dos satélites
+  /// pueden usar «1» sin pisarse, y ninguno puede leer la respuesta del otro.
+  sistemaId String
+  clave     String
+
+  /// Empresa sobre la que se operó. Va aquí para que la Capa 2 de RLS pueda
+  /// aislar la respuesta guardada, que contiene datos de esa empresa.
+  companyId String
+
+  /// Ruta, para que la misma clave en dos endpoints distintos no se confunda.
+  endpoint String
+
+  /// SHA-256 del cuerpo. Es lo que permite distinguir «lo mismo otra vez» de
+  /// «otra cosa con la clave de antes», que es un error y no un reintento.
+  huellaPeticion String
+
+  estadoHttp Int
+  respuesta  Json
+
+  createdAt DateTime @default(now())
+  /// Las claves caducan: guardarlas para siempre convierte una tabla operativa
+  /// en un archivo histórico de todas las operaciones de todos los satélites.
+  expiraAt DateTime
+
+  @@unique([sistemaId, clave])
+  @@index([expiraAt])
+  @@map("claves_idempotencia")
 }

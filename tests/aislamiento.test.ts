@@ -73,6 +73,9 @@ const MODELOS_ACOTADOS = [
   'ordenCompra',
   'activo',
   'cuentaCorporativa',
+  // Habilitación de una empresa sobre un sistema vertical (plataforma · 1b).
+  // Leerla sin acotar diría que una empresa tiene contratado lo de otra.
+  'empresaSistema',
 ]
 
 const OPERACIONES = ['findMany', 'count', 'aggregate', 'groupBy']

@@ -32,6 +32,18 @@ const VARIANTE = {
   falla: 'destructive',
 } as const
 
+/**
+ * Cómo se lee cada estado del ciclo de vida. `activo: Boolean` solo sabía decir
+ * «Inactivo», que servía igual para un sistema en construcción que para uno
+ * caído — y son dos llamadas de teléfono distintas.
+ */
+const ESTADO = {
+  DRAFT: { texto: 'Borrador', variante: 'secondary' },
+  ACTIVE: { texto: 'Activo', variante: 'default' },
+  SUSPENDED: { texto: 'Suspendido', variante: 'destructive' },
+  RETIRED: { texto: 'Retirado', variante: 'outline' },
+} as const
+
 function Numerito({ label, valor, tono }: { label: string; valor: number; tono?: string }) {
   return (
     <div className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
@@ -62,15 +74,38 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
             {sistema.urlWebhook ?? 'sin URL de webhook registrada'}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Badge variant="secondary">{sistema.categoria}</Badge>
-          <Badge variant={sistema.activo ? 'default' : 'destructive'}>
-            {sistema.activo ? 'Activo' : 'Inactivo'}
-          </Badge>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {/* Sin ningún vertical declarado, nadie puede entrar al sistema por
+              mucho que esté ACTIVE: hay que decirlo aquí y no dejar el hueco. */}
+          {sistema.tiposNegocio.length > 0 ? (
+            sistema.tiposNegocio.map((t) => (
+              <Badge key={t} variant="secondary">
+                {t}
+              </Badge>
+            ))
+          ) : (
+            <Badge variant="destructive">Sin vertical</Badge>
+          )}
+          <Badge variant={ESTADO[sistema.estado].variante}>{ESTADO[sistema.estado].texto}</Badge>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          {sistema.autoHabilitar ? (
+            <>
+              Abierto a <strong className="text-foreground">toda empresa compatible</strong>; {sistema.habilitadas}{' '}
+              {sistema.habilitadas === 1 ? 'tiene' : 'tienen'} habilitación explícita.
+            </>
+          ) : (
+            <>
+              Solo por habilitación:{' '}
+              <strong className="text-foreground">{sistema.habilitadas}</strong>{' '}
+              {sistema.habilitadas === 1 ? 'empresa habilitada' : 'empresas habilitadas'}.
+            </>
+          )}
+        </p>
+
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Numerito
             label="Pendientes"

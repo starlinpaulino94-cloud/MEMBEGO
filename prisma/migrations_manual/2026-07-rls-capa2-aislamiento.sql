@@ -212,15 +212,24 @@ BEGIN
 
   -- ── Las que no tienen inquilino porque no les toca ────────────────────────
   --
-  -- Tres tablas se quedaron sin camino, y las tres se miraron una por una. No
-  -- se dejan denegadas: si lo estuvieran, el listado de categorías saldría
-  -- vacío y el POS no podría numerar un ticket.
+  -- Estas tablas se quedaron sin camino, y se miraron una por una. No se dejan
+  -- denegadas: si lo estuvieran, el listado de categorías saldría vacío y el POS
+  -- no podría numerar un ticket.
   --
-  -- `business_categories`, `campanas_globales` y `sistemas_conectados` son
-  -- CATÁLOGOS GLOBALES: los administra MembeGo y los lee todo el mundo
+  -- Son CATÁLOGOS GLOBALES: los administra MembeGo y los lee todo el mundo
   -- (incluido el SSO y el despacho de eventos a sistemas satélite). Lectura
   -- para cualquier inquilino; escritura solo en modo omnisciente.
-  FOREACH cond IN ARRAY ARRAY['business_categories', 'campanas_globales', 'sistemas_conectados'] LOOP
+  --
+  -- `tipos_negocio` y `sistemas_tipos_negocio` entran por el mismo motivo, y
+  -- dejarlas fuera sería peor que en los otros casos: la decisión de acceso a un
+  -- sistema (`modules/plataforma/acceso.ts`) compara el vertical de la empresa
+  -- contra esa relación, así que una lectura vacía no daría una lista vacía en
+  -- pantalla — cerraría TODOS los accesos a TODOS los satélites, y el motivo
+  -- que quedaría en el log sería «vertical incompatible».
+  FOREACH cond IN ARRAY ARRAY[
+    'business_categories', 'campanas_globales', 'sistemas_conectados',
+    'tipos_negocio', 'sistemas_tipos_negocio'
+  ] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
     EXECUTE format('DROP POLICY IF EXISTS membego_catalogo_lee ON public.%I', cond);
@@ -251,6 +260,29 @@ BEGIN
     cubiertas := cubiertas || 'transaction_counters'::text;
     RAISE NOTICE 'transaction_counters: ámbito global TX:* + TICKET del propio inquilino.';
   END IF;
+
+  -- ── Solo omnisciente: ni de un inquilino ni de todos ──────────────────────
+  --
+  -- `credenciales_sistema` guarda con qué se autentica cada satélite contra
+  -- `/api/platform/v1`. No lleva `companyId` —una credencial es de un SISTEMA,
+  -- que atiende a muchas empresas— y NO es un catálogo: abrirla a lectura
+  -- general dejaría que una empresa viera los hashes y los scopes de otra.
+  --
+  -- Es la única categoría que faltaba: sin ruta al inquilino Y sin lectura
+  -- pública. Y no puede quedarse sin política, porque entonces RLS la deniega
+  -- también en modo omnisciente y la API no autenticaría a NADIE: fallo
+  -- cerrado, sí, pero cerrado del todo y sin decir por qué.
+  FOREACH cond IN ARRAY ARRAY['credenciales_sistema'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Credenciales de sistema: solo en modo omnisciente.';
 
   -- ── Lo que quedó fuera ────────────────────────────────────────────────────
   --

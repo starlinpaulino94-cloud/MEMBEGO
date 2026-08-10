@@ -124,6 +124,8 @@ model User {
   notasCliente    ClienteNota[]
   intereses       UserInteres[]
   empresasAcceso  UserCompanyAccess[]
+  /// Acceso a los sistemas verticales, con su rol DENTRO de cada uno.
+  sistemasAcceso  UsuarioSistema[]
 
   // Geolocalización (G-1): la ubicación es de la PERSONA, cross-empresa.
   customerLocations CustomerLocation[]

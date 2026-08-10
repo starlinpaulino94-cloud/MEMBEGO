@@ -22,13 +22,19 @@ const ROLES_EQUIPO = new Set<string>(ROLES_APP.filter((r) => r !== 'CLIENTE'))
  * satélite con un token firmado de 90 segundos. El satélite verifica el token
  * con el secreto compartido y crea su propia sesión (ver docs/INTEGRACIONES.md).
  */
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ slug: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: string }> }) {
   const user = await getUser()
   if (!user || !ROLES_EQUIPO.has(user.metadata.role)) {
     return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
   }
   const { slug } = await ctx.params
-  const res = await urlAperturaSSO(slug, user)
+  // `returnUrl` se valida contra la `urlBase` del sistema y viaja DENTRO del
+  // token firmado. Una que no apunte al propio satélite se descarta sin más:
+  // negarle la entrada al usuario por un parámetro manipulado castigaría a la
+  // víctima en vez de al que lo manipuló.
+  const res = await urlAperturaSSO(slug, user, {
+    returnUrl: req.nextUrl.searchParams.get('returnUrl'),
+  })
   if ('error' in res) {
     return NextResponse.json({ error: res.error }, { status: 400 })
   }

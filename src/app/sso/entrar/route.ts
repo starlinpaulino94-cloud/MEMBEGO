@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { verificarTokenSSOEntrante } from '@/modules/integraciones/nucleo'
+import { accesoASistema, sistemaParaVerificarFirma } from '@/modules/plataforma/registro'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createRouteClient, redirectWithCookies } from '@/lib/supabase/route-client'
 import { getAppUrl } from '@/lib/site'
@@ -36,7 +37,7 @@ export const dynamic = 'force-dynamic'
  * Motivos GRUESOS del rechazo, para que el satélite y el usuario sepan a quién
  * le toca arreglarlo sin convertir esto en un oráculo:
  *   token   — firma/vigencia/formato (no dice nada de ninguna cuenta)
- *   sistema — slug desconocido o inactivo
+ *   sistema — slug desconocido, no ACTIVE, o sin acceso a la empresa del token
  *   cuenta  — usuario inexistente o ajeno a la empresa. Solo se llega aquí con
  *             una firma VÁLIDA, o sea con el secreto compartido en la mano:
  *             quien puede provocar este motivo ya podría preguntarlo de mil
@@ -58,13 +59,8 @@ export async function GET(req: NextRequest) {
   if (!token) return rechazar('token')
 
   try {
-    const sistema = await sinEmpresa('sso entrante: sistema conectado por slug (catálogo global)', (tx) =>
-      tx.sistemaConectado.findUnique({
-        where: { slug },
-        select: { secreto: true, activo: true, categoria: true },
-      })
-    )
-    if (!sistema || !sistema.activo) {
+    const sistema = await sistemaParaVerificarFirma(slug)
+    if (!sistema) {
       console.warn('[sso-entrar] sistema desconocido o inactivo:', slug)
       return rechazar('sistema')
     }
@@ -73,6 +69,48 @@ export async function GET(req: NextRequest) {
     if (!datos) {
       console.warn('[sso-entrar] token inválido o vencido (sistema:', slug, ')')
       return rechazar('token')
+    }
+
+    // ── Un solo uso ─────────────────────────────────────────────────────────
+    //
+    // Aquí MembeGo SÍ puede garantizarlo, porque es quien valida. El `jti` es
+    // clave primaria: el primer canje entra y el segundo choca. Sin lectura
+    // previa, así que no hay ventana entre comprobar y marcar — que es donde
+    // dos peticiones simultáneas conseguirían abrir sesión las dos.
+    //
+    // OPCIONAL por compatibilidad: un satélite que aún no mande `jti` sigue
+    // entrando y queda el aviso. Rechazarlo sería romper a quien ya funciona
+    // por no haber desplegado algo que acabamos de publicar.
+    if (datos.jti) {
+      const { marcarTokenUsado } = await import('@/modules/plataforma/sso')
+      const canje = await marcarTokenUsado({
+        jti: datos.jti,
+        sistemaId: sistema.id,
+        companyId: datos.companyId,
+        direccion: 'ENTRANTE',
+        expiraAt: new Date(datos.exp * 1000),
+      })
+      if (canje === 'YA_USADO') {
+        console.warn('[sso-entrar] token reutilizado:', slug, datos.jti)
+        return rechazar('token')
+      }
+    } else {
+      console.warn('[sso-entrar] token sin jti (sin uso único):', slug)
+    }
+
+    // ── El sistema debe tener acceso a la empresa del token ─────────────────
+    //
+    // ESTA COMPROBACIÓN NO EXISTÍA. La consulta anterior leía `categoria` del
+    // sistema y no la usaba nunca: con la firma válida, el satélite del car
+    // wash podía abrir la sesión de un usuario de un restaurante. Una firma
+    // demuestra QUIÉN pide, no SOBRE QUIÉN puede pedir.
+    //
+    // Va aquí y no antes porque `companyId` viene DENTRO del token, y leerlo
+    // exige haber verificado la firma primero.
+    const { decision } = await accesoASistema(slug, datos.companyId)
+    if (!decision.permitido) {
+      console.warn('[sso-entrar] sistema sin acceso a la empresa del token:', slug, decision.motivo)
+      return rechazar('sistema')
     }
 
     // ── Resolver al usuario de MembeGo: sub preferido, email como respaldo ──
