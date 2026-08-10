@@ -57,6 +57,20 @@ export function getPlatformTokenSecret(): string | null {
   return key && key.length >= 32 ? key : null
 }
 
+/**
+ * Ed25519 private key used to sign outbound platform events.
+ *
+ * Returns the raw value; parsing lives in `modules/plataforma/firma.ts`.
+ *
+ * Absent is a supported state, and unlike `PLATFORM_TOKEN_SECRET` it does NOT
+ * fail closed: without it, events keep going out signed with the shared-secret
+ * HMAC exactly as they do today. Failing closed here would stop delivering
+ * webhooks to satellites that never asked for the new signature.
+ */
+export function getPlatformEventPrivateKey(): string | undefined {
+  return process.env.PLATFORM_EVENT_PRIVATE_KEY
+}
+
 /** Returns the list of missing required public env vars (for diagnostics). */
 export function missingPublicEnv(): string[] {
   return REQUIRED_PUBLIC.filter((k) => !process.env[k])

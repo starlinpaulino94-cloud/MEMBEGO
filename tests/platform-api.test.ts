@@ -302,14 +302,45 @@ test('ninguna ruta usa el companyId de la red sin validarlo', () => {
   )
 })
 
+/**
+ * Solo dos rutas pueden ser públicas, y las dos por el mismo motivo: son las
+ * que hacen falta ANTES de tener credenciales.
+ *
+ *   · `oauth/token` reparte credenciales; no puede exigirlas.
+ *   · `.well-known/keys` publica la clave pública con la que se verifican los
+ *     webhooks — que llegan antes de que nadie configure nada, y pedir un token
+ *     para obtenerla sería un círculo.
+ */
+const PUBLICAS = [join('oauth', 'token'), join('.well-known', 'keys')]
+
+const esPublica = (ruta: string) => PUBLICAS.some((p) => ruta.includes(p))
+
 test('toda ruta de la API v1 se autentica', () => {
   const sinGuardia = rutasPlataforma().filter((r) => {
-    const src = readFileSync(r, 'utf8')
-    // El endpoint de token es el que reparte credenciales: no puede exigirlas.
-    if (r.includes(join('oauth', 'token'))) return false
-    return !src.includes('autenticar')
+    if (esPublica(r)) return false
+    return !readFileSync(r, 'utf8').includes('autenticar')
   })
   assert.deepEqual(sinGuardia, [], `rutas sin autenticación:\n${sinGuardia.join('\n')}`)
+})
+
+/**
+ * La exención anterior sería una puerta abierta si bastara con declararla. Aquí
+ * se comprueba: una ruta pública NO puede tocar la base. Si algún día alguien
+ * añade una consulta a `.well-known`, esto lo para — y no porque la lista diga
+ * que es pública, sino porque leer datos y no pedir credenciales no pueden ser
+ * ciertas a la vez.
+ */
+test('una ruta pública no puede leer datos', () => {
+  const infractoras = rutasPlataforma().filter((r) => {
+    if (!esPublica(r) || r.includes(join('oauth', 'token'))) return false
+    const src = readFileSync(r, 'utf8')
+    return src.includes('conEmpresa') || src.includes('sinEmpresa') || src.includes('prisma')
+  })
+  assert.deepEqual(
+    infractoras,
+    [],
+    `estas rutas son públicas Y consultan la base:\n${infractoras.join('\n')}`
+  )
 })
 
 test('ninguna respuesta de la API v1 se puede cachear', () => {
@@ -325,6 +356,12 @@ test('ninguna respuesta de la API v1 se puede cachear', () => {
   assert.equal(conNoStore.length, 2, 'errorApi y respuestaApi deben poner no-store cada uno')
 
   const sinNoStore = rutasPlataforma().filter((r) => {
+    // La clave pública es pública y no cambia: cachearla es lo correcto, y
+    // además es lo que hace que una rotación se propague sola a los satélites
+    // que la leen de aquí en vez de copiarla a su `.env`. La prueba anterior
+    // garantiza que esta ruta no puede leer datos, así que no hay nada de
+    // ninguna empresa que un intermediario pueda guardar.
+    if (r.includes(join('.well-known', 'keys'))) return false
     const src = readFileSync(r, 'utf8')
     if (!/NextResponse\.json\(/.test(src)) return false // solo usa los envoltorios
     return !src.includes("'no-store'")

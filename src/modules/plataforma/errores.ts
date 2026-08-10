@@ -39,6 +39,15 @@ import { NextResponse } from 'next/server'
 export const CODIGOS_ERROR = {
   // 400
   INVALID_REQUEST: 400,
+  IDEMPOTENCY_KEY_REQUIRED: 400,
+  /**
+   * La misma clave con OTRO cuerpo. Es un error del cliente, no un reintento:
+   * devolver la respuesta guardada sería contestarle sobre una operación
+   * distinta de la que pidió.
+   */
+  IDEMPOTENCY_KEY_REUSED: 400,
+  // 409 — una idéntica sigue en curso; reintentar en un momento
+  IDEMPOTENCY_IN_PROGRESS: 409,
   // 401 — el que pide no ha demostrado quién es
   INVALID_CLIENT: 401,
   INVALID_TOKEN: 401,
@@ -63,6 +72,10 @@ export type CodigoError = keyof typeof CODIGOS_ERROR
  */
 const MENSAJES: Record<CodigoError, string> = {
   INVALID_REQUEST: 'The request is malformed or missing required parameters.',
+  IDEMPOTENCY_KEY_REQUIRED: 'This endpoint writes: send an Idempotency-Key header.',
+  IDEMPOTENCY_KEY_REUSED:
+    'This Idempotency-Key was already used with a different request. Use a new key per operation.',
+  IDEMPOTENCY_IN_PROGRESS: 'An identical request is still in progress. Retry in a moment.',
   INVALID_CLIENT: 'Client authentication failed.',
   INVALID_TOKEN: 'The access token is missing, malformed or invalid.',
   TOKEN_EXPIRED: 'The access token has expired. Request a new one.',

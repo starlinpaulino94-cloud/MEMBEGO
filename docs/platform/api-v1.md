@@ -108,7 +108,8 @@ oráculo que el mensaje común pretende evitar.
 | `customers:read` | `/customers/{id}`, `/customers/resolve` |
 | `memberships:read` | `/memberships/active` |
 | `branches:read` | `/branches` |
-| `benefits:read`, `benefits:redeem`, `promotions:read`, `qr:validate`, `visits:write`, `transactions:write`, `events:publish` | Fase 3 |
+| `benefits:read` | `POST /benefits/evaluate` (Fase 3) |
+| `benefits:redeem`, `promotions:read`, `qr:validate`, `visits:write`, `transactions:write`, `events:publish` | Fase 3b |
 
 **Los scopes efectivos son la intersección** de los que el token pidió con los
 que la credencial tiene concedidos **hoy**, recalculada en cada petición.
@@ -183,13 +184,15 @@ satélite lo guardaría sin saber que no debía.
 **Nada que decida dinero.** `POST /benefits/evaluate`, `POST /redemptions`,
 `POST /visits` y `POST /transactions` no están.
 
-No es que falte tiempo: es que **evaluar sin poder canjear no sirve**, y canjear
-sin idempotencia es peor que no canjear. Un reintento de red sobre un canje sin
-clave de idempotencia consume el beneficio dos veces, y el satélite no puede
-distinguir «no llegó» de «llegó y se perdió la respuesta».
+Canjear sin idempotencia es peor que no canjear: un reintento de red consume el
+beneficio dos veces, y el satélite no puede distinguir «no llegó» de «llegó y se
+perdió la respuesta».
 
-La idempotencia y el *inbox* son la Fase 3. Los cuatro endpoints llegan **juntos**
-con ella. Hasta entonces el canje sigue ocurriendo dentro de MembeGo, como hoy.
+> **Actualizado tras la Fase 3.** `POST /benefits/evaluate` ya existe —decide,
+> no escribe— y la idempotencia está construida. Los tres que escriben siguen
+> pendientes, por un motivo distinto del que se preveía aquí: el canje vive en
+> un Server Action atado a sesión de navegador y hay que extraer un servicio
+> antes. Ver `docs/platform/eventos-v2.md`.
 
 Por el mismo motivo `/memberships/active` responde con `"autoriza": false`. Una
 membresía activa no dice que a ese cliente le quede el beneficio, ni que no lo
@@ -257,6 +260,5 @@ petición de un sistema sobre una empresa que no tiene habilitada.
 
 ## Siguiente
 
-Fase 3: envelope de eventos, Ed25519, DLQ, replay, **idempotencia e inbox** — y
-con ellos los cuatro endpoints que escriben. Ver
-`docs/PLATFORM_ARCHITECTURE_REPORT.md` §12, §29, §74.
+Fase 3 —sobre de eventos, firma Ed25519, cola de descarte, idempotencia y
+`POST /benefits/evaluate`— está en `docs/platform/eventos-v2.md`.

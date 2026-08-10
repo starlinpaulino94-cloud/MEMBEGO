@@ -512,7 +512,7 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | **0** | Esta auditoría | ✅ este documento |
 | **1** | Separar `Feature` / `Capability` / `VerticalModule`. `BusinessType` a tabla. Registry N:M. Entitlements | ✅ `docs/platform/conceptos.md` · `docs/platform/registro.md` |
 | **2** | `/api/platform/v1` · DTOs · OAuth2 · scopes · rate limit · `requestId` | ✅ `docs/platform/api-v1.md` (lectura; las escrituras van con la Fase 3) |
-| **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | Eventos v2 |
+| **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | ✅ `docs/platform/eventos-v2.md` (falta 3b: extraer el canje) |
 | **4** | `@membego/contracts` + `@membego/platform-sdk` | SDK |
 | **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | Acceso |
 | **6** | Car Wash consume la API **sin salir del monolito** | Validación del contrato |
@@ -546,10 +546,10 @@ De los 20 puntos del §93, el estado real hoy:
 | 6 | API versionada | 🟢 `/api/platform/v1` (Fase 2) |
 | 7 | Contratos reutilizables | 🟡 DTOs atados a `proyecciones.ts`; falta el paquete |
 | 8 | Webhooks estándar | 🟢 existe |
-| 9 | Event envelope | 🟡 informal |
-| 10 | Idempotencia | 🟡 `eventId`; sin escritura |
+| 9 | Event envelope | 🟢 sobre v2 con alias de legado (Fase 3) |
+| 10 | Idempotencia | 🟢 `claves_idempotencia` (Fase 3) |
 | 11 | Audit trail | 🟢 `auditLog` |
-| 12 | Outbox / retry | 🟢 existe |
+| 12 | Outbox / retry | 🟢 + DEAD_LETTER y replay (Fase 3) |
 | 13 | Tenant isolation | 🟡 aplicativo + habilitaciones en la API; RLS apagado |
 | 14 | Autorización por categoría | 🟢 sustituida por habilitaciones (Fase 1b) |
 | 15 | SSO | 🟢 existe, endurecer |
@@ -561,7 +561,7 @@ De los 20 puntos del §93, el estado real hoy:
 
 Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
 **8 verdes, 6 amarillos, 6 rojos**. Tras la Fase 2: **11 verdes, 6 amarillos,
-3 rojos**. El cimiento es mejor de lo que sugiere el
+3 rojos**. Tras la Fase 3: **13 verdes, 4 amarillos, 3 rojos**. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -589,5 +589,17 @@ Los cuatro endpoints que ESCRIBEN (`benefits/evaluate`, `redemptions`, `visits`,
 idempotencia es peor que no canjear. Llegan juntos con la Fase 3, que es donde
 vive su idempotencia.
 
-Siguiente: **Fase 3** — envelope de eventos, Ed25519, DLQ, replay, idempotencia
-e inbox.
+**Fase 3 completa** — `docs/platform/eventos-v2.md`: sobre v2 con alias de
+legado, firma Ed25519 junto al HMAC, cola de descarte con replay, idempotencia
+de escrituras y `POST /benefits/evaluate`.
+
+Queda la **Fase 3b**, y su motivo es concreto: el canje vive en
+`confirmarVisita`, un Server Action de 937 líneas que exige sesión de navegador
+con rol de escáner. Una credencial de API no tiene ninguna de las dos cosas.
+Exponer `redemptions`, `visits` y `transactions` requiere extraer antes un
+servicio de canje de ahí, sin cambiar su comportamiento — es la ruta del dinero y
+lo que sostiene Car Wash en producción. Su idempotencia ya está construida y
+probada.
+
+Siguiente: **Fase 3b** (extraer el canje y los tres endpoints de escritura) y
+después **Fase 4**, los paquetes `@membego/contracts` y `@membego/platform-sdk`.

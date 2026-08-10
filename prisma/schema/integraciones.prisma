@@ -214,10 +214,25 @@ model EventoSaliente {
   sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
 
   companyId String
+  /// Nombre INTERNO del evento (`cliente.visita`). El que viaja por el cable es
+  /// el v2 (`visit.completed`), que se deriva al construir el sobre: renombrar
+  /// aquí obligaría a migrar las automatizaciones, que usan el interno.
   tipo      String
   payload   Json
 
-  /// PENDIENTE → ENVIADO | FALLIDO (agotó reintentos).
+  /// Hilo que une los eventos de una misma operación. Una visita genera hasta
+  /// cuatro eventos hacia dos sistemas; sin esto, reconstruir «qué pasó con la
+  /// visita de las 3» es cruzar registros a ojo entre logs de empresas
+  /// distintas. Null en las filas anteriores a la Fase 3: el sobre usa
+  /// entonces el propio `id`, que es un hilo de uno.
+  traceId String?
+
+  /// PENDIENTE → ENVIADO | DEAD_LETTER (agotó los reintentos).
+  ///
+  /// `DEAD_LETTER` y no `FALLIDO`: un fallo es un intento que salió mal y se
+  /// repite; esto es un evento que ya no se va a entregar solo y necesita que
+  /// alguien decida. Son dos conversaciones distintas y antes eran la misma
+  /// palabra. El payload se conserva íntegro para poder reencolarlo.
   estado      String    @default("PENDIENTE")
   intentos    Int       @default(0)
   ultimoError String?
@@ -227,4 +242,45 @@ model EventoSaliente {
   @@index([estado, createdAt])
   @@index([companyId, tipo, createdAt])
   @@map("eventos_salientes")
+}
+
+/// Clave de idempotencia de una escritura entrante (`/api/platform/v1`).
+///
+/// EL PROBLEMA QUE RESUELVE, EN UNA FRASE: un reintento de red sobre un canje
+/// consume el beneficio dos veces, y el satélite no puede distinguir «no llegó»
+/// de «llegó y se perdió la respuesta».
+///
+/// Con esta tabla, repetir la misma llamada con la misma clave devuelve la
+/// MISMA respuesta que la primera vez, sin volver a ejecutar nada. Repetirla
+/// con un cuerpo distinto es un error del cliente y se le dice.
+model ClaveIdempotencia {
+  id String @id @default(cuid())
+
+  /// Sistema llamante. La clave es única DENTRO de un sistema: dos satélites
+  /// pueden usar «1» sin pisarse, y ninguno puede leer la respuesta del otro.
+  sistemaId String
+  clave     String
+
+  /// Empresa sobre la que se operó. Va aquí para que la Capa 2 de RLS pueda
+  /// aislar la respuesta guardada, que contiene datos de esa empresa.
+  companyId String
+
+  /// Ruta, para que la misma clave en dos endpoints distintos no se confunda.
+  endpoint String
+
+  /// SHA-256 del cuerpo. Es lo que permite distinguir «lo mismo otra vez» de
+  /// «otra cosa con la clave de antes», que es un error y no un reintento.
+  huellaPeticion String
+
+  estadoHttp Int
+  respuesta  Json
+
+  createdAt DateTime @default(now())
+  /// Las claves caducan: guardarlas para siempre convierte una tabla operativa
+  /// en un archivo histórico de todas las operaciones de todos los satélites.
+  expiraAt DateTime
+
+  @@unique([sistemaId, clave])
+  @@index([expiraAt])
+  @@map("claves_idempotencia")
 }
