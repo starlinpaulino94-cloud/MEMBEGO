@@ -385,7 +385,7 @@ verificar enlaces.
 | 17 | Empleado | ✅ |
 | 18 | Páginas públicas | ✅ |
 | 19 | Dark mode, accesibilidad, QA visual | ✅ |
-| 20 | Eliminar el frontend visual heredado | ⬜ |
+| 20 | Eliminar el frontend visual heredado | ✅ |
 
 ### Correcciones desde verificación visual
 
@@ -587,6 +587,39 @@ escribir. Quedan 101 en el panel interno, con techo que solo baja.
 y como guardia. Los dos incluyen una **prueba de la prueba**: si el parser se
 rompe devolvería cero y la guardia pasaría por estar ciega, que es peor que
 fallar.
+
+### Fase 20 · lo que se borró, y lo que no
+
+**Se borró:** 13 componentes huérfanos (~1.400 líneas), 4 símbolos muertos, 6
+utilidades CSS con sus `@keyframes`, y el alias `landingPrimary`. Todo
+verificado uno a uno: su única referencia era su propia declaración, y todos
+databan del merge #251, semanas antes del DS 2.0.
+
+**Se conservaron los 16 primitives sin uso de `packages/ui`.** La Fase 0
+predijo que las fases de wizards, tabs y tablas usarían `progress`,
+`segmented-control`, `pagination` y `avatar`; se equivocó — cada fase construyó
+lo suyo. Pero el paquete es una **librería**, y existe para que la futura app
+móvil consuma los mismos componentes. Borrar el vocabulario de un design system
+porque la web todavía no lo usa no es lo mismo que borrar código de producto
+huérfano.
+
+**No se migraron los 91 radios fuera de vocabulario.** Eso no es borrar, es
+cambiar la forma de 91 sitios; apilarlo sobre la Fase 19 sin verificación
+visual era pedir problemas.
+
+**Dos cuidados que evitaron romper cosas:** `Estrellas` y `ESTADO_REGALO`
+aparecían como exports muertos, pero se usan DENTRO de su archivo — ahí sobraba
+el `export`, no el símbolo. Y 4 archivos tenían un símbolo muerto entre otros
+vivos: se saldó el símbolo, no el archivo.
+
+### El espejo de tokens tiene guardia
+
+`packages/ui/src/tokens.ts` es el espejo en hexadecimal de `globals.css` para
+lo que no pasa por CSS: app móvil, correos, imágenes OG, PDFs. **Se
+desincronizó dos veces sin que nada avisara** — la Fase 19 cambió los estados
+semánticos y no tocó el espejo, y `danger` llevaba el hex viejo desde antes de
+este trabajo. Durante dos fases, un correo habría salido con los colores que
+fallaban el contraste. `tests/espejo-tokens.test.ts` los lee juntos.
 
 ### Decisiones de producto resueltas fuera de fase
 

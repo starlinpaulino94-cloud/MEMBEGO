@@ -15,7 +15,7 @@
  * oscuro se aclara hasta ~400 para mantener contraste sobre el lienzo negro.
  *
  * DS 2.0 · Fase 0: esta escala era esmeralda. El azul ya era la marca en la
- * web pública (vivía aparte como `landingPrimary`) y ahora es el color base
+ * web pública (vivía aparte, con su propio token) y ahora es el color base
  * de todo el producto. El verde quedó exclusivamente como estado de éxito,
  * en `state.success`.
  */
@@ -47,21 +47,18 @@ export const cyanBrand = {
  * CTA. El verde de `success` es el único verde que sobrevive en el sistema.
  */
 export const state = {
-  success: '#16a34a',
-  warning: '#f59e0b',
-  danger: '#dc2626',
-  info: '#0e91b8',
+  /**
+   * Sincronizados con `globals.css` tras la Fase 19, que los oscureció para
+   * que sirvan como TEXTO: los valores anteriores daban 3.62:1, 2.28:1 y
+   * 3.44:1 sobre blanco, por debajo del 4.5:1 de AA. Este espejo alimenta
+   * correos, imágenes OG y PDFs — sitios donde nadie va a revisar el
+   * contraste después, así que tienen que nacer bien.
+   */
+  success: '#00864d',
+  warning: '#ab6300',
+  danger: '#e7000b',
+  info: '#00809b',
 } as const
-
-/**
- * Azul eléctrico de la marca.
- *
- * @deprecated Desde DS 2.0 es exactamente `primary[600]`: la landing y la
- * aplicación comparten color, así que ya no hay un "azul de la landing"
- * distinto del de marca. Se conserva como alias para no romper importaciones;
- * en código nuevo usar `primary[600]`.
- */
-export const landingPrimary = primary[600]
 
 /** Navy profundo del logo (sidebar / fondos hero). */
 export const navy = '#0b1220'
@@ -137,7 +134,6 @@ export const tokens = {
   primary,
   cyanBrand,
   state,
-  landingPrimary,
   navy,
   spacing,
   radius,

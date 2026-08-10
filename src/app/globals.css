@@ -399,9 +399,6 @@
   .shadow-card-hover {
     box-shadow: 0 4px 16px 0 rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
   }
-  .shadow-modal {
-    box-shadow: 0 24px 64px -12px rgb(0 0 0 / 0.18);
-  }
 
   /* Premium — sombras suaves en múltiples capas (estilo Stripe/Linear) */
   .shadow-premium {
@@ -437,10 +434,6 @@
       linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
       linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
     background-size: 48px 48px;
-  }
-  .bg-dots {
-    background-image: radial-gradient(rgb(15 23 42 / 0.06) 1px, transparent 1px);
-    background-size: 20px 20px;
   }
 
   /* Máscara de desvanecido radial para texturas */
@@ -647,12 +640,6 @@
       var(--color-primary-900)
     );
   }
-  .text-gradient-brand {
-    background: linear-gradient(135deg, var(--color-primary-600), var(--color-cyan-brand-500));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
 
   /* Gradient text — matches MembeGo logo gradient */
   .text-gradient {
@@ -767,23 +754,6 @@
     .mg-pin--activo,
     .mg-pin--activo:hover { transform: none; }
   }
-
-  /* Animated underline */
-  .link-underline {
-    position: relative;
-    text-decoration: none;
-  }
-  .link-underline::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    width: 0;
-    height: 1px;
-    background: currentColor;
-    transition: width 0.2s ease;
-  }
-  .link-underline:hover::after { width: 100%; }
 }
 
 /* ── Keyframes ── */
@@ -870,23 +840,12 @@
 }
 
 /* Check animado (validación/éxito): traza el visto con stroke-dashoffset. */
-@keyframes draw-check {
-  from { stroke-dashoffset: 24; }
-  to   { stroke-dashoffset: 0; }
-}
-
 /* Barra de tiempo (flash sale): se agota de 100% a 0%. La duración la fija
    el componente en línea según el tiempo restante real. */
 @keyframes time-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 /* Border glow: borde iluminado que rota (tarjeta premium en hover). */
 @keyframes border-glow-spin { to { transform: rotate(1turn); } }
-
-/* Flip de tarjeta (beneficio desbloqueado). */
-@keyframes card-flip-in {
-  from { opacity: 0; transform: perspective(800px) rotateY(-90deg); }
-  to   { opacity: 1; transform: none; }
-}
 
 @layer utilities {
   .animate-fade-up    { animation: fade-up 0.35s ease both; }
@@ -917,7 +876,6 @@
   .animate-slide-in-left  { animation: slide-in-left 0.45s var(--ease-out-expo) both; }
   .animate-zoom-in        { animation: zoom-in 0.4s var(--ease-out-expo) both; }
   .animate-burst          { animation: burst 0.5s var(--ease-elastic) both; }
-  .animate-card-flip      { animation: card-flip-in 0.6s var(--ease-out-expo) both; }
   .animate-glow-pulse     { animation: glow-pulse 2.2s ease-in-out infinite; }
 
   /* Shine: envolver el elemento en `.shine` (overflow-hidden, position) y
@@ -953,13 +911,6 @@
     animation: time-drain var(--time-left, 60s) linear forwards;
   }
 
-  /* Check que se traza (validación/éxito). */
-  .draw-check {
-    stroke-dasharray: 24;
-    stroke-dashoffset: 24;
-    animation: draw-check 0.45s var(--ease-out-expo) forwards;
-  }
-
   /* Respeta la preferencia de reducir movimiento (todas las animaciones custom).
      MMS: con reduce-motion NADA se mueve — el contenido aparece de una vez y
      los bucles se detienen; la información (contenido, estado) nunca depende
@@ -979,15 +930,12 @@
     .animate-slide-in-left,
     .animate-zoom-in,
     .animate-burst,
-    .animate-card-flip,
     .animate-glow-pulse,
     .shine-hover:hover .shine-sweep,
     .shine-loop .shine-sweep,
     .time-drain,
-    .draw-check,
     .scanner-line,
     .skeleton-shimmer { animation: none; }
     .card-lift:hover { transform: none; }
-    .draw-check { stroke-dashoffset: 0; }
   }
 }

@@ -29,7 +29,7 @@ import type { RegaloItem } from '@/modules/regalos/queries'
 
 const initial: RegaloActionState = {}
 
-export const ESTADO_REGALO: Record<string, { label: string; clase: string }> = {
+const ESTADO_REGALO: Record<string, { label: string; clase: string }> = {
   PENDIENTE: { label: 'Pendiente', clase: 'bg-warning/15 text-warning' },
   ACEPTADO: { label: 'Aceptado', clase: 'bg-success/15 text-success' },
   RECHAZADO: { label: 'Rechazado', clase: 'bg-destructive/10 text-destructive' },

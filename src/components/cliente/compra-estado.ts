@@ -188,17 +188,6 @@ export function compraEstadoVisual(
   return BASE[estado] ?? fallback(estado)
 }
 
-/**
- * Compat Fase E5: forma reducida { label, badge }. Mantiene a los llamadores
- * previos funcionando; internamente usa la capa visual nueva.
- */
-export const COMPRA_ESTADO_UI: Record<
-  string,
-  { label: string; badge: CompraBadgeTone }
-> = Object.fromEntries(
-  Object.entries(BASE).map(([k, v]) => [k, { label: v.label, badge: v.badge }])
-)
-
 export function compraEstadoUi(estado: string) {
   const v = BASE[estado] ?? fallback(estado)
   return { label: v.label, badge: v.badge }

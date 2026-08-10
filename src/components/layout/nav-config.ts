@@ -21,7 +21,6 @@ import {
   ClipboardList,
   History,
   User,
-  ShieldCheck,
   LifeBuoy,
   Newspaper,
   TrendingUp,
@@ -406,20 +405,6 @@ export function roleLabel(role: AppRole): string {
     default:
       return 'Administrador'
   }
-}
-
-/** Icon per role, accessed by property (avoids "component created during render"). */
-export const ROLE_ICONS: Record<AppRole, LucideIcon> = {
-  SUPERADMIN: ShieldCheck,
-  ADMINISTRADOR: ShieldCheck,
-  GERENTE: ShieldCheck,
-  CAJERO: ShieldCheck,
-  ADMIN_EMPRESA: ShieldCheck,
-  MARKETING: Megaphone,
-  SUPERVISOR: ShieldCheck,
-  RECEPCION: ScanLine,
-  EMPLEADO: ScanLine,
-  CLIENTE: User,
 }
 
 /** Flattened links for breadcrumb/title resolution. */
