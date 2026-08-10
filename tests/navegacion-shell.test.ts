@@ -205,9 +205,10 @@ const MICRO = /text-\[(\d+(?:\.\d+)?)px\]/g
  * área de superadministrador a cero · 185 al cerrar los acentos de `--info` ·
  * 169 tras la Fase 17, que dejó a cero el área del empleado — la que más
  * tenía y la que peor se lee (de pie, con el cliente delante) · 163 tras la
- * Fase 18, con la web pública también a cero.
+ * Fase 18, con la web pública también a cero · 160 tras la Fase 20, que se
+ * llevó por delante los que vivían en componentes huérfanos.
  */
-const TECHO_MICRO_TEXTOS = 163
+const TECHO_MICRO_TEXTOS = 160
 
 function archivosTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {
