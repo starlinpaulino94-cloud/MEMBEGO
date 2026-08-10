@@ -10,11 +10,14 @@ import {
   vehiculoPorPlaca,
   vehiculosDeCliente,
 } from '@/modules/plataforma/consultas'
+import { altaCliente } from '@/modules/plataforma/alta-cliente'
 import { ejecutarCanje } from '@/modules/visitas/canje'
 import type {
   BranchesResponse,
   ClientePlataforma,
   CompanyDTO,
+  CreateCustomerRequest,
+  CreateCustomerResponse,
   CustomerDTO,
   EntitlementsResponse,
   EvaluateResponse,
@@ -188,6 +191,30 @@ export function clienteLocal(companyId: string, sistemaSlug = 'carwash'): Client
         memberships: filas.map((m) => membershipSummaryDTO({ ...m, estado: String(m.estado) })),
         autoriza: false,
       }
+    },
+
+    async createCustomer(
+      peticion: CreateCustomerRequest,
+      idempotencyKey: string
+    ): Promise<CreateCustomerResponse> {
+      if (!idempotencyKey) throw new Error('createCustomer: idempotencyKey es obligatoria')
+      const empresa = mismaEmpresa(peticion.companyId)
+
+      // EL MISMO servicio que usa la API. La deduplicación, el prefijo `local:`
+      // y el canal de origen se deciden en un solo sitio: si esto llamara a
+      // `tx.cliente.create` por su cuenta, el mostrador y el satélite crearían
+      // fichas distintas para el mismo caso y solo se notaría al cruzarlas.
+      //
+      // Como en `redeem`, la clave de idempotencia se exige pero no se aplica:
+      // en proceso no hay reintento de red que proteger. Se pide para que la
+      // firma sea la misma y el día de la extracción no cambie quien llama.
+      const alta = await altaCliente(
+        empresa,
+        { nombre: peticion.name, telefono: peticion.phone, email: peticion.email },
+        sistemaSlug
+      )
+      if ('error' in alta) throw new Error(`INVALID_REQUEST: ${alta.error}`)
+      return { customer: alta.cliente, created: alta.creado }
     },
 
     async evaluateBenefits(): Promise<EvaluateResponse> {

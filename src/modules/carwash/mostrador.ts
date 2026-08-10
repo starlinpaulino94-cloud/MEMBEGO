@@ -27,19 +27,13 @@ import { normalizarPlaca } from './cuentas'
  * comprobación que haya que acordarse de escribir: es imposible por forma.
  */
 
-/** Prefijo que marca una identidad que NO viene de Supabase Auth. */
-export const PREFIJO_LOCAL = 'local:'
-
-/** Identidad para un cliente de mostrador. Nunca colisiona con un UUID real. */
-export function nuevoIdLocal(): string {
-  // Date + azar: no necesita ser criptográfico, solo único. La unicidad real
-  // la garantiza el @@unique([supabaseId, companyId]) de la base.
-  return `${PREFIJO_LOCAL}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
-}
-
-export function esIdLocal(supabaseId: string | null | undefined): boolean {
-  return !!supabaseId?.startsWith(PREFIJO_LOCAL)
-}
+/**
+ * La identidad de un cliente sin cuenta es del CORE, no de este vertical: un
+ * restaurante registra exactamente la misma clase de ficha (Fase 7). Vive en
+ * `plataforma/alta-cliente-nucleo` y se reexporta aquí para no romper a quien
+ * ya la importaba desde el lavadero.
+ */
+export { PREFIJO_LOCAL, nuevoIdLocal, esIdLocal } from '@/modules/plataforma/alta-cliente-nucleo'
 
 /** Normaliza un teléfono para comparar: solo dígitos. */
 export function normalizarTelefono(tel: string): string {

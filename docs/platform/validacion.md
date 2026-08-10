@@ -196,6 +196,5 @@ que llegan sin cuenta, y el diseño tiene que servir a los dos.
 
 ## Siguiente
 
-Fase 7: Restaurant como **primer satélite real**. Sobre este contrato, con este
-SDK, y contestando la única pregunta que queda — si un sistema nuevo se integra
-sin tocar el Core. Ver `docs/PLATFORM_ARCHITECTURE_REPORT.md` §17.
+Fase 7 —un vertical nuevo sin tocar el Core, y la escritura que aquí faltaba—
+está en `docs/platform/satelite.md`.

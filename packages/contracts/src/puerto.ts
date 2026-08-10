@@ -1,6 +1,8 @@
 import type {
   BranchesResponse,
   CompanyDTO,
+  CreateCustomerRequest,
+  CreateCustomerResponse,
   CustomerDTO,
   EntitlementsResponse,
   EvaluateRequest,
@@ -95,6 +97,27 @@ export interface ClientePlataforma {
 
   // ── Decisiones y escrituras ───────────────────────────────────────────────
 
+  /**
+   * Da de alta a alguien que llegó sin cuenta.
+   *
+   * ESTE MÉTODO ESTUVO FUERA DEL PUERTO A PROPÓSITO, y entra ahora por el
+   * camino que la Fase 6 dejó escrito: «llegan como escrituras del Core cuando
+   * un satélite real las necesite, con su idempotencia». Restaurant es ese
+   * satélite, y quien llega sin reserva es su caso normal.
+   *
+   * Lo que NO cambia es de quién es la identidad. El Core sigue decidiendo cómo
+   * queda la fila —que no pueda iniciar sesión, de qué canal vino, si en
+   * realidad ya existía—; el vertical manda un nombre y recibe un id.
+   *
+   * Deduplica por el identificador que venga, así que puede devolver un cliente
+   * que ya existía con `created: false`. Sin identificador no hay nada con qué
+   * deduplicar y siempre crea: por eso la clave de idempotencia es obligatoria.
+   */
+  createCustomer(
+    peticion: CreateCustomerRequest,
+    idempotencyKey: string
+  ): Promise<CreateCustomerResponse>
+
   evaluateBenefits(peticion: EvaluateRequest): Promise<EvaluateResponse>
   redeem(peticion: RedemptionRequest, idempotencyKey: string): Promise<RedemptionResponse>
   recordTransaction(
@@ -108,10 +131,13 @@ export interface ClientePlataforma {
  * documento para que quien busque un método y no lo encuentre lea aquí la
  * razón, en vez de suponer que se olvidó.
  *
- *   · Crear clientes y vehículos — Core-owned. Un vertical que los cree
- *     directamente empieza a ser dueño de la identidad del cliente, que es
- *     justo lo que MembeGo no puede ceder (§14). Llegan como escrituras del
- *     Core cuando un satélite real las necesite, con su idempotencia.
+ *   · Crear VEHÍCULOS — sigue fuera, y la razón es que ningún satélite real lo
+ *     ha necesitado todavía. Restaurant no tiene coches. El alta de clientes
+ *     entró en la Fase 7 porque el primer satélite la pedía de verdad; añadir
+ *     el vehículo «ya que estamos» sería diseñar un contrato contra un caso
+ *     imaginado, que es exactamente cómo se llenan las APIs de métodos que
+ *     nadie usa y nadie puede quitar. Entrará el día que un vertical con
+ *     vehículos viva fuera del monolito.
  *
  *   · Fusionar un cliente de mostrador con su cuenta — se queda en el Core
  *     para siempre. Fusionar identidades es irreversible y toca membresías,
@@ -123,9 +149,4 @@ export interface ClientePlataforma {
  *     la Fase 5 sabe cuándo entra cada uno por primera vez. Darle la plantilla
  *     entera de MembeGo sería exponer a gente que nunca usó su sistema.
  */
-export const FUERA_DEL_PUERTO = [
-  'customers:create',
-  'vehicles:create',
-  'customers:merge',
-  'staff:list',
-] as const
+export const FUERA_DEL_PUERTO = ['vehicles:create', 'customers:merge', 'staff:list'] as const

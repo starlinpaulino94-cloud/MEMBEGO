@@ -5,6 +5,8 @@ import {
   type ClientePlataforma,
   type CodigoError,
   type CompanyDTO,
+  type CreateCustomerRequest,
+  type CreateCustomerResponse,
   type CuerpoError,
   type CustomerDTO,
   type EntitlementsResponse,
@@ -366,6 +368,41 @@ export class MembegoClient implements ClientePlataforma {
   }
 
   // ── Escrituras ────────────────────────────────────────────────────────────
+
+  /**
+   * Dar de alta a alguien que llegó sin cuenta.
+   *
+   * `idempotencyKey` es obligatoria por un motivo concreto: el alta deduplica
+   * por correo o teléfono, pero quien llega solo con su nombre —el caso normal
+   * de una mesa— no tiene con qué deduplicarse. Sin clave, un reintento por una
+   * respuesta que se perdió por el camino crea la segunda ficha de la misma
+   * persona.
+   *
+   * Usa la referencia de TU operación (la comanda, la mesa, el turno), no un
+   * identificador nuevo por intento: si la generas en cada llamada, tienes
+   * idempotencia en el papel y dos clientes en la base.
+   *
+   * Mira `created`: si viene `false`, esa persona ya existía y puede tener
+   * membresía. Tratarla como nueva es, para quien está delante, un sistema que
+   * no lo reconoce.
+   */
+  async createCustomer(
+    peticion: CreateCustomerRequest,
+    idempotencyKey: string
+  ): Promise<CreateCustomerResponse> {
+    if (!idempotencyKey) {
+      throw new MembegoError(
+        'IDEMPOTENCY_KEY_REQUIRED',
+        'createCustomer: idempotencyKey es obligatoria',
+        0,
+        null
+      )
+    }
+    return this.pedir('POST', '/api/platform/v1/customers', {
+      cuerpo: peticion,
+      idempotencyKey,
+    })
+  }
 
   /**
    * Consumir un beneficio.

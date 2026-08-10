@@ -12,6 +12,7 @@
 
 export const CAPABILITIES = [
   'CUSTOMER_LOOKUP',
+  'CUSTOMER_REGISTRATION',
   'MEMBERSHIP_LOOKUP',
   'BENEFIT_EVALUATION',
   'BENEFIT_REDEMPTION',
@@ -31,9 +32,15 @@ export type Capability = (typeof CAPABILITIES)[number]
  *
  * `BENEFIT_REDEMPTION` incluye `benefits:read` además de `benefits:redeem`
  * porque un sistema que puede consumir pero no evaluar consumiría a ciegas.
+ *
+ * `CUSTOMER_REGISTRATION` incluye `customers:read` por el mismo motivo: el alta
+ * deduplica, y cuando el cliente ya existía devuelve SU ficha. Conceder escribir
+ * sin leer sería conceder un camino por el que se leen clientes igual, sin que
+ * el scope lo diga — y un permiso que miente es peor que uno amplio.
  */
 export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   CUSTOMER_LOOKUP: ['customers:read'],
+  CUSTOMER_REGISTRATION: ['customers:read', 'customers:write'],
   MEMBERSHIP_LOOKUP: ['memberships:read'],
   BENEFIT_EVALUATION: ['benefits:read'],
   BENEFIT_REDEMPTION: ['benefits:read', 'benefits:redeem'],

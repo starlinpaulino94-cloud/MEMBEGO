@@ -24,9 +24,11 @@ import { medirAcoplamiento } from '../scripts/acoplamiento-vertical.mjs'
  * ESTE NÚMERO SOLO PUEDE BAJAR. Subirlo significa que alguien añadió
  * acoplamiento nuevo justo cuando el proyecto va en la otra dirección.
  *
- * 25 al empezar la Fase 6 · 22 ahora.
+ * 25 al empezar la Fase 6 · 22 al cerrarla · 20 tras la Fase 7, donde el alta
+ * de clientes pasó a ser una escritura del Core y dejó de escribirse a mano en
+ * el mostrador y en la pista.
  */
-const TECHO_ACOPLAMIENTO = 22
+const TECHO_ACOPLAMIENTO = 20
 
 test('el acoplamiento del vertical con el núcleo no crece', () => {
   const { total, porArchivo } = medirAcoplamiento()
@@ -261,28 +263,20 @@ test('la consulta real usa exactamente esta comparación, no una copia', () => {
  * olvido. Estos cuatro son decisiones, y la razón vive en el código para que
  * quien busque un método y no lo encuentre la lea ahí.
  */
-test('los límites del puerto están declarados', () => {
-  assert.deepEqual([...FUERA_DEL_PUERTO].sort(), [
-    'customers:create',
-    'customers:merge',
-    'staff:list',
-    'vehicles:create',
-  ])
+test('cada límite del puerto lleva escrita su razón', () => {
+  // La LISTA de límites la congela `platform-satelite.test.ts`, porque en la
+  // Fase 7 cambió: `customers:create` salió de aquí por el camino que esta
+  // misma fase dejó escrito —«llegan como escrituras del Core cuando un
+  // satélite real las necesite»—, y el satélite llegó.
+  //
+  // Lo que esta prueba sigue vigilando es lo que NO puede cambiar: que un
+  // límite sin razón escrita no existe. Un método que falta sin explicación se
+  // lee como un olvido, y el siguiente lo añade.
   const src = readFileSync(join('packages', 'contracts', 'src', 'puerto.ts'), 'utf8')
-  for (const razon of ['Core-owned', 'irreversible', 'SSO']) {
+  for (const razon of ['irreversible', 'SSO', 'ningún satélite real']) {
     assert.ok(src.includes(razon), `falta la razón de un límite: "${razon}"`)
   }
-})
-
-test('el puerto no ofrece crear clientes ni fusionar identidades', () => {
-  // Un vertical que cree clientes empieza a ser dueño de la identidad, que es
-  // justo lo que MembeGo no puede ceder (§14). Fusionar es irreversible y toca
-  // membresías, compras e historial.
-  const src = readFileSync(join('packages', 'contracts', 'src', 'puerto.ts'), 'utf8')
-  const interfaz = src.slice(src.indexOf('export interface ClientePlataforma'), src.indexOf('export const FUERA_DEL_PUERTO'))
-  for (const prohibido of ['createCustomer', 'mergeCustomer', 'createVehicle', 'staff']) {
-    assert.ok(!interfaz.includes(prohibido), `el puerto no puede ofrecer "${prohibido}"`)
-  }
+  assert.ok(FUERA_DEL_PUERTO.length > 0, 'un puerto sin límites no es un puerto')
 })
 
 // ── Higiene de los paquetes ─────────────────────────────────────────────────

@@ -199,6 +199,35 @@ export interface RedemptionRequest {
   notas?: string | null
 }
 
+/**
+ * Alta de alguien que llegó sin cuenta.
+ *
+ * SOLO EL NOMBRE ES OBLIGATORIO, y es una decisión: exigir correo o documento
+ * en la puerta es la forma más rápida de que el encargado deje de usar el
+ * sistema. Un cliente registrado con solo su nombre vale más que uno no
+ * registrado.
+ *
+ * Lo que NO se manda es igual de importante: no hay `id`, ni `esLocal`, ni
+ * canal. Quien decide cómo queda la fila es el Core (§14) — el vertical pide un
+ * alta, no escribe un registro.
+ */
+export interface CreateCustomerRequest {
+  companyId: string
+  name: string
+  phone?: string | null
+  email?: string | null
+}
+
+export interface CreateCustomerResponse {
+  customer: CustomerDTO
+  /**
+   * `false` cuando ese identificador ya estaba y se devuelve el cliente que ya
+   * existe. Míralo: un cliente que ya existía puede tener membresía, y darle la
+   * bienvenida como si fuera nuevo es un sistema que no lo reconoce.
+   */
+  created: boolean
+}
+
 export interface TransactionRequest {
   companyId: string
   customerId?: string | null

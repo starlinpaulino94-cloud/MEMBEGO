@@ -331,20 +331,18 @@ async function crearMostradorEnLinea(
   datos: { nombre: string; telefono: string | null; placa: string | null; descripcion: string }
 ): Promise<{ clienteId: string; vehiculoId: string | null } | null> {
   try {
-    const { nuevoIdLocal } = await import('./mostrador')
+    const { altaCliente } = await import('@/modules/plataforma/alta-cliente')
     return await conEmpresa(companyId, async (tx) => {
-      const cliente = await tx.cliente.create({
-        data: {
-          companyId,
-          supabaseId: nuevoIdLocal(),
-          nombre: datos.nombre,
-          telefono: datos.telefono,
-          email: '',
-          esLocal: true,
-          canalOrigen: 'MOSTRADOR',
-        },
-        select: { id: true },
-      })
+      // La escribe el Core, y en la MISMA transacción que el vehículo. Aquí es
+      // donde el alta deduplica por teléfono: si ese número ya está, el carro
+      // entra en la ficha del cliente que YA vino otras veces en vez de abrir
+      // una segunda que parte su historial en dos.
+      const alta = await altaCliente(companyId, {
+        nombre: datos.nombre,
+        telefono: datos.telefono,
+      }, 'MOSTRADOR', tx)
+      if ('error' in alta) throw new Error(alta.error)
+      const cliente = alta.cliente
 
       let vehiculoId: string | null = null
       if (datos.placa) {
