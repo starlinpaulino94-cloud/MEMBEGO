@@ -516,7 +516,7 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | **3b** | Extraer el canje del Server Action · `redemptions` · `transactions` | ✅ `docs/platform/canje.md` |
 | **4** | `@membego/contracts` + `@membego/platform-sdk` | ✅ `docs/platform/sdk.md` |
 | **5** | SSO de un solo uso · `UserSystemAccess` · App Launcher por entitlement | ✅ `docs/platform/sso.md` |
-| **6** | Car Wash consume la API **sin salir del monolito** | Validación del contrato |
+| **6** | Car Wash consume la API **sin salir del monolito** | ✅ `docs/platform/validacion.md` |
 | **7** | Restaurant como **primer satélite real** | Prueba de la arquitectura |
 | **8** | Health · métricas de entrega · panel de sistemas | Observabilidad |
 | **9** | `create-membego-system` · `docs/platform/` | Developer experience |
@@ -556,7 +556,7 @@ De los 20 puntos del §93, el estado real hoy:
 | 15 | SSO | 🟢 uso único, returnUrl y rol del vertical (Fase 5) |
 | 16 | App Launcher | 🟢 por habilitación Y acceso del usuario (Fase 5) |
 | 17 | Documentación | 🟢 `docs/platform/` + README de los paquetes |
-| 18 | Car Wash migrable | 🟡 el canje ya es un servicio reutilizable (Fase 3b) |
+| 18 | Car Wash migrable | 🟡 puerto con dos implementaciones; acoplamiento 25 → 22 (Fase 6) |
 | 19 | Restaurant sobre el estándar | 🔴 sin estándar |
 | 20 | Tercer sistema sin rediseño | 🔴 |
 
@@ -566,7 +566,8 @@ Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
 el canje ya expuesto sobre un servicio único: **14 verdes, 3 amarillos, 3
 rojos**. Tras la Fase 4: **16 verdes, 1 amarillo, 3 rojos**. La Fase 5 no
 cambia el recuento —esos dos puntos ya estaban verdes— pero cierra lo que el
-§13 pedía endurecer. El cimiento es mejor de lo que sugiere el
+§13 pedía endurecer. La Fase 6 tampoco lo cambia: valida, y su resultado son
+tres correcciones al contrato y un fallo de producción arreglado. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -617,7 +618,17 @@ MembeGo, `returnUrl` validada por origen y firmada, `UsuarioSistema` con el
 puesto del vertical que el Core transporta sin interpretar, y el lanzador
 filtrando por habilitación Y acceso.
 
-Siguiente: **Fase 6** — Car Wash consumiendo los contratos sin salir del
-monolito. Es la validación del estándar hecha con el vertical que ya funciona, y
-antes de que exista un satélite real: si algo del contrato no sirve, se descubre
-aquí y no en la primera integración de verdad.
+**Fase 6 completa** — `docs/platform/validacion.md`. El contrato SIRVE, con tres
+correcciones que solo aparecieron al intentar usarlo: resolver por matrícula,
+buscar por texto y el vehículo como entidad compartida. Y de paso destapó un
+fallo que ya estaba en producción: un teléfono en formato internacional nunca
+resolvía al cliente guardado en local, así que el empleado le cobraba el precio
+completo a quien sí tenía membresía.
+
+Lo que el contrato NO aguanta todavía es escribir: un mostrador crea clientes y
+vehículos, y el puerto no lo ofrece. Es la conversación de la Fase 7, y hay que
+tenerla con Restaurant delante — un restaurante también registra clientes sin
+cuenta, y el diseño tiene que servir a los dos.
+
+Siguiente: **Fase 7** — Restaurant como primer satélite real, sobre este
+contrato y este SDK.

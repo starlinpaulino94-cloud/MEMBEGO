@@ -35,6 +35,29 @@ export interface CustomerDTO {
 }
 
 /**
+ * Vehículo de un cliente.
+ *
+ * Es una entidad COMPARTIDA: MembeGo es su dueño —las membresías se atan a
+ * vehículos concretos (§13)— y a la vez un lavadero no puede operar sin ella.
+ * Por eso está en el contrato en vez de que cada vertical se invente la suya.
+ *
+ * Sin color, sin año y sin la categoría tarifaria: un vertical identifica el
+ * coche con la matrícula y lo nombra con marca y modelo. Lo demás es de MembeGo.
+ */
+export interface VehicleDTO {
+  id: string
+  customerId: string
+  /** Puede ser null: hay vehículos históricos sin matrícula registrada. */
+  placa: string | null
+  marca: string
+  modelo: string
+}
+
+export interface VehiclesResponse {
+  vehicles: VehicleDTO[]
+}
+
+/**
  * RESUMEN, y el nombre es la advertencia: sirve para PINTAR «cliente con
  * membresía activa». **No autoriza nada.** Para saber si se puede consumir un
  * beneficio, `benefits.evaluate`.

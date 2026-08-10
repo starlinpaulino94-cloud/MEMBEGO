@@ -132,6 +132,16 @@ export async function duenoDeLaPlaca(companyId: string, placa: string) {
   const limpia = normalizarPlaca(placa)
   if (!limpia) return null
   try {
+    // NO va por el contrato, y es una conclusión medida, no un olvido.
+    //
+    // El puerto da el vehículo y el cliente, pero no `tipoVehiculoId` (la
+    // categoría tarifaria del lavadero) ni `esLocal` (si el cliente tiene
+    // cuenta o es de mostrador). Pasarlo por el contrato obligaba a hacer TRES
+    // consultas donde hoy hay una — en la operación más frecuente de una pista.
+    //
+    // Peor código a cambio de mover un número no es una mejora. Queda como
+    // hueco documentado en docs/platform/validacion.md: se migra cuando el DTO
+    // de cliente lleve `esLocal` y la categoría tarifaria sea del vertical.
     const vehiculo = await conEmpresa(companyId, (tx) =>
       tx.vehiculo.findFirst({
         where: {

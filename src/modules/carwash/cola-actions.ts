@@ -18,6 +18,7 @@ import {
   type ColaEstado,
 } from './cola'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { clienteLocal } from '@/modules/plataforma/cliente-local'
 
 const RUTA_COLA = '/admin/app/carwash/cola'
 
@@ -67,21 +68,17 @@ export async function registrarEnCola(
     let vehiculoId: string | null = null
     let clienteId: string | null = null
 
+    // Las dos identificaciones van por el CONTRATO de plataforma, no por las
+    // tablas del Core (Fase 6). Hoy `clienteLocal` no cruza la red; el día que
+    // Car Wash salga del monolito solo cambia por `new MembegoClient(...)` y
+    // estas dos líneas siguen valiendo.
+    const membego = clienteLocal(ctx.companyId)
+
     if (placa) {
-      const vehiculo = await conEmpresa(ctx.companyId, (tx) =>
-        tx.vehiculo
-          .findFirst({
-            where: {
-              placa: { equals: placa, mode: 'insensitive' },
-              cliente: { companyId: ctx.companyId },
-            },
-            select: { id: true, clienteId: true },
-          })
-          .catch(() => null)
-      )
+      const vehiculo = await membego.vehicleByPlate(ctx.companyId, placa)
       if (vehiculo) {
         vehiculoId = vehiculo.id
-        clienteId = vehiculo.clienteId
+        clienteId = vehiculo.customerId
       }
     }
 
@@ -89,12 +86,9 @@ export async function registrarEnCola(
       const elegido = String(formData.get('clienteId') ?? '').trim()
       if (elegido) {
         // Se revalida contra la empresa: un id copiado de otro negocio no puede
-        // colar un cliente ajeno en esta pista.
-        const c = await conEmpresa(ctx.companyId, (tx) =>
-          tx.cliente
-            .findFirst({ where: { id: elegido, companyId: ctx.companyId }, select: { id: true } })
-            .catch(() => null)
-        )
+        // colar un cliente ajeno en esta pista. El puerto acota por empresa, así
+        // que un id ajeno sale por el mismo sitio que uno inexistente.
+        const c = await membego.customer(ctx.companyId, elegido).catch(() => null)
         if (c) clienteId = c.id
       }
     }
