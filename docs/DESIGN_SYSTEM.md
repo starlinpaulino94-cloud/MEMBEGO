@@ -61,8 +61,18 @@ azul. Ahora `--primary` es el mismo azul en las dos, y `.theme-landing` solo
 sigue existiendo para forzar el tema claro en la landing.
 
 - **Marca:** `--primary` (azul eléctrico), con `--primary-hover` y
-  `--primary-soft` para los estados. Gradiente: `.bg-gradient-brand`
-  (azul → cian), con moderación — hero, CTA protagonista, dock del QR.
+  `--primary-soft` para los estados.
+- **Degradados — dos, y no son intercambiables:**
+
+| Clase | Para qué | Texto blanco encima |
+|---|---|---|
+| `.surface-hero` | Cabeceras públicas con texto | ✅ 6,34:1 · 8,35:1 · 10,13:1 |
+| `.bg-gradient-brand` | Chips, iconos, dock del QR | ❌ su extremo cian da **2,33:1** |
+
+  Este documento recomendaba `.bg-gradient-brand` para héroes hasta la Fase 18.
+  Era una combinación ilegible por escrito: sobre el cian, el texto blanco
+  pequeño no llega ni a la mitad del mínimo de AA. Si necesitas escribir encima
+  de un degradado, es `.surface-hero`.
 - **Superficies:** `--background`, `--card`, `--muted`, `--border`.
 - **Estados semánticos** — usar SIEMPRE estos, nunca `text-green-600` suelto:
 
@@ -373,9 +383,9 @@ verificar enlaces.
 | 15 | Soporte | ✅ |
 | 16 | Superadmin | ✅ |
 | 17 | Empleado | ✅ |
-| 18 | Páginas públicas | ⬜ |
-| 19 | Dark mode, accesibilidad, QA visual | ⬜ |
-| 20 | Eliminar el frontend visual heredado | ⬜ |
+| 18 | Páginas públicas | ✅ |
+| 19 | Dark mode, accesibilidad, QA visual | ✅ |
+| 20 | Eliminar el frontend visual heredado | ✅ |
 
 ### Correcciones desde verificación visual
 
@@ -518,6 +528,98 @@ cerrar el turno— y se toca con una mano. Ahora mide 44px.
 **El aviso de cola sin conexión usaba `amber-500` con su `dark:` escrito a
 mano.** Es el mensaje que dice "tienes registros sin enviar": si se ve mal en
 oscuro, se pierde dinero de verdad.
+
+### Fase 18 · la cara pública, una sola marca
+
+**Había seis degradados distintos para la misma cabecera.** `from-blue-800 via-
+blue-700 to-indigo-900`, `from-blue-700 via-sky-600 to-indigo-800`, `from-blue-
+600 to-sky-500`, `from-blue-600 to-indigo-700`, `from-blue-700 to-indigo-800` y
+`from-slate-900 to-blue-900`. Nadie los eligió distintos: se fueron escribiendo
+a mano página a página. La web pública cambiaba de azul al navegar.
+
+Ahora es **`.surface-hero`**, definida una vez, con tres topes de la escala de
+marca que **todos** aguantan texto blanco: 6,34:1 · 8,35:1 · 10,13:1.
+
+**`.bg-gradient-brand` no admite texto blanco pequeño.** Su extremo cian da
+**2,33:1** contra blanco, muy por debajo de AA — y el documento lo recomendaba
+para héroes. Queda para chips, iconos y superficies decorativas; las cabeceras
+con párrafos encima usan `.surface-hero`. Está anotado junto a la propia regla.
+
+**Seis clases con dos opacidades encadenadas.** `text-white/80/90`,
+`bg-primary/10/50`, `bg-primary/40/20`. Tailwind no las parsea: **descarta la
+clase entera**, sin aviso, sin romper el build y sin fallar ninguna prueba. Tres
+estaban en la portada, dejando el subtítulo del héroe en blanco puro y sin
+jerarquía frente al titular. La guardia las vigila en todo `src`, no solo aquí.
+
+**La landing usa los mismos nueve roles.** Los héroes pasan de tres breakpoints
+(`text-4xl sm:text-5xl lg:text-7xl`) a `.text-display`, que ya es fluida de 40 a
+72px. Los siete `rounded-3xl` —fuera del vocabulario— bajan a `rounded-2xl`.
+Área pública a **cero** micro-textos y **cero** tamaños fuera de escala.
+
+### Fase 19 · el contraste se calcula, no se mira
+
+**Cuatro pares de token no llegaban a AA**, todos en tema claro:
+
+| Par | Antes | Ahora |
+|---|---|---|
+| Texto de alerta sobre tarjeta | **2,28:1** | 4,65:1 |
+| Texto informativo | 3,44:1 | 4,59:1 |
+| Texto de éxito | 3,62:1 | 4,64:1 |
+| Borde de tarjeta | 1,29:1 | 1,48:1 |
+
+Los valores se habían elegido mirando el RELLENO (`bg-success/10`), pero el uso
+real es el contrario: 150 `text-success`, 118 `text-warning`, 30 `text-info`
+frente a 23 rellenos sólidos en total. El token estaba optimizado para su caso
+raro.
+
+**103 sitios usaban `text-*-foreground` como texto sobre tarjeta o tinte.** Ese
+token es el color que va ENCIMA del relleno sólido. Sobre una tarjeta daba
+**1,06:1 en oscuro** —invisible— y `success`/`info` fallaban también en claro
+con 1,03:1. Nadie lo reportó porque el texto no desaparece: se funde con el
+fondo, y quien lo ve asume que ahí no había nada escrito. Solo 6 usos eran
+correctos (sobre su relleno sólido) y se conservaron.
+
+**Campos sin nombre accesible: 0 de cara al usuario.** Un `<Label>` sin
+`htmlFor` se ve como etiqueta y no lo es; un `placeholder` desaparece al
+escribir. Quedan 101 en el panel interno, con techo que solo baja.
+
+`scripts/contraste.mjs` y `scripts/campos-sin-etiqueta.mjs` se ejecutan a mano
+y como guardia. Los dos incluyen una **prueba de la prueba**: si el parser se
+rompe devolvería cero y la guardia pasaría por estar ciega, que es peor que
+fallar.
+
+### Fase 20 · lo que se borró, y lo que no
+
+**Se borró:** 13 componentes huérfanos (~1.400 líneas), 4 símbolos muertos, 6
+utilidades CSS con sus `@keyframes`, y el alias `landingPrimary`. Todo
+verificado uno a uno: su única referencia era su propia declaración, y todos
+databan del merge #251, semanas antes del DS 2.0.
+
+**Se conservaron los 16 primitives sin uso de `packages/ui`.** La Fase 0
+predijo que las fases de wizards, tabs y tablas usarían `progress`,
+`segmented-control`, `pagination` y `avatar`; se equivocó — cada fase construyó
+lo suyo. Pero el paquete es una **librería**, y existe para que la futura app
+móvil consuma los mismos componentes. Borrar el vocabulario de un design system
+porque la web todavía no lo usa no es lo mismo que borrar código de producto
+huérfano.
+
+**No se migraron los 91 radios fuera de vocabulario.** Eso no es borrar, es
+cambiar la forma de 91 sitios; apilarlo sobre la Fase 19 sin verificación
+visual era pedir problemas.
+
+**Dos cuidados que evitaron romper cosas:** `Estrellas` y `ESTADO_REGALO`
+aparecían como exports muertos, pero se usan DENTRO de su archivo — ahí sobraba
+el `export`, no el símbolo. Y 4 archivos tenían un símbolo muerto entre otros
+vivos: se saldó el símbolo, no el archivo.
+
+### El espejo de tokens tiene guardia
+
+`packages/ui/src/tokens.ts` es el espejo en hexadecimal de `globals.css` para
+lo que no pasa por CSS: app móvil, correos, imágenes OG, PDFs. **Se
+desincronizó dos veces sin que nada avisara** — la Fase 19 cambió los estados
+semánticos y no tocó el espejo, y `danger` llevaba el hex viejo desde antes de
+este trabajo. Durante dos fases, un correo habría salido con los colores que
+fallaban el contraste. `tests/espejo-tokens.test.ts` los lee juntos.
 
 ### Decisiones de producto resueltas fuera de fase
 

@@ -30,7 +30,7 @@ export default async function HomePage() {
         <section className="bg-muted py-16 sm:py-20">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-8">
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">
+              <h2 className="text-h1 text-foreground">
                 Promociones del momento
               </h2>
               <p className="mt-2 text-muted-foreground">
@@ -49,10 +49,10 @@ export default async function HomePage() {
       <HowItWorks />
 
       {/* CTA final */}
-      <section className="bg-gradient-to-br from-blue-700 to-indigo-800 py-16 text-center text-white">
+      <section className="surface-hero py-16 text-center text-white">
         <div className="mx-auto max-w-2xl px-4">
           <Sparkles className="mx-auto h-10 w-10 text-primary" />
-          <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+          <h2 className="mt-4 text-h1">
             Tu membresía te está esperando
           </h2>
           <p className="mt-3 text-white/80">

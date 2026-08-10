@@ -217,7 +217,7 @@ export default async function AdminDashboard() {
                       a.tono === 'danger'
                         ? 'text-destructive'
                         : a.tono === 'warning'
-                          ? 'text-warning-foreground'
+                          ? 'text-warning'
                           : 'text-muted-foreground'
                     }`}
                     aria-hidden

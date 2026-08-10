@@ -59,7 +59,7 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
           ← Ver empresas
         </Link>
 
-        <div className="mt-8 overflow-hidden rounded-3xl border border-border/80 shadow-premium">
+        <div className="mt-8 overflow-hidden rounded-2xl border border-border/80 shadow-premium">
           {/* Encabezado con color del plan */}
           <div
             className="p-8 text-white"
@@ -77,8 +77,8 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
               )}
               <span className="font-semibold">{plan.company.name}</span>
             </div>
-            <h1 className="mt-4 text-4xl font-bold">{plan.nombre}</h1>
-            <p className="mt-2 text-3xl font-bold">
+            <h1 className="mt-4 text-h1">{plan.nombre}</h1>
+            <p className="mt-2 text-h1">
               {plan.precio > 0 ? fmtRD(plan.precio) : 'Gratis'}
               <span className="text-base font-medium opacity-80"> / {plan.vigenciaDias} días</span>
             </p>
@@ -89,7 +89,7 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 href={registroHref}
-                className="flex-1 rounded-xl bg-primary px-6 py-4 text-center text-lg font-bold text-primary-foreground shadow-glow transition hover:opacity-95"
+                className="flex-1 rounded-xl bg-primary px-6 py-4 text-center text-h3 text-primary-foreground shadow-glow transition hover:opacity-95"
               >
                 Elegir este plan
               </Link>
@@ -129,7 +129,7 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
 
             {plan.descripcion && (
               <div>
-                <h2 className="mb-2 text-xl font-semibold text-foreground">Descripción</h2>
+                <h2 className="mb-2 text-h2 text-foreground">Descripción</h2>
                 <p className="whitespace-pre-wrap leading-relaxed text-foreground">{plan.descripcion}</p>
               </div>
             )}

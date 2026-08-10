@@ -20,7 +20,7 @@ export const metadata = { title: 'Campañas conjuntas' }
 
 const CHIP_ESTADO: Record<string, string> = {
   BORRADOR: 'bg-muted text-muted-foreground',
-  APLICADA: 'bg-success/15 text-success-foreground',
+  APLICADA: 'bg-success/15 text-success',
   ARCHIVADA: 'bg-muted text-muted-foreground line-through',
 }
 

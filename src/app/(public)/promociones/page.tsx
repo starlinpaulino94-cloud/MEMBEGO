@@ -43,19 +43,19 @@ export default async function PromotionsPage({
   return (
     <div className="min-h-screen bg-card">
       {/* Header */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-900 pb-16 pt-14">
+      <section className="relative overflow-hidden surface-hero pb-16 pt-14">
         <div className="absolute inset-0 bg-grid-light mask-fade" />
         <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-primary/25 blur-3xl" />
-        <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-primary/40/20 blur-3xl" />
+        <div className="absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-primary/25 blur-3xl" />
         <div className="relative mx-auto max-w-7xl space-y-7 px-4 sm:px-6 lg:px-8">
           <div className="text-white">
             <span className="inline-flex animate-slide-up items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-sm font-medium text-white/80 backdrop-blur">
               <Tag className="h-4 w-4 text-primary" /> Ofertas vigentes
             </span>
-            <h1 className="mt-5 animate-slide-up text-4xl font-extrabold tracking-tight delay-75 sm:text-5xl">
+            <h1 className="mt-5 animate-slide-up text-display delay-75">
               Promociones
             </h1>
-            <p className="mt-3 max-w-xl animate-slide-up text-lg text-white/80/90 delay-100">
+            <p className="mt-3 max-w-xl animate-slide-up text-body text-white/80 delay-100">
               Descuentos, regalos y beneficios exclusivos de las empresas
               afiliadas a MembeGo.
             </p>

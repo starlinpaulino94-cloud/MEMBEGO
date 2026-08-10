@@ -200,7 +200,7 @@ export function EmpresaDashboard({
                   <div key={p.id} className="flex items-center gap-3">
                     <div className={cn(
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold',
-                      i === 0 ? 'bg-warning/15 text-warning-foreground' : 'bg-muted text-muted-foreground'
+                      i === 0 ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'
                     )}>
                       {i + 1}
                     </div>

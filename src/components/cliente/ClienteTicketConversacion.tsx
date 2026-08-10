@@ -85,7 +85,13 @@ export function ClienteTicketConversacion({
       ) : (
         <form action={action} className="space-y-3" key={state.success ? 'sent' : 'draft'}>
           <input type="hidden" name="ticketId" value={ticketId} />
-          <Textarea name="cuerpo" rows={3} placeholder="Escribe tu mensaje…" required />
+          <Textarea
+            name="cuerpo"
+            rows={3}
+            aria-label="Tu mensaje"
+            placeholder="Escribe tu mensaje…"
+            required
+          />
           <SubmitBtn />
         </form>
       )}

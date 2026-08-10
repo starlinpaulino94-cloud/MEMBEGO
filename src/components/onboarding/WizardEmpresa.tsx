@@ -79,7 +79,7 @@ export function WizardEmpresa({
               key={item.key}
               className={`flex items-center justify-between gap-3 rounded-xl border p-4 transition ${
                 isCurrent
-                  ? 'border-primary/40 bg-primary/10/50 shadow-sm'
+                  ? 'border-primary/40 bg-primary/10 shadow-sm'
                   : 'border-border bg-card'
               }`}
             >
@@ -145,7 +145,7 @@ export function WizardEmpresa({
       </div>
 
       {/* Publicación */}
-      <div className="rounded-xl border border-primary/20 bg-primary/10/40 p-5">
+      <div className="rounded-xl border border-primary/20 bg-primary/10 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-start gap-2">
             <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-primary" />

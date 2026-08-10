@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 const ESTILOS: Record<string, { label: string; clase: string }> = {
-  PENDIENTE: { label: 'Por confirmar', clase: 'bg-warning/15 text-warning-foreground' },
+  PENDIENTE: { label: 'Por confirmar', clase: 'bg-warning/15 text-warning' },
   CONFIRMADA: { label: 'Confirmada', clase: 'bg-success/15 text-success' },
   COMPLETADA: { label: 'Completada', clase: 'bg-muted text-muted-foreground' },
   CANCELADA: { label: 'Cancelada', clase: 'bg-destructive/10 text-destructive' },

@@ -69,10 +69,10 @@ export default function FaqPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground">
+        <h1 className="text-h1 text-foreground">
           Preguntas frecuentes
         </h1>
-        <p className="mt-3 text-lg text-muted-foreground">
+        <p className="mt-3 text-body text-muted-foreground">
           Todo lo que necesitas saber sobre {SITE_NAME}. ¿No encuentras tu respuesta?{' '}
           <Link href="/contact" className="text-primary hover:underline">
             Escríbenos

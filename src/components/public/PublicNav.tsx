@@ -45,7 +45,7 @@ export function PublicNav() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <Image src="/logo.svg" alt="MembeGo" width={30} height={30} priority />
-          <span className="text-lg font-bold tracking-tight text-foreground">
+          <span className="text-h3 text-foreground">
             Membe<span className="text-success">Go</span>
           </span>
         </Link>

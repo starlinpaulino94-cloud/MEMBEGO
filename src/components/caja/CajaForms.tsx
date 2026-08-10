@@ -138,6 +138,7 @@ export function BuscadorOrdenes({ q }: { q: string }) {
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           name="q"
+          aria-label="Buscar en caja"
           defaultValue={q}
           placeholder="Referencia, nombre, teléfono o correo…"
           className="pl-9"
@@ -151,10 +152,10 @@ export function BuscadorOrdenes({ q }: { q: string }) {
 }
 
 const ESTADO_CHIP: Record<string, string> = {
-  PENDIENTE: 'bg-warning/15 text-warning-foreground',
+  PENDIENTE: 'bg-warning/15 text-warning',
   PENDIENTE_PAGO: 'bg-info/10 text-info',
   EN_VALIDACION: 'bg-info/10 text-info',
-  SOLICITADA: 'bg-warning/15 text-warning-foreground',
+  SOLICITADA: 'bg-warning/15 text-warning',
   RECHAZADA: 'bg-destructive/10 text-destructive',
   CAMBIO_PLAN: 'bg-primary/10 text-primary',
 }
@@ -298,7 +299,11 @@ export function OrdenCobroCard({
             </div>
           )}
 
-          <Input name="observaciones" placeholder="Observaciones (opcional)" />
+          <Input
+            name="observaciones"
+            aria-label="Observaciones del cobro"
+            placeholder="Observaciones (opcional)"
+          />
 
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => setCobrando(false)} className="flex-1">

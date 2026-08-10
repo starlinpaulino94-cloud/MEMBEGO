@@ -210,8 +210,8 @@ export function CompanyProfile({
                   {TIPO_LABEL[company.type] ?? company.type}
                 </span>
                 {company.isFeatured && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-0.5 text-xs font-semibold text-warning-foreground">
-                    <Star className="h-3 w-3 fill-amber-500 text-warning-foreground" /> Destacada
+                  <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-0.5 text-xs font-semibold text-warning">
+                    <Star className="h-3 w-3 fill-amber-500 text-warning" /> Destacada
                   </span>
                 )}
               </div>
@@ -252,10 +252,10 @@ export function CompanyProfile({
                   </span>
                 )}
                 {stats && stats.averageRating != null && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1 text-sm font-medium text-warning-foreground">
-                    <Star className="h-4 w-4 fill-amber-500 text-warning-foreground" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1 text-sm font-medium text-warning">
+                    <Star className="h-4 w-4 fill-amber-500 text-warning" />
                     {stats.averageRating.toFixed(1)}
-                    <span className="text-warning-foreground/70">({stats.totalRatings})</span>
+                    <span className="text-warning/70">({stats.totalRatings})</span>
                   </span>
                 )}
               </div>
@@ -386,13 +386,13 @@ export function CompanyProfile({
 
                     <div className="flex items-center gap-2">
                       {plan.esIlimitado ? (
-                        <Crown className="h-5 w-5 text-warning-foreground" />
+                        <Crown className="h-5 w-5 text-warning" />
                       ) : (
                         <Sparkles className="h-5 w-5 text-primary" />
                       )}
                       <h3 className="font-semibold text-foreground">{plan.nombre}</h3>
                       {plan.esIlimitado && (
-                        <span className="ml-auto rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning-foreground">
+                        <span className="ml-auto rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
                           Ilimitado
                         </span>
                       )}

@@ -59,13 +59,13 @@ function fmtFecha(d: Date) {
 
 const CHIP_ESTADO: Record<string, string> = {
   ABIERTA: 'bg-destructive/10 text-destructive',
-  EN_PROCESO: 'bg-warning/15 text-warning-foreground',
+  EN_PROCESO: 'bg-warning/15 text-warning',
   RESUELTA: 'bg-success/15 text-success',
 }
 
 const CHIP_GRAVEDAD: Record<string, string> = {
   ALTA: 'bg-destructive/10 text-destructive',
-  MEDIA: 'bg-warning/15 text-warning-foreground',
+  MEDIA: 'bg-warning/15 text-warning',
   BAJA: 'bg-muted text-muted-foreground',
 }
 

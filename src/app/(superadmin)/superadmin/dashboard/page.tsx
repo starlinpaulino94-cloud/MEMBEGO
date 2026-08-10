@@ -156,7 +156,7 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
         {c.pendientes > 0 && (
           <Link
             href="/superadmin/operaciones"
-            className="mt-3 flex items-center justify-end gap-1 text-caption font-medium text-warning-foreground hover:underline"
+            className="mt-3 flex items-center justify-end gap-1 text-caption font-medium text-warning hover:underline"
           >
             {c.pendientes} pago{c.pendientes !== 1 ? 's' : ''} pendiente
             {c.pendientes !== 1 ? 's' : ''} <ArrowRight className="h-3 w-3" />

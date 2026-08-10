@@ -170,22 +170,40 @@
   /* Destructive */
   --destructive: oklch(0.577 0.245 27.325);
 
-  /* Estados semánticos */
-  --success: oklch(0.60 0.15 160);
+  /**
+   * ESTADOS SEMÁNTICOS · ajustados en la Fase 19 para que sirvan como TEXTO.
+   *
+   * Los valores anteriores se eligieron mirando el RELLENO (`bg-success/10`) y
+   * fallaban como texto sobre tarjeta: éxito 3.62:1, alerta **2.28:1**, info
+   * 3.44:1, contra el 4.5:1 que exige AA. Y el uso real es justo el contrario
+   * —150 `text-success`, 118 `text-warning`, 30 `text-info` frente a 23
+   * rellenos sólidos en total—, así que el token estaba optimizado para su
+   * caso raro.
+   *
+   * Ahora los tres pasan AA como texto (4.64 · 4.65 · 4.59) y también admiten
+   * blanco encima cuando se usan como relleno sólido. Del tinte `/10` y `/15`
+   * apenas se nota la diferencia: es un 10% de un color algo más profundo.
+   *
+   * `--warning-foreground` pasa a ser CLARO en tema claro. No es una errata:
+   * `--warning` ya no es un ámbar pálido sino uno medio, así que lo que va
+   * encima tiene que ser claro. En oscuro sigue al revés —el relleno es un
+   * ámbar claro y su texto es oscuro—, exactamente como hace `--primary`.
+   */
+  --success: oklch(0.535 0.15 160);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.75 0.16 75);
-  --warning-foreground: oklch(0.25 0.06 75);
-  /* DS 2.0: con la marca en azul (255), `--info` se desplazó de 230 a 215
-     para que un aviso informativo no se confunda con un CTA. Retirarlo del
-     vocabulario y resolver los avisos con superficie neutra + icono sería
-     más limpio todavía, pero son 138 usos en páginas: se evalúa en la fase
-     de cada módulo, no aquí. */
-  --info: oklch(0.62 0.12 215);
+  --warning: oklch(0.565 0.16 75);
+  --warning-foreground: oklch(0.99 0 0);
+  /* Cian, no azul: a 215 no se confunde con la marca (255). Ver
+     `tests/token-info.test.ts`, que exige 30° de separación. */
+  --info: oklch(0.545 0.12 215);
   --info-foreground: oklch(0.99 0 0);
 
   /* Borders */
-  --border: oklch(0.914 0.005 264);
-  --input: oklch(0.914 0.005 264);
+  /* 0.914 dejaba el borde de tarjeta en 1.29:1 sobre blanco: una tarjeta no se
+     distinguía de la página salvo por su sombra. 0.87 lo sube a 1.48:1, que sí
+     se ve sin convertirse en una caja marcada. */
+  --border: oklch(0.87 0.006 264);
+  --input: oklch(0.87 0.006 264);
   --ring: oklch(0.55 0.22 255);
 
   /* MDS · Superficies auxiliares */
@@ -294,14 +312,17 @@
   --accent: oklch(0.945 0.025 200);
   --accent-foreground: oklch(0.40 0.14 200);
   --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.60 0.15 160);
+  /* Espejo del tema claro: la landing debe redeclarar TODO lo que redefine
+     `.dark`, incluidos los valores de la Fase 19. Si se quedaran los antiguos
+     aquí, la web pública tendría un contraste distinto al de la app. */
+  --success: oklch(0.535 0.15 160);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.75 0.16 75);
-  --warning-foreground: oklch(0.25 0.06 75);
-  --info: oklch(0.62 0.12 215);
+  --warning: oklch(0.565 0.16 75);
+  --warning-foreground: oklch(0.99 0 0);
+  --info: oklch(0.545 0.12 215);
   --info-foreground: oklch(0.99 0 0);
-  --border: oklch(0.914 0.005 264);
-  --input: oklch(0.914 0.005 264);
+  --border: oklch(0.87 0.006 264);
+  --input: oklch(0.87 0.006 264);
   --ring: oklch(0.55 0.22 255);
 
   /* Este bloque tiene que redefinir TODO lo que redefine `.dark`, aunque el
@@ -378,9 +399,6 @@
   .shadow-card-hover {
     box-shadow: 0 4px 16px 0 rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
   }
-  .shadow-modal {
-    box-shadow: 0 24px 64px -12px rgb(0 0 0 / 0.18);
-  }
 
   /* Premium — sombras suaves en múltiples capas (estilo Stripe/Linear) */
   .shadow-premium {
@@ -416,10 +434,6 @@
       linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
       linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
     background-size: 48px 48px;
-  }
-  .bg-dots {
-    background-image: radial-gradient(rgb(15 23 42 / 0.06) 1px, transparent 1px);
-    background-size: 20px 20px;
   }
 
   /* Máscara de desvanecido radial para texturas */
@@ -594,14 +608,37 @@
 
   /* MDS · Gradiente de marca de la app (esmeralda → cyan). El de la landing
      (azul → cyan) ya existe como .text-gradient. */
+  /* ATENCIÓN: este degradado NO admite texto blanco pequeño. Su extremo cian
+     (`cyan-brand-500`) da 2.33:1 contra blanco, muy por debajo del 4.5:1 de
+     AA. Sirve para superficies decorativas, iconos y botones con texto grande;
+     para una cabecera con párrafos encima está `.surface-hero`. */
   .bg-gradient-brand {
     background-image: linear-gradient(135deg, var(--color-primary-600), var(--color-cyan-brand-500));
   }
-  .text-gradient-brand {
-    background: linear-gradient(135deg, var(--color-primary-600), var(--color-cyan-brand-500));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+
+  /**
+   * Superficie de CABECERA pública — una sola, para todas las páginas.
+   *
+   * Había SEIS degradados distintos para el mismo papel repartidos por la web
+   * pública: `from-blue-800 via-blue-700 to-indigo-900`, `from-blue-700 via-
+   * sky-600 to-indigo-800`, `from-blue-600 to-sky-500`, `from-blue-600 to-
+   * indigo-700`, `from-blue-700 to-indigo-800` y `from-slate-900 to-blue-900`.
+   * Nadie los eligió distintos a propósito: se fueron escribiendo a mano página
+   * a página. El resultado es que la cara pública del producto cambiaba de azul
+   * al navegar, que es justo lo contrario de lo que hace una marca.
+   *
+   * Los tres topes salen de la escala de marca y TODOS aguantan texto blanco:
+   * 6.34:1, 8.35:1 y 10.13:1 contra blanco. Se puede escribir encima sin
+   * comprobar nada, que es la razón de que exista como utilidad y no como una
+   * cadena de clases que copiar.
+   */
+  .surface-hero {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-primary-700),
+      var(--color-primary-800) 55%,
+      var(--color-primary-900)
+    );
   }
 
   /* Gradient text — matches MembeGo logo gradient */
@@ -717,23 +754,6 @@
     .mg-pin--activo,
     .mg-pin--activo:hover { transform: none; }
   }
-
-  /* Animated underline */
-  .link-underline {
-    position: relative;
-    text-decoration: none;
-  }
-  .link-underline::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    width: 0;
-    height: 1px;
-    background: currentColor;
-    transition: width 0.2s ease;
-  }
-  .link-underline:hover::after { width: 100%; }
 }
 
 /* ── Keyframes ── */
@@ -820,23 +840,12 @@
 }
 
 /* Check animado (validación/éxito): traza el visto con stroke-dashoffset. */
-@keyframes draw-check {
-  from { stroke-dashoffset: 24; }
-  to   { stroke-dashoffset: 0; }
-}
-
 /* Barra de tiempo (flash sale): se agota de 100% a 0%. La duración la fija
    el componente en línea según el tiempo restante real. */
 @keyframes time-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 /* Border glow: borde iluminado que rota (tarjeta premium en hover). */
 @keyframes border-glow-spin { to { transform: rotate(1turn); } }
-
-/* Flip de tarjeta (beneficio desbloqueado). */
-@keyframes card-flip-in {
-  from { opacity: 0; transform: perspective(800px) rotateY(-90deg); }
-  to   { opacity: 1; transform: none; }
-}
 
 @layer utilities {
   .animate-fade-up    { animation: fade-up 0.35s ease both; }
@@ -867,7 +876,6 @@
   .animate-slide-in-left  { animation: slide-in-left 0.45s var(--ease-out-expo) both; }
   .animate-zoom-in        { animation: zoom-in 0.4s var(--ease-out-expo) both; }
   .animate-burst          { animation: burst 0.5s var(--ease-elastic) both; }
-  .animate-card-flip      { animation: card-flip-in 0.6s var(--ease-out-expo) both; }
   .animate-glow-pulse     { animation: glow-pulse 2.2s ease-in-out infinite; }
 
   /* Shine: envolver el elemento en `.shine` (overflow-hidden, position) y
@@ -903,13 +911,6 @@
     animation: time-drain var(--time-left, 60s) linear forwards;
   }
 
-  /* Check que se traza (validación/éxito). */
-  .draw-check {
-    stroke-dasharray: 24;
-    stroke-dashoffset: 24;
-    animation: draw-check 0.45s var(--ease-out-expo) forwards;
-  }
-
   /* Respeta la preferencia de reducir movimiento (todas las animaciones custom).
      MMS: con reduce-motion NADA se mueve — el contenido aparece de una vez y
      los bucles se detienen; la información (contenido, estado) nunca depende
@@ -929,15 +930,12 @@
     .animate-slide-in-left,
     .animate-zoom-in,
     .animate-burst,
-    .animate-card-flip,
     .animate-glow-pulse,
     .shine-hover:hover .shine-sweep,
     .shine-loop .shine-sweep,
     .time-drain,
-    .draw-check,
     .scanner-line,
     .skeleton-shimmer { animation: none; }
     .card-lift:hover { transform: none; }
-    .draw-check { stroke-dashoffset: 0; }
   }
 }

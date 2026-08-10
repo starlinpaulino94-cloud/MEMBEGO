@@ -13,7 +13,7 @@ function fmtFecha(d: Date) {
 }
 
 /** Fila de 5 estrellas (solo lectura). */
-export function Estrellas({ rating, className }: { rating: number; className?: string }) {
+function Estrellas({ rating, className }: { rating: number; className?: string }) {
   return (
     <span
       className={cn('inline-flex items-center gap-0.5', className)}

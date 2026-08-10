@@ -16,7 +16,7 @@ export const metadata = { title: 'Regalos VIP' }
 
 const ESTADO_CLASE: Record<string, string> = {
   ACTIVA: 'bg-success/15 text-success',
-  PAUSADA: 'bg-warning/15 text-warning-foreground',
+  PAUSADA: 'bg-warning/15 text-warning',
   FINALIZADA: 'bg-muted text-muted-foreground',
 }
 

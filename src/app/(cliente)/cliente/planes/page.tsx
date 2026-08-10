@@ -190,7 +190,7 @@ export default async function PlanesPage({
           <div className="flex flex-col gap-3 rounded-2xl border border-warning/25 bg-warning/8 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-warning/15">
-                <Clock className="h-4.5 w-4.5 text-warning-foreground" />
+                <Clock className="h-4.5 w-4.5 text-warning" />
               </span>
               <div className="min-w-0">
                 <p className="font-semibold text-foreground">

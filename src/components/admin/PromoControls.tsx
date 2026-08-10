@@ -90,7 +90,7 @@ export function PromoControls({
           action={alternarPausaPromocion}
           icon={
             activo ? (
-              <Pause className="h-4 w-4 text-warning-foreground" />
+              <Pause className="h-4 w-4 text-warning" />
             ) : (
               <Play className="h-4 w-4 text-success" />
             )

@@ -241,7 +241,7 @@ export default async function MembershipDetail({
               ? 'bg-success/15 text-success'
               : tone === 'expired'
                 ? 'bg-destructive/10 text-destructive'
-                : 'bg-warning/15 text-warning-foreground'
+                : 'bg-warning/15 text-warning'
           }`}
         >
           {estadoLabel}

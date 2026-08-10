@@ -73,8 +73,8 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
                 />
               )}
               {esFavorita && (
-                <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-warning-foreground">
-                  <Star className="h-3 w-3 fill-amber-400 text-warning-foreground" /> Favorita
+                <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-xs font-semibold text-warning">
+                  <Star className="h-3 w-3 fill-amber-400 text-warning" /> Favorita
                 </span>
               )}
             </div>
@@ -124,8 +124,8 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
                   title={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
                   className={`rounded-lg border p-2 transition disabled:opacity-50 ${
                     esFavorita
-                      ? 'border-warning/30 bg-warning/15 text-warning-foreground'
-                      : 'border-border text-muted-foreground hover:text-warning-foreground'
+                      ? 'border-warning/30 bg-warning/15 text-warning'
+                      : 'border-border text-muted-foreground hover:text-warning'
                   }`}
                 >
                   <Star className={`h-4 w-4 ${esFavorita ? 'fill-amber-400' : ''}`} />

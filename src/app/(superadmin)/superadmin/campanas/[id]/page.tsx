@@ -143,7 +143,7 @@ export default async function CampanaGlobalDetallePage({
               )}
               <span
                 className={`self-start rounded-full px-2 py-0.5 text-overline ${
-                  p.aplicadaAt ? 'bg-success/15 text-success-foreground' : 'bg-muted text-muted-foreground'
+                  p.aplicadaAt ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'
                 }`}
               >
                 {p.aplicadaAt ? 'creada' : 'pendiente'}
@@ -198,7 +198,7 @@ export default async function CampanaGlobalDetallePage({
                       <TriangleAlert className="h-3.5 w-3.5" /> Error
                     </span>
                   ) : p.aplicadaAt ? (
-                    <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-success-foreground">
+                    <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-success">
                       <Check className="h-3.5 w-3.5" /> Creada
                     </span>
                   ) : (

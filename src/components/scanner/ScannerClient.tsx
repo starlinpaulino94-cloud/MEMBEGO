@@ -82,8 +82,8 @@ const TONE = {
   },
   warning: {
     box: 'border-warning/30 bg-warning/10',
-    icon: 'text-warning-foreground',
-    title: 'text-warning-foreground',
+    icon: 'text-warning',
+    title: 'text-warning',
   },
   muted: {
     box: 'border-border bg-muted/50',

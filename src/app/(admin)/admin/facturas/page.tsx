@@ -28,7 +28,7 @@ const fmtFecha = (d: Date) =>
 const ESTADO_CHIP: Record<string, string> = {
   APPLIED: 'bg-success/15 text-success',
   CANCELLED: 'bg-destructive/10 text-destructive',
-  REVERTED: 'bg-warning/15 text-warning-foreground',
+  REVERTED: 'bg-warning/15 text-warning',
 }
 const ESTADO_LABEL: Record<string, string> = {
   APPLIED: 'Pagada',

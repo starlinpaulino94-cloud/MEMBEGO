@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Seguimiento de recompensas' }
 
 const ESTADO_CHIP: Record<string, string> = {
-  SIN_USAR: 'bg-warning/15 text-warning-foreground',
+  SIN_USAR: 'bg-warning/15 text-warning',
   USADO: 'bg-success/15 text-success',
   VENCIDO: 'bg-destructive/10 text-destructive',
 }

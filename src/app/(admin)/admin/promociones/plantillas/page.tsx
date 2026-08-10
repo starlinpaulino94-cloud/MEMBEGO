@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 
 const DIFICULTAD_STYLE: Record<PromoPlantillaCard['dificultad'], string> = {
   baja: 'bg-success/10 text-success',
-  media: 'bg-warning/15 text-warning-foreground',
+  media: 'bg-warning/15 text-warning',
   alta: 'bg-destructive/10 text-destructive',
 }
 
@@ -47,7 +47,7 @@ function PlantillaCard({ p }: { p: PromoPlantillaCard }) {
 
         <dl className="mt-3 space-y-1.5 text-xs text-muted-foreground">
           <div className="flex items-start gap-1.5">
-            <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-foreground" />
+            <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <span>
               <span className="font-medium text-foreground">Beneficio:</span> {p.beneficio}
             </span>

@@ -75,7 +75,7 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
           <Numerito
             label="Pendientes"
             valor={sistema.pendientes}
-            tono={sistema.pendientes > 0 ? 'text-warning-foreground' : undefined}
+            tono={sistema.pendientes > 0 ? 'text-warning' : undefined}
           />
           <Numerito label="Entregados" valor={sistema.enviados} tono="text-success" />
           <Numerito

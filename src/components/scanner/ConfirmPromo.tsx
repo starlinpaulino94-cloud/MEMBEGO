@@ -245,7 +245,7 @@ export function ConfirmPromo({
         </div>
 
         {compra.alertas.map((a) => (
-          <p key={a} className="mt-3 rounded-lg border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
+          <p key={a} className="mt-3 rounded-lg border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning">
             {a}
           </p>
         ))}

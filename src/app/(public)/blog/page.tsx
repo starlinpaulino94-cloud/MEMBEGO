@@ -18,17 +18,17 @@ export default function BlogPage() {
   return (
     <div className="min-h-screen bg-card">
       <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground">Blog</h1>
-        <p className="mt-3 text-lg text-muted-foreground">
+        <h1 className="text-h1 text-foreground">Blog</h1>
+        <p className="mt-3 text-body text-muted-foreground">
           Guías y novedades sobre membresías digitales, fidelización y crecimiento.
         </p>
 
         {ARTICULOS.length === 0 ? (
-          <div className="mt-12 flex flex-col items-center rounded-3xl border border-dashed border-border bg-muted/40 py-16 text-center">
+          <div className="mt-12 flex flex-col items-center rounded-2xl border border-dashed border-border bg-muted/40 py-16 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
               <Newspaper className="h-7 w-7 text-primary" />
             </span>
-            <h2 className="mt-4 text-xl font-semibold text-foreground">
+            <h2 className="mt-4 text-h2 text-foreground">
               Muy pronto, contenido nuevo
             </h2>
             <p className="mt-1 max-w-md text-muted-foreground">
@@ -58,7 +58,7 @@ export default function BlogPage() {
                 href={`/blog/${a.slug}`}
                 className="rounded-2xl border border-border/80 bg-card p-6 shadow-card transition hover:shadow-premium"
               >
-                <p className="text-xs text-muted-foreground">{a.fecha}</p>
+                <p className="text-caption text-muted-foreground">{a.fecha}</p>
                 <h2 className="mt-1 font-semibold text-foreground">{a.titulo}</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">{a.resumen}</p>
               </Link>

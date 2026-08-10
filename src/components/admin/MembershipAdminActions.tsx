@@ -97,7 +97,7 @@ export function MembershipAdminActions({
               variant="outline"
               type="button"
               disabled={desactivarPending}
-              className="border-warning/30 text-warning-foreground hover:bg-warning/15 hover:text-warning-foreground"
+              className="border-warning/30 text-warning hover:bg-warning/15 hover:text-warning"
               onClick={() => setConfirmDesactivar(true)}
             >
               {desactivarPending ? '…' : 'Desactivar'}

@@ -84,7 +84,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     desc: 'La operación fue cancelada antes de aplicarse.',
     icon: XCircle,
     box: 'border-warning/30 bg-warning/10',
-    icono: 'text-warning-foreground',
+    icono: 'text-warning',
     badge: 'warning',
   },
   REVERTED: {
@@ -100,7 +100,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     desc: 'La operación expiró sin completarse.',
     icon: Clock,
     box: 'border-warning/30 bg-warning/10',
-    icono: 'text-warning-foreground',
+    icono: 'text-warning',
     badge: 'warning',
   },
   ERROR: {
@@ -257,7 +257,7 @@ export function TransaccionRecord({
 
       {/* Cancelación / reversión / error */}
       {tx.cancelacion && (
-        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning-foreground">
+        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
           <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">Cancelada el {fmtFechaHora(tx.cancelacion.fecha).fecha} a las {fmtFechaHora(tx.cancelacion.fecha).hora}</p>

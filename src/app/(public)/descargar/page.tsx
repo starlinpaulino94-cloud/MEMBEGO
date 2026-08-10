@@ -51,10 +51,10 @@ export default function DescargarPage() {
           <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
             <Image src="/logo.svg" alt="MembeGo" width={40} height={40} />
           </span>
-          <h1 className="mt-5 text-4xl font-bold tracking-tight text-foreground">
+          <h1 className="mt-5 text-h1 text-foreground">
             Lleva MembeGo en tu bolsillo
           </h1>
-          <p className="mt-3 max-w-xl text-lg text-muted-foreground">
+          <p className="mt-3 max-w-xl text-body text-muted-foreground">
             No necesitas descargar nada de una tienda: MembeGo funciona en tu navegador
             y puedes instalarlo como app en segundos.
           </p>
@@ -64,17 +64,17 @@ export default function DescargarPage() {
           <div className="rounded-2xl border border-border/80 p-5 text-center">
             <Zap className="mx-auto h-6 w-6 text-primary" />
             <p className="mt-2 text-sm font-medium text-foreground">Instantáneo</p>
-            <p className="text-xs text-muted-foreground">Sin esperar descargas</p>
+            <p className="text-caption text-muted-foreground">Sin esperar descargas</p>
           </div>
           <div className="rounded-2xl border border-border/80 p-5 text-center">
             <Smartphone className="mx-auto h-6 w-6 text-primary" />
             <p className="mt-2 text-sm font-medium text-foreground">Como una app</p>
-            <p className="text-xs text-muted-foreground">En tu pantalla de inicio</p>
+            <p className="text-caption text-muted-foreground">En tu pantalla de inicio</p>
           </div>
           <div className="rounded-2xl border border-border/80 p-5 text-center">
             <WifiOff className="mx-auto h-6 w-6 text-primary" />
             <p className="mt-2 text-sm font-medium text-foreground">Siempre a mano</p>
-            <p className="text-xs text-muted-foreground">Tus QR cuando los necesites</p>
+            <p className="text-caption text-muted-foreground">Tus QR cuando los necesites</p>
           </div>
         </div>
 

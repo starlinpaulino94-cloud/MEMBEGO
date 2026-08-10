@@ -142,7 +142,7 @@ export default async function CampanasPage({
                   {/* Contenido de la campaña */}
                   <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
-                      <Gift className="h-3.5 w-3.5 text-warning-foreground" />
+                      <Gift className="h-3.5 w-3.5 text-warning" />
                       {c._count.promociones} promociones
                     </span>
                     <span className="inline-flex items-center gap-1">

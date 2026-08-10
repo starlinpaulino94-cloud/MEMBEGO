@@ -415,7 +415,7 @@ export function PlanesGrid({
                   ) : isRequested ? (
                     <Button
                       variant="outline"
-                      className="min-h-12 w-full border-warning/30 text-warning-foreground"
+                      className="min-h-12 w-full border-warning/30 text-warning"
                       onClick={() =>
                         activeMembershipId && router.push(`/membresia/${activeMembershipId}`)
                       }

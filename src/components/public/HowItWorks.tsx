@@ -28,10 +28,10 @@ export function HowItWorks() {
     <section className="bg-muted py-16 sm:py-24">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h2 className="text-h1 text-foreground">
             Cómo funciona
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <p className="mt-4 text-body text-muted-foreground">
             Cuatro pasos simples para empezar a disfrutar tus beneficios.
           </p>
         </div>
@@ -40,9 +40,9 @@ export function HowItWorks() {
           {STEPS.map((step, i) => (
             <div key={step.title} className="relative">
               <div className="h-full rounded-2xl border border-border/60 bg-card p-6 text-center shadow-sm">
-                <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-sky-500 text-white">
+                <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-brand text-white">
                   <step.icon className="h-6 w-6" />
-                  <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-xs font-bold text-white">
+                  <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-foreground text-caption font-bold text-white">
                     {i + 1}
                   </span>
                 </div>
@@ -51,7 +51,10 @@ export function HowItWorks() {
               </div>
 
               {i < STEPS.length - 1 && (
-                <div className="absolute -right-3 top-1/2 hidden -translate-y-1/2 text-2xl text-muted-foreground/40 lg:block">
+                <div
+                  aria-hidden
+                  className="absolute -right-3 top-1/2 hidden -translate-y-1/2 text-2xl text-muted-foreground/40 lg:block"
+                >
                   →
                 </div>
               )}

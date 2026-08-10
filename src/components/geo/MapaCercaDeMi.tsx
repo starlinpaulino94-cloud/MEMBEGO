@@ -708,6 +708,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
             <Input
               value={busqueda}
+              aria-label="Buscar ciudad, sector o dirección"
               onChange={(e) => onBusqueda(e.target.value)}
               onFocus={() => setAbiertaSugerencias(sugerencias.length > 0)}
               placeholder="Buscar ciudad, sector o dirección…"
@@ -843,7 +844,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           </div>
         )}
         {error && error.codigo !== 'consentimiento_requerido' && (
-          <div className="absolute inset-x-3 bottom-[8.5rem] z-[500] mx-auto max-w-md rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-warning-foreground elevation-3 backdrop-blur lg:bottom-16">
+          <div className="absolute inset-x-3 bottom-[8.5rem] z-[500] mx-auto max-w-md rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-warning elevation-3 backdrop-blur lg:bottom-16">
             {error.mensaje}
           </div>
         )}

@@ -56,7 +56,7 @@ function PromoCard({ p, showCompany }: { p: PromoRow; showCompany: boolean }) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-warning/15 p-2">
-              <Gift className="h-5 w-5 text-warning-foreground" />
+              <Gift className="h-5 w-5 text-warning" />
             </div>
             <div>
               <p className="font-semibold text-foreground">{p.titulo}</p>
