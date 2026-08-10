@@ -10,12 +10,42 @@
 model SistemaConectado {
   id     String @id @default(cuid())
   /// Identificador estable en URLs (ej. "carwash").
+  ///
+  /// El informe de plataforma proponía renombrarlo a `systemKey`. NO se hace:
+  /// este valor es parte del contrato público con el satélite —viaja en
+  /// `/sso/entrar?sistema=<slug>`— y renombrarlo obligaría a coordinar un
+  /// despliegue con cada satélite a cambio de nada más que estética.
   slug   String @unique
   nombre String
 
-  /// Categoría de negocio que atiende (CAR_WASH, BARBERIA, …). Solo las
-  /// empresas de esta categoría generan eventos hacia este sistema.
+  /// LEGADO. La categoría única que el sistema atendía. La relación real es
+  /// N:M y vive en `tiposNegocio`: un mismo sistema puede servir a varias
+  /// (un POS sirve a restaurante y a barbería) y una categoría puede tener
+  /// varios sistemas.
+  ///
+  /// Se conserva porque la migración es EXPANSIVA: primero se añade lo nuevo
+  /// y se rellena, después se retira lo viejo. Ningún código lee ya esta
+  /// columna para decidir — lo vigila `tests/plataforma-acceso.test.ts`.
   categoria String
+
+  /// Ciclo de vida: DRAFT | ACTIVE | SUSPENDED | RETIRED.
+  ///
+  /// `activo` no distinguía «aún no lanzado» de «suspendido por incidente» de
+  /// «retirado», y son tres conversaciones distintas con el satélite.
+  estado String @default("ACTIVE")
+
+  /// LEGADO, espejo de `estado = 'ACTIVE'`. La migración instala un CHECK que
+  /// impide que los dos valores se separen: mientras la columna exista, no
+  /// puede mentir. Se retira en la fase de contracción.
+  activo Boolean @default(true)
+
+  /// ¿Toda empresa compatible lo obtiene sin habilitación explícita?
+  ///
+  /// FALSE por defecto, y ese default ES la razón de ser de los entitlements:
+  /// hasta hoy registrar un sistema se lo concedía de golpe a todas las
+  /// empresas de su categoría. Solo el vertical incumbente (Car Wash, que ya
+  /// funcionaba así) nace con TRUE, para que nadie pierda acceso.
+  autoHabilitar Boolean @default(false)
 
   /// Raíz del sistema satélite (ej. https://carwash.membego.com). El SSO
   /// redirige a `{urlBase}/sso/membego?token=...`.
@@ -29,12 +59,98 @@ model SistemaConectado {
   /// .env del satélite. Nunca viaja en requests.
   secreto String
 
-  activo    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  eventos EventoSaliente[]
+  eventos        EventoSaliente[]
+  tiposNegocio   SistemaTipoNegocio[]
+  habilitaciones EmpresaSistema[]
 
   @@map("sistemas_conectados")
+}
+
+/// Vertical de negocio al que sirve un sistema (CAR_WASH, RESTAURANTE, …).
+///
+/// Era un `as const` de cuatro valores en `modules/capacidades/catalogo.ts`.
+/// Pasa a tabla porque dar de alta un vertical nuevo no puede exigir un
+/// despliegue del Core (Regla §6); el `as const` se conserva como SEMILLA y
+/// como tipo derivado — perder el tipado estático sería un retroceso.
+model TipoNegocio {
+  id String @id @default(cuid())
+
+  /// Código estable. Es el que viaja en el manifest del satélite y el que
+  /// guarda `companies.capacidades.categoria`: no se traduce ni se renombra.
+  codigo      String  @unique
+  nombre      String
+  descripcion String?
+  icono       String?
+  /// Orden de presentación en los selectores del panel.
+  orden  Int     @default(0)
+  activo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sistemas SistemaTipoNegocio[]
+
+  @@map("tipos_negocio")
+}
+
+/// Qué verticales atiende cada sistema. La tabla que convierte el 1:1 de
+/// `SistemaConectado.categoria` en la relación N:M que el estándar exige.
+model SistemaTipoNegocio {
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  tipoId String
+  tipo   TipoNegocio @relation(fields: [tipoId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([sistemaId, tipoId])
+  @@index([tipoId])
+  @@map("sistemas_tipos_negocio")
+}
+
+/// HABILITACIÓN (entitlement) de UNA empresa sobre UN sistema.
+///
+/// Responde a la pregunta que hoy nadie contestaba: registrar el sistema de
+/// Restaurante no puede concedérselo automáticamente a todos los restaurantes
+/// de la plataforma. Compatibilidad (tipo de negocio) y concesión (esta tabla)
+/// son cosas distintas.
+///
+/// Sin relación con `Company` a propósito: igual que `EventoSaliente`, guarda
+/// `companyId` suelto para que la Capa 2 de RLS lo aísle por columna sin
+/// añadir una clave foránea a un catálogo que el superadmin administra.
+model EmpresaSistema {
+  id        String @id @default(cuid())
+  companyId String
+
+  sistemaId String
+  sistema   SistemaConectado @relation(fields: [sistemaId], references: [id], onDelete: Cascade)
+
+  /// AVAILABLE | ENABLED | DISABLED | SUSPENDED.
+  ///
+  /// AVAILABLE no es «encendido»: es «compatible y disponible para encender».
+  /// DISABLED y SUSPENDED DENIEGAN aunque el sistema tenga `autoHabilitar`;
+  /// una revocación explícita siempre gana a una política general.
+  estado String @default("AVAILABLE")
+
+  habilitadoAt    DateTime?
+  deshabilitadoAt DateTime?
+
+  /// Plan contratado del satélite, si el vertical cobra por niveles.
+  plan String?
+  /// Ajustes por empresa que el satélite lee al arrancar la sesión.
+  configuracion Json?
+  metadata      Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, sistemaId])
+  @@index([companyId, estado])
+  @@index([sistemaId, estado])
+  @@map("empresas_sistemas")
 }
 
 /// Outbox de webhooks: cada evento que debe llegar a un satélite queda aquí

@@ -510,7 +510,7 @@ generar credenciales · implementar webhook + SSO · activar entitlements.
 | Fase | Alcance | Entregable |
 |---|---|---|
 | **0** | Esta auditoría | ✅ este documento |
-| **1** | Separar `Feature` / `Capability` / `VerticalModule`. `BusinessType` a tabla. Registry N:M. Entitlements | Dominio de plataforma |
+| **1** | Separar `Feature` / `Capability` / `VerticalModule`. `BusinessType` a tabla. Registry N:M. Entitlements | ✅ `docs/platform/conceptos.md` · `docs/platform/registro.md` |
 | **2** | `/api/platform/v1` · DTOs · OAuth2 · scopes · rate limit · `requestId` | API entrante |
 | **3** | Envelope · Ed25519 · DLQ · replay · idempotencia · inbox | Eventos v2 |
 | **4** | `@membego/contracts` + `@membego/platform-sdk` | SDK |
@@ -538,11 +538,11 @@ De los 20 puntos del §93, el estado real hoy:
 
 | | Punto | Estado |
 |---|---|---|
-| 1 | Systems Registry | 🟡 existe, falta extender |
-| 2 | System ↔ BusinessType | 🔴 es 1:1 |
-| 3 | Entitlements | 🔴 no existe |
+| 1 | Systems Registry | 🟢 estado de ciclo de vida (Fase 1b) |
+| 2 | System ↔ BusinessType | 🟢 N:M sobre `tipos_negocio` (Fase 1b) |
+| 3 | Entitlements | 🟢 `empresas_sistemas` (Fase 1b) |
 | 4 | Auth service-to-service | 🔴 no existe |
-| 5 | Scopes | 🔴 no existe |
+| 5 | Scopes | 🟡 declarados (Fase 1a); falta emitirlos |
 | 6 | API versionada | 🔴 no existe |
 | 7 | Contratos reutilizables | 🟡 `nucleo.ts` lo es |
 | 8 | Webhooks estándar | 🟢 existe |
@@ -551,15 +551,16 @@ De los 20 puntos del §93, el estado real hoy:
 | 11 | Audit trail | 🟢 `auditLog` |
 | 12 | Outbox / retry | 🟢 existe |
 | 13 | Tenant isolation | 🟡 aplicativo; RLS apagado |
-| 14 | Autorización por categoría | 🟢 existe |
+| 14 | Autorización por categoría | 🟢 sustituida por habilitaciones (Fase 1b) |
 | 15 | SSO | 🟢 existe, endurecer |
 | 16 | App Launcher | 🟢 existe |
-| 17 | Documentación | 🔴 no existe |
+| 17 | Documentación | 🟡 `docs/platform/` iniciada |
 | 18 | Car Wash migrable | 🔴 embebido |
 | 19 | Restaurant sobre el estándar | 🔴 sin estándar |
 | 20 | Tercer sistema sin rediseño | 🔴 |
 
-**5 verdes, 6 amarillos, 9 rojos.** El cimiento es mejor de lo que sugiere el
+Al cerrar la auditoría: **5 verdes, 6 amarillos, 9 rojos**. Tras la Fase 1:
+**8 verdes, 6 amarillos, 6 rojos**. El cimiento es mejor de lo que sugiere el
 encargo; lo que falta es casi todo el lado de entrada.
 
 ---
@@ -570,4 +571,13 @@ Empezar por la **Fase 1**, y dentro de ella por **la separación de los tres
 conceptos** hoy llamados «capacidades». Es media jornada de diseño y condiciona
 todo lo demás; hacerlo después obligaría a migrar datos ya escritos.
 
-**Detengo aquí, a la espera de tu revisión.**
+### Estado
+
+**Fase 1 completa.**
+
+- **1a** — los tres conceptos separados y probados: `docs/platform/conceptos.md`.
+- **1b** — tipos de negocio a tabla, registro N:M y habilitaciones por empresa:
+  `docs/platform/registro.md`.
+
+Siguiente: **Fase 2**, la API entrante (`/api/platform/v1`) con OAuth2 y los
+scopes que la Fase 1a ya declara.

@@ -1,6 +1,7 @@
 import 'server-only'
-import { sinEmpresa } from '@/lib/tenant'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
+import { esEstadoSistema, type EstadoSistema } from '@/modules/plataforma/acceso'
 import {
   diagnosticarSonda,
   type Diagnostico,
@@ -33,10 +34,16 @@ export interface ResumenSistema {
   id: string
   slug: string
   nombre: string
-  categoria: string
+  /** DRAFT | ACTIVE | SUSPENDED | RETIRED. */
+  estado: EstadoSistema
+  /** Verticales que atiende (N:M). Vacío = nadie puede entrar. */
+  tiposNegocio: string[]
+  /** ¿Toda empresa compatible entra sin habilitación explícita? */
+  autoHabilitar: boolean
+  /** Empresas con habilitación ENABLED. */
+  habilitadas: number
   urlBase: string
   urlWebhook: string | null
-  activo: boolean
   /** Huella del secreto: permite comparar con el satélite SIN exponerlo. */
   secretoLargo: number
   pendientes: number
@@ -48,12 +55,86 @@ export interface ResumenSistema {
   esperandoDesde: Date | null
 }
 
+interface FilaSistema {
+  id: string
+  slug: string
+  nombre: string
+  urlBase: string
+  urlWebhook: string | null
+  secreto: string
+  estado: EstadoSistema
+  tiposNegocio: string[]
+  autoHabilitar: boolean
+  habilitadas: number
+}
+
+/**
+ * Sistemas del catálogo con su ciclo de vida y sus verticales.
+ *
+ * Doble forma por el mismo motivo que en `modules/plataforma/registro`: entre
+ * el despliegue del código y el de la migración, las columnas nuevas no
+ * existen. Ahí el panel enseña lo que hay y lo etiqueta con el estado
+ * equivalente, en vez de quedarse en blanco justo cuando alguien está mirando
+ * por qué no salen los eventos.
+ */
+async function leerCatalogo(tx: Tx): Promise<FilaSistema[]> {
+  try {
+    const filas = await tx.sistemaConectado.findMany({
+      orderBy: { slug: 'asc' },
+      select: {
+        id: true,
+        slug: true,
+        nombre: true,
+        urlBase: true,
+        urlWebhook: true,
+        secreto: true,
+        estado: true,
+        autoHabilitar: true,
+        tiposNegocio: { select: { tipo: { select: { codigo: true } } } },
+        _count: { select: { habilitaciones: { where: { estado: 'ENABLED' } } } },
+      },
+    })
+    return filas.map((f) => ({
+      ...f,
+      estado: esEstadoSistema(f.estado) ? f.estado : 'SUSPENDED',
+      tiposNegocio: f.tiposNegocio.map((t) => t.tipo.codigo),
+      habilitadas: f._count.habilitaciones,
+    }))
+  } catch {
+    const filas = await tx.sistemaConectado
+      .findMany({
+        orderBy: { slug: 'asc' },
+        select: {
+          id: true,
+          slug: true,
+          nombre: true,
+          urlBase: true,
+          urlWebhook: true,
+          secreto: true,
+          activo: true,
+          categoria: true,
+        },
+      })
+      .catch(() => [])
+    return filas.map((f) => ({
+      id: f.id,
+      slug: f.slug,
+      nombre: f.nombre,
+      urlBase: f.urlBase,
+      urlWebhook: f.urlWebhook,
+      secreto: f.secreto,
+      estado: (f.activo ? 'ACTIVE' : 'SUSPENDED') as EstadoSistema,
+      tiposNegocio: [f.categoria],
+      autoHabilitar: true,
+      habilitadas: 0,
+    }))
+  }
+}
+
 /** Estado de cada sistema conectado y de su cola de eventos. */
 export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
   return sinEmpresa('panel del superadmin: estado de las integraciones y colas de todas las empresas', async (tx) => {
-    const sistemas = await tx.sistemaConectado
-      .findMany({ orderBy: { slug: 'asc' } })
-      .catch(() => [])
+    const sistemas = await leerCatalogo(tx)
 
     const resumenes: ResumenSistema[] = []
     for (const s of sistemas) {
@@ -83,10 +164,12 @@ export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
         id: s.id,
         slug: s.slug,
         nombre: s.nombre,
-        categoria: s.categoria,
+        estado: s.estado,
+        tiposNegocio: s.tiposNegocio,
+        autoHabilitar: s.autoHabilitar,
+        habilitadas: s.habilitadas,
         urlBase: s.urlBase,
         urlWebhook: s.urlWebhook,
-        activo: s.activo,
         secretoLargo: s.secreto.length,
         pendientes: cuenta('PENDIENTE'),
         enviados: cuenta('ENVIADO'),

@@ -162,5 +162,5 @@ higiene; esas dos protegen el modelo de negocio.
 
 ## Siguiente
 
-Fase 1 continúa con: `BusinessType` a tabla · Registry N:M ·
-`CompanySystemEntitlement`. Ver `docs/PLATFORM_ARCHITECTURE_REPORT.md` §17.
+Fase 1b —tipos de negocio a tabla, registro N:M y habilitaciones por empresa—
+está en `docs/platform/registro.md`.

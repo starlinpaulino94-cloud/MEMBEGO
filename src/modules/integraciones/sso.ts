@@ -1,6 +1,7 @@
 import 'server-only'
-import { sinEmpresa } from '@/lib/tenant'
 import { crearTokenSSO } from '@/modules/integraciones/nucleo'
+import { mensajeDenegado } from '@/modules/plataforma/acceso'
+import { accesoASistema, sistemasDeEmpresa } from '@/modules/plataforma/registro'
 import type { SessionUser } from '@/types'
 
 /**
@@ -13,35 +14,33 @@ import type { SessionUser } from '@/types'
 
 const TTL_SEGUNDOS = 90
 
+/**
+ * Empresa con la que el usuario entra al satélite. El SUPERADMIN de la
+ * plataforma no siempre carga `companyId` en su sesión; en modo marca única
+ * opera sobre la empresa principal, y con ese tenant entra.
+ */
+async function empresaDelUsuario(user: SessionUser): Promise<string | null> {
+  if (user.metadata.companyId) return user.metadata.companyId
+  if (user.metadata.role !== 'SUPERADMIN') return null
+  const { getEmpresaPrincipal } = await import('@/modules/marketplace/marcaUnica')
+  return (await getEmpresaPrincipal())?.id ?? null
+}
+
 export async function urlAperturaSSO(
   slug: string,
   user: SessionUser
 ): Promise<{ url: string } | { error: string }> {
-  // El SUPERADMIN de la plataforma no siempre carga companyId en su sesión;
-  // en modo marca única opera sobre la empresa principal, y con ese tenant
-  // entra al satélite.
-  let companyId = user.metadata.companyId
-  if (!companyId && user.metadata.role === 'SUPERADMIN') {
-    const { getEmpresaPrincipal } = await import('@/modules/marketplace/marcaUnica')
-    companyId = (await getEmpresaPrincipal())?.id ?? null
-  }
+  const companyId = await empresaDelUsuario(user)
   if (!companyId) return { error: 'Tu cuenta no tiene empresa activa.' }
 
-  const sistema = await sinEmpresa('sso: sistema conectado por slug (catálogo global)', (tx) =>
-    tx.sistemaConectado
-      .findUnique({ where: { slug }, select: { urlBase: true, secreto: true, activo: true, categoria: true } })
-  ).catch(() => null)
-  if (!sistema || !sistema.activo) return { error: 'Sistema no disponible.' }
-
-  // La empresa debe pertenecer a la categoría que el sistema atiende: un
-  // empleado de una barbería no abre el sistema de car wash.
-  try {
-    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
-    const { categoria } = await getCapacidadesEmpresa(companyId)
-    if (categoria !== sistema.categoria) return { error: 'Este sistema no aplica a tu empresa.' }
-  } catch {
-    return { error: 'No se pudo verificar tu empresa.' }
+  // Una sola pregunta al registro: estado del sistema, compatibilidad de
+  // vertical y habilitación de la empresa se deciden juntas en `acceso.ts`.
+  const { decision, sistema } = await accesoASistema(slug, companyId, { conSecreto: true })
+  if (!decision.permitido) {
+    console.warn('[sso] acceso denegado:', slug, decision.motivo, 'empresa:', companyId)
+    return { error: mensajeDenegado(decision.motivo) }
   }
+  if (!sistema?.secreto) return { error: 'Sistema no disponible.' }
 
   const token = crearTokenSSO(sistema.secreto, {
     sub: user.supabaseId,
@@ -61,30 +60,20 @@ export interface SistemaExterno {
 
 /**
  * Sistema satélite que el header ofrece como acceso directo ("ir al car
- * wash"). Es el sistema ACTIVO cuya categoría coincide con la de la empresa
- * del usuario (o la empresa principal para el SUPERADMIN). Null = sin botón.
- * Nunca lanza: un fallo aquí no puede tumbar el layout.
+ * wash"): el primero que la empresa del usuario tiene habilitado. Null = sin
+ * botón. Nunca lanza: un fallo aquí no puede tumbar el layout.
+ *
+ * Solo se ofrece UNO aunque la empresa tenga varios habilitados. El día que eso
+ * sea normal, el botón pasa a ser un menú — pero eso es el App Launcher de la
+ * Fase 5, no un desplegable improvisado en la cabecera.
  */
 export async function sistemaExternoParaHeader(user: SessionUser): Promise<SistemaExterno | null> {
   try {
-    let companyId = user.metadata.companyId
-    if (!companyId && user.metadata.role === 'SUPERADMIN') {
-      const { getEmpresaPrincipal } = await import('@/modules/marketplace/marcaUnica')
-      companyId = (await getEmpresaPrincipal())?.id ?? null
-    }
+    const companyId = await empresaDelUsuario(user)
     if (!companyId) return null
 
-    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
-    const { categoria } = await getCapacidadesEmpresa(companyId)
-
-    const sistema = await sinEmpresa('header: sistema satélite de la categoría (catálogo global)', (tx) =>
-      tx.sistemaConectado.findFirst({
-        where: { activo: true, categoria },
-        select: { slug: true, nombre: true },
-        orderBy: { createdAt: 'asc' },
-      })
-    )
-    return sistema ?? null
+    const [primero] = await sistemasDeEmpresa(companyId)
+    return primero ? { slug: primero.slug, nombre: primero.nombre } : null
   } catch (e) {
     console.error('[sso] sistemaExternoParaHeader:', e)
     return null

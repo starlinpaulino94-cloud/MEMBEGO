@@ -2,6 +2,7 @@ import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { firmarHmac, EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
+import { sistemasDeEmpresa } from '@/modules/plataforma/registro'
 
 /**
  * DESPACHO DE EVENTOS a los sistemas satélite conectados.
@@ -13,8 +14,10 @@ import { firmarHmac, EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
  * MembeGo y no de un tercero.
  *
  * AISLAMIENTO (regla de oro): cada evento lleva el companyId de UNA empresa y
- * solo va a sistemas cuya categoría coincide con la de esa empresa. El satélite
- * jamás recibe datos de empresas ajenas a su vertical.
+ * solo va a los sistemas que ESA empresa tiene habilitados
+ * (`modules/plataforma/registro`). El satélite jamás recibe datos de empresas
+ * que no lo usan — antes bastaba con compartir categoría, ahora hace falta la
+ * habilitación, que es más estrecho y nunca más ancho.
  */
 
 const MAX_INTENTOS = 8
@@ -27,17 +30,15 @@ interface EventoParaEnviar {
   payload?: Record<string, unknown>
 }
 
-/** Sistemas activos que atienden la categoría de la empresa y reciben webhooks. */
-async function sistemasDestino(companyId: string) {
+/** Sistemas que la empresa tiene habilitados Y que reciben webhooks. */
+async function sistemasDestino(
+  companyId: string
+): Promise<{ id: string; urlWebhook: string; secreto: string }[]> {
   try {
-    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
-    const { categoria } = await getCapacidadesEmpresa(companyId)
-    return await conEmpresa(companyId, (tx) =>
-      tx.sistemaConectado.findMany({
-        where: { activo: true, categoria, urlWebhook: { not: null } },
-        select: { id: true, urlWebhook: true, secreto: true },
-      })
-    )
+    const sistemas = await sistemasDeEmpresa(companyId, { conSecreto: true })
+    return sistemas
+      .filter((s) => s.urlWebhook !== null && s.secreto !== undefined)
+      .map((s) => ({ id: s.id, urlWebhook: s.urlWebhook!, secreto: s.secreto! }))
   } catch {
     return []
   }
@@ -111,7 +112,7 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
           },
         })
       ).catch(anotarFallo('integraciones:outbox', { tipo: evento.tipo }))
-      if (!fila || !sistema.urlWebhook) continue
+      if (!fila) continue
 
       const error = await entregar(sistema.urlWebhook, sistema.secreto, cuerpoDe(fila))
       await conEmpresa(evento.companyId, (tx) =>
@@ -128,7 +129,19 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
   }
 }
 
-/** Reintenta los PENDIENTES (cron). Marca FALLIDO al agotar los intentos. */
+/**
+ * Reintenta los PENDIENTES (cron). Marca FALLIDO al agotar los intentos.
+ *
+ * EL DESTINO SE VUELVE A COMPROBAR EN CADA REINTENTO, y no se da por bueno
+ * porque el evento estuviera en la cola. Un evento encolado el lunes puede
+ * salir el miércoles, y entre medias la empresa pudo perder la habilitación o
+ * el sistema pudo suspenderse: entregarlo entonces sería mandar datos a un
+ * sistema al que esa empresa ya no pertenece. Con el destino resuelto de nuevo,
+ * revocar deja de ser una promesa a futuro y vacía también la cola.
+ *
+ * El coste es una consulta por empresa —no por evento— gracias al memo: cien
+ * eventos pendientes suelen ser de dos o tres empresas.
+ */
 export async function reintentarPendientes(limite = 100): Promise<{ enviados: number; fallidos: number }> {
   let enviados = 0
   let fallidos = 0
@@ -137,20 +150,29 @@ export async function reintentarPendientes(limite = 100): Promise<{ enviados: nu
       where: { estado: 'PENDIENTE' },
       orderBy: { createdAt: 'asc' },
       take: limite,
-      include: { sistema: { select: { urlWebhook: true, secreto: true, activo: true } } },
     })
   ).catch(() => [])
 
+  const memo = new Map<string, Map<string, { urlWebhook: string; secreto: string }>>()
+  const destinosDe = async (companyId: string) => {
+    const cacheado = memo.get(companyId)
+    if (cacheado) return cacheado
+    const porId = new Map((await sistemasDestino(companyId)).map((s) => [s.id, s]))
+    memo.set(companyId, porId)
+    return porId
+  }
+
   for (const ev of pendientes) {
-    if (!ev.sistema.activo || !ev.sistema.urlWebhook) {
+    const destino = (await destinosDe(ev.companyId)).get(ev.sistemaId)
+    if (!destino) {
       await sinEmpresa('integraciones: cerrar evento sin destino (cron global)', (tx) =>
         tx.eventoSaliente
-          .update({ where: { id: ev.id }, data: { estado: 'FALLIDO', ultimoError: 'Sistema inactivo o sin webhook.' } })
+          .update({ where: { id: ev.id }, data: { estado: 'FALLIDO', ultimoError: 'Sistema no habilitado para esta empresa, inactivo o sin webhook.' } })
       ).catch(anotarFallo('integraciones:cerrar', { id: ev.id }))
       fallidos++
       continue
     }
-    const error = await entregar(ev.sistema.urlWebhook, ev.sistema.secreto, cuerpoDe(ev))
+    const error = await entregar(destino.urlWebhook, destino.secreto, cuerpoDe(ev))
     const intentos = ev.intentos + 1
     await sinEmpresa('integraciones: marcar evento tras reintento (cron global)', (tx) =>
       tx.eventoSaliente.update({
