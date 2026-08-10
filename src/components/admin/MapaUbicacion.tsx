@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef, useState } from 'react'
 import type { Map as LeafletMap, Marker as LeafletMarker } from 'leaflet'
 import { MapPin, LocateFixed } from 'lucide-react'
+import { OPCIONES_TESELAS, temaOscuroActivo, urlTeselas } from '@/modules/geo/mapa/teselas'
 
 // Centro por defecto: Santo Domingo. Solo se usa si aún no hay coordenadas.
 const DEFAULT_CENTER: [number, number] = [18.4861, -69.9312]
@@ -39,10 +40,9 @@ export function MapaUbicacion({
       if (cancelled || !containerRef.current || mapRef.current) return
 
       const map = L.map(containerRef.current).setView(start, coords ? 15 : 12)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
-        maxZoom: 19,
-      }).addTo(map)
+      // Mismo basemap que "Cerca de mí": tres mapas del producto no pueden
+      // verse distintos según en cuál caigas.
+      L.tileLayer(urlTeselas(temaOscuroActivo()), OPCIONES_TESELAS).addTo(map)
 
       const icon = L.divIcon({
         className: '',

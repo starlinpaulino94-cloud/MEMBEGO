@@ -655,6 +655,14 @@
      variante. Vive fuera de React: Leaflet inserta el HTML del `divIcon`
      directamente en el DOM, donde las clases de Tailwind generadas bajo
      demanda no llegarían. */
+  /* Fondo del lienzo mientras cargan las teselas. Leaflet trae un gris claro
+     fijo: en tema oscuro, ese destello blanco en cada arrastre parecía un
+     fallo de carga. Va a nivel global —no por clase— porque afecta a los tres
+     mapas y no hay caso en que se quiera otro. */
+  .leaflet-container {
+    background: var(--muted);
+  }
+
   /* ── Marcador de negocio en el mapa ──────────────────────────────────────
      Estos estilos VIVEN AQUÍ y no en el componente porque Leaflet inserta el
      HTML del `divIcon` por fuera de React: no hay JSX al que aplicarle clases.
@@ -682,8 +690,11 @@
     box-shadow: 0 4px 12px rgb(15 23 42 / 0.4);
   }
   /* La imagen es de fondo, no un <img>: una URL rota simplemente no pinta —
-     no deja el icono de imagen partida del navegador colgando en el mapa. */
+     no deja el icono de imagen partida del navegador colgando en el mapa. Y
+     como la inicial va DEBAJO, ese fallo se ve como la letra del negocio en
+     vez de como un disco vacío. */
   .mg-pin__logo {
+    z-index: 1;
     position: absolute;
     inset: 0;
     background-size: cover;

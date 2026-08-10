@@ -29,6 +29,7 @@ import {
   formatearMagnitudDistancia,
 } from '@/modules/geo/cercanos/distancia'
 import { aceptarConsentimientoGeo } from '@/modules/geo/consentimiento/actions'
+import { OPCIONES_TESELAS, temaOscuroActivo, urlTeselas } from '@/modules/geo/mapa/teselas'
 import type {
   ContextoUbicacion,
   FiltrosCercanos,
@@ -328,10 +329,16 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         .filter(Boolean)
         .join(' ')
 
+      // La inicial va SIEMPRE, y el logo encima cuando lo hay. Antes eran
+      // excluyentes: con una URL presente pero rota —un logo borrado del
+      // almacenamiento, un dominio caído— el disco se quedaba vacío, porque un
+      // `background-image` que falla no pinta nada y no avisa. Con la inicial
+      // debajo, ese fallo degrada a la letra del negocio en vez de a un hueco.
       const url = urlImagenSegura(s.logoUrl)
+      const inicial = `<span class="mg-pin__inicial">${escaparHtml((s.empresaNombre[0] ?? '?').toUpperCase())}</span>`
       const interior = url
-        ? `<span class="mg-pin__logo" style="background-image:url('${escaparCss(url)}')"></span>`
-        : `<span class="mg-pin__inicial">${escaparHtml((s.empresaNombre[0] ?? '?').toUpperCase())}</span>`
+        ? `${inicial}<span class="mg-pin__logo" style="background-image:url('${escaparCss(url)}')"></span>`
+        : inicial
 
       return L.divIcon({
         className: '',
@@ -371,29 +378,10 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           zoomControl: false,
           attributionControl: true,
         }).setView(DEFAULT_CENTER, 12)
-        /**
-         * BASEMAP · CARTO en vez de las teselas estándar de OpenStreetMap.
-         *
-         * Las de OSM están dibujadas para leerse solas: carreteras en naranja
-         * fuerte, áreas comerciales en rosa, bosques en verde saturado. Sobre
-         * ese ruido, nuestros marcadores compiten con el mapa en lugar de
-         * destacar. Positron y Dark Matter son basemaps deliberadamente
-         * apagados —grises, sin relleno de color— pensados justo para esto:
-         * que el dato encima sea lo que se ve.
-         *
-         * Siguen siendo datos de OpenStreetMap, así que la atribución mantiene
-         * a OSM además de CARTO — es un requisito de la licencia, no un
-         * detalle de cortesía.
-         */
-        const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        const CARTO = '&copy; <a href="https://carto.com/attributions">CARTO</a>'
-        const teselas = (oscuro: boolean) =>
-          L.tileLayer(
-            `https://{s}.basemaps.cartocdn.com/${oscuro ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`,
-            { attribution: `${OSM} ${CARTO}`, maxZoom: 20, subdomains: 'abcd' }
-          )
+        // Basemap compartido por los tres mapas del producto (modules/geo/mapa/teselas).
+        const teselas = (oscuro: boolean) => L.tileLayer(urlTeselas(oscuro), OPCIONES_TESELAS)
 
-        const esOscuro = () => document.documentElement.classList.contains('dark')
+        const esOscuro = temaOscuroActivo
         let oscuroActual = esOscuro()
         let capa = teselas(oscuroActual).addTo(map)
 
@@ -420,7 +408,14 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         const anyL = L as any
         const cluster =
           typeof anyL.markerClusterGroup === 'function'
-            ? anyL.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45 })
+            ? anyL.markerClusterGroup({
+                showCoverageOnHover: false,
+                // El marcador mide 38px: agrupar solo cuando de verdad se
+                // solapan. Con 45 se juntaban logos que ni se tocaban, y un
+                // número gris en lugar de dos marcas es justo lo que uno viene
+                // a buscar al mapa.
+                maxClusterRadius: 38,
+              })
             : L.layerGroup()
 
         cluster.addTo(map)
