@@ -96,16 +96,6 @@ const BLANCA = new Map([
  * cero filas, y la pantalla se queda en blanco sin decir por qué.
  */
 const PENDIENTES = new Set([
-  'app/(cliente)/cliente/ayuda/page.tsx',
-  'app/(cliente)/cliente/bienvenida/page.tsx',
-  'app/(cliente)/cliente/celebracion/page.tsx',
-  'app/(cliente)/cliente/citas/page.tsx',
-  'app/(cliente)/cliente/intereses/page.tsx',
-  'app/(cliente)/cliente/mis-promociones/[id]/agendar/page.tsx',
-  'app/(cliente)/cliente/mis-promociones/[id]/page.tsx',
-  'app/(cliente)/cliente/mis-promociones/page.tsx',
-  'app/(cliente)/cliente/perfil/page.tsx',
-  'app/(cliente)/membresia/[membresiaId]/page.tsx',
   'app/(empleado)/empleado/caja/page.tsx',
   'app/(onboarding)/onboarding/page.tsx',
   'app/invitacion/[token]/page.tsx',

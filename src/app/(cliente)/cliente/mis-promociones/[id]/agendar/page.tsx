@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { notFound, redirect } from 'next/navigation'
 import { CalendarDays, CheckCircle2, Clock, MapPin } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { safeInternalPath } from '@/lib/utils'
-import { prisma } from '@/lib/prisma'
 import { getAgendaConfig } from '@/modules/citas/queries'
 import { Button } from '@/components/ui/button'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
@@ -38,17 +38,24 @@ export default async function AgendarTrasAdquirirPage({
   const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
   const retornoQs = retornoParam ? `?retorno=${encodeURIComponent(retorno)}` : ''
 
-  const compra = await prisma.productoCompra.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      clienteId: true,
-      companyId: true,
-      estado: true,
-      promocion: { select: { titulo: true } },
-      company: { select: { name: true } },
-    },
-  })
+  // Igual que el detalle: el beneficio puede ser de otro negocio donde la
+  // persona tenga ficha, así que no cabe en una sola empresa. La pertenencia se
+  // comprueba justo debajo.
+  const compra = await sinEmpresa(
+    'agendar el canje: el beneficio puede ser de cualquier negocio de la persona',
+    (tx) =>
+      tx.productoCompra.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          clienteId: true,
+          companyId: true,
+          estado: true,
+          promocion: { select: { titulo: true } },
+          company: { select: { name: true } },
+        },
+      })
+  )
   // Contra TODAS las fichas de la persona, no solo la de la empresa activa: una
   // recompensa reclamada en otro negocio queda bajo la ficha de ESE negocio, y
   // comparando con la activa esta pantalla daba 404 — justo aquí, que es adonde
@@ -65,10 +72,12 @@ export default async function AgendarTrasAdquirirPage({
 
   // Ya agendó (por ejemplo, si recarga esta pantalla): no volver a preguntar.
   try {
-    const yaTiene = await prisma.cita.findFirst({
-      where: { compraId: compra.id, estado: { notIn: ['CANCELADA', 'NO_ASISTIO'] } },
-      select: { id: true },
-    })
+    const yaTiene = await conEmpresa(compra.companyId, (tx) =>
+      tx.cita.findFirst({
+        where: { compraId: compra.id, estado: { notIn: ['CANCELADA', 'NO_ASISTIO'] } },
+        select: { id: true },
+      })
+    )
     if (yaTiene) redirect(destino)
   } catch {
     // Columna citas.compraId sin migrar: seguimos ofreciendo, no es crítico.

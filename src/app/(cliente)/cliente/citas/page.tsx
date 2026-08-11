@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresa, conEmpresaOTodas } from '@/lib/tenant'
 import { ArrowLeft, CalendarDays, CalendarX2, Clock } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import {
   diasDeVentana,
   getAgendaConfig,
@@ -43,15 +43,23 @@ export default async function CitasClientePage({
     )
   }
 
-  const cliente = await prisma.cliente.findUnique({
-    where: { id: user.metadata.clienteId },
-    select: {
-      id: true,
-      companyId: true,
-      vehiculos: { select: { id: true, marca: true, modelo: true }, orderBy: { createdAt: 'desc' } },
-      company: { select: { name: true, zonaHoraria: true, idioma: true } },
-    },
-  })
+  // El narrowing del `if (!user.metadata.clienteId)` de arriba NO sobrevive al
+  // closure: dentro de la función vuelve a ser `string | null`. Se extrae aquí.
+  const clienteId = user.metadata.clienteId
+  const cliente = await conEmpresaOTodas(
+    user.metadata.companyId,
+    'citas del cliente: su ficha y sus vehículos son de su empresa activa',
+    (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: {
+          id: true,
+          companyId: true,
+          vehiculos: { select: { id: true, marca: true, modelo: true }, orderBy: { createdAt: 'desc' } },
+          company: { select: { name: true, zonaHoraria: true, idioma: true } },
+        },
+      })
+  )
   if (!cliente) {
     return (
       <main className="container max-w-3xl py-8">
@@ -70,8 +78,8 @@ export default async function CitasClientePage({
   // Cita para canjear una recompensa gratis (?compra=): valida que sea suya
   // y esté disponible; al reservar, su QR queda habilitado.
   const compraCanje = compra
-    ? await prisma.productoCompra
-        .findFirst({
+    ? await conEmpresa(cliente.companyId, (tx) =>
+        tx.productoCompra.findFirst({
           where: {
             id: compra,
             clienteId: cliente.id,
@@ -80,7 +88,7 @@ export default async function CitasClientePage({
           },
           select: { id: true, promocion: { select: { titulo: true } } },
         })
-        .catch(() => null)
+      ).catch(() => null)
     : null
   const compraParam = compraCanje ? `&compra=${compraCanje.id}` : ''
 
