@@ -1,5 +1,5 @@
 import { Clock, CheckCircle2 } from 'lucide-react'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -44,21 +44,23 @@ export async function VisitasDeHoy({
       fechaVisita: { gte: startOfTodaySantoDomingo() },
       ...(empleadoId ? { empleadoId } : {}),
     }
-    const [rows, count] = await Promise.all([
-      prisma.visit.findMany({
-        where,
-        orderBy: { fechaVisita: 'desc' },
-        take: 8,
-        select: {
-          id: true,
-          servicio: true,
-          fechaVisita: true,
-          cliente: { select: { nombre: true } },
-          sucursal: { select: { nombre: true } },
-        },
-      }),
-      prisma.visit.count({ where }),
-    ])
+    const [rows, count] = await conEmpresa(companyId, (tx) =>
+      Promise.all([
+        tx.visit.findMany({
+          where,
+          orderBy: { fechaVisita: 'desc' },
+          take: 8,
+          select: {
+            id: true,
+            servicio: true,
+            fechaVisita: true,
+            cliente: { select: { nombre: true } },
+            sucursal: { select: { nombre: true } },
+          },
+        }),
+        tx.visit.count({ where }),
+      ])
+    )
     visitas = rows
     total = count
   } catch (e) {

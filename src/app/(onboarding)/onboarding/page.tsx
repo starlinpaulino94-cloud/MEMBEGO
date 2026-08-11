@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { FULL_ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { WizardEmpresa } from '@/components/onboarding/WizardEmpresa'
 
@@ -15,9 +15,9 @@ export default async function OnboardingPage() {
 
   const [onboarding, company] = await Promise.all([
     getOnboardingEmpresa(companyId).catch(() => null),
-    prisma.company
-      .findUnique({ where: { id: companyId }, select: { name: true } })
-      .catch(() => null),
+    conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({ where: { id: companyId }, select: { name: true } })
+    ).catch(() => null),
   ])
   if (!onboarding) redirect('/admin/dashboard')
 

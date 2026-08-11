@@ -30,8 +30,12 @@ declare su empresa y las políticas de PostgreSQL filtren correctamente.
 > consulta siguen sin envoltorio** — 44 pantallas de admin, 11 de superadmin,
 > 6 de cliente, 1 de empleado y 2 componentes.
 >
-> **Consecuencia práctica:** encender la Capa 2 hoy dejaría en blanco la mayor
-> parte del panel. Con `membego_app` una consulta sin contexto **no da error**:
+> **Resuelto el mismo día:** los 85 se migraron en cuatro tandas (admin 57,
+> superadmin 12, cliente 10, mostrador 6) y la lista `PENDIENTES` del gate está
+> vacía. Lo que sigue es el registro de lo que se encontró.
+>
+> **Consecuencia que se evitó:** encender la Capa 2 con el gate anterior habría
+> dejado en blanco la mayor parte del panel. Con `membego_app` una consulta sin contexto **no da error**:
 > devuelve cero filas. Ver el inventario nominal en la lista `PENDIENTES` del
 > script y el estado real en `docs/RLS.md`.
 

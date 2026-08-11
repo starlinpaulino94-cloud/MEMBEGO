@@ -78,30 +78,22 @@ const BLANCA = new Map([
  * los registros no dicen por qué.
  */
 /**
- * EL ATRASO CONOCIDO de la migración a `conEmpresa` (2026-08).
+ * EL ATRASO de la migración a `conEmpresa`. **Terminada el 2026-08-11.**
  *
- * No es lista blanca: estos archivos **sí** necesitan envoltorio y todavía no
- * lo tienen. Están aquí para que el gate pueda hacer las dos cosas a la vez:
- *
- *   · no bloquear el trabajo de todos los días por un atraso ya conocido, y
- *   · fallar EN EL ACTO si aparece un archivo nuevo sin contexto.
- *
- * Se escribe uno por uno a propósito. Un tope numérico («permitir 85») dejaría
+ * Nació con 85 archivos, el día que se descubrió que este mismo gate solo
+ * miraba `.ts` y por eso daba por cubierto un panel que vive en `.tsx`. Se
+ * escribió uno por uno a propósito: un tope numérico («permitir 85») deja
  * cambiar unos por otros sin que se note; una lista nominal solo se puede
- * acortar. Cada línea que se borre de aquí es una pantalla que sobrevive al
- * encendido de RLS.
+ * acortar.
  *
- * MIENTRAS ESTA LISTA NO ESTÉ VACÍA, `DATABASE_URL` NO DEBE APUNTAR A
- * `membego_app`: con ese rol, una consulta sin contexto no falla — devuelve
- * cero filas, y la pantalla se queda en blanco sin decir por qué.
+ * Se vació en cuatro tandas —admin, superadmin, cliente y mostrador— y se deja
+ * aquí, vacía, por una razón: si algún día vuelve a tener entradas, será porque
+ * alguien aflojó el gate para dejar pasar algo, no porque el atraso reapareciera
+ * solo. Con la lista vacía, cualquier archivo sin contexto falla en el acto.
  */
 const PENDIENTES = new Set([
-  'app/(empleado)/empleado/caja/page.tsx',
-  'app/(onboarding)/onboarding/page.tsx',
-  'app/invitacion/[token]/page.tsx',
-  'components/invitaciones/CampanaLandingScreen.tsx',
-  'components/scanner/ScannerScreen.tsx',
-  'components/scanner/VisitasDeHoy.tsx',
+  // Vacía desde 2026-08-11: la migración terminó. Si algo vuelve a entrar aquí,
+  // es que se aflojó el gate — no que el atraso reapareciera solo.
 ])
 
 function archivosTS(dir) {
@@ -140,18 +132,26 @@ function tocaBase(contenido) {
 const huecos = []
 const atrasados = []
 let archivosConBase = 0
+let archivosCubiertos = 0
 let sitiosDeConsulta = 0
 
 for (const ruta of archivosTS(RAIZ)) {
   const relativa = ruta.replace(`${RAIZ}/`, '')
   const contenido = readFileSync(ruta, 'utf8')
 
-  if (!tocaBase(contenido)) continue
+  const conTenant = usaTenant(contenido)
+  if (!tocaBase(contenido)) {
+    if (conTenant) archivosCubiertos++
+    continue
+  }
   archivosConBase++
   sitiosDeConsulta += (contenido.match(/[^.\w]prisma\s*\.\s*[a-zA-Z]+\s*\./g) || []).length
   sitiosDeConsulta += (contenido.match(/\$queryRaw|\$executeRaw/g) || []).length
 
-  if (usaTenant(contenido)) continue
+  if (usaTenant(contenido)) {
+    archivosCubiertos++
+    continue
+  }
   if (BLANCA.has(relativa)) continue
   if (PENDIENTES.has(relativa)) {
     atrasados.push(relativa)
@@ -164,7 +164,14 @@ huecos.sort()
 
 console.log('Cobertura de contexto de empresa para RLS')
 console.log('─'.repeat(60))
-console.log(`${C.dim}Archivos que tocan la base: ${archivosConBase} · sitios de consulta aprox.: ${sitiosDeConsulta}${C.off}`)
+// Se cuentan APARTE los que ya usan los envoltorios. Tras la migración casi
+// nadie llama a `prisma.` directamente —se usa el `tx` de la transacción—, así
+// que sin esta segunda cifra el informe parecería decir que la aplicación
+// dejó de tocar la base.
+console.log(
+  `${C.dim}Archivos con contexto de empresa: ${archivosCubiertos} · ` +
+    `con llamadas directas a prisma: ${archivosConBase} (${sitiosDeConsulta} sitios)${C.off}`
+)
 
 // El atraso conocido se dice SIEMPRE y con su número. Un pendiente que no se
 // imprime deja de existir a las dos semanas, y es justo lo que pasó: el gate
