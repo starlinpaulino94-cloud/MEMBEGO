@@ -399,13 +399,24 @@ END $$;
 -- ────────────────────────────────────────────────────────────────────────────
 -- MARCHA ATRÁS:
 --
+-- LA BUENA, y la que hay que usar con la aplicación en marcha: devolver
+-- `DATABASE_URL` al rol `postgres`. Ese rol se salta RLS, así que desactiva la
+-- Capa 2 entera sin borrar nada y sin tocar la base. Un cambio de variable de
+-- entorno, sin despliegue y reversible en el otro sentido.
+--
+-- LA DESTRUCTIVA, solo si de verdad quieres quitarlo de la base. APAGA RLS
+-- ANTES de borrar las políticas, no después: una tabla con RLS encendido y sin
+-- políticas DENIEGA TODO a `membego_app`, así que hacerlo al revés deja la
+-- aplicación con cero filas en todas partes hasta que termines.
+--
 --   do $$ declare t record; begin
---     for t in select tablename from pg_tables where schemaname='public' loop
---       execute format('drop policy if exists membego_inquilino on public.%I', t.tablename);
+--     for t in select tablename from pg_tables
+--               where schemaname='public' and tablename <> '_prisma_migrations' loop
+--       execute format('alter table public.%I disable row level security', t.tablename);
+--       execute format('drop policy if exists membego_inquilino    on public.%I', t.tablename);
+--       execute format('drop policy if exists membego_catalogo_lee on public.%I', t.tablename);
+--       execute format('drop policy if exists membego_catalogo_escribe on public.%I', t.tablename);
+--       execute format('drop policy if exists membego_omnisciente  on public.%I', t.tablename);
 --     end loop;
 --   end $$;
---   -- y devuelve DATABASE_URL al rol `postgres`.
---
--- Volver la cadena de conexión a `postgres` basta para desactivar la Capa 2
--- entera sin borrar nada: ese rol se salta RLS.
 -- ============================================================================
