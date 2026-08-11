@@ -1,4 +1,5 @@
 import { conEmpresa, type Tx } from '@/lib/tenant'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import type { ConteoSegmentos, SegmentoValue } from '@/modules/admin/segmentos-def'
 
 // F4.5: segmentación inteligente de clientes por empresa. Los segmentos se
@@ -51,7 +52,10 @@ export async function resolverSegmento(
       }
       case 'activos': {
         const rows = await tx.cliente.findMany({
-          where: { companyId, memberships: { some: { estado: 'ACTIVA' } } },
+          // VIGENTE, no «activa»: `estado` sobrevivía a su fecha de
+          // vencimiento (ver `modules/membresia/vigencia.ts`), así que este
+          // segmento incluía a gente cuya membresía el escáner ya rechazaba.
+          where: { companyId, memberships: { some: membresiaVigente(ahora) } },
           select: { supabaseId: true },
         })
         return userIdsDeClientes(tx, rows.map((r) => r.supabaseId))
@@ -93,7 +97,7 @@ export async function resolverSegmento(
         const rows = await tx.cliente.findMany({
           where: {
             companyId,
-            memberships: { some: { estado: 'ACTIVA', planId } },
+            memberships: { some: { ...membresiaVigente(ahora), planId } },
           },
           select: { supabaseId: true },
         })
@@ -115,7 +119,10 @@ export async function contarSegmentos(companyId: string): Promise<ConteoSegmento
         tx.companyFollow.count({ where: { companyId } }),
         tx.cliente.count({ where: { companyId } }),
         tx.cliente.count({
-          where: { companyId, memberships: { some: { estado: 'ACTIVA' } } },
+          // VIGENTE, no «activa»: `estado` sobrevivía a su fecha de
+          // vencimiento (ver `modules/membresia/vigencia.ts`), así que este
+          // segmento incluía a gente cuya membresía el escáner ya rechazaba.
+          where: { companyId, memberships: { some: membresiaVigente(ahora) } },
         }),
         tx.cliente.count({
           where: {

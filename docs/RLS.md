@@ -222,13 +222,95 @@ transacción y no existe una variante "suelta".
 
 ### Orden recomendado para encenderla
 
-1. ~~Migrar a `conEmpresa` los módulos de `/admin`~~ → **Completado** (Fase 5.0–5.4 + carwash + regalos + app/ + lib/).
-2. ~~Marcar con `sinEmpresa` lo que cruza inquilinos~~ → **Completado**.
-3. En una base de **prueba**: aplicar la Capa 2, cambiar `DATABASE_URL` a
+> #### ✅ Migración terminada el 2026-08-11
+>
+> La lista `PENDIENTES` del gate está **vacía**. Las cuatro tandas —admin (57),
+> superadmin (12), cliente (10) y mostrador (6)— quedaron migradas, y con ellas
+> desaparece el único motivo por el que la Capa 2 no podía encenderse.
+>
+> Lo que sigue abajo es el registro de cómo se descubrió, que conviene conservar:
+> el problema no fueron los 85 archivos sino el **✓ verde** que decía que no
+> existían.
+>
+> #### ⚠️ Estado que se encontró el 2026-08-11
+>
+> Los pasos 1 y 2 estaban marcados como completados **sobre una medida falsa**.
+> El gate `scripts/rls-cobertura.mjs` recorría solo archivos `.ts`, y en App
+> Router una parte enorme de las consultas vive en componentes de servidor
+> (`.tsx`): las páginas del panel llaman a Prisma directamente. Contaba 9
+> archivos de los 95 que tocan la base, y por eso decía «✓ todo cubierto».
+>
+> Medida con el gate corregido:
+>
+> | | |
+> |---|---|
+> | Archivos que tocan la base | **95** |
+> | Sitios de consulta | **~188** |
+> | **Sin envoltorio de tenant** | **85** |
+> | Reparto | 44 admin · 11 superadmin · 6 cliente · 1 empleado · 2 componentes |
+>
+> El inventario nominal está en la constante `PENDIENTES` del script, y se
+> imprime en cada ejecución. **Mientras no esté vacía, el paso 5 no se puede
+> dar**: con `membego_app`, una consulta sin contexto no falla — devuelve cero
+> filas, así que el panel se queda en blanco y los registros no dicen por qué.
+
+1. Migrar a `conEmpresa` los módulos de `src/modules/**`, `src/lib/**` y los
+   route handlers de `src/app/**/route.ts` → **Completado** (Fase 5.0–5.4).
+2. Marcar con `sinEmpresa` lo que cruza inquilinos → **Completado** en esa
+   misma capa.
+3. ~~Migrar las páginas y componentes de servidor (`.tsx`)~~ → **Completado**
+   (85 archivos, cuatro tandas). El gate lo verifica en cada ejecución: la lista
+   `PENDIENTES` está vacía y cualquier archivo nuevo sin contexto falla en el
+   acto.
+4. En una base de **prueba**: aplicar la Capa 2, cambiar `DATABASE_URL` a
    `membego_app`, ejercitar la aplicación entera.
-4. `npm run rls:probar` contra esa base.
-5. Recién entonces, producción — y con `docs/runbooks/` a mano, porque la marcha
+5. `npm run rls:probar` contra esa base.
+6. Recién entonces, producción — y con `docs/runbooks/` a mano, porque la marcha
    atrás es devolver `DATABASE_URL` al rol `postgres`, que se salta RLS.
+
+### Tres cosas que apareció la migración, y que no eran RLS
+
+Migrar 85 archivos obliga a leerlos, y leerlos encontró defectos que llevaban
+tiempo ahí:
+
+- **Ocho transacciones anidadas.** Varias pantallas mezclaban consultas de
+  Prisma con llamadas a módulos que abren su propia transacción. Envolver el
+  conjunto las metía dentro de una transacción ya abierta, lo que pide una
+  segunda conexión desde dentro de la primera: con el pooler de Supabase por
+  delante, así es como se agota el pool. No habría dado un error claro — habría
+  dado timeouts intermitentes bajo carga.
+- **Dos agujeros de autorización.** `promociones/[id]/editar` e
+  `invitaciones/[id]/editar` leían la fila por su identificador sin mirar de qué
+  empresa era: quien acertara el id abría la promoción o la campaña de otro
+  negocio.
+- **Un respaldo ciego.** El panel de plataforma cuenta clientes excluyendo las
+  empresas de práctica y, si esa columna falta, cae a un conteo sin filtro. Ese
+  camino de repuesto tampoco tenía contexto: habría devuelto cero justo el día
+  que hiciera falta.
+
+### Dónde cruzar empresas es la respuesta correcta
+
+No todo lo que no lleva `conEmpresa` es un descuido. Una misma persona tiene una
+**ficha por negocio**, y varias pantallas del cliente —«Mis beneficios», el
+detalle de un beneficio, agendar su canje, el detalle de la membresía— ya
+llevaban comentarios explicando que filtrar por la ficha activa hacía que una
+recompensa reclamada en otro negocio se guardara bien y no apareciera en ningún
+sitio. Ponerles `conEmpresa` habría reintroducido ese fallo con la firma de una
+mejora de seguridad. Van con `sinEmpresa` y el motivo escrito; lo que las
+protege es la comprobación de pertenencia contra `misClienteIds`.
+
+Lo mismo el panel de plataforma (cruzar empresas es su trabajo), los intereses
+de la persona, el conmutador de empresas, y las dos pantallas públicas —la
+invitación por token y la landing de campaña— que se abren sin sesión y donde la
+empresa se descubre AL resolver el enlace.
+
+### Por qué el punto ciego importaba más que los 85 archivos
+
+Un atraso conocido se planifica. Lo grave era el **✓ verde**: cualquiera que
+leyera el gate o la Fase 5 concluiría que solo faltaba cambiar una variable de
+entorno, y esa conclusión termina en una tarde con el panel en blanco y una
+marcha atrás a ciegas. El gate ahora imprime el atraso con su número en cada
+ejecución, y falla en el acto si aparece un archivo **nuevo** sin contexto.
 
 ---
 

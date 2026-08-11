@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -27,11 +27,15 @@ export default async function MetodosPagoPage() {
     company: { name: string }
   }[] = []
   try {
-    metodos = await prisma.metodoPago.findMany({
-      where: companyId ? { companyId } : {},
-      include: { company: true },
-      orderBy: { createdAt: 'asc' },
-    })
+    metodos = await conEmpresaOTodas(
+      companyId,
+      'metodos-pago: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.metodoPago.findMany({
+        where: companyId ? { companyId } : {},
+        include: { company: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    )
   } catch (e) {
     console.error('[admin-metodos-pago]', e)
   }

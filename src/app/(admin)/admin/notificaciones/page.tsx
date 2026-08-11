@@ -1,6 +1,6 @@
 import { ADMIN_ROLES } from '@/types'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { contarSegmentos, type ConteoSegmentos } from '@/modules/admin/segmentos'
 import { NotifSegmentForm } from '@/components/admin/NotifSegmentForm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,13 +29,19 @@ export default async function NotificacionesEmpresaPage() {
   let planes: { id: string; nombre: string }[] = []
   let loadError = false
   try {
+    // `contarSegmentos` abre su propia transacción: fuera del envoltorio.
     ;[conteos, planes] = await Promise.all([
       contarSegmentos(companyId),
-      prisma.plan.findMany({
-        where: { companyId, activo: true },
-        select: { id: true, nombre: true },
-        orderBy: { orden: 'asc' },
-      }),
+      conEmpresaOTodas(
+        companyId,
+        'notificaciones: sin empresa activa es el superadmin',
+        (tx) =>
+          tx.plan.findMany({
+            where: { companyId, activo: true },
+            select: { id: true, nombre: true },
+            orderBy: { orden: 'asc' },
+          })
+      ),
     ])
   } catch (e) {
     console.error('[admin-notificaciones]', e)

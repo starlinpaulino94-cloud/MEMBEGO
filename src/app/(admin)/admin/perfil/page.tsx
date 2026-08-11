@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas, sinEmpresa } from '@/lib/tenant'
 import { ExternalLink, AlertCircle, Building2 } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
@@ -39,11 +40,14 @@ export default async function PerfilEmpresaPage({
 
   if (!companyId) {
     if (esSuper) {
-      const companies = await prisma.company
-        .findMany({
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, slug: true, isPublished: true },
-        })
+      const companies = await sinEmpresa(
+        'perfil: el superadmin sin empresa activa elige entre todas',
+        (tx) =>
+          tx.company.findMany({
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, slug: true, isPublished: true },
+          })
+      )
         .catch(() => [])
       return (
         <div className="space-y-6">
@@ -99,14 +103,23 @@ export default async function PerfilEmpresaPage({
   let receiptConfig: ReceiptTemplateConfig = {}
   try {
     let plantilla: { config: unknown } | null = null
-    ;[company, categories, selectedCategoryIds, plantilla] = await Promise.all([
-      prisma.company.findUnique({ where: { id: companyId } }),
+    // Las dos funciones de categorías abren su propia transacción: fuera del
+    // envoltorio, que anidarlas agota el pool con el pooler por delante.
+    ;[[company, plantilla], categories, selectedCategoryIds] = await Promise.all([
+      conEmpresaOTodas(
+        companyId,
+        'perfil: sin empresa activa es el superadmin',
+        (tx) =>
+          Promise.all([
+            tx.company.findUnique({ where: { id: companyId } }),
+            tx.receiptTemplate.findUnique({
+              where: { companyId },
+              select: { config: true },
+            }),
+          ])
+      ),
       getActiveCategories(),
       getCompanyCategoryIds(companyId),
-      prisma.receiptTemplate.findUnique({
-        where: { companyId },
-        select: { config: true },
-      }),
     ])
     receiptConfig = (plantilla?.config ?? {}) as ReceiptTemplateConfig
   } catch (e) {

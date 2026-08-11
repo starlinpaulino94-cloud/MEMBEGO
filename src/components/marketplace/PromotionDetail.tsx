@@ -220,7 +220,13 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
                     href={empresaHref}
                     className="w-full block text-center bg-primary text-primary-foreground px-6 py-4 rounded-lg hover:bg-primary transition-colors font-bold text-lg"
                   >
-                    Ver empresa y sus planes
+                    {/* No se nombran los planes de un negocio que no los tiene:
+                        el botón es una promesa y aquí llevaba a una sección que
+                        no existe. `undefined` (listados) mantiene el texto de
+                        siempre. */}
+                    {promotion.company.tienePlanes === false
+                      ? 'Ver empresa'
+                      : 'Ver empresa y sus planes'}
                   </Link>
                 ) : (
                   <Link

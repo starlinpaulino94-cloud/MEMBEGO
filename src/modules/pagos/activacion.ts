@@ -81,6 +81,10 @@ export async function activarMembresia(
         lavadosRestantes: membership.plan.esIlimitado ? 0 : membership.plan.lavadosIncluidos,
         montoPagado: montoNeto,
         pagoConfirmado: true,
+        // Cuándo entró el dinero, de una vez y para siempre: los reportes
+        // fechaban el cobro por `updatedAt`, así que cualquier edición
+        // posterior lo movía de mes (auditoría · A-6).
+        fechaPago: now,
         rechazadoReason: null,
         adminNota: null,
       },

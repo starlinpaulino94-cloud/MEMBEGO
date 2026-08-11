@@ -5,6 +5,8 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { ExternalLink } from 'lucide-react'
 import { DataTable } from '@/components/ui/data-table'
 import { EstadoBadge } from '@/components/EstadoBadge'
+import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
+import type { EstadoCliente } from '@/modules/riesgo/semaforo'
 import type { MembershipEstado } from '@/types'
 
 export interface ClienteRow {
@@ -17,6 +19,8 @@ export interface ClienteRow {
     estado: MembershipEstado
     plan: { nombre: string }
   }>
+  /** Semáforo ya calculado en el servidor (`modules/riesgo/semaforo`). */
+  semaforo?: { estado: EstadoCliente; motivo: string; diasSinVenir: number | null }
 }
 
 const columns: ColumnDef<ClienteRow>[] = [
@@ -57,6 +61,26 @@ const columns: ColumnDef<ClienteRow>[] = [
     },
   },
   {
+    id: 'semaforo',
+    header: 'Estado',
+    cell: ({ row }) => {
+      const s = row.original.semaforo
+      if (!s) return <span className="text-muted-foreground">—</span>
+      return (
+        <div className="space-y-0.5">
+          <SemaforoCliente estado={s.estado} motivo={s.motivo} />
+          {/* El número que hay detrás del color: sin él, «en riesgo» es una
+              opinión del sistema y no un dato que se pueda comprobar. */}
+          <p className="text-caption">
+            {s.diasSinVenir == null
+              ? 'nunca ha venido'
+              : `hace ${s.diasSinVenir} d que no viene`}
+          </p>
+        </div>
+      )
+    },
+  },
+  {
     id: 'actions',
     header: 'Acciones',
     cell: ({ row }) => (
@@ -76,9 +100,10 @@ export function ClientesTable({ data }: { data: ClienteRow[] }) {
       // M-07). El de la tabla solo filtraba las filas ya cargadas, así que un
       // cliente que no estuviera en la página actual no aparecía nunca — y la
       // pantalla no daba ninguna pista de por qué.
+      // Sin exportación propia: el CSV se genera en el SERVIDOR sobre el
+      // filtro completo (auditoría · B-9). El de la tabla se llevaba las filas
+      // cargadas —50 de 98— y no lo decía en ninguna parte.
       pageSize={25}
-      exportable
-      exportFilename="clientes.csv"
     />
   )
 }

@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
@@ -52,19 +52,23 @@ export default async function VehiculosPage({
       : {}),
   }
 
-  const [vehiculos, total] = await Promise.all([
-    prisma.vehiculo.findMany({
-    where,
-    include: {
-      cliente: { select: { id: true, nombre: true, telefono: true } },
-      _count: { select: { visits: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-    skip: paginacion.saltar,
-    take: paginacion.tomar,
-    }),
-    prisma.vehiculo.count({ where }),
-  ])
+  const [vehiculos, total] = await conEmpresaOTodas(
+    companyId,
+    'app · carwash · vehiculos: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => Promise.all([
+      tx.vehiculo.findMany({
+      where,
+      include: {
+        cliente: { select: { id: true, nombre: true, telefono: true } },
+        _count: { select: { visits: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: paginacion.saltar,
+      take: paginacion.tomar,
+      }),
+      tx.vehiculo.count({ where }),
+    ])
+  )
 
   return (
     <div className="space-y-6">

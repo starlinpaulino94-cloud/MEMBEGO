@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { redirect } from 'next/navigation'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import {
@@ -22,7 +23,6 @@ import { adminMetrics } from '@/modules/admin/queries'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { OnboardingChecklist } from '@/components/admin/OnboardingChecklist'
-import { prisma } from '@/lib/prisma'
 import { formatMoney } from '@/lib/format'
 import { StatCard } from '@/components/ui/stat-card'
 import { AnimatedCounter } from '@/components/system/AnimatedCounter'
@@ -97,15 +97,22 @@ export default async function AdminDashboard() {
   }
 
   let d: DashboardEjecutivo | null = null
-  let company: { name: string; moneda: string; idioma: string } | null = null
+  let company: { name: string; moneda: string; idioma: string; zonaHoraria: string } | null = null
   try {
-    ;[d, company] = await Promise.all([
-      getDashboardEjecutivo(companyId),
-      prisma.company.findUnique({
+    // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy», y
+    // las métricas no pueden calcularse sin ella (ver `dashboardQueries`).
+    company = await conEmpresaOTodas(
+      companyId,
+      'dashboard: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.company.findUnique({
         where: { id: companyId },
-        select: { name: true, moneda: true, idioma: true },
-      }),
-    ])
+        select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
+      })
+    )
+    d = await getDashboardEjecutivo(
+      companyId,
+      company?.zonaHoraria || 'America/Santo_Domingo'
+    )
   } catch (e) {
     console.error('[admin-dashboard]', e)
   }
@@ -137,15 +144,20 @@ export default async function AdminDashboard() {
       icon: Wallet,
       tono: 'warning' as const,
     },
+    // «Cada punto lleva a donde se resuelve» es la promesa de esta sección, y
+    // durante mucho tiempo no se cumplió: los dos avisos de abajo llevaban a la
+    // lista completa, sin filtrar, y el administrador tenía que volver a buscar
+    // a mano a las personas que el panel acababa de identificar. Ahora llevan a
+    // la MISMA lista ya acotada.
     {
-      href: '/admin/membresias',
+      href: '/admin/riesgo?vence=7&sinVisitas=0',
       label: 'Membresías vencen en 7 días',
       valor: d.porVencer7d,
       icon: Clock,
       tono: 'danger' as const,
     },
     {
-      href: '/admin/clientes',
+      href: '/admin/riesgo?sinVisitas=30&vence=0',
       label: 'Clientes sin visitas en 30 días',
       valor: d.clientesEnRiesgo,
       icon: UserX,
@@ -164,6 +176,10 @@ export default async function AdminDashboard() {
    */
   const secundarias = [
     { label: 'Clientes en total', valor: fmt(d.clientesTotal) },
+    // Lo que facturarían las membresías vigentes al renovar, a precio de
+    // tarifa (con el precio de la categoría del vehículo cuando existe). Es una
+    // proyección, así que vive aquí y no entre los KPI: no es dinero cobrado.
+    { label: 'Recurrente esperado', valor: formatMoney(d.recurrenteEsperado, company) },
     { label: 'Seguidores', valor: `${fmt(d.seguidores)} (+${d.nuevosSeguidores30d} este mes)` },
     { label: 'Promociones activas', valor: fmt(d.promosActivas) },
     { label: 'Referidos completados', valor: fmt(d.referidosCompletados) },
@@ -179,7 +195,13 @@ export default async function AdminDashboard() {
           <h1 className="text-h1 mt-1 text-balance text-foreground">{companyName}</h1>
         </div>
         <p className="hidden text-small text-muted-foreground sm:block">
-          {new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'long' }).format(new Date())}
+          {/* La fecha del encabezado es la del NEGOCIO, no una constante: si
+              dijera otro día que el «hoy» de las visitas, el panel volvería a
+              contradecirse a sí mismo. */}
+          {new Intl.DateTimeFormat(company?.idioma || 'es-DO', {
+            timeZone: company?.zonaHoraria || 'America/Santo_Domingo',
+            dateStyle: 'long',
+          }).format(new Date())}
         </p>
       </div>
 
@@ -246,12 +268,15 @@ export default async function AdminDashboard() {
             accent="success"
             sub="Con membresía vigente"
           />
+          {/* «Ingresos estimados» mezclaba dos cosas que no son la misma: lo
+              que entró y lo que se espera que entre. Aquí manda lo COBRADO —es
+              el dato duro— y lo esperado baja a las cifras de referencia. */}
           <StatCard
-            label="Ingresos estimados"
-            value={formatMoney(d.ingresosEstimadosMes, company)}
+            label="Cobrado este mes"
+            value={formatMoney(d.ingresosCobradosMes, company)}
             icon={Wallet}
             accent="brand"
-            sub="Membresías activas / mes"
+            sub="Membresías con pago confirmado"
           />
           <StatCard
             label="Visitas hoy"

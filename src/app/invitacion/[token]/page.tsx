@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { roleLabel } from '@/components/layout/nav-config'
 import { AceptarInvitacionForm } from '@/components/onboarding/AceptarInvitacionForm'
 
@@ -10,12 +10,21 @@ export default async function AceptarInvitacionPage({
   params: Promise<{ token: string }>
 }) {
   const { token } = await params
-  const invitacion = await prisma.invitacion
-    .findUnique({
-      where: { token },
-      include: { company: { select: { name: true } } },
-    })
-    .catch(() => null)
+  // PÁGINA PÚBLICA, sin sesión: quien la abre viene de un correo y todavía no
+  // pertenece a ninguna empresa — el token es justamente lo que va a decir a
+  // cuál. No hay empresa que poner antes de resolverlo.
+  //
+  // Lo que protege es el propio token: es único, opaco y caduca, y las tres
+  // comprobaciones de abajo (existe · PENDIENTE · sin expirar) son la barrera
+  // real. Aquí solo se lee su fila y el nombre de la empresa que invita.
+  const invitacion = await sinEmpresa(
+    'invitación por token: página pública, la empresa se descubre AL resolver el token',
+    (tx) =>
+      tx.invitacion.findUnique({
+        where: { token },
+        include: { company: { select: { name: true } } },
+      })
+  ).catch(() => null)
 
   const invalida =
     !invitacion ||

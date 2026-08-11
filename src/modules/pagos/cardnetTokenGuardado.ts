@@ -236,6 +236,9 @@ export async function renovarMembresiaPorTarjeta(
             lavadosRestantes: m.plan.esIlimitado ? 0 : m.plan.lavadosIncluidos,
             montoPagado: pesos,
             pagoConfirmado: true,
+            // La renovación es un cobro nuevo: pisa la fecha anterior a
+            // propósito, porque lo que interesa es cuándo entró ESTE dinero.
+            fechaPago: now,
           },
         }),
         tx.auditLog.create({

@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ConfettiCelebration } from '@/components/growth/ConfettiCelebration'
 import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
@@ -23,13 +23,16 @@ export default async function CelebracionPage() {
   let beneficio: string | null = null
   let compraId: string | null = null
   if (clienteId) {
-    const compra = await prisma.productoCompra
-      .findFirst({
-        where: { clienteId, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, promocion: { select: { titulo: true } } },
-      })
-      .catch(() => null)
+    const compra = await conEmpresaOTodas(
+      user.metadata.companyId,
+      'celebración: el beneficio recién otorgado es del cliente que acaba de entrar',
+      (tx) =>
+        tx.productoCompra.findFirst({
+          where: { clienteId, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, promocion: { select: { titulo: true } } },
+        })
+    ).catch(() => null)
     beneficio = compra?.promocion?.titulo ?? null
     compraId = compra?.id ?? null
   }

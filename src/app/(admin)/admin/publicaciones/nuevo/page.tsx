@@ -1,7 +1,7 @@
 import { requireRole } from '@/lib/auth/guards'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { prisma } from '@/lib/prisma'
 import { PostForm } from '@/components/admin/PostForm'
 
 export const dynamic = 'force-dynamic'
@@ -12,11 +12,15 @@ export default async function NuevaPublicacionPage() {
   const companyId = await resolveCompanyId(user)
 
   const campanas = companyId
-    ? await prisma.campana.findMany({
-        where: { companyId, activo: true },
-        select: { id: true, nombre: true },
-        orderBy: { createdAt: 'desc' },
-      })
+    ? await conEmpresaOTodas(
+      companyId,
+      'publicaciones · nuevo: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.campana.findMany({
+          where: { companyId, activo: true },
+          select: { id: true, nombre: true },
+          orderBy: { createdAt: 'desc' },
+        })
+    )
     : []
 
   return (

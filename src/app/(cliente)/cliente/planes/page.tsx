@@ -302,8 +302,9 @@ export default async function PlanesPage({
 
         {/* Miembro de antes del rediseño sin vehículo: puede seguir viendo la
             vitrina, con la invitación (no obligación) a registrar su vehículo
-            para precios exactos y compra en línea. */}
-        {resultado.vitrina && (
+            para precios exactos y compra en línea. Solo donde el vehículo
+            significa algo: en un restaurante esta tarjeta no tiene sentido. */}
+        {resultado.vitrina && resultado.requiereVehiculo && (
           <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted">
@@ -321,7 +322,21 @@ export default async function PlanesPage({
       </div>
 
       {/* ── Contenido ─────────────────────────────────────────────────────── */}
-      {faltanRequisitos ? (
+      {/* EL ORDEN IMPORTA. Primero "¿hay algo que enseñar?" y después "¿puedes
+          verlo?". Al revés, una empresa sin un solo plan le exigía al cliente
+          registrar su vehículo —un trámite— para llegar a una pantalla vacía. */}
+      {resultado.planesPublicados === 0 ? (
+        <EmptyState
+          icon={Sparkles}
+          title="Sin planes disponibles"
+          description={`${cliente.company.name} aún no tiene planes de membresía publicados. Vuelve pronto.`}
+          action={
+            <Button asChild variant="outline">
+              <Link href="/mis-membresias">Volver a mis membresías</Link>
+            </Button>
+          }
+        />
+      ) : faltanRequisitos ? (
         /* §10: sin vehículo no hay planes ni precios — la consulta ya volvió
            vacía (esto no es CSS). El asistente lo resuelve y regresa aquí. */
         <EmptyState

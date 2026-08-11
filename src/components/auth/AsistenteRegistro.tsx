@@ -405,6 +405,12 @@ export function AsistenteRegistro({
               </div>
               <SelectorUbicacionVivienda
                 sinEncabezado
+                /* En el registro NO se pide marcar el punto exacto en un mapa:
+                   es el momento de menos confianza que hay con la persona, y
+                   pedirle su dirección exacta ahí hace que abandone. Ciudad y
+                   sector bastan para enseñar negocios cerca; el mapa sigue
+                   disponible en el perfil, cuando ya decidió quedarse. */
+                sinMapa
                 value={datos.ubicacion}
                 onChange={(v) => {
                   setError(null)

@@ -1,6 +1,6 @@
 import { requireRole } from '@/lib/auth/guards'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
 import { CampanaInvitacionForm } from '@/components/invitaciones/CampanaInvitacionForm'
@@ -16,11 +16,15 @@ export default async function NuevaCampanaInvitacionPage() {
 
   // Promociones vigentes de la empresa: candidatas a beneficio digital (E8).
   const promociones = companyId
-    ? await prisma.promocion.findMany({
-        where: { companyId, activo: true, archivada: false },
-        select: { id: true, titulo: true },
-        orderBy: { titulo: 'asc' },
-      })
+    ? await conEmpresaOTodas(
+      companyId,
+      'invitaciones · nueva: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.promocion.findMany({
+          where: { companyId, activo: true, archivada: false },
+          select: { id: true, titulo: true },
+          orderBy: { titulo: 'asc' },
+        })
+    )
     : []
 
   return (

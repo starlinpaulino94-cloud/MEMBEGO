@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { MetodoPagoForm } from '@/components/admin/MetodoPagoForm'
 
 export default async function EditarMetodoPagoPage({
@@ -13,10 +13,14 @@ export default async function EditarMetodoPagoPage({
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
 
-  const method = await prisma.metodoPago.findUnique({ where: { id } })
+  const companyId = companyFilter(user)
+  const method = await conEmpresaOTodas(
+    companyId,
+    'metodos-pago · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.metodoPago.findUnique({ where: { id } })
+  )
   if (!method) return notFound()
 
-  const companyId = companyFilter(user)
   if (companyId && method.companyId !== companyId) return notFound()
 
   return (

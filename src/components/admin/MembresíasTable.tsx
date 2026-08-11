@@ -21,6 +21,9 @@ export interface MembershipRow {
   plan: { nombre: string; esIlimitado: boolean }
 }
 
+/** La página del servidor trae 50; la tabla no vuelve a paginarlas. */
+const POR_PAGINA_TABLA = 50
+
 const baseColumns: ColumnDef<MembershipRow>[] = [
   {
     accessorKey: 'cliente.nombre',
@@ -113,11 +116,11 @@ export function MembresíasTable({
     <DataTable
       columns={columns as unknown as ColumnDef<Record<string, unknown>, unknown>[]}
       data={data as unknown as Record<string, unknown>[]}
-      searchPlaceholder="Buscar por cliente o plan..."
-      searchKey="cliente.nombre"
-      pageSize={15}
-      exportable
-      exportFilename="membresias.csv"
+      // Sin buscador propio ni exportación propia: los dos viven en el SERVIDOR
+      // (auditoría · A-5/B-9). El de la tabla filtraba las filas ya cargadas,
+      // así que una membresía de otra página no aparecía nunca; y el CSV se
+      // llevaba solo lo visible, callándose el resto.
+      pageSize={POR_PAGINA_TABLA}
     />
   )
 }

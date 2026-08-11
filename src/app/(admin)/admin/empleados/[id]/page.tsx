@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
@@ -26,7 +27,11 @@ export default async function EmpleadoDetailPage({
 
   let empleado: Awaited<ReturnType<typeof prisma.user.findUnique>> = null
   try {
-    empleado = await prisma.user.findUnique({ where: { id } })
+    empleado = await conEmpresaOTodas(
+      companyId,
+      'empleados · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.user.findUnique({ where: { id } })
+    )
   } catch (e) {
     console.error('[admin-empleado-detail]', e)
     return (

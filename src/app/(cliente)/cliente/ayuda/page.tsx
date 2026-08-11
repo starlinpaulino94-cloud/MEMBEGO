@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresa } from '@/lib/tenant'
 import {
   MessageCircle,
   Mail,
@@ -8,7 +9,6 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { getFaqs, listTicketsCliente, getComunicacionConfig } from '@/modules/soporte/queries'
 import { getOnboardingCliente } from '@/modules/social/queries'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
@@ -62,13 +62,13 @@ export default async function AyudaPage() {
   try {
     const [c, cl, f, t, ob] = await Promise.all([
       companyId ? getComunicacionConfig(companyId).catch(() => null) : null,
-      clienteId
-        ? prisma.cliente
-            .findUnique({
+      clienteId && companyId
+        ? conEmpresa(companyId, (tx) =>
+            tx.cliente.findUnique({
               where: { id: clienteId },
               select: { nombre: true, company: { select: { name: true } } },
             })
-            .catch(() => null)
+          ).catch(() => null)
         : null,
       getFaqs(companyId ?? null, { activeOnly: true }).catch(() => []),
       // La PERSONA, no la ficha activa: un hilo abierto con otro negocio

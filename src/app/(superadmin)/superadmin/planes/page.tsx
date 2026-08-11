@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Check, Infinity as InfinityIcon, Plus, Pencil } from 'lucide-react'
@@ -22,23 +22,26 @@ export default async function SuperadminPlanesPage() {
   let companies: { id: string; name: string }[] = []
 
   try {
-    const [p, c] = await Promise.all([
-      prisma.plan.findMany({
-        select: {
-          id: true, nombre: true, precio: true, esIlimitado: true,
-          lavadosIncluidos: true, activo: true, descripcion: true,
-          beneficios: true, companyId: true,
-          company: { select: { name: true } },
-          _count: { select: { memberships: true } },
-        },
-        orderBy: [{ companyId: 'asc' }, { precio: 'asc' }],
-      }),
-      prisma.company.findMany({
-        where: { isActive: true },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      }),
-    ])
+    const [p, c] = await sinEmpresa(
+      'planes globales: el superadmin los administra en todas las empresas',
+      (tx) => Promise.all([
+        tx.plan.findMany({
+          select: {
+            id: true, nombre: true, precio: true, esIlimitado: true,
+            lavadosIncluidos: true, activo: true, descripcion: true,
+            beneficios: true, companyId: true,
+            company: { select: { name: true } },
+            _count: { select: { memberships: true } },
+          },
+          orderBy: [{ companyId: 'asc' }, { precio: 'asc' }],
+        }),
+        tx.company.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        }),
+      ])
+    )
     planes = p
     companies = c
   } catch (e) {

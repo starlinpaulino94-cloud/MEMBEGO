@@ -1,6 +1,6 @@
 import { requireRole } from '@/lib/auth/guards'
+import { conEmpresa } from '@/lib/tenant'
 import { SCANNER_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import {
   buscarOrdenesPendientes,
   getResumenSesion,
@@ -127,14 +127,16 @@ export default async function CajaPage({
     )
 
   // Sesión abierta de la empresa (la primera entre sus sucursales).
-  const sesion = await prisma.cajaSesion.findFirst({
-    where: { companyId, estado: 'ABIERTA' },
-    include: {
-      sucursal: { select: { nombre: true } },
-      abiertaPor: { select: { name: true } },
-    },
-    orderBy: { abiertaAt: 'desc' },
-  })
+  const sesion = await conEmpresa(companyId, (tx) =>
+    tx.cajaSesion.findFirst({
+      where: { companyId, estado: 'ABIERTA' },
+      include: {
+        sucursal: { select: { nombre: true } },
+        abiertaPor: { select: { name: true } },
+      },
+      orderBy: { abiertaAt: 'desc' },
+    })
+  )
 
   if (!sesion) {
     return (

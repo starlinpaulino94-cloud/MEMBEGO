@@ -1,6 +1,6 @@
 import Form from 'next/form'
+import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
 import { CapacidadesPanel } from '@/components/capacidades/CapacidadesPanel'
@@ -24,20 +24,26 @@ export default async function CapacidadesSuperadminPage({
   await requireRole('SUPERADMIN')
   const { empresa } = await searchParams
 
-  const empresas = await prisma.company.findMany({
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true, type: true },
-  })
+  const empresas = await sinEmpresa(
+    'capacidades: el superadmin configura los módulos de cada empresa',
+    (tx) => tx.company.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, type: true },
+    })
+  )
   const seleccionada = empresas.find((e) => e.id === empresa) ?? empresas[0] ?? null
 
   // Estado efectivo actual (lectura DIRECTA, sin caché: el superadmin debe
   // ver lo recién guardado). Defensivo ante la migración pendiente.
   let raw: unknown = null
   if (seleccionada) {
-    raw = await prisma.company
-      .findUnique({ where: { id: seleccionada.id }, select: { capacidades: true } })
-      .then((c) => c?.capacidades ?? null)
-      .catch(() => null)
+    raw = await sinEmpresa(
+      'capacidades: el superadmin configura los módulos de cada empresa',
+      (tx) => tx.company
+        .findUnique({ where: { id: seleccionada.id }, select: { capacidades: true } })
+        .then((c) => c?.capacidades ?? null)
+        .catch(() => null)
+    )
   }
   const efectivas = seleccionada ? capacidadesEfectivas(seleccionada.type, raw) : null
 
@@ -80,10 +86,24 @@ export default async function CapacidadesSuperadminPage({
             Categoría actual: {CATEGORIA_LABELS[efectivas.categoria]} ·{' '}
             {efectivas.activas.size} capacidades activas
           </p>
+          {/* Un tipo que el catálogo no reconoce ("otro", vacío, uno inventado)
+              no es un detalle cosmético: de él dependen los requisitos que se le
+              exigen al cliente. Decirlo aquí evita tener que deducirlo mirando
+              la pantalla del cliente. */}
+          {efectivas.categoriaExplicita == null && (
+            <p className="mb-5 rounded-xl border border-warning/25 bg-warning/8 p-3 text-small text-foreground">
+              El tipo guardado de esta empresa (
+              <span className="font-mono">{seleccionada.type || 'vacío'}</span>) no
+              corresponde a ninguna categoría del catálogo. Se le aplican los módulos
+              de {CATEGORIA_LABELS[efectivas.categoria]}, pero NO se le exige vehículo
+              a sus clientes. Elige la categoría correcta abajo para fijarla.
+            </p>
+          )}
           <CapacidadesPanel
             companyId={seleccionada.id}
             categoria={efectivas.categoria}
             activas={[...efectivas.activas]}
+            modulosCliente={efectivas.modulosCliente}
           />
         </section>
       )}

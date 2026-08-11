@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { PostForm } from '@/components/admin/PostForm'
 
 export const dynamic = 'force-dynamic'
@@ -16,14 +16,22 @@ export default async function EditarPublicacionPage({
   const companyId = companyFilter(user)
   const { id } = await params
 
-  const post = await prisma.companyPost.findUnique({ where: { id } })
+  const post = await conEmpresaOTodas(
+    companyId,
+    'publicaciones · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.companyPost.findUnique({ where: { id } })
+  )
   if (!post) notFound()
 
-  const campanas = await prisma.campana.findMany({
-    where: { companyId: post.companyId, activo: true },
-    select: { id: true, nombre: true },
-    orderBy: { createdAt: 'desc' },
-  })
+  const campanas = await conEmpresaOTodas(
+    companyId,
+    'publicaciones · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.campana.findMany({
+      where: { companyId: post.companyId, activo: true },
+      select: { id: true, nombre: true },
+      orderBy: { createdAt: 'desc' },
+    })
+  )
   // Aislamiento: solo la empresa dueña (o superadmin) puede editar.
   if (companyId && post.companyId !== companyId) notFound()
 

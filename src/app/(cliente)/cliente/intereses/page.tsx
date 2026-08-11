@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react'
+import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { getActiveCategories } from '@/modules/empresas/queries'
 import { InteresesForm } from '@/components/cliente/InteresesForm'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,10 +15,15 @@ export default async function InteresesPage() {
   try {
     const [cats, intereses] = await Promise.all([
       getActiveCategories(),
-      prisma.userInteres.findMany({
-        where: { userId: user.metadata.dbUserId },
-        select: { categoryId: true },
-      }),
+      // Los intereses son de la PERSONA, no de una empresa: la misma cuenta
+      // los conserva aunque cambie de negocio, y por eso no caben dentro de
+      // un contexto de inquilino.
+      sinEmpresa('intereses: son de la persona y no de ninguna empresa', (tx) =>
+        tx.userInteres.findMany({
+          where: { userId: user.metadata.dbUserId },
+          select: { categoryId: true },
+        })
+      ),
     ])
     categories = cats
     selected = intereses.map((i) => i.categoryId)

@@ -51,6 +51,13 @@ export interface PromotionPublic {
     name: string
     slug: string
     logoUrl: string | null
+    /**
+     * ¿La empresa tiene planes de membresía publicados? Solo lo trae el detalle
+     * (`getPromotionDetail`); en los listados viaja `undefined` y la UI no
+     * promete nada. Sirve para no mandar al cliente a "ver los planes" de un
+     * negocio que no vende ninguno.
+     */
+    tienePlanes?: boolean
   }
   createdAt: Date
   /** Fase E5: datos de venta directa (solo si la promoción es comprable). */

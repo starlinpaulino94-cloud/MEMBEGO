@@ -1,10 +1,10 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { EditarPlanForm } from '@/components/admin/EditarPlanForm'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,11 @@ export default async function EditarPlanEmpresaPage({
   const companyId = companyFilter(user)
   const { id } = await params
 
-  const plan = await prisma.plan.findUnique({ where: { id } })
+  const plan = await conEmpresaOTodas(
+    companyId,
+    'planes · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.plan.findUnique({ where: { id } })
+  )
   if (!plan) notFound()
   // Aislamiento: solo los planes de la propia empresa (o superadmin).
   if (companyId && plan.companyId !== companyId) notFound()

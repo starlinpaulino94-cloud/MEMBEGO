@@ -98,16 +98,30 @@ export function DataTable<TData extends Record<string, unknown>, TValue>({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder={searchPlaceholder}
-            value={globalFilter ?? ''}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      {/*
+        El buscador solo existe si hay algo por lo que buscar. Sin `searchKey`,
+        `globalFilterFn` devuelve true para todas las filas: el campo se pintaba
+        igual y no filtraba NADA. Donde la búsqueda se había movido al servidor
+        —Clientes— quedaban dos campos idénticos, uno vivo y otro muerto, sin
+        forma de distinguirlos. Un control que no hace nada es peor que no tener
+        control: enseña a desconfiar de los que sí funcionan.
+      */}
+      <div
+        className={`flex flex-col gap-3 md:flex-row md:items-center ${
+          searchKey ? 'md:justify-between' : 'md:justify-end'
+        } ${!searchKey && !exportable ? 'hidden' : ''}`}
+      >
+        {searchKey && (
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder={searchPlaceholder}
+              value={globalFilter ?? ''}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        )}
         {exportable && (
           <Button
             type="button"

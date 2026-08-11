@@ -24,6 +24,9 @@ import {
   LifeBuoy,
   Newspaper,
   TrendingUp,
+  TriangleAlert,
+  HeartPulse,
+  Scale,
   Store,
   Bell,
   Flag,
@@ -120,6 +123,10 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: '/admin/clientes', label: 'Directorio', icon: Users },
       { href: '/admin/membresias', label: 'Membresías', icon: CreditCard },
+      // Bloque 2 de la auditoría: el destino que faltaba para los avisos del
+      // Resumen. Va aquí, junto a Directorio y Membresías, porque la pregunta
+      // que responde —«¿a quién llamo hoy?»— es de la gestión de clientes.
+      { href: '/admin/riesgo', label: 'En riesgo', icon: TriangleAlert },
       { href: '/admin/audiencia/segmentos', label: 'Segmentos', icon: SlidersHorizontal },
       { href: '/admin/citas', label: 'Citas', icon: CalendarDays },
       { href: '/admin/actividad', label: 'Actividad', icon: History },
@@ -163,6 +170,8 @@ const ADMIN_NAV: NavGroup[] = [
     label: 'Analítica',
     items: [
       { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
+      { href: '/admin/retencion', label: 'Retención', icon: HeartPulse },
+      { href: '/admin/conciliacion', label: 'Conciliación', icon: Scale },
       { href: '/admin/audiencia', label: 'Audiencia', icon: TrendingUp },
       { href: '/admin/adquisicion', label: 'Origen de clientes', icon: Compass },
       { href: '/admin/seguimiento', label: 'Seguimiento', icon: QrCode },

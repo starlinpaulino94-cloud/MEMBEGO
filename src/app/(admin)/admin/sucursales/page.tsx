@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { MapPin, Plus, Pencil, Phone, Navigation } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/system/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -31,14 +31,18 @@ export default async function SucursalesPage() {
     company: { name: string }; _count: { visits: number }
   }[] = []
   try {
-    sucursales = await prisma.sucursal.findMany({
-      where: companyId ? { companyId } : {},
-      include: {
-        company: true,
-        _count: { select: { visits: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    })
+    sucursales = await conEmpresaOTodas(
+      companyId,
+      'sucursales: el superadmin las ve de todas las empresas',
+      (tx) => tx.sucursal.findMany({
+        where: companyId ? { companyId } : {},
+        include: {
+          company: true,
+          _count: { select: { visits: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    )
   } catch (e) {
     console.error('[admin-sucursales]', e)
   }

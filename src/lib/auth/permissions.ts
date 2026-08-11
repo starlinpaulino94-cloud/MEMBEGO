@@ -39,6 +39,12 @@ export const ADMIN_SECTIONS = [
   'reportes',
   // Bitácora de actividad: toda acción con su fecha y hora exactas.
   'actividad',
+  // Bloque 2 de la auditoría: quién está a punto de irse y cuánto cuesta
+  // perderlo, y el reporte de retención con el pasivo de usos sin consumir.
+  'riesgo',
+  'retencion',
+  // Comprobaciones cruzadas entre membresías, transacciones y caja.
+  'conciliacion',
   'adquisicion',
   'audiencia',
   'invitaciones',
@@ -60,8 +66,12 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 // MARKETING = difusión; SUPERVISOR = operación. Ambos incluyen 'dashboard'
 // como aterrizaje. Todo lo no listado queda denegado (fail-closed).
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
-  MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones'],
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app'],
+  // 'riesgo' entra en los dos: Marketing lo necesita para saber a quién
+  // dirigir una campaña de retención, y Supervisión para repartir las llamadas.
+  MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones', 'riesgo', 'retencion'],
+  // Sin 'aplicaciones': el módulo se retiró a propósito (los genéricos —QR,
+  // citas, seguimiento— volvieron al menú lateral como secciones propias).
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app', 'riesgo', 'retencion', 'conciliacion'],
 }
 
 /** ¿Puede este rol abrir esta sección del panel? */

@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { prisma } from '@/lib/prisma'
 import { promocionPrefill } from '@/modules/admin/plantillas'
 import { PromocionForm } from '@/components/admin/PromocionForm'
 import { LayoutTemplate } from 'lucide-react'
@@ -25,11 +25,15 @@ export default async function NuevaPromocionPage({
   const prefill = plantilla ? promocionPrefill(plantilla) : null
 
   const campanas = companyId
-    ? await prisma.campana.findMany({
-        where: { companyId, activo: true },
-        select: { id: true, nombre: true },
-        orderBy: { createdAt: 'desc' },
-      })
+    ? await conEmpresaOTodas(
+      companyId,
+      'promociones · nuevo: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.campana.findMany({
+          where: { companyId, activo: true },
+          select: { id: true, nombre: true },
+          orderBy: { createdAt: 'desc' },
+        })
+    )
     : []
 
   return (

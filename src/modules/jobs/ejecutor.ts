@@ -35,8 +35,8 @@ export async function ejecutarTrabajo(carga: CargaTrabajo): Promise<ResultadoTra
       )
       const r = await ejecutarAutomatizacionesEmpresa(carga.companyId)
       return {
-        procesados: r.cumpleanos + r.porVencer + r.inactivos,
-        detalle: `cumpleaños ${r.cumpleanos} · por vencer ${r.porVencer} · inactivos ${r.inactivos}`,
+        procesados: r.cumpleanos + r.porVencer + r.inactivos + r.vigilancia,
+        detalle: `cumpleaños ${r.cumpleanos} · por vencer ${r.porVencer} · inactivos ${r.inactivos} · vigilancia ${r.vigilancia}`,
       }
     }
     case 'email':

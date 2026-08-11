@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import type { CompraEstado } from '@prisma/client'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { PROMO_TIPO_LABEL } from '@/lib/promociones'
 import { formatDate, formatMoney } from '@/lib/format'
@@ -39,14 +39,16 @@ const ETIQUETA_ESTADO: Record<EstadoPromo, string> = {
 }
 
 async function fetchPromos(companyId: string | null) {
-  return prisma.promocion.findMany({
+  return conEmpresaOTodas(companyId, 'promociones: sin empresa activa es el superadmin', (tx) =>
+    tx.promocion.findMany({
     where: companyId ? { companyId } : {},
     include: {
       company: { select: { name: true } },
       _count: { select: { guardadaPor: true } },
     },
-    orderBy: [{ archivada: 'asc' }, { prioridad: 'desc' }, { createdAt: 'desc' }],
-  })
+      orderBy: [{ archivada: 'asc' }, { prioridad: 'desc' }, { createdAt: 'desc' }],
+    })
+  )
 }
 
 function PromoCard({ p, showCompany }: { p: PromoRow; showCompany: boolean }) {
@@ -159,21 +161,25 @@ function PromoCard({ p, showCompany }: { p: PromoRow; showCompany: boolean }) {
 async function fetchVentas(companyId: string | null) {
   const where = companyId ? { companyId } : {}
   const activadas: CompraEstado[] = ['ACTIVA', 'CONSUMIDA', 'EXPIRADA']
-  const [porEstado, ingresos, usos, porCliente] = await Promise.all([
-    prisma.productoCompra.groupBy({ by: ['estado'], where, _count: { _all: true } }),
-    prisma.productoCompra.aggregate({
-      where: { ...where, pagoConfirmado: true },
-      _sum: { montoPagado: true },
-    }),
-    // QR usados = usos consumidos = usosIncluidos − usosRestantes en las que
-    // llegaron a activarse (mismo cálculo que ve el cliente).
-    prisma.productoCompra.aggregate({
-      where: { ...where, estado: { in: activadas } },
-      _sum: { usosIncluidos: true, usosRestantes: true },
-    }),
-    // Clientes distintos que adquirieron: nuevos (1 compra) vs recurrentes (>1).
-    prisma.productoCompra.groupBy({ by: ['clienteId'], where, _count: { _all: true } }),
-  ])
+  const [porEstado, ingresos, usos, porCliente] = await conEmpresaOTodas(
+    companyId,
+    'promociones: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => Promise.all([
+      tx.productoCompra.groupBy({ by: ['estado'], where, _count: { _all: true } }),
+      tx.productoCompra.aggregate({
+        where: { ...where, pagoConfirmado: true },
+        _sum: { montoPagado: true },
+      }),
+      // QR usados = usos consumidos = usosIncluidos − usosRestantes en las que
+      // llegaron a activarse (mismo cálculo que ve el cliente).
+      tx.productoCompra.aggregate({
+        where: { ...where, estado: { in: activadas } },
+        _sum: { usosIncluidos: true, usosRestantes: true },
+      }),
+      // Clientes distintos que adquirieron: nuevos (1 compra) vs recurrentes (>1).
+      tx.productoCompra.groupBy({ by: ['clienteId'], where, _count: { _all: true } }),
+    ])
+  )
   const count = (estados: string[]) =>
     porEstado.filter((r) => estados.includes(r.estado)).reduce((s, r) => s + r._count._all, 0)
 

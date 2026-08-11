@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { ScannerClient } from '@/components/scanner/ScannerClient'
 import { ScannerErrorBoundary } from '@/components/scanner/ScannerErrorBoundary'
 import { VisitasDeHoy } from '@/components/scanner/VisitasDeHoy'
@@ -26,14 +26,16 @@ export async function ScannerScreen({
   let modoDefault: 'camara' | 'lector' = 'camara'
   try {
     if (companyId) {
-      const [suc, company] = await Promise.all([
-        prisma.sucursal.findMany({
-          where: { companyId, activa: true },
-          orderBy: { nombre: 'asc' },
-          select: { id: true, nombre: true },
-        }),
-        prisma.company.findUnique({ where: { id: companyId }, select: { escanerModo: true } }),
-      ])
+      const [suc, company] = await conEmpresa(companyId, (tx) =>
+        Promise.all([
+          tx.sucursal.findMany({
+            where: { companyId, activa: true },
+            orderBy: { nombre: 'asc' },
+            select: { id: true, nombre: true },
+          }),
+          tx.company.findUnique({ where: { id: companyId }, select: { escanerModo: true } }),
+        ])
+      )
       sucursales = suc
       if (company?.escanerModo === 'lector') modoDefault = 'lector'
     }

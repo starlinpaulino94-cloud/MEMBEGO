@@ -63,6 +63,39 @@ const BLANCA = new Map([
   ['modules/observabilidad/metricas.ts', 'métricas de plataforma cross-tenant (sinEmpresa)'],
 ])
 
+/**
+ * PUNTO CIEGO CORREGIDO (2026-08).
+ *
+ * Este recorrido miraba solo `.ts`. En una aplicación de App Router, una parte
+ * enorme de las consultas vive en **componentes de servidor** (`.tsx`): las
+ * páginas del panel consultan Prisma directamente. El gate informaba «✓ todos
+ * los archivos con consultas usan conEmpresa/sinEmpresa» contando 9 archivos,
+ * cuando en realidad había 91 tocando la base.
+ *
+ * No era un fallo inofensivo: era exactamente el que hace que se encienda RLS
+ * creyendo que el trabajo está hecho. Con `membego_app`, una consulta sin
+ * contexto no da error — devuelve CERO filas. El panel se queda en blanco y
+ * los registros no dicen por qué.
+ */
+/**
+ * EL ATRASO de la migración a `conEmpresa`. **Terminada el 2026-08-11.**
+ *
+ * Nació con 85 archivos, el día que se descubrió que este mismo gate solo
+ * miraba `.ts` y por eso daba por cubierto un panel que vive en `.tsx`. Se
+ * escribió uno por uno a propósito: un tope numérico («permitir 85») deja
+ * cambiar unos por otros sin que se note; una lista nominal solo se puede
+ * acortar.
+ *
+ * Se vació en cuatro tandas —admin, superadmin, cliente y mostrador— y se deja
+ * aquí, vacía, por una razón: si algún día vuelve a tener entradas, será porque
+ * alguien aflojó el gate para dejar pasar algo, no porque el atraso reapareciera
+ * solo. Con la lista vacía, cualquier archivo sin contexto falla en el acto.
+ */
+const PENDIENTES = new Set([
+  // Vacía desde 2026-08-11: la migración terminó. Si algo vuelve a entrar aquí,
+  // es que se aflojó el gate — no que el atraso reapareciera solo.
+])
+
 function archivosTS(dir) {
   const salida = []
   for (const entrada of readdirSync(dir)) {
@@ -70,7 +103,10 @@ function archivosTS(dir) {
     if (statSync(ruta).isDirectory()) {
       if (['__tests__', 'node_modules'].includes(entrada)) continue
       salida.push(...archivosTS(ruta))
-    } else if (entrada.endsWith('.ts') && !entrada.endsWith('.test.ts') && !entrada.endsWith('.spec.ts')) {
+    } else if (
+      (entrada.endsWith('.ts') || entrada.endsWith('.tsx')) &&
+      !/\.(test|spec)\.tsx?$/.test(entrada)
+    ) {
       salida.push(ruta)
     }
   }
@@ -79,9 +115,11 @@ function archivosTS(dir) {
 
 /** ¿El archivo usa los envoltorios de tenant? */
 function usaTenant(contenido) {
-  return /import\s*\{[^}]*\b(conEmpresa|sinEmpresa)\b[^}]*\}\s*from\s*['"]@\/lib\/tenant['"]/.test(
+  // `conEmpresaOTodas` cuenta: elige entre los dos según haya empresa o no
+  // (superadmin). Va primero en la alternancia para que no lo coma `conEmpresa`.
+  return /import\s*\{[^}]*\b(conEmpresaOTodas|conEmpresa|sinEmpresa)\b[^}]*\}\s*from\s*['"]@\/lib\/tenant['"]/.test(
     contenido
-  ) || /[^.\w](conEmpresa|sinEmpresa)\s*\(/.test(contenido)
+  ) || /[^.\w](conEmpresaOTodas|conEmpresa|sinEmpresa)\s*\(/.test(contenido)
 }
 
 /** ¿El archivo toca la base (consultas Prisma o SQL crudo)? */
@@ -92,20 +130,33 @@ function tocaBase(contenido) {
 }
 
 const huecos = []
+const atrasados = []
 let archivosConBase = 0
+let archivosCubiertos = 0
 let sitiosDeConsulta = 0
 
 for (const ruta of archivosTS(RAIZ)) {
   const relativa = ruta.replace(`${RAIZ}/`, '')
   const contenido = readFileSync(ruta, 'utf8')
 
-  if (!tocaBase(contenido)) continue
+  const conTenant = usaTenant(contenido)
+  if (!tocaBase(contenido)) {
+    if (conTenant) archivosCubiertos++
+    continue
+  }
   archivosConBase++
   sitiosDeConsulta += (contenido.match(/[^.\w]prisma\s*\.\s*[a-zA-Z]+\s*\./g) || []).length
   sitiosDeConsulta += (contenido.match(/\$queryRaw|\$executeRaw/g) || []).length
 
-  if (usaTenant(contenido)) continue
+  if (usaTenant(contenido)) {
+    archivosCubiertos++
+    continue
+  }
   if (BLANCA.has(relativa)) continue
+  if (PENDIENTES.has(relativa)) {
+    atrasados.push(relativa)
+    continue
+  }
   huecos.push(relativa)
 }
 
@@ -113,10 +164,35 @@ huecos.sort()
 
 console.log('Cobertura de contexto de empresa para RLS')
 console.log('─'.repeat(60))
-console.log(`${C.dim}Archivos que tocan la base: ${archivosConBase} · sitios de consulta aprox.: ${sitiosDeConsulta}${C.off}`)
+// Se cuentan APARTE los que ya usan los envoltorios. Tras la migración casi
+// nadie llama a `prisma.` directamente —se usa el `tx` de la transacción—, así
+// que sin esta segunda cifra el informe parecería decir que la aplicación
+// dejó de tocar la base.
+console.log(
+  `${C.dim}Archivos con contexto de empresa: ${archivosCubiertos} · ` +
+    `con llamadas directas a prisma: ${archivosConBase} (${sitiosDeConsulta} sitios)${C.off}`
+)
+
+// El atraso conocido se dice SIEMPRE y con su número. Un pendiente que no se
+// imprime deja de existir a las dos semanas, y es justo lo que pasó: el gate
+// informaba «✓ todo cubierto» mirando 9 archivos de 95.
+if (atrasados.length > 0) {
+  console.log(
+    `${C.avi}⚠${C.off}  ${atrasados.length} archivo(s) pendientes de la migración a conEmpresa ` +
+      `(lista PENDIENTES del script).`
+  )
+  console.log(
+    `${C.dim}   RLS Capa 2 NO debe encenderse mientras esta lista no esté vacía: con ` +
+      `membego_app,\n   una consulta sin contexto devuelve cero filas en silencio.${C.off}`
+  )
+}
 
 if (huecos.length === 0) {
-  console.log(`${C.ok}✓${C.off} Todos los archivos con consultas usan conEmpresa/sinEmpresa (o están justificados).`)
+  console.log(
+    atrasados.length === 0
+      ? `${C.ok}✓${C.off} Todos los archivos con consultas usan conEmpresa/sinEmpresa (o están justificados).`
+      : `${C.ok}✓${C.off} Ningún archivo NUEVO sin contexto (los pendientes están inventariados arriba).`
+  )
 } else {
   console.log(`${C.mal}✗ ${huecos.length} archivo(s) con consultas sin envoltorio de tenant:${C.off}`)
   for (const h of huecos) console.log(`   ${h}`)

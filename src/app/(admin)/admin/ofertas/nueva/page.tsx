@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { CrearOfertaForm } from '@/components/ofertas/CrearOfertaForm'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
@@ -18,12 +18,16 @@ export default async function NuevaOfertaPage() {
     return <SinEmpresaActiva seccion="tus regalos VIP" />
   }
 
-  const clientes = await prisma.cliente.findMany({
-    where: { companyId },
-    select: { id: true, nombre: true, email: true, telefono: true },
-    orderBy: { nombre: 'asc' },
-    take: 1000,
-  })
+  const clientes = await conEmpresaOTodas(
+    companyId,
+    'ofertas · nueva: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.cliente.findMany({
+      where: { companyId },
+      select: { id: true, nombre: true, email: true, telefono: true },
+      orderBy: { nombre: 'asc' },
+      take: 1000,
+    })
+  )
 
   return (
     <div className="max-w-3xl space-y-6">

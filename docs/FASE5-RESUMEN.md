@@ -14,8 +14,30 @@ con `conEmpresa`/`sinEmpresa` de `src/lib/tenant.ts`, de modo que cuando se
 encienda RLS (cambiando `DATABASE_URL` a `membego_app`), cada transacción
 declare su empresa y las políticas de PostgreSQL filtren correctamente.
 
-**Resultado:** 0 archivos con consultas `prisma.` o `$queryRaw` sin envoltorio
-de tenant (verificado con `node scripts/rls-cobertura.mjs`).
+**Resultado (declarado entonces):** 0 archivos con consultas `prisma.` o
+`$queryRaw` sin envoltorio de tenant.
+
+> ### ⚠️ Corrección · 2026-08-11
+>
+> **Ese resultado era falso, y el gate que lo midió tenía un punto ciego.**
+> `scripts/rls-cobertura.mjs` recorría solo archivos `.ts`. En App Router, una
+> parte enorme de las consultas vive en **componentes de servidor** (`.tsx`):
+> las páginas del panel llaman a Prisma directamente. El gate informaba
+> «✓ todos cubiertos» contando **9** archivos cuando en realidad había **95**
+> tocando la base.
+>
+> Medido de nuevo con el gate corregido: **85 archivos y ~188 sitios de
+> consulta siguen sin envoltorio** — 44 pantallas de admin, 11 de superadmin,
+> 6 de cliente, 1 de empleado y 2 componentes.
+>
+> **Resuelto el mismo día:** los 85 se migraron en cuatro tandas (admin 57,
+> superadmin 12, cliente 10, mostrador 6) y la lista `PENDIENTES` del gate está
+> vacía. Lo que sigue es el registro de lo que se encontró.
+>
+> **Consecuencia que se evitó:** encender la Capa 2 con el gate anterior habría
+> dejado en blanco la mayor parte del panel. Con `membego_app` una consulta sin contexto **no da error**:
+> devuelve cero filas. Ver el inventario nominal en la lista `PENDIENTES` del
+> script y el estado real en `docs/RLS.md`.
 
 ---
 
@@ -191,7 +213,7 @@ const user = await sinEmpresa('auth-user-lookup', (tx) =>
 ```
 npx tsc --noEmit              → 0 errores (solo artefactos .next)
 bun run test                  → 286/286 pass
-node scripts/rls-cobertura.mjs → ✓ 0 gaps, 4 archivos whitelisted
+node scripts/rls-cobertura.mjs → ✓ 0 gaps  ← medida inválida: solo miraba .ts (ver corrección arriba)
 ```
 
 ---

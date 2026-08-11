@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { EditarPlanForm } from '@/components/admin/EditarPlanForm'
 
 export default async function EditarPlanPage({
@@ -14,10 +14,13 @@ export default async function EditarPlanPage({
   await requireRole('SUPERADMIN')
   const { id } = await params
 
-  const plan = await prisma.plan.findUnique({
-    where: { id },
-    include: { company: true },
-  })
+  const plan = await sinEmpresa(
+    'planes globales · editar: el superadmin edita el plan de cualquier empresa',
+    (tx) => tx.plan.findUnique({
+      where: { id },
+      include: { company: true },
+    })
+  )
   if (!plan) notFound()
 
   return (

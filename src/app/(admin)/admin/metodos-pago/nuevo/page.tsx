@@ -1,6 +1,6 @@
 import { requireRole } from '@/lib/auth/guards'
+import { sinEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { MetodoPagoForm } from '@/components/admin/MetodoPagoForm'
 
 export default async function NuevoMetodoPagoPage() {
@@ -10,9 +10,10 @@ export default async function NuevoMetodoPagoPage() {
   // pertenece el método de pago. El admin de empresa usa la suya (sin selector).
   const companies =
     user.metadata.role === 'SUPERADMIN'
-      ? await prisma.company
-          .findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
-          .catch(() => [])
+      ? await sinEmpresa(
+          'metodos-pago · nuevo: el superadmin elige a qué empresa pertenece',
+          (tx) => tx.company.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+        ).catch(() => [])
       : undefined
 
   return (

@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { UsuarioStaffForm } from '@/components/superadmin/UsuarioStaffForm'
 import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButton'
 
@@ -16,23 +16,26 @@ export default async function EditarUsuarioStaffPage({
   await requireRole('SUPERADMIN')
   const { id } = await params
 
-  const [usuario, companies] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        companyId: true,
-        empresasAcceso: { select: { companyId: true } },
-      },
-    }),
-    prisma.company.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    }),
-  ])
+  const [usuario, companies] = await sinEmpresa(
+    'usuarios de la plataforma: la ficha es de cualquier empresa',
+    (tx) => Promise.all([
+      tx.user.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          companyId: true,
+          empresasAcceso: { select: { companyId: true } },
+        },
+      }),
+      tx.company.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      }),
+    ])
+  )
 
   // Solo staff: las cuentas SUPERADMIN y CLIENTE no se editan desde aquí.
   if (!usuario || usuario.role === 'SUPERADMIN' || usuario.role === 'CLIENTE') {

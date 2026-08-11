@@ -84,7 +84,16 @@ bun.lockb
 .zscripts/
 mini-services/
 skills/
-examples/
+examples/*
+# ...salvo los manifiestos de satélite: son fixtures que las pruebas LEEN, no
+# scratch. `examples/` entero ignorado se tragó restaurant.json en la Fase 7 y
+# dejó `npm test` en rojo en todo clon limpio, porque el archivo solo existía en
+# la máquina donde se escribió.
+#
+# Va por niveles a propósito: git no entra en un directorio excluido, así que un
+# `!examples/manifiestos/` colgando de `examples/` no re-incluye nada. Hay que
+# abrir el padre (`examples/*`) para que llegue a leer la excepción.
+!examples/manifiestos/
 
 # Pruebas de extremo a extremo (Playwright)
 /test-results/

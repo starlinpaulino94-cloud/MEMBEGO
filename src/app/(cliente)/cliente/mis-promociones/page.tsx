@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { ChevronRight, Ticket, Clock, History, Sparkles, Gift } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { getRegalosCliente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
@@ -119,9 +119,21 @@ export default async function MisPromocionesPage() {
   // solo veía que no estaba. Ver `afiliacion.ts`.
   const clienteIds = await misClienteIds(user.supabaseId)
 
+  // `clienteIds` (fase 5): la lista de ofertas reclamadas también es de la
+  // persona, no de una sola ficha.
   const regalos = await getRegalosCliente(clienteIds).catch(() => [])
-  const compras = await prisma.productoCompra
-    .findMany({
+  // CRUZA EMPRESAS A PROPÓSITO, y es el motivo por el que existe `clienteIds`:
+  // la misma persona tiene una ficha por negocio, y filtrar por la activa hacía
+  // que una recompensa reclamada en otro se guardara bien y no apareciera en
+  // ningún sitio. Un `conEmpresa` aquí reintroduciría ese fallo.
+  //
+  // El `sinEmpresa` viene del barrido de RLS de `main` y hay que conservarlo:
+  // con las políticas puestas, una llamada suelta a `prisma` sin contexto no
+  // devuelve NADA, así que esta pantalla se habría quedado vacía.
+  const compras = await sinEmpresa(
+    'mis beneficios: la persona los ve de todos los negocios donde tiene ficha',
+    (tx) =>
+      tx.productoCompra.findMany({
       where: { clienteId: { in: clienteIds } },
       select: {
         id: true,
@@ -132,10 +144,10 @@ export default async function MisPromocionesPage() {
         promocion: { select: { titulo: true, imagenUrl: true, tipo: true } },
         company: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
-    .catch(() => [])
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      })
+  ).catch(() => [])
 
   const activas = compras.filter((c) => c.estado === 'ACTIVA')
   const pendientes = compras.filter((c) => PENDIENTES.includes(c.estado))
