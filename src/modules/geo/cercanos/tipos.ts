@@ -58,7 +58,15 @@ export interface SucursalCercana {
   horarioTexto: string | null
   categorias: string[]
   promedioRating: number | null
+  /** La sigue (`CompanyFollow`): suscripción a sus novedades. */
   esFavorita: boolean
+  /**
+   * Ya tiene ficha en ese negocio: una relación comercial, con su historial y
+   * sus beneficios. No es lo mismo que seguirlo, y el mapa lo dice por
+   * separado — antes solo marcaba el seguimiento, así que un negocio del que
+   * ya era clienta se le ofrecía igual que uno que no había pisado nunca.
+   */
+  esCliente: boolean
   /** Ruta de detalle dentro de la app (tarjeta del mapa). */
   urlDetalle: string
 }

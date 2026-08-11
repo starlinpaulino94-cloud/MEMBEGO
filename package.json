@@ -31,6 +31,7 @@
     "verificar:perfil-empresa": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-perfil-empresa.mts",
     "verificar:invitaciones": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-invitaciones.mts",
     "verificar:cuenta-y-ayuda": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cuenta-y-ayuda.mts",
+    "verificar:cerca-de-mi": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cerca-de-mi.mts",
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
     "auditar:placas": "node scripts/auditar-placas.mjs"

@@ -46,6 +46,7 @@ export interface FilaSucursalCercana {
   ofertaTitulo: string | null
   promedioRating: number | null
   esFavorita: boolean
+  esCliente: boolean
   horarioDetallado: string | null
   categorias: string[]
 }
@@ -53,6 +54,15 @@ export interface FilaSucursalCercana {
 export interface BaseBusqueda {
   filtros?: FiltrosCercanos
   userId?: string | null
+  /**
+   * Identidad de la PERSONA, para marcar los negocios donde ya tiene ficha.
+   *
+   * Va aparte de `userId` porque son dos relaciones distintas y se leen de
+   * tablas distintas: seguir vive en `company_follows` (por `User`), ser
+   * cliente vive en `clientes` (por `supabaseId`). El mapa las enseña por
+   * separado — ver `esCliente` en `tipos.ts`.
+   */
+  supabaseId?: string | null
   ahora?: Date
 }
 
@@ -140,12 +150,28 @@ const COLUMNAS_BASE = Prisma.sql`
   COALESCE(cat.nombres, ARRAY[]::text[]) AS categorias
 `
 
-/** JOINs compartidos: empresa, lateral de ofertas y categorías, favorita. */
-function joinsSucursales(f: FiltrosCercanos, ahora: Date, userId: string | null): Prisma.Sql {
+/**
+ * JOINs compartidos: empresa, lateral de ofertas y categorías, favorita y
+ * ficha de cliente.
+ *
+ * SEGUIR Y SER CLIENTE SON DOS COSAS. El mapa marcaba solo el seguimiento, así
+ * que un negocio donde la persona lleva un año siendo clienta se le ofrecía
+ * igual que uno que no ha pisado nunca. La ficha vive en `clientes` y se cruza
+ * por `supabaseId` —la persona—, no por la empresa activa.
+ */
+function joinsSucursales(
+  f: FiltrosCercanos,
+  ahora: Date,
+  userId: string | null,
+  supabaseId: string | null
+): Prisma.Sql {
   const promo = condicionPromo(Prisma.sql`p`, ahora, f.soloGratis ?? false)
   const promo2 = condicionPromo(Prisma.sql`p2`, ahora, f.soloGratis ?? false)
   const fav = userId
     ? Prisma.sql`LEFT JOIN "company_follows" cf ON cf."companyId" = c.id AND cf."userId" = ${userId}`
+    : Prisma.empty
+  const ficha = supabaseId
+    ? Prisma.sql`LEFT JOIN "clientes" cl ON cl."companyId" = c.id AND cl."supabaseId" = ${supabaseId}`
     : Prisma.empty
   return Prisma.sql`
     FROM "sucursales" s
@@ -164,11 +190,23 @@ function joinsSucursales(f: FiltrosCercanos, ahora: Date, userId: string | null)
       WHERE ctc."companyId" = c.id AND bc.active
     ) cat ON true
     ${fav}
+    ${ficha}
   `
 }
 
 function columnaFavorita(userId: string | null): Prisma.Sql {
   return userId ? Prisma.sql`(cf.id IS NOT NULL) AS "esFavorita"` : Prisma.sql`false AS "esFavorita"`
+}
+
+/**
+ * Sin sesión se devuelve `false` en vez de omitir la columna: el mapa es
+ * público y la forma de la respuesta tiene que ser la misma con y sin sesión,
+ * o la UI tendría dos contratos que mantener.
+ */
+function columnaCliente(supabaseId: string | null): Prisma.Sql {
+  return supabaseId
+    ? Prisma.sql`(cl.id IS NOT NULL) AS "esCliente"`
+    : Prisma.sql`false AS "esCliente"`
 }
 
 /**
@@ -179,7 +217,10 @@ export async function buscarCercanosRaw(
   params: BaseBusqueda & { lat: number; lng: number; radioKm: number; limit: number; offset?: number },
   postgis = false
 ): Promise<{ filas: FilaSucursalCercana[]; hayMas: boolean }> {
-  const { lat, lng, radioKm, limit, offset = 0, filtros = {}, userId = null, ahora = new Date() } = params
+  const {
+    lat, lng, radioKm, limit, offset = 0, filtros = {},
+    userId = null, supabaseId = null, ahora = new Date(),
+  } = params
   // "Abierto ahora" se filtra en el mapeo (zona horaria local): se piden más
   // filas de las necesarias para no devolver páginas medio vacías.
   const internoLimit = Math.min((filtros.abiertosAhora ?? false) ? limit * 4 : limit + 1, 300)
@@ -189,8 +230,9 @@ export async function buscarCercanosRaw(
       SELECT
         ${COLUMNAS_BASE},
         ${distanciaDesde(postgis, Prisma.sql`${lat}`, Prisma.sql`${lng}`, Prisma.sql`s`)} AS "distanciaM",
-        ${columnaFavorita(userId)}
-      ${joinsSucursales(filtros, ahora, userId)}
+        ${columnaFavorita(userId)},
+        ${columnaCliente(supabaseId)}
+      ${joinsSucursales(filtros, ahora, userId, supabaseId)}
       WHERE ${Prisma.join(condicionesFiltros(filtros), ' AND ')}
       AND ${postgis
         ? Prisma.sql`s.location IS NOT NULL AND ST_DWithin(
@@ -226,7 +268,10 @@ export async function buscarEnViewportRaw(
   },
   postgis = false
 ): Promise<FilaSucursalCercana[]> {
-  const { viewport, limit = 100, filtros = {}, userId = null, ahora = new Date(), ancla = null } = params
+  const {
+    viewport, limit = 100, filtros = {},
+    userId = null, supabaseId = null, ahora = new Date(), ancla = null,
+  } = params
   const { west, south, east, north } = viewport
   const latCentro = ancla?.lat ?? (south + north) / 2
   const lngCentro = ancla?.lng ?? (west + east) / 2
@@ -236,8 +281,9 @@ export async function buscarEnViewportRaw(
       SELECT
         ${COLUMNAS_BASE},
         ${distanciaDesde(postgis, Prisma.sql`${latCentro}`, Prisma.sql`${lngCentro}`, Prisma.sql`s`)} AS "distanciaM",
-        ${columnaFavorita(userId)}
-      ${joinsSucursales(filtros, ahora, userId)}
+        ${columnaFavorita(userId)},
+        ${columnaCliente(supabaseId)}
+      ${joinsSucursales(filtros, ahora, userId, supabaseId)}
       WHERE ${Prisma.join(condicionesFiltros(filtros), ' AND ')}
       AND ${postgis
         ? Prisma.sql`ST_Intersects(s.location::geometry, ST_MakeEnvelope(${west}, ${south}, ${east}, ${north}, 4326))`
@@ -284,6 +330,7 @@ function filaADto(f: FilaSucursalCercana): SucursalCercana {
     categorias: Array.isArray(f.categorias) ? f.categorias : [],
     promedioRating: f.promedioRating,
     esFavorita: f.esFavorita,
+    esCliente: f.esCliente,
     urlDetalle: `/cliente/empresas/${f.empresaSlug}?sucursal=${f.id}&origen=cerca`,
   }
 }
