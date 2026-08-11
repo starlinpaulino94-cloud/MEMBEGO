@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import Image from 'next/image'
 import {
   Building2,
@@ -13,7 +14,6 @@ import {
   FlaskConical,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -72,14 +72,20 @@ const SELECT_EMPRESA = {
  */
 async function empresasDelPanel() {
   try {
-    return await prisma.company.findMany({
-      orderBy: { name: 'asc' },
-      select: { ...SELECT_EMPRESA, esDemo: true },
-    })
+    return await sinEmpresa(
+      'panel de plataforma: los totales son de todas las empresas',
+      (tx) => tx.company.findMany({
+        orderBy: { name: 'asc' },
+        select: { ...SELECT_EMPRESA, esDemo: true },
+      })
+    )
   } catch {
-    const filas = await prisma.company
-      .findMany({ orderBy: { name: 'asc' }, select: SELECT_EMPRESA })
-      .catch(() => [])
+    const filas = await sinEmpresa(
+      'panel de plataforma: los totales son de todas las empresas',
+      (tx) => tx.company
+        .findMany({ orderBy: { name: 'asc' }, select: SELECT_EMPRESA })
+        .catch(() => [])
+    )
     return filas.map((f) => ({ ...f, esDemo: false }))
   }
 }
@@ -87,11 +93,19 @@ async function empresasDelPanel() {
 /** Clientes nuevos SIN contar los de las empresas de práctica. */
 async function nuevosReales(desde: Date) {
   try {
-    return await prisma.cliente.count({
-      where: { createdAt: { gte: desde }, company: { esDemo: false } },
-    })
+    return await sinEmpresa(
+      'panel de plataforma: los totales son de todas las empresas',
+      (tx) => tx.cliente.count({
+        where: { createdAt: { gte: desde }, company: { esDemo: false } },
+      })
+    )
   } catch {
-    return prisma.cliente.count({ where: { createdAt: { gte: desde } } }).catch(() => 0)
+    // Respaldo por si la columna `esDemo` todavía no está migrada: cuenta sin
+    // excluir las empresas de práctica. También necesita contexto.
+    return sinEmpresa(
+      'panel de plataforma: los totales son de todas las empresas',
+      (tx) => tx.cliente.count({ where: { createdAt: { gte: desde } } })
+    ).catch(() => 0)
   }
 }
 
@@ -176,40 +190,43 @@ export default async function SuperadminDashboard() {
   // Conteos agregados en pocas queries: los de membresías salen de un solo
   // groupBy por companyId/estado.
   const [companies, membershipCounts, clientesNuevos30d, ticketsAbiertos, actividad] =
-    await Promise.all([
-      empresasDelPanel(),
-      prisma.membership
-        .groupBy({
-          by: ['companyId', 'estado'],
-          where: { estado: { in: ['ACTIVA', 'PENDIENTE_PAGO'] } },
-          _count: { _all: true },
-        })
-        .catch(() => []),
-      nuevosReales(hace30d),
-      // Cuenta la cola "Te toca a ti", no "todo lo no cerrado". El enlace lleva
-      // a /admin/tickets, que desde la Fase 15 abre en esa cola: si aquí se
-      // contara también ESPERANDO_CLIENTE, el panel diría "7" y la bandeja
-      // enseñaría 5 — el aviso y su destino tienen que hablar del mismo
-      // trabajo. Y un ticket esperando al cliente no es trabajo pendiente de
-      // la plataforma.
-      prisma.supportTicket
-        .count({ where: { estado: { in: [...COLAS_TICKET.pendientes] } } })
-        .catch(() => 0),
-      prisma.auditLog
-        .findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 8,
-          select: {
-            id: true,
-            accion: true,
-            entidadTipo: true,
-            createdAt: true,
-            company: { select: { name: true } },
-            user: { select: { name: true } },
-          },
-        })
-        .catch(() => []),
-    ])
+    await sinEmpresa(
+      'panel de plataforma: los totales son de todas las empresas',
+      (tx) => Promise.all([
+        empresasDelPanel(),
+        tx.membership
+          .groupBy({
+            by: ['companyId', 'estado'],
+            where: { estado: { in: ['ACTIVA', 'PENDIENTE_PAGO'] } },
+            _count: { _all: true },
+          })
+          .catch(() => []),
+        nuevosReales(hace30d),
+        // Cuenta la cola "Te toca a ti", no "todo lo no cerrado". El enlace lleva
+        // a /admin/tickets, que desde la Fase 15 abre en esa cola: si aquí se
+        // contara también ESPERANDO_CLIENTE, el panel diría "7" y la bandeja
+        // enseñaría 5 — el aviso y su destino tienen que hablar del mismo
+        // trabajo. Y un ticket esperando al cliente no es trabajo pendiente de
+        // la plataforma.
+        tx.supportTicket
+          .count({ where: { estado: { in: [...COLAS_TICKET.pendientes] } } })
+          .catch(() => 0),
+        tx.auditLog
+          .findMany({
+            orderBy: { createdAt: 'desc' },
+            take: 8,
+            select: {
+              id: true,
+              accion: true,
+              entidadTipo: true,
+              createdAt: true,
+              company: { select: { name: true } },
+              user: { select: { name: true } },
+            },
+          })
+          .catch(() => []),
+      ])
+    )
 
   const countFor = (companyId: string, estado: string) =>
     membershipCounts.find((g) => g.companyId === companyId && g.estado === estado)

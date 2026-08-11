@@ -1,6 +1,6 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,21 +30,24 @@ export default async function UsuariosStaffPage() {
     empresasAcceso: { company: { name: string } }[]
   }[] = []
   try {
-    usuarios = await prisma.user.findMany({
-      // Staff Y superadmins: los superadmins aparecen para poder otorgar o
-      // retirar el rango desde aquí (los clientes siguen fuera).
-      where: { role: { notIn: ['CLIENTE'] } },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        companyId: true,
-        company: { select: { name: true } },
-        empresasAcceso: { select: { company: { select: { name: true } } } },
-      },
-    })
+    usuarios = await sinEmpresa(
+      'usuarios de la plataforma: incluye a los de todas las empresas y a los que no tienen',
+      (tx) => tx.user.findMany({
+        // Staff Y superadmins: los superadmins aparecen para poder otorgar o
+        // retirar el rango desde aquí (los clientes siguen fuera).
+        where: { role: { notIn: ['CLIENTE'] } },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          companyId: true,
+          company: { select: { name: true } },
+          empresasAcceso: { select: { company: { select: { name: true } } } },
+        },
+      })
+    )
   } catch (e) {
     console.error('[superadmin-usuarios]', e)
   }
