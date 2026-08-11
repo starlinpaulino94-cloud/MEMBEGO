@@ -115,13 +115,6 @@ export default async function PagosPage({
     return <SinEmpresaTodavia que="pagos"
       detalle="Aquí aparecerán tus pagos cuando adquieras una membresía o una promoción." />
   }
-  if (!clienteId) {
-    return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">No autorizado.</p>
-      </main>
-    )
-  }
 
   const prefs = await getRegionalPrefs(user.metadata.companyId)
   const fmtMonto = (n: number | null) => (n ? formatMoney(n, prefs) : '—')
@@ -129,7 +122,11 @@ export default async function PagosPage({
   let data: Awaited<ReturnType<typeof getClientePagos>> = { membership: null, historial: [] }
   let loadError = false
   try {
-    data = await getClientePagos(clienteId)
+    // La PERSONA, no la ficha activa: un pago a un negocio y un pago a otro son
+    // los dos suyos. Con la ficha activa, la mitad de sus recibos desaparecía al
+    // cambiar de empresa y encontrar una factura pasaba por adivinar en qué
+    // contexto se hizo.
+    data = await getClientePagos(user.supabaseId)
   } catch (e) {
     loadError = true
     console.error('[cliente-pagos]', e)

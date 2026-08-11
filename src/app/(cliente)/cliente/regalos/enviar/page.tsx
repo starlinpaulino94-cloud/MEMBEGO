@@ -24,8 +24,12 @@ export default async function EnviarRegaloPage() {
     return <SinEmpresaTodavia que="beneficios que regalar"
       detalle="Para regalar necesitas tener beneficios con usos disponibles." />
   }
+  // Regalar es SIEMPRE dentro de un negocio: lo que se regala (una promoción,
+  // un plan, un monto) es suyo y se canjea allí. Esta pantalla se queda anclada
+  // a la empresa activa a propósito; lo que sí es global es el LISTADO de
+  // regalos, que es de la persona.
   const companyId = user.metadata.companyId
-  if (!clienteId || !companyId) {
+  if (!companyId) {
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 

@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { compraEstadoVisual } from '@/components/cliente/compra-estado'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,8 +104,12 @@ function Section({
 
 export default async function MisPromocionesPage() {
   const user = await requireRole('CLIENTE')
-  const clienteId = user.metadata.clienteId
-  if (!clienteId) return <p className="text-muted-foreground">No autorizado.</p>
+  // «No autorizado» era falso: quien acaba de registrarse está autorizado, solo
+  // que aún no ha adquirido nada. Ver `SinEmpresaTodavia`.
+  if (!user.metadata.clienteId) {
+    return <SinEmpresaTodavia que="beneficios"
+      detalle="Adquiere una recompensa de cualquier negocio y aparecerá aquí, lista para usar." />
+  }
 
   // TODAS las fichas de la persona, no solo la de la empresa activa.
   //
@@ -114,7 +119,7 @@ export default async function MisPromocionesPage() {
   // solo veía que no estaba. Ver `afiliacion.ts`.
   const clienteIds = await misClienteIds(user.supabaseId)
 
-  const regalos = await getRegalosCliente(clienteId).catch(() => [])
+  const regalos = await getRegalosCliente(clienteIds).catch(() => [])
   const compras = await prisma.productoCompra
     .findMany({
       where: { clienteId: { in: clienteIds } },

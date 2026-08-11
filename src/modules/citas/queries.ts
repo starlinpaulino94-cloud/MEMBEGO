@@ -128,19 +128,32 @@ export function diasDeVentana(cfg: AgendaConfigData, timeZone: string): DiaAgend
   return out
 }
 
-/** Citas del cliente (próximas primero, luego historial reciente). */
-export async function getCitasCliente(clienteId: string) {
-  const cliente = await sinEmpresa(
-    'citas: empresa del cliente para sus citas (se usa su empresa después)',
-    (tx) => tx.cliente.findUnique({ where: { id: clienteId }, select: { companyId: true } })
-  )
-  if (!cliente) return []
-  return conEmpresa(cliente.companyId, (tx) =>
+/**
+ * Citas del cliente (próximas primero, luego historial reciente).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DE LA PERSONA, Y CADA UNA CON SU NEGOCIO Y SU HORA
+ *
+ * Una cita se agenda CON un negocio, pero «Mis citas» es la agenda de la
+ * persona. Acotada a la ficha activa, quien tenía turno en el lavadero el
+ * martes y en la barbería el miércoles solo veía uno de los dos, y el otro le
+ * llegaba por sorpresa —o no le llegaba.
+ *
+ * Por eso cada cita viaja con `company`: el nombre, para poder decir CON QUIÉN
+ * es —una lista de horas sin negocio es inútil cuando son de varios—, y la
+ * ZONA HORARIA, porque la hora se pinta con la del negocio. Formateando todo
+ * con la zona de la empresa activa, una cita de otra región se mostraría a la
+ * hora equivocada: el peor fallo posible en una agenda, porque parece correcto.
+ */
+export async function getCitasCliente(clienteIds: string[]) {
+  if (clienteIds.length === 0) return []
+  return sinEmpresa('citas: mis citas, acotadas a MIS fichas (cruzan empresas)', (tx) =>
     tx.cita.findMany({
-      where: { clienteId },
+      where: { clienteId: { in: clienteIds } },
       include: {
         vehiculo: { select: { marca: true, modelo: true } },
         sucursal: { select: { nombre: true } },
+        company: { select: { name: true, zonaHoraria: true, idioma: true } },
       },
       orderBy: { inicio: 'desc' },
       take: 30,

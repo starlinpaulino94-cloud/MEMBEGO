@@ -34,20 +34,17 @@ export default async function RegalosPage() {
     return <SinEmpresaTodavia que="regalos"
       detalle="Los regalos te los envían otros usuarios o los negocios a los que sigues." />
   }
-  if (!clienteId) {
-    return (
-      <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
-    )
-  }
 
+  // La PERSONA, no la ficha activa: un regalo que le enviaron desde otro
+  // negocio también es suyo, y si no aparece aquí expira sin que lo vea.
   const [{ recibidos, enviados }, { recibidas: gcRecibidas, compradas: gcCompradas }] =
     await Promise.all([
-      getRegalosCliente(clienteId).catch(() => ({
+      getRegalosCliente(user.supabaseId).catch(() => ({
         recibidos: [],
         enviados: [],
         pendientesRecibidos: 0,
       })),
-      getGiftCardsCliente(clienteId).catch(() => ({ recibidas: [], compradas: [] })),
+      getGiftCardsCliente(user.supabaseId).catch(() => ({ recibidas: [], compradas: [] })),
     ])
   const giftCards = [...gcRecibidas, ...gcCompradas]
 

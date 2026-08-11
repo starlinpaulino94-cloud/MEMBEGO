@@ -336,11 +336,19 @@ export interface HistorialVisitas {
   visitas: VisitaHistorial[]
 }
 
+/**
+ * MI HISTORIAL — de la PERSONA, no de la empresa que tenga abierta.
+ *
+ * Una visita a un negocio y una visita a otro son las dos suyas. Filtrando por
+ * la ficha activa, cambiar de empresa le cambiaba el historial debajo de los
+ * pies: la mitad de sus visitas desaparecía sin explicación.
+ */
 export async function getClienteVisitas(
-  clienteId: string,
+  supabaseId: string,
   page = 1,
   pageSize = 20
 ): Promise<HistorialVisitas> {
+  const clienteIds = await misClienteIds(supabaseId)
   const skip = (page - 1) * pageSize
   const inicioMes = new Date()
   inicioMes.setDate(1)
@@ -348,10 +356,10 @@ export async function getClienteVisitas(
 
   const [total, esteMes, visitas] = await sinEmpresa('cliente: mi historial de visitas', (tx) =>
     Promise.all([
-      tx.visit.count({ where: { clienteId } }),
-      tx.visit.count({ where: { clienteId, fechaVisita: { gte: inicioMes } } }),
+      tx.visit.count({ where: { clienteId: { in: clienteIds } } }),
+      tx.visit.count({ where: { clienteId: { in: clienteIds }, fechaVisita: { gte: inicioMes } } }),
       tx.visit.findMany({
-        where: { clienteId },
+        where: { clienteId: { in: clienteIds } },
         select: {
           id: true,
           servicio: true,
@@ -538,10 +546,19 @@ export interface ClientePagos {
  * Datos de "Mis pagos": estado actual de la membresía + historial real de pagos
  * (aprobados/rechazados) reconstruido desde el AuditLog. Devuelve datos planos.
  */
-export async function getClientePagos(clienteId: string): Promise<ClientePagos> {
+/**
+ * MIS PAGOS — de la PERSONA.
+ *
+ * Un pago a un negocio y un pago a otro son los dos suyos, y su comprobante
+ * también. Filtrando por la ficha activa, la mitad de sus pagos desaparecía al
+ * cambiar de empresa — y encontrar una factura pasaba por adivinar en qué
+ * contexto se había hecho.
+ */
+export async function getClientePagos(supabaseId: string): Promise<ClientePagos> {
+  const clienteIds = await misClienteIds(supabaseId)
   const memberships = await sinEmpresa('cliente: mis membresías y pagos', (tx) =>
     tx.membership.findMany({
-      where: { clienteId },
+      where: { clienteId: { in: clienteIds } },
       include: { plan: true, metodoPago: true, planSolicitado: true },
       orderBy: { createdAt: 'desc' },
       take: 50,
