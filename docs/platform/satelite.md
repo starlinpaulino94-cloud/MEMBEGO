@@ -41,6 +41,11 @@ Eso escribe cinco filas —el tipo de negocio, el sistema, la relación N:M, la
 credencial y la habilitación— e imprime las tres variables del `.env` del
 satélite. **Ni un `switch`, ni un despliegue.**
 
+Hay uno completo y versionado en
+[`examples/manifiestos/restaurant.json`](../../examples/manifiestos/restaurant.json),
+que es además el que valida `tests/platform-satelite.test.ts`: si se toca, la
+prueba lo dice.
+
 ### Se piden capabilities, no scopes
 
 `"capabilities": ["BENEFIT_REDEMPTION"]` concede `benefits:read` y

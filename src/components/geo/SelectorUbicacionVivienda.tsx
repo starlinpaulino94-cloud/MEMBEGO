@@ -23,6 +23,9 @@ import { cn } from '@/lib/utils'
  * ubicación nunca es obligatoria, §2). El mapa de confirmación es opcional y
  * explica que la ubicación servirá para mostrar ofertas cercanas.
  *
+ * Con `sinMapa` el recorrido termina en «Sector». Así va el REGISTRO: ver el
+ * motivo en la propia prop.
+ *
  * Emite el resultado por `onChange` mientras se avanza y llama `onDone` cuando
  * el usuario completa (o omite) el flujo. Se usa en el asistente de registro
  * y en el perfil.
@@ -68,6 +71,8 @@ interface Opcion {
 type MiniPaso = 'pais' | 'region' | 'ciudad' | 'sector' | 'mapa'
 
 const ORDEN_MINIPASOS: MiniPaso[] = ['pais', 'region', 'ciudad', 'sector', 'mapa']
+/** El mismo recorrido sin el mapa. Ver `sinMapa`. */
+const ORDEN_SIN_MAPA: MiniPaso[] = ORDEN_MINIPASOS.filter((p) => p !== 'mapa')
 const ETIQUETAS: Record<MiniPaso, string> = {
   pais: 'País',
   region: 'Provincia',
@@ -81,6 +86,7 @@ export function SelectorUbicacionVivienda({
   onChange,
   onDone,
   sinEncabezado = false,
+  sinMapa = false,
 }: {
   value: UbicacionSeleccionada
   onChange: (v: UbicacionSeleccionada) => void
@@ -91,8 +97,21 @@ export function SelectorUbicacionVivienda({
    * país se veía "¿Dónde vives?" dos veces seguidas.
    */
   sinEncabezado?: boolean
+  /**
+   * Termina en «sector» y no pide confirmar el punto en el mapa.
+   *
+   * En el REGISTRO va encendido. Pedirle a alguien que acaba de llegar que
+   * marque en un mapa dónde vive es el momento de menos confianza que existe:
+   * todavía no ha usado nada, no sabe quién guarda ese dato, y la reacción
+   * normal es abandonar. Ciudad y sector bastan para lo que la ubicación sirve
+   * aquí —enseñar negocios cerca—, y quien quiera afinar puede hacerlo después
+   * desde su perfil, donde el mapa sigue estando.
+   */
+  sinMapa?: boolean
 }) {
   const [mini, setMini] = useState<MiniPaso>('pais')
+  /** Recorrido efectivo: de él salen el indicador de progreso y el «Atrás». */
+  const orden = sinMapa ? ORDEN_SIN_MAPA : ORDEN_MINIPASOS
   const [d, setD] = useState<UbicacionSeleccionada>(value)
 
   /**
@@ -230,7 +249,11 @@ export function SelectorUbicacionVivienda({
   function elegirSector(op: Opcion) {
     actualizarDatos({ sectorId: op.id, sectorNameRaw: op.name })
     setRefCoords(op.latitud != null && op.longitud != null ? { lat: op.latitud, lng: op.longitud } : null)
-    irA('mapa')
+    // Sin mapa, el sector ES el final. No se llama a `finalizar()` porque
+    // trabajaría sobre el `d` viejo: `actualizarDatos` ya emitió el valor
+    // nuevo, y sin mapa no hay coordenadas que añadirle.
+    if (sinMapa) onDone()
+    else irA('mapa')
   }
 
   function confirmarManual() {
@@ -240,7 +263,8 @@ export function SelectorUbicacionVivienda({
       irA('sector')
     } else if (mini === 'sector') {
       actualizarDatos({ sectorId: '', sectorNameRaw: manualText.trim() })
-      irA('mapa')
+      if (sinMapa) onDone()
+      else irA('mapa')
     }
   }
 
@@ -262,7 +286,8 @@ export function SelectorUbicacionVivienda({
       return
     }
     if (mini === 'sector') {
-      irA('mapa')
+      if (sinMapa) onDone()
+      else irA('mapa')
       return
     }
     if (mini === 'mapa') {
@@ -276,7 +301,7 @@ export function SelectorUbicacionVivienda({
   }
 
   const etiqueta2 = mini === 'region' ? regionLabel : ETIQUETAS[mini]
-  const pasoIdx = ORDEN_MINIPASOS.indexOf(mini)
+  const pasoIdx = orden.indexOf(mini)
   /** País y provincia salen de la división oficial: no se escriben a mano. */
   const puedeEscribirAMano = mini === 'ciudad' || mini === 'sector'
 
@@ -287,7 +312,7 @@ export function SelectorUbicacionVivienda({
     <div className="space-y-4">
       {/* Indicador de mini-pasos */}
       <div className="flex items-center gap-1" aria-label="Progreso de la ubicación">
-        {ORDEN_MINIPASOS.map((p, i) => (
+        {orden.map((p, i) => (
           <div
             key={p}
             title={ETIQUETAS[p]}
@@ -490,7 +515,7 @@ export function SelectorUbicacionVivienda({
         <Button
           type="button"
           variant="ghost"
-          onClick={() => (mini === 'pais' ? onDone() : irA(ORDEN_MINIPASOS[stepAtras()]))}
+          onClick={() => (mini === 'pais' ? onDone() : irA(orden[stepAtras()]))}
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" /> Atrás
         </Button>
@@ -521,6 +546,6 @@ export function SelectorUbicacionVivienda({
   )
 
   function stepAtras(): number {
-    return Math.max(0, ORDEN_MINIPASOS.indexOf(mini) - 1)
+    return Math.max(0, orden.indexOf(mini) - 1)
   }
 }
