@@ -261,6 +261,8 @@ export interface VehiculoCliente {
   esPrincipal: boolean
   /** Categoría del catálogo (Sedán, SUV…), si se registró. */
   categoria: string | null
+  /** Negocio en cuya ficha está registrado. Un coche puede estar en varias. */
+  empresaNombre: string | null
   /** Membresías a las que está asociado: por qué borrarlo no es trivial. */
   membresias: { id: string; planNombre: string; empresaNombre: string }[]
 }
@@ -273,12 +275,28 @@ export interface VehiculoCliente {
  * pantalla enseña además la categoría, cuál es el principal y a qué
  * membresías está asociado cada uno. Cargar todo eso en el perfil sería pagar
  * dos joins en una pantalla que no los muestra.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * UN VEHÍCULO PERTENECE A UNA FICHA, Y ESO NO SE CAMBIA AQUÍ
+ *
+ * En el modelo, `Vehiculo` cuelga de `Cliente` —la ficha de UNA empresa—, no
+ * de la persona. Tiene sentido: cada negocio le asigna su categoría, su tarifa
+ * y sus membresías, y esa clasificación es suya.
+ *
+ * Pero «Mis vehículos» enseñaba solo los de la ficha ACTIVA, así que el mismo
+ * coche aparecía y desaparecía según el negocio abierto, sin decir por qué.
+ * Ahora se listan los de TODAS sus fichas y cada uno dice de qué negocio es.
+ * La lista deja de mentir sin tocar el modelo — unificar los vehículos de
+ * verdad significaría fusionar categorías y tarifas de negocios distintos, y
+ * eso es una decisión comercial, no una migración de pantalla.
  */
-export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCliente[]> {
+export async function getVehiculosCliente(supabaseId: string): Promise<VehiculoCliente[]> {
   try {
-    const filas = await sinEmpresa('cliente: mis vehículos', (tx) =>
+    const clienteIds = await misClienteIds(supabaseId)
+    if (clienteIds.length === 0) return []
+    const filas = await sinEmpresa('cliente: mis vehículos (todas mis fichas)', (tx) =>
       tx.vehiculo.findMany({
-        where: { clienteId },
+        where: { clienteId: { in: clienteIds } },
         orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'desc' }],
         select: {
           id: true,
@@ -289,6 +307,10 @@ export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCl
           placa: true,
           esPrincipal: true,
           tipoVehiculo: { select: { nombre: true } },
+          // De qué negocio es esta ficha: con vehículos de varias empresas en
+          // la misma lista, el mismo coche puede salir dos veces y sin el
+          // nombre no hay forma de saber cuál es cuál.
+          cliente: { select: { company: { select: { name: true } } } },
           membresias: {
             select: {
               membership: {
@@ -313,6 +335,7 @@ export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCl
       placa: v.placa,
       esPrincipal: v.esPrincipal,
       categoria: v.tipoVehiculo?.nombre ?? null,
+      empresaNombre: v.cliente?.company?.name ?? null,
       membresias: v.membresias
         .map((mv) => mv.membership)
         .filter((m): m is NonNullable<typeof m> => Boolean(m))

@@ -36,8 +36,12 @@ const DESCRIPCION =
 
 export default async function VehiculosPage() {
   const user = await requireRole('CLIENTE')
+  // Los de TODAS sus fichas: un vehículo pertenece a la ficha de un negocio
+  // —cada uno le asigna su categoría y su tarifa—, así que el mismo coche
+  // aparecía y desaparecía según la empresa abierta. Ahora salen todos y cada
+  // tarjeta dice de qué negocio es.
   const vehiculos = user.metadata.clienteId
-    ? await getVehiculosCliente(user.metadata.clienteId)
+    ? await getVehiculosCliente(user.supabaseId)
     : []
 
   return (

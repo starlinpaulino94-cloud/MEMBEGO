@@ -11,6 +11,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { prisma } from '@/lib/prisma'
 import { getFaqs, listTicketsCliente, getComunicacionConfig } from '@/modules/soporte/queries'
 import { getOnboardingCliente } from '@/modules/social/queries'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import {
   renderPlantilla,
   buildWaLink,
@@ -70,7 +71,11 @@ export default async function AyudaPage() {
             .catch(() => null)
         : null,
       getFaqs(companyId ?? null, { activeOnly: true }).catch(() => []),
-      clienteId ? listTicketsCliente(clienteId).catch(() => []) : [],
+      // La PERSONA, no la ficha activa: un hilo abierto con otro negocio
+      // desaparecía de la vista y con él la respuesta que estaba esperando.
+      misClienteIds(supabaseId)
+        .then((ids) => listTicketsCliente(ids))
+        .catch(() => []),
       dbUserId && supabaseId
         ? getOnboardingCliente(dbUserId, supabaseId).catch(() => null)
         : null,
@@ -250,8 +255,12 @@ export default async function AyudaPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-foreground">{t.asunto}</p>
-                      <p className="text-caption text-muted-foreground">
-                        {t._count.mensajes} mensaje{t._count.mensajes !== 1 ? 's' : ''}
+                      {/* CON QUIÉN. Con hilos de varios negocios en la misma
+                          lista, un asunto sin destinatario no dice a quién se
+                          le preguntó. */}
+                      <p className="truncate text-caption text-muted-foreground">
+                        {t.company.name} · {t._count.mensajes} mensaje
+                        {t._count.mensajes !== 1 ? 's' : ''}
                       </p>
                     </div>
                     {teToca ? (

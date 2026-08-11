@@ -138,12 +138,35 @@ export async function getTicketDetail(id: string, includeInternal: boolean) {
   )
 }
 
-export async function listTicketsCliente(clienteId: string) {
-  return sinEmpresa('soporte: tickets por cliente (solo id)', (tx) =>
+/**
+ * LAS CONVERSACIONES DE LA PERSONA CON LOS NEGOCIOS.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ PASABA
+ *
+ * Se listaban los tickets de la ficha ACTIVA. Quien abría una consulta con un
+ * negocio y luego entraba a otro dejaba de ver su propia conversación —y con
+ * ella, la respuesta que estaba esperando—. Un hilo de soporte abierto que
+ * desaparece de la vista es peor que no tener soporte: la persona cree que se
+ * perdió y vuelve a escribir por otro canal.
+ *
+ * Cada ticket trae ahora el nombre de SU negocio: con hilos de varias empresas
+ * en la misma lista, un asunto sin destinatario no dice con quién se está
+ * hablando.
+ *
+ * `clienteIds` sale de `misClienteIds`, así que lo que acota la consulta son
+ * sus fichas — no un identificador que venga de la vista.
+ */
+export async function listTicketsCliente(clienteIds: string[]) {
+  if (clienteIds.length === 0) return []
+  return sinEmpresa('soporte: mis tickets (todas mis fichas)', (tx) =>
     tx.supportTicket.findMany({
-      where: { clienteId },
+      where: { clienteId: { in: clienteIds } },
       orderBy: { updatedAt: 'desc' },
-      include: { _count: { select: { mensajes: true } } },
+      include: {
+        _count: { select: { mensajes: true } },
+        company: { select: { name: true } },
+      },
       take: 100,
     })
   )

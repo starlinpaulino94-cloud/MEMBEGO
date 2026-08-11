@@ -194,6 +194,65 @@ export async function fichaEnEmpresa(
   return ficha?.id ?? null
 }
 
+/**
+ * Datos que son de la PERSONA y viven copiados en cada ficha.
+ *
+ * No incluye nada de la relación comercial —membresías, beneficios, historial,
+ * notas del negocio—: eso es de cada empresa y no se copia de un lado a otro.
+ */
+export interface DatosPersonales {
+  nombre: string
+  telefono: string | null
+  fechaNacimiento: Date | null
+  ciudad: string | null
+  genero: string | null
+  notifPromos: boolean
+  notifRecordatorios: boolean
+  avatarUrl?: string
+}
+
+/**
+ * ESCRIBIR SUS DATOS EN TODAS SUS FICHAS.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTO ES UNA FUNCIÓN Y NO ESTABA DENTRO DE LA ACCIÓN
+ *
+ * Una `server action` necesita sesión de Supabase, así que no se puede
+ * ejecutar en una verificación contra la base. Sacando aquí la parte que
+ * decide QUÉ se escribe y DÓNDE, lo que se comprueba en
+ * `scripts/verificar-cuenta-y-ayuda.mts` es el código de verdad y no una copia
+ * suya escrita en el script — que es una prueba que solo se prueba a sí misma.
+ *
+ * Cada ficha se escribe con `conEmpresa` de SU empresa: el aislamiento sigue
+ * puesto en cada escritura, y un fallo en una no tumba las demás.
+ *
+ * Devuelve cuántas fichas se actualizaron.
+ */
+export async function propagarDatosPersonales(
+  supabaseId: string,
+  datos: DatosPersonales
+): Promise<number> {
+  const fichas = await sinEmpresa('perfil: mis fichas para propagar mis datos', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId },
+      select: { id: true, companyId: true },
+    })
+  )
+  let escritas = 0
+  for (const ficha of fichas) {
+    const ok = await conEmpresa(ficha.companyId, (tx) =>
+      tx.cliente.update({ where: { id: ficha.id }, data: datos })
+    )
+      .then(() => true)
+      .catch((e) => {
+        console.error('[perfil] propagar a', ficha.companyId, e)
+        return false
+      })
+    if (ok) escritas++
+  }
+  return escritas
+}
+
 export async function misClienteIds(supabaseId: string): Promise<string[]> {
   const fichas = await sinEmpresa('cliente: todas mis fichas (para listar beneficios)', (tx) =>
     tx.cliente.findMany({ where: { supabaseId }, select: { id: true } })
