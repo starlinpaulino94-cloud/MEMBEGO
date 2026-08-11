@@ -17,8 +17,11 @@ test.describe('Asistente de registro (general)', () => {
     expect(respuesta?.status()).toBe(200)
 
     // Paso 1: una sola pregunta por pantalla, con progreso visible.
+    // El total es EXACTO a propósito: si alguien añade o quita un paso, esta
+    // línea se pone roja. Así apareció que `ubicacion` se había añadido sin
+    // tocar esta prueba, y el recorrido llevaba días sin cubrir un paso entero.
     await expect(page.getByRole('heading', { name: /cómo te llamas/i })).toBeVisible()
-    await expect(page.getByText(/paso 1 de 5/i)).toBeVisible()
+    await expect(page.getByText(/paso 1 de 6/i)).toBeVisible()
 
     // Avanzar sin datos → error comprensible, no un submit mudo. (Con filter:
     // el route-announcer de Next también tiene role=alert y rompería el modo
@@ -47,17 +50,30 @@ test.describe('Asistente de registro (general)', () => {
     await page.locator('#telefono').fill('809-555-0000')
     await page.getByRole('button', { name: /continuar/i }).click()
 
-    // Paso 5: resumen con los datos reales y consentimientos.
+    // Paso 5: ubicación. Es OPCIONAL por diseño (§20) y trae su propia
+    // navegación, no el «Continuar» del asistente. Se omite, que es el camino
+    // que recorre quien no quiere dar dónde vive — y el único que funciona sin
+    // catálogo geográfico sembrado.
+    await expect(page.getByRole('heading', { name: /dónde vives/i })).toBeVisible()
+    await page.getByRole('button', { name: /^omitir$/i }).click()
+
+    // Paso 6: resumen con los datos reales y consentimientos.
     await expect(page.getByRole('heading', { name: /revisa y confirma/i })).toBeVisible()
     await expect(page.locator('dl')).toContainText('María Prueba')
     await expect(page.locator('dl')).toContainText('maria@example.com')
     await expect(page.locator('input[name="terminos"]')).toBeVisible()
     await expect(page.getByRole('button', { name: /crear mi cuenta/i })).toBeVisible()
 
-    // Atrás vuelve al paso anterior sin perder el dato.
+    // Atrás vuelve al paso anterior, que ahora es ubicación.
     await page.getByRole('button', { name: /atrás/i }).click()
-    await expect(page.getByRole('heading', { name: /teléfono/i })).toBeVisible()
-    await expect(page.locator('#telefono')).toHaveValue('809-555-0000')
+    await expect(page.getByRole('heading', { name: /dónde vives/i })).toBeVisible()
+
+    // Y volver a avanzar no pierde lo ya escrito: el teléfono sigue en el
+    // resumen. Es la misma garantía que cubría la versión anterior de esta
+    // prueba, comprobada donde el dato se puede ver ahora.
+    await page.getByRole('button', { name: /^omitir$/i }).click()
+    await expect(page.getByRole('heading', { name: /revisa y confirma/i })).toBeVisible()
+    await expect(page.locator('dl')).toContainText('809-555-0000')
   })
 
   test('el borrador sobrevive a una recarga (sin la contraseña)', async ({ page }) => {
