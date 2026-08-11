@@ -270,6 +270,14 @@ model Company {
   // null = defaults del módulo.
   seguimientoConfig Json?
 
+  /// Umbrales del SEMÁFORO DEL CLIENTE (docs/auditoria-clientes-membresias.md
+  /// · bloque 3): cuántos días sin venir lo ponen en riesgo, cuántos lo dan por
+  /// dormido, cuántos por perdido. Configurables porque un car wash y un
+  /// restaurante no tienen la misma frecuencia normal de visita: treinta días
+  /// sin lavar el carro es raro; treinta días sin cenar fuera, no.
+  /// null = los valores por defecto (ver `modules/riesgo/semaforo.ts`).
+  retencionConfig Json?
+
   users                  User[]
   plans                  Plan[]
   clientes               Cliente[]

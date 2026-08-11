@@ -16,6 +16,9 @@ import {
   whereClientes,
 } from '@/modules/admin/clientesFiltro'
 import { DIAS_SIN_VISITAS, urlConFiltros } from '@/modules/admin/filtrosComunes'
+import { semaforoDeFila } from '@/modules/riesgo/clasificar'
+import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
+import { resolverUmbrales } from '@/modules/riesgo/semaforo'
 import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
 import { Download } from 'lucide-react'
 
@@ -67,6 +70,9 @@ export default async function ClientesPage({
   // El filtro vive en `modules/admin/clientesFiltro`: la exportación usa el
   // MISMO, para que el CSV no pueda separarse nunca de lo que se ve.
   const where = whereClientes(companyId, sp)
+  const umbrales = await getUmbralesRetencion(companyId ?? '__none__').catch(() =>
+    resolverUmbrales(null)
+  )
 
   let clientes: ClienteRow[] = []
   let categorias: { id: string; nombre: string }[] = []
@@ -82,11 +88,18 @@ export default async function ClientesPage({
             orderBy: { createdAt: 'desc' },
             take: 1,
           },
+          // La última visita: es la mitad del semáforo, y sin ella la columna
+          // «Estado» tendría que adivinarse desde la fecha de vencimiento.
+          visits: {
+            select: { fechaVisita: true },
+            orderBy: { fechaVisita: 'desc' },
+            take: 1,
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (pagina - 1) * POR_PAGINA,
         take: POR_PAGINA,
-      }) as Promise<ClienteRow[]>,
+      }),
       prisma.cliente.count({ where }),
       // Categorías de vehículo: el filtro solo se ofrece si el negocio las usa.
       prisma.tipoVehiculo
@@ -97,7 +110,14 @@ export default async function ClientesPage({
         })
         .catch(() => []),
     ])
-    clientes = filas
+    // El semáforo se calcula UNA vez, en el servidor, con los umbrales de esta
+    // empresa. La tabla solo lo pinta: si lo decidiera el navegador, cada
+    // pantalla podría llegar a una conclusión distinta del mismo cliente.
+    const ahora = new Date()
+    clientes = filas.map((c) => ({
+      ...c,
+      semaforo: semaforoDeFila(c, umbrales, ahora),
+    })) as unknown as ClienteRow[]
     total = cuenta
     categorias = tipos
   } catch (e) {

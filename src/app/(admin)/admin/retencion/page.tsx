@@ -11,6 +11,8 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { UmbralesRetencionForm } from '@/components/admin/UmbralesRetencionForm'
+import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +47,11 @@ export default async function RetencionPage() {
   const companyId = companyFilter(user)
   if (!companyId) return <SinEmpresaActiva seccion="el reporte de retención" />
 
-  const [r, prefs] = await Promise.all([getRetencion(companyId), getRegionalPrefs(companyId)])
+  const [r, prefs, umbrales] = await Promise.all([
+    getRetencion(companyId),
+    getRegionalPrefs(companyId),
+    getUmbralesRetencion(companyId),
+  ])
   const dinero = (n: number) => formatMoney(n, prefs)
 
   const tasaRenovacion =
@@ -157,6 +163,17 @@ export default async function RetencionPage() {
               </Button>
             </CardContent>
           </Card>
+        </div>
+      </section>
+
+      {/* ── Umbrales ────────────────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <SectionHeader
+          title="Cuándo se considera que un cliente se está yendo"
+          description="Estos números definen el semáforo que verás en la tabla de clientes, en su ficha y en el reporte de riesgo. También son los que usan los avisos automáticos."
+        />
+        <div className="rounded-2xl border border-border/70 bg-card p-5">
+          <UmbralesRetencionForm umbrales={umbrales} />
         </div>
       </section>
 

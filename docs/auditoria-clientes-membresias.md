@@ -460,3 +460,72 @@ apoya en columnas que ya existen.
 Semáforo del cliente calculado en un solo sitio, ficha del cliente como una sola
 línea de tiempo, vigilancia automática que dispare las automatizaciones desde el
 semáforo, y conciliación diaria entre Caja, Membresías y Transacciones.
+
+---
+
+## Estado · Bloque 3 completado (2026-08-11)
+
+| # | Qué se hizo |
+|---|---|
+| 15 | **Semáforo del cliente** (`modules/riesgo/semaforo.ts`, puro): activo · en riesgo · dormido · perdido · sin membresía, con **el motivo en una frase** que se enseña tal cual. Umbrales por empresa (`companies.retencionConfig`), editables desde Retención. Se pinta en la tabla de clientes y en su ficha, y lo usan las automatizaciones. |
+| 16 | **Ficha del cliente con línea de tiempo**: registro, membresías, cobros, visitas, compras, citas, notas y notificaciones enviadas, en un solo hilo cronológico. Pestaña «Historial». |
+| 17 | **Vigilancia automática**: la regla de inactivos pasa a usar el umbral de la empresa (y a exigir membresía **vigente**, no solo activa), y se añade una cuarta regla que avisa **al equipo** cuando alguien cruza el umbral de dormido teniendo usos pagados dentro. |
+| 18 | **`/admin/conciliacion`**: cinco comprobaciones cruzadas entre Membresías, Transacciones y Caja. |
+
+### Por qué el semáforo es puro y con motivo
+
+Va a decidir a quién se llama, así que la regla vive en un módulo sin base de
+datos y se prueba al milímetro — sobre todo **el orden**, que es donde está el
+criterio: se evalúa de lo más definitivo a lo más recuperable, porque quien ya
+se fue no puede estar «en riesgo» de irse y quien nunca compró no está dormido.
+
+Cada estado devuelve una frase («Lleva 47 días sin venir»). Un color sin
+explicación es una etiqueta que cada persona del equipo interpreta a su manera,
+y de ahí a discutir sobre qué significa «en riesgo» hay un paso.
+
+Los umbrales son configurables por una razón concreta: **treinta días sin lavar
+el carro es raro; treinta días sin cenar fuera, no**. Con un número fijo, el
+mismo semáforo llamaría «en riesgo» a la clientela normal de un restaurante y
+«activa» a la de un car wash que ya se está yendo. Si alguien guarda «dormido»
+antes que «riesgo», se separan en vez de fallar — un formulario mal rellenado no
+debería poder apagar un estado entero sin que nadie se entere.
+
+### Qué comprueba la conciliación
+
+| Comprobación | Qué significa |
+|---|---|
+| Cobros sin transacción | La membresía dice que se pagó y el libro no lo tiene: caja y membresías no van a cuadrar |
+| Visitas sin transacción | Se prestó el servicio sin comprobante reimprimible |
+| Operaciones sin cerrar de más de un día | Todavía no descuadran; mañana sí |
+| Cajas abiertas de días anteriores | Un turno sin arquear no se ha comparado con nada |
+| Turnos con faltante o sobrante | Un sobrante importa tanto como un faltante: los dos dicen que algo no se registró como pasó |
+
+**No corrige nada a propósito.** Cada hallazgo es un caso que una persona tiene
+que mirar: arreglar en automático un descuadre de dinero es la forma más rápida
+de convertir un error visible en uno invisible. Y si la consulta falla, **no
+dice que todo cuadra** — un visto bueno que nadie ha comprobado es el peor
+resultado posible de una comprobación.
+
+### Para desplegar
+
+```bash
+prisma/migrations/20260807_membresia_fecha_pago/migration.sql   # bloque 1
+prisma/migrations/20260808_semaforo_retencion/migration.sql     # bloque 3
+```
+
+Las dos son aditivas e idempotentes. `retencionConfig` nace en NULL, así que
+todas las empresas arrancan con los umbrales de fábrica y nada cambia de
+comportamiento el día del despliegue.
+
+Verificado: tipos, lint sin errores nuevos, 743/743 pruebas (14 nuevas del
+bloque), `rls:cobertura` sin huecos y build correcto.
+
+---
+
+## Cierre
+
+Los 18 puntos de las tres partes están implementados. Lo que empezó como «el
+Resumen dice 7 y la pantalla dice 0» terminó en: una sola definición por
+concepto, un semáforo que todas las pantallas comparten, dos reportes que antes
+no existían, y un sistema que se vigila a sí mismo en vez de esperar a que
+alguien note el descuadre.

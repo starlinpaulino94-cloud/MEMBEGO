@@ -26,6 +26,7 @@ import {
   TrendingUp,
   TriangleAlert,
   HeartPulse,
+  Scale,
   Store,
   Bell,
   Flag,
@@ -171,6 +172,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: '/admin/reportes', label: 'Reportes', icon: BarChart3 },
       { href: '/admin/retencion', label: 'Retención', icon: HeartPulse },
+      { href: '/admin/conciliacion', label: 'Conciliación', icon: Scale },
       { href: '/admin/audiencia', label: 'Audiencia', icon: TrendingUp },
       { href: '/admin/adquisicion', label: 'Origen de clientes', icon: Compass },
       { href: '/admin/seguimiento', label: 'Seguimiento', icon: QrCode },

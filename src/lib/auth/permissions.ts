@@ -43,6 +43,8 @@ export const ADMIN_SECTIONS = [
   // perderlo, y el reporte de retención con el pasivo de usos sin consumir.
   'riesgo',
   'retencion',
+  // Comprobaciones cruzadas entre membresías, transacciones y caja.
+  'conciliacion',
   'adquisicion',
   'audiencia',
   'invitaciones',
@@ -65,7 +67,7 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // 'riesgo' entra en los dos: Marketing lo necesita para saber a quién
   // dirigir una campaña de retención, y Supervisión para repartir las llamadas.
   MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones', 'riesgo', 'retencion'],
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app', 'riesgo', 'retencion'],
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app', 'riesgo', 'retencion', 'conciliacion'],
 }
 
 /** ¿Puede este rol abrir esta sección del panel? */
