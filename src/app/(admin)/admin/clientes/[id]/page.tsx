@@ -23,6 +23,11 @@ import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButt
 import { FileText, MessageCircle, Mail, StickyNote } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
 import { TabsNav } from '@/components/ui/tabs-nav'
+import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
+import { HistorialCliente } from '@/components/admin/HistorialCliente'
+import { getHistorialCliente } from '@/modules/cliente/historial'
+import { semaforoDeFila } from '@/modules/riesgo/clasificar'
+import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
 import type { MembershipEstado } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -50,7 +55,7 @@ function fmtFechaHora(d: Date | null) {
  * solo `include` y separarlos por pestaña sería reescribir la carga de datos
  * para ahorrar poco en una ficha que se abre de una en una.
  */
-const VISTAS = ['resumen', 'visitas', 'notas', 'ajustes'] as const
+const VISTAS = ['resumen', 'historial', 'visitas', 'notas', 'ajustes'] as const
 type Vista = (typeof VISTAS)[number]
 
 export default async function ClienteDetailPage({
@@ -107,6 +112,23 @@ export default async function ClienteDetailPage({
 
   const prefs = await getRegionalPrefs(cliente.companyId)
 
+  // El semáforo se calcula en el servidor con los umbrales de ESTA empresa,
+  // igual que en la tabla: dos pantallas no pueden llegar a conclusiones
+  // distintas del mismo cliente.
+  const umbrales = await getUmbralesRetencion(cliente.companyId)
+  const semaforo = semaforoDeFila(
+    {
+      memberships: cliente.memberships,
+      visits: cliente.visits.length > 0 ? [{ fechaVisita: cliente.visits[0].fechaVisita }] : [],
+    },
+    umbrales
+  )
+
+  // La línea de tiempo solo se consulta cuando se está mirando: son siete
+  // consultas y la ficha se abre casi siempre por el resumen.
+  const historial =
+    vista === 'historial' ? await getHistorialCliente(cliente.companyId, cliente.id) : []
+
   let planes: { id: string; nombre: string; precio: string }[] = []
   try {
     const rows = await prisma.plan.findMany({
@@ -156,6 +178,11 @@ export default async function ClienteDetailPage({
               </a>
             )}
             {membership && <EstadoBadge estado={membership.estado as MembershipEstado} />}
+            {/* El semáforo va junto al estado de la membresía a propósito:
+                dicen cosas distintas y verlos juntos es lo que evita
+                confundirlos. «Activa» habla del contrato; «en riesgo», de la
+                relación. */}
+            <SemaforoCliente estado={semaforo.estado} motivo={semaforo.motivo} />
           </>
         }
         nav={
@@ -163,6 +190,7 @@ export default async function ClienteDetailPage({
             aria-label="Secciones del cliente"
             items={[
               { clave: 'resumen', label: 'Resumen' },
+              { clave: 'historial', label: 'Historial' },
               { clave: 'visitas', label: 'Visitas', badge: cliente.visits.length },
               { clave: 'notas', label: 'Notas', badge: cliente.notas.length },
               { clave: 'ajustes', label: 'Ajustes' },
@@ -335,6 +363,24 @@ export default async function ClienteDetailPage({
                 </p>
               </div>
             ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Línea de tiempo: qué ha pasado con esta persona, en orden. Antes esta
+          información existía repartida en seis pantallas y había que
+          reconstruirla de cabeza mientras se hablaba por teléfono. */}
+      {vista === 'historial' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Todo lo que ha pasado</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <HistorialCliente
+              eventos={historial}
+              formatearFecha={(d) => formatDateTime(d, prefs)}
+              formatearMonto={(n) => formatMoney(n, prefs)}
+            />
           </CardContent>
         </Card>
       )}

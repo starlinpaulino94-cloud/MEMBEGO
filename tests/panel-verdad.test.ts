@@ -33,6 +33,15 @@ import {
 } from '../src/modules/admin/filtrosComunes'
 import { leerFiltroRiesgo } from '../src/modules/riesgo/filtro'
 import { VER_SEGMENTO } from '../src/modules/admin/segmentos-def'
+import {
+  ESTADOS_CLIENTE,
+  ESTADO_CLIENTE_LABEL,
+  ESTADO_CLIENTE_TONO,
+  UMBRALES_POR_DEFECTO,
+  clasificarCliente,
+  resolverUmbrales,
+  type DatosCliente,
+} from '../src/modules/riesgo/semaforo'
 import { armarCsv, celdaCsv, fechaCsv } from '../src/lib/csv'
 
 const AHORA = new Date('2026-08-11T15:00:00Z')
@@ -367,5 +376,175 @@ test('cada segmento con enlace apunta a un filtro que el directorio entiende', (
     const f = leerFiltrosClientes(qs)
     const reconocido = Boolean(f.sinVisitas || f.membresia || f.nuevos) || url === '/admin/clientes'
     assert.ok(reconocido, `el enlace del segmento ${clave} no lo entiende el directorio`)
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BLOQUE 3 · El semáforo: una sola respuesta a «¿este cliente sigue con
+// nosotros?». Es lo que va a decidir a quién se llama, así que se prueba al
+// milímetro — sobre todo el ORDEN de las reglas, que es donde está el criterio.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BASE: DatosCliente = {
+  tieneVigente: true,
+  fechaVencimiento: new Date('2026-12-31T00:00:00Z'),
+  usosRestantes: 4,
+  esIlimitado: false,
+  ultimaVisita: new Date('2026-08-09T15:00:00Z'), // hace 2 días
+  ultimoVencimiento: null,
+  tuvoMembresia: true,
+}
+
+test('quien viene con normalidad y tiene margen está ACTIVO', () => {
+  const s = clasificarCliente(BASE, UMBRALES_POR_DEFECTO, AHORA)
+  assert.equal(s.estado, 'ACTIVO')
+  assert.equal(s.diasSinVenir, 2)
+})
+
+test('quien nunca compró no está deteriorado: no llegó a empezar', () => {
+  const s = clasificarCliente(
+    { ...BASE, tuvoMembresia: false, tieneVigente: false },
+    UMBRALES_POR_DEFECTO,
+    AHORA
+  )
+  assert.equal(s.estado, 'SIN_MEMBRESIA')
+})
+
+test('el que pagó y NUNCA vino es un caso propio, y es EN_RIESGO', () => {
+  // No aparece en ningún informe de visitas porque no tiene ninguna: es el
+  // más fácil de perder de vista y el más caro de perder.
+  const s = clasificarCliente({ ...BASE, ultimaVisita: null }, UMBRALES_POR_DEFECTO, AHORA)
+  assert.equal(s.estado, 'EN_RIESGO')
+  assert.equal(s.diasSinVenir, null)
+  assert.match(s.motivo, /no ha venido ni una vez/)
+})
+
+test('las ventanas de riesgo y dormido se aplican en orden', () => {
+  const hace = (d: number) => new Date(AHORA.getTime() - d * 86_400_000)
+  const estadoA = (dias: number) =>
+    clasificarCliente({ ...BASE, ultimaVisita: hace(dias) }, UMBRALES_POR_DEFECTO, AHORA).estado
+
+  assert.equal(estadoA(10), 'ACTIVO')
+  assert.equal(estadoA(31), 'EN_RIESGO', 'pasado el umbral de riesgo')
+  assert.equal(estadoA(61), 'DORMIDO', 'pasado el de dormido')
+})
+
+test('el que se fue hace mucho está PERDIDO, no en riesgo de irse', () => {
+  // Un cliente que ya se marchó no puede estar «a punto» de marcharse: por eso
+  // las reglas van de lo más definitivo a lo más recuperable.
+  const s = clasificarCliente(
+    {
+      ...BASE,
+      tieneVigente: false,
+      fechaVencimiento: null,
+      ultimoVencimiento: new Date(AHORA.getTime() - 90 * 86_400_000),
+    },
+    UMBRALES_POR_DEFECTO,
+    AHORA
+  )
+  assert.equal(s.estado, 'PERDIDO')
+})
+
+test('el que venció hace poco está DORMIDO: todavía se recupera', () => {
+  const s = clasificarCliente(
+    {
+      ...BASE,
+      tieneVigente: false,
+      fechaVencimiento: null,
+      ultimoVencimiento: new Date(AHORA.getTime() - 10 * 86_400_000),
+    },
+    UMBRALES_POR_DEFECTO,
+    AHORA
+  )
+  assert.equal(s.estado, 'DORMIDO')
+  assert.match(s.motivo, /a tiempo de volver/)
+})
+
+test('vencer pronto CON usos dentro pone en riesgo; sin usos, no', () => {
+  const enTresDias = new Date(AHORA.getTime() + 3 * 86_400_000)
+  const conSaldo = clasificarCliente(
+    { ...BASE, fechaVencimiento: enTresDias, usosRestantes: 3 },
+    UMBRALES_POR_DEFECTO,
+    AHORA
+  )
+  assert.equal(conSaldo.estado, 'EN_RIESGO')
+  assert.match(conSaldo.motivo, /3 usos sin consumir/)
+
+  // Sin nada dentro, que venza es el final normal del ciclo, no una urgencia.
+  const sinSaldo = clasificarCliente(
+    { ...BASE, fechaVencimiento: enTresDias, usosRestantes: 0 },
+    UMBRALES_POR_DEFECTO,
+    AHORA
+  )
+  assert.equal(sinSaldo.estado, 'ACTIVO')
+})
+
+test('un plan ilimitado que vence pronto también avisa', () => {
+  const s = clasificarCliente(
+    {
+      ...BASE,
+      esIlimitado: true,
+      usosRestantes: 0,
+      fechaVencimiento: new Date(AHORA.getTime() + 2 * 86_400_000),
+    },
+    UMBRALES_POR_DEFECTO,
+    AHORA
+  )
+  assert.equal(s.estado, 'EN_RIESGO')
+})
+
+test('todo estado trae un motivo que se puede enseñar tal cual', () => {
+  // Un color sin explicación es una etiqueta que cada uno interpreta a su
+  // manera, y de ahí a discutir sobre qué significa «en riesgo» hay un paso.
+  const casos: DatosCliente[] = [
+    BASE,
+    { ...BASE, tuvoMembresia: false },
+    { ...BASE, ultimaVisita: null },
+    { ...BASE, ultimaVisita: new Date(AHORA.getTime() - 45 * 86_400_000) },
+    { ...BASE, tieneVigente: false, ultimoVencimiento: new Date(AHORA.getTime() - 5 * 86_400_000) },
+  ]
+  for (const c of casos) {
+    const s = clasificarCliente(c, UMBRALES_POR_DEFECTO, AHORA)
+    assert.ok(s.motivo.length > 10, `el estado ${s.estado} no explica por qué`)
+    assert.ok(s.motivo.endsWith('.'), 'el motivo se enseña tal cual: es una frase')
+  }
+})
+
+// ── Umbrales configurables ──────────────────────────────────────────────────
+
+test('umbrales ausentes o corruptos caen en los de fábrica', () => {
+  for (const basura of [null, undefined, 'texto', 42, [], { riesgoDias: 'pronto' }]) {
+    const u = resolverUmbrales(basura)
+    assert.equal(u.riesgoDias, UMBRALES_POR_DEFECTO.riesgoDias, `falló con ${JSON.stringify(basura)}`)
+  }
+})
+
+test('un umbral fuera de rango se ignora en vez de romper el semáforo', () => {
+  const u = resolverUmbrales({ riesgoDias: 0, dormidoDias: 10_000, perdidoDias: 45 })
+  assert.equal(u.riesgoDias, UMBRALES_POR_DEFECTO.riesgoDias, '0 días no es un umbral')
+  assert.equal(u.perdidoDias, 45, 'lo válido sí se respeta')
+})
+
+test('dormido siempre queda por detrás de riesgo, aunque se guarde al revés', () => {
+  // Con dormido antes que riesgo, el estado EN_RIESGO no existiría nunca: el
+  // DORMIDO se lo comería entero y nadie se enteraría de que falta un color.
+  const u = resolverUmbrales({ riesgoDias: 45, dormidoDias: 20 })
+  assert.equal(u.riesgoDias, 45)
+  assert.ok(u.dormidoDias > u.riesgoDias, 'se separan en vez de fallar')
+})
+
+test('un umbral distinto cambia la clasificación del mismo cliente', () => {
+  // Es la razón de que sean configurables: 30 días sin lavar el carro es raro,
+  // 30 días sin cenar fuera no lo es.
+  const cliente = { ...BASE, ultimaVisita: new Date(AHORA.getTime() - 40 * 86_400_000) }
+  assert.equal(clasificarCliente(cliente, UMBRALES_POR_DEFECTO, AHORA).estado, 'EN_RIESGO')
+  const relajado = resolverUmbrales({ riesgoDias: 60, dormidoDias: 120 })
+  assert.equal(clasificarCliente(cliente, relajado, AHORA).estado, 'ACTIVO')
+})
+
+test('cada estado tiene etiqueta y tono: ninguno se queda sin pintar', () => {
+  for (const e of ESTADOS_CLIENTE) {
+    assert.ok(ESTADO_CLIENTE_LABEL[e], `falta etiqueta de ${e}`)
+    assert.ok(ESTADO_CLIENTE_TONO[e], `falta tono de ${e}`)
   }
 })

@@ -1,4 +1,6 @@
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
+import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
 
 // F4.7: motor de automatizaciones. Reglas basadas en tiempo que generan
 // notificaciones a clientes. Sin tablas nuevas: la deduplicación usa un
@@ -11,6 +13,8 @@ export interface ResultadoAutomatizaciones {
   cumpleanos: number
   porVencer: number
   inactivos: number
+  /** Bloque 3: clientes que el semáforo dio por dormidos y no reaccionaron. */
+  vigilancia: number
 }
 
 /** userIds por supabaseId de clientes (solo los que tienen cuenta). */
@@ -65,17 +69,17 @@ export async function ejecutarAutomatizacionesEmpresa(
     const hoyDia = now.getDate()
     const anio = now.getFullYear()
     const en7dias = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const hace30dias = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
     const company = await tx.company.findUnique({
       where: { id: companyId },
       select: { name: true },
     })
-    if (!company) return { cumpleanos: 0, porVencer: 0, inactivos: 0 }
+    if (!company) return { cumpleanos: 0, porVencer: 0, inactivos: 0, vigilancia: 0 }
 
     let cumpleanos = 0
     let porVencer = 0
     let inactivos = 0
+    let vigilancia = 0
 
     // ── Regla 1: cumpleaños hoy → felicitación (una vez por año) ──────────────
     const conNacimiento = await tx.cliente.findMany({
@@ -142,11 +146,19 @@ export async function ejecutarAutomatizacionesEmpresa(
     }
 
     // ── Regla 3: sin visitas en 30 días → incentivo (una vez al mes) ──────────
+    // Con el umbral de ESTA empresa, no con un 30 fijo: la frecuencia normal de
+    // visita de un car wash y la de un restaurante no se parecen, y el mismo
+    // número los trataba igual.
+    const umbrales = await getUmbralesRetencion(companyId)
+    const limiteRiesgo = new Date(now.getTime() - umbrales.riesgoDias * 86_400_000)
     const inactivosRows = await tx.cliente.findMany({
       where: {
         companyId,
-        memberships: { some: { estado: 'ACTIVA' } },
-        visits: { none: { fechaVisita: { gte: hace30dias } } },
+        // VIGENTE, no solo activa: a quien ya se le venció no se le dice «tu
+        // membresía sigue activa, pásate» — es la clase de mensaje que hace
+        // que el cliente venga y se lleve un no en el mostrador.
+        memberships: { some: membresiaVigente(now) },
+        visits: { none: { fechaVisita: { gte: limiteRiesgo } } },
       },
       select: { supabaseId: true },
     })
@@ -162,7 +174,7 @@ export async function ejecutarAutomatizacionesEmpresa(
             userId,
             tipo: 'SISTEMA' as const,
             titulo: 'Te extrañamos 👋',
-            mensaje: `Hace más de 30 días que no visitas ${company.name}. Tu membresía sigue activa: pásate y aprovecha tus beneficios.`,
+            mensaje: `Hace más de ${umbrales.riesgoDias} días que no visitas ${company.name}. Tu membresía sigue vigente: pásate y aprovecha tus beneficios.`,
             // companyId en el marcador: el incentivo mensual es por empresa.
             href: `/cliente/promociones?auto=inactivo-${anio}-${mes}-${companyId}`,
           }]
@@ -170,7 +182,50 @@ export async function ejecutarAutomatizacionesEmpresa(
       )
     }
 
-    return { cumpleanos, porVencer, inactivos }
+    // ── Regla 4 · VIGILANCIA: el cliente al que ya se le avisó y no volvió ────
+    //
+    // Las tres reglas anteriores le hablan al CLIENTE. Esta le habla al
+    // NEGOCIO, y por eso existe: un aviso automático que no funciona no deja
+    // ningún rastro: el cliente simplemente no vuelve, y nadie se entera hasta
+    // que se mira un informe trimestral. Cuando alguien cruza el umbral de
+    // «dormido» teniendo cosas pagadas dentro, deja de ser un mensaje más y
+    // pasa a ser una llamada que alguien tiene que hacer.
+    const dormidos = await tx.cliente.count({
+      where: {
+        companyId,
+        memberships: {
+          some: {
+            ...membresiaVigente(now),
+            // Con saldo: un dormido sin nada dentro se recupera con marketing;
+            // uno con usos pagados sin consumir es dinero que el negocio debe.
+            OR: [{ plan: { esIlimitado: true } }, { lavadosRestantes: { gt: 0 } }],
+          },
+        },
+        visits: { none: { fechaVisita: { gte: new Date(now.getTime() - umbrales.dormidoDias * 86_400_000) } } },
+      },
+    })
+    if (dormidos > 0) {
+      const admins = await tx.user.findMany({
+        where: { companyId, role: { in: ['ADMIN_EMPRESA', 'ADMINISTRADOR', 'GERENTE'] } },
+        select: { id: true },
+      })
+      const semana = `${anio}-S${Math.ceil(((now.getTime() - Date.UTC(anio, 0, 1)) / 86_400_000 + 1) / 7)}`
+      vigilancia = await notificarLote(
+        tx,
+        admins.map((a) => ({
+          userId: a.id,
+          tipo: 'SISTEMA' as const,
+          titulo: `${dormidos} cliente(s) llevan ${umbrales.dormidoDias} días sin venir`,
+          mensaje:
+            'Tienen membresía vigente y usos pagados sin consumir. Ya recibieron el recordatorio automático y no volvieron: toca llamarlos.',
+          // Una vez por semana y por empresa: un aviso diario sobre el mismo
+          // problema se convierte en ruido, y el ruido se ignora.
+          href: `/admin/riesgo?sinVisitas=${umbrales.dormidoDias >= 60 ? 60 : 30}&vence=0&usos=con&auto=vigilancia-${semana}-${companyId}`,
+        }))
+      )
+    }
+
+    return { cumpleanos, porVencer, inactivos, vigilancia }
   })
 }
 

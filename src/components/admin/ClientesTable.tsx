@@ -5,6 +5,8 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { ExternalLink } from 'lucide-react'
 import { DataTable } from '@/components/ui/data-table'
 import { EstadoBadge } from '@/components/EstadoBadge'
+import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
+import type { EstadoCliente } from '@/modules/riesgo/semaforo'
 import type { MembershipEstado } from '@/types'
 
 export interface ClienteRow {
@@ -17,6 +19,8 @@ export interface ClienteRow {
     estado: MembershipEstado
     plan: { nombre: string }
   }>
+  /** Semáforo ya calculado en el servidor (`modules/riesgo/semaforo`). */
+  semaforo?: { estado: EstadoCliente; motivo: string; diasSinVenir: number | null }
 }
 
 const columns: ColumnDef<ClienteRow>[] = [
@@ -52,6 +56,26 @@ const columns: ColumnDef<ClienteRow>[] = [
         <div className="space-y-0.5">
           <p className="text-sm font-medium">{membership.plan.nombre}</p>
           <EstadoBadge estado={membership.estado} />
+        </div>
+      )
+    },
+  },
+  {
+    id: 'semaforo',
+    header: 'Estado',
+    cell: ({ row }) => {
+      const s = row.original.semaforo
+      if (!s) return <span className="text-muted-foreground">—</span>
+      return (
+        <div className="space-y-0.5">
+          <SemaforoCliente estado={s.estado} motivo={s.motivo} />
+          {/* El número que hay detrás del color: sin él, «en riesgo» es una
+              opinión del sistema y no un dato que se pueda comprobar. */}
+          <p className="text-caption">
+            {s.diasSinVenir == null
+              ? 'nunca ha venido'
+              : `hace ${s.diasSinVenir} d que no viene`}
+          </p>
         </div>
       )
     },

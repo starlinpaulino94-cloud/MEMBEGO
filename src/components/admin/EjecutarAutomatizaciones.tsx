@@ -19,12 +19,12 @@ export function EjecutarAutomatizaciones() {
 
   useEffect(() => {
     if (state.success && state.resultado) {
-      const { cumpleanos, porVencer, inactivos } = state.resultado
-      const total = cumpleanos + porVencer + inactivos
+      const { cumpleanos, porVencer, inactivos, vigilancia } = state.resultado
+      const total = cumpleanos + porVencer + inactivos + vigilancia
       toast.success(
         total === 0
           ? 'Todo al día: no había avisos nuevos que enviar.'
-          : `Enviados: ${cumpleanos} de cumpleaños, ${porVencer} por vencer y ${inactivos} de inactividad.`
+          : `Enviados: ${cumpleanos} de cumpleaños, ${porVencer} por vencer, ${inactivos} de inactividad y ${vigilancia} avisos al equipo.`
       )
     }
     if (state.error) toast.error(state.error)
