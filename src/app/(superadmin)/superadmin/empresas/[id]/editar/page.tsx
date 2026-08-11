@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import {
   getActiveCategories,
   getCompanyCategoryIds,
@@ -20,7 +20,10 @@ export default async function EditarEmpresaPage({
   await requireRole('SUPERADMIN')
   const { id } = await params
 
-  const company = await prisma.company.findUnique({ where: { id } })
+  const company = await sinEmpresa(
+    'empresas · editar: el superadmin edita cualquier empresa',
+    (tx) => tx.company.findUnique({ where: { id } })
+  )
   if (!company) notFound()
 
   const [categories, selectedCategoryIds] = await Promise.all([

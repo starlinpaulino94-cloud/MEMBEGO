@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,11 +48,13 @@ export default async function PublicacionesPage() {
 
   let posts: Awaited<ReturnType<typeof query>> = []
   async function query() {
-    return prisma.companyPost.findMany({
+    return conEmpresaOTodas(companyId, 'publicaciones: sin empresa activa es el superadmin', (tx) =>
+      tx.companyPost.findMany({
       where: companyId ? { companyId } : {},
       include: { company: { select: { name: true, slug: true } } },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+      })
+    )
   }
   try {
     posts = await query()

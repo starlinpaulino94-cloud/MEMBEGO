@@ -98,6 +98,26 @@ export async function sinEmpresa<T>(motivo: string, fn: (tx: Tx) => Promise<T>):
 }
 
 /**
+ * Ejecuta `fn` en UNA empresa, o en todas si no hay ninguna.
+ *
+ * Existe por una forma concreta del panel: `companyFilter(user)` devuelve
+ * `undefined` cuando quien mira es el superadmin, porque su panel de empresa
+ * cruza inquilinos a propósito. Sin este envoltorio, cada pantalla del panel
+ * repetiría el mismo `companyId ? conEmpresa(...) : sinEmpresa(...)` —
+ * cincuenta y siete veces, y la primera que se copiara mal sería un hueco.
+ *
+ * El `motivo` es el de `sinEmpresa`: solo se usa cuando NO hay empresa, que es
+ * justo el caso que hay que poder justificar leyendo la llamada.
+ */
+export function conEmpresaOTodas<T>(
+  companyId: string | null | undefined,
+  motivo: string,
+  fn: (tx: Tx) => Promise<T>
+): Promise<T> {
+  return companyId ? conEmpresa(companyId, fn) : sinEmpresa(motivo, fn)
+}
+
+/**
  * Ejecuta `fn` con la variable `app.user_id` puesta. Es el análogo de
  * `conEmpresa` para los datos DE LA PERSONA (RLS · GEO ·
  * `prisma/migrations_manual/2026-08-rls-geo.sql`): `customer_locations`,

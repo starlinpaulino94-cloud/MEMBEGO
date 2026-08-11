@@ -1,10 +1,10 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { getOfertaDetalleAdmin, ofertaVigente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
 import { absoluteUrl } from '@/lib/site'
@@ -29,10 +29,14 @@ export default async function OfertaDetallePage({
   const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
   if (!companyId) notFound()
 
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { zonaHoraria: true },
-  })
+  const company = await conEmpresaOTodas(
+    companyId,
+    'ofertas · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.company.findUnique({
+      where: { id: companyId },
+      select: { zonaHoraria: true },
+    })
+  )
   const detalle = await getOfertaDetalleAdmin(
     companyId,
     id,
@@ -45,12 +49,16 @@ export default async function OfertaDetallePage({
   // Candidatos para agregar: clientes de la empresa que aún no están invitados.
   const yaInvitados = new Set(invitados.map((i) => i.cliente.id))
   const candidatos = (
-    await prisma.cliente.findMany({
-      where: { companyId },
-      select: { id: true, nombre: true },
-      orderBy: { nombre: 'asc' },
-      take: 500,
-    })
+    await conEmpresaOTodas(
+      companyId,
+      'ofertas · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.cliente.findMany({
+        where: { companyId },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' },
+        take: 500,
+      })
+    )
   ).filter((c) => !yaInvitados.has(c.id))
 
   const reclamaron = invitados.filter((i) => i.reclamadaAt).length

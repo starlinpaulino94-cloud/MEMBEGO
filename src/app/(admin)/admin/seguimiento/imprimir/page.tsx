@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { Button } from '@/components/ui/button'
 import { ImprimirReporteButton } from '@/components/registros/ImprimirReporteButton'
 import {
@@ -34,10 +34,14 @@ export default async function SeguimientoImprimirPage({
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
-  const empresa = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { name: true, zonaHoraria: true },
-  })
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'seguimiento · imprimir: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.company.findUnique({
+      where: { id: companyId },
+      select: { name: true, zonaHoraria: true },
+    })
+  )
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
   const fmtFecha = (d: Date | null) =>
     d ? new Intl.DateTimeFormat('es-DO', { timeZone, dateStyle: 'medium' }).format(d) : '—'

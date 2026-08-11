@@ -1,6 +1,6 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import {
   getCampanasGlobales,
   CAMPANA_TIPO_LABELS,
@@ -33,14 +33,19 @@ const CHIP_ESTADO: Record<string, string> = {
 export default async function CampanasGlobalesPage() {
   await requireRole('SUPERADMIN')
 
+  // `getCampanasGlobales` abre su propia transacción: fuera del envoltorio, que
+  // anidarlas pide una segunda conexión desde dentro de una abierta y con el
+  // pooler por delante es así como se agota el pool.
   const [empresas, campanas] = await Promise.all([
-    prisma.company
-      .findMany({
-        where: { isActive: true },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      })
-      .catch(() => []),
+    sinEmpresa(
+      'campañas conjuntas: por definición agrupan varias empresas',
+      (tx) =>
+        tx.company.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        })
+    ).catch(() => []),
     getCampanasGlobales().catch(() => null),
   ])
 

@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { ALL_PLAYBOOKS, type AutomationPlaybook, type PlaybookCategory } from '@/lib/automation'
 import {
   CATEGORIA_LABELS,
@@ -49,15 +49,19 @@ export default async function PlantillasAutomatizacionPage({
   }
 
   // Instalaciones vivas de esta empresa (las archivadas no cuentan).
-  const instaladas = await prisma.automation.findMany({
-    where: {
-      companyId,
-      templateKey: { startsWith: 'playbook.' },
-      status: { not: 'ARCHIVED' },
-    },
-    select: { id: true, nombre: true, templateKey: true, status: true, createdAt: true },
-    orderBy: { createdAt: 'desc' },
-  })
+  const instaladas = await conEmpresaOTodas(
+    companyId,
+    'automatizaciones · plantillas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.automation.findMany({
+      where: {
+        companyId,
+        templateKey: { startsWith: 'playbook.' },
+        status: { not: 'ARCHIVED' },
+      },
+      select: { id: true, nombre: true, templateKey: true, status: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    })
+  )
   const instaladaPorPlaybook = new Map(
     instaladas.map((a) => [a.templateKey!.replace('playbook.', ''), a])
   )

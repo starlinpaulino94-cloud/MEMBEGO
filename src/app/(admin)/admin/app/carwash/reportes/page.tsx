@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { getReporteOperativo } from '@/modules/apps/reportes'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -59,9 +59,13 @@ export default async function ReportesOperativosPage({
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
-  const empresa = await prisma.company
-    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-    .catch(() => null)
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'app · carwash · reportes: sin empresa activa es el superadmin',
+    (tx) => tx.company
+      .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      .catch(() => null)
+  )
   const tz = empresa?.zonaHoraria || 'America/Santo_Domingo'
 
   let reporte: Awaited<ReturnType<typeof getReporteOperativo>> | null = null

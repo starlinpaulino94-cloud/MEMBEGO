@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { getAuditoria, ACCION_LABEL } from '@/modules/auditoria/queries'
 import { BitacoraTabla } from '@/components/auditoria/BitacoraTabla'
 import { PageHeader } from '@/components/ui/page-header'
@@ -35,10 +35,13 @@ export default async function AuditoriaPage({
 
   let empresas: { id: string; name: string }[] = []
   try {
-    empresas = await prisma.company.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    })
+    empresas = await sinEmpresa(
+      'auditoría de la plataforma: la bitácora es de todas las empresas',
+      (tx) => tx.company.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      })
+    )
   } catch (e) {
     console.error('[auditoria] empresas', e)
   }

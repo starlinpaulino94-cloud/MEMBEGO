@@ -1,10 +1,10 @@
 import Form from 'next/form'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Link from 'next/link'
 import { Download, Search } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import {
   ESTADOS_MEMBRESIA,
   USOS_OPCIONES,
@@ -76,35 +76,39 @@ export default async function MembresiasPage({
   let total = 0
   let fallo = false
   try {
-    const [data, planesData, cuenta, tipos] = await Promise.all([
-      prisma.membership.findMany({
-        where,
-        include: { plan: true, cliente: true },
-        // Lo que vence antes, primero: con el filtro de vencimiento puesto,
-        // el orden por fecha de creación enterraba lo urgente.
-        orderBy: f.vence
-          ? [{ fechaVencimiento: 'asc' }]
-          : [{ createdAt: 'desc' }],
-        skip: pag.saltar,
-        take: pag.tomar,
-      }),
-      // Planes activos de la empresa para el cambio de plan directo por el
-      // admin (política: el cliente no puede cambiar su plan desde la app).
-      prisma.plan.findMany({
-        where: { ...(companyId ? { companyId } : {}), activo: true },
-        orderBy: [{ orden: 'asc' }, { precio: 'asc' }],
-        select: { id: true, nombre: true, precio: true },
-      }),
-      prisma.membership.count({ where }),
-      // Categorías de vehículo: solo se ofrece el filtro si el negocio las usa.
-      prisma.tipoVehiculo
-        .findMany({
+    const [data, planesData, cuenta, tipos] = await conEmpresaOTodas(
+      companyId,
+      'membresias: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => Promise.all([
+        tx.membership.findMany({
+          where,
+          include: { plan: true, cliente: true },
+          // Lo que vence antes, primero: con el filtro de vencimiento puesto,
+          // el orden por fecha de creación enterraba lo urgente.
+          orderBy: f.vence
+            ? [{ fechaVencimiento: 'asc' }]
+            : [{ createdAt: 'desc' }],
+          skip: pag.saltar,
+          take: pag.tomar,
+        }),
+        // Planes activos de la empresa para el cambio de plan directo por el
+        // admin (política: el cliente no puede cambiar su plan desde la app).
+        tx.plan.findMany({
           where: { ...(companyId ? { companyId } : {}), activo: true },
-          orderBy: { nivelTarifario: 'asc' },
-          select: { id: true, nombre: true },
-        })
-        .catch(() => []),
-    ])
+          orderBy: [{ orden: 'asc' }, { precio: 'asc' }],
+          select: { id: true, nombre: true, precio: true },
+        }),
+        tx.membership.count({ where }),
+        // Categorías de vehículo: solo se ofrece el filtro si el negocio las usa.
+        tx.tipoVehiculo
+          .findMany({
+            where: { ...(companyId ? { companyId } : {}), activo: true },
+            orderBy: { nivelTarifario: 'asc' },
+            select: { id: true, nombre: true },
+          })
+          .catch(() => []),
+      ])
+    )
     memberships = data as unknown as MembershipRow[]
     total = cuenta
     categorias = tipos

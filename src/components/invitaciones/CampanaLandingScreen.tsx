@@ -1,5 +1,5 @@
 import { headers } from 'next/headers'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import type { getCampanaBySlug } from '@/modules/invitaciones/queries'
 import { registrarEventoCampana } from '@/modules/invitaciones/clienteActions'
 import { esBotDeVistaPrevia } from '@/lib/share/bots'
@@ -35,14 +35,19 @@ export async function CampanaLandingScreen({
   // partir del código de referido (corto o largo). Nunca bloquea la landing.
   let invitanteNombre: string | null = null
   if (refCode && !esBot) {
-    const invitante = await prisma.cliente
-      .findFirst({
-        where: {
-          OR: [{ codigoCorto: refCode.toUpperCase() }, { codigoReferido: refCode }],
-        },
-        select: { nombre: true },
-      })
-      .catch(() => null)
+    // Landing PÚBLICA: quien llega no tiene sesión, y el código de referido
+    // puede ser de un cliente de cualquier empresa — es un enlace que se
+    // comparte por WhatsApp. Se lee solo el nombre de pila para el saludo.
+    const invitante = await sinEmpresa(
+      'landing de campaña: pública, y el código de referido puede ser de cualquier empresa',
+      (tx) =>
+        tx.cliente.findFirst({
+          where: {
+            OR: [{ codigoCorto: refCode.toUpperCase() }, { codigoReferido: refCode }],
+          },
+          select: { nombre: true },
+        })
+    ).catch(() => null)
     // Solo el primer nombre: suficiente para personalizar sin exponer datos.
     invitanteNombre = invitante?.nombre?.split(' ')[0] ?? null
   }

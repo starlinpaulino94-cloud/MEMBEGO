@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { safeInternalPath } from '@/lib/utils'
-import { prisma } from '@/lib/prisma'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { differenceInCalendarDays } from 'date-fns'
 import Link from 'next/link'
@@ -85,7 +85,13 @@ export default async function MembershipDetail({
 
   let membership = null
   try {
-    membership = await prisma.membership.findUnique({
+    // Por id y sin empresa: la persona puede tener membresías en varios
+    // negocios y esta pantalla es el destino del QR. Lo que protege es la
+    // comprobación de propiedad de más abajo, no el aislamiento por empresa —
+    // que aquí daría un 404 a su dueño.
+    membership = await sinEmpresa(
+      'detalle de la membresía: la persona puede tenerlas en varios negocios',
+      (tx) => tx.membership.findUnique({
       where: { id: membresiaId },
       include: {
         cliente: {
@@ -95,7 +101,8 @@ export default async function MembershipDetail({
         planSolicitado: true,
         metodoPago: { select: { tipo: true } },
       },
-    })
+      })
+    )
   } catch (error) {
     console.error('[membresia-detail] Error loading membership:', error)
     notFound()
@@ -115,27 +122,35 @@ export default async function MembershipDetail({
   const now = new Date()
   const isActive = membership.estado === 'ACTIVA' && (!membership.fechaVencimiento || membership.fechaVencimiento > now)
 
-  const visits = await prisma.visit.findMany({
-    where: { membershipId: membresiaId },
-    include: { vehiculo: true },
-    orderBy: { fechaVisita: 'desc' },
-    take: 20,
-  })
+  // A partir de aquí la empresa YA se conoce: todo va en su contexto y en una
+  // sola transacción.
+  const empresaDeLaMembresia = membership.cliente.companyId
+  const [visits, qrToken] = await conEmpresa(empresaDeLaMembresia, (tx) =>
+    Promise.all([
+      tx.visit.findMany({
+        where: { membershipId: membresiaId },
+        include: { vehiculo: true },
+        orderBy: { fechaVisita: 'desc' },
+        take: 20,
+      }),
+      tx.qrToken.findFirst({
+        where: { membresiaId: membresiaId, activo: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+  )
 
-  const qrToken = await prisma.qrToken.findFirst({
-    where: { membresiaId: membresiaId, activo: true },
-    orderBy: { createdAt: 'desc' },
-  })
-
-  const enviosQr = await prisma.auditLog.findMany({
-    where: {
-      accion: 'QR_COMPARTIDO',
-      payload: { path: ['membresiaId'], equals: membresiaId },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-    select: { id: true, createdAt: true },
-  }).catch(() => [])
+  const enviosQr = await conEmpresa(empresaDeLaMembresia, (tx) =>
+    tx.auditLog.findMany({
+      where: {
+        accion: 'QR_COMPARTIDO',
+        payload: { path: ['membresiaId'], equals: membresiaId },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, createdAt: true },
+    })
+  ).catch(() => [])
 
   const diasRestantes = membership.fechaVencimiento
     ? differenceInCalendarDays(membership.fechaVencimiento, now)
@@ -180,21 +195,21 @@ export default async function MembershipDetail({
   const tokensConfig = tarjetaDisponible ? getTokensPublicConfig() : null
 
   const [metodosPago, sucursales] = needsPayment
-    ? await Promise.all([
-        prisma.metodoPago.findMany({
+    ? await conEmpresa(empresaDeLaMembresia, (tx) => Promise.all([
+        tx.metodoPago.findMany({
           where: {
-            companyId: membership.cliente.companyId,
+            companyId: empresaDeLaMembresia,
             activo: true,
             ...(transferenciaActiva ? {} : { tipo: 'PRESENCIAL' as const }),
           },
           orderBy: { createdAt: 'asc' },
         }),
-        prisma.sucursal.findMany({
-          where: { companyId: membership.cliente.companyId, activa: true },
+        tx.sucursal.findMany({
+          where: { companyId: empresaDeLaMembresia, activa: true },
           select: { id: true, nombre: true, direccion: true },
           orderBy: { nombre: 'asc' },
         }),
-      ])
+      ]))
     : [[], []]
 
   const estadoLabel = membresiaEstadoUi(membership.estado).label

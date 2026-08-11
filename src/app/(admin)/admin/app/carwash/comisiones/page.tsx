@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -66,15 +67,19 @@ export default async function ComisionesPage({
   const inicio = utcDesdeLocal(rango.desde, '00:00', tz)
   const fin = utcDesdeLocal(sumarDias(rango.hasta, 1), '00:00', tz)
 
+  // `getPanelComisiones` abre su propia transacción: fuera del envoltorio.
   const [panel, servicios] = await Promise.all([
     getPanelComisiones(companyId, inicio, fin),
-    prisma.servicio
-      .findMany({
-        where: { companyId, activo: true },
-        orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
-        select: { id: true, nombre: true, comisionPorcentaje: true, comisionMonto: true },
-      })
-      .catch(() => []),
+    conEmpresaOTodas(
+      companyId,
+      'app · carwash · comisiones: sin empresa activa es el superadmin',
+      (tx) =>
+        tx.servicio.findMany({
+          where: { companyId, activo: true },
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          select: { id: true, nombre: true, comisionPorcentaje: true, comisionMonto: true },
+        })
+    ).catch(() => []),
   ])
 
   const tarifas: ServicioTarifa[] = servicios.map((s) => ({

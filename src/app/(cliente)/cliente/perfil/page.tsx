@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { getClientePerfil } from '@/modules/cliente/queries'
-import { prisma } from '@/lib/prisma'
 import { ProfileForm } from '@/components/cliente/ProfileForm'
 import { IdMembegoCard } from '@/components/cliente/IdMembegoCard'
 import { ensureCodigoCorto } from '@/lib/referidos'
@@ -70,22 +70,31 @@ export default async function PerfilPage() {
     beneficiosActivos,
     ubicacion,
   ] = await Promise.all([
-    prisma.whatsAppConfig.findUnique({ where: { companyId: cliente.companyId } }).catch(() => null),
-    prisma.membership
-      .count({
+    // Lo de la empresa del cliente, en su contexto y en una sola transacción.
+    conEmpresa(cliente.companyId, (tx) =>
+      tx.whatsAppConfig.findUnique({ where: { companyId: cliente.companyId } })
+    ).catch(() => null),
+    conEmpresa(cliente.companyId, (tx) =>
+      tx.membership.count({
         where: {
           cliente: { id: cliente.id },
           estado: 'ACTIVA',
           OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
         },
       })
-      .catch(() => 0),
+    ).catch(() => 0),
+    // A cuántas empresas SIGUE esta persona: la cuenta cruza inquilinos por
+    // definición — es lo que hace interesante el número.
     user.metadata.dbUserId
-      ? prisma.companyFollow.count({ where: { userId: user.metadata.dbUserId } }).catch(() => 0)
+      ? sinEmpresa('perfil: seguir empresas es de la persona y cruza inquilinos', (tx) =>
+          tx.companyFollow.count({ where: { userId: user.metadata.dbUserId! } })
+        ).catch(() => 0)
       : Promise.resolve(0),
-    prisma.productoCompra
-      .count({ where: { clienteId: cliente.id, estado: 'ACTIVA', usosRestantes: { gt: 0 } } })
-      .catch(() => 0),
+    conEmpresa(cliente.companyId, (tx) =>
+      tx.productoCompra.count({
+        where: { clienteId: cliente.id, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
+      })
+    ).catch(() => 0),
     user.metadata.dbUserId
       ? LocationService.primaria(user.metadata.dbUserId).catch(() => null)
       : Promise.resolve(null),

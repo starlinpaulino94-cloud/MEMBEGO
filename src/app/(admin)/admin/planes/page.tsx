@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { Check, Infinity as InfinityIcon, Plus, Pencil, Package, LayoutTemplate } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
@@ -42,10 +43,14 @@ export default async function PlanesPage() {
   let bienvenida: { activa: boolean; tipo: string; valor: number | null } | null = null
   if (companyId) {
     try {
-      const company = await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { bienvenidaActiva: true, bienvenidaTipo: true, bienvenidaValor: true },
-      })
+      const company = await conEmpresaOTodas(
+        companyId,
+        'planes: sin empresa activa es el superadmin, que cruza empresas a propósito',
+        (tx) => tx.company.findUnique({
+          where: { id: companyId },
+          select: { bienvenidaActiva: true, bienvenidaTipo: true, bienvenidaValor: true },
+        })
+      )
       if (company) {
         bienvenida = {
           activa: company.bienvenidaActiva,
@@ -59,18 +64,22 @@ export default async function PlanesPage() {
   }
 
   try {
-    planes = await prisma.plan.findMany({
-      where: companyId ? { companyId } : {},
-      select: {
-        id: true, nombre: true, precio: true, esIlimitado: true,
-        lavadosIncluidos: true, activo: true, descripcion: true,
-        beneficios: true, companyId: true, vigenciaDias: true,
-        condiciones: true, color: true, orden: true,
-        company: { select: { name: true } },
-        _count: { select: { memberships: true } },
-      },
-      orderBy: [{ companyId: 'asc' }, { orden: 'asc' }, { precio: 'asc' }],
-    })
+    planes = await conEmpresaOTodas(
+      companyId,
+      'planes: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.plan.findMany({
+        where: companyId ? { companyId } : {},
+        select: {
+          id: true, nombre: true, precio: true, esIlimitado: true,
+          lavadosIncluidos: true, activo: true, descripcion: true,
+          beneficios: true, companyId: true, vigenciaDias: true,
+          condiciones: true, color: true, orden: true,
+          company: { select: { name: true } },
+          _count: { select: { memberships: true } },
+        },
+        orderBy: [{ companyId: 'asc' }, { orden: 'asc' }, { precio: 'asc' }],
+      })
+    )
   } catch (e) {
     console.error('[admin-planes]', e)
   }

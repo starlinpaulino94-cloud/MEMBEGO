@@ -1,11 +1,11 @@
 import Image from 'next/image'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney, formatDate } from '@/lib/format'
-import { prisma } from '@/lib/prisma'
 import { EstadoBadge } from '@/components/EstadoBadge'
 import {
   ConfirmarPagoButton,
@@ -154,201 +154,209 @@ export default async function PagosPage({
     sucursalComprasData,
     seguimientoMembresiasData,
     seguimientoComprasData,
-    conteos,
     totalSucursalMembresias,
-  ] = await Promise.all([
-    prisma.membership
-      .findMany({
-        where: whereTransferencias(companyId),
-        select: {
-          id: true,
-          estado: true,
-          clienteId: true,
-          updatedAt: true,
-          comprobanteUrl: true,
-          comprobanteNota: true,
-          adminNota: true,
-          descuentoBienvenida: true,
-          fechaInicio: true,
-          cliente: {
-            select: { nombre: true, email: true, company: { select: { name: true } } },
+  ] = await conEmpresaOTodas(
+    companyId,
+    'pagos: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => Promise.all([
+      tx.membership
+        .findMany({
+          where: whereTransferencias(companyId),
+          select: {
+            id: true,
+            estado: true,
+            clienteId: true,
+            updatedAt: true,
+            comprobanteUrl: true,
+            comprobanteNota: true,
+            adminNota: true,
+            descuentoBienvenida: true,
+            fechaInicio: true,
+            cliente: {
+              select: { nombre: true, email: true, company: { select: { name: true } } },
+            },
+            plan: { select: { nombre: true, precio: true } },
+            metodoPago: { select: { nombre: true } },
           },
-          plan: { select: { nombre: true, precio: true } },
-          metodoPago: { select: { nombre: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-        skip: pagTr.saltar,
-        take: pagTr.tomar,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] pendientes query', e)
-        return null
-      }),
-    prisma.membership
-      .findMany({
-        where: whereCambiosDePlan(companyId),
-        select: {
-          id: true,
-          clienteId: true,
-          updatedAt: true,
-          comprobanteUrl: true,
-          comprobanteNota: true,
-          cliente: {
-            select: { nombre: true, email: true, company: { select: { name: true } } },
+          orderBy: { updatedAt: 'desc' },
+          skip: pagTr.saltar,
+          take: pagTr.tomar,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] pendientes query', e)
+          return null
+        }),
+      tx.membership
+        .findMany({
+          where: whereCambiosDePlan(companyId),
+          select: {
+            id: true,
+            clienteId: true,
+            updatedAt: true,
+            comprobanteUrl: true,
+            comprobanteNota: true,
+            cliente: {
+              select: { nombre: true, email: true, company: { select: { name: true } } },
+            },
+            plan: { select: { nombre: true } },
+            planSolicitado: { select: { nombre: true, precio: true } },
           },
-          plan: { select: { nombre: true } },
-          planSolicitado: { select: { nombre: true, precio: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-        skip: pagCp.saltar,
-        take: pagCp.tomar,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] cambios query', e)
-        return null
-      }),
-    // Fase E5: compras de promociones esperando validación del pago.
-    prisma.productoCompra
-      .findMany({
-        where: whereComprasEnValidacion(companyId),
-        select: {
-          id: true,
-          clienteId: true,
-          updatedAt: true,
-          comprobanteUrl: true,
-          comprobanteNota: true,
-          transferenciaFecha: true,
-          precioCongelado: true,
-          cliente: {
-            select: { nombre: true, email: true, company: { select: { name: true } } },
+          orderBy: { updatedAt: 'desc' },
+          skip: pagCp.saltar,
+          take: pagCp.tomar,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] cambios query', e)
+          return null
+        }),
+      // Fase E5: compras de promociones esperando validación del pago.
+      tx.productoCompra
+        .findMany({
+          where: whereComprasEnValidacion(companyId),
+          select: {
+            id: true,
+            clienteId: true,
+            updatedAt: true,
+            comprobanteUrl: true,
+            comprobanteNota: true,
+            transferenciaFecha: true,
+            precioCongelado: true,
+            cliente: {
+              select: { nombre: true, email: true, company: { select: { name: true } } },
+            },
+            promocion: { select: { titulo: true } },
+            metodoPago: { select: { nombre: true } },
           },
-          promocion: { select: { titulo: true } },
-          metodoPago: { select: { nombre: true } },
-        },
-        orderBy: { updatedAt: 'desc' },
-        skip: pagPr.saltar,
-        take: pagPr.tomar,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] compras query', e)
-        return null
-      }),
-    // Pagos EN SUCURSAL: el cliente vino a pagar al local y nadie ha cobrado
-    // todavía. La condición vive en `modules/pagos/colas.ts` y se aplica en la
-    // BASE, no en memoria: antes se traían 500 filas y se separaban aquí, así
-    // que a partir de la 501 el recuento de la pestaña era falso sin avisar.
-    prisma.membership
-      .findMany({
-        where: whereMembresiasEnSucursal(companyId),
-        select: {
-          id: true,
-          estado: true,
-          clienteId: true,
-          createdAt: true,
-          updatedAt: true,
-          referencia: true,
-          descuentoBienvenida: true,
-          fechaInicio: true,
-          rechazadoReason: true,
-          sucursalPago: { select: { nombre: true } },
-          metodoPago: { select: { nombre: true, tipo: true } },
-          cliente: {
-            select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+          orderBy: { updatedAt: 'desc' },
+          skip: pagPr.saltar,
+          take: pagPr.tomar,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] compras query', e)
+          return null
+        }),
+      // Pagos EN SUCURSAL: el cliente vino a pagar al local y nadie ha cobrado
+      // todavía. La condición vive en `modules/pagos/colas.ts` y se aplica en la
+      // BASE, no en memoria: antes se traían 500 filas y se separaban aquí, así
+      // que a partir de la 501 el recuento de la pestaña era falso sin avisar.
+      tx.membership
+        .findMany({
+          where: whereMembresiasEnSucursal(companyId),
+          select: {
+            id: true,
+            estado: true,
+            clienteId: true,
+            createdAt: true,
+            updatedAt: true,
+            referencia: true,
+            descuentoBienvenida: true,
+            fechaInicio: true,
+            rechazadoReason: true,
+            sucursalPago: { select: { nombre: true } },
+            metodoPago: { select: { nombre: true, tipo: true } },
+            cliente: {
+              select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+            },
+            plan: { select: { nombre: true, precio: true } },
           },
-          plan: { select: { nombre: true, precio: true } },
-        },
-        orderBy: { updatedAt: 'asc' },
-        take: VENTANA_SUCURSAL,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] sucursal membresías query', e)
-        return null
-      }),
-    // Compras de promociones a pagar en el local (misma condición).
-    prisma.productoCompra
-      .findMany({
-        where: whereComprasEnSucursal(companyId),
-        select: {
-          id: true,
-          estado: true,
-          clienteId: true,
-          createdAt: true,
-          updatedAt: true,
-          referencia: true,
-          precioCongelado: true,
-          rechazadoReason: true,
-          sucursalPago: { select: { nombre: true } },
-          metodoPago: { select: { nombre: true, tipo: true } },
-          cliente: {
-            select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+          orderBy: { updatedAt: 'asc' },
+          take: VENTANA_SUCURSAL,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] sucursal membresías query', e)
+          return null
+        }),
+      // Compras de promociones a pagar en el local (misma condición).
+      tx.productoCompra
+        .findMany({
+          where: whereComprasEnSucursal(companyId),
+          select: {
+            id: true,
+            estado: true,
+            clienteId: true,
+            createdAt: true,
+            updatedAt: true,
+            referencia: true,
+            precioCongelado: true,
+            rechazadoReason: true,
+            sucursalPago: { select: { nombre: true } },
+            metodoPago: { select: { nombre: true, tipo: true } },
+            cliente: {
+              select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+            },
+            promocion: { select: { titulo: true, precio: true } },
           },
-          promocion: { select: { titulo: true, precio: true } },
-        },
-        orderBy: { updatedAt: 'asc' },
-        take: VENTANA_SUCURSAL,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] sucursal compras query', e)
-        return null
-      }),
-    // SEGUIMIENTO: empezaron y no completaron. Las dos listas se mezclan por
-    // fecha, así que cada una trae hasta el final de la ventana visible y el
-    // corte se hace después: es exacto para cualquier página, y la consulta
-    // crece con la página que se pide, no con el tamaño de la cola.
-    prisma.membership
-      .findMany({
-        where: whereMembresiasSinCompletar(companyId),
-        select: {
-          id: true,
-          estado: true,
-          clienteId: true,
-          updatedAt: true,
-          descuentoBienvenida: true,
-          fechaInicio: true,
-          rechazadoReason: true,
-          metodoPago: { select: { tipo: true } },
-          cliente: {
-            select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+          orderBy: { updatedAt: 'asc' },
+          take: VENTANA_SUCURSAL,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] sucursal compras query', e)
+          return null
+        }),
+      // SEGUIMIENTO: empezaron y no completaron. Las dos listas se mezclan por
+      // fecha, así que cada una trae hasta el final de la ventana visible y el
+      // corte se hace después: es exacto para cualquier página, y la consulta
+      // crece con la página que se pide, no con el tamaño de la cola.
+      tx.membership
+        .findMany({
+          where: whereMembresiasSinCompletar(companyId),
+          select: {
+            id: true,
+            estado: true,
+            clienteId: true,
+            updatedAt: true,
+            descuentoBienvenida: true,
+            fechaInicio: true,
+            rechazadoReason: true,
+            metodoPago: { select: { tipo: true } },
+            cliente: {
+              select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+            },
+            plan: { select: { nombre: true, precio: true } },
           },
-          plan: { select: { nombre: true, precio: true } },
-        },
-        orderBy: { updatedAt: 'asc' },
-        take: VENTANA_SEGUIMIENTO,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] seguimiento membresías query', e)
-        return null
-      }),
-    prisma.productoCompra
-      .findMany({
-        where: whereComprasSinCompletar(companyId),
-        select: {
-          id: true,
-          estado: true,
-          clienteId: true,
-          updatedAt: true,
-          precioCongelado: true,
-          rechazadoReason: true,
-          cliente: {
-            select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+          orderBy: { updatedAt: 'asc' },
+          take: VENTANA_SEGUIMIENTO,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] seguimiento membresías query', e)
+          return null
+        }),
+      tx.productoCompra
+        .findMany({
+          where: whereComprasSinCompletar(companyId),
+          select: {
+            id: true,
+            estado: true,
+            clienteId: true,
+            updatedAt: true,
+            precioCongelado: true,
+            rechazadoReason: true,
+            cliente: {
+              select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+            },
+            promocion: { select: { titulo: true, precio: true } },
           },
-          promocion: { select: { titulo: true, precio: true } },
-        },
-        orderBy: { updatedAt: 'asc' },
-        take: VENTANA_SEGUIMIENTO,
-      })
-      .catch((e) => {
-        console.error('[admin-pagos] seguimiento compras query', e)
-        return null
-      }),
-    // Recuentos de las cinco colas — la MISMA definición que consume el aviso
-    // del Resumen (`modules/pagos/colas.ts`). Ya no se derivan de las filas
-    // cargadas, así que el número de la pestaña es el de toda la cola.
-    contarColasDePago(companyId),
-    prisma.membership
-      .count({ where: whereMembresiasEnSucursal(companyId) })
-      .catch(() => 0),
-  ])
+          orderBy: { updatedAt: 'asc' },
+          take: VENTANA_SEGUIMIENTO,
+        })
+        .catch((e) => {
+          console.error('[admin-pagos] seguimiento compras query', e)
+          return null
+        }),
+      tx.membership
+        .count({ where: whereMembresiasEnSucursal(companyId) })
+        .catch(() => 0),
+    ])
+  )
+
+  // Los recuentos de las cinco colas van APARTE: `contarColasDePago` abre su
+  // propia transacción con su contexto, y anidarla dentro de la de arriba
+  // pediría una segunda conexión desde dentro de una abierta — que con el
+  // pooler por delante es exactamente como se agota el pool.
+  // Es la MISMA definición que consume el aviso del Resumen
+  // (`modules/pagos/colas.ts`): el número de la pestaña y el del panel salen
+  // del mismo sitio, que es lo que arregló el «7 por validar → pantalla con 0».
+  const conteos = await contarColasDePago(companyId)
 
   const loadError =
     pendientesData === null ||

@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import {
   capacidadesEfectivas,
   CAPACIDADES,
@@ -37,14 +37,20 @@ export default async function CapacidadesEmpresaPage() {
   // base de datos, se cae al paquete base de la categoría.
   let empresa: { name: string; type: string | null; capacidades: unknown } | null = null
   try {
-    empresa = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { name: true, type: true, capacidades: true },
-    })
+    empresa = await conEmpresaOTodas(
+      companyId,
+      'aplicaciones · capacidades: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, type: true, capacidades: true },
+      })
+    )
   } catch {
-    const basica = await prisma.company
-      .findUnique({ where: { id: companyId }, select: { name: true, type: true } })
-      .catch(() => null)
+    const basica = await conEmpresaOTodas(
+      companyId,
+      'aplicaciones · capacidades: lectura defensiva si falta la columna',
+      (tx) => tx.company.findUnique({ where: { id: companyId }, select: { name: true, type: true } })
+    ).catch(() => null)
     empresa = basica ? { ...basica, capacidades: null } : null
   }
 

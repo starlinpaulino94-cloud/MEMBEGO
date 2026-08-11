@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { ChevronRight, Ticket, Clock, History, Sparkles, Gift } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { getRegalosCliente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
@@ -115,8 +115,14 @@ export default async function MisPromocionesPage() {
   const clienteIds = await misClienteIds(user.supabaseId)
 
   const regalos = await getRegalosCliente(clienteId).catch(() => [])
-  const compras = await prisma.productoCompra
-    .findMany({
+  // CRUZA EMPRESAS A PROPÓSITO, y es el motivo por el que existe `clienteIds`:
+  // la misma persona tiene una ficha por negocio, y filtrar por la activa hacía
+  // que una recompensa reclamada en otro se guardara bien y no apareciera en
+  // ningún sitio. Un `conEmpresa` aquí reintroduciría ese fallo.
+  const compras = await sinEmpresa(
+    'mis beneficios: la persona los ve de todos los negocios donde tiene ficha',
+    (tx) =>
+      tx.productoCompra.findMany({
       where: { clienteId: { in: clienteIds } },
       select: {
         id: true,
@@ -127,10 +133,10 @@ export default async function MisPromocionesPage() {
         promocion: { select: { titulo: true, imagenUrl: true, tipo: true } },
         company: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
-    .catch(() => [])
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      })
+  ).catch(() => [])
 
   const activas = compras.filter((c) => c.estado === 'ACTIVA')
   const pendientes = compras.filter((c) => PENDIENTES.includes(c.estado))

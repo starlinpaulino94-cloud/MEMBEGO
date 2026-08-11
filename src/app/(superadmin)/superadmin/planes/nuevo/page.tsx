@@ -1,17 +1,20 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
+import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { NuevoPlanForm } from '@/components/admin/NuevoPlanForm'
 
 export default async function NuevoPlanPage() {
   await requireRole('SUPERADMIN')
 
-  const companies = await prisma.company.findMany({
-    where: { isActive: true },
-    orderBy: { name: 'asc' },
-  })
+  const companies = await sinEmpresa(
+    'planes globales · nuevo: el superadmin elige a qué empresa pertenece',
+    (tx) => tx.company.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    })
+  )
 
   return (
     <div className="max-w-xl space-y-6">

@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireSection } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { getAuditoria, ACCION_LABEL } from '@/modules/auditoria/queries'
 import { BitacoraTabla } from '@/components/auditoria/BitacoraTabla'
 import { PageHeader } from '@/components/ui/page-header'
@@ -35,9 +35,13 @@ export default async function ActividadPage({
 
   const { accion, q, desde, hasta } = await searchParams
 
-  const empresa = await prisma.company
-    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-    .catch(() => null)
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'actividad: sin empresa activa es el superadmin',
+    (tx) => tx.company
+      .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      .catch(() => null)
+  )
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
 
   let items: Awaited<ReturnType<typeof getAuditoria>> = []

@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { getOrdenDetalle } from '@/modules/carwash/compras'
 import { OrdenDetalle, type ProductoOpcion } from '@/components/carwash/OrdenDetalle'
@@ -48,13 +48,17 @@ export default async function OrdenPage({ params }: { params: Promise<{ id: stri
   const orden = await getOrdenDetalle(companyId, id)
   if (!orden) notFound()
 
-  const productos = await prisma.productoInventario
-    .findMany({
-      where: { companyId, activo: true },
-      orderBy: { nombre: 'asc' },
-      select: { id: true, nombre: true, unidad: true, costo: true },
-    })
-    .catch(() => [])
+  const productos = await conEmpresaOTodas(
+    companyId,
+    'app · carwash · compras · [id]: sin empresa activa es el superadmin',
+    (tx) => tx.productoInventario
+      .findMany({
+        where: { companyId, activo: true },
+        orderBy: { nombre: 'asc' },
+        select: { id: true, nombre: true, unidad: true, costo: true },
+      })
+      .catch(() => [])
+  )
 
   const opciones: ProductoOpcion[] = productos.map((p) => ({
     id: p.id,

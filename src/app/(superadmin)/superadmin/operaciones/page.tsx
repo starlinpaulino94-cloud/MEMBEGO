@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Megaphone, Gift, MessageCircle } from 'lucide-react'
@@ -11,10 +11,13 @@ export default async function OperacionesPage() {
 
   let companies: { id: string; name: string; type: string }[] = []
   try {
-    companies = await prisma.company.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, type: true },
-    })
+    companies = await sinEmpresa(
+      'operaciones de plataforma: compara empresas entre sí',
+      (tx) => tx.company.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, type: true },
+      })
+    )
   } catch (e) {
     console.error('[operaciones] companies', e)
   }
@@ -31,23 +34,26 @@ export default async function OperacionesPage() {
       referidosCompletados,
       reglas,
       whatsapps,
-    ] = await Promise.all([
-      prisma.promocion.groupBy({ by: ['companyId'], _count: { _all: true } }),
-      prisma.promocion.groupBy({
-        by: ['companyId'],
-        where: { activo: true },
-        _count: { _all: true },
-      }),
-      prisma.referido.groupBy({
-        by: ['companyId'],
-        where: { estado: 'COMPLETADO' },
-        _count: { _all: true },
-      }),
-      prisma.reglaRecompensa.groupBy({ by: ['companyId'], _count: { _all: true } }),
-      prisma.whatsAppConfig.findMany({
-        select: { companyId: true, numero: true, activo: true },
-      }),
-    ])
+    ] = await sinEmpresa(
+      'operaciones de plataforma: compara empresas entre sí',
+      (tx) => Promise.all([
+        tx.promocion.groupBy({ by: ['companyId'], _count: { _all: true } }),
+        tx.promocion.groupBy({
+          by: ['companyId'],
+          where: { activo: true },
+          _count: { _all: true },
+        }),
+        tx.referido.groupBy({
+          by: ['companyId'],
+          where: { estado: 'COMPLETADO' },
+          _count: { _all: true },
+        }),
+        tx.reglaRecompensa.groupBy({ by: ['companyId'], _count: { _all: true } }),
+        tx.whatsAppConfig.findMany({
+          select: { companyId: true, numero: true, activo: true },
+        }),
+      ])
+    )
 
     for (const c of companies) {
       const total = promosTotal.find((p) => p.companyId === c.id)?._count._all ?? 0

@@ -1,4 +1,5 @@
 import { ComprobantePreview } from '@/components/pagos/ComprobanteLink'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Link from 'next/link'
 import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
@@ -6,7 +7,6 @@ import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney, formatDate, formatDateTime } from '@/lib/format'
-import { prisma } from '@/lib/prisma'
 import { QRDisplay } from '@/components/qr/QRDisplay'
 import { EstadoBadge } from '@/components/EstadoBadge'
 import {
@@ -72,7 +72,10 @@ export default async function ClienteDetailPage({
   const companyId = companyFilter(user)
 
   const fetchCliente = () =>
-    prisma.cliente.findUnique({
+    conEmpresaOTodas(
+      companyId,
+      'ficha del cliente: sin empresa activa es el superadmin',
+      (tx) => tx.cliente.findUnique({
       where: { id },
       include: {
         company: true,
@@ -93,7 +96,8 @@ export default async function ClienteDetailPage({
           include: { autor: { select: { name: true } } },
         },
       },
-    })
+      })
+    )
 
   let cliente: Awaited<ReturnType<typeof fetchCliente>> = null
   try {
@@ -131,10 +135,14 @@ export default async function ClienteDetailPage({
 
   let planes: { id: string; nombre: string; precio: string }[] = []
   try {
-    const rows = await prisma.plan.findMany({
-      where: { companyId: cliente.companyId, activo: true },
-      orderBy: { precio: 'asc' },
-    })
+    const rows = await conEmpresaOTodas(
+      companyId,
+      'clientes · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.plan.findMany({
+        where: { companyId: cliente.companyId, activo: true },
+        orderBy: { precio: 'asc' },
+      })
+    )
     planes = rows.map((p) => ({
       id: p.id,
       nombre: p.nombre,

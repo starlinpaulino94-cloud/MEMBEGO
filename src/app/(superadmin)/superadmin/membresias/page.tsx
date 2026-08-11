@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { EstadoBadge } from '@/components/EstadoBadge'
@@ -43,11 +43,14 @@ export default async function SuperadminMembresiasPage({
   }[] = []
 
   try {
-    companies = await prisma.company.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    })
+    companies = await sinEmpresa(
+      'membresías globales: el superadmin las revisa a través de todas las empresas',
+      (tx) => tx.company.findMany({
+        where: { isActive: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      })
+    )
   } catch (e) {
     console.error('[superadmin-membresias] companies', e)
   }
@@ -61,31 +64,34 @@ export default async function SuperadminMembresiasPage({
   }
 
   try {
-    const [data, cuenta] = await Promise.all([
-      prisma.membership.findMany({
-      where,
-      select: {
-        id: true,
-        estado: true,
-        fechaInicio: true,
-        fechaVencimiento: true,
-        lavadosRestantes: true,
-        clienteId: true,
-        plan: { select: { nombre: true, precio: true, lavadosIncluidos: true, esIlimitado: true } },
-        cliente: {
-          select: {
-            nombre: true,
-            email: true,
-            company: { select: { name: true } },
+    const [data, cuenta] = await sinEmpresa(
+      'membresías globales: el superadmin las revisa a través de todas las empresas',
+      (tx) => Promise.all([
+        tx.membership.findMany({
+        where,
+        select: {
+          id: true,
+          estado: true,
+          fechaInicio: true,
+          fechaVencimiento: true,
+          lavadosRestantes: true,
+          clienteId: true,
+          plan: { select: { nombre: true, precio: true, lavadosIncluidos: true, esIlimitado: true } },
+          cliente: {
+            select: {
+              nombre: true,
+              email: true,
+              company: { select: { name: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip: paginacion.saltar,
-      take: paginacion.tomar,
-      }),
-      prisma.membership.count({ where }),
-    ])
+        orderBy: { createdAt: 'desc' },
+        skip: paginacion.saltar,
+        take: paginacion.tomar,
+        }),
+        tx.membership.count({ where }),
+      ])
+    )
     membresias = data
     total = cuenta
   } catch (e) {

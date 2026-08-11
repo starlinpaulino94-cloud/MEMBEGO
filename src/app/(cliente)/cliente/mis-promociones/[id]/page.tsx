@@ -1,4 +1,5 @@
 import { ComprobanteLink } from '@/components/pagos/ComprobanteLink'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
@@ -12,7 +13,6 @@ import {
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { safeInternalPath } from '@/lib/utils'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { QRDisplay } from '@/components/qr/QRDisplay'
@@ -53,23 +53,31 @@ export default async function MiCompraPage({
   const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
   const retornoQs = retornoParam ? `&retorno=${encodeURIComponent(retorno)}` : ''
 
-  const compra = await prisma.productoCompra.findUnique({
-    where: { id },
-    include: {
-      promocion: true,
-      company: { select: { name: true, zonaHoraria: true } },
-      metodoPago: true,
-      transiciones: { orderBy: { createdAt: 'asc' } },
-      qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-      campanaPaso: {
-        select: {
-          orden: true,
-          campanaId: true,
-          campana: { select: { nombre: true } },
+  // La persona puede tener ficha en varios negocios y este beneficio ser de
+  // cualquiera de ellos, así que la búsqueda por id no cabe en una sola empresa.
+  // Quien lo protege es la comprobación de pertenencia de más abajo, contra
+  // `misClienteIds`; el aislamiento por empresa aquí daría un 404 a su dueño.
+  const compra = await sinEmpresa(
+    'detalle del beneficio: puede ser de cualquier negocio donde la persona tenga ficha',
+    (tx) =>
+      tx.productoCompra.findUnique({
+        where: { id },
+        include: {
+          promocion: true,
+          company: { select: { name: true, zonaHoraria: true } },
+          metodoPago: true,
+          transiciones: { orderBy: { createdAt: 'asc' } },
+          qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          campanaPaso: {
+            select: {
+              orden: true,
+              campanaId: true,
+              campana: { select: { nombre: true } },
+            },
+          },
         },
-      },
-    },
-  })
+      })
+  )
   // Contra TODAS las fichas de la persona, no solo la de la empresa activa: una
   // recompensa reclamada en otro negocio queda bajo la ficha de ESE negocio, y
   // comparando con la activa esta pantalla daba 404 — justo aquí, que es adonde
@@ -101,11 +109,13 @@ export default async function MiCompraPage({
     const agenda = invitar ? await getAgendaConfig(compra.companyId).catch(() => null) : null
     if (agenda?.activa) {
       try {
-        citaCanje = await prisma.cita.findFirst({
-          where: { compraId: compra.id, estado: { notIn: ['CANCELADA', 'NO_ASISTIO'] } },
-          orderBy: { inicio: 'desc' },
-          select: { inicio: true, estado: true },
-        })
+        citaCanje = await conEmpresa(compra.companyId, (tx) =>
+          tx.cita.findFirst({
+            where: { compraId: compra.id, estado: { notIn: ['CANCELADA', 'NO_ASISTIO'] } },
+            orderBy: { inicio: 'desc' },
+            select: { inicio: true, estado: true },
+          })
+        )
         sugiereCita = !citaCanje
       } catch (e) {
         // Columna citas.compraId sin migrar: simplemente no se sugiere nada.
@@ -114,17 +124,21 @@ export default async function MiCompraPage({
     }
   }
   // Campaña en cadena: qué beneficio se desbloquea al canjear este.
-  const siguienteEnCadena = compra.campanaPaso
-    ? await prisma.campanaPaso
-        .findFirst({
+  // Extraído del closure: el narrowing del ternario no sobrevive dentro de la
+  // función, y dentro vuelve a ser `campanaPaso | null`.
+  const paso = compra.campanaPaso
+  const siguienteEnCadena = paso
+    ? await sinEmpresa(
+        'campaña en cadena: los pasos pueden estar repartidos entre varias empresas',
+        (tx) => tx.campanaPaso.findFirst({
           where: {
-            campanaId: compra.campanaPaso.campanaId,
-            orden: { gt: compra.campanaPaso.orden },
+            campanaId: paso.campanaId,
+            orden: { gt: paso.orden },
           },
           orderBy: { orden: 'asc' },
           select: { titulo: true, company: { select: { name: true } } },
         })
-        .catch(() => null)
+      ).catch(() => null)
     : null
 
   const fmtCita = (d: Date) =>

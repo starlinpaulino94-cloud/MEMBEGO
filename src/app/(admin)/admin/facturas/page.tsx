@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
@@ -107,21 +107,25 @@ export default async function FacturasPage({
 
   // Paginación real: el historial de comprobantes es permanente y crece sin
   // límite; con un tope fijo las reimpresiones viejas eran inalcanzables.
-  const [facturas, totalFacturas] = await Promise.all([
-    prisma.transaction.findMany({
-      where,
-      include: {
-        cliente: { select: { nombre: true } },
-        sucursal: { select: { nombre: true } },
-        empleado: { select: { name: true } },
-        _count: { select: { impresiones: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip: paginacion.saltar,
-      take: paginacion.tomar,
-    }),
-    prisma.transaction.count({ where }),
-  ])
+  const [facturas, totalFacturas] = await conEmpresaOTodas(
+    companyId,
+    'facturas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => Promise.all([
+      tx.transaction.findMany({
+        where,
+        include: {
+          cliente: { select: { nombre: true } },
+          sucursal: { select: { nombre: true } },
+          empleado: { select: { name: true } },
+          _count: { select: { impresiones: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: paginacion.saltar,
+        take: paginacion.tomar,
+      }),
+      tx.transaction.count({ where }),
+    ])
+  )
 
   return (
     <div className="space-y-6">

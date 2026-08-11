@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
+import { conEmpresa, conEmpresaOTodas } from '@/lib/tenant'
+import { companyFilter } from '@/modules/admin/queries'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { PromocionForm } from '@/components/admin/PromocionForm'
 import { SharePreviewCard } from '@/components/share/SharePreviewCard'
@@ -14,8 +15,16 @@ export default async function EditarPromocionPage({
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
 
-  const promo = await prisma.promocion.findUnique({ where: { id } })
+  // Con el contexto del administrador: además de preparar RLS, impide abrir la
+  // promoción de otra empresa acertando el identificador.
+  const companyId = companyFilter(user)
+  const promo = await conEmpresaOTodas(
+    companyId,
+    'promociones · editar: sin empresa activa es el superadmin',
+    (tx) => tx.promocion.findUnique({ where: { id } })
+  )
   if (!promo) notFound()
+  if (companyId && promo.companyId !== companyId) notFound()
 
   // Textos de compartición guardados (para la vista previa de abajo).
   const shareRaw = (promo.shareConfig ?? {}) as { ogTitulo?: unknown; ogDescripcion?: unknown }
@@ -24,11 +33,13 @@ export default async function EditarPromocionPage({
     ogDescripcion: typeof shareRaw.ogDescripcion === 'string' ? shareRaw.ogDescripcion : '',
   }
 
-  const campanas = await prisma.campana.findMany({
-    where: { companyId: promo.companyId, activo: true },
-    select: { id: true, nombre: true },
-    orderBy: { createdAt: 'desc' },
-  })
+  const campanas = await conEmpresa(promo.companyId, (tx) =>
+    tx.campana.findMany({
+      where: { companyId: promo.companyId, activo: true },
+      select: { id: true, nombre: true },
+      orderBy: { createdAt: 'desc' },
+    })
+  )
   if (
     user.metadata.role !== 'SUPERADMIN' &&
     promo.companyId !== user.metadata.companyId

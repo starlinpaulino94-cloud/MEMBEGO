@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { CampanaForm } from '@/components/admin/CampanaForm'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,11 @@ export default async function EditarCampanaPage({
   const companyId = companyFilter(user)
   const { id } = await params
 
-  const campana = await prisma.campana.findUnique({ where: { id } })
+  const campana = await conEmpresaOTodas(
+    companyId,
+    'campanas · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.campana.findUnique({ where: { id } })
+  )
   if (!campana) notFound()
   if (companyId && campana.companyId !== companyId) notFound()
 

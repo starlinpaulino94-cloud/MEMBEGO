@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas, type Tx } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -48,8 +48,11 @@ export default async function CampanasPage({
   let total = 0
   // Esta lista no tenía tope: con muchas campañas se traían todas con sus
   // promociones anidadas en cada carga.
-  async function query() {
-    return prisma.campana.findMany({
+  // La lista recibe el `tx` de la transacción de abajo en vez de abrir la suya:
+  // anidar transacciones pide una segunda conexión desde dentro de una abierta,
+  // y con el pooler por delante es así como se agota el pool.
+  const query = (tx: Tx) =>
+    tx.campana.findMany({
       where: { companyId: companyId! },
       include: {
         promociones: {
@@ -65,12 +68,15 @@ export default async function CampanasPage({
       skip: paginacion.saltar,
       take: paginacion.tomar,
     })
-  }
   try {
-    ;[campanas, total] = await Promise.all([
-      query(),
-      prisma.campana.count({ where: { companyId } }),
-    ])
+    ;[campanas, total] = await conEmpresaOTodas(
+      companyId,
+      'campanas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => Promise.all([
+        query(tx),
+        tx.campana.count({ where: { companyId } }),
+      ])
+    )
   } catch (e) {
     console.error('[admin-campanas]', e)
   }

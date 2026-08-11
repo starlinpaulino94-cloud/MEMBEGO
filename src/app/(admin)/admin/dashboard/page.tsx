@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { redirect } from 'next/navigation'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import {
@@ -22,7 +23,6 @@ import { adminMetrics } from '@/modules/admin/queries'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { OnboardingChecklist } from '@/components/admin/OnboardingChecklist'
-import { prisma } from '@/lib/prisma'
 import { formatMoney } from '@/lib/format'
 import { StatCard } from '@/components/ui/stat-card'
 import { AnimatedCounter } from '@/components/system/AnimatedCounter'
@@ -101,10 +101,14 @@ export default async function AdminDashboard() {
   try {
     // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy», y
     // las métricas no pueden calcularse sin ella (ver `dashboardQueries`).
-    company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
-    })
+    company = await conEmpresaOTodas(
+      companyId,
+      'dashboard: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.company.findUnique({
+        where: { id: companyId },
+        select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
+      })
+    )
     d = await getDashboardEjecutivo(
       companyId,
       company?.zonaHoraria || 'America/Santo_Domingo'
