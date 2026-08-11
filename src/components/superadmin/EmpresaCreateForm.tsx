@@ -85,10 +85,18 @@ function SubmitBtn() {
  */
 export function EmpresaCreateForm({
   categories,
+  verticales,
   admins = [],
   demo = false,
 }: {
   categories: CategoryOption[]
+  /**
+   * Verticales de `tipos_negocio`. Llegan como prop desde el servidor: este
+   * formulario es de cliente y no puede consultar la base. Aquí estaban los
+   * cinco `<SelectItem>` escritos a mano que impedían asignar desde la interfaz
+   * un vertical registrado por manifiesto.
+   */
+  verticales: { codigo: string; nombre: string }[]
   /** Administradores existentes a los que se les puede dar esta empresa. */
   admins?: AdminVinculable[]
   demo?: boolean
@@ -125,16 +133,16 @@ export function EmpresaCreateForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="type">Tipo</Label>
-            <Select name="type" defaultValue="carwash">
+            <Select name="type" defaultValue={verticales[0]?.codigo}>
               <SelectTrigger id="type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="carwash">Car Wash</SelectItem>
-                <SelectItem value="restaurante">Restaurante</SelectItem>
-                <SelectItem value="gimnasio">Gimnasio</SelectItem>
-                <SelectItem value="salon">Salón de Belleza</SelectItem>
-                <SelectItem value="otro">Otro</SelectItem>
+                {verticales.map((v) => (
+                  <SelectItem key={v.codigo} value={v.codigo}>
+                    {v.nombre}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

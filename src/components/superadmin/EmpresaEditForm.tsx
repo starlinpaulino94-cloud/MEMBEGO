@@ -27,6 +27,8 @@ interface CompanyData {
   id: string
   name: string
   type: string
+  /** Vertical real (Fase 7). Manda sobre `type`, que es el valor legacy. */
+  tipoNegocioCodigo?: string | null
   description: string | null
   logoUrl: string | null
   email: string | null
@@ -53,10 +55,13 @@ export function EmpresaEditForm({
   company,
   categories,
   selectedCategoryIds,
+  verticales,
 }: {
   company: CompanyData
   categories: CategoryOption[]
   selectedCategoryIds: string[]
+  /** Verticales de `tipos_negocio` (ver `modules/empresas/verticales.ts`). */
+  verticales: { codigo: string; nombre: string }[]
 }) {
   const [state, action] = useActionState(actualizarEmpresa, init)
   const logoUrlRef = useRef<HTMLInputElement>(null)
@@ -84,16 +89,20 @@ export function EmpresaEditForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="type">Tipo</Label>
-          <Select name="type" defaultValue={company.type}>
+          {/* El vertical actual de la empresa puede no estar entre los activos
+              —se desactivó después de asignarlo—. Se añade igualmente para que
+              el selector no aparezca vacío ni cambie el tipo por abrir la
+              pantalla de edición. */}
+          <Select name="type" defaultValue={company.tipoNegocioCodigo ?? company.type}>
             <SelectTrigger id="type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="carwash">Car Wash</SelectItem>
-              <SelectItem value="restaurante">Restaurante</SelectItem>
-              <SelectItem value="gimnasio">Gimnasio</SelectItem>
-              <SelectItem value="salon">Salón de Belleza</SelectItem>
-              <SelectItem value="otro">Otro</SelectItem>
+              {verticales.map((v) => (
+                <SelectItem key={v.codigo} value={v.codigo}>
+                  {v.nombre}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

@@ -44,40 +44,30 @@ async function empresasDisponibles(
   }
 }
 
-/**
- * Plataforma modular · E2 (interruptor D7): con la capacidad NAVEGACION_V2
- * encendida, los módulos operativos salen del menú de MembeGo y viven solo
- * dentro de la app Car Wash (launchpad → shell). Apagada (el default), el
- * menú es EXACTAMENTE el de siempre. Fail-open ante cualquier error.
- */
-async function navOcultaPorApps(companyId: string | null | undefined): Promise<string[]> {
-  if (!companyId) return []
-  try {
-    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
-    const capacidades = await getCapacidadesEmpresa(companyId)
-    if (!capacidades.navegacionV2) return []
-    // E6: qué se oculta lo declara la app de la categoría, no este archivo.
-    const { appDeCategoria } = await import('@/modules/apps/catalogo')
-    return appDeCategoria(capacidades.categoria)?.navOculta ?? []
-  } catch {
-    return []
-  }
-}
-
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const [notifCount, empresas, hiddenNav, demo, sistemasExternos] = await Promise.all([
+  // `hiddenNav` ya no lo alimenta nada aquí.
+  //
+  // Había una función que escondía del menú lateral las entradas «que ya viven
+  // dentro de la app Car Wash»: Escanear QR, Citas, Seguimiento y Sucursales.
+  // Tenía sentido mientras esos módulos fueran de una app construida dentro de
+  // MembeGo. Ya no lo son —los sistemas de cada oficio se construyen aparte—, y
+  // esas cuatro pantallas son de MembeGo: escanear un QR, agendar una cita o
+  // ver quién no ha venido no dependen de que el negocio sea un lavadero.
+  //
+  // Escondidas, quien retiraba el launcher se quedaba sin ellas por ningún
+  // sitio. Vuelven al menú, que es de donde salieron.
+  const [notifCount, empresas, demo, sistemasExternos] = await Promise.all([
     getUnreadCount().catch(() => 0),
     empresasDisponibles(
       user.metadata.role,
       user.metadata.dbUserId,
       user.metadata.companyId ?? null
     ),
-    navOcultaPorApps(user.metadata.companyId),
     nombreSiEsDemo(user.metadata.companyId),
     sistemasParaLanzador(user),
   ])
@@ -91,7 +81,6 @@ export default async function AdminLayout({
       title="MembeGo"
       userEmail={user.email}
       notifCount={notifCount}
-      hiddenNav={hiddenNav}
       sistemasExternos={sistemasExternos}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />

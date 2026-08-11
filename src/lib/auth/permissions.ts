@@ -45,9 +45,11 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
-  // Plataforma modular · E2: launchpad de aplicaciones y shells de negocio
-  // (/admin/aplicaciones y /admin/app/<categoria>).
-  'aplicaciones',
+  // `/admin/app/<vertical>/*`. El launchpad `/admin/aplicaciones` se retiró
+  // —los sistemas de cada oficio se construyen aparte y se conectan por
+  // contrato—, pero las pantallas de Car Wash siguen en el repositorio para su
+  // extracción y su guardia tiene que seguir existiendo. Ya no se enlazan desde
+  // ningún sitio: son alcanzables por URL y nada más.
   'app',
 ] as const
 
@@ -59,7 +61,7 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 // como aterrizaje. Todo lo no listado queda denegado (fail-closed).
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones'],
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app'],
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app'],
 }
 
 /** ¿Puede este rol abrir esta sección del panel? */

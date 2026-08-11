@@ -5,14 +5,16 @@ import { getActiveCategories } from '@/modules/empresas/queries'
 import { getAdminsVinculables } from '@/modules/empresas/accesos'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmpresaCreateForm } from '@/components/superadmin/EmpresaCreateForm'
+import { verticalesElegibles } from '@/modules/empresas/verticales'
 
 export const dynamic = 'force-dynamic'
 
 export default async function NuevaEmpresaDemoPage() {
   await requireRole('SUPERADMIN')
-  const [categories, admins] = await Promise.all([
+  const [categories, admins, verticales] = await Promise.all([
     getActiveCategories(),
     getAdminsVinculables(),
+    verticalesElegibles(),
   ])
 
   return (
@@ -38,7 +40,7 @@ export default async function NuevaEmpresaDemoPage() {
           <CardTitle>Nueva empresa de práctica</CardTitle>
         </CardHeader>
         <CardContent>
-          <EmpresaCreateForm categories={categories} admins={admins} demo />
+          <EmpresaCreateForm categories={categories} admins={admins} demo verticales={verticales} />
         </CardContent>
       </Card>
     </div>

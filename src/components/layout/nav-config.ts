@@ -40,7 +40,6 @@ import {
   Tag,
   QrCode,
   Compass,
-  LayoutGrid,
   SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react'
@@ -177,8 +176,12 @@ const ADMIN_NAV: NavGroup[] = [
       { href: '/admin/personalizacion', label: 'Personalización', icon: Palette },
       { href: '/admin/empleados', label: 'Empleados', icon: UserCog },
       { href: '/admin/metodos-pago', label: 'Métodos de pago', icon: Landmark },
-      // Plataforma modular · E2: launchpad de los sistemas del negocio.
-      { href: '/admin/aplicaciones', label: 'Aplicaciones', icon: LayoutGrid },
+      // «Aplicaciones» vivía aquí: un launchpad de sistemas especializados
+      // CONSTRUIDOS DENTRO de MembeGo. Se retira porque esa idea cambió — los
+      // sistemas de cada oficio se construyen aparte y se conectan por
+      // contrato (`docs/platform/satelite.md`). Los sistemas conectados de una
+      // empresa ya se alcanzan por el App Launcher de la cabecera, que lee de
+      // la base qué tiene habilitado y no de un catálogo en el código.
     ],
   },
   {
