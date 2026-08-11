@@ -222,13 +222,49 @@ transacción y no existe una variante "suelta".
 
 ### Orden recomendado para encenderla
 
-1. ~~Migrar a `conEmpresa` los módulos de `/admin`~~ → **Completado** (Fase 5.0–5.4 + carwash + regalos + app/ + lib/).
-2. ~~Marcar con `sinEmpresa` lo que cruza inquilinos~~ → **Completado**.
-3. En una base de **prueba**: aplicar la Capa 2, cambiar `DATABASE_URL` a
+> #### ⚠️ Estado real, corregido el 2026-08-11
+>
+> Los pasos 1 y 2 estaban marcados como completados **sobre una medida falsa**.
+> El gate `scripts/rls-cobertura.mjs` recorría solo archivos `.ts`, y en App
+> Router una parte enorme de las consultas vive en componentes de servidor
+> (`.tsx`): las páginas del panel llaman a Prisma directamente. Contaba 9
+> archivos de los 95 que tocan la base, y por eso decía «✓ todo cubierto».
+>
+> Medida con el gate corregido:
+>
+> | | |
+> |---|---|
+> | Archivos que tocan la base | **95** |
+> | Sitios de consulta | **~188** |
+> | **Sin envoltorio de tenant** | **85** |
+> | Reparto | 44 admin · 11 superadmin · 6 cliente · 1 empleado · 2 componentes |
+>
+> El inventario nominal está en la constante `PENDIENTES` del script, y se
+> imprime en cada ejecución. **Mientras no esté vacía, el paso 5 no se puede
+> dar**: con `membego_app`, una consulta sin contexto no falla — devuelve cero
+> filas, así que el panel se queda en blanco y los registros no dicen por qué.
+
+1. Migrar a `conEmpresa` los módulos de `src/modules/**`, `src/lib/**` y los
+   route handlers de `src/app/**/route.ts` → **Completado** (Fase 5.0–5.4).
+2. Marcar con `sinEmpresa` lo que cruza inquilinos → **Completado** en esa
+   misma capa.
+3. **Migrar las páginas y componentes de servidor (`.tsx`)** → **85
+   pendientes**. Es el trabajo que queda, y el que hay que terminar antes de
+   seguir. Cada archivo que salga de `PENDIENTES` es una pantalla que sobrevive
+   al encendido.
+4. En una base de **prueba**: aplicar la Capa 2, cambiar `DATABASE_URL` a
    `membego_app`, ejercitar la aplicación entera.
-4. `npm run rls:probar` contra esa base.
-5. Recién entonces, producción — y con `docs/runbooks/` a mano, porque la marcha
+5. `npm run rls:probar` contra esa base.
+6. Recién entonces, producción — y con `docs/runbooks/` a mano, porque la marcha
    atrás es devolver `DATABASE_URL` al rol `postgres`, que se salta RLS.
+
+### Por qué el punto ciego importaba más que los 85 archivos
+
+Un atraso conocido se planifica. Lo grave era el **✓ verde**: cualquiera que
+leyera el gate o la Fase 5 concluiría que solo faltaba cambiar una variable de
+entorno, y esa conclusión termina en una tarde con el panel en blanco y una
+marcha atrás a ciegas. El gate ahora imprime el atraso con su número en cada
+ejecución, y falla en el acto si aparece un archivo **nuevo** sin contexto.
 
 ---
 

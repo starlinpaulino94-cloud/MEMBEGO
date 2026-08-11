@@ -63,6 +63,126 @@ const BLANCA = new Map([
   ['modules/observabilidad/metricas.ts', 'métricas de plataforma cross-tenant (sinEmpresa)'],
 ])
 
+/**
+ * PUNTO CIEGO CORREGIDO (2026-08).
+ *
+ * Este recorrido miraba solo `.ts`. En una aplicación de App Router, una parte
+ * enorme de las consultas vive en **componentes de servidor** (`.tsx`): las
+ * páginas del panel consultan Prisma directamente. El gate informaba «✓ todos
+ * los archivos con consultas usan conEmpresa/sinEmpresa» contando 9 archivos,
+ * cuando en realidad había 91 tocando la base.
+ *
+ * No era un fallo inofensivo: era exactamente el que hace que se encienda RLS
+ * creyendo que el trabajo está hecho. Con `membego_app`, una consulta sin
+ * contexto no da error — devuelve CERO filas. El panel se queda en blanco y
+ * los registros no dicen por qué.
+ */
+/**
+ * EL ATRASO CONOCIDO de la migración a `conEmpresa` (2026-08).
+ *
+ * No es lista blanca: estos archivos **sí** necesitan envoltorio y todavía no
+ * lo tienen. Están aquí para que el gate pueda hacer las dos cosas a la vez:
+ *
+ *   · no bloquear el trabajo de todos los días por un atraso ya conocido, y
+ *   · fallar EN EL ACTO si aparece un archivo nuevo sin contexto.
+ *
+ * Se escribe uno por uno a propósito. Un tope numérico («permitir 85») dejaría
+ * cambiar unos por otros sin que se note; una lista nominal solo se puede
+ * acortar. Cada línea que se borre de aquí es una pantalla que sobrevive al
+ * encendido de RLS.
+ *
+ * MIENTRAS ESTA LISTA NO ESTÉ VACÍA, `DATABASE_URL` NO DEBE APUNTAR A
+ * `membego_app`: con ese rol, una consulta sin contexto no falla — devuelve
+ * cero filas, y la pantalla se queda en blanco sin decir por qué.
+ */
+const PENDIENTES = new Set([
+  'app/(admin)/admin/actividad/page.tsx',
+  'app/(admin)/admin/adquisicion/page.tsx',
+  'app/(admin)/admin/aplicaciones/capacidades/page.tsx',
+  'app/(admin)/admin/aplicaciones/page.tsx',
+  'app/(admin)/admin/app/[app]/page.tsx',
+  'app/(admin)/admin/app/carwash/activos/page.tsx',
+  'app/(admin)/admin/app/carwash/catalogo/page.tsx',
+  'app/(admin)/admin/app/carwash/cola/page.tsx',
+  'app/(admin)/admin/app/carwash/comisiones/page.tsx',
+  'app/(admin)/admin/app/carwash/compras/[id]/page.tsx',
+  'app/(admin)/admin/app/carwash/compras/page.tsx',
+  'app/(admin)/admin/app/carwash/evidencias/page.tsx',
+  'app/(admin)/admin/app/carwash/incidencias/page.tsx',
+  'app/(admin)/admin/app/carwash/reportes/page.tsx',
+  'app/(admin)/admin/app/carwash/turnos/page.tsx',
+  'app/(admin)/admin/app/carwash/vehiculos/page.tsx',
+  'app/(admin)/admin/automatizaciones/plantillas/[id]/page.tsx',
+  'app/(admin)/admin/automatizaciones/plantillas/page.tsx',
+  'app/(admin)/admin/campanas/[id]/editar/page.tsx',
+  'app/(admin)/admin/campanas/page.tsx',
+  'app/(admin)/admin/citas/page.tsx',
+  'app/(admin)/admin/clientes/[id]/page.tsx',
+  'app/(admin)/admin/clientes/page.tsx',
+  'app/(admin)/admin/dashboard/page.tsx',
+  'app/(admin)/admin/empleados/[id]/page.tsx',
+  'app/(admin)/admin/empleados/page.tsx',
+  'app/(admin)/admin/facturas/page.tsx',
+  'app/(admin)/admin/gamificacion/page.tsx',
+  'app/(admin)/admin/invitaciones/[id]/editar/page.tsx',
+  'app/(admin)/admin/invitaciones/nueva/page.tsx',
+  'app/(admin)/admin/membresias/page.tsx',
+  'app/(admin)/admin/metodos-pago/[id]/editar/page.tsx',
+  'app/(admin)/admin/metodos-pago/nuevo/page.tsx',
+  'app/(admin)/admin/metodos-pago/page.tsx',
+  'app/(admin)/admin/notificaciones/page.tsx',
+  'app/(admin)/admin/ofertas/[id]/page.tsx',
+  'app/(admin)/admin/ofertas/nueva/page.tsx',
+  'app/(admin)/admin/ofertas/page.tsx',
+  'app/(admin)/admin/pagos/page.tsx',
+  'app/(admin)/admin/perfil/page.tsx',
+  'app/(admin)/admin/planes/[id]/editar/page.tsx',
+  'app/(admin)/admin/planes/page.tsx',
+  'app/(admin)/admin/promociones/[id]/editar/page.tsx',
+  'app/(admin)/admin/promociones/nuevo/page.tsx',
+  'app/(admin)/admin/promociones/page.tsx',
+  'app/(admin)/admin/publicaciones/[id]/editar/page.tsx',
+  'app/(admin)/admin/publicaciones/nuevo/page.tsx',
+  'app/(admin)/admin/publicaciones/page.tsx',
+  'app/(admin)/admin/referidos/page.tsx',
+  'app/(admin)/admin/regalos/page.tsx',
+  'app/(admin)/admin/registros/page.tsx',
+  'app/(admin)/admin/reportes/page.tsx',
+  'app/(admin)/admin/seguimiento/imprimir/page.tsx',
+  'app/(admin)/admin/seguimiento/page.tsx',
+  'app/(admin)/admin/sucursales/[id]/editar/page.tsx',
+  'app/(admin)/admin/sucursales/page.tsx',
+  'app/(admin)/layout.tsx',
+  'app/(cliente)/cliente/ayuda/page.tsx',
+  'app/(cliente)/cliente/bienvenida/page.tsx',
+  'app/(cliente)/cliente/celebracion/page.tsx',
+  'app/(cliente)/cliente/citas/page.tsx',
+  'app/(cliente)/cliente/intereses/page.tsx',
+  'app/(cliente)/cliente/mis-promociones/[id]/agendar/page.tsx',
+  'app/(cliente)/cliente/mis-promociones/[id]/page.tsx',
+  'app/(cliente)/cliente/mis-promociones/page.tsx',
+  'app/(cliente)/cliente/perfil/page.tsx',
+  'app/(cliente)/membresia/[membresiaId]/page.tsx',
+  'app/(empleado)/empleado/caja/page.tsx',
+  'app/(onboarding)/onboarding/page.tsx',
+  'app/(superadmin)/superadmin/auditoria/page.tsx',
+  'app/(superadmin)/superadmin/campanas/page.tsx',
+  'app/(superadmin)/superadmin/capacidades/page.tsx',
+  'app/(superadmin)/superadmin/dashboard/page.tsx',
+  'app/(superadmin)/superadmin/empresas/[id]/editar/page.tsx',
+  'app/(superadmin)/superadmin/membresias/page.tsx',
+  'app/(superadmin)/superadmin/operaciones/page.tsx',
+  'app/(superadmin)/superadmin/planes/[id]/editar/page.tsx',
+  'app/(superadmin)/superadmin/planes/nuevo/page.tsx',
+  'app/(superadmin)/superadmin/planes/page.tsx',
+  'app/(superadmin)/superadmin/usuarios/[id]/page.tsx',
+  'app/(superadmin)/superadmin/usuarios/page.tsx',
+  'app/invitacion/[token]/page.tsx',
+  'components/invitaciones/CampanaLandingScreen.tsx',
+  'components/scanner/ScannerScreen.tsx',
+  'components/scanner/VisitasDeHoy.tsx',
+])
+
 function archivosTS(dir) {
   const salida = []
   for (const entrada of readdirSync(dir)) {
@@ -70,7 +190,10 @@ function archivosTS(dir) {
     if (statSync(ruta).isDirectory()) {
       if (['__tests__', 'node_modules'].includes(entrada)) continue
       salida.push(...archivosTS(ruta))
-    } else if (entrada.endsWith('.ts') && !entrada.endsWith('.test.ts') && !entrada.endsWith('.spec.ts')) {
+    } else if (
+      (entrada.endsWith('.ts') || entrada.endsWith('.tsx')) &&
+      !/\.(test|spec)\.tsx?$/.test(entrada)
+    ) {
       salida.push(ruta)
     }
   }
@@ -92,6 +215,7 @@ function tocaBase(contenido) {
 }
 
 const huecos = []
+const atrasados = []
 let archivosConBase = 0
 let sitiosDeConsulta = 0
 
@@ -106,6 +230,10 @@ for (const ruta of archivosTS(RAIZ)) {
 
   if (usaTenant(contenido)) continue
   if (BLANCA.has(relativa)) continue
+  if (PENDIENTES.has(relativa)) {
+    atrasados.push(relativa)
+    continue
+  }
   huecos.push(relativa)
 }
 
@@ -115,8 +243,26 @@ console.log('Cobertura de contexto de empresa para RLS')
 console.log('─'.repeat(60))
 console.log(`${C.dim}Archivos que tocan la base: ${archivosConBase} · sitios de consulta aprox.: ${sitiosDeConsulta}${C.off}`)
 
+// El atraso conocido se dice SIEMPRE y con su número. Un pendiente que no se
+// imprime deja de existir a las dos semanas, y es justo lo que pasó: el gate
+// informaba «✓ todo cubierto» mirando 9 archivos de 95.
+if (atrasados.length > 0) {
+  console.log(
+    `${C.avi}⚠${C.off}  ${atrasados.length} archivo(s) pendientes de la migración a conEmpresa ` +
+      `(lista PENDIENTES del script).`
+  )
+  console.log(
+    `${C.dim}   RLS Capa 2 NO debe encenderse mientras esta lista no esté vacía: con ` +
+      `membego_app,\n   una consulta sin contexto devuelve cero filas en silencio.${C.off}`
+  )
+}
+
 if (huecos.length === 0) {
-  console.log(`${C.ok}✓${C.off} Todos los archivos con consultas usan conEmpresa/sinEmpresa (o están justificados).`)
+  console.log(
+    atrasados.length === 0
+      ? `${C.ok}✓${C.off} Todos los archivos con consultas usan conEmpresa/sinEmpresa (o están justificados).`
+      : `${C.ok}✓${C.off} Ningún archivo NUEVO sin contexto (los pendientes están inventariados arriba).`
+  )
 } else {
   console.log(`${C.mal}✗ ${huecos.length} archivo(s) con consultas sin envoltorio de tenant:${C.off}`)
   for (const h of huecos) console.log(`   ${h}`)
