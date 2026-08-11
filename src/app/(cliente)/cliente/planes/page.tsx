@@ -15,6 +15,7 @@ import { planesElegibles } from '@/modules/elegibilidad'
 import { Button } from '@/components/ui/button'
 import { PlanesGrid, type PlanItem } from '@/components/cliente/PlanesGrid'
 import { EmptyState } from '@/components/system/EmptyState'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -38,12 +39,17 @@ export default async function PlanesPage({
   const planesHref = conRetorno ? `/cliente/planes?retorno=${encodeURIComponent(retorno)}` : '/cliente/planes'
   const vehiculoNext = `/cliente/vehiculos/nuevo?next=${encodeURIComponent(planesHref)}`
 
+  // ANTES decía «Tu cuenta no está completamente configurada». Ese mensaje
+  // se escribió para una sesión ROTA; desde que un cliente puede existir sin
+  // empresa, es el estado normal de quien acaba de registrarse. Decirle a
+  // alguien que su cuenta está mal y que llame a soporte, cuando lo único
+  // que pasa es que aún no se ha unido a ningún negocio, es mandarlo a
+  // resolver un problema que no tiene.
+  // También `companyId`: esta pantalla muestra los planes de UNA empresa —la
+  // activa—, así que sin empresa no hay catálogo que enseñar. Que sea global
+  // es trabajo de la fase de Explorar, no de esta.
   if (!user.metadata.clienteId || !user.metadata.companyId) {
-    return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">Tu cuenta no está completamente configurada.</p>
-      </main>
-    )
+    return <SinEmpresaTodavia que="ningún plan contratado" detalle="Explora los planes de los negocios cerca de ti y elige el que te convenga." />
   }
   const clienteId = user.metadata.clienteId
   const companyId = user.metadata.companyId

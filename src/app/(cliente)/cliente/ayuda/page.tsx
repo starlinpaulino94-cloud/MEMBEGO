@@ -33,6 +33,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { cn } from '@/lib/utils'
 import { OnboardingClienteCard } from '@/components/cliente/OnboardingClienteCard'
 import { ReportarProblemaForm } from '@/components/cliente/ReportarProblemaForm'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,13 @@ export default async function AyudaPage() {
   const user = await requireRole('CLIENTE')
   const companyId = user.metadata.companyId
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="tickets de ayuda"
+      detalle="Cuando abras una consulta con un negocio, la verás aquí." />
+  }
 
   const dbUserId = user.metadata.dbUserId
   const supabaseId = user.supabaseId

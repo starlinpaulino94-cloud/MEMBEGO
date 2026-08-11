@@ -1,6 +1,9 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
+import { otorgarBienvenidaDirecta } from '@/modules/invitaciones/beneficios'
+import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
+import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 
 /**
  * UNIRSE A UNA EMPRESA — una sola vez en todo el código.
@@ -103,6 +106,34 @@ export async function asegurarClienteEnEmpresa(
   )
 
   await seguirEmpresa(dbUser.id, companyId)
+
+  /**
+   * LA BIENVENIDA DE LA EMPRESA — aquí, y no al registrarse.
+   *
+   * Antes la daba `repararContextoCliente`: alguien creaba su cuenta de Membego
+   * y recibía el regalo de bienvenida de un negocio que no había elegido, del
+   * que quedaba como cliente y al que seguía. La relación se la inventaba el
+   * sistema.
+   *
+   * Ahora se entrega en el momento en que esa relación existe de verdad: al
+   * reclamar una recompensa suya, al afiliarse, al comprar. La regla comercial
+   * no cambia —quien se hace cliente de una empresa recibe su bienvenida—; lo
+   * que cambia es que ya no se le regala en nombre de alguien que no conocía.
+   *
+   * Los tres van sin bloquear: el alta ya está hecha y la persona viene a por
+   * otra cosa. Un fallo aquí le cuesta un regalo, no su ficha.
+   */
+  await otorgarBienvenidaDirecta(cliente.id, companyId).catch((e) =>
+    console.error('[afiliación] bienvenida:', e)
+  )
+  await capturarCanalRegistro(cliente.id).catch((e) =>
+    console.error('[afiliación] canal de registro:', e)
+  )
+  if (email) {
+    await vincularRegalosPorContacto({ clienteId: cliente.id, companyId, email }).catch((e) =>
+      console.error('[afiliación] regalos por contacto:', e)
+    )
+  }
 
   // El negocio se entera de que tiene un cliente nuevo por el mismo evento que
   // ya usaba el alta normal: para las automatizaciones da igual si entró por la

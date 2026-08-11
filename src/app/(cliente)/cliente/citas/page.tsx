@@ -14,6 +14,7 @@ import { CancelarCitaButton } from '@/components/citas/CancelarCitaButton'
 import { CitaEstadoBadge } from '@/components/citas/CitaEstadoBadge'
 import { EmptyState } from '@/components/system/EmptyState'
 import { cn, safeInternalPath } from '@/lib/utils'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -35,12 +36,14 @@ export default async function CitasClientePage({
   const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
   const retornoParamQs = retornoParam ? `&retorno=${encodeURIComponent(retorno)}` : ''
 
+  // ANTES decía «Tu cuenta no está completamente configurada». Ese mensaje
+  // se escribió para una sesión ROTA; desde que un cliente puede existir sin
+  // empresa, es el estado normal de quien acaba de registrarse. Decirle a
+  // alguien que su cuenta está mal y que llame a soporte, cuando lo único
+  // que pasa es que aún no se ha unido a ningún negocio, es mandarlo a
+  // resolver un problema que no tiene.
   if (!user.metadata.clienteId) {
-    return (
-      <main className="container max-w-3xl py-8">
-        <p className="text-muted-foreground">Tu cuenta no está completamente configurada.</p>
-      </main>
-    )
+    return <SinEmpresaTodavia que="citas" detalle="Podrás agendar cuando te unas a un negocio que ofrezca reservas." />
   }
 
   const cliente = await prisma.cliente.findUnique({

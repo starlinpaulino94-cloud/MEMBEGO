@@ -19,6 +19,7 @@ import { BillingCycleHeader } from '@/components/cliente/pagos/BillingCycleHeade
 import { EmptyState } from '@/components/system/EmptyState'
 import { PagosLedger } from '@/components/cliente/pagos/PagosLedger'
 import { cn } from '@/lib/utils'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -107,6 +108,13 @@ export default async function PagosPage({
   const aviso = pago ? AVISO_PAGO[pago] : undefined
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="pagos"
+      detalle="Aquí aparecerán tus pagos cuando adquieras una membresía o una promoción." />
+  }
   if (!clienteId) {
     return (
       <main className="container max-w-5xl py-8">

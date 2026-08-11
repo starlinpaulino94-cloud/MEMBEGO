@@ -5,6 +5,7 @@ import { getRegalosConfig } from '@/modules/regalos/config'
 import { EnviarRegaloForm } from '@/components/regalos/EnviarRegaloForm'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Gift } from 'lucide-react'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enviar regalo' }
@@ -16,6 +17,13 @@ export const metadata = { title: 'Enviar regalo' }
 export default async function EnviarRegaloPage() {
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="beneficios que regalar"
+      detalle="Para regalar necesitas tener beneficios con usos disponibles." />
+  }
   const companyId = user.metadata.companyId
   if (!clienteId || !companyId) {
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>

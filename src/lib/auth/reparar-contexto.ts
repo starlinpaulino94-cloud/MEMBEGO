@@ -1,11 +1,6 @@
 import { sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getEmpresaPrincipal } from '@/modules/marketplace/marcaUnica'
-import { otorgarBienvenidaDirecta } from '@/modules/invitaciones/beneficios'
-import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
-import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 import type { AppRole, SessionUser } from '@/types'
-import { anotarFallo } from '@/lib/prisma-errors'
 
 /**
  * AUTO-REPARACIÓN de sesiones incompletas.
@@ -80,65 +75,59 @@ export async function repararContextoCliente(user: SessionUser): Promise<Session
       }
 
       // ── Cliente: ¿ya tiene ficha en alguna empresa? ──────────────────────────
-      let cliente = await tx.cliente.findFirst({
+      const cliente = await tx.cliente.findFirst({
         where: { supabaseId: user.supabaseId },
         orderBy: { createdAt: 'desc' },
         select: { id: true, companyId: true },
       })
 
-      // ── Sin ficha: afiliarlo a la empresa principal (marca única) ────────────
-      if (!cliente) {
-        if (!user.email) return user // la ficha requiere correo
-        const empresa = await getEmpresaPrincipal()
-        if (!empresa) return user // sin empresa publicada no hay a qué afiliar
-
-        cliente = await tx.cliente
-          .create({
-            data: {
-              companyId: empresa.id,
-              supabaseId: user.supabaseId,
-              nombre: dbUser.name || user.email,
-              email: user.email,
-            },
-            select: { id: true, companyId: true },
-          })
-          // Requests paralelos: si otro ya creó la ficha, la reutilizamos.
-          .catch(() =>
-            tx.cliente.findFirst({
-              where: { supabaseId: user.supabaseId },
-              select: { id: true, companyId: true },
-            })
-          )
-        if (!cliente) return user
-
-        await tx.companyFollow
-          .upsert({
-            where: { userId_companyId: { userId: dbUser.id, companyId: cliente.companyId } },
-            update: {},
-            create: { userId: dbUser.id, companyId: cliente.companyId },
-          })
-          .catch(anotarFallo('auth:companyFollow.upsert'))
-
-        // Misma experiencia que un registro normal: canal de marketing (?src=),
-        // regalo de bienvenida de la campaña activa + regalos P2P que esperaban
-        // a este correo.
-        await capturarCanalRegistro(cliente.id)
-        await otorgarBienvenidaDirecta(cliente.id, cliente.companyId)
-        if (user.email) {
-          await vincularRegalosPorContacto({
-            clienteId: cliente.id,
-            companyId: cliente.companyId,
-            email: user.email,
-          })
-        }
-      }
+      /**
+       * SIN FICHA: SE QUEDA SIN FICHA. Y eso ahora es un estado válido.
+       *
+       * ────────────────────────────────────────────────────────────────────
+       * QUÉ HABÍA AQUÍ
+       *
+       * Se le creaba una ficha de `Cliente` en `getEmpresaPrincipal()` —la
+       * empresa destacada, o la más antigua publicada—, se la hacía seguir y
+       * se le daba su regalo de bienvenida. Todo automático, sin que la
+       * persona hubiera oído hablar de ese negocio.
+       *
+       * Sostenía el modo MARCA ÚNICA: con una sola empresa publicada, «tu
+       * cuenta de Membego» y «tu ficha en esa empresa» son lo mismo, así que
+       * afiliar por defecto no se notaba.
+       *
+       * ────────────────────────────────────────────────────────────────────
+       * POR QUÉ DEJA DE HACERSE
+       *
+       * Con dos empresas deja de ser invisible y pasa a ser un error: alguien
+       * se registra en Membego y aparece como cliente de un restaurante que no
+       * conoce, siguiéndolo, y con un regalo suyo. La relación comercial se la
+       * inventó el sistema.
+       *
+       * Ahora una sesión de CLIENTE puede tener `clienteId: null` y
+       * `companyId: null`. Es alguien que tiene cuenta en Membego y todavía no
+       * es cliente de ningún negocio — que es exactamente lo que es.
+       *
+       * ────────────────────────────────────────────────────────────────────
+       * LA BIENVENIDA NO SE PIERDE, SE MUEVE
+       *
+       * El regalo de bienvenida de una empresa se entrega cuando la persona se
+       * hace cliente de ella de verdad: al reclamar una recompensa, al
+       * afiliarse, al comprar. Lo hace `asegurarClienteEnEmpresa`.
+       *
+       * Antes se entregaba al registrarse, de una empresa que no había
+       * elegido. Sigue habiendo regalo; ahora lo da quien lo ofrece a quien lo
+       * quiso.
+       */
 
       // ── Persistir el metadata para las próximas sesiones ─────────────────────
       const metadata = {
         role: 'CLIENTE' as AppRole,
         dbUserId: dbUser.id,
-        clienteId: cliente.id,
-        companyId: cliente.companyId,
+        // Pueden ser null: una cuenta de Membego que aún no es cliente de
+        // ningún negocio. Las pantallas lo tratan como estado, no como error.
+        clienteId: cliente?.id ?? null,
+        companyId: cliente?.companyId ?? null,
       }
       await admin.auth.admin
         .updateUserById(user.supabaseId, { app_metadata: metadata })

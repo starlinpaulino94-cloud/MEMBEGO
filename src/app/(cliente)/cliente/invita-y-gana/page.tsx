@@ -18,6 +18,7 @@ import {
 } from '@/lib/invitaContenido'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,7 +46,14 @@ function tiempoRelativo(fecha: Date): string {
  */
 export default async function InvitaYGanaPage() {
   const user = await requireRole(['CLIENTE'])
-  const clienteId = user.metadata.clienteId as string
+  const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="campañas para invitar"
+      detalle="Las campañas de «Invita y gana» las publica cada negocio. Únete a uno para participar." />
+  }
   const companyId = user.metadata.companyId as string
 
   const campana = await getCampanaActiva(companyId)

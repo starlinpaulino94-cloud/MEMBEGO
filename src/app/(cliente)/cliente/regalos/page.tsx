@@ -6,6 +6,7 @@ import { RegaloRecibidoCard, RegaloEnviadoCard } from '@/components/regalos/Rega
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { CreditCard, Gift, Send } from 'lucide-react'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
@@ -26,6 +27,13 @@ export const metadata = { title: 'Regalos' }
 export default async function RegalosPage() {
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="regalos"
+      detalle="Los regalos te los envían otros usuarios o los negocios a los que sigues." />
+  }
   if (!clienteId) {
     return (
       <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
