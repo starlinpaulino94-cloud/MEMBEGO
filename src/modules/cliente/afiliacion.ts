@@ -253,6 +253,41 @@ export async function propagarDatosPersonales(
   return escritas
 }
 
+/**
+ * POR QUÉ ESTO **NO** LLEVA `cache` DE REACT.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA OPTIMIZACIÓN QUE PARECÍA GRATIS
+ *
+ * Al cerrar las fases 4-9 esta función se llama desde 36 sitios, y una sola
+ * pantalla la dispara varias veces: `/cliente/regalos` pide los regalos y las
+ * gift cards, y cada una resuelve las fichas por su cuenta. Envolverla en
+ * `cache()` —como ya hacen `getRegionalPrefs` y
+ * `getCampanaPorCodigoInvitacion`— une esas consultas idénticas en una.
+ *
+ * Se probó, y se quitó.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LO QUE LO DESACONSEJA
+ *
+ * A diferencia de aquellas dos, esta lista CAMBIA dentro de la propia
+ * petición: `asegurarClienteEnEmpresa` crea una ficha nueva al adquirir una
+ * recompensa de un negocio donde la persona todavía no era clienta. Si una
+ * lectura posterior recibiera la lista memorizada de ANTES del alta, la
+ * recompensa recién reclamada no aparecería en «Mis beneficios» — que es
+ * exactamente el fallo que estas fases se dedicaron a quitar, reintroducido
+ * por una optimización.
+ *
+ * Y no se puede comprobar desde aquí: `cache` solo deduplica dentro del
+ * contexto de una petición de Next; en un script devuelve una caché nueva en
+ * cada llamada, así que una verificación como las de `scripts/` no distingue
+ * si funciona o no. Adoptarla a ciegas sería cambiar una consulta barata
+ * —índice por `supabaseId`, dos filas— por un riesgo que nadie ha medido.
+ *
+ * Queda anotado por si alguien vuelve: haría falta separar la lectura del
+ * camino que da de alta, o invalidar tras el alta. Hasta entonces, la consulta
+ * se repite y no pasa nada.
+ */
 export async function misClienteIds(supabaseId: string): Promise<string[]> {
   const fichas = await sinEmpresa('cliente: todas mis fichas (para listar beneficios)', (tx) =>
     tx.cliente.findMany({ where: { supabaseId }, select: { id: true } })

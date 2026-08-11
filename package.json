@@ -32,6 +32,7 @@
     "verificar:invitaciones": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-invitaciones.mts",
     "verificar:cuenta-y-ayuda": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cuenta-y-ayuda.mts",
     "verificar:cerca-de-mi": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cerca-de-mi.mts",
+    "verificar:rls-cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-rls-cliente-global.mts",
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
     "auditar:placas": "node scripts/auditar-placas.mjs"
