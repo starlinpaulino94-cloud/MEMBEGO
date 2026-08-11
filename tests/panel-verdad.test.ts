@@ -20,12 +20,19 @@ import {
   whereMembresiasSinCompletar,
   whereComprasSinCompletar,
 } from '../src/modules/pagos/colas'
-import { whereClientes } from '../src/modules/admin/clientesFiltro'
 import {
   ESTADOS_MEMBRESIA,
   estadoValido,
   whereMembresias,
 } from '../src/modules/admin/membresiasFiltro'
+import { leerFiltrosClientes, whereClientes } from '../src/modules/admin/clientesFiltro'
+import {
+  diasDesde,
+  diasHasta,
+  urlConFiltros,
+} from '../src/modules/admin/filtrosComunes'
+import { leerFiltroRiesgo } from '../src/modules/riesgo/filtro'
+import { VER_SEGMENTO } from '../src/modules/admin/segmentos-def'
 import { armarCsv, celdaCsv, fechaCsv } from '../src/lib/csv'
 
 const AHORA = new Date('2026-08-11T15:00:00Z')
@@ -147,8 +154,10 @@ test('el chip «Vigentes» no es un estado guardado: es estado + fecha', () => {
   const vigentes = whereMembresias('c1', { estado: 'ACTIVA' }) as { AND?: unknown }
   assert.ok(vigentes.AND, 'ACTIVA se traduce a vigente, no a `estado: ACTIVA`')
 
-  const vencidas = whereMembresias('c1', { estado: 'VENCIDA' }) as { estado?: string }
-  assert.equal(vencidas.estado, 'VENCIDA', 'los demás estados sí son literales')
+  const vencidas = whereMembresias('c1', { estado: 'VENCIDA' }) as {
+    AND: Array<{ estado?: string }>
+  }
+  assert.deepEqual(vencidas.AND, [{ estado: 'VENCIDA' }], 'los demás estados sí son literales')
 })
 
 test('los estados que faltaban ya tienen pestaña', () => {
@@ -162,19 +171,22 @@ test('un estado inventado en la URL se ignora, no rompe ni filtra de más', () =
   assert.equal(estadoValido('PANADERIA'), undefined)
   assert.equal(estadoValido(undefined), undefined)
   assert.equal(estadoValido('VENCIDA'), 'VENCIDA')
-  const w = whereMembresias('c1', { estado: 'PANADERIA' }) as { estado?: string }
-  assert.equal(w.estado, undefined)
+  const w = whereMembresias('c1', { estado: 'PANADERIA' }) as { AND?: unknown }
+  assert.equal(w.AND, undefined, 'un estado inventado no añade ninguna condición')
 })
 
 test('la empresa manda siempre, aunque la búsqueda venga vacía o sucia', () => {
   for (const q of ['', '   ', undefined as unknown as string]) {
-    const w = whereClientes('c1', q) as { companyId?: string; OR?: unknown }
+    const w = whereClientes('c1', q) as { companyId?: string; AND?: unknown }
     assert.equal(w.companyId, 'c1')
-    assert.equal(w.OR, undefined, 'una búsqueda vacía no debe añadir condiciones')
+    assert.equal(w.AND, undefined, 'una búsqueda vacía no debe añadir condiciones')
   }
-  const conTexto = whereClientes('c1', ' ramón ') as { companyId?: string; OR: unknown[] }
+  const conTexto = whereClientes('c1', ' ramón ') as {
+    companyId?: string
+    AND: Array<{ OR?: unknown[] }>
+  }
   assert.equal(conTexto.companyId, 'c1')
-  assert.equal(conTexto.OR.length, 3, 'nombre, correo y teléfono')
+  assert.equal(conTexto.AND[0].OR?.length, 3, 'nombre, correo y teléfono')
 })
 
 // ── CSV ─────────────────────────────────────────────────────────────────────
@@ -202,4 +214,158 @@ test('las fechas del CSV van en la zona horaria del negocio', () => {
   const medianoche = new Date('2026-08-12T03:00:00Z')
   assert.equal(fechaCsv(medianoche, 'America/Santo_Domingo'), '11/8/26')
   assert.equal(fechaCsv(null, 'America/Santo_Domingo'), '')
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BLOQUE 2 · Los filtros y el cruce que no se podía hacer
+// ═══════════════════════════════════════════════════════════════════════════
+
+test('cada filtro es una condición dentro de un ÚNICO AND', () => {
+  // Es la propiedad que impide el peor fallo posible en un filtro combinable:
+  // dos condiciones con su propio OR puestas como claves sueltas del mismo
+  // objeto se pisan, y la lista sale mal filtrada SIN error. Con una lista de
+  // condiciones, añadir un filtro no puede romper los que ya había.
+  const w = whereMembresias('c1', { estado: 'ACTIVA', vence: '7', usos: 'con', q: 'ramón' }, AHORA) as {
+    AND: unknown[]
+  }
+  assert.ok(Array.isArray(w.AND))
+  assert.ok(w.AND.length >= 4, 'las cuatro condiciones tienen que sobrevivir juntas')
+})
+
+test('«vence en 7 días» implica estar vigente', () => {
+  // Sin esto, una membresía que venció hace un mes cumpliría «vence pronto»
+  // porque su fecha también cae por debajo del límite superior.
+  const w = whereMembresias('c1', { vence: '7' }, AHORA) as { AND: Array<Record<string, unknown>> }
+  const tieneVigencia = w.AND.some((c) => Array.isArray((c as { AND?: unknown }).AND))
+  const tieneRango = w.AND.some((c) => {
+    const f = (c as { fechaVencimiento?: { gte?: Date; lte?: Date } }).fechaVencimiento
+    return f?.gte === AHORA && f?.lte instanceof Date
+  })
+  assert.ok(tieneVigencia, 'falta la condición de vigencia')
+  assert.ok(tieneRango, 'falta la ventana de vencimiento')
+})
+
+test('«con usos» no le pide un contador a un plan ilimitado', () => {
+  const con = whereMembresias('c1', { usos: 'con' }, AHORA) as { AND: Array<{ OR?: unknown[] }> }
+  const rama = con.AND.find((c) => c.OR)
+  assert.ok(rama, 'debe ser un OR: ilimitado O con usos por consumir')
+  assert.equal(rama!.OR!.length, 2)
+
+  const sin = whereMembresias('c1', { usos: 'sin' }, AHORA) as {
+    AND: Array<{ lavadosRestantes?: unknown; plan?: unknown }>
+  }
+  const ramaSin = sin.AND.find((c) => c.lavadosRestantes)
+  assert.deepEqual(ramaSin?.lavadosRestantes, { lte: 0 })
+  assert.deepEqual(ramaSin?.plan, { esIlimitado: false })
+})
+
+test('«sin visitas» mira al CLIENTE, e incluye a quien nunca vino', () => {
+  const w = whereMembresias('c1', { sinVisitas: '30' }, AHORA) as {
+    AND: Array<{ cliente?: { visits?: { none?: unknown } } }>
+  }
+  const rama = w.AND.find((c) => c.cliente?.visits)
+  assert.ok(rama?.cliente?.visits?.none, '`none` es lo que incluye a quien no ha venido nunca')
+})
+
+test('un valor de filtro inventado se ignora en vez de filtrar de más', () => {
+  for (const basura of [{ vence: '999' }, { sinVisitas: 'ayer' }, { usos: 'quizá' }]) {
+    const w = whereMembresias('c1', basura, AHORA) as { AND?: unknown[] }
+    assert.equal(w.AND, undefined, `"${JSON.stringify(basura)}" no debería filtrar nada`)
+  }
+})
+
+test('«membresía vencida» excluye a quien ya renovó', () => {
+  // Aparecer en esta lista habiendo renovado cuesta una llamada inútil y la
+  // confianza de quien la recibe.
+  const w = whereClientes('c1', { membresia: 'vencida' }, AHORA) as {
+    AND: Array<{ NOT?: unknown; memberships?: unknown }>
+  }
+  const rama = w.AND.find((c) => c.memberships)
+  assert.ok(rama?.NOT, 'falta la exclusión de quien tiene una vigente')
+})
+
+test('los filtros de clientes también se combinan sin pisarse', () => {
+  const w = whereClientes(
+    'c1',
+    { sinVisitas: '30', membresia: 'vigente', nuevos: '90', q: 'ana' },
+    AHORA
+  ) as { companyId?: string; AND: unknown[] }
+  assert.equal(w.companyId, 'c1')
+  assert.equal(w.AND.length, 4)
+})
+
+test('la búsqueda por texto sigue anclada a la empresa con filtros puestos', () => {
+  const w = whereClientes('c1', { sinVisitas: '60', q: 'x' }, AHORA) as { companyId?: string }
+  assert.equal(w.companyId, 'c1', 'el companyId no es negociable ni viaja por la URL')
+})
+
+// ── Umbrales del reporte de riesgo ──────────────────────────────────────────
+
+test('el riesgo arranca con un criterio por defecto, no vacío', () => {
+  const f = leerFiltroRiesgo({})
+  assert.equal(f.sinVisitas, 30, 'sin parámetros, la pantalla ya dice algo útil')
+  assert.equal(f.vence, 0)
+  assert.equal(f.soloConUsos, false)
+})
+
+test('«da igual» es una elección legítima y se distingue de no elegir', () => {
+  // El enlace del Resumen manda `sinVisitas=0&vence=7`: quiere ver a quien se
+  // le vence esta semana, venga o no venga. Si el 0 cayera al defecto, esa
+  // pantalla enseñaría otra cosa distinta de la que promete el aviso.
+  const f = leerFiltroRiesgo({ sinVisitas: '0', vence: '7' })
+  assert.equal(f.sinVisitas, 0)
+  assert.equal(f.vence, 7)
+})
+
+test('los umbrales fuera de la lista no se cuelan', () => {
+  const f = leerFiltroRiesgo({ sinVisitas: '999', vence: '365' })
+  assert.equal(f.sinVisitas, 0, 'un valor inventado no filtra')
+  assert.equal(f.vence, 0)
+})
+
+// ── Utilidades de las ventanas ──────────────────────────────────────────────
+
+test('las ventanas de tiempo cuentan días completos hacia los dos lados', () => {
+  assert.equal(diasHasta(new Date('2026-08-18T15:00:00Z'), AHORA), 7)
+  assert.equal(diasDesde(new Date('2026-07-12T15:00:00Z'), AHORA), 30)
+  assert.equal(diasHasta(null), null, 'sin fecha no se inventa un número')
+  assert.equal(diasDesde(null), null)
+  // Ya vencida: negativo, no cero. Un «−3» dice algo que un «0» oculta.
+  assert.ok(diasHasta(new Date('2026-08-08T15:00:00Z'), AHORA)! < 0)
+})
+
+test('cambiar un filtro conserva los demás y vuelve a la página 1', () => {
+  const url = urlConFiltros('/admin/clientes', { sinVisitas: '30', q: 'ana', page: '4' }, {
+    membresia: 'vigente',
+  })
+  assert.ok(url.includes('sinVisitas=30'), 'el filtro anterior sobrevive')
+  assert.ok(url.includes('q=ana'), 'y la búsqueda también')
+  assert.ok(url.includes('membresia=vigente'))
+  // Seguir en la página 4 de una lista que ahora tiene 2 es una pantalla vacía
+  // sin explicación.
+  assert.equal(url.includes('page='), false)
+})
+
+test('pulsar un filtro activo lo quita', () => {
+  const url = urlConFiltros('/admin/clientes', { sinVisitas: '30', q: 'ana' }, {
+    sinVisitas: undefined,
+  })
+  assert.equal(url, '/admin/clientes?q=ana')
+})
+
+test('los segmentos que ya existían tienen a dónde llevar', () => {
+  // El sistema sabía quiénes eran y no podía enseñárselos a nadie.
+  assert.equal(VER_SEGMENTO.inactivos, '/admin/clientes?sinVisitas=30')
+  assert.equal(VER_SEGMENTO.por_vencer, '/admin/clientes?membresia=por_vencer&vence=7')
+  assert.equal(VER_SEGMENTO.seguidores, null, 'un seguidor no es necesariamente un cliente')
+})
+
+test('cada segmento con enlace apunta a un filtro que el directorio entiende', () => {
+  for (const [clave, url] of Object.entries(VER_SEGMENTO)) {
+    if (!url) continue
+    const qs = Object.fromEntries(new URLSearchParams(url.split('?')[1] ?? ''))
+    const f = leerFiltrosClientes(qs)
+    const reconocido = Boolean(f.sinVisitas || f.membresia || f.nuevos) || url === '/admin/clientes'
+    assert.ok(reconocido, `el enlace del segmento ${clave} no lo entiende el directorio`)
+  }
 })

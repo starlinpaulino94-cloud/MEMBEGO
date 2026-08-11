@@ -140,15 +140,20 @@ export default async function AdminDashboard() {
       icon: Wallet,
       tono: 'warning' as const,
     },
+    // «Cada punto lleva a donde se resuelve» es la promesa de esta sección, y
+    // durante mucho tiempo no se cumplió: los dos avisos de abajo llevaban a la
+    // lista completa, sin filtrar, y el administrador tenía que volver a buscar
+    // a mano a las personas que el panel acababa de identificar. Ahora llevan a
+    // la MISMA lista ya acotada.
     {
-      href: '/admin/membresias',
+      href: '/admin/riesgo?vence=7&sinVisitas=0',
       label: 'Membresías vencen en 7 días',
       valor: d.porVencer7d,
       icon: Clock,
       tono: 'danger' as const,
     },
     {
-      href: '/admin/clientes',
+      href: '/admin/riesgo?sinVisitas=30&vence=0',
       label: 'Clientes sin visitas en 30 días',
       valor: d.clientesEnRiesgo,
       icon: UserX,

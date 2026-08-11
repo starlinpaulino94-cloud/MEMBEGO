@@ -18,6 +18,29 @@ export function esSegmentoValido(s: string): s is SegmentoValue {
   return SEGMENTOS.some((x) => x.value === s)
 }
 
+/**
+ * Dónde SE VE quién está en cada segmento.
+ *
+ * Estos segmentos llevaban tiempo calculados y probados, pero `resolverSegmento`
+ * devuelve identificadores y su único consumidor era el envío de
+ * notificaciones: el sistema sabía quiénes eran los clientes en riesgo, podía
+ * mandarles un mensaje, y no podía enseñárselos a nadie. Mandar a ciegas es
+ * justo lo que hace que nadie se atreva a pulsar el botón.
+ *
+ * No hace falta una pantalla nueva: los filtros del directorio dicen lo mismo,
+ * así que enlazar es poner una URL. `null` = ese segmento no tiene equivalente
+ * (los seguidores no son necesariamente clientes; «por plan» depende de cuál).
+ */
+export const VER_SEGMENTO: Record<SegmentoValue, string | null> = {
+  seguidores: null,
+  todos: '/admin/clientes',
+  activos: '/admin/clientes?membresia=vigente',
+  por_vencer: '/admin/clientes?membresia=por_vencer&vence=7',
+  nuevos: '/admin/clientes?nuevos=30',
+  inactivos: '/admin/clientes?sinVisitas=30',
+  plan: null,
+}
+
 export interface ConteoSegmentos {
   seguidores: number
   todos: number

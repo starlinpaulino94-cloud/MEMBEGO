@@ -22,8 +22,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Cuenta sin empresa.' }, { status: 400 })
   }
 
-  const sp = request.nextUrl.searchParams
-  const where = whereClientes(companyId, sp.get('q') ?? '')
+  // TODOS los filtros de la pantalla, no solo la búsqueda: el CSV tiene que
+  // llevarse exactamente lo que se está viendo.
+  const sp = Object.fromEntries(request.nextUrl.searchParams.entries())
+  const where = whereClientes(companyId, sp)
 
   const { clientes, total, zonaHoraria } = await conEmpresa(companyId, async (tx) => {
     const [filas, cuenta, empresa] = await Promise.all([

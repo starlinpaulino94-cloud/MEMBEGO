@@ -7,9 +7,17 @@ import { companyFilter } from '@/modules/admin/queries'
 import { prisma } from '@/lib/prisma'
 import {
   ESTADOS_MEMBRESIA,
-  estadoValido,
+  USOS_OPCIONES,
+  hayFiltrosMembresias,
+  leerFiltrosMembresias,
   whereMembresias,
 } from '@/modules/admin/membresiasFiltro'
+import {
+  DIAS_PARA_VENCER,
+  DIAS_SIN_VISITAS,
+  urlConFiltros,
+} from '@/modules/admin/filtrosComunes'
+import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
 import { MembresíasTable, type MembershipRow } from '@/components/admin/MembresíasTable'
 import type { PlanOption } from '@/components/admin/CambiarPlanDialog'
 import { PageHeader } from '@/components/ui/page-header'
@@ -45,29 +53,6 @@ const POR_PAGINA = 50
  * aparecía bajo NINGUNA pestaña.
  */
 
-function FilterLink({
-  label,
-  href,
-  active,
-}: {
-  label: string
-  href: string
-  active: boolean
-}) {
-  return (
-    <Link
-      href={href}
-      className={
-        active
-          ? 'rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground'
-          : 'rounded-full border border-border bg-card px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted'
-      }
-    >
-      {label}
-    </Link>
-  )
-}
-
 export default async function MembresiasPage({
   searchParams,
 }: {
@@ -79,22 +64,27 @@ export default async function MembresiasPage({
   const pag = leerPaginacion(sp, POR_PAGINA)
   const busqueda = (sp.q ?? '').trim()
 
-  const estadoFilter = estadoValido(sp.estado)
+  const f = leerFiltrosMembresias(sp)
 
   // El filtro vive en `modules/admin/membresiasFiltro`: la exportación usa el
   // MISMO, para que el CSV no pueda separarse de lo que se ve.
-  const where = whereMembresias(companyId, { estado: estadoFilter, q: busqueda })
+  const where = whereMembresias(companyId, sp)
 
   let memberships: MembershipRow[] = []
   let planes: PlanOption[] = []
+  let categorias: { id: string; nombre: string }[] = []
   let total = 0
   let fallo = false
   try {
-    const [data, planesData, cuenta] = await Promise.all([
+    const [data, planesData, cuenta, tipos] = await Promise.all([
       prisma.membership.findMany({
         where,
         include: { plan: true, cliente: true },
-        orderBy: { createdAt: 'desc' },
+        // Lo que vence antes, primero: con el filtro de vencimiento puesto,
+        // el orden por fecha de creación enterraba lo urgente.
+        orderBy: f.vence
+          ? [{ fechaVencimiento: 'asc' }]
+          : [{ createdAt: 'desc' }],
         skip: pag.saltar,
         take: pag.tomar,
       }),
@@ -106,9 +96,18 @@ export default async function MembresiasPage({
         select: { id: true, nombre: true, precio: true },
       }),
       prisma.membership.count({ where }),
+      // Categorías de vehículo: solo se ofrece el filtro si el negocio las usa.
+      prisma.tipoVehiculo
+        .findMany({
+          where: { ...(companyId ? { companyId } : {}), activo: true },
+          orderBy: { nivelTarifario: 'asc' },
+          select: { id: true, nombre: true },
+        })
+        .catch(() => []),
     ])
     memberships = data as unknown as MembershipRow[]
     total = cuenta
+    categorias = tipos
     planes = planesData.map((p) => ({
       id: p.id,
       nombre: p.nombre,
@@ -121,15 +120,53 @@ export default async function MembresiasPage({
 
   const desde = total === 0 ? 0 : pag.saltar + 1
   const hasta = Math.min(pag.saltar + pag.tomar, total)
-  const filtro = estadoFilter ? ESTADOS_MEMBRESIA.find((e) => e.clave === estadoFilter)!.label : null
 
-  const enlace = (params: Record<string, string | undefined>) => {
-    const qs = new URLSearchParams()
-    if (params.estado) qs.set('estado', params.estado)
-    if (params.q) qs.set('q', params.q)
-    const s = qs.toString()
-    return `/admin/membresias${s ? `?${s}` : ''}`
-  }
+  const grupos: GrupoFiltro[] = [
+    {
+      clave: 'estado',
+      titulo: 'Estado',
+      activo: f.estado,
+      opciones: ESTADOS_MEMBRESIA.map((e) => ({ valor: e.clave, label: e.label })),
+    },
+    {
+      clave: 'vence',
+      titulo: 'Vence en',
+      activo: f.vence ? String(f.vence) : undefined,
+      opciones: DIAS_PARA_VENCER.map((d) => ({ valor: String(d), label: `${d} días` })),
+    },
+    {
+      clave: 'usos',
+      titulo: 'Usos',
+      activo: f.usos,
+      opciones: USOS_OPCIONES.map((u) => ({ valor: u.clave, label: u.label })),
+    },
+    {
+      clave: 'sinVisitas',
+      titulo: 'Sin venir',
+      activo: f.sinVisitas ? String(f.sinVisitas) : undefined,
+      opciones: DIAS_SIN_VISITAS.map((d) => ({ valor: String(d), label: `+${d} días` })),
+    },
+    ...(planes.length > 1
+      ? [
+          {
+            clave: 'plan',
+            titulo: 'Plan',
+            activo: f.plan,
+            opciones: planes.map((p) => ({ valor: p.id, label: p.nombre })),
+          },
+        ]
+      : []),
+    ...(categorias.length > 0
+      ? [
+          {
+            clave: 'vehiculo',
+            titulo: 'Categoría',
+            activo: f.vehiculo,
+            opciones: categorias.map((c) => ({ valor: c.id, label: c.nombre })),
+          },
+        ]
+      : []),
+  ]
 
   return (
     <div className="space-y-6">
@@ -140,12 +177,8 @@ export default async function MembresiasPage({
           fallo
             ? 'No se pudieron cargar las membresías.'
             : total === 0
-              ? busqueda
-                ? `Ninguna membresía coincide con "${busqueda}".`
-                : 'Todavía no hay membresías.'
-              : `Quién tiene qué. ${desde}–${hasta} de ${total}${
-                  filtro ? ` · ${filtro}` : ''
-                }${busqueda ? ` para "${busqueda}"` : ''}`
+              ? 'Ninguna membresía coincide con lo que buscas.'
+              : `Quién tiene qué. ${desde}–${hasta} de ${total}`
         }
         action={
           <Button asChild variant="outline">
@@ -154,27 +187,25 @@ export default async function MembresiasPage({
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <FilterLink label="Todas" href={enlace({ q: busqueda })} active={!estadoFilter} />
-        {ESTADOS_MEMBRESIA.map((e) => (
-          <FilterLink
-            key={e.clave}
-            label={e.label}
-            href={enlace({ estado: e.clave, q: busqueda })}
-            active={estadoFilter === e.clave}
-          />
-        ))}
-      </div>
+      <FiltrosChips
+        base="/admin/membresias"
+        params={sp}
+        grupos={grupos}
+        hayFiltros={hayFiltrosMembresias(f)}
+      />
 
       {/* `next/form` navega sin JavaScript: el buscador sigue funcionando con
-          mala conexión o antes de que cargue el bundle. */}
-      <Form action="/admin/membresias" className="flex max-w-md gap-2">
-        {estadoFilter && <input type="hidden" name="estado" value={estadoFilter} />}
+          mala conexión o antes de que cargue el bundle. Los filtros activos
+          viajan ocultos para que buscar no los borre. */}
+      <Form action="/admin/membresias" className="flex max-w-2xl gap-2">
+        {(['estado', 'vence', 'usos', 'sinVisitas', 'plan', 'vehiculo'] as const).map((k) =>
+          sp[k] ? <input key={k} type="hidden" name={k} value={sp[k]} /> : null
+        )}
         <Input
           name="q"
           aria-label="Buscar membresías"
           defaultValue={busqueda}
-          placeholder="Buscar por cliente, correo o plan…"
+          placeholder="Buscar por cliente, correo, teléfono o plan…"
           className="min-h-10"
           autoComplete="off"
         />
@@ -183,7 +214,7 @@ export default async function MembresiasPage({
         </Button>
         {/* Enlace al servidor: se lleva TODO el filtro, no la página visible. */}
         <Button asChild variant="outline" className="shrink-0">
-          <a href={`/admin/membresias/export${enlace({ estado: estadoFilter, q: busqueda }).replace('/admin/membresias', '')}`}>
+          <a href={urlConFiltros('/admin/membresias/export', sp, {})}>
             <Download className="mr-2 h-4 w-4" /> Exportar
           </a>
         </Button>

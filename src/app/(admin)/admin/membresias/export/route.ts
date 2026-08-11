@@ -22,11 +22,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Cuenta sin empresa.' }, { status: 400 })
   }
 
-  const sp = request.nextUrl.searchParams
-  const where = whereMembresias(companyId, {
-    estado: sp.get('estado') ?? undefined,
-    q: sp.get('q') ?? undefined,
-  })
+  // TODOS los filtros de la pantalla, no solo estado y búsqueda.
+  const sp = Object.fromEntries(request.nextUrl.searchParams.entries())
+  const where = whereMembresias(companyId, sp)
 
   const { filas, total, zonaHoraria } = await conEmpresa(companyId, async (tx) => {
     const [datos, cuenta, empresa] = await Promise.all([
