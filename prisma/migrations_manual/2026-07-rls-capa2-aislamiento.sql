@@ -76,21 +76,35 @@
 -- NOBYPASSRLS es todo el punto de esta capa. Si este rol se saltara RLS, todo
 -- lo demás sería decorado.
 --
--- CAMBIA LA CONTRASEÑA antes de correr esto. Y no la guardes en el repositorio.
-\set clave 'CAMBIA-ESTA-CLAVE'
-
+-- CAMBIA LA CONTRASEÑA en la línea marcada de abajo antes de ejecutar esto.
+-- No la guardes en el repositorio: escríbela, ejecuta, y deshaz el cambio.
+--
+-- Aquí NO se usa `\set` de psql. El editor SQL de Supabase no es psql: manda el
+-- texto tal cual al servidor, y una línea que empieza por `\` es un error de
+-- sintaxis. Todo lo que este archivo necesita va en SQL puro, para que se pueda
+-- pegar igual en el editor de Supabase que en psql.
+--
+-- Y si nadie cambia la clave, esto FALLA en vez de crear un rol con una
+-- contraseña que está escrita en el repositorio.
 DO $$
+DECLARE
+  clave text := 'CAMBIA-ESTA-CLAVE';   -- ← LA CONTRASEÑA VA AQUÍ
 BEGIN
+  IF clave = 'CAMBIA-ESTA-CLAVE' OR length(clave) < 16 THEN
+    RAISE EXCEPTION
+      'Pon una contraseña propia (16+ caracteres) en la variable `clave` antes de ejecutar este archivo.';
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'membego_app') THEN
-    CREATE ROLE membego_app LOGIN NOBYPASSRLS;
+    EXECUTE format('CREATE ROLE membego_app LOGIN NOBYPASSRLS PASSWORD %L', clave);
     RAISE NOTICE 'Rol membego_app creado.';
   ELSE
-    ALTER ROLE membego_app NOBYPASSRLS;
-    RAISE NOTICE 'Rol membego_app ya existía; se reafirma NOBYPASSRLS.';
+    -- NOBYPASSRLS se reafirma siempre: si alguien se lo quitó, esta capa
+    -- entera sería decorado y nadie se enteraría.
+    EXECUTE format('ALTER ROLE membego_app NOBYPASSRLS PASSWORD %L', clave);
+    RAISE NOTICE 'Rol membego_app ya existía; se reafirma NOBYPASSRLS y se fija la contraseña.';
   END IF;
 END $$;
-
-ALTER ROLE membego_app PASSWORD :'clave';
 
 GRANT USAGE ON SCHEMA public TO membego_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO membego_app;
@@ -305,6 +319,67 @@ BEGIN
   RAISE NOTICE '────────────────────────────────────────────────';
   RAISE NOTICE 'Revisa esa lista. Si ahí aparece una tabla con datos de una';
   RAISE NOTICE 'empresa concreta, le falta camino y hay que dárselo a mano.';
+END $$;
+
+
+-- ── 3. Encender RLS ─────────────────────────────────────────────────────────
+--
+-- SIN ESTO, TODO LO DE ARRIBA ES DECORADO. Una política no se aplica sola: si
+-- la tabla no tiene `ENABLE ROW LEVEL SECURITY`, PostgreSQL ni la mira. Se
+-- crean las 137 políticas, `pg_policies` las enseña, y una empresa sigue viendo
+-- a otra entera. Comprobado: con las políticas puestas y sin este paso,
+-- `npm run rls:probar` daba 1 de 6, y la que pasaba lo hacía por casualidad
+-- (el modo omnisciente ve todo, que es justo lo que pasa cuando RLS está
+-- apagado).
+--
+-- Se encienden TODAS las tablas, también las que quedaron sin política: sin
+-- política, RLS deniega, y eso es lo que se quiere para una tabla nueva que
+-- nadie ha decidido cómo aislar. Fallar cerrado.
+--
+-- NO se usa FORCE ROW LEVEL SECURITY. FORCE aplicaría RLS también al DUEÑO de
+-- la tabla, que es quien migra y quien siembra; y en Supabase ese dueño es
+-- superusuario, así que FORCE ni siquiera lo alcanzaría. Lo único que
+-- conseguiría es romper despliegues sin añadir aislamiento.
+DO $$
+DECLARE
+  t          record;
+  encendidas integer := 0;
+  faltan     text[];
+BEGIN
+  FOR t IN
+    SELECT c.relname
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relkind = 'r'
+       AND c.relname <> '_prisma_migrations'
+       AND NOT c.relrowsecurity
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t.relname);
+    encendidas := encendidas + 1;
+  END LOOP;
+
+  -- Y se comprueba, en vez de suponerlo. Este archivo ya estuvo una vez
+  -- creando políticas inertes sin que nada lo dijera; que no vuelva a pasar
+  -- en silencio.
+  SELECT array_agg(c.relname ORDER BY c.relname) INTO faltan
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname = 'public'
+     AND c.relkind = 'r'
+     AND c.relname <> '_prisma_migrations'
+     AND NOT c.relrowsecurity;
+
+  IF faltan IS NOT NULL THEN
+    RAISE EXCEPTION 'RLS quedó apagado en: %', array_to_string(faltan, ', ');
+  END IF;
+
+  RAISE NOTICE '────────────────────────────────────────────────';
+  RAISE NOTICE 'RLS ENCENDIDO. Tablas activadas en esta pasada: %', encendidas;
+  RAISE NOTICE 'Total con RLS activo: %',
+    (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity);
+  RAISE NOTICE '────────────────────────────────────────────────';
 END $$;
 
 
