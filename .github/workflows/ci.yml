@@ -174,7 +174,14 @@ jobs:
 
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
             -f prisma/migrations/20260771_rls_barrera_publica/migration.sql
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v clave=ci \
+          # La contraseña del rol se manda con `SET`, no con `-v clave=…`: psql
+          # no sustituye sus variables dentro de las comillas de dólar del
+          # bloque `DO $$ … $$`, así que el `-v` llegaba ignorado, el guardia
+          # veía el marcador y este paso moría antes de comprobar nada.
+          # `-c` y `-f` van en la MISMA sesión, así que el ajuste sigue puesto.
+          # No es un secreto: la base se crea aquí y se tira al terminar.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "set membego.clave = 'clave-de-ci-no-es-un-secreto'" \
             -f prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql
 
           # Capa 1: nada de `public` debe quedar al alcance de la clave anónima.

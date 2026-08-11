@@ -90,6 +90,34 @@ DO $$
 DECLARE
   clave text := 'CAMBIA-ESTA-CLAVE';   -- ← LA CONTRASEÑA VA AQUÍ
 BEGIN
+  /*
+   * UNA SALIDA PARA QUIEN NO PUEDE EDITAR EL ARCHIVO.
+   *
+   * El guardia de abajo está pensado para una persona: si no cambia el
+   * marcador, esto falla en vez de crear un rol con la contraseña escrita en
+   * el repositorio. Perfecto para quien lo pega en el editor de Supabase.
+   *
+   * Pero hay un ejecutor que NO es una persona: el trabajo «Esquema de base de
+   * datos» de CI levanta un Postgres de usar y tirar y corre este archivo
+   * entero para comprobar que las 137 políticas se aplican y que el
+   * aislamiento aguanta (`npm run rls:probar`). Ahí nadie va a editar nada.
+   *
+   * CI intentaba pasarla con `psql -v clave=ci`, y no funciona: psql NO
+   * sustituye sus variables dentro de comillas de dólar, así que el marcador
+   * llegaba intacto y el guardia disparaba. Comprobado contra PostgreSQL 16:
+   * con `-v clave=ci`, dentro del bloque `clave` seguía valiendo
+   * «CAMBIA-ESTA-CLAVE». El resultado era CI en rojo y, peor, el paso moría
+   * antes de llegar a la prueba de aislamiento — las políticas dejaban de
+   * comprobarse sin que nadie lo notara.
+   *
+   * `current_setting` sí es SQL puro, así que sirve para los dos: quien pega
+   * el archivo en Supabase no ve ninguna diferencia, y un automatismo puede
+   * mandar la contraseña con `SET membego.clave = '…'` antes de ejecutarlo.
+   * Sin ese ajuste, `current_setting(..., true)` devuelve NULL y todo sigue
+   * exactamente como estaba: el marcador, y el guardia.
+   */
+  clave := coalesce(current_setting('membego.clave', true), clave);
+
   -- Dos casos distintos, dos mensajes distintos: «no la cambiaste» y «la
   -- cambiaste pero es corta» se arreglan de forma diferente, y un único texto
   -- para ambos deja a quien lo ejecuta mirando la misma línea sin saber cuál
