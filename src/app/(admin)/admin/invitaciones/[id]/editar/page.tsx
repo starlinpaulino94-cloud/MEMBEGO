@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
+import { conEmpresa, conEmpresaOTodas } from '@/lib/tenant'
+import { companyFilter } from '@/modules/admin/queries'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/ui/page-header'
 import { CampanaInvitacionForm } from '@/components/invitaciones/CampanaInvitacionForm'
 import type { InvitaContenido } from '@/lib/invitaContenido'
@@ -14,18 +15,29 @@ export default async function EditarCampanaPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireRole(ADMIN_ROLES)
+  const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
+  const companyId = companyFilter(user)
 
-  const campana = await prisma.campanaInvitacion.findUnique({ where: { id } })
+  // Se lee CON el contexto del administrador, no a pelo por id. Además de
+  // preparar RLS, cierra un hueco: hasta ahora esta pantalla abría la campaña
+  // de cualquier empresa a quien acertara el identificador.
+  const campana = await conEmpresaOTodas(
+    companyId,
+    'invitaciones · editar: sin empresa activa es el superadmin',
+    (tx) => tx.campanaInvitacion.findUnique({ where: { id } })
+  )
   if (!campana) notFound()
+  if (companyId && campana.companyId !== companyId) notFound()
 
   // Promociones vigentes de la empresa: candidatas a beneficio digital (E8).
-  const promociones = await prisma.promocion.findMany({
-    where: { companyId: campana.companyId, activo: true, archivada: false },
-    select: { id: true, titulo: true },
-    orderBy: { titulo: 'asc' },
-  })
+  const promociones = await conEmpresa(campana.companyId, (tx) =>
+    tx.promocion.findMany({
+      where: { companyId: campana.companyId, activo: true, archivada: false },
+      select: { id: true, titulo: true },
+      orderBy: { titulo: 'asc' },
+    })
+  )
 
   const existing = {
     id: campana.id,

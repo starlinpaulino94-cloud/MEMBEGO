@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -18,13 +18,20 @@ export default async function AdminGamificacionPage() {
     return <SinEmpresaActiva seccion="la ruleta de premios" />
   }
 
+  // `getRuletaPremiosAdmin` abre su propia transacción: fuera del envoltorio,
+  // que anidarlas agota el pool con el pooler por delante.
   const [premiosRaw, promociones] = await Promise.all([
     getRuletaPremiosAdmin(companyId),
-    prisma.promocion.findMany({
-      where: { companyId, activo: true, archivada: false },
-      select: { id: true, titulo: true },
-      orderBy: { titulo: 'asc' },
-    }),
+    conEmpresaOTodas(
+      companyId,
+      'gamificacion: sin empresa activa es el superadmin',
+      (tx) =>
+        tx.promocion.findMany({
+          where: { companyId, activo: true, archivada: false },
+          select: { id: true, titulo: true },
+          orderBy: { titulo: 'asc' },
+        })
+    ),
   ])
 
   const premios: PremioRow[] = premiosRaw.map((p) => ({

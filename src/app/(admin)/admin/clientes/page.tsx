@@ -1,10 +1,10 @@
 import Form from 'next/form'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -79,37 +79,41 @@ export default async function ClientesPage({
   let total = 0
   let fallo = false
   try {
-    const [filas, cuenta, tipos] = await Promise.all([
-      prisma.cliente.findMany({
-        where,
-        include: {
-          memberships: {
-            include: { plan: true },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
+    const [filas, cuenta, tipos] = await conEmpresaOTodas(
+      companyId,
+      'clientes: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => Promise.all([
+        tx.cliente.findMany({
+          where,
+          include: {
+            memberships: {
+              include: { plan: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+            // La última visita: es la mitad del semáforo, y sin ella la columna
+            // «Estado» tendría que adivinarse desde la fecha de vencimiento.
+            visits: {
+              select: { fechaVisita: true },
+              orderBy: { fechaVisita: 'desc' },
+              take: 1,
+            },
           },
-          // La última visita: es la mitad del semáforo, y sin ella la columna
-          // «Estado» tendría que adivinarse desde la fecha de vencimiento.
-          visits: {
-            select: { fechaVisita: true },
-            orderBy: { fechaVisita: 'desc' },
-            take: 1,
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (pagina - 1) * POR_PAGINA,
-        take: POR_PAGINA,
-      }),
-      prisma.cliente.count({ where }),
-      // Categorías de vehículo: el filtro solo se ofrece si el negocio las usa.
-      prisma.tipoVehiculo
-        .findMany({
-          where: { ...(companyId ? { companyId } : {}), activo: true },
-          orderBy: { nivelTarifario: 'asc' },
-          select: { id: true, nombre: true },
-        })
-        .catch(() => []),
-    ])
+          orderBy: { createdAt: 'desc' },
+          skip: (pagina - 1) * POR_PAGINA,
+          take: POR_PAGINA,
+        }),
+        tx.cliente.count({ where }),
+        // Categorías de vehículo: el filtro solo se ofrece si el negocio las usa.
+        tx.tipoVehiculo
+          .findMany({
+            where: { ...(companyId ? { companyId } : {}), activo: true },
+            orderBy: { nivelTarifario: 'asc' },
+            select: { id: true, nombre: true },
+          })
+          .catch(() => []),
+      ])
+    )
     // El semáforo se calcula UNA vez, en el servidor, con los umbrales de esta
     // empresa. La tabla solo lo pinta: si lo decidiera el navegador, cada
     // pantalla podría llegar a una conclusión distinta del mismo cliente.

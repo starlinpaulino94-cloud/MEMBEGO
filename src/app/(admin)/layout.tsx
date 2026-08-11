@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { AppShell } from '@/components/layout/AppShell'
 import { AdminCompanySwitcher } from '@/components/admin/AdminCompanySwitcher'
 import { SentryUserSync } from '@/components/SentryUserSync'
@@ -19,26 +19,35 @@ async function empresasDisponibles(
   dbUserId: string,
   companyId: string | null
 ) {
+  // El conmutador de empresas cruza inquilinos POR DEFINICIÓN: su trabajo es
+  // enseñar a cuáles puede cambiar esta persona, así que ninguna de estas
+  // consultas cabe dentro de una sola empresa. Va con `sinEmpresa` y con el
+  // motivo escrito, que es como debe leerse una renuncia al aislamiento.
   try {
-    if (role === 'SUPERADMIN') {
-      return await prisma.company.findMany({
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      })
-    }
-    const accesos = await prisma.userCompanyAccess.findMany({
-      where: { userId: dbUserId },
-      select: { company: { select: { id: true, name: true } } },
-    })
-    const mapa = new Map(accesos.map((a) => [a.company.id, a.company]))
-    if (companyId && !mapa.has(companyId)) {
-      const propia = await prisma.company.findUnique({
-        where: { id: companyId },
-        select: { id: true, name: true },
-      })
-      if (propia) mapa.set(propia.id, propia)
-    }
-    return [...mapa.values()].sort((a, b) => a.name.localeCompare(b.name))
+    return await sinEmpresa(
+      'conmutador de empresas: por definición enseña a cuáles puede cambiar el usuario',
+      async (tx) => {
+        if (role === 'SUPERADMIN') {
+          return await tx.company.findMany({
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true },
+          })
+        }
+        const accesos = await tx.userCompanyAccess.findMany({
+          where: { userId: dbUserId },
+          select: { company: { select: { id: true, name: true } } },
+        })
+        const mapa = new Map(accesos.map((a) => [a.company.id, a.company]))
+        if (companyId && !mapa.has(companyId)) {
+          const propia = await tx.company.findUnique({
+            where: { id: companyId },
+            select: { id: true, name: true },
+          })
+          if (propia) mapa.set(propia.id, propia)
+        }
+        return [...mapa.values()].sort((a, b) => a.name.localeCompare(b.name))
+      }
+    )
   } catch {
     return []
   }

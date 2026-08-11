@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
 import { getPlaybook } from '@/lib/automation'
 import {
   CATEGORIA_LABELS,
@@ -53,14 +53,18 @@ export default async function EstrategiaDetallePage({
   if (!playbook) notFound()
 
   const instalada = companyId
-    ? await prisma.automation.findFirst({
-        where: {
-          companyId,
-          templateKey: `playbook.${playbook.id}`,
-          status: { not: 'ARCHIVED' },
-        },
-        select: { id: true, nombre: true, status: true },
-      })
+    ? await conEmpresaOTodas(
+      companyId,
+      'automatizaciones · plantillas · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => tx.automation.findFirst({
+          where: {
+            companyId,
+            templateKey: `playbook.${playbook.id}`,
+            status: { not: 'ARCHIVED' },
+          },
+          select: { id: true, nombre: true, status: true },
+        })
+    )
     : null
 
   return (

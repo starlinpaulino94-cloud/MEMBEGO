@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { getCapacidadesEmpresa } from '@/modules/capacidades/resolver'
 import { appPorSlug, type IconoApp } from '@/modules/apps/catalogo'
 import { getDashboardOperativo } from '@/modules/apps/dashboard'
@@ -99,11 +99,18 @@ export default async function AppShellPage({
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
+  // `getCapacidadesEmpresa` abre su propia transacción: fuera del envoltorio,
+  // que anidarlas agota el pool con el pooler por delante.
   const [empresa, capacidades] = await Promise.all([
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: { name: true, colorPrimario: true, logoUrl: true, zonaHoraria: true },
-    }),
+    conEmpresaOTodas(
+      companyId,
+      'app · [app]: sin empresa activa es el superadmin',
+      (tx) =>
+        tx.company.findUnique({
+          where: { id: companyId },
+          select: { name: true, colorPrimario: true, logoUrl: true, zonaHoraria: true },
+        })
+    ),
     getCapacidadesEmpresa(companyId).catch(() => null),
   ])
   const color = empresa?.colorPrimario || '#0D9488'

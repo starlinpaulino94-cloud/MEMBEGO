@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { PageHeader } from '@/components/ui/page-header'
 import { getCapacidadesEmpresa } from '@/modules/capacidades/resolver'
 import { CATEGORIA_LABELS } from '@/modules/capacidades/catalogo'
@@ -32,11 +32,19 @@ export default async function AplicacionesPage() {
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
+  // `getCapacidadesEmpresa` abre su propia transacción: va FUERA del envoltorio.
+  // Anidarla pediría una segunda conexión desde dentro de una abierta, y con el
+  // pooler por delante es exactamente así como se agota el pool.
   const [empresa, capacidades] = await Promise.all([
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: { name: true, colorPrimario: true },
-    }),
+    conEmpresaOTodas(
+      companyId,
+      'aplicaciones: sin empresa activa es el superadmin',
+      (tx) =>
+        tx.company.findUnique({
+          where: { id: companyId },
+          select: { name: true, colorPrimario: true },
+        })
+    ),
     getCapacidadesEmpresa(companyId).catch(() => null),
   ])
   const categoria = capacidades?.categoria ?? 'CAR_WASH'

@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney } from '@/lib/format'
 import { leerRango, paramsDeRango, PRESETS } from '@/modules/reportes/rango'
@@ -68,9 +68,13 @@ export default async function ReportesPage({
   }
 
   const sp = await searchParams
-  const empresa = await prisma.company
-    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-    .catch(() => null)
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'reportes: sin empresa activa es el superadmin',
+    (tx) => tx.company
+      .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      .catch(() => null)
+  )
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
 
   const rango = leerRango(sp, timeZone)

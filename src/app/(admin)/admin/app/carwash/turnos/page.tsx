@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { normalizarRango } from '@/modules/apps/reportes'
 import { utcDesdeLocal, sumarDias } from '@/modules/citas/disponibilidad'
@@ -56,9 +56,13 @@ export default async function TurnosPage({
     )
   }
 
-  const empresa = await prisma.company
-    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-    .catch(anotarFallo('carwash:turnos:company'))
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'app · carwash · turnos: sin empresa activa es el superadmin',
+    (tx) => tx.company
+      .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      .catch(anotarFallo('carwash:turnos:company'))
+  )
   const tz = empresa?.zonaHoraria || 'America/Santo_Domingo'
   const { rango } = normalizarRango(sp.desde, sp.hasta, tz)
   const inicio = utcDesdeLocal(rango.desde, '00:00', tz)

@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import {
   getEvidencias,
@@ -62,12 +62,16 @@ export default async function EvidenciasPage({
 
   // Contexto de la cola cuando llegan desde una tarjeta de la pista.
   const entradaCola = cola
-    ? await prisma.colaVehiculo
-        .findFirst({
-          where: { id: cola, companyId },
-          select: { id: true, placa: true, descripcion: true },
-        })
-        .catch(() => null)
+    ? await conEmpresaOTodas(
+      companyId,
+      'app · carwash · evidencias: sin empresa activa es el superadmin',
+      (tx) => tx.colaVehiculo
+          .findFirst({
+            where: { id: cola, companyId },
+            select: { id: true, placa: true, descripcion: true },
+          })
+          .catch(() => null)
+    )
     : null
 
   let evidencias: Awaited<ReturnType<typeof getEvidencias>> | null = null

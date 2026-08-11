@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import {
   Users,
   Gift,
@@ -16,7 +17,6 @@ import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney } from '@/lib/format'
-import { prisma } from '@/lib/prisma'
 import {
   getEmpresaReferidosDashboard,
   type EmpresaReferidosDashboard,
@@ -78,20 +78,28 @@ export default async function ReferidosPage() {
   // El superadmin no tiene empresa propia: debe elegir a cuál aplica la regla.
   let companies: { id: string; name: string }[] = []
   try {
-    ;[dash, reglas, companies] = await Promise.all([
+    // `getEmpresaReferidosDashboard` abre su propia transacción: se queda
+    // fuera del envoltorio para no anidar transacciones (agota el pool).
+    ;[dash, [reglas, companies]] = await Promise.all([
       getEmpresaReferidosDashboard(companyId ?? null),
-      prisma.reglaRecompensa.findMany({
-        where,
-        orderBy: { valorCondicion: 'asc' },
-        include: { company: { select: { name: true } } },
-      }),
-      isSuperadmin
-        ? prisma.company.findMany({
-            where: { isActive: true },
-            select: { id: true, name: true },
-            orderBy: { name: 'asc' },
-          })
-        : Promise.resolve([]),
+      conEmpresaOTodas(
+      companyId,
+      'referidos: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => Promise.all([
+        tx.reglaRecompensa.findMany({
+          where,
+          orderBy: { valorCondicion: 'asc' },
+          include: { company: { select: { name: true } } },
+        }),
+        isSuperadmin
+          ? tx.company.findMany({
+              where: { isActive: true },
+              select: { id: true, name: true },
+              orderBy: { name: 'asc' },
+            })
+          : Promise.resolve([]),
+        ])
+      ),
     ])
   } catch (e) {
     console.error('[admin-referidos]', e)

@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { CalendarDays, Search, Settings2, Users, X } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import {
   getAgenda,
   getAgendaConfig,
@@ -64,10 +64,14 @@ export default async function CitasAdminPage({
     return <SinEmpresaActiva seccion="tu agenda de citas" />
   }
 
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { zonaHoraria: true, idioma: true },
-  })
+  const company = await conEmpresaOTodas(
+    companyId,
+    'citas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.company.findUnique({
+      where: { id: companyId },
+      select: { zonaHoraria: true, idioma: true },
+    })
+  )
   const tz = company?.zonaHoraria ?? 'America/Santo_Domingo'
   const idioma = company?.idioma ?? 'es-DO'
 

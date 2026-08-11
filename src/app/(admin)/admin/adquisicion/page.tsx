@@ -1,6 +1,6 @@
 import { requireRole } from '@/lib/auth/guards'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import Form from 'next/form'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -33,10 +33,14 @@ export default async function AdquisicionPage({
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
-  const empresa = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { zonaHoraria: true },
-  })
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'adquisicion: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.company.findUnique({
+      where: { id: companyId },
+      select: { zonaHoraria: true },
+    })
+  )
   const timeZone = empresa?.zonaHoraria || 'America/Santo_Domingo'
   const fmtFecha = (d: Date) =>
     new Intl.DateTimeFormat('es-DO', { timeZone, dateStyle: 'medium' }).format(d)

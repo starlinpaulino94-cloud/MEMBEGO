@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { SucursalForm } from '@/components/admin/SucursalForm'
 
 export default async function EditarSucursalPage({
@@ -13,10 +13,14 @@ export default async function EditarSucursalPage({
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
 
-  const suc = await prisma.sucursal.findUnique({ where: { id } })
+  const companyId = companyFilter(user)
+  const suc = await conEmpresaOTodas(
+    companyId,
+    'sucursales · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    (tx) => tx.sucursal.findUnique({ where: { id } })
+  )
   if (!suc) return notFound()
 
-  const companyId = companyFilter(user)
   if (companyId && suc.companyId !== companyId) return notFound()
 
   return (

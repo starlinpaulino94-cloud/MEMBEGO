@@ -1,7 +1,7 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { prisma } from '@/lib/prisma'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import {
   getColaTablero,
@@ -58,9 +58,13 @@ export default async function ColaPage() {
     )
   }
 
-  const empresa = await prisma.company
-    .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-    .catch(() => null)
+  const empresa = await conEmpresaOTodas(
+    companyId,
+    'app · carwash · cola: sin empresa activa es el superadmin',
+    (tx) => tx.company
+      .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      .catch(() => null)
+  )
   const tz = empresa?.zonaHoraria || 'America/Santo_Domingo'
   const inicioDia = utcDesdeLocal(ymdEnTz(new Date(), tz), '00:00', tz)
 
@@ -94,15 +98,19 @@ export default async function ColaPage() {
   // Apagada, la tarjeta se ve exactamente como antes.
   const conComisiones = await tieneCapacidad(companyId, 'COMISIONES')
   const lavadores: LavadorOpcion[] = conComisiones
-    ? await prisma.user
-        .findMany({
-          // Solo el personal: los CLIENTE de la empresa no lavan carros.
-          where: { companyId, role: { not: 'CLIENTE' } },
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, email: true },
-        })
-        .then((us) => us.map((u) => ({ id: u.id, nombre: u.name || u.email || 'Sin nombre' })))
-        .catch(() => [])
+    ? await conEmpresaOTodas(
+      companyId,
+      'app · carwash · cola: sin empresa activa es el superadmin',
+      (tx) => tx.user
+          .findMany({
+            // Solo el personal: los CLIENTE de la empresa no lavan carros.
+            where: { companyId, role: { not: 'CLIENTE' } },
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, email: true },
+          })
+          .then((us) => us.map((u) => ({ id: u.id, nombre: u.name || u.email || 'Sin nombre' })))
+          .catch(() => [])
+    )
     : []
 
   return (

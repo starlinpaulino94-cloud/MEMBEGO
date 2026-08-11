@@ -1,10 +1,10 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import { Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { listInvitacionesPendientes } from '@/modules/admin/invitacionActions'
-import { prisma } from '@/lib/prisma'
 import { Button } from '@/components/ui/button'
 import { EmpleadosTable, type EmpleadoRow } from '@/components/admin/EmpleadosTable'
 import { InvitarEquipo } from '@/components/admin/InvitarEquipo'
@@ -40,17 +40,21 @@ export default async function EmpleadosPage() {
   }[] = []
   let loadError = false
   try {
-    const [team, invs] = await Promise.all([
-      prisma.user.findMany({
-        where: { role: { in: TEAM_ROLES }, ...(companyId ? { companyId } : {}) },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        select: { id: true, name: true, email: true, role: true, createdAt: true },
-      }),
-      user.metadata.companyId
-        ? listInvitacionesPendientes(user.metadata.companyId).catch(() => [])
-        : Promise.resolve([]),
-    ])
+    const [team, invs] = await conEmpresaOTodas(
+      companyId,
+      'empleados: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      (tx) => Promise.all([
+        tx.user.findMany({
+          where: { role: { in: TEAM_ROLES }, ...(companyId ? { companyId } : {}) },
+          orderBy: { createdAt: 'desc' },
+          take: 200,
+          select: { id: true, name: true, email: true, role: true, createdAt: true },
+        }),
+        user.metadata.companyId
+          ? listInvitacionesPendientes(user.metadata.companyId).catch(() => [])
+          : Promise.resolve([]),
+      ])
+    )
     miembros = team.map((m) => ({
       id: m.id,
       name: m.name,

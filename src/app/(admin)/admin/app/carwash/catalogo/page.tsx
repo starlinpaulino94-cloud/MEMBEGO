@@ -1,9 +1,9 @@
 import Link from 'next/link'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
-import { prisma } from '@/lib/prisma'
 import { getTiposVehiculo, getServicios, getBahias } from '@/modules/carwash/catalogo'
 import { CatalogoPanel } from '@/components/carwash/CatalogoPanel'
 import { PageHeader } from '@/components/ui/page-header'
@@ -24,15 +24,24 @@ export default async function CatalogoCarWashPage() {
   const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
   if (!companyId) return <SinEmpresaActiva seccion="el catálogo de la pista" />
 
+  // Los tres `getX` abren su PROPIA transacción con su contexto de empresa, así
+  // que van fuera del envoltorio: anidarlos pediría una segunda conexión desde
+  // dentro de una transacción abierta, que con el pooler es como se agota el
+  // pool. Solo se envuelve la consulta que de verdad usa Prisma aquí.
   const datos = await Promise.all([
     getTiposVehiculo(companyId),
     getServicios(companyId),
     getBahias(companyId),
-    prisma.sucursal.findMany({
-      where: { companyId },
-      orderBy: { nombre: 'asc' },
-      select: { id: true, nombre: true },
-    }),
+    conEmpresaOTodas(
+      companyId,
+      'app · carwash · catalogo: sin empresa activa es el superadmin',
+      (tx) =>
+        tx.sucursal.findMany({
+          where: { companyId },
+          orderBy: { nombre: 'asc' },
+          select: { id: true, nombre: true },
+        })
+    ),
   ]).catch(() => null)
 
   return (

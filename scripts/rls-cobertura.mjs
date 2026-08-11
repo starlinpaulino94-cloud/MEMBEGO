@@ -96,63 +96,6 @@ const BLANCA = new Map([
  * cero filas, y la pantalla se queda en blanco sin decir por qué.
  */
 const PENDIENTES = new Set([
-  'app/(admin)/admin/actividad/page.tsx',
-  'app/(admin)/admin/adquisicion/page.tsx',
-  'app/(admin)/admin/aplicaciones/capacidades/page.tsx',
-  'app/(admin)/admin/aplicaciones/page.tsx',
-  'app/(admin)/admin/app/[app]/page.tsx',
-  'app/(admin)/admin/app/carwash/activos/page.tsx',
-  'app/(admin)/admin/app/carwash/catalogo/page.tsx',
-  'app/(admin)/admin/app/carwash/cola/page.tsx',
-  'app/(admin)/admin/app/carwash/comisiones/page.tsx',
-  'app/(admin)/admin/app/carwash/compras/[id]/page.tsx',
-  'app/(admin)/admin/app/carwash/compras/page.tsx',
-  'app/(admin)/admin/app/carwash/evidencias/page.tsx',
-  'app/(admin)/admin/app/carwash/incidencias/page.tsx',
-  'app/(admin)/admin/app/carwash/reportes/page.tsx',
-  'app/(admin)/admin/app/carwash/turnos/page.tsx',
-  'app/(admin)/admin/app/carwash/vehiculos/page.tsx',
-  'app/(admin)/admin/automatizaciones/plantillas/[id]/page.tsx',
-  'app/(admin)/admin/automatizaciones/plantillas/page.tsx',
-  'app/(admin)/admin/campanas/[id]/editar/page.tsx',
-  'app/(admin)/admin/campanas/page.tsx',
-  'app/(admin)/admin/citas/page.tsx',
-  'app/(admin)/admin/clientes/[id]/page.tsx',
-  'app/(admin)/admin/clientes/page.tsx',
-  'app/(admin)/admin/dashboard/page.tsx',
-  'app/(admin)/admin/empleados/[id]/page.tsx',
-  'app/(admin)/admin/empleados/page.tsx',
-  'app/(admin)/admin/facturas/page.tsx',
-  'app/(admin)/admin/gamificacion/page.tsx',
-  'app/(admin)/admin/invitaciones/[id]/editar/page.tsx',
-  'app/(admin)/admin/invitaciones/nueva/page.tsx',
-  'app/(admin)/admin/membresias/page.tsx',
-  'app/(admin)/admin/metodos-pago/[id]/editar/page.tsx',
-  'app/(admin)/admin/metodos-pago/nuevo/page.tsx',
-  'app/(admin)/admin/metodos-pago/page.tsx',
-  'app/(admin)/admin/notificaciones/page.tsx',
-  'app/(admin)/admin/ofertas/[id]/page.tsx',
-  'app/(admin)/admin/ofertas/nueva/page.tsx',
-  'app/(admin)/admin/ofertas/page.tsx',
-  'app/(admin)/admin/pagos/page.tsx',
-  'app/(admin)/admin/perfil/page.tsx',
-  'app/(admin)/admin/planes/[id]/editar/page.tsx',
-  'app/(admin)/admin/planes/page.tsx',
-  'app/(admin)/admin/promociones/[id]/editar/page.tsx',
-  'app/(admin)/admin/promociones/nuevo/page.tsx',
-  'app/(admin)/admin/promociones/page.tsx',
-  'app/(admin)/admin/publicaciones/[id]/editar/page.tsx',
-  'app/(admin)/admin/publicaciones/nuevo/page.tsx',
-  'app/(admin)/admin/publicaciones/page.tsx',
-  'app/(admin)/admin/referidos/page.tsx',
-  'app/(admin)/admin/regalos/page.tsx',
-  'app/(admin)/admin/registros/page.tsx',
-  'app/(admin)/admin/reportes/page.tsx',
-  'app/(admin)/admin/seguimiento/imprimir/page.tsx',
-  'app/(admin)/admin/seguimiento/page.tsx',
-  'app/(admin)/admin/sucursales/[id]/editar/page.tsx',
-  'app/(admin)/admin/sucursales/page.tsx',
-  'app/(admin)/layout.tsx',
   'app/(cliente)/cliente/ayuda/page.tsx',
   'app/(cliente)/cliente/bienvenida/page.tsx',
   'app/(cliente)/cliente/celebracion/page.tsx',
@@ -202,9 +145,11 @@ function archivosTS(dir) {
 
 /** ¿El archivo usa los envoltorios de tenant? */
 function usaTenant(contenido) {
-  return /import\s*\{[^}]*\b(conEmpresa|sinEmpresa)\b[^}]*\}\s*from\s*['"]@\/lib\/tenant['"]/.test(
+  // `conEmpresaOTodas` cuenta: elige entre los dos según haya empresa o no
+  // (superadmin). Va primero en la alternancia para que no lo coma `conEmpresa`.
+  return /import\s*\{[^}]*\b(conEmpresaOTodas|conEmpresa|sinEmpresa)\b[^}]*\}\s*from\s*['"]@\/lib\/tenant['"]/.test(
     contenido
-  ) || /[^.\w](conEmpresa|sinEmpresa)\s*\(/.test(contenido)
+  ) || /[^.\w](conEmpresaOTodas|conEmpresa|sinEmpresa)\s*\(/.test(contenido)
 }
 
 /** ¿El archivo toca la base (consultas Prisma o SQL crudo)? */
