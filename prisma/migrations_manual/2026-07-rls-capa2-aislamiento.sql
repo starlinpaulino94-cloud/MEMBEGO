@@ -90,9 +90,17 @@ DO $$
 DECLARE
   clave text := 'CAMBIA-ESTA-CLAVE';   -- ← LA CONTRASEÑA VA AQUÍ
 BEGIN
-  IF clave = 'CAMBIA-ESTA-CLAVE' OR length(clave) < 16 THEN
+  -- Dos casos distintos, dos mensajes distintos: «no la cambiaste» y «la
+  -- cambiaste pero es corta» se arreglan de forma diferente, y un único texto
+  -- para ambos deja a quien lo ejecuta mirando la misma línea sin saber cuál
+  -- de las dos le está pasando.
+  IF clave = 'CAMBIA-ESTA-CLAVE' THEN
     RAISE EXCEPTION
-      'Pon una contraseña propia (16+ caracteres) en la variable `clave` antes de ejecutar este archivo.';
+      'La contraseña sigue siendo el marcador. Cambia CAMBIA-ESTA-CLAVE por una tuya en la línea `clave text := ...` (unas 20 líneas más abajo del inicio de este bloque).';
+  END IF;
+  IF length(clave) < 16 THEN
+    RAISE EXCEPTION
+      'La contraseña tiene % caracteres y hacen falta 16 o más.', length(clave);
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'membego_app') THEN
