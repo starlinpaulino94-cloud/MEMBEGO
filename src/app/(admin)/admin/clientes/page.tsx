@@ -9,7 +9,14 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ClientesTable, type ClienteRow } from '@/components/admin/ClientesTable'
-import { whereClientes } from '@/modules/admin/clientesFiltro'
+import {
+  MEMBRESIA_OPCIONES,
+  hayFiltrosClientes,
+  leerFiltrosClientes,
+  whereClientes,
+} from '@/modules/admin/clientesFiltro'
+import { DIAS_SIN_VISITAS, urlConFiltros } from '@/modules/admin/filtrosComunes'
+import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
 import { Download } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -47,24 +54,26 @@ const POR_PAGINA = 50
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; p?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = companyFilter(user)
-  const { q, p } = await searchParams
+  const sp = await searchParams
 
-  const busqueda = (q ?? '').trim()
-  const pagina = Math.max(1, Number.parseInt(p ?? '1', 10) || 1)
+  const busqueda = (sp.q ?? '').trim()
+  const pagina = Math.max(1, Number.parseInt(sp.p ?? '1', 10) || 1)
+  const f = leerFiltrosClientes(sp)
 
   // El filtro vive en `modules/admin/clientesFiltro`: la exportación usa el
   // MISMO, para que el CSV no pueda separarse nunca de lo que se ve.
-  const where = whereClientes(companyId, busqueda)
+  const where = whereClientes(companyId, sp)
 
   let clientes: ClienteRow[] = []
+  let categorias: { id: string; nombre: string }[] = []
   let total = 0
   let fallo = false
   try {
-    ;[clientes, total] = await Promise.all([
+    const [filas, cuenta, tipos] = await Promise.all([
       prisma.cliente.findMany({
         where,
         include: {
@@ -79,11 +88,53 @@ export default async function ClientesPage({
         take: POR_PAGINA,
       }) as Promise<ClienteRow[]>,
       prisma.cliente.count({ where }),
+      // Categorías de vehículo: el filtro solo se ofrece si el negocio las usa.
+      prisma.tipoVehiculo
+        .findMany({
+          where: { ...(companyId ? { companyId } : {}), activo: true },
+          orderBy: { nivelTarifario: 'asc' },
+          select: { id: true, nombre: true },
+        })
+        .catch(() => []),
     ])
+    clientes = filas
+    total = cuenta
+    categorias = tipos
   } catch (e) {
     fallo = true
     console.error('[admin-clientes]', e)
   }
+
+  const grupos: GrupoFiltro[] = [
+    {
+      clave: 'sinVisitas',
+      titulo: 'Sin venir',
+      activo: f.sinVisitas ? String(f.sinVisitas) : undefined,
+      opciones: DIAS_SIN_VISITAS.map((d) => ({ valor: String(d), label: `+${d} días` })),
+    },
+    {
+      clave: 'membresia',
+      titulo: 'Membresía',
+      activo: f.membresia,
+      opciones: MEMBRESIA_OPCIONES.map((m) => ({ valor: m.clave, label: m.label })),
+    },
+    {
+      clave: 'nuevos',
+      titulo: 'Registrados',
+      activo: f.nuevos ? String(f.nuevos) : undefined,
+      opciones: [7, 30, 90].map((d) => ({ valor: String(d), label: `últimos ${d} días` })),
+    },
+    ...(categorias.length > 0
+      ? [
+          {
+            clave: 'vehiculo',
+            titulo: 'Categoría',
+            activo: f.vehiculo,
+            opciones: categorias.map((c) => ({ valor: c.id, label: c.nombre })),
+          },
+        ]
+      : []),
+  ]
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA))
   const desde = total === 0 ? 0 : (pagina - 1) * POR_PAGINA + 1
@@ -106,7 +157,18 @@ export default async function ClientesPage({
 
       {/* `next/form` navega sin JavaScript: el buscador sigue funcionando en la
           pista con conexión mala o mientras el bundle todavía no cargó. */}
-      <Form action="/admin/clientes" className="flex max-w-md gap-2">
+      <FiltrosChips
+        base="/admin/clientes"
+        params={sp}
+        grupos={grupos}
+        hayFiltros={hayFiltrosClientes(f)}
+      />
+
+      {/* Los filtros activos viajan ocultos: buscar no debe borrarlos. */}
+      <Form action="/admin/clientes" className="flex max-w-2xl gap-2">
+        {(['sinVisitas', 'membresia', 'nuevos', 'vehiculo', 'vence'] as const).map((k) =>
+          sp[k] ? <input key={k} type="hidden" name={k} value={sp[k]} /> : null
+        )}
         <Input
           name="q"
           aria-label="Buscar clientes"
@@ -121,7 +183,7 @@ export default async function ClientesPage({
         {/* La exportación es un ENLACE al servidor, no un botón en la tabla: se
             lleva todo el filtro, no las 50 filas que el navegador tenga a mano. */}
         <Button asChild variant="outline" className="shrink-0">
-          <a href={`/admin/clientes/export${busqueda ? `?q=${encodeURIComponent(busqueda)}` : ''}`}>
+          <a href={urlConFiltros('/admin/clientes/export', sp, {})}>
             <Download className="mr-2 h-4 w-4" /> Exportar
           </a>
         </Button>
@@ -132,7 +194,7 @@ export default async function ClientesPage({
       {paginas > 1 && (
         <nav className="flex items-center justify-between gap-3" aria-label="Paginación">
           <PaginaLink
-            href={enlace(busqueda, pagina - 1)}
+            href={urlConFiltros('/admin/clientes', { ...sp, p: undefined }, { p: pagina - 1 > 1 ? pagina - 1 : undefined })}
             disponible={pagina > 1}
             texto="← Anterior"
           />
@@ -140,7 +202,7 @@ export default async function ClientesPage({
             Página {pagina} de {paginas}
           </span>
           <PaginaLink
-            href={enlace(busqueda, pagina + 1)}
+            href={urlConFiltros('/admin/clientes', { ...sp, p: undefined }, { p: pagina + 1 })}
             disponible={pagina < paginas}
             texto="Siguiente →"
           />
@@ -148,14 +210,6 @@ export default async function ClientesPage({
       )}
     </div>
   )
-}
-
-function enlace(q: string, pagina: number): string {
-  const params = new URLSearchParams()
-  if (q) params.set('q', q)
-  if (pagina > 1) params.set('p', String(pagina))
-  const cadena = params.toString()
-  return `/admin/clientes${cadena ? `?${cadena}` : ''}`
 }
 
 /** El borde deshabilitado se pinta como texto, no como enlace muerto. */

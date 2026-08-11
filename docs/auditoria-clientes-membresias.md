@@ -413,3 +413,50 @@ Los tres avisos de «Requiere tu atención» siguen llevando a listas sin filtra
 —«vence en 7 días», «sin visitas en 30 días»— es el Bloque 2. Los segmentos
 siguen sin pantalla propia (C-11) y `lavadosRestantes` sigue sin reporte (C-12),
 también Bloque 2.
+
+---
+
+## Estado · Bloque 2 completado (2026-08-11)
+
+| # | Hallazgo | Qué se hizo |
+|---|---|---|
+| 9 | — | **Filtros combinables en Membresías**: vence en 7/15/30, con/sin usos, sin venir +15/30/60/90, por plan y por categoría de vehículo. Todos en la URL y compartidos con el CSV. |
+| 10 | — | **Filtros equivalentes en Clientes**: sin venir, situación de la membresía (vigente · por vencer · vencida · sin), registrados en los últimos N días y categoría de vehículo. |
+| 11 | B-7, C-12 | **`/admin/riesgo`** — el cruce que faltaba: *no viene hace X* **+** *vence en Y* **+** *le quedan Z usos*, ordenado por **dinero en juego**, con WhatsApp ya redactado en cada fila y exportación. Los dos avisos del Resumen llevan aquí con sus umbrales puestos. |
+| 12 | C-12 | **`/admin/retencion`** — reparto por días sin venir (con enlace a las personas de cada tramo), tasa de renovación a 90 días, **pasivo de usos pagados sin prestar** y consumo por plan. |
+| 13 | C-11 | Los segmentos predefinidos ganan **«ver quiénes son antes de enviar»**: enlazan al directorio con el filtro equivalente. No hacía falta pantalla nueva — los filtros del punto 10 dicen lo mismo. |
+
+### Tres decisiones que conviene conocer
+
+**El orden es por dinero, no por nombre.** Con cincuenta personas y una tarde
+para llamar, el orden alfabético reparte el esfuerzo al azar. El *valor en
+juego* es lo que queda sin consumir de cada membresía **al precio al que se
+compró** (no al de la lista, que puede haber cambiado); en los planes ilimitados
+es la renovación completa. Se calcula en SQL para que el orden y la paginación
+sigan siendo exactos con miles de filas.
+
+**Cada filtro es una condición dentro de un único `AND`.** Suena a detalle de
+implementación y es la propiedad que evita el peor fallo posible aquí: dos
+condiciones con su propio `OR` puestas como claves sueltas del mismo objeto se
+pisan, y la lista sale **mal filtrada sin ningún error**. Hay prueba.
+
+**Los usos sin consumir se presentan como un pasivo.** No es dinero por ganar:
+es servicio ya cobrado que el negocio debe. Si vence sin consumirse no se
+convierte en ingreso extra, se convierte en un cliente molesto — y la pantalla
+lo dice con esas palabras en vez de dejarlo a interpretación.
+
+### Permisos
+
+`riesgo` y `retencion` entran en `ADMIN_SECTIONS`, y en los dos roles acotados:
+Marketing las necesita para dirigir una campaña de retención y Supervisión para
+repartir las llamadas.
+
+Verificado: tipos, lint sin errores nuevos, 729/729 pruebas (16 nuevas del
+bloque), `rls:cobertura` sin huecos y build correcto. **Sin migración**: todo se
+apoya en columnas que ya existen.
+
+### Lo que queda (Bloque 3)
+
+Semáforo del cliente calculado en un solo sitio, ficha del cliente como una sola
+línea de tiempo, vigilancia automática que dispare las automatizaciones desde el
+semáforo, y conciliación diaria entre Caja, Membresías y Transacciones.

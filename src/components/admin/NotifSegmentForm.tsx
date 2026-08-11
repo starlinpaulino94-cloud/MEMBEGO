@@ -7,7 +7,13 @@ import {
   enviarNotificacionSegmento,
   type NotifSegmentState,
 } from '@/modules/admin/notifSegmentActions'
-import { SEGMENTOS, type ConteoSegmentos } from '@/modules/admin/segmentos-def'
+import {
+  SEGMENTOS,
+  VER_SEGMENTO,
+  type ConteoSegmentos,
+  type SegmentoValue,
+} from '@/modules/admin/segmentos-def'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -81,6 +87,17 @@ export function NotifSegmentForm({
           Solo se notifica al segmento elegido — nunca a usuarios ajenos a tu
           empresa.
         </p>
+        {/* Ver antes de mandar. Estos segmentos se calculaban desde hace tiempo
+            y solo servían para ENVIAR: había que apretar el botón sin saber a
+            quién le iba a llegar, que es lo que hace que nadie se atreva. */}
+        {VER_SEGMENTO[segmento as SegmentoValue] && (
+          <Link
+            href={VER_SEGMENTO[segmento as SegmentoValue]!}
+            className="text-caption text-primary hover:underline"
+          >
+            Ver quiénes son antes de enviar →
+          </Link>
+        )}
       </div>
 
       {segmento === 'plan' && (
