@@ -98,11 +98,24 @@ async function sumarVentas(
 }
 
 async function sumarMembresias(tx: Tx, companyId: string, desde: Date, hasta: Date): Promise<number> {
-  // `updatedAt` es lo único que hay para fechar el cobro: la membresía no
-  // guarda una fecha de pago propia. Se documenta porque significa que editar
-  // una membresía vieja la mueve de periodo.
+  // El cobro se fecha por `fechaPago`, que se escribe UNA vez al confirmarlo.
+  // Antes se usaba `updatedAt`, lo único que había, con la consecuencia
+  // anotada aquí mismo: editar una membresía vieja la movía de periodo, así
+  // que un informe cerrado podía cambiar meses después (auditoría · A-6).
+  //
+  // Las membresías anteriores a la columna la tienen rellena con su `updatedAt`
+  // (la migración lo hizo), pero el respaldo se mantiene para las que quedaran
+  // sin rellenar: un cobro sin fecha es mejor contarlo por su aproximación que
+  // desaparecer de los ingresos sin avisar.
   const agg = await tx.membership.aggregate({
-    where: { companyId, pagoConfirmado: true, updatedAt: { gte: desde, lt: hasta } },
+    where: {
+      companyId,
+      pagoConfirmado: true,
+      OR: [
+        { fechaPago: { gte: desde, lt: hasta } },
+        { fechaPago: null, updatedAt: { gte: desde, lt: hasta } },
+      ],
+    },
     _sum: { montoPagado: true },
   })
   return Number(agg._sum.montoPagado ?? 0)

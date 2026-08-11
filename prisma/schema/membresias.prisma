@@ -110,6 +110,14 @@ model Membership {
   adminNota             String? // nota interna del admin, no visible al cliente
   pagoConfirmado        Boolean          @default(false)
   montoPagado           Decimal?         @db.Decimal(10, 2)
+  /// CUÁNDO entró el dinero. Antes no existía y los reportes fechaban el cobro
+  /// por `updatedAt`, con una consecuencia anotada en el propio código: editar
+  /// una membresía vieja movía su cobro de periodo, así que un informe cerrado
+  /// podía cambiar meses después. Se escribe una sola vez, al confirmar el
+  /// pago, y no se toca al renovar ni al editar. Null = membresía anterior a
+  /// esta columna (los reportes caen a `updatedAt` para esas, sin fingir un
+  /// dato que no se guardó).
+  fechaPago             DateTime?
   // O-13: descuento de bienvenida congelado al solicitar el plan (null = sin
   // descuento). Solo se aplica si la membresía nunca se activó (fechaInicio null).
   descuentoBienvenida   Decimal?         @db.Decimal(10, 2)
@@ -149,6 +157,8 @@ model Membership {
   // Patrón caliente de dashboards y automatizaciones: membresías de una
   // empresa por estado y vencimiento (activas, por vencer, pendientes).
   @@index([companyId, estado, fechaVencimiento])
+  // Ingresos por periodo: el Resumen y los reportes suman lo cobrado de un mes.
+  @@index([companyId, fechaPago])
   @@map("memberships")
 }
 
