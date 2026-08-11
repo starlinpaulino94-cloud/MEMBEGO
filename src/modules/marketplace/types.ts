@@ -113,6 +113,14 @@ export interface MarketplaceFilters {
 export interface PromotionFilters {
   search?: string
   company?: string
+  /**
+   * Categoría del NEGOCIO que publica la oferta, por slug.
+   *
+   * Se filtra por la categoría de la empresa y no por una de la promoción
+   * porque la promoción no tiene: quien busca «barbería» busca ofertas de
+   * barberías, no ofertas etiquetadas como tales.
+   */
+  category?: string
   type?: string
   tag?: string
   limit?: number
