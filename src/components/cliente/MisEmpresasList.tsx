@@ -4,7 +4,16 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Star, Gift, MapPin, ArrowRight, UserMinus, Loader2 } from 'lucide-react'
+import {
+  Star,
+  Gift,
+  MapPin,
+  ArrowRight,
+  UserMinus,
+  UserPlus,
+  BadgeCheck,
+  Loader2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   toggleSeguirEmpresa,
@@ -24,7 +33,7 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
-  function dejarDeSeguir(companyId: string, name: string) {
+  function alternarSeguir(companyId: string, name: string, seguiaAntes: boolean) {
     setPendingId(companyId)
     startTransition(async () => {
       const res = await toggleSeguirEmpresa(companyId)
@@ -33,7 +42,9 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
         toast.error(res.error)
         return
       }
-      toast.success(`Dejaste de seguir ${name}.`)
+      toast.success(
+        seguiaAntes ? `Dejaste de seguir ${name}.` : `Ahora sigues ${name}.`
+      )
       router.refresh()
     })
   }
@@ -54,7 +65,7 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {empresas.map(({ company, esFavorita }) => {
+      {empresas.map(({ company, esFavorita, sigo, esCliente }) => {
         const pending = pendingId === company.id
         const initials = company.name.slice(0, 2).toUpperCase()
         return (
@@ -93,6 +104,11 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
               </div>
 
               <h3 className="font-semibold text-foreground">{company.name}</h3>
+              {esCliente && (
+                <p className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-caption font-semibold text-success">
+                  <BadgeCheck className="h-3.5 w-3.5" aria-hidden /> Eres cliente
+                </p>
+              )}
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="rounded-full bg-muted px-2 py-0.5">
                   {TIPO_LABEL[company.type] ?? company.type}
@@ -117,30 +133,43 @@ export function MisEmpresasList({ empresas }: { empresas: EmpresaSeguida[] }) {
                 >
                   Ver perfil <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
+                {/* Marcar favorita presupone seguir: sin seguimiento no hay
+                    fila que marcar. */}
+                {sigo && (
+                  <button
+                    onClick={() => toggleFavorita(company.id)}
+                    disabled={pending}
+                    aria-label={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
+                    title={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
+                    className={`rounded-lg border p-2 transition disabled:opacity-50 ${
+                      esFavorita
+                        ? 'border-warning/30 bg-warning/15 text-warning'
+                        : 'border-border text-muted-foreground hover:text-warning'
+                    }`}
+                  >
+                    <Star className={`h-4 w-4 ${esFavorita ? 'fill-amber-400' : ''}`} />
+                  </button>
+                )}
+                {/* Un negocio del que se es cliente sin seguirlo se queda en la
+                    lista —la relación existe— y lo que se ofrece es volver a
+                    recibir sus novedades, no echarlo de aquí. */}
                 <button
-                  onClick={() => toggleFavorita(company.id)}
+                  onClick={() => alternarSeguir(company.id, company.name, sigo)}
                   disabled={pending}
-                  aria-label={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
-                  title={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
+                  aria-label={sigo ? 'Dejar de seguir' : 'Seguir'}
+                  title={sigo ? 'Dejar de seguir' : 'Seguir'}
                   className={`rounded-lg border p-2 transition disabled:opacity-50 ${
-                    esFavorita
-                      ? 'border-warning/30 bg-warning/15 text-warning'
-                      : 'border-border text-muted-foreground hover:text-warning'
+                    sigo
+                      ? 'border-border text-muted-foreground hover:border-destructive/25 hover:text-destructive'
+                      : 'border-primary/30 text-primary hover:bg-primary/10'
                   }`}
-                >
-                  <Star className={`h-4 w-4 ${esFavorita ? 'fill-amber-400' : ''}`} />
-                </button>
-                <button
-                  onClick={() => dejarDeSeguir(company.id, company.name)}
-                  disabled={pending}
-                  aria-label="Dejar de seguir"
-                  title="Dejar de seguir"
-                  className="rounded-lg border border-border p-2 text-muted-foreground transition hover:border-destructive/25 hover:text-destructive disabled:opacity-50"
                 >
                   {pending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+                  ) : sigo ? (
                     <UserMinus className="h-4 w-4" />
+                  ) : (
+                    <UserPlus className="h-4 w-4" />
                   )}
                 </button>
               </div>

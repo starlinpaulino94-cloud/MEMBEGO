@@ -25,7 +25,7 @@ export default async function MisEmpresasPage() {
     <div className="space-y-6">
       <PageHeader
         title="Mis empresas"
-        description="Las que sigues. Sus promociones y novedades te llegan solas."
+        description="Donde eres cliente y las que sigues. Sus promociones y novedades te llegan solas."
         action={
           <Button asChild variant="outline">
             <Link href="/cliente/explorar">
@@ -49,8 +49,8 @@ export default async function MisEmpresasPage() {
       ) : empresas.length === 0 ? (
         <EmptyState
           icon={Store}
-          title="Aún no sigues ninguna empresa"
-          description="Sigue negocios para recibir sus promociones y novedades sin tener que buscarlas."
+          title="Todavía no tienes negocios"
+          description="Aquí aparecerán los negocios donde eres cliente y los que sigas para recibir sus promociones."
           action={
             <Button asChild size="lg">
               <Link href="/cliente/explorar">Explorar empresas</Link>
