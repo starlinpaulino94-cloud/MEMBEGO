@@ -77,6 +77,21 @@ function sql(texto) {
 }
 
 /**
+ * Ejecuta SQL con la válvula omnisciente abierta, y COMMIT.
+ *
+ * La siembra y la limpieza crean y borran DOS empresas: eso no lo hace ningún
+ * inquilino, lo hace el superadmin. Con RLS de verdad encendido, hacerlo sin la
+ * válvula falla —`new row violates row-level security policy for table
+ * "companies"`— y la prueba no llega ni a empezar.
+ *
+ * Commit y no rollback, al contrario que `comoInquilino`: lo sembrado tiene que
+ * seguir ahí cuando corran las comprobaciones.
+ */
+function comoOmnisciente(texto) {
+  return sql(`begin; set local app.omnisciente = 'on'; ${texto} commit;`)
+}
+
+/**
  * Ejecuta SQL como `membego_app` con un contexto de empresa, dentro de una
  * transacción que SIEMPRE se deshace.
  *
@@ -134,7 +149,7 @@ function limpiar() {
   // En orden inverso a la siembra: las hijas antes que las madres, o las
   // claves foráneas lo impiden.
   try {
-    sql(`
+    comoOmnisciente(`
       delete from visits      where "clienteId" in ('${A}_k', '${B}_k');
       delete from memberships where "clienteId" in ('${A}_k', '${B}_k');
       delete from clientes    where id in ('${A}_k', '${B}_k');
@@ -185,7 +200,7 @@ try {
   // interesa: `visits` no tiene `companyId` y debe heredar el inquilino a
   // través de esa cadena.
   limpiar()
-  sql(`
+  comoOmnisciente(`
     insert into companies (id, name, slug, type, "updatedAt") values
       ('${A}', 'Prueba A', '${A}', 'CARWASH', now()),
       ('${B}', 'Prueba B', '${B}', 'CARWASH', now());

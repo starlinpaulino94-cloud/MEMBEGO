@@ -153,6 +153,34 @@ MembeGo y lee todo el mundo: lectura abierta, escritura solo para el superadmin.
 global, `TICKET:<empresa>` no—, así que la regla lo distingue en vez de abrirla
 entera.
 
+### Y encenderlo, que es un paso aparte — y faltaba
+
+**Una política no se aplica sola.** Si la tabla no tiene `ENABLE ROW LEVEL
+SECURITY`, PostgreSQL ni la mira: las políticas existen, `pg_policies` las
+enseña, y el aislamiento es cero.
+
+Eso es exactamente lo que pasaba. El archivo creaba las 137 políticas y no
+encendía RLS en ninguna tabla. Medido: `relrowsecurity` en **0 de 137**, y
+`npm run rls:probar` daba **1 de 6** — y la que pasaba era «el modo omnisciente
+lo ve todo», que es justo lo que ocurre cuando RLS está apagado. Verde por el
+motivo equivocado.
+
+Lo peligroso no era el fallo, sino su forma: el recuento de políticas decía 137
+de 137, así que cualquier comprobación por encima daba por hecho que estaba
+puesto. Se habría cambiado `DATABASE_URL` a `membego_app` creyendo tener
+aislamiento y sin tener ninguno.
+
+Ahora el archivo lo enciende en las 137 —también en las que no tienen política,
+porque sin política RLS deniega y eso es lo correcto para una tabla nueva que
+nadie ha decidido cómo aislar— y **falla con excepción** si alguna quedara
+apagada. No `FORCE ROW LEVEL SECURITY`: eso aplicaría RLS también al dueño de
+las tablas, que es quien migra, y en Supabase ese dueño es superusuario, así que
+ni le alcanzaría.
+
+Comprobado de punta a punta contra PostgreSQL 16: `db push`, el archivo, y
+`npm run rls:probar` → **6 de 6**. Y una segunda pasada activa 0 tablas nuevas y
+sigue en 6 de 6.
+
 ### La válvula de escape, y su límite honesto
 
 Muchísimo de MembeGo cruza empresas por diseño: el marketplace público, el panel
