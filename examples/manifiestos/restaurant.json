@@ -1,0 +1,16 @@
+{
+  "slug": "restaurant-pos",
+  "nombre": "Restaurant POS",
+  "urlBase": "https://pos.restaurante-ejemplo.com",
+  "webhookUrl": "https://pos.restaurante-ejemplo.com/webhooks/membego",
+  "businessTypes": ["RESTAURANTE"],
+  "capabilities": [
+    "CUSTOMER_LOOKUP",
+    "CUSTOMER_REGISTRATION",
+    "MEMBERSHIP_LOOKUP",
+    "BENEFIT_EVALUATION",
+    "BENEFIT_REDEMPTION",
+    "QR_VALIDATION",
+    "TRANSACTION_SYNC"
+  ]
+}
