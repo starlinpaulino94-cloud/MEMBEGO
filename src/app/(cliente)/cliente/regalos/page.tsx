@@ -49,7 +49,9 @@ export default async function RegalosPage() {
         <div>
           <h1 className="text-h1 text-foreground">Regalos</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Envía lavados a tus amigos o acepta los que te enviaron.
+            {/* "Lavados" era el vocabulario de un solo oficio en una pantalla
+                que ve el cliente de cualquier negocio. */}
+            Envía tus usos a tus amigos o acepta los que te enviaron.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

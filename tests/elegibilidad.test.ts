@@ -18,6 +18,8 @@ import {
   type VehiculoInfo,
   type PlanReglas,
 } from '../src/modules/elegibilidad/decidir'
+import { categoriaExplicitaDeType } from '../src/modules/capacidades/catalogo'
+import { flujoRequiereVehiculo } from '../src/modules/onboarding/flujos'
 
 const vehiculoCompleto: VehiculoInfo = {
   id: 'v1',
@@ -154,4 +156,34 @@ test('§13: OTRO vehículo identificado se rechaza con la placa del asociado en 
   const r = vehiculoAutorizadoEnMembresia(asociados, 'v2')
   assert.equal(r.autorizado, false)
   if (!r.autorizado) assert.match(r.mensaje, /A123456/)
+})
+
+// ── La cadena completa: tipo de empresa → requisito ──────────────────────────
+//
+// La regla pura de arriba (categoría null → sin requisitos) siempre estuvo
+// bien. Lo que fallaba era el eslabón anterior: la capa de base de datos NUNCA
+// devolvía null porque un tipo desconocido caía en CAR_WASH. Por eso al cliente
+// de un restaurante se le pedía registrar un vehículo para ver los planes. Esta
+// prueba cubre el eslabón, no la regla.
+
+test('un tipo de negocio que el catálogo no reconoce no exige vehículo', () => {
+  for (const type of ['restaurante', 'otro', '', null, undefined]) {
+    const categoria = categoriaExplicitaDeType(type)
+    assert.equal(
+      flujoRequiereVehiculo(categoria),
+      false,
+      `el tipo "${type}" no debería exigir vehículo`
+    )
+    const r = requisitosParaAccion({ accion: 'COMPRAR_PLAN', categoria, vehiculos: [] })
+    assert.equal(r.canProceed, true)
+  }
+})
+
+test('el car wash sí sigue exigiéndolo (la corrección no aflojó nada)', () => {
+  const categoria = categoriaExplicitaDeType('carwash')
+  assert.equal(categoria, 'CAR_WASH')
+  assert.equal(flujoRequiereVehiculo(categoria), true)
+  const r = requisitosParaAccion({ accion: 'COMPRAR_PLAN', categoria, vehiculos: [] })
+  assert.equal(r.canProceed, false)
+  assert.ok(r.missingRequirements.includes('VEHICLE_REQUIRED'))
 })

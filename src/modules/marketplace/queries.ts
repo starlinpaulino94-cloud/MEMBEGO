@@ -436,6 +436,11 @@ export async function getPromotionDetail(
               logoUrl: true,
               isPublished: true,
               isActive: true,
+              // ¿Este negocio vende membresías? El detalle de una promoción
+              // invitaba a "ver la empresa y sus planes" sin saberlo: en un
+              // negocio que solo publica ofertas, el botón prometía una
+              // sección que no existe.
+              _count: { select: { plans: { where: { activo: true } } } },
             },
           },
           activo: true,
@@ -476,7 +481,8 @@ export async function getPromotionDetail(
         ...rest
       } = promotion
       // No exponer flags internos de la empresa en el payload público.
-      const { isPublished: _p, isActive: _a, ...company } = rest.company
+      const { isPublished: _p, isActive: _a, _count, ...companyBase } = rest.company
+      const company = { ...companyBase, tienePlanes: _count.plans > 0 }
       const venta = esComprable
         ? {
             precio: Number(precio ?? 0),
