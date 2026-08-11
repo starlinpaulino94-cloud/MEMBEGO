@@ -208,7 +208,9 @@ que queda, y es de pantalla, no de arquitectura.
 
 ## Siguiente
 
-**Fase 7b — Restaurant como aplicación aparte**: su propia base de datos, su
-proyección local de los datos compartidos, su webhook firmado y su SSO, hablando
-con MembeGo solo por HTTP. Es donde se comprueba la otra mitad del encargo —
-*Shared Data Contracts, no Shared Database*.
+**Fase 7b — Restaurant como aplicación aparte**: hecha. Su propia base de datos,
+su proyección local, su webhook firmado y su SSO, hablando con MembeGo solo por
+HTTP. Verificado contra PostgreSQL 16 y HTTP reales, con la firma generada por
+la función del propio Core.
+
+→ `docs/platform/restaurante.md`

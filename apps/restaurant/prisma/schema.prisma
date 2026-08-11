@@ -1,0 +1,131 @@
+// SATÉLITE DE RESTAURANTE · SU PROPIA BASE DE DATOS.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// LA MITAD DEL ENCARGO QUE ESTE ARCHIVO DEMUESTRA
+//
+// «Shared Data Contracts, not Shared Database». Hasta aquí, todo lo que sabía
+// hablar el contrato lo hacía dentro del mismo proceso y contra la misma base:
+// Car Wash pide por el puerto, pero con `clienteLocal()`, que no cruza la red.
+// Funciona — y no prueba nada sobre lo que pasa cuando hay red en medio.
+//
+// Esta base NO comparte una sola tabla con MembeGo. No hay `Cliente`, no hay
+// `Membership`, no hay `Promocion`. Lo único que hay de allí es una PROYECCIÓN:
+// una copia de lectura, con su fecha, que llega por webhook y puede estar
+// atrasada.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// LA REGLA QUE SOSTIENE TODO ESTO
+//
+// La proyección sirve para MOSTRAR, nunca para DECIDIR.
+//
+// Un camarero puede ver en pantalla «Ana, socia Premium» leyendo la copia local
+// —instantáneo, y sigue funcionando si MembeGo no responde—. Pero el momento en
+// que ese beneficio se consume, la decisión la toma el Core por HTTP, sin
+// excepción. Si se decidiera con la copia, bastaría un webhook perdido para
+// regalar un beneficio que ya se había gastado en otro local, y nadie se
+// enteraría hasta cuadrar caja.
+//
+// Es la diferencia entre una caché y una fuente de verdad, y aquí se decide
+// escribiéndola en el esquema: `ClienteProyectado` no tiene saldos ni usos
+// restantes. No es un olvido — es que no puede tenerlos.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/restaurant"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Su propia base. No es la de MembeGo ni un esquema dentro de ella.
+  url      = env("RESTAURANT_DATABASE_URL")
+}
+
+// ── Lo que es del restaurante y de nadie más ────────────────────────────────
+
+model Mesa {
+  id       String    @id @default(cuid())
+  numero   Int       @unique
+  nombre   String?
+  comandas Comanda[]
+
+  @@map("mesas")
+}
+
+/// Una comanda: lo que se pide en una mesa. Es el dominio propio del oficio y
+/// MembeGo no sabe que existe — ni tiene por qué.
+model Comanda {
+  id     String  @id @default(cuid())
+  mesaId String
+  mesa   Mesa    @relation(fields: [mesaId], references: [id])
+
+  /// A quién se le sirve, en el vocabulario del Core. Se guarda el id del
+  /// CLIENTE DE MEMBEGO, no una copia de la persona: la identidad es del Core
+  /// y aquí solo se referencia (§14).
+  customerId String?
+
+  estado      String   @default("ABIERTA") // ABIERTA | COBRADA | ANULADA
+  totalCentavos Int    @default(0)
+  abiertaEn   DateTime @default(now())
+  cobradaEn   DateTime?
+
+  /// El canje que se aplicó, si hubo. Se guarda el id que devolvió el Core para
+  /// poder conciliar: sin él, un canje cobrado aquí y no registrado allí solo
+  /// se descubre cuadrando a mano.
+  redemptionId String?
+
+  @@index([estado])
+  @@index([customerId])
+  @@map("comandas")
+}
+
+// ── La proyección de lo que es del Core ─────────────────────────────────────
+
+/// COPIA LOCAL DE UN CLIENTE. Llega por webhook y puede ir atrasada.
+///
+/// Solo lleva lo que hace falta para PINTAR una pantalla: nombre y teléfono
+/// para que el camarero reconozca a quien tiene delante. Nada que se pueda
+/// gastar.
+model ClienteProyectado {
+  /// El id del Core. Es la clave: aquí no se inventan identidades.
+  customerId String @id
+  companyId  String
+
+  nombre   String
+  telefono String?
+  email    String?
+
+  /// `occurredAt` DEL EVENTO que dejó esta fila así — no cuándo se guardó.
+  ///
+  /// Es lo que impide que un reintento tardío de un evento viejo pise a uno
+  /// nuevo. Los webhooks no llegan en orden: el envío se reintenta y el
+  /// segundo intento de un evento de las 10:00 puede aterrizar después del
+  /// primero de las 10:05. Sin esta comparación, el nombre del cliente
+  /// «volvería» al anterior sin que nada fallara.
+  vigenteDesde DateTime
+
+  actualizadoEn DateTime @updatedAt
+
+  @@index([companyId])
+  @@map("clientes_proyectados")
+}
+
+/// INBOX: qué eventos ya se procesaron.
+///
+/// MembeGo reintenta lo que no responde 200, así que el mismo `eventId` llega
+/// más de una vez por diseño. Sin esto, un reintento volvería a aplicar el
+/// evento — y en los que no son idempotentes por naturaleza, a duplicar su
+/// efecto.
+///
+/// El SDK trae un inbox EN MEMORIA que sirve para probar. Este es en base a
+/// propósito: un inbox en memoria se vacía al reiniciar el proceso, y el
+/// reinicio es justamente cuando MembeGo está reintentando lo que quedó sin
+/// responder.
+model EventoRecibido {
+  eventId    String   @id
+  eventType  String
+  occurredAt DateTime
+  recibidoEn DateTime @default(now())
+
+  @@index([eventType])
+  @@map("eventos_recibidos")
+}
