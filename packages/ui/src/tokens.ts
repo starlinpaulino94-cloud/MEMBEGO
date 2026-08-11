@@ -1,10 +1,22 @@
 /**
  * MDS · Membego Design System — tokens como datos.
  *
- * Fuente única de los valores de diseño para consumidores que NO pasan por
- * CSS (app móvil nativa, emails, generación de imágenes OG, PDFs). En la web
- * la fuente de verdad son las variables CSS de `globals.css`; este archivo
- * las refleja en sRGB/hex para plataformas sin soporte OKLCH.
+ * Valores de diseño para consumidores que NO pasan por CSS (app móvil nativa,
+ * correos, imágenes OG, PDFs). En la web la fuente de verdad son las variables
+ * CSS de `globals.css`; este archivo las refleja en sRGB/hex para plataformas
+ * sin soporte OKLCH.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * HOY NO LO IMPORTA NADIE. ESO ES EL PROBLEMA, NO LA EXCUSA.
+ *
+ * Los correos y los generadores de imágenes OG escriben sus hexadecimales a
+ * mano — y algunos son de la paleta ANTERIOR a que la marca fuera azul. Este
+ * espejo existe para que dejen de hacerlo.
+ *
+ * Que no tenga consumidores es lo que hizo que A-13 pasara desapercibido: la
+ * escala de marca llevaba tiempo apuntando a otro azul y no se veía en ningún
+ * sitio, esperando a que alguien la usara. Un espejo sin usar no está bien:
+ * está sin estrenar, y se estrena roto.
  *
  * Regla: si un valor cambia aquí, debe cambiar también en `globals.css`
  * (y viceversa). Ver docs/MDS.md § Tokens.
@@ -18,25 +30,44 @@
  * web pública (vivía aparte, con su propio token) y ahora es el color base
  * de todo el producto. El verde quedó exclusivamente como estado de éxito,
  * en `state.success`.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * A-13 · ESTA ESCALA ERA OTRO AZUL, Y NADIE LO MIRABA
+ *
+ * Hasta la Fase 1 del sistema de diseño, aquí vivía el azul de Tailwind
+ * (`#2563eb` en el 600) mientras `globals.css` pintaba un azul puro
+ * (`#006bed`). 65 unidades sRGB de distancia en el paso 500: se ven distintos.
+ *
+ * Se notaba donde el cliente lo ve. Este espejo alimenta correos, imágenes al
+ * compartir, PDFs y recibos: quien recibía un correo de MembeGo y abría la
+ * aplicación veía DOS AZULES DE MARCA.
+ *
+ * La guardia del espejo existía y no lo cazó porque miraba cuatro tokens de
+ * veinticuatro — solo los estados semánticos. Ahora cubre los diez pasos de
+ * esta escala y los tres del cyan. Una guardia parcial da la sensación de estar
+ * cubierto sin estarlo.
+ *
+ * Los valores salen de convertir los OKLCH de `globals.css`, que es quien
+ * manda: es lo que el cliente ve cada día en la aplicación.
  */
 export const primary = {
-  50: '#eff4ff',
-  100: '#dbe6fe',
-  200: '#bfd3fe',
-  300: '#93b4fd',
-  400: '#608cfa',
-  500: '#3b6bf6',
-  600: '#2563eb',
-  700: '#1d4ed8',
-  800: '#1e40af',
-  900: '#1e3a8a',
+  50: '#f0f6ff',
+  100: '#ddecff',
+  200: '#bedcff',
+  300: '#92c4ff',
+  400: '#52a2ff',
+  500: '#0084ff',
+  600: '#006bed',
+  700: '#0059ce',
+  800: '#0049a7',
+  900: '#004087',
 } as const
 
 /** Secundario: cyan del degradado del logo. */
 export const cyanBrand = {
-  300: '#7dd8e8',
-  500: '#22b8cf',
-  700: '#0e7f96',
+  300: '#71e4ea',
+  500: '#00bcc5',
+  700: '#00858c',
 } as const
 
 /**

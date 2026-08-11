@@ -1,4 +1,28 @@
-# MembeGo Design System 2.0
+# MembeGo Design System 2.0 · RETIRADO
+
+> **Este documento ya no es el maestro.**
+>
+> El maestro es **[`docs/design-system/MEMBEGO_DESIGN_SYSTEM.md`](design-system/MEMBEGO_DESIGN_SYSTEM.md)**.
+>
+> ---
+>
+> **Por qué se retiró.** Había DOS documentos declarándose maestros —este y el
+> otro— y no decían lo mismo. Con dos fuentes, cada equipo elige la que
+> encuentra primero; con varios sistemas verticales, se elige varias veces
+> distinto. Eso es exactamente lo que un sistema de diseño existe para evitar.
+>
+> **Y la contradicción no era documental.** Este archivo decía que el azul de
+> marca era `#2563eb` porque leyó `packages/ui/src/tokens.ts`; la interfaz
+> pintaba `#006bed` desde `globals.css`. Los dos tenían razón — lo que no
+> coincidía eran las dos FUENTES, que llevaban tiempo separadas sin que nada
+> avisara. Se arregló en la Fase 1 (ver A-13 en el maestro): manda el azul de
+> la aplicación, y la guardia del espejo cubre ahora los diez pasos de la
+> escala en vez de cuatro tokens sueltos.
+>
+> Lo que había aquí está en el maestro, corregido contra el código. Este
+> archivo se conserva porque hay enlaces que apuntan a él.
+
+---
 
 Contrato visual del producto. **Toda pantalla nueva o rediseñada debe salir de
 aquí** — nada de estilos inventados por página. Referencias de nivel: Stripe,
