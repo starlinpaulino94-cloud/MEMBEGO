@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Sparkles,
   Car,
+  Store,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { conEmpresa } from '@/lib/tenant'
@@ -15,6 +16,8 @@ import { planesElegibles } from '@/modules/elegibilidad'
 import { Button } from '@/components/ui/button'
 import { PlanesGrid, type PlanItem } from '@/components/cliente/PlanesGrid'
 import { EmptyState } from '@/components/system/EmptyState'
+import { getPlanesPublic, getCategoriesPublic } from '@/modules/marketplace/cached'
+import { CatalogoPlanesGlobal } from '@/components/cliente/CatalogoPlanesGlobal'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -27,10 +30,22 @@ const PENDIENTE_PAGO_ESTADOS = ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA']
 export default async function PlanesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vehiculo?: string; retorno?: string }>
+  searchParams: Promise<{
+    vehiculo?: string
+    retorno?: string
+    todos?: string
+    q?: string
+    categoria?: string
+  }>
 }) {
   const user = await requireRole('CLIENTE')
-  const { vehiculo: vehiculoParam, retorno: retornoParam } = await searchParams
+  const {
+    vehiculo: vehiculoParam,
+    retorno: retornoParam,
+    todos,
+    q: qParam,
+    categoria: categoriaParam,
+  } = await searchParams
   // Fase 4: quien viene del mapa conserva el contexto de ubicación (el botón
   // volver de la membresía lo devuelve al detalle de la empresa).
   const retorno = safeInternalPath(retornoParam, '/cliente/empresas')
@@ -38,11 +53,51 @@ export default async function PlanesPage({
   const planesHref = conRetorno ? `/cliente/planes?retorno=${encodeURIComponent(retorno)}` : '/cliente/planes'
   const vehiculoNext = `/cliente/vehiculos/nuevo?next=${encodeURIComponent(planesHref)}`
 
-  if (!user.metadata.clienteId || !user.metadata.companyId) {
+  /**
+   * DOS PANTALLAS EN UNA RUTA, Y LA DIFERENCIA IMPORTA.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * CATÁLOGO GLOBAL (sin empresa activa, o `?todos=1`)
+   *
+   * Los planes de todos los negocios publicados, con buscador y categorías en
+   * la URL. Antes, a quien todavía no era cliente de nadie se le contestaba
+   * con un estado vacío: la peor respuesta posible a «quiero ver qué
+   * membresías hay», porque la plataforma sí tiene.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * CATÁLOGO DE SU EMPRESA (con empresa activa)
+   *
+   * Lo de siempre, y sin tocar: el motor de elegibilidad decide qué planes se
+   * le pueden ofrecer y a qué precio según la categoría de su vehículo y su
+   * historial en ESE negocio. Esa parte no se hace global — un precio personal
+   * calculado con la ficha equivocada es peor que no enseñarlo.
+   */
+  const verTodos = todos === '1'
+  if (verTodos || !user.metadata.clienteId || !user.metadata.companyId) {
+    const q = (qParam ?? '').trim()
+    const categoria = (categoriaParam ?? '').trim()
+    const [planesGlobales, categorias] = await Promise.all([
+      getPlanesPublic({ search: q || undefined, category: categoria || undefined }),
+      getCategoriesPublic().catch(() => []),
+    ])
+    // Si tiene empresa activa y está mirando el catálogo global, hay que poder
+    // volver a la suya: sin ese enlace, «ver todos» es un viaje de ida.
+    const suEmpresaId = user.metadata.companyId
+    const miEmpresa = suEmpresaId
+      ? await conEmpresa(suEmpresaId, (tx) =>
+          tx.company.findUnique({ where: { id: suEmpresaId }, select: { name: true } })
+        )
+          .then((c) => c?.name ?? null)
+          .catch(() => null)
+      : null
     return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">Tu cuenta no está completamente configurada.</p>
-      </main>
+      <CatalogoPlanesGlobal
+        planes={planesGlobales}
+        categorias={categorias}
+        q={q}
+        categoria={categoria}
+        volverAMiEmpresa={miEmpresa}
+      />
     )
   }
   const clienteId = user.metadata.clienteId
@@ -166,12 +221,23 @@ export default async function PlanesPage({
           <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
             Membresías · {cliente.company.name}
           </p>
-          <Button asChild variant="ghost" size="sm" className="-mt-1 shrink-0 text-muted-foreground">
-            <Link href="/mis-membresias">
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              Mis membresías
-            </Link>
-          </Button>
+          <div className="-mt-1 flex shrink-0 items-center gap-1">
+            {/* Sin esta salida, «Planes» significaría para siempre «los planes
+                de la empresa que tengas activa», que es justo el supuesto que
+                esta fase quita. */}
+            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+              <Link href="/cliente/planes?todos=1">
+                <Store className="mr-1.5 h-4 w-4" />
+                Otros negocios
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+              <Link href="/mis-membresias">
+                <ArrowLeft className="mr-1.5 h-4 w-4" />
+                Mis membresías
+              </Link>
+            </Button>
+          </div>
         </div>
         <h1 className="mt-2 max-w-2xl text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           {cliente.nombre

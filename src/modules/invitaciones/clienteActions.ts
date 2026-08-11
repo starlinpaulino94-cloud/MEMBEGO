@@ -5,6 +5,7 @@ import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { hashIp } from '@/lib/referidos'
 import { createRateLimiter } from '@/lib/rate-limit'
+import { fichaEnEmpresa } from '@/modules/cliente/afiliacion'
 
 const shareLimiter = createRateLimiter({
   interval: 60 * 60 * 1000,
@@ -24,15 +25,12 @@ export async function registrarShareCampana(
 ): Promise<{ ok: boolean }> {
   try {
     const user = await getUser()
-    if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
-      return { ok: false }
-    }
-    const clienteId = user.metadata.clienteId as string
-    if (!(await shareLimiter(`campshare:${clienteId}`))) {
+    if (!user || user.metadata.role !== 'CLIENTE') return { ok: false }
+    if (!(await shareLimiter(`campshare:${user.supabaseId}`))) {
       return { ok: false }
     }
 
-    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa se valida contra la del cliente)', (tx) =>
+    const campana = await sinEmpresa('invitaciones: buscar campaña por id (empresa se valida contra la ficha)', (tx) =>
       tx.campanaInvitacion.findUnique({
         where: { id: campanaId },
         select: { id: true, companyId: true, estado: true },
@@ -40,13 +38,21 @@ export async function registrarShareCampana(
     )
     if (!campana || campana.estado !== 'ACTIVA') return { ok: false }
 
-    const cliente = await sinEmpresa('invitaciones: buscar cliente por id (empresa desconocida)', (tx) =>
-      tx.cliente.findUnique({
-        where: { id: clienteId },
-        select: { id: true, companyId: true },
-      })
-    )
-    if (!cliente || cliente.companyId !== campana.companyId) return { ok: false }
+    /**
+     * LA FICHA DE LA EMPRESA DE LA CAMPAÑA, NO LA ACTIVA.
+     *
+     * Antes esto tomaba `metadata.clienteId` y exigía que su empresa fuera la
+     * de la campaña. Desde que se puede invitar desde cualquiera de sus
+     * negocios, esa comprobación rechazaba en silencio —`{ ok: false }`, sin
+     * mensaje— cada compartido hecho desde un negocio que no fuera el activo:
+     * el evento no se registraba, «invitaciones enviadas» no subía nunca y el
+     * embudo de referidos perdía su primer eslabón.
+     *
+     * Sigue siendo una comprobación de pertenencia, no un pase libre: sin
+     * ficha en la empresa de esa campaña, no hay evento.
+     */
+    const clienteId = await fichaEnEmpresa(user.supabaseId, campana.companyId)
+    if (!clienteId) return { ok: false }
 
     const reciente = await conEmpresa(campana.companyId, (tx) =>
       tx.invitacionEvento.findFirst({

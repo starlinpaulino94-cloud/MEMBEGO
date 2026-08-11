@@ -1,6 +1,7 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import type { Tx } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 /**
  * Regalos P2P · Fase R2 — consultas del módulo /cliente/regalos.
@@ -166,12 +167,13 @@ export async function devolverUsos(
 }
 
 /** Marca EXPIRADO todo pendiente vencido del cliente (como remitente o receptor) y devuelve usos. */
-export async function expirarPendientesVencidos(clienteId: string, tx: Tx) {
+export async function expirarPendientesVencidos(clienteIds: string[], tx: Tx) {
+  if (clienteIds.length === 0) return
   const vencidos = await tx.regalo.findMany({
     where: {
       estado: 'PENDIENTE',
       expiraAt: { lt: new Date() },
-      OR: [{ remitenteId: clienteId }, { destinatarioId: clienteId }],
+      OR: [{ remitenteId: { in: clienteIds } }, { destinatarioId: { in: clienteIds } }],
     },
     select: { id: true, compraOrigenId: true, membershipOrigenId: true, usos: true },
   })
@@ -237,18 +239,37 @@ async function resolverEtiquetas(regalos: RegaloParaEtiqueta[], tx: Tx): Promise
   return mapa
 }
 
-export async function getRegalosCliente(clienteId: string): Promise<{
+/**
+ * EL CENTRO DE REGALOS ES DE LA PERSONA.
+ *
+ * Un regalo se envía y se recibe entre FICHAS —cada una en su empresa—, pero
+ * quien mira esta pantalla es la persona. Acotarlo a la ficha activa hacía
+ * desaparecer los regalos de sus otros negocios: alguien le transfería usos,
+ * le llegaba la notificación, entraba a «Regalos» y no había nada. Y lo que
+ * peor envejece: un regalo PENDIENTE invisible expira solo.
+ *
+ * Las acciones (`responderRegalo`, `cancelarRegalo`) miran las mismas fichas.
+ * Migrar el listado sin migrar su acción deja un botón que contesta «este
+ * regalo ya no está pendiente» sobre un regalo que sí lo está.
+ */
+export async function getRegalosCliente(supabaseId: string): Promise<{
   recibidos: RegaloItem[]
   enviados: RegaloItem[]
   pendientesRecibidos: number
 }> {
+  const misFichas = await misClienteIds(supabaseId)
+  if (misFichas.length === 0) return { recibidos: [], enviados: [], pendientesRecibidos: 0 }
+  const esMia = (id: string | null) => !!id && misFichas.includes(id)
+
   const { regalos, pagos, etiquetas } = await sinEmpresa(
-    'regalos: panel del cliente por clienteId (empresa no conocida de entrada)',
+    'regalos: panel del cliente por sus fichas (empresa no conocida de entrada)',
     async (tx) => {
-      await expirarPendientesVencidos(clienteId, tx).catch(anotarFallo('regalos:expirar-pendientes'))
+      await expirarPendientesVencidos(misFichas, tx).catch(anotarFallo('regalos:expirar-pendientes'))
 
       const regalos = await tx.regalo.findMany({
-        where: { OR: [{ remitenteId: clienteId }, { destinatarioId: clienteId }] },
+        where: {
+          OR: [{ remitenteId: { in: misFichas } }, { destinatarioId: { in: misFichas } }],
+        },
         include: {
           remitente: { select: { nombre: true } },
           destinatario: { select: { nombre: true } },
@@ -275,7 +296,7 @@ export async function getRegalosCliente(clienteId: string): Promise<{
       mensaje: r.mensaje,
       beneficio: etiquetas.get(r.id) ?? 'Beneficio',
       contraparte:
-        r.remitenteId === clienteId
+        esMia(r.remitenteId)
           ? r.destinatario
             ? enmascarar(r.destinatario.nombre)
             : (r.destinatarioContacto ?? '—')
@@ -288,8 +309,8 @@ export async function getRegalosCliente(clienteId: string): Promise<{
     } satisfies RegaloItem,
   }))
 
-  const recibidos = items.filter((x) => x.raw.destinatarioId === clienteId).map((x) => x.item)
-  const enviados = items.filter((x) => x.raw.remitenteId === clienteId).map((x) => x.item)
+  const recibidos = items.filter((x) => esMia(x.raw.destinatarioId)).map((x) => x.item)
+  const enviados = items.filter((x) => esMia(x.raw.remitenteId)).map((x) => x.item)
   return {
     recibidos,
     enviados,

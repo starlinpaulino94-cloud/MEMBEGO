@@ -106,7 +106,9 @@ export async function guardarCapacidades(
     // El resolutor está cacheado por tag: los cambios aplican de inmediato.
     revalidateTag(CAPACIDADES_TAG, 'max')
     revalidatePath('/superadmin/capacidades')
-    revalidatePath('/admin/aplicaciones')
+    // El launchpad ya no existe; las capacidades siguen decidiendo qué módulos
+    // están encendidos, así que se refresca el panel entero.
+    revalidatePath('/admin', 'layout')
     revalidatePath('/admin/app/carwash')
     revalidatePath('/admin/aplicaciones/capacidades')
     return { success: `Capacidades de ${company.name} guardadas.` }

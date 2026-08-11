@@ -1,64 +1,161 @@
 import { cache } from 'react'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
-export async function getCampanaActiva(companyId: string) {
-  return conEmpresa(companyId, (tx) =>
-    tx.campanaInvitacion.findFirst({
+/**
+ * `getCampanaActiva(companyId)` vivía aquí y ya no: su único llamador era la
+ * pantalla de «Invita y gana», que preguntaba por la campaña de la EMPRESA
+ * ACTIVA. Ahora pregunta por las de todos sus negocios con
+ * `misCampanasDisponibles`, así que la vieja quedó sin nadie que la llamara.
+ * Se borra en lugar de dejarla: una función que devuelve «la campaña de la
+ * empresa activa» es justo la forma de pensar que esta fase quita de en medio.
+ */
+
+/**
+ * LAS CAMPAÑAS DE TODOS SUS NEGOCIOS, cada una con SU ficha.
+ *
+ * Invitar es de un negocio concreto: el premio lo pone él y la atribución va
+ * por el código de la ficha de esa empresa. Por eso esto no devuelve «la
+ * campaña de la persona» sino una lista de pares (campaña, ficha) — y la
+ * pantalla deja elegir.
+ *
+ * Antes solo existía la de la empresa activa: quien es cliente de tres
+ * negocios podía invitar al que tuviera abierto y a ninguno más, aunque su
+ * ficha y su código en los otros dos existieran igual.
+ */
+export async function misCampanasDisponibles(supabaseId: string) {
+  const ahora = new Date()
+  const fichas = await sinEmpresa('invitaciones: mis fichas para buscar sus campañas', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId },
+      select: {
+        id: true,
+        company: { select: { id: true, name: true, slug: true, logoUrl: true } },
+      },
+    })
+  ).catch(() => [])
+  if (fichas.length === 0) return []
+
+  const campanas = await sinEmpresa('invitaciones: campañas vivas de mis empresas', (tx) =>
+    tx.campanaInvitacion.findMany({
       where: {
-        companyId,
+        // Acotado a SUS empresas: la lista sale de sus fichas, no de un
+        // parámetro de la vista.
+        companyId: { in: fichas.map((f) => f.company.id) },
         estado: 'ACTIVA',
-        fechaInicio: { lte: new Date() },
-        fechaFin: { gte: new Date() },
+        fechaInicio: { lte: ahora },
+        fechaFin: { gte: ahora },
       },
       orderBy: { orden: 'asc' },
     })
-  )
+  ).catch(() => [])
+
+  // Una por empresa: la primera por `orden`, igual que hacía la pantalla.
+  const vistas = new Set<string>()
+  const salida = []
+  for (const campana of campanas) {
+    if (vistas.has(campana.companyId)) continue
+    const ficha = fichas.find((f) => f.company.id === campana.companyId)
+    if (!ficha) continue
+    vistas.add(campana.companyId)
+    salida.push({ campana, clienteId: ficha.id, company: ficha.company })
+  }
+  return salida
 }
 
+const CAMPANA_CON_EMPRESA = {
+  company: {
+    select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+  },
+} as const
+
 /**
- * Enlace corto personal /invitar/[code]: resuelve el código del cliente a la
- * campaña ACTIVA de su empresa (con la empresa incluida, para la landing y la
- * tarjeta OG). Devuelve también el ref normalizado para la atribución.
- * React.cache: generateMetadata y la página lo llaman en el mismo request —
- * una sola resolución (importa para el presupuesto de ~5 s del robot de
- * WhatsApp).
+ * ENLACE CORTO PERSONAL /invitar/[code] — y QUÉ CAMPAÑA PROMETE.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL PROBLEMA: EL ENLACE NO DECÍA QUÉ OFRECÍA
+ *
+ * Antes esto resolvía «la campaña que esté ACTIVA en la empresa de esa ficha
+ * AHORA MISMO». El enlace no llevaba la campaña dentro, así que el negocio
+ * podía cambiarla y todos los enlaces ya compartidos cambiaban con ella: la
+ * tarjeta que la gente vio en WhatsApp prometía dos lavados gratis y, al
+ * tocarla, la landing ofrecía otra cosa. Nadie tocó el enlace; cambió debajo.
+ *
+ * Peor con dos campañas activas a la vez: `orderBy: { orden: 'asc' }` elegía
+ * una, y cuál dependía de un campo de ordenación pensado para el panel.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * AHORA LA CAMPAÑA VIAJA EN EL ENLACE
+ *
+ * `/invitar/CODIGO?c=<slug-de-campaña>`. Con `c`, se sirve ESA campaña; sin
+ * `c` —los enlaces repartidos antes de este cambio—, la activa, como siempre.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DOS COMPROBACIONES QUE NO SON OPCIONALES
+ *
+ * 1 · La campaña pedida tiene que ser DE LA MISMA EMPRESA que la ficha del
+ *     código. Sin esto, `?c=` sería un parámetro de la URL eligiendo qué
+ *     negocio anunciar: cualquiera podría pegar el slug de la campaña de otra
+ *     empresa detrás de un código ajeno y publicar una landing con el nombre y
+ *     el logo de un negocio que no ofreció nada. La atribución seguiría yendo
+ *     al dueño del código.
+ *
+ * 2 · Tiene que seguir siendo válida (ACTIVA y en fechas). Una campaña
+ *     terminada no puede prometer nada; si la de `c` ya venció, se cae a la
+ *     activa, que es el comportamiento que había.
  */
-export const getCampanaPorCodigoInvitacion = cache(async (code: string) => {
-  const clean = decodeURIComponent(code).trim()
-  if (!clean) return null
+export const getCampanaPorCodigoInvitacion = cache(
+  async (code: string, campanaSlug?: string | null) => {
+    const clean = decodeURIComponent(code).trim()
+    if (!clean) return null
 
-  const cliente = await sinEmpresa('invitaciones: resolver cliente por código de invitación (códigos únicos globales)', (tx) =>
-    tx.cliente
-      .findFirst({
-        where: {
-          OR: [{ codigoCorto: clean.toUpperCase() }, { codigoReferido: clean }],
-        },
-        select: { companyId: true, codigoCorto: true, codigoReferido: true },
-      })
-  ).catch(() => null)
-  if (!cliente) return null
-
-  const campana = await conEmpresa(cliente.companyId, (tx) =>
-    tx.campanaInvitacion
-      .findFirst({
-        where: {
-          companyId: cliente.companyId,
-          estado: 'ACTIVA',
-          fechaInicio: { lte: new Date() },
-          fechaFin: { gte: new Date() },
-        },
-        orderBy: { orden: 'asc' },
-        include: {
-          company: {
-            select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, type: true },
+    const cliente = await sinEmpresa('invitaciones: resolver cliente por código de invitación (códigos únicos globales)', (tx) =>
+      tx.cliente
+        .findFirst({
+          where: {
+            OR: [{ codigoCorto: clean.toUpperCase() }, { codigoReferido: clean }],
           },
-        },
-      })
-  ).catch(() => null)
-  if (!campana) return null
+          select: { companyId: true, codigoCorto: true, codigoReferido: true },
+        })
+    ).catch(() => null)
+    if (!cliente) return null
 
-  return { campana, ref: cliente.codigoCorto ?? cliente.codigoReferido }
-})
+    const ahora = new Date()
+    const vigente = {
+      estado: 'ACTIVA' as const,
+      fechaInicio: { lte: ahora },
+      fechaFin: { gte: ahora },
+    }
+
+    const pedida = campanaSlug?.trim()
+      ? await conEmpresa(cliente.companyId, (tx) =>
+          tx.campanaInvitacion.findFirst({
+            where: {
+              slug: campanaSlug.trim(),
+              // El `companyId` es la comprobación 1: sin él, `?c=` elegiría de
+              // qué negocio hablar.
+              companyId: cliente.companyId,
+              ...vigente,
+            },
+            include: CAMPANA_CON_EMPRESA,
+          })
+        ).catch(() => null)
+      : null
+
+    const campana =
+      pedida ??
+      (await conEmpresa(cliente.companyId, (tx) =>
+        tx.campanaInvitacion
+          .findFirst({
+            where: { companyId: cliente.companyId, ...vigente },
+            orderBy: { orden: 'asc' },
+            include: CAMPANA_CON_EMPRESA,
+          })
+      ).catch(() => null))
+    if (!campana) return null
+
+    return { campana, ref: cliente.codigoCorto ?? cliente.codigoReferido }
+  }
+)
 
 // React.cache por el mismo motivo que getCampanaPorCodigoInvitacion.
 export const getCampanaBySlug = cache(async (slug: string) => {

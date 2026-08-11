@@ -19,11 +19,20 @@ export const dynamic = 'force-dynamic'
  */
 interface Props {
   params: Promise<{ code: string }>
+  /**
+   * `c` = campaña que prometía el enlace cuando se compartió (§ fase 7).
+   *
+   * Sin ella, el enlace servía «la campaña activa AHORA», así que al cambiarla
+   * el negocio cambiaba también todos los enlaces ya repartidos: la tarjeta
+   * que la gente vio en WhatsApp ofrecía una cosa y la landing, otra.
+   */
+  searchParams: Promise<{ c?: string }>
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { code } = await params
-  const res = await getCampanaPorCodigoInvitacion(code)
+  const { c } = await searchParams
+  const res = await getCampanaPorCodigoInvitacion(code, c)
   if (!res) return {}
 
   const { campana } = res
@@ -33,14 +42,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // instantánea para el robot de WhatsApp); sin imagen, a /og/campana.
   const compartir = normalizeInvitaContenido(campana.contenido)
   const title = compartir.ogTitulo || campana.titulo
+  // La tarjeta se pide por SLUG de la campaña ya resuelta, no por código: con
+  // `?code=` la imagen volvía a preguntar «¿cuál está activa?» y podía acabar
+  // dibujando una campaña distinta de la que la landing enseña debajo.
   const image =
-    arteDeCampana(campana) ?? absoluteUrl(`/og/campana?code=${encodeURIComponent(code)}`)
+    arteDeCampana(campana) ??
+    absoluteUrl(`/og/campana?slug=${encodeURIComponent(campana.slug)}`)
+  const url = absoluteUrl(
+    `/invitar/${code}?c=${encodeURIComponent(campana.slug)}`
+  )
 
   return {
     ...shareMetadata({
       title,
       description: compartir.ogDescripcion || campana.descripcion,
-      url: absoluteUrl(`/invitar/${code}`),
+      url,
       siteName: campana.company.name,
       image,
     }),
@@ -48,9 +64,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function InvitarCodePage({ params }: Props) {
+export default async function InvitarCodePage({ params, searchParams }: Props) {
   const { code } = await params
-  const res = await getCampanaPorCodigoInvitacion(code)
+  const { c } = await searchParams
+  const res = await getCampanaPorCodigoInvitacion(code, c)
 
   // Código desconocido o sin campaña activa: a la portada (nunca un 404 feo
   // para un enlace que alguien recibió por WhatsApp).

@@ -8,6 +8,7 @@ import { ensureCodigoCorto } from '@/lib/referidos'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { getRegalosConfig } from '@/modules/regalos/config'
 import { devolverUsos } from '@/modules/regalos/queries'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { registrarEntregaBeneficio } from '@/modules/transacciones/entrega'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
 import {
@@ -421,8 +422,19 @@ export async function responderRegalo(
 ): Promise<RegaloActionState> {
   const user = await getUser()
   if (!user || user.metadata.role !== 'CLIENTE') return { error: 'No autorizado.' }
-  const clienteId = user.metadata.clienteId
-  if (!clienteId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
+
+  /**
+   * CONTRA TODAS SUS FICHAS, NO CONTRA LA ACTIVA.
+   *
+   * El listado de regalos es de la PERSONA: si le regalan algo desde otro
+   * negocio, ahí aparece. Dejando esta comprobación acotada a la ficha activa,
+   * el botón «Aceptar» de esa tarjeta contestaba «Este regalo ya no está
+   * pendiente» — sí lo estaba; lo que no coincidía era la ficha. Es el mismo
+   * fallo que ya apareció al hacer global «Mis beneficios»: migrar el listado
+   * sin migrar su acción deja un botón que miente.
+   */
+  const misFichas = await misClienteIds(user.supabaseId)
+  if (misFichas.length === 0) return { error: 'Todavía no eres cliente de ningún negocio.' }
 
   const regaloId = String(formData.get('regaloId') ?? '').trim()
   const aceptar = String(formData.get('decision') ?? '') === 'aceptar'
@@ -431,11 +443,22 @@ export async function responderRegalo(
     'regalos: buscar regalo pendiente por id (empresa no conocida)',
     (tx) =>
       tx.regalo.findFirst({
-        where: { id: regaloId, destinatarioId: clienteId, estado: 'PENDIENTE' },
+        where: { id: regaloId, destinatarioId: { in: misFichas }, estado: 'PENDIENTE' },
         include: { remitente: { select: { id: true, nombre: true } } },
       })
   )
   if (!regalo) return { error: 'Este regalo ya no está pendiente.' }
+
+  /**
+   * El destino es la ficha A LA QUE SE ENVIÓ el regalo, no la que el usuario
+   * tenga abierta. Son la misma persona, pero fichas distintas: la compra
+   * espejo, la membresía que recibe los usos y el comprobante pertenecen a
+   * `regalo.companyId`, y meterlos bajo la ficha activa los pondría en la
+   * empresa equivocada — con RLS de por medio, o fallaría o crearía un
+   * beneficio en un negocio que nunca lo otorgó.
+   */
+  const destinoId = regalo.destinatarioId
+  if (!destinoId) return { error: 'Este regalo aún no tiene destinatario.' }
 
   // ¿Expiró? Se marca y se devuelven los usos al remitente.
   if (regalo.expiraAt < new Date()) {
@@ -498,7 +521,7 @@ export async function responderRegalo(
           tipo: 'PROMOCION',
           estado: 'ACTIVA',
           companyId: regalo.companyId,
-          clienteId,
+          clienteId: destinoId,
           promocionId: regalo.promocionId,
           precioCongelado: origenCompra?.precioCongelado ?? null,
           pagoConfirmado: true,
@@ -517,7 +540,7 @@ export async function responderRegalo(
     const memDest = await conEmpresa(regalo.companyId, (tx) =>
       tx.membership.findFirst({
         where: {
-          cliente: { id: clienteId },
+          cliente: { id: destinoId },
           estado: 'ACTIVA',
           OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
         },
@@ -566,7 +589,7 @@ export async function responderRegalo(
   // Comprobantes (G3): una Transaction por cada parte, reimprimibles.
   const receptor = await conEmpresa(regalo.companyId, (tx) =>
     tx.cliente.findUnique({
-      where: { id: clienteId },
+      where: { id: destinoId },
       select: { nombre: true },
     })
   )
@@ -584,7 +607,7 @@ export async function responderRegalo(
     registrarEntregaBeneficio({
       tipo: 'BENEFIT_USE',
       companyId: regalo.companyId,
-      clienteId,
+      clienteId: destinoId,
       clienteNombre: receptor?.nombre ?? 'Cliente',
       empleadoId: null,
       beneficio: etiqueta,
@@ -621,13 +644,16 @@ export async function cancelarRegalo(
 ): Promise<RegaloActionState> {
   const user = await getUser()
   if (!user || user.metadata.role !== 'CLIENTE') return { error: 'No autorizado.' }
-  const clienteId = user.metadata.clienteId
-  if (!clienteId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
+  // Igual que al responder: el regalo pudo enviarse desde cualquiera de sus
+  // fichas. Con la ficha activa, «Cancelar» fallaba sobre un regalo que el
+  // propio listado le acababa de mostrar como suyo.
+  const misFichas = await misClienteIds(user.supabaseId)
+  if (misFichas.length === 0) return { error: 'Todavía no eres cliente de ningún negocio.' }
 
   const regaloId = String(formData.get('regaloId') ?? '').trim()
   const regalo = await sinEmpresa('regalos: buscar regalo pendiente por id (cross-tenant)', (tx) =>
     tx.regalo.findFirst({
-      where: { id: regaloId, remitenteId: clienteId, estado: 'PENDIENTE' },
+      where: { id: regaloId, remitenteId: { in: misFichas }, estado: 'PENDIENTE' },
       select: { id: true, compraOrigenId: true, membershipOrigenId: true, usos: true },
     })
   )

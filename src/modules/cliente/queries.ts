@@ -117,6 +117,7 @@ export async function getClienteAllMemberships(
 }
 
 import { unstable_cache } from 'next/cache'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 /**
  * Empresas donde el usuario tiene cuenta de cliente — para el switcher del
@@ -260,6 +261,8 @@ export interface VehiculoCliente {
   esPrincipal: boolean
   /** Categoría del catálogo (Sedán, SUV…), si se registró. */
   categoria: string | null
+  /** Negocio en cuya ficha está registrado. Un coche puede estar en varias. */
+  empresaNombre: string | null
   /** Membresías a las que está asociado: por qué borrarlo no es trivial. */
   membresias: { id: string; planNombre: string; empresaNombre: string }[]
 }
@@ -272,12 +275,28 @@ export interface VehiculoCliente {
  * pantalla enseña además la categoría, cuál es el principal y a qué
  * membresías está asociado cada uno. Cargar todo eso en el perfil sería pagar
  * dos joins en una pantalla que no los muestra.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * UN VEHÍCULO PERTENECE A UNA FICHA, Y ESO NO SE CAMBIA AQUÍ
+ *
+ * En el modelo, `Vehiculo` cuelga de `Cliente` —la ficha de UNA empresa—, no
+ * de la persona. Tiene sentido: cada negocio le asigna su categoría, su tarifa
+ * y sus membresías, y esa clasificación es suya.
+ *
+ * Pero «Mis vehículos» enseñaba solo los de la ficha ACTIVA, así que el mismo
+ * coche aparecía y desaparecía según el negocio abierto, sin decir por qué.
+ * Ahora se listan los de TODAS sus fichas y cada uno dice de qué negocio es.
+ * La lista deja de mentir sin tocar el modelo — unificar los vehículos de
+ * verdad significaría fusionar categorías y tarifas de negocios distintos, y
+ * eso es una decisión comercial, no una migración de pantalla.
  */
-export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCliente[]> {
+export async function getVehiculosCliente(supabaseId: string): Promise<VehiculoCliente[]> {
   try {
-    const filas = await sinEmpresa('cliente: mis vehículos', (tx) =>
+    const clienteIds = await misClienteIds(supabaseId)
+    if (clienteIds.length === 0) return []
+    const filas = await sinEmpresa('cliente: mis vehículos (todas mis fichas)', (tx) =>
       tx.vehiculo.findMany({
-        where: { clienteId },
+        where: { clienteId: { in: clienteIds } },
         orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'desc' }],
         select: {
           id: true,
@@ -288,6 +307,10 @@ export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCl
           placa: true,
           esPrincipal: true,
           tipoVehiculo: { select: { nombre: true } },
+          // De qué negocio es esta ficha: con vehículos de varias empresas en
+          // la misma lista, el mismo coche puede salir dos veces y sin el
+          // nombre no hay forma de saber cuál es cuál.
+          cliente: { select: { company: { select: { name: true } } } },
           membresias: {
             select: {
               membership: {
@@ -312,6 +335,7 @@ export async function getVehiculosCliente(clienteId: string): Promise<VehiculoCl
       placa: v.placa,
       esPrincipal: v.esPrincipal,
       categoria: v.tipoVehiculo?.nombre ?? null,
+      empresaNombre: v.cliente?.company?.name ?? null,
       membresias: v.membresias
         .map((mv) => mv.membership)
         .filter((m): m is NonNullable<typeof m> => Boolean(m))
@@ -335,11 +359,19 @@ export interface HistorialVisitas {
   visitas: VisitaHistorial[]
 }
 
+/**
+ * MI HISTORIAL — de la PERSONA, no de la empresa que tenga abierta.
+ *
+ * Una visita a un negocio y una visita a otro son las dos suyas. Filtrando por
+ * la ficha activa, cambiar de empresa le cambiaba el historial debajo de los
+ * pies: la mitad de sus visitas desaparecía sin explicación.
+ */
 export async function getClienteVisitas(
-  clienteId: string,
+  supabaseId: string,
   page = 1,
   pageSize = 20
 ): Promise<HistorialVisitas> {
+  const clienteIds = await misClienteIds(supabaseId)
   const skip = (page - 1) * pageSize
   const inicioMes = new Date()
   inicioMes.setDate(1)
@@ -347,10 +379,10 @@ export async function getClienteVisitas(
 
   const [total, esteMes, visitas] = await sinEmpresa('cliente: mi historial de visitas', (tx) =>
     Promise.all([
-      tx.visit.count({ where: { clienteId } }),
-      tx.visit.count({ where: { clienteId, fechaVisita: { gte: inicioMes } } }),
+      tx.visit.count({ where: { clienteId: { in: clienteIds } } }),
+      tx.visit.count({ where: { clienteId: { in: clienteIds }, fechaVisita: { gte: inicioMes } } }),
       tx.visit.findMany({
-        where: { clienteId },
+        where: { clienteId: { in: clienteIds } },
         select: {
           id: true,
           servicio: true,
@@ -447,14 +479,35 @@ export interface BeneficioDisponible {
  * MOB · El beneficio ACTIVO más reciente del cliente con usos disponibles:
  * protagonista del Home ("🎁 disponible — Usar ahora"). null = nada que usar.
  */
+/**
+ * EL BENEFICIO LISTO PARA USAR DEL INICIO — de la PERSONA, no de la empresa
+ * que tenga abierta.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * FILTRABA POR LA FICHA ACTIVA
+ *
+ * Recibía `clienteId` —la ficha de la empresa activa— y buscaba solo ahí. Una
+ * recompensa reclamada en otro negocio se adquiría bien, se guardaba bien, y
+ * el inicio seguía diciendo que no había nada listo para usar.
+ *
+ * Es el MISMO fallo que tenía «Mis beneficios» y que se arregló al habilitar
+ * reclamar en cualquier empresa. Aquí seguía vivo, y el inicio es la primera
+ * pantalla que alguien mira: el sitio donde más se nota que falta algo.
+ *
+ * Ahora mira todas las fichas de la persona (`misClienteIds`). Sigue acotado
+ * —solo lo suyo—; lo que cambia es que «lo suyo» ya no depende de qué negocio
+ * tuviera seleccionado.
+ */
 export async function getBeneficioDisponible(
-  clienteId?: string | null
+  supabaseId?: string | null
 ): Promise<BeneficioDisponible | null> {
-  if (!clienteId) return null
+  if (!supabaseId) return null
   try {
+    const clienteIds = await misClienteIds(supabaseId)
+    if (clienteIds.length === 0) return null
     const compra = await sinEmpresa('cliente: beneficio disponible', (tx) =>
       tx.productoCompra.findFirst({
-        where: { clienteId, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
+        where: { clienteId: { in: clienteIds }, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -516,10 +569,19 @@ export interface ClientePagos {
  * Datos de "Mis pagos": estado actual de la membresía + historial real de pagos
  * (aprobados/rechazados) reconstruido desde el AuditLog. Devuelve datos planos.
  */
-export async function getClientePagos(clienteId: string): Promise<ClientePagos> {
+/**
+ * MIS PAGOS — de la PERSONA.
+ *
+ * Un pago a un negocio y un pago a otro son los dos suyos, y su comprobante
+ * también. Filtrando por la ficha activa, la mitad de sus pagos desaparecía al
+ * cambiar de empresa — y encontrar una factura pasaba por adivinar en qué
+ * contexto se había hecho.
+ */
+export async function getClientePagos(supabaseId: string): Promise<ClientePagos> {
+  const clienteIds = await misClienteIds(supabaseId)
   const memberships = await sinEmpresa('cliente: mis membresías y pagos', (tx) =>
     tx.membership.findMany({
-      where: { clienteId },
+      where: { clienteId: { in: clienteIds } },
       include: { plan: true, metodoPago: true, planSolicitado: true },
       orderBy: { createdAt: 'desc' },
       take: 50,

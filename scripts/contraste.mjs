@@ -89,6 +89,11 @@ export const PARES = [
   { texto: '--warning', fondo: '--card', minimo: 4.5, que: 'Texto de alerta' },
   { texto: '--destructive', fondo: '--card', minimo: 4.5, que: 'Texto de error' },
   { texto: '--info', fondo: '--card', minimo: 4.5, que: 'Texto informativo' },
+  // DS 2.0 · Fase 1. El estado PENDIENTE no existía: se resolvía con
+  // `--muted-foreground`, el color del texto secundario. Un estado que comparte
+  // color con «esto es menos importante» no se lee como estado — y nadie lo
+  // había medido como texto, que es como se usa.
+  { texto: '--pending', fondo: '--card', minimo: 4.5, que: 'Texto pendiente' },
   { texto: '--ring', fondo: '--background', minimo: 3, que: 'Anillo de foco' },
   { texto: '--border', fondo: '--card', minimo: 1.4, que: 'Borde de tarjeta (separación visible)' },
 ]

@@ -1,6 +1,9 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
+import { otorgarBienvenidaDirecta } from '@/modules/invitaciones/beneficios'
+import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
+import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
 
 /**
  * UNIRSE A UNA EMPRESA — una sola vez en todo el código.
@@ -104,6 +107,34 @@ export async function asegurarClienteEnEmpresa(
 
   await seguirEmpresa(dbUser.id, companyId)
 
+  /**
+   * LA BIENVENIDA DE LA EMPRESA — aquí, y no al registrarse.
+   *
+   * Antes la daba `repararContextoCliente`: alguien creaba su cuenta de Membego
+   * y recibía el regalo de bienvenida de un negocio que no había elegido, del
+   * que quedaba como cliente y al que seguía. La relación se la inventaba el
+   * sistema.
+   *
+   * Ahora se entrega en el momento en que esa relación existe de verdad: al
+   * reclamar una recompensa suya, al afiliarse, al comprar. La regla comercial
+   * no cambia —quien se hace cliente de una empresa recibe su bienvenida—; lo
+   * que cambia es que ya no se le regala en nombre de alguien que no conocía.
+   *
+   * Los tres van sin bloquear: el alta ya está hecha y la persona viene a por
+   * otra cosa. Un fallo aquí le cuesta un regalo, no su ficha.
+   */
+  await otorgarBienvenidaDirecta(cliente.id, companyId).catch((e) =>
+    console.error('[afiliación] bienvenida:', e)
+  )
+  await capturarCanalRegistro(cliente.id).catch((e) =>
+    console.error('[afiliación] canal de registro:', e)
+  )
+  if (email) {
+    await vincularRegalosPorContacto({ clienteId: cliente.id, companyId, email }).catch((e) =>
+      console.error('[afiliación] regalos por contacto:', e)
+    )
+  }
+
   // El negocio se entera de que tiene un cliente nuevo por el mismo evento que
   // ya usaba el alta normal: para las automatizaciones da igual si entró por la
   // pantalla de afiliación o reclamando una recompensa.
@@ -163,6 +194,100 @@ export async function fichaEnEmpresa(
   return ficha?.id ?? null
 }
 
+/**
+ * Datos que son de la PERSONA y viven copiados en cada ficha.
+ *
+ * No incluye nada de la relación comercial —membresías, beneficios, historial,
+ * notas del negocio—: eso es de cada empresa y no se copia de un lado a otro.
+ */
+export interface DatosPersonales {
+  nombre: string
+  telefono: string | null
+  fechaNacimiento: Date | null
+  ciudad: string | null
+  genero: string | null
+  notifPromos: boolean
+  notifRecordatorios: boolean
+  avatarUrl?: string
+}
+
+/**
+ * ESCRIBIR SUS DATOS EN TODAS SUS FICHAS.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTO ES UNA FUNCIÓN Y NO ESTABA DENTRO DE LA ACCIÓN
+ *
+ * Una `server action` necesita sesión de Supabase, así que no se puede
+ * ejecutar en una verificación contra la base. Sacando aquí la parte que
+ * decide QUÉ se escribe y DÓNDE, lo que se comprueba en
+ * `scripts/verificar-cuenta-y-ayuda.mts` es el código de verdad y no una copia
+ * suya escrita en el script — que es una prueba que solo se prueba a sí misma.
+ *
+ * Cada ficha se escribe con `conEmpresa` de SU empresa: el aislamiento sigue
+ * puesto en cada escritura, y un fallo en una no tumba las demás.
+ *
+ * Devuelve cuántas fichas se actualizaron.
+ */
+export async function propagarDatosPersonales(
+  supabaseId: string,
+  datos: DatosPersonales
+): Promise<number> {
+  const fichas = await sinEmpresa('perfil: mis fichas para propagar mis datos', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId },
+      select: { id: true, companyId: true },
+    })
+  )
+  let escritas = 0
+  for (const ficha of fichas) {
+    const ok = await conEmpresa(ficha.companyId, (tx) =>
+      tx.cliente.update({ where: { id: ficha.id }, data: datos })
+    )
+      .then(() => true)
+      .catch((e) => {
+        console.error('[perfil] propagar a', ficha.companyId, e)
+        return false
+      })
+    if (ok) escritas++
+  }
+  return escritas
+}
+
+/**
+ * POR QUÉ ESTO **NO** LLEVA `cache` DE REACT.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA OPTIMIZACIÓN QUE PARECÍA GRATIS
+ *
+ * Al cerrar las fases 4-9 esta función se llama desde 36 sitios, y una sola
+ * pantalla la dispara varias veces: `/cliente/regalos` pide los regalos y las
+ * gift cards, y cada una resuelve las fichas por su cuenta. Envolverla en
+ * `cache()` —como ya hacen `getRegionalPrefs` y
+ * `getCampanaPorCodigoInvitacion`— une esas consultas idénticas en una.
+ *
+ * Se probó, y se quitó.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LO QUE LO DESACONSEJA
+ *
+ * A diferencia de aquellas dos, esta lista CAMBIA dentro de la propia
+ * petición: `asegurarClienteEnEmpresa` crea una ficha nueva al adquirir una
+ * recompensa de un negocio donde la persona todavía no era clienta. Si una
+ * lectura posterior recibiera la lista memorizada de ANTES del alta, la
+ * recompensa recién reclamada no aparecería en «Mis beneficios» — que es
+ * exactamente el fallo que estas fases se dedicaron a quitar, reintroducido
+ * por una optimización.
+ *
+ * Y no se puede comprobar desde aquí: `cache` solo deduplica dentro del
+ * contexto de una petición de Next; en un script devuelve una caché nueva en
+ * cada llamada, así que una verificación como las de `scripts/` no distingue
+ * si funciona o no. Adoptarla a ciegas sería cambiar una consulta barata
+ * —índice por `supabaseId`, dos filas— por un riesgo que nadie ha medido.
+ *
+ * Queda anotado por si alguien vuelve: haría falta separar la lectura del
+ * camino que da de alta, o invalidar tras el alta. Hasta entonces, la consulta
+ * se repite y no pasa nada.
+ */
 export async function misClienteIds(supabaseId: string): Promise<string[]> {
   const fichas = await sinEmpresa('cliente: todas mis fichas (para listar beneficios)', (tx) =>
     tx.cliente.findMany({ where: { supabaseId }, select: { id: true } })

@@ -18,6 +18,7 @@ import {
   type HorarioSemanal,
 } from '@/modules/citas/disponibilidad'
 import { ESTADOS_ACTIVOS, getAgendaConfig } from '@/modules/citas/queries'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface CitaActionState {
@@ -225,11 +226,15 @@ export async function cancelarCitaCliente(
     if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
       return { error: 'No autorizado.' }
     }
-    const clienteId = user.metadata.clienteId
+    // Contra TODAS sus fichas: el listado de citas es de la persona y muestra
+    // las de todos sus negocios. Comprobando solo la ficha activa, el botón
+    // «Cancelar» de una cita de otro negocio respondía «Cita no encontrada»
+    // sobre una cita que la propia pantalla acababa de mostrarle.
+    const misFichas = await misClienteIds(user.supabaseId)
     const citaId = String(formData.get('citaId') ?? '').trim()
-    const cita = await sinEmpresa('citas: buscar cita por id y cliente (se usa su empresa después)', (tx) =>
+    const cita = await sinEmpresa('citas: buscar cita por id entre MIS fichas', (tx) =>
       tx.cita.findFirst({
-        where: { id: citaId, clienteId },
+        where: { id: citaId, clienteId: { in: misFichas } },
         include: {
           cliente: { select: { nombre: true } },
           company: { select: { zonaHoraria: true } },

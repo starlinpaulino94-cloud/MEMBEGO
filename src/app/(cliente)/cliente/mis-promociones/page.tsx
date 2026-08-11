@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { compraEstadoVisual } from '@/components/cliente/compra-estado'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,8 +104,12 @@ function Section({
 
 export default async function MisPromocionesPage() {
   const user = await requireRole('CLIENTE')
-  const clienteId = user.metadata.clienteId
-  if (!clienteId) return <p className="text-muted-foreground">No autorizado.</p>
+  // «No autorizado» era falso: quien acaba de registrarse está autorizado, solo
+  // que aún no ha adquirido nada. Ver `SinEmpresaTodavia`.
+  if (!user.metadata.clienteId) {
+    return <SinEmpresaTodavia que="beneficios"
+      detalle="Adquiere una recompensa de cualquier negocio y aparecerá aquí, lista para usar." />
+  }
 
   // TODAS las fichas de la persona, no solo la de la empresa activa.
   //
@@ -114,11 +119,17 @@ export default async function MisPromocionesPage() {
   // solo veía que no estaba. Ver `afiliacion.ts`.
   const clienteIds = await misClienteIds(user.supabaseId)
 
-  const regalos = await getRegalosCliente(clienteId).catch(() => [])
+  // `clienteIds` (fase 5): la lista de ofertas reclamadas también es de la
+  // persona, no de una sola ficha.
+  const regalos = await getRegalosCliente(clienteIds).catch(() => [])
   // CRUZA EMPRESAS A PROPÓSITO, y es el motivo por el que existe `clienteIds`:
   // la misma persona tiene una ficha por negocio, y filtrar por la activa hacía
   // que una recompensa reclamada en otro se guardara bien y no apareciera en
   // ningún sitio. Un `conEmpresa` aquí reintroduciría ese fallo.
+  //
+  // El `sinEmpresa` viene del barrido de RLS de `main` y hay que conservarlo:
+  // con las políticas puestas, una llamada suelta a `prisma` sin contexto no
+  // devuelve NADA, así que esta pantalla se habría quedado vacía.
   const compras = await sinEmpresa(
     'mis beneficios: la persona los ve de todos los negocios donde tiene ficha',
     (tx) =>

@@ -1,4 +1,5 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 /**
  * Gift cards de monto abierto (Regalos P2P · extensión de R4) — consultas.
@@ -37,16 +38,30 @@ export interface GiftCardItem {
   activadaAt: Date | null
 }
 
-export async function getGiftCardsCliente(clienteId: string): Promise<{
+/**
+ * Las gift cards de la PERSONA, no las de su ficha activa.
+ *
+ * Una gift card comprada en un negocio y otra recibida en otro son las dos
+ * suyas. Acotarlo a la ficha activa escondía saldo real: el código seguía
+ * siendo válido en el mostrador, pero en su propia pantalla no existía.
+ */
+export async function getGiftCardsCliente(supabaseId: string): Promise<{
   recibidas: GiftCardItem[]
   compradas: GiftCardItem[]
 }> {
+  const misFichas = await misClienteIds(supabaseId)
+  if (misFichas.length === 0) return { recibidas: [], compradas: [] }
+  const esMia = (id: string | null) => !!id && misFichas.includes(id)
+
   const cards = await sinEmpresa(
-    'giftcards: panel del cliente por clienteId (empresa no conocida de entrada)',
+    'giftcards: panel del cliente por sus fichas (empresa no conocida de entrada)',
     (tx) =>
       tx.giftCard.findMany({
         where: {
-          OR: [{ compradorClienteId: clienteId }, { destinatarioClienteId: clienteId }],
+          OR: [
+            { compradorClienteId: { in: misFichas } },
+            { destinatarioClienteId: { in: misFichas } },
+          ],
         },
         orderBy: { createdAt: 'desc' },
         take: 40,
@@ -70,8 +85,7 @@ export async function getGiftCardsCliente(clienteId: string): Promise<{
     id ? (clientes.find((c) => c.id === id)?.nombre ?? null) : null
 
   const items = cards.map((c) => {
-    const rol: GiftCardItem['rol'] =
-      c.destinatarioClienteId === clienteId ? 'RECIBIDA' : 'COMPRADA'
+    const rol: GiftCardItem['rol'] = esMia(c.destinatarioClienteId) ? 'RECIBIDA' : 'COMPRADA'
     const otra =
       rol === 'RECIBIDA'
         ? (nombre(c.compradorClienteId) ?? 'Alguien')

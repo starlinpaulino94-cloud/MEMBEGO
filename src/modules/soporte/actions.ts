@@ -15,6 +15,7 @@ import {
 } from '@/lib/soporte'
 import type { SessionUser } from '@/types'
 import { primerErrorZod } from '@/lib/validacion'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { capturarErrorInesperado } from '@/lib/sentry'
 import {
   configComunicacionSchema,
@@ -543,7 +544,15 @@ export async function responderTicketCliente(
         include: { cliente: { select: { id: true, nombre: true } } },
       })
     )
-    if (!ticket || ticket.clienteId !== user.metadata.clienteId) {
+    /**
+     * Contra TODAS sus fichas. El listado y el detalle de «Ayuda» enseñan los
+     * hilos de todos sus negocios; comprobando aquí la ficha ACTIVA, la caja de
+     * respuesta de una conversación abierta contestaba «Ticket no encontrado»
+     * sobre un hilo que la persona tenía delante — y con el negocio esperando
+     * esa respuesta.
+     */
+    const misFichas = await misClienteIds(user.supabaseId)
+    if (!ticket || !misFichas.includes(ticket.clienteId)) {
       return { error: 'Ticket no encontrado.' }
     }
 
