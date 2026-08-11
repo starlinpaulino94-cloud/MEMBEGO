@@ -126,7 +126,15 @@ export function BottomNav({
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-card/95 backdrop-blur-md lg:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      <ul className="mx-auto flex max-w-md items-stretch justify-around">
+      {/* El alto sale de `--dock-inferior`, la MISMA variable con la que el
+          shell calcula el hueco que le reserva al contenido. Escritos por
+          separado ya se separaron una vez: la barra creció con el área segura
+          del móvil, el hueco siguió siendo `pb-24` y el botón principal de la
+          pantalla quedó debajo de la barra. */}
+      <ul
+        className="mx-auto flex max-w-md items-stretch justify-around"
+        style={{ minHeight: 'var(--dock-inferior)' }}
+      >
         {izquierda.map((item) => (
           <TabLink key={item.href} item={item} pathname={pathname} />
         ))}

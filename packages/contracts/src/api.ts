@@ -35,6 +35,29 @@ export interface CustomerDTO {
 }
 
 /**
+ * Vehículo de un cliente.
+ *
+ * Es una entidad COMPARTIDA: MembeGo es su dueño —las membresías se atan a
+ * vehículos concretos (§13)— y a la vez un lavadero no puede operar sin ella.
+ * Por eso está en el contrato en vez de que cada vertical se invente la suya.
+ *
+ * Sin color, sin año y sin la categoría tarifaria: un vertical identifica el
+ * coche con la matrícula y lo nombra con marca y modelo. Lo demás es de MembeGo.
+ */
+export interface VehicleDTO {
+  id: string
+  customerId: string
+  /** Puede ser null: hay vehículos históricos sin matrícula registrada. */
+  placa: string | null
+  marca: string
+  modelo: string
+}
+
+export interface VehiclesResponse {
+  vehicles: VehicleDTO[]
+}
+
+/**
  * RESUMEN, y el nombre es la advertencia: sirve para PINTAR «cliente con
  * membresía activa». **No autoriza nada.** Para saber si se puede consumir un
  * beneficio, `benefits.evaluate`.
@@ -174,6 +197,35 @@ export interface RedemptionRequest {
   sucursalId?: string | null
   qrTokenId?: string | null
   notas?: string | null
+}
+
+/**
+ * Alta de alguien que llegó sin cuenta.
+ *
+ * SOLO EL NOMBRE ES OBLIGATORIO, y es una decisión: exigir correo o documento
+ * en la puerta es la forma más rápida de que el encargado deje de usar el
+ * sistema. Un cliente registrado con solo su nombre vale más que uno no
+ * registrado.
+ *
+ * Lo que NO se manda es igual de importante: no hay `id`, ni `esLocal`, ni
+ * canal. Quien decide cómo queda la fila es el Core (§14) — el vertical pide un
+ * alta, no escribe un registro.
+ */
+export interface CreateCustomerRequest {
+  companyId: string
+  name: string
+  phone?: string | null
+  email?: string | null
+}
+
+export interface CreateCustomerResponse {
+  customer: CustomerDTO
+  /**
+   * `false` cuando ese identificador ya estaba y se devuelve el cliente que ya
+   * existe. Míralo: un cliente que ya existía puede tener membresía, y darle la
+   * bienvenida como si fuera nuevo es un sistema que no lo reconoce.
+   */
+  created: boolean
 }
 
 export interface TransactionRequest {

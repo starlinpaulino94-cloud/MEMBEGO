@@ -264,6 +264,31 @@ model Company {
   // de su categoría (fail-open: nada de lo actual desaparece).
   capacidades Json?
 
+  /// Vertical de la empresa, como CÓDIGO de `tipos_negocio` (Fase 7).
+  ///
+  /// ────────────────────────────────────────────────────────────────────────
+  /// QUÉ ESTABA ROTO SIN ESTO
+  ///
+  /// El vertical de una empresa salía de `categoriaDeType(type)`: un `switch`
+  /// de cuatro casos con `default: 'CAR_WASH'`. La Fase 1b convirtió los tipos
+  /// de negocio en TABLA para que registrar un vertical nuevo fuera escribir
+  /// filas — pero la COMPATIBILIDAD seguía decidiéndose contra esa lista
+  /// congelada.
+  ///
+  /// El resultado: se podía dar de alta el sistema de un hotel y ninguna
+  /// empresa podía ser compatible con él jamás, porque el vertical de una
+  /// empresa solo sabía tomar cuatro valores. El registro era datos; la
+  /// compatibilidad seguía siendo código.
+  ///
+  /// Lo encontró la prueba contra base real de la Fase 7: una empresa creada
+  /// con `type: "restaurant"` caía en el `default` y quedaba clasificada como
+  /// lavadero.
+  ///
+  /// Nullable y RELLENADA con la resolución de siempre, así que ninguna empresa
+  /// cambia de vertical el día del despliegue. Cuando está, manda; cuando no,
+  /// se resuelve como antes.
+  tipoNegocioCodigo String?
+
   // Seguimiento de beneficios gratis (docs/SEGUIMIENTO-BENEFICIOS.md · S3).
   // JSON: { umbralPorVencerDias?, recordatorioAuto?, recordatorioDiasAntes?,
   // recordatorioFrecuenciaDias?, plantillaMensaje?, promosExcluidas? }.
@@ -367,6 +392,7 @@ model Company {
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
   @@index([type])
+  @@index([tipoNegocioCodigo])
   @@index([createdAt])
   @@map("companies")
 }

@@ -6,6 +6,7 @@ import { safeInternalPath } from '@/lib/utils'
 import { prisma } from '@/lib/prisma'
 import { getAgendaConfig } from '@/modules/citas/queries'
 import { Button } from '@/components/ui/button'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +49,11 @@ export default async function AgendarTrasAdquirirPage({
       company: { select: { name: true } },
     },
   })
-  if (!compra || compra.clienteId !== user.metadata.clienteId) notFound()
+  // Contra TODAS las fichas de la persona, no solo la de la empresa activa: una
+  // recompensa reclamada en otro negocio queda bajo la ficha de ESE negocio, y
+  // comparando con la activa esta pantalla daba 404 — justo aquí, que es adonde
+  // el botón de adquirir redirige nada más adquirir. Ver `afiliacion.ts`.
+  if (!compra || !(await misClienteIds(user.supabaseId)).includes(compra.clienteId)) notFound()
 
   const destino = `/cliente/mis-promociones/${compra.id}${retornoQs}`
 

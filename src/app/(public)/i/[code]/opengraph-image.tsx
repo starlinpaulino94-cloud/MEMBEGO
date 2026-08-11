@@ -1,13 +1,14 @@
-import { ImageResponse } from 'next/og'
 import { getGrowthLanding } from '@/modules/growth/links'
-import { originalImageResponse } from '@/lib/share/og'
+import { originalImageResponse, OG_SIZE, tarjetaOg } from '@/lib/share/og'
 import { SITE_NAME } from '@/lib/site'
 
 // Growth Engine 3.0 · Vista previa enriquecida al compartir una invitación.
 export const runtime = 'nodejs'
 export const revalidate = 0
 export const alt = 'Invitación exclusiva en MembeGo'
-export const size = { width: 1200, height: 630 }
+// El tamaño lo manda `OG_SIZE`: tres literales iguales se separan al primer
+// cambio, y entonces cada enlace se comparte con una resolución distinta.
+export const size = OG_SIZE
 export const contentType = 'image/png'
 
 export default async function Image({ params }: { params: Promise<{ code: string }> }) {
@@ -26,12 +27,12 @@ export default async function Image({ params }: { params: Promise<{ code: string
     if (original) return original
   }
 
-  return new ImageResponse(
+  return tarjetaOg(
     (
       <div style={{ width: '100%', height: '100%', display: 'flex', background: '#FFFFFF' }}>
-        <div style={{ width: 470, height: '100%', display: 'flex', background: '#EEF2F7' }}>
+        <div style={{ width: 679, height: '100%', display: 'flex', background: '#EEF2F7' }}>
           {imagen ? (
-            <img src={imagen} alt="" width={470} height={630} style={{ width: 470, height: 630, objectFit: 'cover' }} />
+            <img src={imagen} alt="" width={679} height={910} style={{ width: 679, height: 910, objectFit: 'cover' }} />
           ) : (
             <div
               style={{
@@ -62,20 +63,20 @@ export default async function Image({ params }: { params: Promise<{ code: string
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            padding: 60,
+            padding: 87,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 32, fontWeight: 800, color: '#0F172A' }}>{SITE_NAME}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 17 }}>
+            <span style={{ fontSize: 46, fontWeight: 800, color: '#0F172A' }}>{SITE_NAME}</span>
             <span
               style={{
                 display: 'flex',
                 background: '#EDE9FE',
                 color: '#6D28D9',
-                fontSize: 22,
+                fontSize: 32,
                 fontWeight: 700,
                 padding: '6px 16px',
-                borderRadius: 999,
+                borderRadius: 1443,
               }}
             >
               Invitación
@@ -83,13 +84,13 @@ export default async function Image({ params }: { params: Promise<{ code: string
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 34, fontWeight: 600, color: '#6D28D9' }}>
+            <span style={{ fontSize: 49, fontWeight: 600, color: '#6D28D9' }}>
               {referente} te invita
             </span>
-            <span style={{ fontSize: 58, fontWeight: 800, color: '#0F172A', lineHeight: 1.05, marginTop: 10 }}>
+            <span style={{ fontSize: 84, fontWeight: 800, color: '#0F172A', lineHeight: 1.05, marginTop: 14 }}>
               {beneficio.slice(0, 70)}
             </span>
-            <span style={{ fontSize: 30, color: '#475569', marginTop: 18 }}>en {empresa}</span>
+            <span style={{ fontSize: 43, color: '#475569', marginTop: 26 }}>en {empresa}</span>
           </div>
 
           <div
@@ -98,17 +99,16 @@ export default async function Image({ params }: { params: Promise<{ code: string
               alignSelf: 'flex-start',
               background: 'linear-gradient(90deg, #6D28D9, #0D9488)',
               color: 'white',
-              fontSize: 30,
+              fontSize: 43,
               fontWeight: 700,
               padding: '16px 34px',
-              borderRadius: 999,
+              borderRadius: 1443,
             }}
           >
             Aprovechar ahora →
           </div>
         </div>
       </div>
-    ),
-    size
+    )
   )
 }

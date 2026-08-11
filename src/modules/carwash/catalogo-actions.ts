@@ -13,6 +13,7 @@ import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { clienteLocal } from '@/modules/plataforma/cliente-local'
 
 export interface CatalogoState {
   error?: string
@@ -244,12 +245,10 @@ export async function guardarBahia(
     // Una sucursal de otra empresa no puede colarse por el formulario.
     let sucursalId: string | null = null
     if (sucursalIdRaw) {
-      const suc = await conEmpresa(companyId, (tx) =>
-        tx.sucursal.findFirst({
-          where: { id: sucursalIdRaw, companyId },
-          select: { id: true },
-        })
-      )
+      // Por el CONTRATO (Fase 6): la lista de sucursales es del Core y el
+      // vertical la pide, no la consulta. El día de la extracción no cambia.
+      const { branches } = await clienteLocal(companyId).branches(companyId)
+      const suc = branches.find((b) => b.id === sucursalIdRaw)
       if (!suc) return { error: 'Sucursal no válida.' }
       sucursalId = suc.id
     }

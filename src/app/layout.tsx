@@ -44,8 +44,18 @@ export const metadata: Metadata = {
     images: [
       {
         url: '/og-image.png',
-        width: 1200,
-        height: 630,
+        // LAS DIMENSIONES REALES DEL ARCHIVO, no las que nos gustaría.
+        //
+        // Aquí decía 1200×630 y `public/og-image.png` mide 1600×840. Con las
+        // dimensiones declaradas WhatsApp reserva el hueco ANTES de descargar
+        // la imagen: si mienten, la vista previa salta de tamaño al cargar.
+        //
+        // PENDIENTE: reexportar el archivo a 1728×910 (`OG_SIZE`) para que la
+        // portada por defecto tenga la misma nitidez que las tarjetas
+        // generadas. Necesita el original de diseño, así que no se hace desde
+        // aquí — y mientras tanto es mejor declarar la verdad que adelantarla.
+        width: 1600,
+        height: 840,
         alt: 'MembeGo — Conecta. Disfruta. Ahorra.',
       },
     ],

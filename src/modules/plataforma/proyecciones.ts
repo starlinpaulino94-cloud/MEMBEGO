@@ -86,6 +86,17 @@ export const PROYECCIONES: readonly ContratoProyeccion[] = [
       'Buscar por nombre, pintar la comanda, imprimir. NO para decidir elegibilidad.',
   },
   {
+    entidad: 'Vehicle',
+    autoridad: 'CORE',
+    refresco: 'EVENTO',
+    // Sin color, sin año y sin categoría tarifaria: el vertical identifica el
+    // coche y lo nombra; lo demás es de MembeGo.
+    campos: ['id', 'customerId', 'placa', 'marca', 'modelo'],
+    eventos: ['vehicle.created', 'vehicle.updated', 'vehicle.deleted'],
+    usoPermitido:
+      'Identificar el coche en la pista y nombrarlo en el comprobante. NO para decidir si la membresía cubre ESE vehículo: eso lo decide el canje (§13).',
+  },
+  {
     entidad: 'MembershipSummary',
     autoridad: 'CORE',
     refresco: 'EVENTO',

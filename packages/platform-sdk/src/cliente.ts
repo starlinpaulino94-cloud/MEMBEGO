@@ -2,8 +2,11 @@ import {
   esReintentable,
   exigeTokenNuevo,
   type BranchesResponse,
+  type ClientePlataforma,
   type CodigoError,
   type CompanyDTO,
+  type CreateCustomerRequest,
+  type CreateCustomerResponse,
   type CuerpoError,
   type CustomerDTO,
   type EntitlementsResponse,
@@ -17,6 +20,8 @@ import {
   type TokenResponse,
   type TransactionRequest,
   type TransactionResponse,
+  type VehicleDTO,
+  type VehiclesResponse,
 } from '@membego/contracts'
 
 /**
@@ -83,7 +88,7 @@ const MARGEN_RENOVACION_MS = 60_000
 
 const dormirPorDefecto = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-export class MembegoClient {
+export class MembegoClient implements ClientePlataforma {
   private readonly base: string
   private readonly hacerFetch: typeof fetch
   private readonly dormir: (ms: number) => Promise<void>
@@ -268,17 +273,64 @@ export class MembegoClient {
     )
   }
 
-  /** «¿Quién es este?» por correo o teléfono. Exactamente uno de los dos. */
+  /**
+   * «¿Quién es este?» por un identificador EXACTO. Exactamente uno de los tres.
+   *
+   * `plate` existe porque en un lavadero el cliente se identifica por la
+   * matrícula, no por su correo. Fue el primer hueco que destapó meter a Car
+   * Wash por este mismo contrato.
+   */
   resolveCustomer(
     companyId: string,
-    por: { email: string } | { phone: string }
+    por: { email: string } | { phone: string } | { plate: string }
   ): Promise<CustomerDTO> {
-    const clave = 'email' in por ? 'email' : 'phone'
-    const valor = 'email' in por ? por.email : por.phone
+    const clave = 'email' in por ? 'email' : 'phone' in por ? 'phone' : 'plate'
+    const valor = 'email' in por ? por.email : 'phone' in por ? por.phone : por.plate
     return this.pedir(
       'GET',
       `/api/platform/v1/customers/resolve?companyId=${encodeURIComponent(companyId)}&${clave}=${encodeURIComponent(valor)}`
     )
+  }
+
+  /**
+   * BUSCA por texto parcial. Distinto de `resolveCustomer`: aquí el empleado
+   * teclea «mar» y espera ver a María.
+   *
+   * Con límite y mínimo de caracteres del lado del servidor: buscar sí, listar
+   * la base entera a base de probar no.
+   */
+  searchCustomers(companyId: string, termino: string): Promise<{ customers: CustomerDTO[] }> {
+    return this.pedir(
+      'GET',
+      `/api/platform/v1/customers/search?companyId=${encodeURIComponent(companyId)}&q=${encodeURIComponent(termino)}`
+    )
+  }
+
+  /** Vehículos de un cliente. Un lavadero identifica al cliente por el coche. */
+  vehiclesOfCustomer(companyId: string, customerId: string): Promise<VehiclesResponse> {
+    return this.pedir(
+      'GET',
+      `/api/platform/v1/vehicles?companyId=${encodeURIComponent(companyId)}&customerId=${encodeURIComponent(customerId)}`
+    )
+  }
+
+  /**
+   * El vehículo de una matrícula, o `null`.
+   *
+   * Devuelve `null` y no lanza porque «esa placa no está» es el caso NORMAL en
+   * una pista: entra un coche que nunca vino. Tratarlo como excepción obligaría
+   * a envolver en try la operación más frecuente del día.
+   */
+  async vehicleByPlate(companyId: string, placa: string): Promise<VehicleDTO | null> {
+    try {
+      return await this.pedir<VehicleDTO>(
+        'GET',
+        `/api/platform/v1/vehicles/by-plate?companyId=${encodeURIComponent(companyId)}&plate=${encodeURIComponent(placa)}`
+      )
+    } catch (e) {
+      if (e instanceof MembegoError && e.code === 'NOT_FOUND') return null
+      throw e
+    }
   }
 
   /** Para PINTAR el estado. No autoriza: para eso, `evaluateBenefits`. */
@@ -316,6 +368,41 @@ export class MembegoClient {
   }
 
   // ── Escrituras ────────────────────────────────────────────────────────────
+
+  /**
+   * Dar de alta a alguien que llegó sin cuenta.
+   *
+   * `idempotencyKey` es obligatoria por un motivo concreto: el alta deduplica
+   * por correo o teléfono, pero quien llega solo con su nombre —el caso normal
+   * de una mesa— no tiene con qué deduplicarse. Sin clave, un reintento por una
+   * respuesta que se perdió por el camino crea la segunda ficha de la misma
+   * persona.
+   *
+   * Usa la referencia de TU operación (la comanda, la mesa, el turno), no un
+   * identificador nuevo por intento: si la generas en cada llamada, tienes
+   * idempotencia en el papel y dos clientes en la base.
+   *
+   * Mira `created`: si viene `false`, esa persona ya existía y puede tener
+   * membresía. Tratarla como nueva es, para quien está delante, un sistema que
+   * no lo reconoce.
+   */
+  async createCustomer(
+    peticion: CreateCustomerRequest,
+    idempotencyKey: string
+  ): Promise<CreateCustomerResponse> {
+    if (!idempotencyKey) {
+      throw new MembegoError(
+        'IDEMPOTENCY_KEY_REQUIRED',
+        'createCustomer: idempotencyKey es obligatoria',
+        0,
+        null
+      )
+    }
+    return this.pedir('POST', '/api/platform/v1/customers', {
+      cuerpo: peticion,
+      idempotencyKey,
+    })
+  }
 
   /**
    * Consumir un beneficio.

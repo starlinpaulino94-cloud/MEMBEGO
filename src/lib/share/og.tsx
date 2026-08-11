@@ -1,18 +1,47 @@
 import { ImageResponse } from 'next/og'
+import { OG_MAX_BYTES, OG_SIZE } from './og-tamano'
 import { SITE_NAME } from '@/lib/site'
 
 /**
  * Share Engine · tarjeta de vista previa (Open Graph / Twitter Card) genérica.
  *
  * Cualquier entidad compartible (promoción, plan/membresía, empresa, campaña,
- * invitación) genera su tarjeta 1200×630 con este componente: si tiene imagen
- * oficial, es el FONDO de la tarjeta (con velo para legibilidad); si no, un
- * degradado con los colores de la entidad. Así todo enlace de MembeGo se ve
- * como una tarjeta visual completa en WhatsApp/Facebook/Telegram/X, nunca como
- * texto plano.
+ * invitación) genera su tarjeta con este componente: si tiene imagen oficial,
+ * es el FONDO de la tarjeta (con velo para legibilidad); si no, un degradado
+ * con los colores de la entidad. Así todo enlace de MembeGo se ve como una
+ * tarjeta visual completa en WhatsApp/Facebook/Telegram/X, nunca como texto
+ * plano.
  */
 
-export const OG_SIZE = { width: 1200, height: 630 }
+// El tamaño y los límites viven en `og-tamano.ts`, sin dependencias, para que
+// también los pueda leer la vista previa del panel (componente de cliente) sin
+// arrastrar `next/og` al navegador.
+export { OG_SIZE, OG_ASPECTO, OG_MAX_BYTES, OG_MAX_MB, OG_RECOMENDACION } from './og-tamano'
+
+/**
+ * ÚNICA FORMA DE GENERAR UNA TARJETA.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ LOS TAMAÑOS ESTÁN ESCRITOS Y NO ESCALADOS AL VUELO
+ *
+ * Al subir el lienzo de 1200×630 a `OG_SIZE`, lo evidente era envolver el
+ * diseño en un `transform: scale()` y no tocar ningún número. **No funciona, y
+ * falla de la peor manera posible:** satori descarta los `<svg>` y los `<img>`
+ * que están dentro de un contenedor transformado. Solo sobrevive el texto.
+ *
+ * Se comprobó renderizando: el logo de MembeGo DESAPARECÍA de todas las
+ * tarjetas. Un cambio pensado para que la marca se vea mejor la habría borrado
+ * de cada enlace compartido.
+ *
+ * Así que los tamaños del diseño están escritos ya en las coordenadas finales,
+ * multiplicados una vez por `OG_ESCALA`. Es más verboso y es lo que funciona.
+ *
+ * Regla para quien retoque estas tarjetas: los números son píxeles del lienzo
+ * de `OG_SIZE`, no de 1200×630.
+ */
+export function tarjetaOg(elemento: React.ReactElement): ImageResponse {
+  return new ImageResponse(elemento, OG_SIZE)
+}
 
 export interface ShareCardData {
   /** Categoría del enlace (Promoción · Membresía · Empresa · Invitación). */
@@ -35,6 +64,7 @@ export interface ShareCardData {
 /** Formatos que satori (next/og) rasteriza de forma fiable. */
 const OG_IMG_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif']
 
+
 /**
  * Descarga la imagen y la devuelve como data URL para incrustarla en la
  * tarjeta. Se hace aquí (y no dejando que satori haga el fetch) para poder
@@ -51,8 +81,10 @@ export async function fetchImageDataUrl(url: string, timeoutMs = 4000): Promise<
     const tipo = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
     if (!OG_IMG_TYPES.includes(tipo)) return null
     const buf = Buffer.from(await res.arrayBuffer())
-    // Imágenes desmedidas harían lenta la vista previa (WhatsApp corta ~5s).
-    if (buf.length === 0 || buf.length > 4_000_000) return null
+    // El tope va contra lo que se admite al subir, no contra un número suelto:
+    // ver `OG_MAX_BYTES`. El timeout de 4 s sigue siendo la defensa real contra
+    // una vista previa lenta (WhatsApp corta alrededor de 5 s), y esa no cambia.
+    if (buf.length === 0 || buf.length > OG_MAX_BYTES) return null
     return `data:${tipo};base64,${buf.toString('base64')}`
   } catch {
     return null
@@ -98,8 +130,8 @@ export async function originalImageResponse(
 
 export function MembeGoMark() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-      <svg width="48" height="48" viewBox="0 0 512 512">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+      <svg width="69" height="69" viewBox="0 0 512 512">
         <defs>
           <linearGradient id="l" x1="104" y1="148" x2="104" y2="424" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#A855F7" />
@@ -119,7 +151,7 @@ export function MembeGoMark() {
         <path d="M408 148 L408 424" stroke="url(#r)" strokeWidth="88" strokeLinecap="round" fill="none" />
         <path d="M104 148 L256 308 L408 148" stroke="url(#v)" strokeWidth="88" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       </svg>
-      <span style={{ fontSize: 36, fontWeight: 800, color: '#FFFFFF', letterSpacing: -1 }}>
+      <span style={{ fontSize: 52, fontWeight: 800, color: '#FFFFFF', letterSpacing: -1.4 }}>
         {SITE_NAME}
       </span>
     </div>
@@ -128,7 +160,7 @@ export function MembeGoMark() {
 
 /** Tarjeta genérica de marca (entidad inexistente o enlace inválido). */
 export function genericOgResponse(subtitulo = 'Conecta. Disfruta. Ahorra.') {
-  return new ImageResponse(
+  return tarjetaOg(
     (
       <div
         style={{
@@ -142,11 +174,10 @@ export function genericOgResponse(subtitulo = 'Conecta. Disfruta. Ahorra.') {
           color: 'white',
         }}
       >
-        <span style={{ fontSize: 88, fontWeight: 800, letterSpacing: -2 }}>{SITE_NAME}</span>
-        <span style={{ fontSize: 34, marginTop: 12, opacity: 0.92 }}>{subtitulo}</span>
+        <span style={{ fontSize: 127, fontWeight: 800, letterSpacing: -2.9 }}>{SITE_NAME}</span>
+        <span style={{ fontSize: 49, marginTop: 17, opacity: 0.92 }}>{subtitulo}</span>
       </div>
-    ),
-    OG_SIZE
+    )
   )
 }
 
@@ -154,17 +185,17 @@ export function genericOgResponse(subtitulo = 'Conecta. Disfruta. Ahorra.') {
 function CardHeader({ badge, empresa }: { badge?: string | null; empresa?: string | null }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 23 }}>
         <MembeGoMark />
         {badge ? (
           <span
             style={{
-              fontSize: 24,
+              fontSize: 35,
               fontWeight: 700,
               color: '#FFFFFF',
               background: 'rgba(255,255,255,0.22)',
               padding: '8px 20px',
-              borderRadius: 999,
+              borderRadius: 1443,
             }}
           >
             {badge}
@@ -174,13 +205,13 @@ function CardHeader({ badge, empresa }: { badge?: string | null; empresa?: strin
       {empresa ? (
         <span
           style={{
-            fontSize: 26,
+            fontSize: 38,
             fontWeight: 600,
             color: '#FFFFFF',
             background: 'rgba(255,255,255,0.22)',
             padding: '10px 22px',
-            borderRadius: 999,
-            maxWidth: 420,
+            borderRadius: 1443,
+            maxWidth: 607,
             overflow: 'hidden',
           }}
         >
@@ -207,7 +238,7 @@ export async function shareCardResponse(data: ShareCardData) {
   const fondo = data.imagenUrl ? await fetchImageDataUrl(data.imagenUrl) : null
 
   if (fondo) {
-    return new ImageResponse(
+    return tarjetaOg(
       (
         <div
           style={{
@@ -254,17 +285,17 @@ export async function shareCardResponse(data: ShareCardData) {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: 56,
+              padding: 81,
               color: '#FFFFFF',
             }}
           >
             <CardHeader badge={data.badge} empresa={data.empresa} />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 23 }}>
               {subtitulo ? (
-                <span style={{ fontSize: 28, fontWeight: 600, opacity: 0.95 }}>{subtitulo}</span>
+                <span style={{ fontSize: 40, fontWeight: 600, opacity: 0.95 }}>{subtitulo}</span>
               ) : null}
-              <span style={{ fontSize: 58, fontWeight: 800, letterSpacing: -1.5, lineHeight: 1.08 }}>
+              <span style={{ fontSize: 84, fontWeight: 800, letterSpacing: -2.2, lineHeight: 1.08 }}>
                 {titulo}
               </span>
               {destacado ? (
@@ -272,28 +303,27 @@ export async function shareCardResponse(data: ShareCardData) {
                   style={{
                     display: 'flex',
                     alignSelf: 'flex-start',
-                    fontSize: 32,
+                    fontSize: 46,
                     fontWeight: 700,
                     color: '#0f172a',
                     background: '#FFFFFF',
                     padding: '12px 28px',
-                    borderRadius: 16,
+                    borderRadius: 23,
                   }}
                 >
                   {destacado}
                 </span>
               ) : footer ? (
-                <span style={{ fontSize: 28, fontWeight: 600, opacity: 0.95 }}>{footer}</span>
+                <span style={{ fontSize: 40, fontWeight: 600, opacity: 0.95 }}>{footer}</span>
               ) : null}
             </div>
           </div>
         </div>
-      ),
-      OG_SIZE
+      )
     )
   }
 
-  return new ImageResponse(
+  return tarjetaOg(
     (
       <div
         style={{
@@ -302,18 +332,18 @@ export async function shareCardResponse(data: ShareCardData) {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          padding: 64,
+          padding: 92,
           background: `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`,
           color: '#FFFFFF',
         }}
       >
         <CardHeader badge={data.badge} empresa={data.empresa} />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
           {subtitulo ? (
-            <span style={{ fontSize: 30, fontWeight: 600, opacity: 0.95 }}>{subtitulo}</span>
+            <span style={{ fontSize: 43, fontWeight: 600, opacity: 0.95 }}>{subtitulo}</span>
           ) : null}
-          <span style={{ fontSize: 68, fontWeight: 800, letterSpacing: -1.5, lineHeight: 1.05 }}>
+          <span style={{ fontSize: 98, fontWeight: 800, letterSpacing: -2.2, lineHeight: 1.05 }}>
             {titulo}
           </span>
           {destacado ? (
@@ -321,13 +351,13 @@ export async function shareCardResponse(data: ShareCardData) {
               style={{
                 display: 'flex',
                 alignSelf: 'flex-start',
-                fontSize: 34,
+                fontSize: 49,
                 fontWeight: 700,
                 color: primary,
                 background: '#FFFFFF',
                 padding: '14px 30px',
-                borderRadius: 18,
-                marginTop: 6,
+                borderRadius: 26,
+                marginTop: 9,
               }}
             >
               {destacado}
@@ -336,12 +366,11 @@ export async function shareCardResponse(data: ShareCardData) {
         </div>
 
         {footer ? (
-          <span style={{ fontSize: 30, fontWeight: 600, opacity: 0.95 }}>{footer}</span>
+          <span style={{ fontSize: 43, fontWeight: 600, opacity: 0.95 }}>{footer}</span>
         ) : (
-          <span style={{ fontSize: 30, fontWeight: 600, opacity: 0.95 }}>membego.com</span>
+          <span style={{ fontSize: 43, fontWeight: 600, opacity: 0.95 }}>membego.com</span>
         )}
       </div>
-    ),
-    OG_SIZE
+    )
   )
 }

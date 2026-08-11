@@ -32,6 +32,8 @@ export function ComprarPromoButton({
   yaAdquirida = false,
   unSoloUso = false,
   retorno,
+  empresaNueva = false,
+  empresa,
 }: {
   promocionId: string
   precio: number
@@ -42,6 +44,15 @@ export function ComprarPromoButton({
   unSoloUso?: boolean
   /** Fase 4 · contexto de ubicación: se encadena al detalle de la compra. */
   retorno?: string
+  /**
+   * La persona todavía no es cliente de este negocio. Al adquirir se creará su
+   * ficha allí y empezará a seguirlo, así que el diálogo lo dice ANTES de
+   * confirmar. Empezar a seguir a alguien sin haberlo pedido es de las cosas
+   * que más molestan de una app; avisarlo cuesta una frase.
+   */
+  empresaNueva?: boolean
+  /** Nombre del negocio, para nombrarlo en ese aviso. */
+  empresa?: string
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(solicitarCompraPromocion, init)
@@ -122,9 +133,12 @@ export function ComprarPromoButton({
         open={confirmar}
         title="Adquirir promoción"
         description={
-          esGratis
+          (esGratis
             ? 'Esta promoción es gratuita. Al confirmar se activará al instante y tendrás tu QR listo para canjear.'
-            : `El costo es ${fmtRD(precio)}. Al confirmar crearemos tu solicitud y podrás completar el pago por transferencia para activarla.`
+            : `El costo es ${fmtRD(precio)}. Al confirmar crearemos tu solicitud y podrás completar el pago por transferencia para activarla.`) +
+          (empresaNueva
+            ? ` También empezarás a seguir a ${empresa ?? 'este negocio'} para enterarte de sus novedades.`
+            : '')
         }
         confirmText={esGratis ? 'Activar ahora' : 'Continuar al pago'}
         cancelText="Cancelar"

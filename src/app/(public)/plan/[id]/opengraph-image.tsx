@@ -1,5 +1,5 @@
-import { ImageResponse } from 'next/og'
 import { getPlanOg } from '@/modules/marketplace/cached'
+import { OG_SIZE, tarjetaOg } from '@/lib/share/og'
 import { SITE_NAME } from '@/lib/site'
 
 // Fase E8 · Imagen dinámica de vista previa (Open Graph / Twitter Card) por
@@ -7,7 +7,9 @@ import { SITE_NAME } from '@/lib/site'
 export const runtime = 'nodejs'
 export const revalidate = 3600
 export const alt = 'Vista previa de plan de membresía en MembeGo'
-export const size = { width: 1200, height: 630 }
+// El tamaño lo manda `OG_SIZE`: tres literales iguales se separan al primer
+// cambio, y entonces cada enlace se comparte con una resolución distinta.
+export const size = OG_SIZE
 export const contentType = 'image/png'
 
 function fmtRD(n: number) {
@@ -20,7 +22,7 @@ function fmtRD(n: number) {
 
 function MembeGoMark() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
       <svg width="44" height="44" viewBox="0 0 512 512">
         <defs>
           <linearGradient id="l" x1="104" y1="148" x2="104" y2="424" gradientUnits="userSpaceOnUse">
@@ -41,7 +43,7 @@ function MembeGoMark() {
         <path d="M408 148 L408 424" stroke="url(#r)" strokeWidth="88" strokeLinecap="round" fill="none" />
         <path d="M104 148 L256 308 L408 148" stroke="url(#v)" strokeWidth="88" strokeLinecap="round" strokeLinejoin="round" fill="none" />
       </svg>
-      <span style={{ fontSize: 32, fontWeight: 800, color: 'white', letterSpacing: -1 }}>{SITE_NAME}</span>
+      <span style={{ fontSize: 46, fontWeight: 800, color: 'white', letterSpacing: -1.4 }}>{SITE_NAME}</span>
     </div>
   )
 }
@@ -51,7 +53,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   const og = await getPlanOg(id).catch(() => null)
 
   if (!og) {
-    return new ImageResponse(
+    return tarjetaOg(
       (
         <div
           style={{
@@ -65,11 +67,10 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             color: 'white',
           }}
         >
-          <span style={{ fontSize: 84, fontWeight: 800, letterSpacing: -2 }}>{SITE_NAME}</span>
-          <span style={{ fontSize: 34, marginTop: 12, opacity: 0.92 }}>Planes de membresía con QR</span>
+          <span style={{ fontSize: 121, fontWeight: 800, letterSpacing: -2.9 }}>{SITE_NAME}</span>
+          <span style={{ fontSize: 49, marginTop: 17, opacity: 0.92 }}>Planes de membresía con QR</span>
         </div>
-      ),
-      size
+      )
     )
   }
 
@@ -78,7 +79,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     ? 'Servicios ilimitados'
     : `${og.lavadosIncluidos} servicio${og.lavadosIncluidos !== 1 ? 's' : ''} incluido${og.lavadosIncluidos !== 1 ? 's' : ''}`
 
-  return new ImageResponse(
+  return tarjetaOg(
     (
       <div
         style={{
@@ -87,7 +88,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          padding: 70,
+          padding: 101,
           background: 'linear-gradient(135deg, #6D28D9 0%, #3B82F6 55%, #0D9488 100%)',
           color: 'white',
         }}
@@ -99,8 +100,8 @@ export default async function Image({ params }: { params: Promise<{ id: string }
               display: 'flex',
               background: 'rgba(255,255,255,0.18)',
               padding: '10px 22px',
-              borderRadius: 999,
-              fontSize: 26,
+              borderRadius: 1443,
+              fontSize: 38,
               fontWeight: 600,
             }}
           >
@@ -109,31 +110,30 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: 30, fontWeight: 600, opacity: 0.9 }}>Plan de membresía</span>
-          <span style={{ fontSize: 72, fontWeight: 800, letterSpacing: -2, lineHeight: 1.05 }}>
+          <span style={{ fontSize: 43, fontWeight: 600, opacity: 0.9 }}>Plan de membresía</span>
+          <span style={{ fontSize: 104, fontWeight: 800, letterSpacing: -2.9, lineHeight: 1.05 }}>
             {og.nombre.slice(0, 60)}
           </span>
-          <span style={{ fontSize: 40, fontWeight: 700, marginTop: 16 }}>{precio}</span>
+          <span style={{ fontSize: 58, fontWeight: 700, marginTop: 23 }}>{precio}</span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 35 }}>
           <span
             style={{
               display: 'flex',
               background: 'white',
               color: '#0F172A',
-              fontSize: 28,
+              fontSize: 40,
               fontWeight: 700,
               padding: '14px 30px',
-              borderRadius: 999,
+              borderRadius: 1443,
             }}
           >
             {incluye}
           </span>
-          <span style={{ fontSize: 28, fontWeight: 700, opacity: 0.95 }}>Elegir este plan →</span>
+          <span style={{ fontSize: 40, fontWeight: 700, opacity: 0.95 }}>Elegir este plan →</span>
         </div>
       </div>
-    ),
-    size
+    )
   )
 }

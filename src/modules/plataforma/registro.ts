@@ -116,7 +116,13 @@ async function leerContexto(companyId: string, conSecreto: boolean): Promise<Con
     ...(conSecreto ? { secreto: true } : {}),
   } as const
 
-  const empresaSelect = { type: true, capacidades: true } as const
+  const empresaSelect = { type: true, capacidades: true, tipoNegocioCodigo: true } as const
+  // El camino de respaldo NO puede pedir `tipoNegocioCodigo`: si se entra ahí es
+  // porque la migración no está aplicada, y pedir la columna que falta haría
+  // fallar también el respaldo. El resultado no sería «se resuelve como antes»
+  // sino «esta empresa no tiene ningún sistema», que es una caída completa por
+  // una columna que aún no existe.
+  const empresaSelectLegado = { type: true, capacidades: true } as const
 
   try {
     // Las dos lecturas en la MISMA transacción: la empresa y los sistemas se
@@ -163,7 +169,7 @@ async function leerContexto(companyId: string, conSecreto: boolean): Promise<Con
       const { empresa, filas } = await conEmpresa(companyId, async (tx) => {
         const empresa = await tx.company.findUnique({
           where: { id: companyId },
-          select: empresaSelect,
+          select: empresaSelectLegado,
         })
         const filas = (await tx.sistemaConectado.findMany({
           select: { ...comun, activo: true, categoria: true },
@@ -216,8 +222,26 @@ async function leerContexto(companyId: string, conSecreto: boolean): Promise<Con
  * El coste es leer dos columnas dentro de una transacción que ya estaba
  * abierta.
  */
-function tipoNegocioDe(empresa: { type: string | null; capacidades: unknown } | null): string | null {
+function tipoNegocioDe(
+  empresa: { type: string | null; capacidades: unknown; tipoNegocioCodigo?: string | null } | null
+): string | null {
   if (!empresa) return null
+
+  // MANDA LA COLUMNA, Y ESE ES EL ARREGLO DE LA FASE 7.
+  //
+  // `capacidadesEfectivas` resuelve contra una lista de cuatro valores con
+  // `default: 'CAR_WASH'`. Mientras la compatibilidad se decidiera ahí, se podía
+  // registrar el sistema de un hotel y ninguna empresa podía ser compatible con
+  // él jamás: el registro era datos y la compatibilidad seguía siendo código.
+  //
+  // Con `tipoNegocioCodigo`, el vertical de una empresa es cualquier código de
+  // `tipos_negocio` — incluido uno que un manifiesto acabe de crear.
+  const codigo = empresa.tipoNegocioCodigo?.trim()
+  if (codigo) return codigo
+
+  // Sin columna —empresa anterior a la migración, o creada por un camino que
+  // aún no la rellena— se resuelve como siempre. Devolver null aquí le quitaría
+  // el acceso a sus sistemas a una empresa que hoy lo tiene.
   return capacidadesEfectivas(empresa.type, empresa.capacidades).categoria
 }
 

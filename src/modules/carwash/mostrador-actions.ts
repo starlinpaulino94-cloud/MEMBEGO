@@ -14,8 +14,9 @@ import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
 import { companyFilter } from '@/modules/admin/queries'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { altaCliente } from '@/modules/plataforma/alta-cliente'
 import { normalizarPlaca } from './cuentas'
-import { nuevoIdLocal, esIdLocal, buscarClientes } from './mostrador'
+import { esIdLocal, buscarClientes } from './mostrador'
 
 export interface MostradorState {
   error?: string
@@ -86,26 +87,24 @@ export async function crearClienteMostrador(
 
     const tipoVehiculoId = texto(formData.get('tipoVehiculoId'), 40) || null
 
+    // El alta la escribe el Core (`altaCliente`), no esta pantalla: es la misma
+    // fila que crea el satélite de un restaurante por la API, y escribirla en
+    // dos sitios acaba con dos formas distintas del mismo cliente. El vehículo
+    // sí es del vertical, y va en la MISMA transacción para que no pueda quedar
+    // un cliente registrado sin el carro con el que vino.
     const cliente = await conEmpresa(ctx.companyId, async (tx) => {
-      const c = await tx.cliente.create({
-        data: {
-          companyId: ctx.companyId,
-          // Identidad que Supabase nunca podría emitir: este cliente no puede
-          // iniciar sesión ni por accidente.
-          supabaseId: nuevoIdLocal(),
-          nombre,
-          telefono,
-          email: '',
-          esLocal: true,
-          canalOrigen: 'MOSTRADOR',
-        },
-        select: { id: true },
-      })
+      const alta = await altaCliente(
+        ctx.companyId,
+        { nombre, telefono },
+        'MOSTRADOR',
+        tx
+      )
+      if ('error' in alta) throw new Error(alta.error)
 
       if (placa || texto(formData.get('marca'))) {
         await tx.vehiculo.create({
           data: {
-            clienteId: c.id,
+            clienteId: alta.cliente.id,
             placa,
             marca: texto(formData.get('marca'), 40) || 'Sin marca',
             modelo: texto(formData.get('modelo'), 40) || 'Sin modelo',
@@ -115,12 +114,20 @@ export async function crearClienteMostrador(
           },
         })
       }
-      return c
+      return alta
     })
 
     revalidatePath(RUTA)
     revalidatePath(RUTA_COLA)
-    return { success: `${nombre} registrado.`, clienteId: cliente.id }
+    // Se dice cuando ya estaba. El encargado creía estar dando de alta a
+    // alguien nuevo: si no se le avisa, va a buscar la ficha recién creada y va
+    // a encontrar una con historial, sin saber por qué.
+    return {
+      success: cliente.creado
+        ? `${nombre} registrado.`
+        : `${cliente.cliente.nombre} ya estaba registrado con ese teléfono; se usó su ficha.`,
+      clienteId: cliente.cliente.id,
+    }
   } catch (e) {
     console.error('[mostrador] crear:', e)
     return { error: 'No se pudo registrar. ¿Corriste la migración 20260766?' }

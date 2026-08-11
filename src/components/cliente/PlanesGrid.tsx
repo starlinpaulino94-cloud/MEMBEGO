@@ -104,7 +104,11 @@ function SubmitButton({
 /** Micro-etiqueta de sección: estructura editorial, sin color. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/70">
+    // 10px y encima `/70`: medido daba 3,11:1, por debajo del 4,5:1 de AA.
+    // `.text-overline` es el token del sistema para justo esto —12px,
+    // mayúsculas, tracking y `muted-foreground` a plena opacidad— y arregla el
+    // tamaño y el contraste de una vez.
+    <p className="mb-2.5 text-overline">
       {children}
     </p>
   )
@@ -275,7 +279,7 @@ export function PlanesGrid({
               )}
               {isRecommended && (
                 <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2">
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-b-xl bg-foreground px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider text-background">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-b-xl bg-foreground px-4 py-1.5 text-[12px] font-bold uppercase tracking-wider text-background">
                     <Sparkles className="h-3 w-3" />
                     {vehiculo && recomendadoId
                       ? `Para tu ${titleCase(vehiculo.modelo)}`
@@ -292,12 +296,12 @@ export function PlanesGrid({
                       {base}
                     </h3>
                     {variante && (
-                      <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
                         {variante}
                       </span>
                     )}
                     {plan.esIlimitado && (
-                      <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
                         Ilimitado
                       </span>
                     )}
@@ -344,7 +348,7 @@ export function PlanesGrid({
                       <p className="text-sm font-bold leading-tight text-foreground">
                         {plan.esIlimitado ? 'Ilimitados' : plan.lavadosIncluidos}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">usos incluidos</p>
+                      <p className="text-[12px] text-muted-foreground">usos incluidos</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5">
@@ -355,7 +359,7 @@ export function PlanesGrid({
                       <p className="text-sm font-bold leading-tight text-foreground">
                         {plan.vigenciaDias} días
                       </p>
-                      <p className="text-[11px] text-muted-foreground">de vigencia</p>
+                      <p className="text-[12px] text-muted-foreground">de vigencia</p>
                     </div>
                   </div>
                 </div>
@@ -400,7 +404,7 @@ export function PlanesGrid({
                 {/* Aviso explícito de compatibilidad (a11y: visible y legible,
                     la tarjeta sigue siendo comprable) */}
                 {isDimmed && (
-                  <p className="mb-3 text-[11px] font-medium text-muted-foreground">
+                  <p className="mb-3 text-[12px] font-medium text-muted-foreground">
                     Pensado para otro tamaño de vehículo — también puedes elegirlo.
                   </p>
                 )}
@@ -432,7 +436,7 @@ export function PlanesGrid({
                         {isDowngrade && <ArrowDownCircle className="mr-2 h-4 w-4" />}
                         Disponible en el negocio
                       </Button>
-                      <p className="text-center text-[11px] text-muted-foreground">
+                      <p className="text-center text-[12px] text-muted-foreground">
                         Para cambiar a este plan, solicítalo en el local: el equipo lo aplica por ti.
                       </p>
                     </div>
@@ -445,7 +449,7 @@ export function PlanesGrid({
                           Registra tu vehículo para comprar
                         </a>
                       </Button>
-                      <p className="text-center text-[11px] text-muted-foreground">
+                      <p className="text-center text-[12px] text-muted-foreground">
                         Precio base referencial: con tu vehículo verás el de tu categoría.
                       </p>
                     </div>
@@ -456,7 +460,7 @@ export function PlanesGrid({
                       <Button disabled variant="outline" className="min-h-12 w-full">
                         Para vehículos de otra categoría
                       </Button>
-                      <p className="text-center text-[11px] text-muted-foreground">
+                      <p className="text-center text-[12px] text-muted-foreground">
                         Tu vehículo excede este plan. Elige un plan de tu categoría o
                         consulta en el local para actualizarlo.
                       </p>

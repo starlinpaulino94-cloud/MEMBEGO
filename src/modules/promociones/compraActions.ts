@@ -21,6 +21,7 @@ import {
   estadoLimiteCliente,
   mensajeLimitePorCliente,
 } from '@/modules/promociones/compra'
+import { asegurarClienteEnEmpresa, misClienteIds } from '@/modules/cliente/afiliacion'
 
 export interface CompraState {
   error?: string
@@ -37,6 +38,66 @@ async function clienteAutenticado() {
   const user = await getUser()
   if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) return null
   return user
+}
+
+/**
+ * LA FICHA CON LA QUE SE ADQUIERE ESTA PROMOCIÓN.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ANTES: «PRIMERO ÚNETE A LA EMPRESA»
+ *
+ * Aquí había un rechazo seco cuando la promoción era de otro negocio:
+ * «Para adquirir esta promoción primero únete a la empresa que la publica».
+ * Y en la pantalla de la promoción el botón directamente NO aparecía, así que
+ * el mensaje ni siquiera llegaba a leerse: quien veía unos tacos gratis en un
+ * restaurante que no conocía solo tenía «Ver empresa y sus planes».
+ *
+ * Eso invertía el trato. Una recompensa es el motivo por el que alguien se
+ * acerca a un negocio nuevo; pedirle que se dé de alta ANTES es cobrarle el
+ * trámite por adelantado y perder justo a quien todavía no tiene ninguna razón
+ * para pagarlo.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * AHORA: EL ALTA ES LA CONSECUENCIA, NO EL REQUISITO
+ *
+ * Adquirir crea la ficha en esa empresa y la sigue —`asegurarClienteEnEmpresa`
+ * hace las dos cosas—, y la compra queda bajo esa ficha. El negocio gana un
+ * cliente y un seguidor en el momento en que la persona demuestra interés, no
+ * antes.
+ *
+ * Lo que NO cambia es la empresa activa de la sesión: reclamar unos tacos no es
+ * pedir mudarse de negocio (ver `afiliacion.ts`).
+ */
+async function fichaParaAdquirir(
+  user: NonNullable<Awaited<ReturnType<typeof clienteAutenticado>>>,
+  companyId: string,
+  companyIdDeMiFicha: string,
+  miClienteId: string
+): Promise<{ clienteId: string } | { error: string }> {
+  if (companyId === companyIdDeMiFicha) return { clienteId: miClienteId }
+
+  const alta = await asegurarClienteEnEmpresa(user.supabaseId, user.email, companyId)
+  if ('error' in alta) return alta
+  return { clienteId: alta.clienteId }
+}
+
+
+/**
+ * ¿ES MÍA ESTA COMPRA? — contra TODAS mis fichas, no solo la activa.
+ *
+ * Estas comprobaciones comparaban con `user.metadata.clienteId`, la ficha de la
+ * empresa que la persona tiene abierta. Mientras solo se podían adquirir
+ * promociones de la propia empresa, esa ficha y la de la compra eran siempre la
+ * misma y la comparación bastaba.
+ *
+ * Desde que se puede reclamar en cualquier negocio, ya no: una recompensa
+ * adquirida en el restaurante queda bajo la ficha del restaurante, y su dueña
+ * legítima se habría encontrado un «No autorizado» al ir a pagarla o
+ * cancelarla. La pertenencia es de la PERSONA, así que se mira por persona.
+ */
+async function esMiCompra(supabaseId: string, clienteIdDeLaCompra: string): Promise<boolean> {
+  const mias = await misClienteIds(supabaseId)
+  return mias.includes(clienteIdDeLaCompra)
 }
 
 /** Paso 1: el cliente solicita la compra (valida ventana de adquisición y cupo). */
@@ -65,31 +126,43 @@ export async function solicitarCompraPromocion(
     if (!cliente) return { error: 'Cliente no encontrado.' }
     if (!promo) return { error: 'Promoción no encontrada.' }
 
-    // Debe ser cliente de la empresa dueña de la promoción.
-    if (promo.companyId !== cliente.companyId) {
-      return { error: 'Para adquirir esta promoción primero únete a la empresa que la publica.' }
-    }
-
     // Rule Engine de adquisición: ventana + cupo + estado de publicación.
+    // Va ANTES del alta a propósito: si la promoción está agotada o fuera de
+    // ventana, no tiene ningún sentido haberle creado una ficha a la persona en
+    // una empresa a la que al final no se lleva nada.
     const ventana = validarVentanaAdquisicion(promo)
     if (!ventana.ok) return { error: ventana.mensaje }
 
     // Promoción privada: solo miembros con membresía activa.
+    //
+    // Se comprueba ANTES del alta, y se mira la ficha que la persona YA tenga
+    // en esa empresa. Sin ficha no puede haber membresía, así que crear una
+    // primero solo serviría para dejarla afiliada a un negocio del que se va
+    // con un «es exclusiva para miembros» — y siguiéndolo, además.
     if (promo.visibilidad === 'privada') {
       const activa = await conEmpresa(promo.companyId, (tx) =>
         tx.membership.findFirst({
-          where: { clienteId: cliente.id, companyId: promo.companyId, estado: 'ACTIVA' },
+          where: {
+            cliente: { supabaseId: user.supabaseId, companyId: promo.companyId },
+            companyId: promo.companyId,
+            estado: 'ACTIVA',
+          },
           select: { id: true },
         })
       )
       if (!activa) return { error: 'Esta promoción es exclusiva para miembros con membresía activa.' }
     }
 
+    // Promoción de otra empresa: el alta y el seguimiento salen de adquirirla.
+    const ficha = await fichaParaAdquirir(user, promo.companyId, cliente.companyId, cliente.id)
+    if ('error' in ficha) return { error: ficha.error }
+    const clienteId = ficha.clienteId
+
     // Sin compras duplicadas vivas de la misma promoción.
     const viva = await conEmpresa(promo.companyId, (tx) =>
       tx.productoCompra.findFirst({
         where: {
-          clienteId: cliente.id,
+          clienteId,
           promocionId: promo.id,
           estado: { in: [...ESTADOS_VIVOS] },
         },
@@ -106,7 +179,7 @@ export async function solicitarCompraPromocion(
     // no pueden re-adquirirse aunque ya se hayan usado o vencido.
     if (promo.limitePorCliente != null) {
       const limite = await conEmpresa(promo.companyId, (tx) =>
-        estadoLimiteCliente(cliente.id, promo.id, promo.limitePorCliente, tx)
+        estadoLimiteCliente(clienteId, promo.id, promo.limitePorCliente, tx)
       )
       if (limite.alcanzado) {
         return { error: mensajeLimitePorCliente(promo.limitePorCliente) }
@@ -122,7 +195,7 @@ export async function solicitarCompraPromocion(
           tipo: 'PROMOCION',
           estado: esGratis ? 'SOLICITADA' : 'PENDIENTE_PAGO',
           companyId: promo.companyId,
-          clienteId: cliente.id,
+          clienteId,
           promocionId: promo.id,
           precioCongelado: promo.precio,
           usosIncluidos: promo.usosPorCompra,
@@ -152,7 +225,7 @@ export async function solicitarCompraPromocion(
     // Así el cliente entra a la cadena por el flujo normal, sin pantallas
     // extra. Fail-open: nunca invalida una compra legítima.
     const { vincularCompraSiEsPaso } = await import('@/modules/campanas/cadena')
-    await vincularCompraSiEsPaso(compra.id, promo.id, cliente.id)
+    await vincularCompraSiEsPaso(compra.id, promo.id, clienteId)
 
     // Promoción gratuita: activación directa (sin pago), QR inmediato.
     if (esGratis) {
@@ -216,7 +289,7 @@ export async function enviarComprobanteCompra(
         })
     )
     if (!compra) return { error: 'Compra no encontrada.' }
-    if (compra.clienteId !== user.metadata.clienteId) return { error: 'No autorizado.' }
+    if (!(await esMiCompra(user.supabaseId, compra.clienteId))) return { error: 'No autorizado.' }
     if (!['SOLICITADA', 'PENDIENTE_PAGO', 'RECHAZADA'].includes(compra.estado)) {
       return { error: 'Esta compra no está esperando comprobante.' }
     }
@@ -278,7 +351,7 @@ export async function cancelarCompraCliente(compraId: string): Promise<CompraSta
       'promociones: lookup de compra por id para cancelar (su empresa se valida después)',
       (tx) => tx.productoCompra.findUnique({ where: { id: compraId } })
     )
-    if (!compra || compra.clienteId !== user.metadata.clienteId) {
+    if (!compra || !(await esMiCompra(user.supabaseId, compra.clienteId))) {
       return { error: 'Compra no encontrada.' }
     }
     if (!['SOLICITADA', 'PENDIENTE_PAGO', 'EN_VALIDACION', 'RECHAZADA'].includes(compra.estado)) {
@@ -323,7 +396,7 @@ export async function instruccionesDePago(compraId: string): Promise<{
         include: { promocion: { select: { titulo: true } } },
       })
   )
-  if (!compra || compra.clienteId !== user.metadata.clienteId) {
+  if (!compra || !(await esMiCompra(user.supabaseId, compra.clienteId))) {
     return { error: 'Compra no encontrada.' }
   }
   const provider = getPaymentProvider('TRANSFERENCIA')

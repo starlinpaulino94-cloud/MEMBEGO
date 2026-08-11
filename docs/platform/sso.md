@@ -231,6 +231,5 @@ UPDATE sistemas_conectados SET "accesoPorUsuario" = true WHERE slug = 'restauran
 
 ## Siguiente
 
-Fase 6: Car Wash consumiendo los contratos **sin salir del monolito** — la
-validación de que el estándar sirve, hecha con el vertical que ya funciona y
-antes de que exista un satélite real. Ver `docs/PLATFORM_ARCHITECTURE_REPORT.md` §17.
+Fase 6 —Car Wash consumiendo los contratos sin salir del monolito, y los huecos
+que ese ejercicio destapó— está en `docs/platform/validacion.md`.
