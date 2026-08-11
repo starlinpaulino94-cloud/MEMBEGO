@@ -30,6 +30,23 @@ npx tsx ../../scripts/verificar-satelite-restaurante.mts
 Levanta el servidor, firma eventos con la función del propio Core y comprueba
 firma, inbox, orden de llegada y aislamiento de la base.
 
+## Reconciliación
+
+`reconciliar()` refresca las copias más viejas contra el Core, con presupuesto
+por pasada. Es lo que arregla un webhook que **no llegó nunca** — el inbox y el
+orden por `occurredAt` no hacen nada en ese caso.
+
+```ts
+const resumen = await reconciliar(membego, almacen, { presupuesto: 50 })
+if (seEstaQuedandoAtras(resumen)) {
+  // La tarea no da la vuelta: hay copias más viejas que la tolerancia.
+  // Subir el presupuesto o correrla más a menudo.
+}
+```
+
+Pendiente: el cron que la dispare. Un barrido que nadie llama corrige lo mismo
+que no tenerlo.
+
 ## La regla
 
 > **La copia local muestra. No decide.**

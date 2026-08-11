@@ -27,6 +27,9 @@ import {
   CABECERA_TIMESTAMP,
 } from '@membego/contracts'
 import { crearServidor } from '../apps/restaurant/src/servidor'
+import { reconciliar, seEstaQuedandoAtras, type AlmacenReconciliacion } from '../apps/restaurant/src/reconciliacion'
+import { MembegoClient } from '@membego/platform-sdk'
+import { createServer } from 'node:http'
 import type { AlmacenProyeccion } from '../apps/restaurant/src/proyeccion'
 import type { AlmacenInboxPersistente } from '../apps/restaurant/src/webhook'
 
@@ -65,6 +68,22 @@ const proyeccion: AlmacenProyeccion = {
         vigenteDesde: f.vigenteDesde,
       },
     })
+  },
+}
+
+/** La reconciliación necesita dos cosas más de la base propia. */
+const reconciliacion: AlmacenReconciliacion = {
+  ...proyeccion,
+  async masViejas(limite) {
+    const filas = await db.clienteProyectado.findMany({
+      orderBy: { vigenteDesde: 'asc' },
+      take: limite,
+      select: { customerId: true, companyId: true, vigenteDesde: true },
+    })
+    return filas
+  },
+  async olvidar(customerId) {
+    await db.clienteProyectado.delete({ where: { customerId } }).catch(() => {})
   },
 }
 
@@ -121,6 +140,44 @@ async function emitir(url: string, cuerpoObjeto: Record<string, unknown>, romper
     },
     body: cuerpo,
   })
+}
+
+/**
+ * UN CORE DE MENTIRA, PERO POR HTTP DE VERDAD.
+ *
+ * Sirve `/oauth/token` y `/customers/:id` como los sirve MembeGo. Lo que se
+ * comprueba con esto no es el Core —ese ya tiene sus pruebas— sino que el
+ * SATÉLITE recorre el camino entero: pedir token, mandarlo, leer el DTO y
+ * escribir la proyección. Un cliente falso en memoria se saltaría justo eso.
+ */
+function coreDeMentira(clientes: Map<string, { nombre: string; telefono: string | null }>) {
+  const pedidos: string[] = []
+  const servidor = createServer((req, res) => {
+    const responder = (codigo: number, cuerpo: unknown) => {
+      res.writeHead(codigo, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(cuerpo))
+    }
+    const url = req.url ?? ''
+    if (url.includes('/oauth/token')) {
+      pedidos.push('token')
+      return responder(200, { access_token: 'tok', token_type: 'Bearer', expires_in: 3600 })
+    }
+    const m = url.match(/\/customers\/([^/?]+)/)
+    if (m) {
+      const id = decodeURIComponent(m[1])
+      pedidos.push(`customer:${id}`)
+      const c = clientes.get(id)
+      if (!c) {
+        return responder(404, { error: { code: 'NOT_FOUND', message: 'No existe' } })
+      }
+      // Los nombres del CONTRATO, no los que uno recuerda. Este doble decía
+      // `name`/`phone` y le daba la razón a la misma equivocación del satélite:
+      // 22 comprobaciones en verde con el campo mal. Lo paró `tsc`.
+      return responder(200, { id, nombre: c.nombre, telefono: c.telefono, email: '' })
+    }
+    responder(404, { error: { code: 'NOT_FOUND', message: 'ruta' } })
+  })
+  return { servidor, pedidos }
 }
 
 // ── Ejecución ───────────────────────────────────────────────────────────────
@@ -190,6 +247,52 @@ async function main() {
     tras?.nombre === 'Ana María',
     `quedó "${tras?.nombre}" — un dato viejo pisando a uno nuevo, sin error ni log`
   )
+
+  console.log('\nRECONCILIACIÓN — lo que arregla un webhook que no llegó nunca')
+  // Una copia de hace tres días: el evento se perdió y nada la ha tocado.
+  await db.clienteProyectado.update({
+    where: { customerId: 'cli-1' },
+    data: { nombre: 'Ana (copia vieja)', vigenteDesde: new Date(Date.now() - 72 * 3600 * 1000) },
+  })
+  const catalogoCore = new Map([['cli-1', { nombre: 'Ana Actualizada', telefono: '+18099990000' }]])
+  const { servidor: core, pedidos } = coreDeMentira(catalogoCore)
+  await new Promise<void>((r) => core.listen(0, r))
+  const puertoCore = (core.address() as { port: number }).port
+
+  const membego = new MembegoClient({
+    baseUrl: `http://127.0.0.1:${puertoCore}`,
+    clientId: 'id',
+    clientSecret: 'secreto',
+  })
+
+  const resumen = await reconciliar(membego, reconciliacion, { presupuesto: 10 })
+  comprobar('la copia vieja se refrescó contra el Core', resumen.actualizadas === 1, JSON.stringify(resumen))
+  comprobar('el SDK pidió token antes de leer', pedidos[0] === 'token', pedidos.join(', '))
+  const refrescada = await db.clienteProyectado.findUnique({ where: { customerId: 'cli-1' } })
+  comprobar(
+    'la base del satélite quedó con el dato del Core',
+    refrescada?.nombre === 'Ana Actualizada',
+    `nombre=${refrescada?.nombre}`
+  )
+  comprobar(
+    'una copia recién refrescada ya no gasta presupuesto',
+    (await reconciliar(membego, reconciliacion, { presupuesto: 10 })).revisadas === 0
+  )
+
+  // El cliente desapareció del Core.
+  catalogoCore.delete('cli-1')
+  await db.clienteProyectado.update({
+    where: { customerId: 'cli-1' },
+    data: { vigenteDesde: new Date(Date.now() - 72 * 3600 * 1000) },
+  })
+  const trasBorrado = await reconciliar(membego, reconciliacion, { presupuesto: 10 })
+  comprobar('un cliente que ya no está en el Core se olvida', trasBorrado.olvidadas === 1)
+  comprobar(
+    'y desaparece de la base del satélite',
+    (await db.clienteProyectado.count({ where: { customerId: 'cli-1' } })) === 0
+  )
+  comprobar('la tarea sabe que no se está quedando atrás', seEstaQuedandoAtras(trasBorrado) === false)
+  core.close()
 
   console.log('\nAISLAMIENTO — la base del satélite es suya')
   const tablas = await db.$queryRawUnsafe<{ tablename: string }[]>(

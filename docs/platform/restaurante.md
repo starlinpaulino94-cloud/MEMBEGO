@@ -153,11 +153,65 @@ correcto; caerse, no.
 
 ---
 
+## Reconciliación — lo que arregla un webhook que no llegó nunca
+
+El inbox evita procesar dos veces. El orden evita que un evento viejo pise a uno
+nuevo. **Ninguno de los dos hace nada si el evento no llega.**
+
+Y puede no llegar: el satélite caído más de lo que dura la política de
+reintentos, un `DEAD_LETTER`, una partición de red larga. Entonces la copia
+queda vieja **para siempre**, y nada avisa. Es el único de los tres problemas de
+una proyección que no se resuelve recibiendo mejor, sino **preguntando**.
+
+### No se puede releer todo
+
+Un restaurante con veinte mil clientes proyectados no puede pedirlos todos cada
+hora: sería un ataque a MembeGo desde dentro, y peor cuanto más creciera el
+negocio.
+
+Se leen **las más viejas**, con un presupuesto por pasada y saltando lo
+refrescado hace poco. La carga sobre el Core queda fija y conocida; lo que crece
+con el número de clientes es el **tiempo en dar la vuelta**, que es un dato que
+se puede mirar.
+
+Por eso el resumen incluye `desfaseMaximoPendiente`: la antigüedad de la copia
+más vieja que quedó sin revisar. Una tarea que corre cada hora y no llega a lo
+de hace tres días está «funcionando» —no falla, no da error— y no sirve para
+nada. `seEstaQuedandoAtras()` convierte eso en algo que se puede vigilar.
+
+### La sutileza que decide si arregla o rompe
+
+> `vigenteDesde` se sella con la hora de **envío**, no con la de llegada.
+
+La respuesta del Core refleja el estado en algún instante entre que se envió la
+petición y que se recibió. Sellándola con la hora de llegada, un cambio ocurrido
+**durante ese vuelo** queda marcado como más viejo que la copia — y su webhook,
+que trae el `occurredAt` real, se descarta por «evento viejo».
+
+Resultado: un cambio real perdido, sin error, **por haber intentado arreglar la
+copia**.
+
+Con la hora de envío, el peor caso es volver a aplicar un evento que ya estaba:
+inofensivo, porque el dato es el mismo. Se elige el fallo que no pierde nada.
+
+Y el sello **nunca retrocede**: si mientras se pedía llegó un webhook más nuevo,
+se conserva el suyo. Retroceder volvería a abrir la puerta a que un evento viejo
+lo pise.
+
+### Fallos
+
+| Qué pasa | Qué se hace |
+|---|---|
+| `404` — ya no está en el Core | Se olvida la copia. Conservarla enseñaría un cliente que no existe, y quedaría atascada al frente de la cola gastando presupuesto en cada pasada |
+| `500`, corte de red | **No se borra nada.** Un fallo del Core no significa que el cliente no exista. Sigue siendo de las más viejas, así que vuelve a salir en la próxima pasada |
+
+---
+
 ## Verificación
 
-**760 pruebas** en `tests/`, de las que 15 son de esta fase.
+**771 pruebas** en `tests/`, de las que 26 son de esta fase.
 
-Y **15 comprobaciones contra PostgreSQL 16 y HTTP reales**
+Y **22 comprobaciones contra PostgreSQL 16 y HTTP reales**
 (`scripts/verificar-satelite-restaurante.mts`), que es lo que separa esto de un
 ejercicio:
 
@@ -176,6 +230,14 @@ INBOX — el reintento es normal, no un fallo
   ✓ no dejó una segunda fila en el inbox
 ORDEN — lo que el cliente en-proceso hacía invisible
   ✓ un reintento tardío de un evento viejo NO pisa al nuevo
+RECONCILIACIÓN — lo que arregla un webhook que no llegó nunca
+  ✓ la copia vieja se refrescó contra el Core
+  ✓ el SDK pidió token antes de leer
+  ✓ la base del satélite quedó con el dato del Core
+  ✓ una copia recién refrescada ya no gasta presupuesto
+  ✓ un cliente que ya no está en el Core se olvida
+  ✓ y desaparece de la base del satélite
+  ✓ la tarea sabe que no se está quedando atrás
 AISLAMIENTO — la base del satélite es suya
   ✓ solo existen las tablas del satélite
   ✓ no existe la tabla `clientes` de MembeGo
@@ -197,6 +259,21 @@ Es exactamente para lo que existe `packages/contracts`. Escritas a mano en el
 satélite, esas dos suposiciones habrían compilado, se habrían desplegado, y
 habrían fallado contra el Core de verdad.
 
+**Y volvió a pasar con la reconciliación, de una forma peor.** Se escribió
+`cliente.name` y `cliente.phone`; el DTO dice `nombre` y `telefono`.
+
+Lo grave no es el error: es que el **Core de mentira del script de verificación
+lo escribí yo, con la misma equivocación**. Devolvía `name`/`phone`, así que las
+22 comprobaciones pasaron en verde con el campo mal. Contra el Core real, cada
+reconciliación habría escrito `undefined` en el nombre de cada cliente.
+
+Lo paró `tsc`, porque el doble no está tipado contra mi memoria sino contra el
+contrato.
+
+> Un doble escrito por quien se equivoca le da la razón. Es el límite de
+> verificar con dobles, y la razón de que el contrato compartido no sea
+> opcional.
+
 ---
 
 ## Lo que falta
@@ -206,9 +283,10 @@ habrían fallado contra el Core de verdad.
 | Base propia, proyección, inbox, firma, SSO | ✅ |
 | Verificado contra Postgres y HTTP reales | ✅ |
 | **Interfaz del restaurante** | 🔴 No hay pantallas: el dominio y la integración están, la operación se maneja por HTTP |
-| **Reconciliación periódica** | 🔴 Si un webhook se pierde del todo, la copia queda vieja para siempre. Hace falta un barrido que compare contra el Core |
+| **Reconciliación** | ✅ Barrido priorizado, con presupuesto y señal de si se queda atrás |
+| **Programarla** | 🔴 La función existe y está probada; falta el cron que la dispare cada hora |
 | **Despliegue separado** | 🔴 Vive en el monorepo. Sacarlo a su repositorio es el siguiente paso natural |
 
-> La reconciliación es la más importante de las tres. El desfase hoy se puede
-> **medir** (`desfase()`), que es lo que permite enseñarlo en pantalla; lo que
-> todavía no hay es nada que lo **corrija**.
+> Lo que queda es operativo, no de arquitectura: `reconciliar()` está escrita y
+> verificada contra base real, pero nadie la llama todavía. Un barrido que nadie
+> dispara corrige exactamente lo mismo que no tenerlo.
