@@ -117,6 +117,7 @@ export async function getClienteAllMemberships(
 }
 
 import { unstable_cache } from 'next/cache'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 /**
  * Empresas donde el usuario tiene cuenta de cliente — para el switcher del
@@ -447,14 +448,35 @@ export interface BeneficioDisponible {
  * MOB · El beneficio ACTIVO más reciente del cliente con usos disponibles:
  * protagonista del Home ("🎁 disponible — Usar ahora"). null = nada que usar.
  */
+/**
+ * EL BENEFICIO LISTO PARA USAR DEL INICIO — de la PERSONA, no de la empresa
+ * que tenga abierta.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * FILTRABA POR LA FICHA ACTIVA
+ *
+ * Recibía `clienteId` —la ficha de la empresa activa— y buscaba solo ahí. Una
+ * recompensa reclamada en otro negocio se adquiría bien, se guardaba bien, y
+ * el inicio seguía diciendo que no había nada listo para usar.
+ *
+ * Es el MISMO fallo que tenía «Mis beneficios» y que se arregló al habilitar
+ * reclamar en cualquier empresa. Aquí seguía vivo, y el inicio es la primera
+ * pantalla que alguien mira: el sitio donde más se nota que falta algo.
+ *
+ * Ahora mira todas las fichas de la persona (`misClienteIds`). Sigue acotado
+ * —solo lo suyo—; lo que cambia es que «lo suyo» ya no depende de qué negocio
+ * tuviera seleccionado.
+ */
 export async function getBeneficioDisponible(
-  clienteId?: string | null
+  supabaseId?: string | null
 ): Promise<BeneficioDisponible | null> {
-  if (!clienteId) return null
+  if (!supabaseId) return null
   try {
+    const clienteIds = await misClienteIds(supabaseId)
+    if (clienteIds.length === 0) return null
     const compra = await sinEmpresa('cliente: beneficio disponible', (tx) =>
       tx.productoCompra.findFirst({
-        where: { clienteId, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
+        where: { clienteId: { in: clienteIds }, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,

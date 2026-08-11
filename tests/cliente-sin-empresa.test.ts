@@ -123,3 +123,48 @@ test('el estado vacío ofrece a dónde ir', () => {
   assert.match(src, /\/cliente\/promociones/, 'Debe llevar a ver ofertas.')
   assert.match(src, /\/cliente\/cerca/, 'Debe llevar a los negocios cercanos.')
 })
+
+/**
+ * EL INICIO TIENE QUE LLEVAR A ALGÚN SITIO DONDE SE PUEDA HACER ALGO.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL CALLEJÓN QUE ABRIÓ LA FASE 1
+ *
+ * El botón de «Tu wallet está lista» apuntaba a `/cliente/planes`, que muestra
+ * el catálogo de LA EMPRESA ACTIVA. Mientras todo el mundo tenía empresa por la
+ * afiliación automática, funcionaba.
+ *
+ * Al quitar esa afiliación —y añadirle a Planes su guardia—, un cliente recién
+ * registrado pulsaba «Ver planes» y aterrizaba en otro estado vacío. Dos
+ * pantallas para llegar a ninguna parte, y lo introdujo el arreglo anterior.
+ *
+ * Las OFERTAS sí son globales, y reclamar una da de alta a la persona en esa
+ * empresa. Ese es el único primer paso que de verdad avanza.
+ */
+test('el inicio no manda a un catálogo vacío a quien no tiene empresa', () => {
+  const src = leer('src/app/(cliente)/cliente/inicio/page.tsx')
+  assert.match(
+    src,
+    /const sinEmpresa = !companyId/,
+    'El inicio tiene que saber si la persona todavía no es cliente de nadie.'
+  )
+  assert.match(
+    src,
+    /sinEmpresa\s*\n?\s*\?\s*'\/cliente\/promociones'/,
+    'Sin empresa, el primer paso son las OFERTAS: son globales y reclamar una ' +
+      'crea su primera ficha. Mandarlo a `/cliente/planes` —el catálogo de la ' +
+      'empresa activa— es un callejón sin salida de dos pantallas.'
+  )
+})
+
+test('el beneficio listo para usar es de la persona, no de la ficha activa', () => {
+  const q = leer('src/modules/cliente/queries.ts')
+  assert.match(
+    q,
+    /export async function getBeneficioDisponible\(\s*supabaseId/,
+    'Filtrando por la ficha activa, una recompensa reclamada en otro negocio no ' +
+      'aparece en el inicio: se adquirió bien, se guardó bien, y la primera ' +
+      'pantalla que mira el cliente dice que no tiene nada.'
+  )
+  assert.match(q, /misClienteIds\(supabaseId\)/, 'Debe mirar todas sus fichas.')
+})

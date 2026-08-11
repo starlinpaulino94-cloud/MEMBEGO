@@ -76,7 +76,9 @@ export default async function InicioCliente() {
     categorias,
     ubicacion,
   ] = await Promise.all([
-    getBeneficioDisponible(clienteId),
+    // La PERSONA, no la ficha activa: un beneficio reclamado en otro negocio
+    // también está listo para usar, y el inicio es donde más se nota que falte.
+    getBeneficioDisponible(user.supabaseId),
     getClienteAllMemberships(user.supabaseId, clienteId).catch((error) => {
       console.error(
         '[mis-membresias] Error loading memberships:',
@@ -207,6 +209,30 @@ export default async function InicioCliente() {
   // se recorta a las ocho primeras para que la fila quepa sin desbordarse.
   const chips = categorias.slice(0, 8).map((c) => ({ slug: c.slug, nombre: c.name }))
 
+  /**
+   * ¿ESTA PERSONA TODAVÍA NO ES CLIENTE DE NINGÚN NEGOCIO?
+   *
+   * Desde que un cliente puede existir sin empresa (Fase 1), este es el estado
+   * de todo el que acaba de registrarse — y hay que llevarlo a algún sitio DONDE
+   * PUEDA HACER ALGO.
+   *
+   * El botón de «Tu wallet está lista» apuntaba a `/cliente/planes`, que muestra
+   * el catálogo de LA EMPRESA ACTIVA. Sin empresa, esa pantalla responde con su
+   * propio estado vacío: un callejón sin salida de dos pasos, y lo introdujo la
+   * Fase 1 al añadirle la guardia.
+   *
+   * Las ofertas sí son globales, y reclamar una da de alta a la persona en esa
+   * empresa (`asegurarClienteEnEmpresa`). Así que ese es el primer paso que de
+   * verdad avanza: de ahí sale su primera ficha, su primer beneficio y su
+   * primera membresía posible.
+   */
+  const sinEmpresa = !companyId
+  const destinoPrimerPaso = sinEmpresa
+    ? '/cliente/promociones'
+    : mostrarDescubrimiento
+      ? '/cliente/explorar'
+      : '/cliente/planes'
+
   const zona = ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
   const nombre = momentos.nombre?.trim().split(' ')[0] ?? null
 
@@ -226,14 +252,16 @@ export default async function InicioCliente() {
       icon={WalletCards}
       title="Tu wallet está lista"
       description={
-        mostrarDescubrimiento
-          ? 'Activa tu primera membresía y tendrás tu QR aquí, listo para usar en el mostrador.'
-          : 'Activa un plan y tendrás tu QR aquí, listo para usar en el mostrador.'
+        sinEmpresa
+          ? 'Reclama tu primera recompensa o contrata un plan, y tendrás tu QR aquí para usarlo en el mostrador.'
+          : mostrarDescubrimiento
+            ? 'Activa tu primera membresía y tendrás tu QR aquí, listo para usar en el mostrador.'
+            : 'Activa un plan y tendrás tu QR aquí, listo para usar en el mostrador.'
       }
       action={
         <Button asChild size="lg">
-          <Link href={mostrarDescubrimiento ? '/cliente/explorar' : '/cliente/planes'}>
-            {mostrarDescubrimiento ? 'Explorar empresas' : 'Ver planes'}
+          <Link href={destinoPrimerPaso}>
+            {sinEmpresa ? 'Ver ofertas' : mostrarDescubrimiento ? 'Explorar empresas' : 'Ver planes'}
           </Link>
         </Button>
       }
