@@ -322,3 +322,219 @@ test('cuando va sobrada, no hay desfase pendiente', async () => {
   assert.equal(r.desfaseMaximoPendiente, null)
   assert.equal(seEstaQuedandoAtras(r), false)
 })
+
+// ── La tarea programada ─────────────────────────────────────────────────────
+
+import { tareaReconciliar, type Cerrojo } from '../apps/restaurant/src/tarea-reconciliar'
+
+function cerrojoFalso(libre = true) {
+  let tomado = !libre
+  const historia: string[] = []
+  const cerrojo: Cerrojo = {
+    async intentar() {
+      historia.push('intentar')
+      if (tomado) return false
+      tomado = true
+      return true
+    },
+    async soltar() {
+      historia.push('soltar')
+      tomado = false
+    },
+  }
+  return { cerrojo, historia, estaTomado: () => tomado }
+}
+
+test('dos pasadas no se solapan', async () => {
+  const { almacen } = almacenFalso([
+    { customerId: 'cli-1', vigenteDesde: new Date(AHORA.getTime() - 72 * HORA) },
+  ])
+  const { membego, pedidos } = coreCon({})
+  const { cerrojo } = cerrojoFalso(false) // otra pasada ya lo tiene
+
+  const r = await tareaReconciliar(membego as never, almacen, cerrojo, {
+    ahora,
+    registrar: () => {},
+  })
+
+  assert.deepEqual(r, { corrio: false, motivo: 'ya-en-curso' })
+  assert.deepEqual(
+    pedidos,
+    [],
+    'Dos pasadas solapadas piden LAS MISMAS filas y le meten al Core el doble de ' +
+      'carga que el presupuesto promete. Y no falla nada: las dos escriben el ' +
+      'mismo dato.'
+  )
+})
+
+test('el cerrojo se suelta aunque la pasada falle', async () => {
+  const { almacen } = almacenFalso([
+    { customerId: 'cli-1', vigenteDesde: new Date(AHORA.getTime() - 72 * HORA) },
+  ])
+  const { cerrojo, estaTomado } = cerrojoFalso()
+  const membego = {
+    async customer() {
+      throw new Error('se cayó todo')
+    },
+  }
+
+  // `reconciliar` traga los fallos por cliente, así que se rompe el almacén
+  // para provocar un fallo de la pasada entera.
+  const roto = {
+    ...almacen,
+    async masViejas(): Promise<never> {
+      throw new Error('la base no responde')
+    },
+  }
+
+  await assert.rejects(() =>
+    tareaReconciliar(membego as never, roto, cerrojo, { ahora, registrar: () => {} })
+  )
+  assert.equal(
+    estaTomado(),
+    false,
+    'Un cerrojo que no se suelta porque la pasada falló deja la tarea muerta ' +
+      'para siempre, y el síntoma —«otra pasada en curso»— parece que está ' +
+      'trabajando.'
+  )
+})
+
+test('quedarse atrás se registra como ERROR, no como info', async () => {
+  const muchas = Array.from({ length: 100 }, (_, i) => ({
+    customerId: `cli-${i}`,
+    vigenteDesde: new Date(AHORA.getTime() - (48 + i) * HORA),
+  }))
+  const { almacen } = almacenFalso(muchas)
+  const { membego } = coreCon({})
+  const { cerrojo } = cerrojoFalso()
+  const registros: [string, string][] = []
+
+  const r = await tareaReconciliar(membego as never, almacen, cerrojo, {
+    presupuesto: 5,
+    ahora,
+    registrar: (nivel, msg) => registros.push([nivel, msg]),
+  })
+
+  assert.equal(r.corrio && r.quedandoAtras, true)
+  assert.ok(
+    registros.some(([nivel]) => nivel === 'error'),
+    'Es el fallo más silencioso de los tres: la tarea termina, no da error y ' +
+      'devuelve 200 mientras no corrige nada. Si no se registra como error, ' +
+      'nadie se entera nunca.'
+  )
+})
+
+test('cuando va sobrada no grita', async () => {
+  const { almacen } = almacenFalso([
+    { customerId: 'cli-1', vigenteDesde: new Date(AHORA.getTime() - 72 * HORA) },
+  ])
+  const { membego } = coreCon({})
+  const { cerrojo } = cerrojoFalso()
+  const registros: [string, string][] = []
+
+  await tareaReconciliar(membego as never, almacen, cerrojo, {
+    presupuesto: 10,
+    ahora,
+    registrar: (nivel, msg) => registros.push([nivel, msg]),
+  })
+
+  assert.ok(
+    !registros.some(([nivel]) => nivel === 'error'),
+    'Gritar cuando todo va bien es cómo se aprende a ignorar las alertas.'
+  )
+})
+
+test('el resumen distingue «los webhooks se pierden» de «esto es un seguro»', async () => {
+  const { almacen } = almacenFalso([
+    { customerId: 'cli-1', vigenteDesde: new Date(AHORA.getTime() - 72 * HORA) },
+  ])
+  const { membego } = coreCon({})
+  const { cerrojo } = cerrojoFalso()
+  const registros: string[] = []
+
+  await tareaReconciliar(membego as never, almacen, cerrojo, {
+    ahora,
+    registrar: (_n, msg) => registros.push(msg),
+  })
+
+  const linea = registros.find((m) => m.includes('revisadas='))
+  assert.ok(linea, 'La pasada tiene que decir qué hizo.')
+  for (const campo of ['revisadas=', 'actualizadas=', 'sinCambios=', 'fallidas=']) {
+    assert.ok(
+      linea.includes(campo),
+      `Falta \`${campo}\` en el registro. «revisadas=50 actualizadas=50» significa ` +
+        'que los webhooks se pierden todos; «revisadas=50 sinCambios=50» que van ' +
+        'bien. Son opuestos y sin el desglose se ven iguales.'
+    )
+  }
+})
+
+// ── El cerrojo, como arrendamiento ──────────────────────────────────────────
+
+import { cerrojoArrendado, type TablaCerrojos } from '../apps/restaurant/src/cerrojo'
+
+function tablaFalsa() {
+  const filas = new Map<string, { tomadoPor: string; expiraEn: Date }>()
+  let reloj = AHORA.getTime()
+  const tabla: TablaCerrojos = {
+    async tomar(nombre, quien, expiraEn) {
+      const actual = filas.get(nombre)
+      // La condición del UPDATE real: solo si está libre o VENCIDO.
+      if (actual && actual.expiraEn.getTime() > reloj) return false
+      filas.set(nombre, { tomadoPor: quien, expiraEn })
+      return true
+    },
+    async soltar(nombre, quien) {
+      const actual = filas.get(nombre)
+      if (actual?.tomadoPor === quien) filas.set(nombre, { tomadoPor: quien, expiraEn: new Date(reloj) })
+    },
+  }
+  return { tabla, avanzar: (ms: number) => (reloj += ms), ahora: () => new Date(reloj) }
+}
+
+test('dos instancias no se llevan el cerrojo a la vez', async () => {
+  const { tabla, ahora } = tablaFalsa()
+  const a = cerrojoArrendado(tabla, { quien: 'A', ahora })
+  const b = cerrojoArrendado(tabla, { quien: 'B', ahora })
+
+  assert.equal(await a.intentar(), true)
+  assert.equal(
+    await b.intentar(),
+    false,
+    'Un satélite puede correr en varias instancias. Un cerrojo en memoria las ' +
+      'deja solaparse igual mientras aparenta que no.'
+  )
+})
+
+test('el arrendamiento vence solo si el proceso muere', async () => {
+  const { tabla, avanzar, ahora } = tablaFalsa()
+  const muerto = cerrojoArrendado(tabla, { quien: 'muerto', duracionMs: 5 * 60_000, ahora })
+  const vivo = cerrojoArrendado(tabla, { quien: 'vivo', ahora })
+
+  await muerto.intentar() // y nunca suelta: el proceso se cayó
+  assert.equal(await vivo.intentar(), false, 'Mientras el arrendamiento vive, nadie más entra.')
+
+  avanzar(6 * 60_000)
+  assert.equal(
+    await vivo.intentar(),
+    true,
+    'Sin vencimiento, un proceso muerto a mitad de pasada deja la tarea parada ' +
+      'hasta que alguien lo note a mano.'
+  )
+})
+
+test('solo el dueño suelta el cerrojo', async () => {
+  const { tabla, ahora } = tablaFalsa()
+  const a = cerrojoArrendado(tabla, { quien: 'A', ahora })
+  const b = cerrojoArrendado(tabla, { quien: 'B', ahora })
+
+  await a.intentar()
+  await b.soltar() // B no lo tiene
+
+  assert.equal(
+    await b.intentar(),
+    false,
+    'Si cualquiera pudiera soltarlo, una pasada lenta soltaría el cerrojo que ya ' +
+      'se llevó otra al vencer, y correrían las dos.'
+  )
+})

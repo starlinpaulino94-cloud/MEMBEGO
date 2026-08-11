@@ -28,6 +28,8 @@ import {
 } from '@membego/contracts'
 import { crearServidor } from '../apps/restaurant/src/servidor'
 import { reconciliar, seEstaQuedandoAtras, type AlmacenReconciliacion } from '../apps/restaurant/src/reconciliacion'
+import { tareaReconciliar } from '../apps/restaurant/src/tarea-reconciliar'
+import { cerrojoArrendado, type TablaCerrojos } from '../apps/restaurant/src/cerrojo'
 import { MembegoClient } from '@membego/platform-sdk'
 import { createServer } from 'node:http'
 import type { AlmacenProyeccion } from '../apps/restaurant/src/proyeccion'
@@ -94,6 +96,43 @@ const inbox: AlmacenInboxPersistente = {
   async marcar(e) {
     await db.eventoRecibido.create({ data: e }).catch(() => {})
   },
+}
+
+/**
+ * EL CERROJO, CONTRA LA BASE. Ver `apps/restaurant/src/cerrojo.ts`.
+ *
+ * La primera versión de esto usaba `pg_try_advisory_lock` y estaba MAL: los
+ * advisory locks son de la SESIÓN y Prisma habla por un pool, así que tomar y
+ * soltar pueden caer en conexiones distintas. Se cambió por un arrendamiento en
+ * una fila, que sobrevive al pool y vence solo.
+ *
+ * `tomar` es UNA sentencia condicional. Leer y luego escribir dejaría entrar a
+ * dos procesos por la ventana de en medio — justo lo que el cerrojo cierra.
+ */
+function tablaCerrojos(cliente: PrismaClient): TablaCerrojos {
+  return {
+    async tomar(nombre, quien, expiraEn) {
+      const filas = await cliente.$executeRawUnsafe(
+        `insert into cerrojos_tarea ("nombre", "tomadoPor", "expiraEn")
+         values ($1, $2, $3)
+         on conflict ("nombre") do update
+           set "tomadoPor" = excluded."tomadoPor", "expiraEn" = excluded."expiraEn"
+           where cerrojos_tarea."expiraEn" < now()`,
+        nombre,
+        quien,
+        expiraEn
+      )
+      return filas > 0
+    },
+    async soltar(nombre, quien) {
+      await cliente.$executeRawUnsafe(
+        `update cerrojos_tarea set "expiraEn" = now()
+         where "nombre" = $1 and "tomadoPor" = $2`,
+        nombre,
+        quien
+      )
+    },
+  }
 }
 
 // ── El Core firma con SU código ─────────────────────────────────────────────
@@ -292,6 +331,96 @@ async function main() {
     (await db.clienteProyectado.count({ where: { customerId: 'cli-1' } })) === 0
   )
   comprobar('la tarea sabe que no se está quedando atrás', seEstaQuedandoAtras(trasBorrado) === false)
+
+  console.log('\nTAREA PROGRAMADA — cerrojo real entre pasadas')
+  // Dos conexiones distintas: es el caso que importa, dos INSTANCIAS del
+  // satélite disparadas por el mismo cron. Un cerrojo en memoria las dejaría
+  // pasar a las dos.
+  const otraConexion = new PrismaClient()
+  const cerrojoA = cerrojoArrendado(tablaCerrojos(db), { quien: 'instancia-A' })
+  const cerrojoB = cerrojoArrendado(tablaCerrojos(otraConexion), { quien: 'instancia-B' })
+
+  await db.clienteProyectado.create({
+    data: {
+      customerId: 'cli-cron',
+      companyId: 'emp-1',
+      nombre: 'viejo',
+      vigenteDesde: new Date(Date.now() - 72 * 3600 * 1000),
+    },
+  })
+  catalogoCore.set('cli-cron', { nombre: 'Refrescado por el cron', telefono: null })
+
+  comprobar('la primera pasada toma el cerrojo', await cerrojoA.intentar())
+  const bloqueada = await tareaReconciliar(membego, reconciliacion, cerrojoB, {
+    registrar: () => {},
+  })
+  comprobar(
+    'la segunda instancia NO entra mientras la primera trabaja',
+    bloqueada.corrio === false,
+    JSON.stringify(bloqueada)
+  )
+  await cerrojoA.soltar()
+
+  const suelta = await tareaReconciliar(membego, reconciliacion, cerrojoB, {
+    presupuesto: 10,
+    registrar: () => {},
+  })
+  comprobar('soltado el cerrojo, la siguiente pasada sí corre', suelta.corrio === true)
+  const porCron = await db.clienteProyectado.findUnique({ where: { customerId: 'cli-cron' } })
+  comprobar(
+    'y la copia quedó refrescada',
+    porCron?.nombre === 'Refrescado por el cron',
+    `nombre=${porCron?.nombre}`
+  )
+  // Sin esto, la pasada «corre» con todas las lecturas fallando y las dos
+  // comprobaciones de arriba pasan igual. Es como se coló que el Core de
+  // mentira estaba cerrado: `corrio: true` no significa que hiciera nada.
+  comprobar(
+    'y ninguna lectura falló',
+    suelta.corrio === true && suelta.resumen.fallidas === 0,
+    suelta.corrio ? JSON.stringify(suelta.resumen) : 'no corrió'
+  )
+  comprobar(
+    'el cerrojo quedó libre al terminar',
+    await cerrojoB.intentar().then(async (ok) => {
+      if (ok) await cerrojoB.soltar()
+      return ok
+    })
+  )
+  await otraConexion.$disconnect()
+
+  console.log('\nDISPARADOR HTTP — solo con el secreto')
+  const conSecreto = crearServidor({
+    clavePublicaPem,
+    inbox,
+    proyeccion,
+    reconciliacion: {
+      membego,
+      almacen: reconciliacion,
+      cerrojo: cerrojoArrendado(tablaCerrojos(db), { quien: 'servidor' }),
+      secreto: 'secreto-del-cron',
+      opciones: { registrar: () => {} },
+    },
+  })
+  await new Promise<void>((r) => conSecreto.listen(0, r))
+  const puertoCron = (conSecreto.address() as { port: number }).port
+  const urlCron = `http://127.0.0.1:${puertoCron}/tareas/reconciliar`
+
+  const sinAuth = await fetch(urlCron, { method: 'POST' })
+  comprobar('sin secreto responde 401', sinAuth.status === 401, `status ${sinAuth.status}`)
+
+  const malAuth = await fetch(urlCron, {
+    method: 'POST',
+    headers: { authorization: 'Bearer otro' },
+  })
+  comprobar('con el secreto equivocado responde 401', malAuth.status === 401)
+
+  const buena = await fetch(urlCron, {
+    method: 'POST',
+    headers: { authorization: 'Bearer secreto-del-cron' },
+  })
+  comprobar('con el secreto correcto dispara la pasada', buena.status === 200, `status ${buena.status}`)
+  conSecreto.close()
   core.close()
 
   console.log('\nAISLAMIENTO — la base del satélite es suya')
@@ -301,7 +430,7 @@ async function main() {
   const nombres = tablas.map((t) => t.tablename)
   comprobar(
     'solo existen las tablas del satélite',
-    nombres.join(',') === 'clientes_proyectados,comandas,eventos_recibidos,mesas',
+    nombres.join(',') === 'cerrojos_tarea,clientes_proyectados,comandas,eventos_recibidos,mesas',
     nombres.join(', ')
   )
   for (const ajena of ['clientes', 'memberships', 'promociones', 'companies']) {

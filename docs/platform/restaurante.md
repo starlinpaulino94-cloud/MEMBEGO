@@ -205,13 +205,50 @@ lo pise.
 | `404` — ya no está en el Core | Se olvida la copia. Conservarla enseñaría un cliente que no existe, y quedaría atascada al frente de la cola gastando presupuesto en cada pasada |
 | `500`, corte de red | **No se borra nada.** Un fallo del Core no significa que el cliente no exista. Sigue siendo de las más viejas, así que vuelve a salir en la próxima pasada |
 
+### El disparador
+
+`reconciliar()` está envuelta en `tareaReconciliar()`, que añade las tres cosas
+que una pasada suelta no necesita y una programada sí:
+
+1. **No solaparse.** Si una pasada tarda más que el intervalo, la siguiente
+   arranca encima: las dos piden las mismas filas y le meten al Core **el doble
+   de carga** que el presupuesto promete. Y no falla nada — las dos escriben el
+   mismo dato.
+2. **Decir qué hizo.** `revisadas=50 actualizadas=50` significa que los webhooks
+   se están perdiendo todos; `revisadas=50 sinCambios=50` que van bien y esto es
+   un seguro. Son opuestos y sin el desglose se ven iguales.
+3. **Gritar cuando no da la vuelta.** Es el fallo más silencioso: la tarea
+   termina, no da error y devuelve 200 mientras no corrige nada. Por eso es el
+   único que se registra como `error`.
+
+Se dispara con `POST /tareas/reconciliar` y `Authorization: Bearer <secreto>` —
+la misma convención que los crons de MembeGo. Es un endpoint y no un temporizador
+interno a propósito: así lo llama cualquier programador (cron del sistema,
+CronJob de Kubernetes, el scheduler de la nube) sin que el satélite tenga que
+saber cuál, y no se duplica solo con cada instancia que se levante.
+
+### El cerrojo NO es un advisory lock
+
+Fue lo primero que se escribió, y está mal aquí.
+
+`pg_try_advisory_lock` es de la **sesión** de PostgreSQL, y Prisma habla por un
+**pool**: `intentar()` puede tomar el cerrojo en una conexión y `soltar()`
+ejecutarse en otra. El unlock no hace nada, la conexión vuelve al pool con el
+cerrojo puesto, y la tarea queda muerta para siempre — anunciando «otra pasada
+en curso», que parece que está trabajando.
+
+Es un **arrendamiento en una fila**: sobrevive al pool, lo ven todas las
+instancias, y si el proceso muere a mitad de pasada vence solo. Tomarlo es una
+sola sentencia condicional —leer y luego escribir deja entrar a dos por la
+ventana de en medio— y solo su dueño puede soltarlo.
+
 ---
 
 ## Verificación
 
-**771 pruebas** en `tests/`, de las que 26 son de esta fase.
+**779 pruebas** en `tests/`, de las que 34 son de esta fase.
 
-Y **22 comprobaciones contra PostgreSQL 16 y HTTP reales**
+Y **31 comprobaciones contra PostgreSQL 16 y HTTP reales**
 (`scripts/verificar-satelite-restaurante.mts`), que es lo que separa esto de un
 ejercicio:
 
@@ -238,6 +275,17 @@ RECONCILIACIÓN — lo que arregla un webhook que no llegó nunca
   ✓ un cliente que ya no está en el Core se olvida
   ✓ y desaparece de la base del satélite
   ✓ la tarea sabe que no se está quedando atrás
+TAREA PROGRAMADA — cerrojo real entre pasadas
+  ✓ la primera pasada toma el cerrojo
+  ✓ la segunda instancia NO entra mientras la primera trabaja
+  ✓ soltado el cerrojo, la siguiente pasada sí corre
+  ✓ y la copia quedó refrescada
+  ✓ y ninguna lectura falló
+  ✓ el cerrojo quedó libre al terminar
+DISPARADOR HTTP — solo con el secreto
+  ✓ sin secreto responde 401
+  ✓ con el secreto equivocado responde 401
+  ✓ con el secreto correcto dispara la pasada
 AISLAMIENTO — la base del satélite es suya
   ✓ solo existen las tablas del satélite
   ✓ no existe la tabla `clientes` de MembeGo
@@ -274,6 +322,20 @@ contrato.
 > verificar con dobles, y la razón de que el contrato compartido no sea
 > opcional.
 
+### Y lo que encontró la base real
+
+El cerrojo de la tarea programada se escribió con `pg_try_advisory_lock`. En las
+pruebas con dobles pasaba; contra PostgreSQL con el pool de Prisma se vio que
+tomar y soltar pueden caer en conexiones distintas.
+
+Se cambió por un arrendamiento en una fila. **Ningún análisis del código lo
+habría enseñado**: la llamada es correcta, la que no encaja es la combinación
+con el pool.
+
+Además, una comprobación pasó en verde con el Core de mentira ya cerrado —
+`corrio: true` no significa que hiciera nada—. Se añadió la que faltaba:
+`fallidas === 0`.
+
 ---
 
 ## Lo que falta
@@ -284,9 +346,9 @@ contrato.
 | Verificado contra Postgres y HTTP reales | ✅ |
 | **Interfaz del restaurante** | 🔴 No hay pantallas: el dominio y la integración están, la operación se maneja por HTTP |
 | **Reconciliación** | ✅ Barrido priorizado, con presupuesto y señal de si se queda atrás |
-| **Programarla** | 🔴 La función existe y está probada; falta el cron que la dispare cada hora |
+| **Programarla** | ✅ `POST /tareas/reconciliar` con secreto, cerrojo por arrendamiento y aviso si se queda atrás |
 | **Despliegue separado** | 🔴 Vive en el monorepo. Sacarlo a su repositorio es el siguiente paso natural |
 
-> Lo que queda es operativo, no de arquitectura: `reconciliar()` está escrita y
-> verificada contra base real, pero nadie la llama todavía. Un barrido que nadie
-> dispara corrige exactamente lo mismo que no tenerlo.
+> Lo que queda es de producto y de despliegue, no de arquitectura. El circuito
+> completo —recibir, ordenar, deduplicar, reconciliar y programarlo— está cerrado
+> y verificado contra base y HTTP reales.

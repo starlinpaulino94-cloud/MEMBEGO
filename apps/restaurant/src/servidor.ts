@@ -1,6 +1,9 @@
 import { createServer } from 'node:http'
 import { recibirWebhook, type AlmacenInboxPersistente } from './webhook'
 import type { AlmacenProyeccion } from './proyeccion'
+import { tareaReconciliar, type Cerrojo, type OpcionesTarea } from './tarea-reconciliar'
+import type { AlmacenReconciliacion } from './reconciliacion'
+import type { MembegoClient } from '@membego/platform-sdk'
 
 /**
  * EL SERVIDOR DEL SATÉLITE.
@@ -26,6 +29,19 @@ export interface DepsServidor {
   clavePublicaPem: string
   inbox: AlmacenInboxPersistente
   proyeccion: AlmacenProyeccion
+  /**
+   * La reconciliación programada. Opcional para poder levantar el servidor solo
+   * como receptor de webhooks —en pruebas, o en una instancia que no barre—
+   * sin tener que inventarle un cliente del Core.
+   */
+  reconciliacion?: {
+    membego: MembegoClient
+    almacen: AlmacenReconciliacion
+    cerrojo: Cerrojo
+    /** El mismo `Bearer <secreto>` que usan los crons de MembeGo. */
+    secreto: string
+    opciones?: OpcionesTarea
+  }
 }
 
 function leerCuerpo(req: import('node:http').IncomingMessage): Promise<string> {
@@ -46,6 +62,42 @@ export function crearServidor(deps: DepsServidor) {
 
     if (req.method === 'GET' && req.url === '/salud') {
       return responder(200, { ok: true, sistema: 'restaurant' })
+    }
+
+    /**
+     * DISPARADOR DE LA RECONCILIACIÓN.
+     *
+     * Es un endpoint y no un temporizador dentro del proceso a propósito: así
+     * lo dispara cualquier programador —cron del sistema, un CronJob de
+     * Kubernetes, el scheduler de la nube— sin que el satélite tenga que
+     * saber cuál. Un temporizador interno además se duplica solo con cada
+     * instancia que se levante.
+     *
+     * El secreto va en `Authorization: Bearer`, igual que los crons de
+     * MembeGo. Sin él, cualquiera puede hacer que el satélite martillee al
+     * Core llamando a esta URL en bucle.
+     */
+    if (req.method === 'POST' && req.url === '/tareas/reconciliar') {
+      const cfg = deps.reconciliacion
+      if (!cfg) return responder(404, { error: 'Esta instancia no reconcilia.' })
+
+      // Comparación de longitud constante no hace falta aquí —no hay oráculo
+      // de tiempo útil sobre un secreto largo por HTTP— pero sí que el secreto
+      // esté configurado: sin él, `Bearer undefined` abriría la puerta.
+      if (!cfg.secreto || req.headers.authorization !== `Bearer ${cfg.secreto}`) {
+        return responder(401, { error: 'No autorizado.' })
+      }
+
+      try {
+        const r = await tareaReconciliar(cfg.membego, cfg.almacen, cfg.cerrojo, cfg.opciones)
+        // 200 también cuando se salta por solape: para el programador no es un
+        // fallo, y devolver error haría que reintentara justo lo que se acaba
+        // de decidir no hacer.
+        return responder(200, r)
+      } catch (e) {
+        console.error('[restaurant] reconciliación:', e)
+        return responder(500, { error: 'La reconciliación falló.' })
+      }
     }
 
     if (req.method === 'POST' && req.url === '/webhooks/membego') {

@@ -129,3 +129,35 @@ model EventoRecibido {
   @@index([eventType])
   @@map("eventos_recibidos")
 }
+
+/// CERROJO DE LAS TAREAS PROGRAMADAS — un arrendamiento, no un lock de sesión.
+///
+/// ─────────────────────────────────────────────────────────────────────────────
+/// POR QUÉ NO `pg_try_advisory_lock`
+///
+/// Es lo primero que uno escribe, y aquí está mal. Los advisory locks son de la
+/// SESIÓN de PostgreSQL, y Prisma habla por un POOL: `intentar()` puede tomar el
+/// cerrojo en una conexión y `soltar()` ejecutarse en otra. Entonces el unlock no
+/// hace nada, la conexión que lo tiene vuelve al pool con el cerrojo puesto, y la
+/// tarea queda muerta para siempre — con el síntoma «otra pasada en curso», que
+/// parece que está trabajando.
+///
+/// Se descubrió al verificar contra Postgres real, no leyendo el código.
+///
+/// ─────────────────────────────────────────────────────────────────────────────
+/// EL ARRENDAMIENTO VENCE SOLO
+///
+/// Un cerrojo sin vencimiento y un proceso que se muere a mitad de pasada dejan
+/// la tarea parada hasta que alguien lo note a mano. Con `expiraEn`, el siguiente
+/// que pase se lo lleva. La duración tiene que ser mayor que lo que tarda una
+/// pasada y menor que lo que se está dispuesto a estar sin reconciliar.
+model CerrojoTarea {
+  /// Qué tarea. Hoy solo `reconciliacion`; el día que haya dos, no comparten.
+  nombre    String   @id
+  /// Quién lo tiene. Solo su dueño puede soltarlo: si no, una pasada lenta
+  /// soltaría el cerrojo que ya se llevó otra al vencer, y correrían las dos.
+  tomadoPor String
+  expiraEn  DateTime
+
+  @@map("cerrojos_tarea")
+}

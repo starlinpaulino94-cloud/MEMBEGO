@@ -44,8 +44,17 @@ if (seEstaQuedandoAtras(resumen)) {
 }
 ```
 
-Pendiente: el cron que la dispare. Un barrido que nadie llama corrige lo mismo
-que no tenerlo.
+Se dispara por HTTP, para que lo llame cualquier programador:
+
+```bash
+# En el cron, cada hora:
+curl -X POST https://restaurante.midominio.com/tareas/reconciliar \
+  -H "Authorization: Bearer $RECONCILIACION_SECRET"
+```
+
+El cerrojo entre pasadas es un **arrendamiento en una fila**, no un advisory
+lock: esos son de la sesión de PostgreSQL y Prisma habla por un pool, así que
+tomar y soltar pueden caer en conexiones distintas.
 
 ## La regla
 
