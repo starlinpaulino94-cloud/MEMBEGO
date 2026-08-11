@@ -132,11 +132,19 @@ test('ninguna rejilla del cliente reparte 3+ columnas en el teléfono', () => {
 })
 
 test('los micro-textos del cliente solo pueden bajar', () => {
-  // Techo, no cero: bajarlo a 0 exige tocar la tarjeta de membresía y la
-  // rejilla de planes, que son piezas visuales de proporciones ajustadas.
-  // Cambiarlas sin poder mirarlas es cómo se empeora una pantalla creyendo
-  // arreglarla, así que quedan medidas y pendientes de revisión de diseño.
-  const TECHO = 27
+  // 31 → 27 → 13. Los catorce que faltaban estaban en la tarjeta de membresía
+  // y en la rejilla de planes, y se arreglaron MIRÁNDOLAS: se montó un taller
+  // temporal, se renderizaron a 360px en Chromium y se midió cada texto.
+  //
+  // Mereció la pena: las etiquetas «DESCRIPCIÓN» y «BENEFICIOS» no solo eran
+  // de 10px, es que con su `/70` de opacidad daban 3,11:1 sobre la tarjeta
+  // —por debajo del 4,5:1 de AA—. Eso no sale de leer el código: el token que
+  // usaban es legítimo y el número solo aparece al componer la opacidad contra
+  // el fondo real. Ahora usan `.text-overline`, que es el token del sistema
+  // para eso y arregla tamaño y contraste a la vez.
+  //
+  // Los 13 que quedan están repartidos de dos en dos por pantallas sueltas.
+  const TECHO = 13
   let total = 0
   for (const p of PANTALLAS_CLIENTE) {
     total += [...leer(p).matchAll(/\btext-\[(?:[0-9]|1[01])(?:\.\d+)?px\]/g)].length

@@ -85,7 +85,11 @@ export function WalletCard({ data, className }: { data: WalletCardData; classNam
           <p className="truncate text-[15px] font-semibold leading-tight">
             {company.name}
           </p>
-          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-white/60">
+          {/* 12px es el suelo del sistema y esta tarjeta se mira de reojo, con
+              el móvil en una mano, para saber cuántos usos quedan. El contraste
+              ya cumplía AA (6,23:1 medido sobre el degradado); lo que fallaba
+              era el tamaño. */}
+          <p className="mt-0.5 flex items-center gap-1 text-[12px] text-white/70">
             <Shield className="h-3 w-3" aria-hidden />
             Membresía digital
           </p>
@@ -103,7 +107,7 @@ export function WalletCard({ data, className }: { data: WalletCardData; classNam
 
       {/* Plan en tipografía monoespaciada premium */}
       <div className="relative">
-        <p className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/50">
+        <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-white/60">
           Plan
         </p>
         <p className="mt-0.5 truncate font-mono text-xl font-bold uppercase tracking-widest sm:text-2xl">
@@ -121,7 +125,7 @@ export function WalletCard({ data, className }: { data: WalletCardData; classNam
         />
         <div className="flex items-center justify-between gap-2">
           {expiryText ? (
-            <p className="inline-flex min-w-0 items-center gap-1.5 text-[11px] text-white/70">
+            <p className="inline-flex min-w-0 items-center gap-1.5 text-[12px] text-white/75">
               <Clock className="h-3 w-3 shrink-0" aria-hidden />
               <span className="truncate">{expiryText}</span>
             </p>
@@ -130,7 +134,7 @@ export function WalletCard({ data, className }: { data: WalletCardData; classNam
           )}
           <span
             className={cn(
-              'shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold',
+              'shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-semibold',
               TONE_CHIP[tone]
             )}
           >
