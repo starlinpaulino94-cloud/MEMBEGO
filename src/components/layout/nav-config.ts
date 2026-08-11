@@ -209,6 +209,36 @@ const ADMIN_NAV: NavGroup[] = [
  * decisión de producto que corresponde a la Fase 4, cuando esas pantallas
  * estén rediseñadas, no a un cambio de configuración de navegación.
  */
+/**
+ * NAVEGACIÓN DEL CLIENTE · tres dominios y una cuenta.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA SEPARACIÓN QUE FALTABA: LO QUE SE ADQUIERE vs. LO QUE YA SE TIENE
+ *
+ * «Planes» vivía dentro del grupo «Mis beneficios», al lado de «Mis
+ * membresías». No es un detalle de orden: son cosas opuestas.
+ *
+ *   · Un PLAN es un catálogo. Algo que todavía se puede comprar.
+ *   · Una MEMBRESÍA es una instancia. Algo que YA es tuyo.
+ *
+ * Puestos juntos, quien entra a «Mis beneficios» a ver qué tiene se encuentra
+ * un escaparate de lo que no tiene. Y quien busca comprar no lo busca ahí.
+ *
+ * Por eso los grupos son ahora:
+ *
+ *   DESCUBRIR    lo que puedes conseguir      (ofertas, planes, cerca de ti)
+ *   MI MEMBEGO   lo que ya es tuyo            (beneficios, membresías, regalos)
+ *   ACTIVIDAD    lo que ya hiciste            (citas, pagos, historial)
+ *   CUENTA       tú                           (perfil, empresas, vehículos)
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * NINGUNA RUTA SE MUEVE
+ *
+ * Esto reagrupa etiquetas, no direcciones. Todos los `href` son los mismos que
+ * antes, así que ningún enlace compartido, marcador o notificación deja de
+ * funcionar y no hace falta ni una redirección. Mover rutas es otro trabajo y
+ * tiene otro riesgo.
+ */
 const CLIENTE_NAV: NavGroup[] = [
   {
     id: 'inicio',
@@ -218,20 +248,22 @@ const CLIENTE_NAV: NavGroup[] = [
     items: [{ href: '/cliente/inicio', label: 'Inicio', icon: LayoutDashboard }],
   },
   {
-    id: 'cerca',
-    label: 'Cerca de mí',
+    id: 'descubrir',
+    label: 'Descubrir',
     items: [
-      { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
       { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
+      // Aquí, y no en «Mis beneficios»: un plan es lo que puedes contratar,
+      // no lo que tienes contratado.
+      { href: '/cliente/planes', label: 'Planes', icon: Package },
+      { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
     ],
   },
   {
-    id: 'beneficios',
-    label: 'Mis beneficios',
+    id: 'mi-membego',
+    label: 'Mi Membego',
     items: [
-      { href: '/mis-membresias', label: 'Mis membresías', icon: WalletCards },
       { href: '/cliente/mis-promociones', label: 'Mis beneficios', icon: Ticket },
-      { href: '/cliente/planes', label: 'Planes', icon: Package },
+      { href: '/mis-membresias', label: 'Mis membresías', icon: WalletCards },
       { href: '/cliente/regalos', label: 'Regalos', icon: HeartHandshake },
       // Unificación: el antiguo módulo "Referidos" vive dentro de Invita y Gana.
       { href: '/cliente/invita-y-gana', label: 'Invita y Gana', icon: Gift },
@@ -252,6 +284,10 @@ const CLIENTE_NAV: NavGroup[] = [
     label: 'Cuenta',
     items: [
       { href: '/cliente/perfil', label: 'Perfil', icon: User },
+      // La pantalla existía y NO estaba en ningún menú: se llegaba solo desde
+      // una notificación o desde una tarjeta de empresa. Una pantalla a la que
+      // no se puede navegar es una pantalla que casi nadie encuentra.
+      { href: '/cliente/empresas', label: 'Mis empresas', icon: Store },
       // Fase 7: entra al menú ahora que existe la pantalla. En la Fase 0 se
       // quedó fuera a propósito — solo había `/cliente/vehiculos/nuevo` y
       // enlazar a una página inexistente habría sido peor que no enlazar.
