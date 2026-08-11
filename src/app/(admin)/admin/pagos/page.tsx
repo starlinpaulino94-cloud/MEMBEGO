@@ -30,15 +30,18 @@ import { StatusBanner } from '@/components/ui/status-banner'
 import { ArrowRight, CheckCircle2, Clock, ExternalLink, FileText, Mail, MessageCircle, Store } from 'lucide-react'
 import type { MembershipEstado } from '@/types'
 
+import { contarColasDePago } from '@/modules/pagos/colasConteo'
+import {
+  whereCambiosDePlan,
+  whereComprasEnSucursal,
+  whereComprasEnValidacion,
+  whereComprasSinCompletar,
+  whereMembresiasEnSucursal,
+  whereMembresiasSinCompletar,
+  whereTransferencias,
+} from '@/modules/pagos/colas'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
-
-/**
- * Las dos colas que se arman en memoria (pagos en sucursal y seguimiento) se
- * filtran y mezclan en JS, así que no se pueden cortar en la base sin falsear
- * los totales: se traen hasta este tope y se paginan aquí.
- */
-const TOPE_DERIVADAS = 500
 
 export const dynamic = 'force-dynamic'
 
@@ -126,6 +129,12 @@ export default async function PagosPage({
   const pagCp = leerPaginacion(sp, 25, 'cp')
   const pagSuc = leerPaginacion(sp, 25, 'suc')
   const pagSeg = leerPaginacion(sp, 25, 'seg')
+  // Las dos colas mixtas (sucursal = membresías + compras; seguimiento = lo
+  // mismo ordenado por fecha) se cortan aquí, así que cada consulta trae hasta
+  // el FINAL de la ventana visible. Crece con la página que se pide, no con el
+  // tamaño de la cola — y a diferencia del tope fijo de antes, es exacto.
+  const VENTANA_SUCURSAL = pagSuc.saltar + pagSuc.tomar
+  const VENTANA_SEGUIMIENTO = pagSeg.saltar + pagSeg.tomar
   const prefs = await getRegionalPrefs(companyId)
   const fmtMoney = (n: number) => formatMoney(n, prefs)
 
@@ -141,18 +150,16 @@ export default async function PagosPage({
     pendientesData,
     cambiosData,
     comprasData,
-    iniciadasData,
-    comprasIniciadasData,
-    totalPendientes,
-    totalCambios,
-    totalCompras,
+    sucursalMembresiasData,
+    sucursalComprasData,
+    seguimientoMembresiasData,
+    seguimientoComprasData,
+    conteos,
+    totalSucursalMembresias,
   ] = await Promise.all([
     prisma.membership
       .findMany({
-        where: {
-          estado: 'PENDIENTE_PAGO',
-          ...(companyId ? { companyId } : {}),
-        },
+        where: whereTransferencias(companyId),
         select: {
           id: true,
           estado: true,
@@ -179,11 +186,7 @@ export default async function PagosPage({
       }),
     prisma.membership
       .findMany({
-        where: {
-          estado: 'ACTIVA',
-          planIdSolicitado: { not: null },
-          ...(companyId ? { companyId } : {}),
-        },
+        where: whereCambiosDePlan(companyId),
         select: {
           id: true,
           clienteId: true,
@@ -207,10 +210,7 @@ export default async function PagosPage({
     // Fase E5: compras de promociones esperando validación del pago.
     prisma.productoCompra
       .findMany({
-        where: {
-          estado: 'EN_VALIDACION',
-          ...(companyId ? { companyId } : {}),
-        },
+        where: whereComprasEnValidacion(companyId),
         select: {
           id: true,
           clienteId: true,
@@ -233,16 +233,13 @@ export default async function PagosPage({
         console.error('[admin-pagos] compras query', e)
         return null
       }),
-    // Membresías INICIADAS sin validar: pagos en sucursal (referencia POS) y
-    // pagos que el cliente empezó y nunca completó (transferencia sin
-    // comprobante, rechazados sin reintento). Antes solo aparecían las
-    // transferencias con comprobante y el resto quedaba invisible.
+    // Pagos EN SUCURSAL: el cliente vino a pagar al local y nadie ha cobrado
+    // todavía. La condición vive en `modules/pagos/colas.ts` y se aplica en la
+    // BASE, no en memoria: antes se traían 500 filas y se separaban aquí, así
+    // que a partir de la 501 el recuento de la pestaña era falso sin avisar.
     prisma.membership
       .findMany({
-        where: {
-          estado: { in: ['PENDIENTE', 'RECHAZADA'] },
-          ...(companyId ? { companyId } : {}),
-        },
+        where: whereMembresiasEnSucursal(companyId),
         select: {
           id: true,
           estado: true,
@@ -261,19 +258,16 @@ export default async function PagosPage({
           plan: { select: { nombre: true, precio: true } },
         },
         orderBy: { updatedAt: 'asc' },
-        take: TOPE_DERIVADAS,
+        take: VENTANA_SUCURSAL,
       })
       .catch((e) => {
-        console.error('[admin-pagos] iniciadas query', e)
+        console.error('[admin-pagos] sucursal membresías query', e)
         return null
       }),
-    // Compras de promociones iniciadas sin validar (misma lógica).
+    // Compras de promociones a pagar en el local (misma condición).
     prisma.productoCompra
       .findMany({
-        where: {
-          estado: { in: ['SOLICITADA', 'PENDIENTE_PAGO', 'RECHAZADA'] },
-          ...(companyId ? { companyId } : {}),
-        },
+        where: whereComprasEnSucursal(companyId),
         select: {
           id: true,
           estado: true,
@@ -291,28 +285,68 @@ export default async function PagosPage({
           promocion: { select: { titulo: true, precio: true } },
         },
         orderBy: { updatedAt: 'asc' },
-        take: TOPE_DERIVADAS,
+        take: VENTANA_SUCURSAL,
       })
       .catch((e) => {
-        console.error('[admin-pagos] compras iniciadas query', e)
+        console.error('[admin-pagos] sucursal compras query', e)
         return null
       }),
-    // Totales reales de las tres colas que se paginan en la base: el número del
-    // encabezado debe ser el de TODA la cola, no el de la página visible.
+    // SEGUIMIENTO: empezaron y no completaron. Las dos listas se mezclan por
+    // fecha, así que cada una trae hasta el final de la ventana visible y el
+    // corte se hace después: es exacto para cualquier página, y la consulta
+    // crece con la página que se pide, no con el tamaño de la cola.
     prisma.membership
-      .count({ where: { estado: 'PENDIENTE_PAGO', ...(companyId ? { companyId } : {}) } })
-      .catch(() => 0),
-    prisma.membership
-      .count({
-        where: {
-          estado: 'ACTIVA',
-          planIdSolicitado: { not: null },
-          ...(companyId ? { companyId } : {}),
+      .findMany({
+        where: whereMembresiasSinCompletar(companyId),
+        select: {
+          id: true,
+          estado: true,
+          clienteId: true,
+          updatedAt: true,
+          descuentoBienvenida: true,
+          fechaInicio: true,
+          rechazadoReason: true,
+          metodoPago: { select: { tipo: true } },
+          cliente: {
+            select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+          },
+          plan: { select: { nombre: true, precio: true } },
         },
+        orderBy: { updatedAt: 'asc' },
+        take: VENTANA_SEGUIMIENTO,
       })
-      .catch(() => 0),
+      .catch((e) => {
+        console.error('[admin-pagos] seguimiento membresías query', e)
+        return null
+      }),
     prisma.productoCompra
-      .count({ where: { estado: 'EN_VALIDACION', ...(companyId ? { companyId } : {}) } })
+      .findMany({
+        where: whereComprasSinCompletar(companyId),
+        select: {
+          id: true,
+          estado: true,
+          clienteId: true,
+          updatedAt: true,
+          precioCongelado: true,
+          rechazadoReason: true,
+          cliente: {
+            select: { nombre: true, email: true, telefono: true, company: { select: { name: true } } },
+          },
+          promocion: { select: { titulo: true, precio: true } },
+        },
+        orderBy: { updatedAt: 'asc' },
+        take: VENTANA_SEGUIMIENTO,
+      })
+      .catch((e) => {
+        console.error('[admin-pagos] seguimiento compras query', e)
+        return null
+      }),
+    // Recuentos de las cinco colas — la MISMA definición que consume el aviso
+    // del Resumen (`modules/pagos/colas.ts`). Ya no se derivan de las filas
+    // cargadas, así que el número de la pestaña es el de toda la cola.
+    contarColasDePago(companyId),
+    prisma.membership
+      .count({ where: whereMembresiasEnSucursal(companyId) })
       .catch(() => 0),
   ])
 
@@ -320,44 +354,30 @@ export default async function PagosPage({
     pendientesData === null ||
     cambiosData === null ||
     comprasData === null ||
-    iniciadasData === null ||
-    comprasIniciadasData === null
+    sucursalMembresiasData === null ||
+    sucursalComprasData === null ||
+    seguimientoMembresiasData === null ||
+    seguimientoComprasData === null
   const pendientes: PendienteRow[] = pendientesData ?? []
   const cambios = cambiosData ?? []
   const compras = comprasData ?? []
-  const iniciadas = iniciadasData ?? []
-  const comprasIniciadas = comprasIniciadasData ?? []
+  const sucursalMembresias = sucursalMembresiasData ?? []
+  const sucursalCompras = sucursalComprasData ?? []
 
-  // Pago EN SUCURSAL: el cliente eligió pagar en el local (referencia POS,
-  // sucursal elegida o método presencial). Aparecen para confirmarlos desde el
-  // panel; la Caja también puede cobrarlos por su referencia.
-  const esPresencial = (x: {
-    referencia: string | null
-    sucursalPago: { nombre: string } | null
-    metodoPago: { tipo: string } | null
-  }) => x.referencia != null || x.sucursalPago != null || x.metodoPago?.tipo === 'PRESENCIAL'
-
-  const enSucursalTodas = iniciadas.filter((m) => m.estado === 'PENDIENTE' && esPresencial(m))
-  const enSucursalComprasTodas = comprasIniciadas.filter(
-    (c) => (c.estado === 'SOLICITADA' || c.estado === 'PENDIENTE_PAGO') && esPresencial(c)
-  )
-  // Una sola numeración para las dos listas de sucursal (membresías primero).
-  const totalSucursal = enSucursalTodas.length + enSucursalComprasTodas.length
-  const enSucursal = enSucursalTodas.slice(pagSuc.saltar, pagSuc.saltar + pagSuc.tomar)
+  // Las dos listas de sucursal se numeran como una sola (membresías primero).
+  // Cada una llegó ya filtrada de la base con hasta el final de la ventana
+  // visible, así que el corte de aquí es exacto para cualquier página.
+  const totalSucursal = conteos.sucursal
+  const enSucursal = sucursalMembresias.slice(pagSuc.saltar, pagSuc.saltar + pagSuc.tomar)
   const restoVentana = Math.max(0, pagSuc.tomar - enSucursal.length)
-  const saltarCompras = Math.max(0, pagSuc.saltar - enSucursalTodas.length)
-  const enSucursalCompras = enSucursalComprasTodas.slice(
-    saltarCompras,
-    saltarCompras + restoVentana
-  )
+  const saltarCompras = Math.max(0, pagSuc.saltar - totalSucursalMembresias)
+  const enSucursalCompras = sucursalCompras.slice(saltarCompras, saltarCompras + restoVentana)
 
   // SEGUIMIENTO: iniciaron un pago y no lo completaron (transferencia sin
   // comprobante, solicitud sin método, o rechazado sin reintento). Unificado
   // membresías + compras, los más antiguos primero.
-  const seguimientoTodo = [
-    ...iniciadas
-      .filter((m) => !(m.estado === 'PENDIENTE' && esPresencial(m)))
-      .map((m) => ({
+  const seguimientoVentana = [
+    ...(seguimientoMembresiasData ?? []).map((m) => ({
         key: `m-${m.id}`,
         clienteId: m.clienteId,
         cliente: m.cliente,
@@ -374,37 +394,26 @@ export default async function PagosPage({
               : 'Solicitó el plan y no ha completado el pago',
         fecha: m.updatedAt,
       })),
-    ...comprasIniciadas
-      .filter((c) => !((c.estado === 'SOLICITADA' || c.estado === 'PENDIENTE_PAGO') && esPresencial(c)))
-      .map((c) => ({
-        key: `c-${c.id}`,
-        clienteId: c.clienteId,
-        cliente: c.cliente,
-        concepto: `Promoción ${c.promocion?.titulo ?? '—'}`,
-        monto: Number(c.precioCongelado ?? c.promocion?.precio ?? 0),
-        situacion:
-          c.estado === 'RECHAZADA'
-            ? `Pago rechazado sin reintento${c.rechazadoReason ? ` (${c.rechazadoReason})` : ''}`
-            : c.estado === 'PENDIENTE_PAGO'
-              ? 'Eligió transferencia y no ha enviado el comprobante'
-              : 'Solicitó la promoción y no ha completado el pago',
-        fecha: c.updatedAt,
-      })),
+    ...(seguimientoComprasData ?? []).map((c) => ({
+      key: `c-${c.id}`,
+      clienteId: c.clienteId,
+      cliente: c.cliente,
+      concepto: `Promoción ${c.promocion?.titulo ?? '—'}`,
+      monto: Number(c.precioCongelado ?? c.promocion?.precio ?? 0),
+      situacion:
+        c.estado === 'RECHAZADA'
+          ? `Pago rechazado sin reintento${c.rechazadoReason ? ` (${c.rechazadoReason})` : ''}`
+          : c.estado === 'PENDIENTE_PAGO'
+            ? 'Eligió transferencia y no ha enviado el comprobante'
+            : 'Solicitó la promoción y no ha completado el pago',
+      fecha: c.updatedAt,
+    })),
   ].sort((a, b) => a.fecha.getTime() - b.fecha.getTime())
-  const totalSeguimiento = seguimientoTodo.length
-  const seguimiento = seguimientoTodo.slice(pagSeg.saltar, pagSeg.saltar + pagSeg.tomar)
+  const totalSeguimiento = conteos.seguimiento
+  const seguimiento = seguimientoVentana.slice(pagSeg.saltar, pagSeg.saltar + pagSeg.tomar)
 
-  const totalPorValidar =
-    totalPendientes + totalCompras + totalCambios + totalSucursal
+  const totalPorValidar = conteos.porValidar
   const sinPendientes = totalPorValidar === 0 && totalSeguimiento === 0
-
-  const conteos: Record<Cola, number> = {
-    sucursal: totalSucursal,
-    transferencias: totalPendientes,
-    compras: totalCompras,
-    cambios: totalCambios,
-    seguimiento: totalSeguimiento,
-  }
 
   return (
     <div className="space-y-6">
@@ -581,10 +590,10 @@ export default async function PagosPage({
       )}
 
       {/* Fase E5: compras de promociones por validar */}
-      {cola === 'compras' && totalCompras > 0 && (
+      {cola === 'compras' && conteos.compras > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
-            Compras de promociones ({totalCompras})
+            Compras de promociones ({conteos.compras})
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {compras.map((c) => (
@@ -678,7 +687,7 @@ export default async function PagosPage({
           </div>
           <TablaPaginacion
             paginacion={pagPr}
-            total={totalCompras}
+            total={conteos.compras}
             params={sp}
             etiqueta="compras"
             clave="pr"
@@ -687,10 +696,10 @@ export default async function PagosPage({
       )}
 
       {/* Cambios de plan solicitados */}
-      {cola === 'cambios' && totalCambios > 0 && (
+      {cola === 'cambios' && conteos.cambios > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
-            Cambios de plan solicitados ({totalCambios})
+            Cambios de plan solicitados ({conteos.cambios})
           </h2>
           <div className="grid gap-4 md:grid-cols-2">
             {cambios.map((c) => (
@@ -777,7 +786,7 @@ export default async function PagosPage({
           </div>
           <TablaPaginacion
             paginacion={pagCp}
-            total={totalCambios}
+            total={conteos.cambios}
             params={sp}
             etiqueta="cambios de plan"
             clave="cp"
@@ -795,10 +804,10 @@ export default async function PagosPage({
         </Card>
       )}
 
-      {cola === 'transferencias' && totalPendientes > 0 && (
+      {cola === 'transferencias' && conteos.transferencias > 0 && (
         <div className="space-y-3">
           <h2 className="text-h4 text-foreground">
-            Transferencias por validar ({totalPendientes})
+            Transferencias por validar ({conteos.transferencias})
           </h2>
         <div className="grid gap-6 md:grid-cols-2">
           {pendientes.map((m) => (
@@ -936,7 +945,7 @@ export default async function PagosPage({
         </div>
           <TablaPaginacion
             paginacion={pagTr}
-            total={totalPendientes}
+            total={conteos.transferencias}
             params={sp}
             etiqueta="transferencias"
             clave="tr"

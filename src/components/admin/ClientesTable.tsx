@@ -76,9 +76,10 @@ export function ClientesTable({ data }: { data: ClienteRow[] }) {
       // M-07). El de la tabla solo filtraba las filas ya cargadas, así que un
       // cliente que no estuviera en la página actual no aparecía nunca — y la
       // pantalla no daba ninguna pista de por qué.
+      // Sin exportación propia: el CSV se genera en el SERVIDOR sobre el
+      // filtro completo (auditoría · B-9). El de la tabla se llevaba las filas
+      // cargadas —50 de 98— y no lo decía en ninguna parte.
       pageSize={25}
-      exportable
-      exportFilename="clientes.csv"
     />
   )
 }

@@ -198,6 +198,7 @@ export async function aprobarCambioPlan(
           estado: 'ACTIVA',
           pagoConfirmado: true,
           montoPagado: nuevoPlan.precio,
+          fechaPago: now,
           fechaInicio: now,
           fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
           lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
@@ -320,6 +321,7 @@ export async function cambiarPlanDeMembresia(
           estado: 'ACTIVA',
           pagoConfirmado: true,
           montoPagado: nuevoPlan.precio,
+          fechaPago: now,
           fechaInicio: now,
           fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
           lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
@@ -643,6 +645,7 @@ export async function renovarMembresia(
           : membership.plan.lavadosIncluidos,
         montoPagado: Number.isNaN(monto) ? Number(membership.plan.precio) : monto,
         pagoConfirmado: true,
+        fechaPago: now,
       },
     })
 

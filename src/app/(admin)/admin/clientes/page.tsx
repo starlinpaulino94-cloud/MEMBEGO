@@ -9,6 +9,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ClientesTable, type ClienteRow } from '@/components/admin/ClientesTable'
+import { whereClientes } from '@/modules/admin/clientesFiltro'
+import { Download } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,20 +56,9 @@ export default async function ClientesPage({
   const busqueda = (q ?? '').trim()
   const pagina = Math.max(1, Number.parseInt(p ?? '1', 10) || 1)
 
-  // La búsqueda se ancla SIEMPRE a la empresa: el término lo escribe el
-  // usuario, pero el `companyId` no es negociable ni viaja por la URL.
-  const where = {
-    ...(companyId ? { companyId } : {}),
-    ...(busqueda
-      ? {
-          OR: [
-            { nombre: { contains: busqueda, mode: 'insensitive' as const } },
-            { email: { contains: busqueda, mode: 'insensitive' as const } },
-            { telefono: { contains: busqueda } },
-          ],
-        }
-      : {}),
-  }
+  // El filtro vive en `modules/admin/clientesFiltro`: la exportación usa el
+  // MISMO, para que el CSV no pueda separarse nunca de lo que se ve.
+  const where = whereClientes(companyId, busqueda)
 
   let clientes: ClienteRow[] = []
   let total = 0
@@ -126,6 +117,13 @@ export default async function ClientesPage({
         />
         <Button type="submit" variant="outline" className="shrink-0">
           <Search className="h-4 w-4" />
+        </Button>
+        {/* La exportación es un ENLACE al servidor, no un botón en la tabla: se
+            lleva todo el filtro, no las 50 filas que el navegador tenga a mano. */}
+        <Button asChild variant="outline" className="shrink-0">
+          <a href={`/admin/clientes/export${busqueda ? `?q=${encodeURIComponent(busqueda)}` : ''}`}>
+            <Download className="mr-2 h-4 w-4" /> Exportar
+          </a>
         </Button>
       </Form>
 

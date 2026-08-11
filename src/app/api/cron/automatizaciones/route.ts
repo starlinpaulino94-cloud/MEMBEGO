@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { ejecutarAutomatizacionesGlobal } from '@/modules/admin/automatizaciones'
 import { mantenimientoRegalos } from '@/modules/regalos/mantenimiento'
 import { recordatoriosSeguimientoAuto } from '@/modules/seguimiento/mantenimiento'
+import { vencerMembresias } from '@/modules/membresia/vencimiento'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -31,6 +32,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Lo PRIMERO del día: poner al día el estado de las membresías. Hasta la
+    // auditoría de 2026-08 nada lo hacía, así que `ACTIVA` sobrevivía a su
+    // propia fecha de vencimiento y el panel enseñaba como vigentes membresías
+    // que el escáner rechazaba. Va antes que las automatizaciones porque
+    // varias de ellas (recordatorios, inactivos) leen ese estado.
+    const vencimientos = await vencerMembresias().catch((e) => {
+      console.error('[cron-automatizaciones] vencimientos', e)
+      return { vencidas: 0, empresas: 0 }
+    })
     // El cron ya NO ejecuta las automatizaciones: solo las REPARTE, una por
     // empresa, a la cola (auditoría · C-06). Por eso aquí no hay totales de
     // cumpleaños ni de vencimientos — cada empresa los produce en su propia
@@ -70,6 +80,7 @@ export async function GET(request: NextRequest) {
     })
     return NextResponse.json({
       ok: true,
+      vencimientos,
       reparto,
       regalos,
       seguimiento,

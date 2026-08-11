@@ -97,15 +97,18 @@ export default async function AdminDashboard() {
   }
 
   let d: DashboardEjecutivo | null = null
-  let company: { name: string; moneda: string; idioma: string } | null = null
+  let company: { name: string; moneda: string; idioma: string; zonaHoraria: string } | null = null
   try {
-    ;[d, company] = await Promise.all([
-      getDashboardEjecutivo(companyId),
-      prisma.company.findUnique({
-        where: { id: companyId },
-        select: { name: true, moneda: true, idioma: true },
-      }),
-    ])
+    // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy», y
+    // las métricas no pueden calcularse sin ella (ver `dashboardQueries`).
+    company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
+    })
+    d = await getDashboardEjecutivo(
+      companyId,
+      company?.zonaHoraria || 'America/Santo_Domingo'
+    )
   } catch (e) {
     console.error('[admin-dashboard]', e)
   }
@@ -164,6 +167,10 @@ export default async function AdminDashboard() {
    */
   const secundarias = [
     { label: 'Clientes en total', valor: fmt(d.clientesTotal) },
+    // Lo que facturarían las membresías vigentes al renovar, a precio de
+    // tarifa (con el precio de la categoría del vehículo cuando existe). Es una
+    // proyección, así que vive aquí y no entre los KPI: no es dinero cobrado.
+    { label: 'Recurrente esperado', valor: formatMoney(d.recurrenteEsperado, company) },
     { label: 'Seguidores', valor: `${fmt(d.seguidores)} (+${d.nuevosSeguidores30d} este mes)` },
     { label: 'Promociones activas', valor: fmt(d.promosActivas) },
     { label: 'Referidos completados', valor: fmt(d.referidosCompletados) },
@@ -179,7 +186,13 @@ export default async function AdminDashboard() {
           <h1 className="text-h1 mt-1 text-balance text-foreground">{companyName}</h1>
         </div>
         <p className="hidden text-small text-muted-foreground sm:block">
-          {new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'long' }).format(new Date())}
+          {/* La fecha del encabezado es la del NEGOCIO, no una constante: si
+              dijera otro día que el «hoy» de las visitas, el panel volvería a
+              contradecirse a sí mismo. */}
+          {new Intl.DateTimeFormat(company?.idioma || 'es-DO', {
+            timeZone: company?.zonaHoraria || 'America/Santo_Domingo',
+            dateStyle: 'long',
+          }).format(new Date())}
         </p>
       </div>
 
@@ -246,12 +259,15 @@ export default async function AdminDashboard() {
             accent="success"
             sub="Con membresía vigente"
           />
+          {/* «Ingresos estimados» mezclaba dos cosas que no son la misma: lo
+              que entró y lo que se espera que entre. Aquí manda lo COBRADO —es
+              el dato duro— y lo esperado baja a las cifras de referencia. */}
           <StatCard
-            label="Ingresos estimados"
-            value={formatMoney(d.ingresosEstimadosMes, company)}
+            label="Cobrado este mes"
+            value={formatMoney(d.ingresosCobradosMes, company)}
             icon={Wallet}
             accent="brand"
-            sub="Membresías activas / mes"
+            sub="Membresías con pago confirmado"
           />
           <StatCard
             label="Visitas hoy"

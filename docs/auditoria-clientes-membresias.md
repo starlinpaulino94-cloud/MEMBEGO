@@ -364,3 +364,52 @@ Transacciones y avise si no cuadran, en vez de esperar a que alguien lo note.
 4. **El bloque 3 al final**: el semáforo solo tiene sentido cuando los datos que
    lo alimentan son fiables, y la vigilancia automática solo cuando el semáforo
    está probado.
+
+---
+
+## Estado · Bloque 1 completado (2026-08-11)
+
+Los ocho puntos del Bloque 1 están implementados. Ninguno añade funciones: hacen
+que lo que la pantalla ya decía sea verdad.
+
+| # | Hallazgo | Qué se hizo |
+|---|---|---|
+| 1 | A-1 | `modules/pagos/colas.ts` — las cinco colas definidas UNA vez. El Resumen y `/admin/pagos` cuentan lo mismo porque leen el mismo módulo. `PENDIENTE` deja de contar como «por validar» y los cambios de plan y las compras empiezan a contar. |
+| 2 | A-2 | «Ingresos estimados» se parte en dos: **Cobrado este mes** (`montoPagado` real, misma fuente que Reportes) y **Recurrente esperado** (tarifa por categoría de vehículo, solo membresías vigentes). |
+| 3 | A-3 | `dashboardQueries` usa `diaLocal`/`limiteDiaLocal` con `Company.zonaHoraria`. La serie de 14 días agrupa en SQL con `AT TIME ZONE`. La fecha del encabezado también. |
+| 4 | A-4 | `modules/membresia/vigencia.ts` (regla pura) + `vencimiento.ts` (job diario en el cron). Doble red: aunque el job falle, `membresiaVigente()` exige la fecha. Aplicado al Resumen, a los segmentos y al chip «Vigentes». |
+| 5 | A-5, B-10 | `/admin/membresias` con total real, paginación y búsqueda en el servidor. Entran los estados `PENDIENTE_PAGO` y `RECHAZADA`, que no tenían pestaña. |
+| 6 | A-6 | Columna `Membership.fechaPago` (migración `20260807_membresia_fecha_pago`), escrita al confirmar el cobro. Reportes y Resumen la usan, con respaldo a `updatedAt` para lo histórico. |
+| 7 | B-8 | `DataTable` solo pinta el buscador si recibe `searchKey`. El campo muerto desaparece. |
+| 8 | B-9 | `/admin/clientes/export` y `/admin/membresias/export`: CSV en el servidor sobre el filtro completo, con el filtro compartido con la pantalla y un aviso DENTRO del archivo si se alcanza el tope. |
+
+**De propina, dos recortes silenciosos que aparecieron al tocar el código:**
+
+- `/admin/pagos` traía 500 filas y separaba las colas en memoria: a partir de la
+  501, el número de la pestaña era falso sin avisar. Ahora la condición se
+  aplica en la base y el recuento es exacto siempre.
+- El CSV de clientes y membresías se llevaba lo que el navegador tenía cargado.
+  Si ahora se alcanza el tope de 10 000 filas, el aviso va **en el propio
+  archivo**: un recorte se dice, no se calla.
+
+### Para desplegar
+
+```bash
+# En el SQL Editor de Supabase (idempotente, aditiva, sin bloqueos largos):
+prisma/migrations/20260807_membresia_fecha_pago/migration.sql
+```
+
+El relleno histórico copia `updatedAt` en `fechaPago` para lo ya cobrado, que es
+exactamente lo que los reportes venían usando: **ningún número cambia el día del
+despliegue**. A partir de ahí, cada cobro nuevo guarda su fecha de verdad.
+
+Verificado: tipos, lint sin errores nuevos, 713/713 pruebas (16 nuevas),
+`rls:cobertura` sin huecos y build correcto.
+
+### Qué NO cambia todavía
+
+Los tres avisos de «Requiere tu atención» siguen llevando a listas sin filtrar
+(hallazgo B-7): ahora sus números son ciertos, pero el filtro de destino
+—«vence en 7 días», «sin visitas en 30 días»— es el Bloque 2. Los segmentos
+siguen sin pantalla propia (C-11) y `lavadosRestantes` sigue sin reporte (C-12),
+también Bloque 2.
