@@ -1,10 +1,12 @@
 import Image from 'next/image'
+import Link from 'next/link'
 import { Gift, Users, Clock, Trophy, Send, Ticket, CheckCircle2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { requireRole } from '@/lib/auth/guards'
 import { absoluteUrl } from '@/lib/site'
 import { ensureCodigoCorto } from '@/lib/referidos'
 import {
-  getCampanaActiva,
+  misCampanasDisponibles,
   getInvitadosPorCliente,
   getInvitaYGanaStats,
 } from '@/modules/invitaciones/queries'
@@ -44,21 +46,53 @@ function tiempoRelativo(fecha: Date): string {
  * ahora, Mi progreso e Historial. Las metas/niveles/gamificación llegan en
  * la fase Growth Engine; el backend ya registra toda la auditoría.
  */
-export default async function InvitaYGanaPage() {
+/**
+ * INVITAR ES DE UN NEGOCIO CONCRETO, PERO NO NECESARIAMENTE DEL ACTIVO.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ PASABA
+ *
+ * La pantalla miraba `metadata.companyId`: la campaña de la empresa ACTIVA y
+ * ninguna más. Alguien cliente de tres negocios solo podía invitar al que
+ * tuviera abierto; las campañas de los otros dos no existían para él, aunque
+ * su ficha allí sí y su código de invitación también.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ NO SE HACE GLOBAL, Y POR QUÉ
+ *
+ * El premio lo pone UN negocio: la recompensa, el progreso y el historial son
+ * suyos. Mezclar las campañas de varias empresas en una sola pantalla
+ * juntaría cuentas que no se suman. Lo que se hace es dejar ELEGIR de cuál se
+ * invita —`?empresa=<slug>`, en la URL como el resto de la fase— y enseñar
+ * arriba los negocios donde tiene una campaña disponible.
+ */
+export default async function InvitaYGanaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ empresa?: string }>
+}) {
   const user = await requireRole(['CLIENTE'])
-  const clienteId = user.metadata.clienteId
+  const { empresa: empresaParam } = await searchParams
+
   // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
   // es un error ni una falta de permiso: es el primer día. Ver
   // `SinEmpresaTodavia`.
-  if (!clienteId) {
+  if (!user.metadata.clienteId) {
     return <SinEmpresaTodavia que="campañas para invitar"
       detalle="Las campañas de «Invita y gana» las publica cada negocio. Únete a uno para participar." />
   }
-  const companyId = user.metadata.companyId as string
 
-  const campana = await getCampanaActiva(companyId)
+  // Sus negocios con campaña viva, cada uno con SU ficha: el código de
+  // invitación es de la ficha, no de la persona, y la atribución del premio va
+  // con él.
+  const opciones = await misCampanasDisponibles(user.supabaseId)
 
-  if (!campana) {
+  const elegida =
+    opciones.find((o) => o.company.slug === empresaParam) ??
+    opciones.find((o) => o.company.id === user.metadata.companyId) ??
+    opciones[0]
+
+  if (!elegida) {
     const t = normalizeInvitaContenido(null)
     return (
       <div className="mx-auto max-w-2xl py-8">
@@ -66,6 +100,9 @@ export default async function InvitaYGanaPage() {
       </div>
     )
   }
+
+  const { campana, clienteId, company } = elegida
+  const companyId = company.id
 
   // Textos editables del módulo (superadmin/admin). Ausente = valores por defecto.
   const t = normalizeInvitaContenido(campana.contenido)
@@ -76,13 +113,22 @@ export default async function InvitaYGanaPage() {
     getInvitaYGanaStats(clienteId, companyId),
   ])
 
-  // Enlace corto personal: membego.com/invitar/CODIGO?v=… El mensaje, la
-  // imagen (OG) y el enlace los genera el sistema; el cliente no los modifica.
-  // `v` cambia cuando el admin edita la campaña: WhatsApp/Facebook cachean la
-  // vista previa por URL exacta durante días, y sin esto seguirían mostrando
-  // la tarjeta vieja tras actualizar la imagen o los textos.
+  /**
+   * Enlace corto personal: membego.com/invitar/CODIGO?c=…&v=…
+   *
+   * `c` es LA CAMPAÑA que este enlace promete. Sin ella, el enlace servía «la
+   * que esté activa cuando lo abran»: el negocio cambiaba de campaña y todos
+   * los enlaces ya repartidos cambiaban con él — la tarjeta que la gente vio
+   * en WhatsApp ofrecía una cosa y la landing, otra.
+   *
+   * `v` cambia cuando el admin edita la campaña: WhatsApp/Facebook cachean la
+   * vista previa por URL exacta durante días, y sin esto seguirían mostrando
+   * la tarjeta vieja tras actualizar la imagen o los textos.
+   */
   const version = campana.updatedAt.getTime().toString(36)
-  const inviteUrl = absoluteUrl(`/invitar/${codigoCorto}?v=${version}`)
+  const inviteUrl = absoluteUrl(
+    `/invitar/${codigoCorto}?c=${encodeURIComponent(campana.slug)}&v=${version}`
+  )
 
   const beneficioInvitado = campana.beneficioInvitado as { descripcion?: string } | null
   const regalo = beneficioInvitado?.descripcion || 'un regalo de bienvenida'
@@ -103,6 +149,33 @@ export default async function InvitaYGanaPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Confeti al desbloquear una recompensa nueva desde la última visita */}
       <MilestoneConfetti recompensas={stats.recompensasObtenidas} />
+
+      {/* De qué negocio se invita. Solo aparece si hay más de uno: con uno
+          solo, un selector de una opción es ruido. El premio, el progreso y el
+          historial son de ESE negocio, así que la elección cambia la pantalla
+          entera — y por eso va en la URL y no en un estado invisible. */}
+      {opciones.length > 1 && (
+        <nav aria-label="Negocio" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {opciones.map((o) => {
+            const activa = o.company.id === companyId
+            return (
+              <Link
+                key={o.company.id}
+                href={`/cliente/invita-y-gana?empresa=${o.company.slug}`}
+                aria-current={activa ? 'page' : undefined}
+                className={cn(
+                  'inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-small font-semibold transition-colors',
+                  activa
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                )}
+              >
+                {o.company.name}
+              </Link>
+            )
+          })}
+        </nav>
+      )}
 
       {/* Campaña activa: protagonismo del arte + mínimo texto + animación. */}
       <Card className="animate-slide-up overflow-hidden border-emerald-200 shadow-premium">

@@ -29,6 +29,7 @@
     "verificar:cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cliente-global.mts",
     "verificar:descubrimiento": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-descubrimiento.mts",
     "verificar:perfil-empresa": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-perfil-empresa.mts",
+    "verificar:invitaciones": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-invitaciones.mts",
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
     "auditar:placas": "node scripts/auditar-placas.mjs"
