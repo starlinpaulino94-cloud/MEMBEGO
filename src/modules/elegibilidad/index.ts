@@ -26,7 +26,7 @@ import {
   type DecisionPlan,
   type VehiculoInfo,
 } from '@/modules/elegibilidad/decidir'
-import type { EvaluacionRequisitos } from '@/modules/onboarding/flujos'
+import { flujoRequiereVehiculo, type EvaluacionRequisitos } from '@/modules/onboarding/flujos'
 
 export type { AccionElegibilidad, DecisionPlan, VehiculoInfo } from '@/modules/elegibilidad/decidir'
 
@@ -35,6 +35,12 @@ export type { AccionElegibilidad, DecisionPlan, VehiculoInfo } from '@/modules/e
  * Exportada para que las acciones que YA están dentro de su propia
  * transacción (p. ej. seleccionarPlan) compongan los mismos datos sin anidar
  * conEmpresa — las reglas siguen siendo las puras de decidir.ts.
+ *
+ * Devuelve la categoría EXPLÍCITA: null cuando el negocio no declaró de qué
+ * tipo es. El motor de requisitos existe para cerrar puertas, y una puerta no
+ * se cierra por un dato que nadie afirmó — un `type` vacío o inventado ("otro",
+ * el valor que ofrece el propio formulario de registro) hacía que el cliente de
+ * un restaurante tuviera que registrar un carro para ver los planes.
  */
 export async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<CategoriaNegocio | null> {
   const company = await tx.company.findUnique({
@@ -42,7 +48,7 @@ export async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<Cat
     select: { type: true, capacidades: true },
   })
   if (!company) return null
-  return capacidadesEfectivas(company.type, company.capacidades).categoria
+  return capacidadesEfectivas(company.type, company.capacidades).categoriaExplicita
 }
 
 /** Vehículos del cliente en la forma plana que consume el motor puro. */
@@ -119,6 +125,16 @@ export interface ResultadoPlanes {
   planes: PlanElegible[]
   /** true = la lista viene en modo vitrina: precios base, compra bloqueada. */
   vitrina: boolean
+  /**
+   * Cuántos planes activos tiene la empresa, INDEPENDIENTE de los requisitos.
+   *
+   * Separa dos vacíos que la lista sola confunde: "no puedes verlos todavía" y
+   * "aquí no hay nada que ver". Sin esta cuenta, una empresa sin un solo plan le
+   * pedía al cliente que registrara su vehículo para poder enseñarle cero.
+   */
+  planesPublicados: number
+  /** ¿Este negocio exige vehículo para comprar? La UI no lo menciona si es false. */
+  requiereVehiculo: boolean
 }
 
 /**
@@ -145,9 +161,20 @@ export async function planesElegibles(args: {
     const categoria = await categoriaDeEmpresa(tx, companyId)
     const vehiculos = await vehiculosDe(tx, clienteId)
     const requisitos = requisitosParaAccion({ accion: 'COMPRAR_PLAN', categoria, vehiculos })
+    const requiereVehiculo = flujoRequiereVehiculo(categoria)
+    // La cuenta va ANTES del gate: un negocio sin planes no tiene por qué
+    // pedirle nada al cliente, y la página necesita distinguir los dos vacíos.
+    const planesPublicados = await tx.plan.count({ where: { companyId, activo: true } })
     const enVitrina = !requisitos.canProceed && vitrinaSinRequisitos
-    if (!requisitos.canProceed && !enVitrina) {
-      return { requisitos, vehiculo: null, planes: [], vitrina: false }
+    if (planesPublicados === 0 || (!requisitos.canProceed && !enVitrina)) {
+      return {
+        requisitos,
+        vehiculo: null,
+        planes: [],
+        vitrina: false,
+        planesPublicados,
+        requiereVehiculo,
+      }
     }
 
     // El vehículo de contexto solo existe en negocios con paso de vehículo.
@@ -186,6 +213,8 @@ export async function planesElegibles(args: {
       requisitos,
       vehiculo,
       vitrina: enVitrina,
+      planesPublicados,
+      requiereVehiculo,
       planes: planes.map((p) => ({
         id: p.id,
         nombre: p.nombre,

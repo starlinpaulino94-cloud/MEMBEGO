@@ -23,24 +23,67 @@ export const CATEGORIA_LABELS: Record<CategoriaNegocio, string> = {
 }
 
 /**
- * Mapea el `Company.type` legacy ("carwash" | "restaurante" | …) a la
- * categoría del catálogo. Desconocido → CAR_WASH (la única operativa), que
- * junto al paquete base completo garantiza el fail-open.
+ * Categoría RECONOCIDA en el `Company.type` legacy, o null si el texto no dice
+ * nada que el catálogo entienda ("otro", vacío, un tipo inventado).
+ *
+ * Existe separada de `categoriaDeType` porque las dos preguntas que se le hacen
+ * al tipo de negocio necesitan respuestas OPUESTAS ante la duda:
+ *
+ * - "¿qué módulos le enciendo?" → ante la duda, TODOS (fail-open: una empresa
+ *   viva no puede perder funciones porque su `type` esté mal escrito).
+ * - "¿le exijo un vehículo al cliente?" → ante la duda, NO. Un requisito es una
+ *   PUERTA CERRADA: darlo por supuesto le pedía la placa del carro al cliente de
+ *   un restaurante, que es como se descubrió que este default estaba mal.
+ *
+ * Por eso el desconocido cae en null aquí y en CAR_WASH allá.
  */
-export function categoriaDeType(type: string | null | undefined): CategoriaNegocio {
-  switch ((type ?? '').toLowerCase()) {
+export function categoriaExplicitaDeType(
+  type: string | null | undefined
+): CategoriaNegocio | null {
+  switch ((type ?? '').trim().toLowerCase()) {
+    case 'carwash':
+    case 'car wash':
+    case 'car-wash':
+    case 'lavado':
+    case 'lavadero':
+    case 'autolavado':
+      return 'CAR_WASH'
     case 'restaurante':
+    case 'restaurant':
       return 'RESTAURANTE'
     case 'barberia':
+    case 'barbería':
     case 'salon':
+    case 'salón':
+    case 'peluqueria':
+    case 'peluquería':
       return 'BARBERIA'
     case 'gym':
     case 'gimnasio':
       return 'GYM'
     default:
-      return 'CAR_WASH'
+      return null
   }
 }
+
+/**
+ * Mapea el `Company.type` legacy ("carwash" | "restaurante" | …) a la
+ * categoría del catálogo. Desconocido → CAR_WASH (la única operativa), que
+ * junto al paquete base completo garantiza el fail-open.
+ *
+ * Para decidir REQUISITOS (¿pido vehículo?) usa `categoriaExplicitaDeType`:
+ * este default no sirve para cerrar puertas, solo para no cerrar ninguna.
+ */
+export function categoriaDeType(type: string | null | undefined): CategoriaNegocio {
+  return categoriaExplicitaDeType(type) ?? 'CAR_WASH'
+}
+
+/**
+ * Categorías cuya operación gira alrededor de un vehículo: son las únicas que
+ * pueden exigirle uno al cliente antes de venderle. Una categoría fuera de esta
+ * lista —o desconocida— jamás pide placa.
+ */
+export const CATEGORIAS_CON_VEHICULO: readonly CategoriaNegocio[] = ['CAR_WASH']
 
 // ── Capacidades ──────────────────────────────────────────────────────────────
 
@@ -136,11 +179,17 @@ export interface CapacidadesConfig {
   categoria?: CategoriaNegocio
   /** Encendidos/apagados puntuales sobre el paquete base. */
   overrides?: Partial<Record<Capacidad, boolean>>
+  /** Forzados de visibilidad de los módulos del cliente (ausente = AUTO). */
+  modulosCliente?: Partial<Record<ModuloCliente, VisibilidadModulo>>
 }
 
 /** Normaliza el JSON guardado (tolerante a null/basura/valores desconocidos). */
 export function resolverConfig(raw: unknown): CapacidadesConfig {
-  const cfg = (raw ?? {}) as { categoria?: unknown; overrides?: unknown }
+  const cfg = (raw ?? {}) as {
+    categoria?: unknown
+    overrides?: unknown
+    modulosCliente?: unknown
+  }
   const categoria = (CATEGORIAS as readonly string[]).includes(String(cfg.categoria))
     ? (cfg.categoria as CategoriaNegocio)
     : undefined
@@ -152,20 +201,132 @@ export function resolverConfig(raw: unknown): CapacidadesConfig {
       }
     }
   }
-  return { categoria, overrides }
+  const modulosCliente: Partial<Record<ModuloCliente, VisibilidadModulo>> = {}
+  if (cfg.modulosCliente && typeof cfg.modulosCliente === 'object') {
+    for (const [k, v] of Object.entries(cfg.modulosCliente as Record<string, unknown>)) {
+      if (
+        (MODULOS_CLIENTE as readonly string[]).includes(k) &&
+        (VISIBILIDADES as readonly string[]).includes(String(v))
+      ) {
+        modulosCliente[k as ModuloCliente] = v as VisibilidadModulo
+      }
+    }
+  }
+  return { categoria, overrides, modulosCliente }
 }
 
 /** Capacidades efectivas: paquete base de la categoría + overrides. */
 export function capacidadesEfectivas(
   type: string | null | undefined,
   raw: unknown
-): { categoria: CategoriaNegocio; activas: Set<Capacidad> } {
+): {
+  categoria: CategoriaNegocio
+  /** null = el tipo de negocio no dice nada reconocible (ver arriba el porqué). */
+  categoriaExplicita: CategoriaNegocio | null
+  activas: Set<Capacidad>
+  modulosCliente: Partial<Record<ModuloCliente, VisibilidadModulo>>
+} {
   const config = resolverConfig(raw)
-  const categoria = config.categoria ?? categoriaDeType(type)
+  // Una categoría elegida a mano en el panel SÍ es explícita: alguien la
+  // afirmó. Lo que no vale como afirmación es el default de un `type` ilegible.
+  const categoriaExplicita = config.categoria ?? categoriaExplicitaDeType(type)
+  const categoria = categoriaExplicita ?? categoriaDeType(type)
   const activas = new Set<Capacidad>(CAPACIDADES_BASE[categoria])
   for (const [cap, on] of Object.entries(config.overrides ?? {})) {
     if (on) activas.add(cap as Capacidad)
     else activas.delete(cap as Capacidad)
   }
-  return { categoria, activas }
+  return { categoria, categoriaExplicita, activas, modulosCliente: config.modulosCliente ?? {} }
+}
+
+// ── Módulos del CLIENTE ──────────────────────────────────────────────────────
+
+/**
+ * Lo que el cliente ve en el menú de SU empresa.
+ *
+ * Es un eje distinto al de las capacidades: aquéllas dicen qué puede HACER el
+ * negocio por dentro; éstos, de qué se le HABLA al cliente. Un negocio que
+ * todavía no publicó un solo plan no debería tener una sección "Planes" que
+ * abre en vacío, ni una que le pida datos para comprar algo que no existe:
+ * un módulo vacío no es una promesa, es una puerta que no lleva a ningún sitio.
+ *
+ * La regla por defecto es AUTOMÁTICA (hay contenido → se ve). El forzado existe
+ * para los dos casos que el dato no puede adivinar: enseñar algo el día antes de
+ * lanzarlo, y esconder algo que existe pero no se quiere ofrecer todavía.
+ */
+export const MODULOS_CLIENTE = [
+  'MEMBRESIAS',
+  'OFERTAS',
+  'BENEFICIOS',
+  'REGALOS',
+  'INVITA_Y_GANA',
+  'RULETA',
+  'CITAS',
+  'VEHICULOS',
+] as const
+export type ModuloCliente = (typeof MODULOS_CLIENTE)[number]
+
+export const MODULO_CLIENTE_LABELS: Record<ModuloCliente, string> = {
+  MEMBRESIAS: 'Planes y mis membresías',
+  OFERTAS: 'Ofertas del negocio',
+  BENEFICIOS: 'Mis beneficios comprados',
+  REGALOS: 'Regalos y gift cards',
+  INVITA_Y_GANA: 'Invita y Gana',
+  RULETA: 'Ruleta de premios',
+  CITAS: 'Mis citas',
+  VEHICULOS: 'Mis vehículos',
+}
+
+/** Qué se le enseña al negocio como criterio automático de cada módulo. */
+export const MODULO_CLIENTE_AUTO: Record<ModuloCliente, string> = {
+  MEMBRESIAS: 'Se ve si la empresa tiene planes activos o el cliente ya tiene una membresía.',
+  OFERTAS: 'Se ve si la empresa tiene promociones vigentes.',
+  BENEFICIOS: 'Se ve si el cliente compró beneficios o recibió regalos VIP.',
+  REGALOS: 'Se ve si el negocio permite regalar o el cliente ya envió/recibió alguno.',
+  INVITA_Y_GANA: 'Se ve si hay una campaña de invitación activa y el programa premia algo.',
+  RULETA: 'Se ve si hay premios activos configurados.',
+  CITAS: 'Se ve si la agenda está encendida o el cliente ya tiene citas.',
+  VEHICULOS: 'Se ve si el negocio trabaja con vehículos o el cliente ya registró uno.',
+}
+
+/** Rutas del menú del cliente que cada módulo controla. */
+export const RUTAS_POR_MODULO_CLIENTE: Record<ModuloCliente, string[]> = {
+  MEMBRESIAS: ['/cliente/planes', '/mis-membresias'],
+  OFERTAS: ['/cliente/promociones'],
+  BENEFICIOS: ['/cliente/mis-promociones'],
+  REGALOS: ['/cliente/regalos'],
+  INVITA_Y_GANA: ['/cliente/invita-y-gana'],
+  RULETA: ['/cliente/ruleta'],
+  CITAS: ['/cliente/citas'],
+  VEHICULOS: ['/cliente/vehiculos'],
+}
+
+export const VISIBILIDADES = ['AUTO', 'MOSTRAR', 'OCULTAR'] as const
+export type VisibilidadModulo = (typeof VISIBILIDADES)[number]
+
+export const VISIBILIDAD_LABELS: Record<VisibilidadModulo, string> = {
+  AUTO: 'Automático (según lo que haya)',
+  MOSTRAR: 'Mostrar siempre',
+  OCULTAR: 'Ocultar siempre',
+}
+
+/**
+ * Rutas del menú del cliente que hay que ESCONDER (decisión pura).
+ *
+ * `disponible[m] === false` significa "no hay nada dentro"; `undefined` es "no
+ * se pudo averiguar" y se trata como disponible — un fallo de consulta puede
+ * dejar un módulo de más en el menú, nunca dejar al cliente sin los suyos.
+ */
+export function rutasOcultasCliente(
+  disponible: Partial<Record<ModuloCliente, boolean>>,
+  forzados: Partial<Record<ModuloCliente, VisibilidadModulo>> = {}
+): string[] {
+  const ocultas: string[] = []
+  for (const modulo of MODULOS_CLIENTE) {
+    const forzado = forzados[modulo] ?? 'AUTO'
+    if (forzado === 'MOSTRAR') continue
+    const vacio = disponible[modulo] === false
+    if (forzado === 'OCULTAR' || vacio) ocultas.push(...RUTAS_POR_MODULO_CLIENTE[modulo])
+  }
+  return ocultas
 }

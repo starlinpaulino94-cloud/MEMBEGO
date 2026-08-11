@@ -20,8 +20,15 @@ import {
   CAPACIDAD_LABELS,
   CATEGORIAS,
   CATEGORIA_LABELS,
+  MODULOS_CLIENTE,
+  MODULO_CLIENTE_AUTO,
+  MODULO_CLIENTE_LABELS,
+  VISIBILIDADES,
+  VISIBILIDAD_LABELS,
   type Capacidad,
   type CategoriaNegocio,
+  type ModuloCliente,
+  type VisibilidadModulo,
 } from '@/modules/capacidades/catalogo'
 
 const init: CapacidadesActionState = {}
@@ -30,11 +37,14 @@ export function CapacidadesPanel({
   companyId,
   categoria,
   activas,
+  modulosCliente = {},
 }: {
   companyId: string
   categoria: CategoriaNegocio
   /** Estado EFECTIVO actual (base + overrides) para precargar los toggles. */
   activas: Capacidad[]
+  /** Forzados guardados; lo ausente es AUTO. */
+  modulosCliente?: Partial<Record<ModuloCliente, VisibilidadModulo>>
 }) {
   const [state, action, pending] = useActionState(guardarCapacidades, init)
   const activasSet = new Set(activas)
@@ -88,10 +98,50 @@ export function CapacidadesPanel({
         ))}
       </div>
 
+      <div className="space-y-3 rounded-2xl border border-border/60 p-4">
+        <div>
+          <h3 className="font-bold text-foreground">Qué ve el cliente de este negocio</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            En automático, un módulo aparece cuando tiene algo dentro y se esconde
+            mientras esté vacío: así el cliente de un negocio que todavía no publicó
+            planes no ve una sección de membresías que no lleva a ninguna parte.
+            Fuérzalo solo cuando quieras adelantar un lanzamiento o guardarte algo
+            que ya existe.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {MODULOS_CLIENTE.map((modulo) => (
+            <label
+              key={modulo}
+              className="space-y-1.5 rounded-xl border border-border/60 p-3 text-sm"
+            >
+              <span className="font-medium text-foreground">
+                {MODULO_CLIENTE_LABELS[modulo]}
+              </span>
+              <select
+                name={`mod_${modulo}`}
+                defaultValue={modulosCliente[modulo] ?? 'AUTO'}
+                className="h-9 w-full rounded-lg border border-input bg-background px-2 text-sm"
+              >
+                {VISIBILIDADES.map((v) => (
+                  <option key={v} value={v}>
+                    {VISIBILIDAD_LABELS[v]}
+                  </option>
+                ))}
+              </select>
+              <span className="text-caption block font-normal text-muted-foreground">
+                {MODULO_CLIENTE_AUTO[modulo]}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       <p className="text-xs text-muted-foreground">
         Los cambios aplican de inmediato (menús, launchpad y barreras de servidor).
         Apagar una capacidad bloquea también sus acciones en el servidor, no solo la
-        esconde.
+        esconde. La visibilidad de los módulos del cliente solo afecta al menú: las
+        rutas siguen respondiendo por URL con su estado vacío.
       </p>
 
       <Button type="submit" disabled={pending} className="gap-2">

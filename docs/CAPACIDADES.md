@@ -273,3 +273,73 @@ UPDATE companies
           || jsonb_build_object('NAVEGACION_V2', true))
  WHERE name ILIKE '%CARTOWN%';
 ```
+
+---
+
+## Módulos del cliente: qué se le enseña a quien compra
+
+Las capacidades responden **qué puede hacer el negocio por dentro**. Falta la
+pregunta simétrica: **de qué se le habla al cliente**. Son ejes distintos y
+mezclarlos producía las dos averías que originaron esta sección.
+
+**La avería 1 — pedirle un carro al cliente de un restaurante.** El motor de
+requisitos preguntaba la categoría con `categoriaDeType`, que ante un tipo
+ilegible devuelve `CAR_WASH` por diseño (fail-open). Sirve para *encender*
+módulos; para *exigir* es exactamente el error opuesto. Y el formulario público
+de registro de empresas ofrece `otro` como opción, así que el caso no era raro:
+era el camino normal. Desde la corrección conviven dos funciones con respuestas
+opuestas ante la duda:
+
+| | Pregunta | Tipo desconocido |
+|---|---|---|
+| `categoriaDeType` | ¿qué módulos le enciendo? | `CAR_WASH` — no perder funciones |
+| `categoriaExplicitaDeType` | ¿qué le exijo al cliente? | `null` — no cerrar puertas |
+
+`capacidadesEfectivas` devuelve las dos (`categoria` y `categoriaExplicita`).
+El motor de elegibilidad usa la explícita, y solo `CATEGORIAS_CON_VEHICULO`
+—hoy `CAR_WASH`— puede pedir placa. Elegir la categoría a mano en el panel sí
+cuenta como afirmación explícita.
+
+**La avería 2 — módulos que abren en vacío.** Un negocio recién dado de alta
+mostraba a sus clientes "Planes", "Mis membresías", "Invita y Gana" y "Mis
+vehículos" sin haber publicado nada. Un módulo vacío no es una promesa: es una
+puerta que no lleva a ningún sitio.
+
+`MODULOS_CLIENTE` (catálogo) + `rutasOcultasCliente` (decisión pura) +
+`modules/cliente/navDisponible.ts` (los datos) resuelven la visibilidad **en dos
+capas, en este orden**:
+
+1. **Automática** — ¿hay algo dentro? Es el criterio por defecto.
+2. **Forzada** — `MOSTRAR` / `OCULTAR` guardados en
+   `capacidades.modulosCliente` desde el panel del superadmin. Gana sobre la
+   automática, porque el dato no sabe qué se lanza mañana ni qué se quiere
+   guardar para después. `AUTO` no se guarda: es la ausencia de decisión, y
+   escribirla congelaría el criterio el día que cambie.
+
+| Módulo | Rutas | Se ve cuando |
+|---|---|---|
+| `MEMBRESIAS` | `/cliente/planes`, `/mis-membresias` | la empresa tiene planes activos **o** el cliente ya tiene una membresía |
+| `OFERTAS` | `/cliente/promociones` | hay promociones vigentes |
+| `BENEFICIOS` | `/cliente/mis-promociones` | el cliente compró beneficios o recibió regalos VIP |
+| `REGALOS` | `/cliente/regalos` | `GIFT_CARDS` encendida **o** ya hay regalos/gift cards suyas |
+| `INVITA_Y_GANA` | `/cliente/invita-y-gana` | hay campaña ACTIVA **y** el programa premia algo |
+| `RULETA` | `/cliente/ruleta` | hay premios activos |
+| `CITAS` | `/cliente/citas` | `CITAS` encendida **o** el cliente ya tiene citas |
+| `VEHICULOS` | `/cliente/vehiculos` | la categoría trabaja con vehículos **o** el cliente ya registró uno |
+
+Las condiciones "**o** el cliente ya tiene…" no son cortesía: quien pagó una
+membresía o registró un vehículo no puede perderlos de vista porque el negocio
+despublique su catálogo.
+
+**Regla de fallo.** Si una consulta se cae, el módulo se considera disponible.
+Un menú con un módulo de más es un defecto; un cliente sin acceso a su membresía
+es una avería.
+
+**Alcance.** Esto controla el **menú** (sidebar, barra inferior, buscador,
+breadcrumb). Las rutas siguen respondiendo por URL con su estado vacío — no es
+una barrera de seguridad y no pretende serlo. Lo que sí es barrera es el motor
+de requisitos: los planes que no se pueden comprar no viajan al navegador.
+
+El menú del cliente está cacheado 5 minutos con el tag `CAPACIDADES_TAG`, así
+que un forzado desde el panel se ve al instante y el contenido nuevo aparece
+solo a los pocos minutos.

@@ -7,6 +7,10 @@ import {
   CAPACIDADES,
   CAPACIDAD_LABELS,
   CATEGORIA_LABELS,
+  MODULOS_CLIENTE,
+  MODULO_CLIENTE_AUTO,
+  MODULO_CLIENTE_LABELS,
+  VISIBILIDAD_LABELS,
 } from '@/modules/capacidades/catalogo'
 import { appDeCategoria } from '@/modules/apps/catalogo'
 import { PageHeader } from '@/components/ui/page-header'
@@ -48,7 +52,10 @@ export default async function CapacidadesEmpresaPage() {
     return <p className="text-muted-foreground">No se pudo cargar tu empresa.</p>
   }
 
-  const { categoria, activas } = capacidadesEfectivas(empresa.type, empresa.capacidades)
+  const { categoria, activas, modulosCliente } = capacidadesEfectivas(
+    empresa.type,
+    empresa.capacidades
+  )
   const app = appDeCategoria(categoria)
 
   return (
@@ -110,6 +117,45 @@ export default async function CapacidadesEmpresaPage() {
         Los módulos apagados no aparecen en tu menú y tampoco se pueden usar por
         detrás: la restricción se aplica en el servidor.
       </p>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">Qué ve tu cliente</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Cada sección aparece en la app de tus clientes cuando tiene algo dentro.
+            Mientras esté vacía se esconde, para no ofrecerles una puerta que no
+            lleva a ninguna parte.
+          </p>
+        </div>
+        <ul className="divide-y divide-border/50 overflow-hidden rounded-2xl border border-border/70 bg-card">
+          {MODULOS_CLIENTE.map((modulo) => {
+            const forzado = modulosCliente[modulo] ?? 'AUTO'
+            return (
+              <li key={modulo} className="flex items-start justify-between gap-4 px-4 py-3">
+                <span>
+                  <span className="font-medium text-foreground">
+                    {MODULO_CLIENTE_LABELS[modulo]}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {MODULO_CLIENTE_AUTO[modulo]}
+                  </span>
+                </span>
+                <span
+                  className={`text-overline shrink-0 rounded-full px-2.5 py-0.5 ${
+                    forzado === 'OCULTAR'
+                      ? 'bg-muted text-muted-foreground'
+                      : forzado === 'MOSTRAR'
+                        ? 'bg-info/15 text-info'
+                        : 'bg-success/15 text-success'
+                  }`}
+                >
+                  {forzado === 'AUTO' ? 'Automático' : VISIBILIDAD_LABELS[forzado]}
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
     </div>
   )
 }

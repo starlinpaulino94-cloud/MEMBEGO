@@ -17,9 +17,12 @@ import {
   CAPACIDADES,
   CATEGORIAS,
   CAPACIDADES_BASE,
+  MODULOS_CLIENTE,
   categoriaDeType,
   type Capacidad,
   type CategoriaNegocio,
+  type ModuloCliente,
+  type VisibilidadModulo,
 } from './catalogo'
 import { CAPACIDADES_TAG } from './resolver'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -63,10 +66,20 @@ export async function guardarCapacidades(
       if (encendida !== base.has(cap)) overrides[cap] = encendida
     }
 
+    // Visibilidad de los módulos del cliente. AUTO no se guarda: es la
+    // ausencia de decisión, y guardarla congelaría el criterio automático el
+    // día que cambie.
+    const modulosCliente: Partial<Record<ModuloCliente, VisibilidadModulo>> = {}
+    for (const modulo of MODULOS_CLIENTE) {
+      const valor = String(formData.get(`mod_${modulo}`) ?? 'AUTO')
+      if (valor === 'MOSTRAR' || valor === 'OCULTAR') modulosCliente[modulo] = valor
+    }
+
     const derivada = categoriaDeType(company.type)
     const config = {
       ...(categoria !== derivada ? { categoria } : {}),
       ...(Object.keys(overrides).length ? { overrides } : {}),
+      ...(Object.keys(modulosCliente).length ? { modulosCliente } : {}),
     }
 
     const meta = await getRequestMeta()
@@ -84,7 +97,7 @@ export async function guardarCapacidades(
           accion: 'NOTA_INTERNA',
           entidadTipo: 'Company',
           entidadId: companyId,
-          payload: { tipo: 'CAPACIDADES_ACTUALIZADAS', categoria, overrides },
+          payload: { tipo: 'CAPACIDADES_ACTUALIZADAS', categoria, overrides, modulosCliente },
           ...meta,
         },
       })
@@ -95,6 +108,7 @@ export async function guardarCapacidades(
     revalidatePath('/superadmin/capacidades')
     revalidatePath('/admin/aplicaciones')
     revalidatePath('/admin/app/carwash')
+    revalidatePath('/admin/aplicaciones/capacidades')
     return { success: `Capacidades de ${company.name} guardadas.` }
   } catch (e) {
     console.error('[capacidades] guardar:', e)

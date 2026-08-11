@@ -80,10 +80,24 @@ export default async function CapacidadesSuperadminPage({
             Categoría actual: {CATEGORIA_LABELS[efectivas.categoria]} ·{' '}
             {efectivas.activas.size} capacidades activas
           </p>
+          {/* Un tipo que el catálogo no reconoce ("otro", vacío, uno inventado)
+              no es un detalle cosmético: de él dependen los requisitos que se le
+              exigen al cliente. Decirlo aquí evita tener que deducirlo mirando
+              la pantalla del cliente. */}
+          {efectivas.categoriaExplicita == null && (
+            <p className="mb-5 rounded-xl border border-warning/25 bg-warning/8 p-3 text-small text-foreground">
+              El tipo guardado de esta empresa (
+              <span className="font-mono">{seleccionada.type || 'vacío'}</span>) no
+              corresponde a ninguna categoría del catálogo. Se le aplican los módulos
+              de {CATEGORIA_LABELS[efectivas.categoria]}, pero NO se le exige vehículo
+              a sus clientes. Elige la categoría correcta abajo para fijarla.
+            </p>
+          )}
           <CapacidadesPanel
             companyId={seleccionada.id}
             categoria={efectivas.categoria}
             activas={[...efectivas.activas]}
+            modulosCliente={efectivas.modulosCliente}
           />
         </section>
       )}
