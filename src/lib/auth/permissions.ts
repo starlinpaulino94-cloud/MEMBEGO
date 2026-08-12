@@ -51,9 +51,11 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
-  // Plataforma modular · E2: launchpad de aplicaciones y shells de negocio
-  // (/admin/aplicaciones y /admin/app/<categoria>).
-  'aplicaciones',
+  // `/admin/app/<vertical>/*`. El launchpad `/admin/aplicaciones` se retiró
+  // —los sistemas de cada oficio se construyen aparte y se conectan por
+  // contrato—, pero las pantallas de Car Wash siguen en el repositorio para su
+  // extracción y su guardia tiene que seguir existiendo. Ya no se enlazan desde
+  // ningún sitio: son alcanzables por URL y nada más.
   'app',
 ] as const
 
@@ -67,7 +69,9 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // 'riesgo' entra en los dos: Marketing lo necesita para saber a quién
   // dirigir una campaña de retención, y Supervisión para repartir las llamadas.
   MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones', 'riesgo', 'retencion'],
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'aplicaciones', 'app', 'riesgo', 'retencion', 'conciliacion'],
+  // Sin 'aplicaciones': el módulo se retiró a propósito (los genéricos —QR,
+  // citas, seguimiento— volvieron al menú lateral como secciones propias).
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app', 'riesgo', 'retencion', 'conciliacion'],
 }
 
 /** ¿Puede este rol abrir esta sección del panel? */

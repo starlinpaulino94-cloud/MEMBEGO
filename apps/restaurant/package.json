@@ -1,0 +1,15 @@
+{
+  "name": "@membego/restaurant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Satélite de restaurante: base propia, proyección local y solo HTTP contra MembeGo.",
+  "type": "module",
+  "scripts": {
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "dev": "tsx src/servidor.ts"
+  },
+  "dependencies": {
+    "@membego/platform-sdk": "workspace:*",
+    "@prisma/client": "^6"
+  }
+}

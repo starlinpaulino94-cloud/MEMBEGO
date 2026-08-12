@@ -115,6 +115,22 @@ export async function getRecentCompanies(limit = 6): Promise<CompanyPublic[]> {
   return (await fn()).map(reviveCompany)
 }
 
+/**
+ * Catálogo global de planes. Precio y nombre son idénticos para todo el
+ * mundo —lo personalizado es la elegibilidad, y esa no pasa por aquí—, así que
+ * se cachea como el resto de la vitrina. Sin fechas que revivir.
+ */
+export async function getPlanesPublic(
+  filtros: { search?: string; category?: string; limit?: number } = {}
+) {
+  const fn = unstable_cache(
+    () => q.getPlanesPublic(filtros),
+    ['mk-planes', JSON.stringify(filtros)],
+    { revalidate: 120, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}
+
 /** Categorías: cambian poco — 1 h de TTL (solo primitivos, sin revivir). */
 export const getCategoriesPublic = unstable_cache(
   () => q.getCategoriesPublic(),

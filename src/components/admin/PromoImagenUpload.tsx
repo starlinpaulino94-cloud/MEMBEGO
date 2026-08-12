@@ -11,7 +11,8 @@ import { useRef, useState } from 'react'
 import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { OG_MAX_MB, OG_RECOMENDACION } from '@/lib/share/og-tamano'
+import { OG_MAX_MB } from '@/lib/share/og-tamano'
+import { PROMO_IMG, validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
 import { uniqueFileName } from '@/lib/storage'
 import { Button } from '@/components/ui/button'
 
@@ -41,6 +42,24 @@ export function PromoImagenUpload({
     }
     if (file.size > MAX_MB * 1024 * 1024) {
       toast.error(`La imagen no puede superar ${MAX_MB} MB.`)
+      return
+    }
+    // El formato se EXIGE aquí, antes de subir: aceptar cualquier proporción
+    // era regalar un problema para después — la imagen se veía recortada o
+    // diminuta en el celular del cliente y nadie sabía por qué. El mensaje
+    // dice qué se necesita y qué midió el archivo (formato-imagen.ts).
+    try {
+      const bmp = await createImageBitmap(file)
+      const error = validarDimensionesPromo(bmp.width, bmp.height)
+      bmp.close()
+      if (error) {
+        toast.error(error)
+        if (fileRef.current) fileRef.current.value = ''
+        return
+      }
+    } catch {
+      toast.error('No se pudo leer la imagen. Prueba con otro archivo.')
+      if (fileRef.current) fileRef.current.value = ''
       return
     }
     setUploading(true)
@@ -95,7 +114,9 @@ export function PromoImagenUpload({
           )}
           <span className="text-sm">Subir imagen desde tu dispositivo</span>
           <span className="text-xs">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
-          <span className="text-xs opacity-80">Ideal {OG_RECOMENDACION} (horizontal)</span>
+          <span className="text-xs opacity-80">
+            Cuadrada, {PROMO_IMG.width}×{PROMO_IMG.height} px (formato Instagram)
+          </span>
         </button>
       )}
 

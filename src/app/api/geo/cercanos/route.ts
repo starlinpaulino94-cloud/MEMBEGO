@@ -197,7 +197,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const base = { filtros, userId: dbUserId }
+  // `supabaseId` va junto al `userId` porque marcan dos relaciones distintas:
+  // seguir (company_follows, por User) y ser cliente (clientes, por persona).
+  const base = { filtros, userId: dbUserId, supabaseId: sessionUser?.supabaseId ?? null }
   let result: ResultadoCercanos
   if (viewport) {
     // La distancia se mide desde donde está la persona (el ancla ya resuelta),

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 // `.mjs` sin tipos: se declara la forma que devuelve para no indexar un `{}`.
 import { leerTokens as leerTokensSinTipar } from '../scripts/contraste.mjs'
 
-import { state } from '../packages/ui/src/tokens'
+import { state, primary, cyanBrand } from '../packages/ui/src/tokens'
 
 const leerTokens = leerTokensSinTipar as (
   css: string,
@@ -82,6 +82,62 @@ test('los estados semánticos del espejo coinciden con globals.css', () => {
       distancia(esperado, real) <= 2,
       `state.${clave} = ${real} pero ${token} equivale a ${esperado}. ` +
         'Los correos y los PDFs saldrían con el color viejo.'
+    )
+  }
+})
+
+/**
+ * LA ESCALA DE MARCA — el hueco por el que se coló A-13.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA GUARDIA DE ARRIBA MIRABA CUATRO TOKENS DE VEINTICUATRO
+ *
+ * Comparaba `success`, `warning`, `info` y `danger`. La ESCALA DE MARCA no la
+ * miraba nadie, y llevaba tiempo separada: `globals.css` decía un azul puro y
+ * `tokens.ts` el azul de Tailwind, con 65 unidades sRGB de distancia en el paso
+ * 500 — se ven distintos.
+ *
+ * Se notaba donde el cliente lo ve: el espejo alimenta correos, imágenes al
+ * compartir, PDFs y recibos. Quien recibía un correo de MembeGo y abría la
+ * aplicación veía DOS AZULES DE MARCA distintos.
+ *
+ * Y explicaba una contradicción que parecía documental: `MDS.md` decía que el
+ * azul era `#2563eb` porque leyó el espejo; la interfaz pintaba `#006bed`. Los
+ * dos documentos tenían razón — lo que no coincidía eran las dos fuentes.
+ *
+ * Se descubrió convirtiendo los OKLCH a hex para documentarlos, en vez de
+ * copiar los del espejo. Una guardia parcial da la sensación de estar cubierto
+ * sin estarlo, que es peor que no tener guardia.
+ */
+test('la escala de marca del espejo coincide con globals.css', () => {
+  const css = readFileSync(join('src', 'app', 'globals.css'), 'utf8')
+  // Las escalas numéricas viven en `@theme inline`, no en `:root`.
+  const tokens = leerTokens(css, '@theme inline')
+
+  for (const paso of [50, 100, 200, 300, 400, 500, 600, 700, 800, 900] as const) {
+    const oklch = tokens[`--color-primary-${paso}`]
+    assert.ok(oklch, `falta --color-primary-${paso} en globals.css`)
+    const esperado = OKLCH_A_HEX(oklch[0], oklch[1], oklch[2])
+    const real = primary[paso]
+    assert.ok(
+      distancia(esperado, real) <= 2,
+      `primary[${paso}] = ${real} pero --color-primary-${paso} equivale a ${esperado}. ` +
+        'Es A-13: el correo saldría con un azul de marca y la aplicación con otro.'
+    )
+  }
+})
+
+test('la escala cyan del espejo coincide con globals.css', () => {
+  const css = readFileSync(join('src', 'app', 'globals.css'), 'utf8')
+  const tokens = leerTokens(css, '@theme inline')
+
+  for (const paso of [300, 500, 700] as const) {
+    const oklch = tokens[`--color-cyan-brand-${paso}`]
+    assert.ok(oklch, `falta --color-cyan-brand-${paso} en globals.css`)
+    const esperado = OKLCH_A_HEX(oklch[0], oklch[1], oklch[2])
+    assert.ok(
+      distancia(esperado, cyanBrand[paso]) <= 2,
+      `cyanBrand[${paso}] = ${cyanBrand[paso]} pero equivale a ${esperado}.`
     )
   }
 })

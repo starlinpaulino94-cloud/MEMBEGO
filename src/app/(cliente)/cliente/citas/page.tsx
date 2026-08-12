@@ -14,6 +14,8 @@ import { CancelarCitaButton } from '@/components/citas/CancelarCitaButton'
 import { CitaEstadoBadge } from '@/components/citas/CitaEstadoBadge'
 import { EmptyState } from '@/components/system/EmptyState'
 import { cn, safeInternalPath } from '@/lib/utils'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -22,6 +24,16 @@ export const metadata = {
 }
 
 const ACTIVAS = ['PENDIENTE', 'CONFIRMADA']
+
+/**
+ * La hora de una cita se lee en la zona horaria de SU negocio, no en la de la
+ * empresa que el cliente tenga abierta. Con citas de varias empresas en la
+ * misma lista, usar una zona para todas produce horas falsas — y una hora
+ * falsa en una agenda no se nota hasta que alguien llega tarde.
+ */
+type CitaConEmpresa = { company: { zonaHoraria: string; idioma: string | null } }
+const tzDe = (c: CitaConEmpresa) => c.company.zonaHoraria
+const idiomaDe = (c: CitaConEmpresa) => c.company.idioma ?? 'es-DO'
 
 export default async function CitasClientePage({
   searchParams,
@@ -35,12 +47,14 @@ export default async function CitasClientePage({
   const retorno = safeInternalPath(retornoParam, '/cliente/mis-promociones')
   const retornoParamQs = retornoParam ? `&retorno=${encodeURIComponent(retorno)}` : ''
 
+  // ANTES decía «Tu cuenta no está completamente configurada». Ese mensaje
+  // se escribió para una sesión ROTA; desde que un cliente puede existir sin
+  // empresa, es el estado normal de quien acaba de registrarse. Decirle a
+  // alguien que su cuenta está mal y que llame a soporte, cuando lo único
+  // que pasa es que aún no se ha unido a ningún negocio, es mandarlo a
+  // resolver un problema que no tiene.
   if (!user.metadata.clienteId) {
-    return (
-      <main className="container max-w-3xl py-8">
-        <p className="text-muted-foreground">Tu cuenta no está completamente configurada.</p>
-      </main>
-    )
+    return <SinEmpresaTodavia que="citas" detalle="Podrás agendar cuando te unas a un negocio que ofrezca reservas." />
   }
 
   // El narrowing del `if (!user.metadata.clienteId)` de arriba NO sobrevive al
@@ -70,9 +84,25 @@ export default async function CitasClientePage({
 
   const tz = cliente.company.zonaHoraria
   const idioma = cliente.company.idioma ?? 'es-DO'
+
+  /**
+   * DOS MITADES QUE NO SON LA MISMA COSA.
+   *
+   * RESERVAR es con un negocio concreto: horarios, turnos libres, vehículos y
+   * zona horaria son SUYOS. Esa mitad sigue anclada a la empresa activa, y así
+   * debe ser — no se agenda «en general».
+   *
+   * MIS CITAS es de la persona: si tiene turno en dos negocios, los dos son
+   * suyos y los dos tienen que aparecer. Antes se listaban solo las de la ficha
+   * activa; la otra existía, se acercaba, y no salía en ninguna pantalla.
+   *
+   * Cada cita se pinta con la zona horaria de SU negocio (`c.company`), no con
+   * la de la empresa abierta: una cita de otra región mostrada en la zona
+   * equivocada da una hora falsa con toda la apariencia de ser correcta.
+   */
   const [cfg, citas] = await Promise.all([
     getAgendaConfig(cliente.companyId),
-    getCitasCliente(cliente.id),
+    getCitasCliente(await misClienteIds(user.supabaseId)),
   ])
 
   // Cita para canjear una recompensa gratis (?compra=): valida que sea suya
@@ -205,13 +235,15 @@ export default async function CitasClientePage({
             >
               <div className="min-w-0">
                 <p className="font-semibold capitalize text-foreground">
-                  {etiquetaDia(ymdEnTz(c.inicio, tz), tz, idioma)} ·{' '}
-                  {hmEnTz(c.inicio, tz)}
+                  {etiquetaDia(ymdEnTz(c.inicio, tzDe(c)), tzDe(c), idiomaDe(c))} ·{' '}
+                  {hmEnTz(c.inicio, tzDe(c))}
                 </p>
                 <p className="mt-0.5 text-sm text-muted-foreground">
-                  {c.vehiculo ? `${c.vehiculo.marca} ${c.vehiculo.modelo}` : null}
-                  {c.vehiculo && c.servicio ? ' · ' : null}
-                  {c.servicio}
+                  {/* CON QUIÉN. Con citas de varios negocios en la misma lista,
+                      una hora sin nombre no dice a dónde hay que ir. */}
+                  {c.company.name}
+                  {c.vehiculo ? ` · ${c.vehiculo.marca} ${c.vehiculo.modelo}` : null}
+                  {c.servicio ? ` · ${c.servicio}` : null}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -233,8 +265,9 @@ export default async function CitasClientePage({
             {historial.map((c) => (
               <div key={c.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                 <p className="capitalize text-foreground/80">
-                  {etiquetaDia(ymdEnTz(c.inicio, tz), tz, idioma)} ·{' '}
-                  {hmEnTz(c.inicio, tz)}
+                  {etiquetaDia(ymdEnTz(c.inicio, tzDe(c)), tzDe(c), idiomaDe(c))} ·{' '}
+                  {hmEnTz(c.inicio, tzDe(c))}
+                  <span className="ml-1.5 normal-case text-muted-foreground">{c.company.name}</span>
                 </p>
                 <CitaEstadoBadge estado={c.estado} />
               </div>

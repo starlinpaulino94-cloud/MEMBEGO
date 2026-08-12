@@ -26,6 +26,7 @@ import {
   Lock,
   ChevronRight,
 } from 'lucide-react'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi perfil' }
@@ -41,9 +42,14 @@ export const metadata = { title: 'Mi perfil' }
 export default async function PerfilPage() {
   const user = await requireRole('CLIENTE')
 
+  // ANTES decía «Tu cuenta no está completamente configurada». Ese mensaje
+  // se escribió para una sesión ROTA; desde que un cliente puede existir sin
+  // empresa, es el estado normal de quien acaba de registrarse. Decirle a
+  // alguien que su cuenta está mal y que llame a soporte, cuando lo único
+  // que pasa es que aún no se ha unido a ningún negocio, es mandarlo a
+  // resolver un problema que no tiene.
   if (!user.metadata.clienteId) {
-    console.error('[cliente-perfil] Missing clienteId in metadata')
-    return <p className="text-muted-foreground">Cuenta no está completamente configurada. Por favor, contacta al soporte.</p>
+    return <SinEmpresaTodavia que="ficha en ningún negocio" detalle="Tu cuenta de Membego está lista. Los datos de contacto se completan al unirte a tu primer negocio." />
   }
 
   let cliente = null

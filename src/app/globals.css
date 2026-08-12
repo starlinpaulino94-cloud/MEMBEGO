@@ -97,6 +97,26 @@
   --color-overlay: var(--overlay);
   --color-skeleton: var(--skeleton);
 
+  /* ── DS 2.0 · Fase 1 · Paleta de GRÁFICOS ────────────────────────────
+     El hueco más peligroso del ecosistema: sin ella, cada gráfico elegía
+     sus colores y «pendiente» era ámbar en un sistema y gris en otro.
+
+     Las cuatro primeras se distinguen también en escala de grises (sus
+     luminosidades son .623, .715, .565 y .535): un daltónico y una
+     impresora en blanco y negro necesitan lo mismo. */
+  --color-chart-1: var(--color-primary-500);
+  --color-chart-2: var(--color-cyan-brand-500);
+  --color-chart-3: var(--warning);
+  --color-chart-4: var(--success);
+  --color-chart-5: var(--color-primary-800);
+  --color-chart-6: var(--muted-foreground);
+
+  /* Estado PENDIENTE. Faltaba: se resolvía con `--muted-foreground`, que es
+     el color del texto secundario. Un estado que comparte color con «esto
+     es menos importante» no se lee como estado. */
+  --color-pending: var(--pending);
+  --color-pending-foreground: var(--pending-foreground);
+
   /* ── DS 2.0 · Alias semánticos ──────────────────────────────────────
      Nombres nuevos que APUNTAN a los tokens existentes; no son un segundo
      sistema. Existen para que las pantallas nuevas digan lo que quieren
@@ -161,6 +181,45 @@
    * El respiro de 1rem no es decoración: sin él el CTA queda pegado al borde de
    * la barra y se pulsa mal con el pulgar.
    */
+  /* ── DS 2.0 · Fase 1 · Lo que el sistema usaba sin declarar ──────────
+
+     Estos cuatro grupos ya se usaban —en píxeles sueltos repartidos por las
+     pantallas— y no existían como token. Declararlos no cambia nada hoy;
+     lo que hace es que un satélite pueda leerlos en vez de medirlos a ojo
+     en una captura, que es como se separan dos productos.
+
+     z-index: había doce valores a mano (z-[500], z-[600], z-[120]…). Sin
+     escala, el síntoma es un modal por debajo de un mapa, y se descubre en
+     producción. */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-map-overlay: 30;
+  --z-drawer: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-celebration: 70;
+
+  /* Tamaños de icono: 16 en texto, 20 en botones y menú, 24 en cabeceras,
+     32 en estados vacíos. */
+  --icon-sm: 1rem;
+  --icon-md: 1.25rem;
+  --icon-lg: 1.5rem;
+  --icon-xl: 2rem;
+
+  /* Alturas de control. `--control-lg` son 44px: NO es una altura elegida
+     por gusto, es el mínimo táctil de WCAG 2.5.8. Por eso está aquí y no
+     redondeada a 2.5rem. */
+  --control-sm: 2rem;
+  --control-md: 2.5rem;
+  --control-lg: 2.75rem;
+  --touch-min: 2.75rem;
+
+  /* ESTADO PENDIENTE. Gris azulado, no el gris del texto secundario: es un
+     estado y tiene que leerse como tal. Contraste 4.83:1 sobre tarjeta. */
+  --pending: oklch(0.545 0.03 264);
+  --pending-foreground: oklch(0.99 0 0);
+
   --dock-inferior: 3.5rem;
   --espacio-dock: calc(var(--dock-inferior) + env(safe-area-inset-bottom, 0px) + 1rem);
 
@@ -288,6 +347,9 @@
   --warning-foreground: oklch(0.22 0.06 80);
   --info: oklch(0.70 0.11 215);
   --info-foreground: oklch(0.15 0.03 215);
+  /* Aclarado sobre el lienzo negro, como el resto de estados. */
+  --pending: oklch(0.68 0.025 264);
+  --pending-foreground: oklch(0.16 0.02 264);
   --border: oklch(1 0 0 / 8%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.72 0.16 255);
@@ -350,6 +412,8 @@
   --warning-foreground: oklch(0.99 0 0);
   --info: oklch(0.545 0.12 215);
   --info-foreground: oklch(0.99 0 0);
+  --pending: oklch(0.545 0.03 264);
+  --pending-foreground: oklch(0.99 0 0);
   --border: oklch(0.87 0.006 264);
   --input: oklch(0.87 0.006 264);
   --ring: oklch(0.55 0.22 255);

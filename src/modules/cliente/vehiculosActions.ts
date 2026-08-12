@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { validarVehiculoNuevo } from '@/modules/registro/vehiculo-nuevo'
 import { clasificarErrorPrisma } from '@/lib/prisma-errors'
@@ -142,10 +143,7 @@ export async function marcarVehiculoPrincipal(
 ): Promise<VehiculoActionState> {
   try {
     const user = await getUser()
-    if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
-      return { error: 'No autorizado.' }
-    }
-    const clienteId = user.metadata.clienteId
+    if (!user || user.metadata.role !== 'CLIENTE') return { error: 'No autorizado.' }
 
     const vehiculoId = String(formData.get('vehiculoId') ?? '').trim()
     if (!vehiculoId) return { error: 'Vehículo no especificado.' }
@@ -158,7 +156,20 @@ export async function marcarVehiculoPrincipal(
         select: { id: true, clienteId: true, esPrincipal: true, cliente: { select: { companyId: true } } },
       })
     )
-    if (!propio || propio.clienteId !== clienteId) return { error: 'No autorizado.' }
+    /**
+     * Contra TODAS sus fichas, y el `clienteId` sale del VEHÍCULO.
+     *
+     * La lista enseña los vehículos de todos sus negocios; con la ficha activa,
+     * marcar como principal uno de otro negocio contestaba «No autorizado».
+     *
+     * Y el `clienteId` del vehículo no es un detalle: «principal» es principal
+     * DENTRO de un negocio. Usando el de la sesión, el `updateMany` que quita
+     * el principal anterior habría desmarcado el coche de otra empresa y dejado
+     * a esa con dos principales o ninguno.
+     */
+    const misFichas = await misClienteIds(user.supabaseId)
+    if (!propio || !misFichas.includes(propio.clienteId)) return { error: 'No autorizado.' }
+    const clienteId = propio.clienteId
     if (propio.esPrincipal) return { success: true, vehiculoId }
 
     // Los dos escritos van juntos —`conEmpresa` ya abre una transacción—: si

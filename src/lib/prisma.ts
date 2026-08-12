@@ -136,27 +136,34 @@ if (process.env.NODE_ENV === 'production' && process.env.DATABASE_URL) {
     const u = new URL(process.env.DATABASE_URL)
     const usaPooler = u.port === '6543' || u.searchParams.has('pgbouncer')
 
-    // Auditoría de producción · Fase 4. El puerto correcto no basta:
-    // `connection_limit` decide cuántas conexiones abre CADA instancia
-    // serverless contra el pooler.
+    // Auditoría de producción · Fase 4, REVISADA en el incidente del
+    // 12-08-2026. El puerto correcto no basta: `connection_limit` decide
+    // cuántas conexiones abre CADA instancia serverless contra el pooler.
     //
-    // La aritmética que importa: Supabase Pro da del orden de 200 conexiones
-    // al pooler. Vercel puede tener cientos de instancias vivas a la vez bajo
-    // carga. Con el valor por defecto de Prisma (num_cpus * 2 + 1, típicamente
-    // 5 o 9) bastan ~25 instancias para agotarlo, y a partir de ahí cada clic
-    // espera hasta diez segundos y muere en P2024.
+    // La aritmética tiene DOS lados y los dos han fallado ya en producción:
     //
-    // En serverless el número correcto es 1: la instancia atiende una petición
-    // a la vez, así que un pool mayor no da paralelismo — solo reserva
-    // conexiones que otra instancia necesita.
-    const limite = u.searchParams.get('connection_limit')
-    if (usaPooler && limite !== '1') {
+    //   · Demasiado alto: Supabase da del orden de 200 conexiones al pooler y
+    //     Vercel puede tener decenas de instancias vivas; con el valor por
+    //     defecto de Prisma (num_cpus * 2 + 1) bastan ~25 instancias para
+    //     agotarlo → P2024 en toda la app.
+    //
+    //   · Demasiado bajo: con Fluid, VARIAS peticiones concurrentes comparten
+    //     la instancia — y su pool. Con `connection_limit=1` (la
+    //     recomendación original, escrita cuando cada instancia atendía una
+    //     petición), todas las transacciones de `conEmpresa`/`sinEmpresa` de
+    //     esa instancia hacen cola por UNA conexión y mueren en P2028 en
+    //     cuanto la de delante tarda más que `maxWait`. Así se cayó el panel
+    //     entero el 12-08-2026.
+    //
+    // El rango sano con Fluid es pequeño pero mayor que uno: 3–5.
+    const limite = Number(u.searchParams.get('connection_limit') ?? NaN)
+    if (usaPooler && !(limite >= 1 && limite <= 5)) {
       console.warn(
-        '[prisma] DATABASE_URL sin `connection_limit=1`' +
-          (limite ? ` (está en ${limite})` : ' (sin definir, Prisma usará ~5-9)') +
-          '. En serverless cada instancia abriría ese número de conexiones contra el ' +
-          'pooler de Supabase; con suficientes instancias se agotan y toda la app ' +
-          'empieza a devolver P2024. Añade `&connection_limit=1` a la cadena.'
+        '[prisma] DATABASE_URL con `connection_limit` ' +
+          (Number.isNaN(limite) ? 'sin definir (Prisma usará ~5-9)' : `en ${limite}`) +
+          '. Con Fluid, el rango sano es 3-5: menos serializa las transacciones ' +
+          'de la instancia (P2028); mucho más agota el pooler de Supabase entre ' +
+          'todas las instancias (P2024). Añade `&connection_limit=3` a la cadena.'
       )
     }
 

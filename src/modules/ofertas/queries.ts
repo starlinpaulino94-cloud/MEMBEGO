@@ -114,11 +114,23 @@ export async function getOfertaParaCliente(codigo: string, clienteId: string | n
   return { oferta, invitado, estadoCliente, usosPeriodo }
 }
 
-/** Regalos reclamados del cliente (para Mis beneficios). */
-export async function getRegalosCliente(clienteId: string) {
+/**
+ * Ofertas reclamadas del cliente (para Mis beneficios).
+ *
+ * Por sus FICHAS, no por la activa. El resto de «Mis beneficios» ya listaba
+ * las compras de todas ellas; este bloque seguía mirando una sola, así que en
+ * la misma pantalla convivían las promociones de todos sus negocios con las
+ * ofertas de uno. Ver `misClienteIds` en `afiliacion.ts`.
+ */
+export async function getRegalosCliente(clienteIds: string[]) {
+  if (clienteIds.length === 0) return []
   const invitaciones = await sinEmpresa('ofertas: regalos del cliente cruzan sus empresas (panel cliente)', (tx) =>
     tx.ofertaInvitado.findMany({
-      where: { clienteId, reclamadaAt: { not: null }, oferta: { estado: 'ACTIVA' } },
+      where: {
+        clienteId: { in: clienteIds },
+        reclamadaAt: { not: null },
+        oferta: { estado: 'ACTIVA' },
+      },
       include: {
         oferta: { include: { company: { select: { name: true, zonaHoraria: true } } } },
       },

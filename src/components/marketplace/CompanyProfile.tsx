@@ -83,6 +83,19 @@ export interface CompanyProfileProps {
   /** Sobrescribe el botón volver (p. ej. "Cerca de mí" cuando vino del mapa). */
   backHref?: string
   backLabel?: string
+
+  /**
+   * Botón principal del modo 'app', resuelto por quien conoce la sesión.
+   *
+   * Antes se decidía aquí con `planesCta`, que a su vez salía de comparar el
+   * negocio con la EMPRESA ACTIVA: si no coincidían, no había botón y el
+   * perfil quedaba de adorno. Quién es esta persona en ESTE negocio —si tiene
+   * ficha, si lo sigue— es cosa de la página, que tiene la sesión delante;
+   * este componente solo pinta.
+   */
+  ctaSlot?: React.ReactNode
+  /** Tira de relación («Eres cliente», «Sigues este negocio»). */
+  relacionSlot?: React.ReactNode
 }
 
 export function CompanyProfile({
@@ -102,6 +115,8 @@ export function CompanyProfile({
   promoRetorno,
   backHref,
   backLabel,
+  ctaSlot,
+  relacionSlot,
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
@@ -235,6 +250,10 @@ export function CompanyProfile({
                 </div>
               )}
 
+              {/* Qué es esta persona AQUÍ. Va antes de la descripción porque
+                  «ya eres cliente» cambia cómo se lee todo lo de abajo. */}
+              {relacionSlot}
+
               {company.description && (
                 <p className="mt-3 max-w-2xl text-muted-foreground">{company.description}</p>
               )}
@@ -264,14 +283,17 @@ export function CompanyProfile({
             {/* CTA */}
             <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
               {isApp ? (
-                (planesCta?.href || planesHref) && (
-                  <Link
-                    href={planesCta?.href ?? planesHref!}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-sm transition hover:bg-primary sm:w-auto"
-                  >
-                    {planesCta?.label ?? 'Ver planes'} <ArrowRight className="h-4 w-4" />
-                  </Link>
-                )
+                // El slot manda cuando existe: sabe si esta persona tiene ficha
+                // en ESTE negocio. `planesCta` queda para quien aún no lo pasa.
+                (ctaSlot ??
+                  ((planesCta?.href || planesHref) && (
+                    <Link
+                      href={planesCta?.href ?? planesHref!}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-sm transition hover:bg-primary sm:w-auto"
+                    >
+                      {planesCta?.label ?? 'Ver planes'} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  )))
               ) : (
                 <Link
                   href={registroHref}

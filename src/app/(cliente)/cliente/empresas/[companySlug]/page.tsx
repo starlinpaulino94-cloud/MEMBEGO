@@ -1,12 +1,15 @@
 import { notFound } from 'next/navigation'
+import { BadgeCheck, Check } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { CompanyProfile } from '@/components/marketplace/CompanyProfile'
+import { CtaEmpresa } from '@/components/cliente/CtaEmpresa'
+import { fichaEnEmpresa } from '@/modules/cliente/afiliacion'
+import { getPromocionesDeEmpresaParaMi, getSeguidasIds } from '@/modules/social/queries'
 import {
   getCompanyPublic,
   getCompanyStats,
   getCompanyPlanesPublic,
   getCompanyPostsPublic,
-  getPromotionsPublic,
   getSucursalesPublic,
 } from '@/modules/marketplace/cached'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
@@ -46,23 +49,46 @@ export default async function ClienteEmpresaPage({
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
 
-  const [stats, planes, promotions, posts, prefs, resenas, miResena, sucursales] =
+  /**
+   * QUIÉN ES ESTA PERSONA EN ESTE NEGOCIO.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * LO QUE SE PREGUNTABA ANTES
+   *
+   * `company.id === user.metadata.companyId` — es decir, «¿es este el negocio
+   * ACTIVO de su sesión?». No es la misma pregunta. Alguien que es cliente de
+   * este negocio desde hace un año, pero con la sesión apuntando a otro, caía
+   * en la rama de «empresa ajena»: sin botón, sin elegibilidad, con el perfil
+   * convertido en un folleto.
+   *
+   * La pregunta correcta es si tiene FICHA aquí, y eso lo contesta
+   * `fichaEnEmpresa`. Es la misma corrección que la fase 4 hizo en «Mi
+   * Membego», ahora del lado del negocio.
+   */
+  const fichaAqui = await fichaEnEmpresa(user.supabaseId, company.id)
+  const esCliente = fichaAqui != null
+  const esActiva = company.id === user.metadata.companyId
+
+  const [stats, planes, promotions, posts, prefs, resenas, miResena, sucursales, sigo] =
     await Promise.all([
       getCompanyStats(companySlug),
       getCompanyPlanesPublic(company.id),
-      getPromotionsPublic({ company: companySlug, limit: 12 }),
+      // Sus ofertas PRIVADAS incluidas si esta persona es cliente aquí: son
+      // exactamente las que sí puede canjear, y el perfil del negocio es la
+      // pantalla que existe para contarle qué ofrece.
+      getPromocionesDeEmpresaParaMi(company.id, user.supabaseId, 12),
       getCompanyPostsPublic(company.id),
       getRegionalPrefs(company.id),
       getCompanyResenas(company.id),
       getMiResena(company.id, user.supabaseId),
       getSucursalesPublic(company.id),
+      getSeguidasIds(user.metadata.dbUserId).then((s) => s.has(company.id)).catch(() => false),
     ])
 
   // Solo clientes de la empresa pueden opinar (su ficha Cliente existe allí).
   const puedeOpinar = miResena.esCliente
 
   // ── Fase 4 · contexto de sucursal y conversión ─────────────────────────────
-  const esMiEmpresa = company.id === user.metadata.companyId
   const sucursalActiva =
     sucursales.find((s) => s.id === sucursalParam) ?? null
 
@@ -74,14 +100,21 @@ export default async function ClienteEmpresaPage({
   // Ofertas y membresías de la empresa: canjeables en cualquiera de sus
   // sucursales (el modelo no las acota por sucursal), por eso no se filtran.
 
-  // Elegibilidad por tipo de negocio: solo en la empresa del usuario (la
-  // compra es multi-tenant; las empresas ajenas quedan informativas).
+  /**
+   * Elegibilidad con la ficha de ESTE negocio.
+   *
+   * Se calcula solo cuando además es el negocio activo, porque el paso que
+   * resuelve (registrar el vehículo) y la compra ocurren en el contexto
+   * activo. Siendo cliente de otro negocio, el botón primero cambia de
+   * contexto y la pantalla de planes vuelve a pedir lo que falte — con sus
+   * propias reglas, que no se tocan.
+   */
   let requisitos = null
-  if (esMiEmpresa && user.metadata.companyId && user.metadata.clienteId) {
+  if (esCliente && esActiva && fichaAqui) {
     requisitos = await requisitosPara({
       accion: 'COMPRAR_PLAN',
-      companyId: user.metadata.companyId,
-      clienteId: user.metadata.clienteId,
+      companyId: company.id,
+      clienteId: fichaAqui,
     }).catch(() => null)
   }
 
@@ -90,7 +123,7 @@ export default async function ClienteEmpresaPage({
     ? `/cliente/planes?retorno=${encodeURIComponent(detailUrl)}`
     : '/cliente/planes'
   const planesCta = decisionCtaPlanes({
-    esMiEmpresa,
+    esMiEmpresa: esCliente && esActiva,
     requisitos,
     rutaVehiculo,
     rutaPlanes,
@@ -105,7 +138,32 @@ export default async function ClienteEmpresaPage({
       promotions={promotions}
       posts={posts}
       prefs={prefs}
-      planesCta={planesCta}
+      ctaSlot={
+        <CtaEmpresa
+          companySlug={company.slug}
+          companyName={company.name}
+          esCliente={esCliente}
+          esActiva={esActiva}
+          hrefDirecto={planesCta?.href ?? null}
+          etiquetaDirecta={planesCta?.label}
+        />
+      }
+      relacionSlot={
+        esCliente || sigo ? (
+          <p className="mt-3 flex flex-wrap items-center gap-2">
+            {esCliente && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-sm font-medium text-success">
+                <BadgeCheck className="h-4 w-4" aria-hidden /> Eres cliente aquí
+              </span>
+            )}
+            {sigo && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+                <Check className="h-4 w-4" aria-hidden /> Sigues este negocio
+              </span>
+            )}
+          </p>
+        ) : undefined
+      }
       sucursales={sucursales}
       sucursalActiva={sucursalActiva}
       promoRetorno={esDeCerca ? detailUrl : undefined}

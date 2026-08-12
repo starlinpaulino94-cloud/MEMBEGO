@@ -6,9 +6,13 @@ import { SIN_DEMO } from '@/modules/demo'
 // ─── FASE 3: capa social — seguir empresas y guardar promociones ────────────
 
 export interface EmpresaSeguida {
-  followId: string
   esFavorita: boolean
-  seguidaDesde: Date
+  /** null si es cliente pero no la sigue. */
+  seguidaDesde: Date | null
+  /** ¿La sigue? Determina si se puede dejar de seguir o hay que ofrecer seguir. */
+  sigo: boolean
+  /** ¿Tiene ficha allí? Una relación comercial, no una suscripción a noticias. */
+  esCliente: boolean
   company: {
     id: string
     name: string
@@ -22,42 +26,100 @@ export interface EmpresaSeguida {
   }
 }
 
-/** Empresas que sigue el usuario, favoritas primero. */
+const EMPRESA_EN_MI_LISTA = {
+  id: true,
+  name: true,
+  slug: true,
+  type: true,
+  description: true,
+  logoUrl: true,
+  bannerUrl: true,
+  ciudad: true,
+  activePromotionsCount: true,
+} as const
+
+/**
+ * MIS EMPRESAS: LAS QUE SIGO **Y** AQUELLAS DONDE SOY CLIENTE.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL AGUJERO QUE ESTO CIERRA
+ *
+ * Esta lista salía solo de `CompanyFollow`. Seguir es una suscripción a
+ * novedades; ser cliente es una relación comercial —con membresía, historial y
+ * beneficios—, y son cosas distintas.
+ *
+ * Como el botón de dejar de seguir está en esta misma pantalla y en el perfil,
+ * bastaba un toque para que un negocio donde la persona tiene membresía activa
+ * DESAPARECIERA de «Mis empresas». Sus datos seguían allí; lo que se perdía
+ * era el camino, y sin más aviso que la tarjeta esfumándose.
+ *
+ * Ahora la lista es la unión de las dos relaciones y cada tarjeta dice cuál
+ * tiene. Dejar de seguir un negocio del que se es cliente quita las novedades,
+ * no el negocio.
+ */
 export async function getMisEmpresas(dbUserId: string): Promise<EmpresaSeguida[]> {
-  const follows = await sinEmpresa('social: empresas seguidas del cliente cruzan empresas', (tx) =>
-    tx.companyFollow.findMany({
-      // Seguir una empresa de práctica ya está bloqueado en la acción, pero el
-      // filtro va también aquí: si alguna vez se marca como demo una empresa que
-      // ya tenía seguidores, esos seguidores dejan de verla en el acto.
-      where: { userId: dbUserId, company: { isActive: true, isPublished: true, ...SIN_DEMO } },
-      orderBy: [{ esFavorita: 'desc' }, { createdAt: 'desc' }],
-      select: {
-        id: true,
-        esFavorita: true,
-        createdAt: true,
-        company: {
+  const { follows, fichas } = await sinEmpresa(
+    'social: mis empresas (seguidas + donde soy cliente) cruzan empresas',
+    async (tx) => {
+      const dbUser = await tx.user.findUnique({
+        where: { id: dbUserId },
+        select: { supabaseId: true },
+      })
+      const [follows, fichas] = await Promise.all([
+        tx.companyFollow.findMany({
+          // Seguir una empresa de práctica ya está bloqueado en la acción, pero
+          // el filtro va también aquí: si alguna vez se marca como demo una
+          // empresa que ya tenía seguidores, dejan de verla en el acto.
+          where: { userId: dbUserId, company: { isActive: true, isPublished: true, ...SIN_DEMO } },
+          orderBy: [{ esFavorita: 'desc' }, { createdAt: 'desc' }],
           select: {
-            id: true,
-            name: true,
-            slug: true,
-            type: true,
-            description: true,
-            logoUrl: true,
-            bannerUrl: true,
-            ciudad: true,
-            activePromotionsCount: true,
+            esFavorita: true,
+            createdAt: true,
+            company: { select: EMPRESA_EN_MI_LISTA },
           },
-        },
-      },
-    })
+        }),
+        dbUser
+          ? tx.cliente.findMany({
+              // Sin `isPublished`: quien YA es cliente de un negocio no puede
+              // perder el acceso a su ficha porque el negocio se despublique de
+              // la vitrina. Ahí ya hay una relación, no un descubrimiento.
+              where: { supabaseId: dbUser.supabaseId, company: { isActive: true } },
+              select: { company: { select: EMPRESA_EN_MI_LISTA } },
+            })
+          : Promise.resolve([]),
+      ])
+      return { follows, fichas }
+    }
   )
 
-  return follows.map((f) => ({
-    followId: f.id,
-    esFavorita: f.esFavorita,
-    seguidaDesde: f.createdAt,
-    company: f.company,
-  }))
+  const porId = new Map<string, EmpresaSeguida>()
+  for (const f of follows) {
+    porId.set(f.company.id, {
+      esFavorita: f.esFavorita,
+      seguidaDesde: f.createdAt,
+      sigo: true,
+      esCliente: false,
+      company: f.company,
+    })
+  }
+  for (const { company } of fichas) {
+    const ya = porId.get(company.id)
+    if (ya) ya.esCliente = true
+    else
+      porId.set(company.id, {
+        esFavorita: false,
+        seguidaDesde: null,
+        sigo: false,
+        esCliente: true,
+        company,
+      })
+  }
+
+  // Favoritas primero, después donde es cliente, y al final las que solo sigue.
+  return [...porId.values()].sort((a, b) => {
+    const peso = (e: EmpresaSeguida) => (e.esFavorita ? 2 : 0) + (e.esCliente ? 1 : 0)
+    return peso(b) - peso(a)
+  })
 }
 
 /** IDs de empresas seguidas (para marcar tarjetas). */
@@ -457,6 +519,154 @@ async function getEmpresasRecomendadas(
     })) as CompanyPublic[]
   } catch (e) {
     console.error('[social] getEmpresasRecomendadas', e)
+    return []
+  }
+}
+
+/**
+ * BUSCAR DENTRO DE LAS OFERTAS DE SUS PROPIAS EMPRESAS.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ NO BASTA CON EL BUSCADOR PÚBLICO
+ *
+ * La vitrina pública (`getPromotionsPublic`) enseña solo promociones
+ * `visibilidad: 'publica'` de empresas publicadas. El feed del cliente, en
+ * cambio, le muestra también:
+ *
+ *   · las PRIVADAS de los negocios donde es cliente —son para sus miembros—, y
+ *   · las de empresas todavía sin publicar donde ya tiene ficha.
+ *
+ * Si el buscador mirara solo la vitrina, una oferta que la persona TIENE
+ * DELANTE en su inicio contestaría «sin resultados» al escribir su nombre. Es
+ * exactamente el mismo fallo que el de las promociones sin fecha de fin, con
+ * otra cara: el buscador contradiciendo a la pantalla de al lado.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ LO ACOTA
+ *
+ * `companyId: { in: … }` con las empresas que la persona sigue o donde tiene
+ * ficha, resueltas aquí dentro a partir de su `dbUserId`. Las privadas solo se
+ * incluyen donde es CLIENTE: seguir a un negocio no da acceso a lo que reserva
+ * para sus miembros.
+ */
+export async function buscarEnMisEmpresas(
+  dbUserId: string,
+  filtros: { texto?: string; categoria?: string },
+  limite = 30
+): Promise<PromotionPublic[]> {
+  const texto = filtros.texto?.trim()
+  const categoria = filtros.categoria?.trim()
+  if (!texto && !categoria) return []
+
+  const now = new Date()
+  try {
+    return (await sinEmpresa('social: buscar en las ofertas de mis empresas', async (tx) => {
+      const [follows, dbUser] = await Promise.all([
+        tx.companyFollow.findMany({ where: { userId: dbUserId }, select: { companyId: true } }),
+        tx.user.findUnique({ where: { id: dbUserId }, select: { supabaseId: true } }),
+      ])
+      const miembroIds = dbUser
+        ? (
+            await tx.cliente.findMany({
+              where: { supabaseId: dbUser.supabaseId },
+              select: { companyId: true },
+            })
+          ).map((c) => c.companyId)
+        : []
+      const misIds = [...new Set([...follows.map((f) => f.companyId), ...miembroIds])]
+      if (misIds.length === 0) return []
+
+      return tx.promocion.findMany({
+        where: {
+          ...promoDeMisEmpresas(now),
+          companyId: { in: misIds },
+          ...(categoria && {
+            company: {
+              isActive: true,
+              categories: { some: { category: { slug: categoria } } },
+            },
+          }),
+          // Tres `OR` en juego —vigencia, visibilidad y texto—: los dos que no
+          // son la vigencia van dentro de `AND`, porque en el primer nivel
+          // Prisma se queda con el último y los otros desaparecen sin ruido.
+          AND: [
+            {
+              OR: [
+                { visibilidad: 'publica' },
+                ...(miembroIds.length > 0
+                  ? [{ visibilidad: 'privada', companyId: { in: miembroIds } }]
+                  : []),
+              ],
+            },
+            ...(texto
+              ? [
+                  {
+                    OR: [
+                      { titulo: { contains: texto, mode: 'insensitive' as const } },
+                      { descripcion: { contains: texto, mode: 'insensitive' as const } },
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        },
+        select: PROMO_SELECT,
+        orderBy: [{ prioridad: 'desc' }, { publicadaEn: 'desc' }],
+        take: limite,
+      })
+    })) as PromotionPublic[]
+  } catch (e) {
+    console.error('[social] buscarEnMisEmpresas', e)
+    return []
+  }
+}
+
+/**
+ * LAS OFERTAS DE UN NEGOCIO, EN SU PROPIO PERFIL.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ NO VALE LA VITRINA PÚBLICA A SECAS
+ *
+ * El perfil de empresa listaba `getPromotionsPublic({ company })`, que solo
+ * trae las `visibilidad: 'publica'`. Un cliente de ese negocio entraba a su
+ * perfil —la pantalla que existe para contarle qué ofrece— y no veía las
+ * ofertas que el negocio reserva PARA SUS MIEMBROS. Es decir: justamente él,
+ * que es el único que puede canjearlas.
+ *
+ * `esCliente` no lo decide quien llama por su cuenta: se comprueba aquí con la
+ * ficha de la persona en ESA empresa. Sin ficha, esta función devuelve lo
+ * mismo que la vitrina.
+ */
+export async function getPromocionesDeEmpresaParaMi(
+  companyId: string,
+  supabaseId: string | null | undefined,
+  limite = 12
+): Promise<PromotionPublic[]> {
+  const now = new Date()
+  try {
+    return (await sinEmpresa('social: ofertas de un negocio para quien las mira', async (tx) => {
+      const ficha = supabaseId
+        ? await tx.cliente.findUnique({
+            where: { supabaseId_companyId: { supabaseId, companyId } },
+            select: { id: true },
+          })
+        : null
+
+      return tx.promocion.findMany({
+        where: {
+          ...promoDeMisEmpresas(now),
+          companyId,
+          // Sin ficha en este negocio, solo lo público. La comprobación se
+          // hace arriba contra la base, no con un dato que venga de la vista.
+          ...(ficha ? {} : { visibilidad: 'publica' }),
+        },
+        select: PROMO_SELECT,
+        orderBy: [{ prioridad: 'desc' }, { isFeatured: 'desc' }, { publicadaEn: 'desc' }],
+        take: limite,
+      })
+    })) as PromotionPublic[]
+  } catch (e) {
+    console.error('[social] getPromocionesDeEmpresaParaMi', e)
     return []
   }
 }

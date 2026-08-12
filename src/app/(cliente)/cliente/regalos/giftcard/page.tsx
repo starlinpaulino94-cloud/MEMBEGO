@@ -4,6 +4,7 @@ import { getRegalosConfig } from '@/modules/regalos/config'
 import { GiftCardForm } from '@/components/regalos/GiftCardForm'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CreditCard } from 'lucide-react'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Gift card' }
@@ -15,8 +16,18 @@ export const metadata = { title: 'Gift card' }
 export default async function GiftCardPage() {
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="giftcards" />
+  }
+  // Regalar es SIEMPRE dentro de un negocio: lo que se regala (una promoción,
+  // un plan, un monto) es suyo y se canjea allí. Esta pantalla se queda anclada
+  // a la empresa activa a propósito; lo que sí es global es el LISTADO de
+  // regalos, que es de la persona.
   const companyId = user.metadata.companyId
-  if (!clienteId || !companyId) {
+  if (!companyId) {
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 

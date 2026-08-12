@@ -1,4 +1,9 @@
 {
+  "build": {
+    "env": {
+      "SENTRY_UPLOAD": "off"
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/automatizaciones",

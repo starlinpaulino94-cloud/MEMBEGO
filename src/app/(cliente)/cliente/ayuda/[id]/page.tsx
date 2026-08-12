@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { getTicketDetail } from '@/modules/soporte/queries'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { estadoLabel, estadoBadgeClass, categoriaLabel } from '@/lib/soporte'
@@ -30,7 +31,20 @@ export default async function ClienteTicketPage({
 
   // includeInternal=false: el cliente nunca ve notas internas.
   const ticket = await getTicketDetail(id, false)
-  if (!ticket || ticket.cliente.id !== user.metadata.clienteId) notFound()
+
+  /**
+   * DUEÑO = CUALQUIERA DE SUS FICHAS.
+   *
+   * El listado enseña los hilos de todos sus negocios; comprobando aquí la
+   * ficha ACTIVA, tocar uno de otro negocio devolvía un 404 sobre una
+   * conversación suya. Es el mismo fallo que ya apareció al hacer global «Mis
+   * beneficios» y las citas: migrar el listado sin migrar su camino.
+   *
+   * Sigue siendo una comprobación de propiedad, no un pase: el ticket tiene
+   * que pertenecer a una ficha de ESTA persona.
+   */
+  const misFichas = await misClienteIds(user.supabaseId)
+  if (!ticket || !misFichas.includes(ticket.cliente.id)) notFound()
 
   return (
     <div className="space-y-4 animate-fade-up">

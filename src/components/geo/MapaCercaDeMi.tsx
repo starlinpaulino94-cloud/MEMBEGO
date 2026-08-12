@@ -985,6 +985,11 @@ function TarjetaNegocio({
                   {s.cantidadOfertas} oferta{s.cantidadOfertas > 1 ? 's' : ''}
                 </Badge>
               )}
+              {/* «Ya eres cliente» antes que «Favorita»: es la relación más
+                  fuerte de las dos. El mapa marcaba solo el seguimiento, así
+                  que un negocio donde la persona lleva un año siendo clienta
+                  se le ofrecía igual que uno que no ha pisado nunca. */}
+              {s.esCliente && <Badge variant="success">Ya eres cliente</Badge>}
               {s.esFavorita && <Badge variant="info">Favorita</Badge>}
             </div>
             {s.ofertaDestacada && (

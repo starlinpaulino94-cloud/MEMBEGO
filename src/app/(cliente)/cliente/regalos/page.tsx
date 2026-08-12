@@ -6,6 +6,7 @@ import { RegaloRecibidoCard, RegaloEnviadoCard } from '@/components/regalos/Rega
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { CreditCard, Gift, Send } from 'lucide-react'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
@@ -26,20 +27,24 @@ export const metadata = { title: 'Regalos' }
 export default async function RegalosPage() {
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
   if (!clienteId) {
-    return (
-      <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
-    )
+    return <SinEmpresaTodavia que="regalos"
+      detalle="Los regalos te los envían otros usuarios o los negocios a los que sigues." />
   }
 
+  // La PERSONA, no la ficha activa: un regalo que le enviaron desde otro
+  // negocio también es suyo, y si no aparece aquí expira sin que lo vea.
   const [{ recibidos, enviados }, { recibidas: gcRecibidas, compradas: gcCompradas }] =
     await Promise.all([
-      getRegalosCliente(clienteId).catch(() => ({
+      getRegalosCliente(user.supabaseId).catch(() => ({
         recibidos: [],
         enviados: [],
         pendientesRecibidos: 0,
       })),
-      getGiftCardsCliente(clienteId).catch(() => ({ recibidas: [], compradas: [] })),
+      getGiftCardsCliente(user.supabaseId).catch(() => ({ recibidas: [], compradas: [] })),
     ])
   const giftCards = [...gcRecibidas, ...gcCompradas]
 

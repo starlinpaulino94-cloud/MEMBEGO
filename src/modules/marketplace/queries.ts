@@ -1,5 +1,6 @@
 import { sinEmpresa } from '@/lib/tenant'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
+import { promocionVigente, EMPRESA_EN_VITRINA } from '@/modules/promociones/vigencia'
 import { categoriasVisibles } from './types'
 import type {
   CompanyPublic,
@@ -185,6 +186,7 @@ export async function getPromotionsPublic(filters: PromotionFilters = {}): Promi
   const {
     search,
     company,
+    category,
     type,
     tag,
     limit = 50,
@@ -197,24 +199,31 @@ export async function getPromotionsPublic(filters: PromotionFilters = {}): Promi
     const promotions = await sinEmpresa('marketplace: vitrina pública', (tx) =>
       tx.promocion.findMany({
         where: {
-          activo: true,
-          archivada: false,
+          // Una sola definición de «vigente», compartida con el feed del
+          // cliente. Antes aquí ponía `vigenciaHasta: { gt: now }`, que
+          // descartaba en silencio TODA promoción sin fecha de fin: la oferta
+          // permanente salía en el inicio del cliente y desaparecía al
+          // buscarla. Ver `src/modules/promociones/vigencia.ts`.
+          ...promocionVigente(now),
           visibilidad: 'publica',
-          vigenciaHasta: {
-            gt: now,
-          },
           // El filtro por slug se fusiona dentro de company para no sobrescribir
           // (y perder) las condiciones isPublished/isActive.
           company: {
-            isPublished: true,
-            isActive: true,
-            esDemo: false,
+            ...EMPRESA_EN_VITRINA,
             ...(company && { slug: company }),
+            ...(category && { categories: { some: { category: { slug: category } } } }),
           },
+          // El `OR` de la búsqueda va DENTRO de `AND`: en el primer nivel
+          // pisaría al `OR` de la vigencia —Prisma no fusiona claves iguales— y
+          // el buscador empezaría a devolver promociones caducadas.
           ...(search && {
-            OR: [
-              { titulo: { contains: search, mode: 'insensitive' } },
-              { descripcion: { contains: search, mode: 'insensitive' } },
+            AND: [
+              {
+                OR: [
+                  { titulo: { contains: search, mode: 'insensitive' } },
+                  { descripcion: { contains: search, mode: 'insensitive' } },
+                ],
+              },
             ],
           }),
           ...(type && { tipo: type }),
@@ -342,17 +351,11 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
       tx.promocion.findMany({
         where: {
           isFeatured: true,
-          activo: true,
-          archivada: false,
+          // Misma corrección que en la vitrina: una destacada permanente no
+          // puede desaparecer por no tener fecha de fin.
+          ...promocionVigente(now),
           visibilidad: 'publica',
-          vigenciaHasta: {
-            gt: now,
-          },
-          company: {
-            isPublished: true,
-            isActive: true,
-            esDemo: false,
-          },
+          company: EMPRESA_EN_VITRINA,
         },
         select: {
           id: true,
@@ -810,6 +813,100 @@ export interface PlanPublic {
   descripcion: string | null
   beneficios: string[]
   vigenciaDias: number
+}
+
+/** Un plan con el negocio que lo ofrece, para el catálogo global. */
+export interface PlanConEmpresa extends PlanPublic {
+  company: {
+    id: string
+    name: string
+    slug: string
+    logoUrl: string | null
+    ciudad: string | null
+    /**
+     * Moneda e idioma de SU negocio. En un catálogo que mezcla empresas, un
+     * precio formateado con la moneda de otra no es un detalle de estilo: son
+     * 800 pesos mostrados como 800 dólares.
+     */
+    moneda: string | null
+    idioma: string | null
+  }
+}
+
+/**
+ * EL CATÁLOGO DE PLANES DE TODA LA PLATAFORMA.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ FALTABA
+ *
+ * «Planes» enseñaba los de UNA empresa: la que el cliente tuviera activa. Con
+ * una sola empresa publicada eso era toda la verdad; con dos, la mitad. Y a
+ * quien todavía no es cliente de nadie le enseñaba un estado vacío, que es la
+ * peor respuesta posible a «quiero ver qué membresías hay».
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * MIRAR AQUÍ, CONTRATAR ALLÍ
+ *
+ * Esta consulta es de VITRINA: nombre, precio y qué incluye. No decide
+ * elegibilidad ni precio por categoría de vehículo — eso lo hace
+ * `planesElegibles` con la ficha del cliente en esa empresa, y sigue viviendo
+ * en la pantalla de la empresa. Aquí no se contrata nada: cada plan lleva al
+ * perfil de su negocio, donde el motor de elegibilidad decide qué se le puede
+ * ofrecer y a qué precio.
+ *
+ * Mezclar las dos cosas sería enseñar un precio que a esa persona no le
+ * corresponde.
+ */
+export async function getPlanesPublic(
+  filtros: { search?: string; category?: string; limit?: number } = {}
+): Promise<PlanConEmpresa[]> {
+  const { search, category, limit = 60 } = filtros
+  try {
+    const planes = await sinEmpresa('marketplace: catálogo global de planes', (tx) =>
+      tx.plan.findMany({
+        where: {
+          activo: true,
+          company: {
+            ...EMPRESA_EN_VITRINA,
+            ...(category && { categories: { some: { category: { slug: category } } } }),
+          },
+          ...(search && {
+            OR: [
+              { nombre: { contains: search, mode: 'insensitive' } },
+              { descripcion: { contains: search, mode: 'insensitive' } },
+              { company: { name: { contains: search, mode: 'insensitive' } } },
+            ],
+          }),
+        },
+        orderBy: [{ company: { isFeatured: 'desc' } }, { precio: 'asc' }],
+        take: limit,
+        select: {
+          id: true, nombre: true, precio: true, esIlimitado: true,
+          lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
+          company: {
+            select: {
+              id: true, name: true, slug: true, logoUrl: true, ciudad: true,
+              moneda: true, idioma: true,
+            },
+          },
+        },
+      })
+    )
+    return planes.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      precio: Number(p.precio),
+      esIlimitado: p.esIlimitado,
+      lavadosIncluidos: p.lavadosIncluidos,
+      descripcion: p.descripcion,
+      beneficios: p.beneficios,
+      vigenciaDias: p.vigenciaDias,
+      company: p.company,
+    }))
+  } catch (error) {
+    console.error('[getPlanesPublic] Error:', error)
+    return []
+  }
 }
 
 /** Planes activos de una empresa para mostrar en su perfil público. */

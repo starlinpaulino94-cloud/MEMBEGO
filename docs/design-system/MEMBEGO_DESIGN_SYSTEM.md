@@ -2,7 +2,7 @@
 
 ## Identidad visual y experiencia unificada del ecosistema
 
-**Versión** 1.0 · **Estado** borrador para revisión · **Fecha** 2026-08-10
+**Versión** 1.1 · **Estado** Fase 1 cerrada · **Fecha** 2026-08-11
 **Alcance** Membego y todos los sistemas verticales conectados
 **Sustituye a** `docs/MDS.md` y `docs/DESIGN_SYSTEM.md` (ver § 3.2)
 
@@ -60,7 +60,7 @@ descontados:
 | Pasos de la escala de marca desincronizados entre las dos fuentes | **10 de 10** | 🔴 Crítica |
 | Textos por debajo de 12 px | **160** | 🔴 Crítica |
 | Campos de formulario sin nombre accesible | **99** | 🔴 Crítica |
-| Clases de color de Tailwind fuera del vocabulario semántico | **333** | 🟠 Alta |
+| Clases de color de Tailwind fuera del vocabulario semántico | **333** (69 en `@membego/ui`) | 🟠 Alta |
 | Radios fuera del vocabulario declarado | **95** | 🟡 Media |
 | HEX escritos a mano en interfaz real | **85** | 🟡 Media |
 
@@ -109,8 +109,9 @@ trabajen en:
 | `docs/MMS.md` | **Se mantiene.** Sistema de movimiento, referenciado desde § 23. No se duplica aquí |
 | `docs/GUIA_LENGUAJE_MEMBEGO.md` | **Se mantiene.** Lenguaje, copy y estados canónicos. Es el par de este documento, no su competidor |
 
-> Esta decisión requiere aprobación (ver § 30). Mientras no se apruebe, los tres
-> siguen vigentes y la contradicción sigue viva.
+> **Hecho en la Fase 1.** `MDS.md` y `DESIGN_SYSTEM.md` son punteros a este
+> documento desde el 2026-08-11, y la contradicción que los separaba —dos azules
+> de marca— está resuelta (A-13).
 
 ## 3.3 · Qué NO cubre
 
@@ -242,7 +243,10 @@ tarjeta. No es mecánico.
 `cliente/pagos` (22), `membresia/[id]` (22).
 **Decisión canónica:** en producto, solo tokens semánticos. Excepción: paletas
 categóricas de gráficos (§ 17), que necesitan tonos que ningún semántico cubre.
-**Justificación agravante:** que 30 de ellas estén en `@membego/ui` es lo grave.
+**Justificación agravante:** que **69** de ellas estén en `@membego/ui` es lo
+grave. (La versión 1.0 de este documento decía «30». Era el peor ARCHIVO
+—`stat-card.tsx`—, no el paquete; el auditor permanente lo corrigió al medirlo
+por paquete, que es la unidad que se reparte.)
 Ese paquete es lo que un satélite instalaría: exportar un `StatCard` con
 esmeralda cruda dentro significa **repartir la inconsistencia a cada sistema
 nuevo**.
@@ -300,9 +304,21 @@ estados semánticos** (`success`, `warning`, `danger`, `info`). La escala de mar
 no la mira nadie. La Fase 19 sincronizó los estados y la escala se quedó donde
 estaba.
 
-**Dónde se nota:** en todo lo que consume el espejo — **correos, imágenes OG,
-PDF y recibos**. Un cliente que recibe un correo de Membego y luego abre la
-aplicación ve **dos azules de marca distintos**.
+**Dónde se nota — y aquí hay una corrección a la v1.0 de este documento.**
+
+La v1.0 decía que el espejo «alimenta correos, imágenes OG, PDF y recibos» y que
+por eso un cliente veía dos azules. **Era su propósito declarado, no su uso
+real:** al cerrar la Fase 1 se comprobó que `packages/ui/src/tokens.ts` **no lo
+importa nadie**. Correos y generadores de OG escriben sus hexadecimales a mano.
+
+Así que A-13 no era una divergencia viva: era una **trampa esperando**. El
+espejo llevaba tiempo apuntando a otro azul y no se veía en ningún sitio,
+lista para morder a quien lo estrenara. Un espejo sin usar no está bien —
+está sin estrenar, y se estrena roto.
+
+La severidad baja de «lo ve el cliente hoy» a «lo verá el primero que lo use».
+La decisión no cambia: sigue habiendo que sincronizarlo, y ahora la guardia
+cubre los diez pasos.
 
 **Y explica la contradicción del § 2:** `MDS.md` dice que el azul de marca es
 `#2563eb` porque leyó el espejo. La interfaz pinta `#006bed`. Los dos
@@ -315,6 +331,25 @@ ampliar `espejo-tokens.test.ts` para que cubra los 10 pasos.
 
 **Impacto:** cambia el azul de correos, OG y PDF. Es un cambio visible que hay
 que aprobar (D-8).
+
+### 🟠 ALTA · A-14 · Las tarjetas que se comparten usan la paleta ANTERIOR
+
+**Encontrado al cerrar la Fase 1**, buscando quién consumía el espejo.
+
+`src/lib/share/og.tsx` —el generador de las tarjetas que se ven al compartir un
+enlace en WhatsApp, Facebook o Telegram— pinta su degradado con `#6D28D9`
+(morado), `#3B82F6` y `#0D9488` (verde azulado). Es la paleta de **antes de que
+la marca fuera azul**: el morado y el esmeralda que la Fase 0 del DS 2.0 retiró.
+
+**Es una divergencia viva, no latente.** Cada enlace que comparte un cliente
+muestra un degradado morado y verde mientras la aplicación entera es azul. Se
+ve en el logo de esas tarjetas, que sigue siendo el de la paleta vieja.
+
+**Decisión canónica:** las tarjetas compartidas usan el azul de marca. Es lo
+primero que ve alguien que no conoce Membego todavía.
+
+**Impacto:** cambia el aspecto de todos los enlaces compartidos. Es visible y
+requiere aprobación (D-9).
 
 ### 🟡 MEDIA · A-7 · 95 radios fuera del vocabulario
 
@@ -1190,9 +1225,24 @@ Este proyecto ya usa el patrón: una prueba congela un número y falla si sube.
 | Campos sin nombre accesible | 99 | `tests/accesibilidad-formularios.test.ts:30` |
 | Textos por debajo de 12 px | 160 | `tests/navegacion-shell.test.ts:211` |
 
-**Propuestos:** color crudo (333) · radios fuera de vocabulario (95) · HEX en
-interfaz (85) · duraciones sueltas (48) · z-index sueltos (12) · **color crudo
-dentro de `@membego/ui` (30, objetivo 0)**.
+**Puestos en la Fase 1** (`tests/deuda-diseno.test.ts`, medidos desde
+`scripts/auditar-diseno.mjs`):
+
+| Techo | Valor |
+|---|---|
+| HEX en interfaz | 122 |
+| Color crudo de Tailwind | 333 |
+| Radios fuera del vocabulario | 94 |
+| Textos < 12 px | 135 |
+| Sombras arbitrarias | 0 |
+| Duraciones sueltas | 48 |
+| z-index sueltos | 12 |
+| **Color crudo en `@membego/ui`** | **69** |
+| **Radios fuera en `@membego/ui`** | **20** |
+
+Hay además una prueba que falla si un techo se queda **más de 10 por encima**
+del número real: un techo con holgura deja de proteger sin que se note, porque
+se puede añadir deuda hasta llenarlo con la suite en verde.
 
 ---
 
@@ -1207,7 +1257,7 @@ dentro de `@membego/ui` (30, objetivo 0)**.
 | **Storybook** | 🔴 |
 | **Regresión visual** | 🔴 |
 | **Teclado automatizado** | 🔴 |
-| Auditoría de tokens | 🟠 Existe como script de esta auditoría; falta hacerlo permanente |
+| Auditoría de tokens | 🟢 `scripts/auditar-diseno.mjs` + techos en `tests/deuda-diseno.test.ts` |
 
 ## 28.1 · Antes de publicar
 
@@ -1224,15 +1274,30 @@ dentro de `@membego/ui` (30, objetivo 0)**.
 
 # 29 · Plan de migración
 
-## Fase 1 · Decidir y congelar
+## Fase 1 · Decidir y congelar — ✅ HECHA
 
-Aprobar este documento · convertir `MDS.md` y `DESIGN_SYSTEM.md` en punteros ·
-**resolver A-13 y ampliar `espejo-tokens.test.ts` a los 10 pasos de la escala** ·
-hacer permanente el script de auditoría · añadir los techos propuestos ·
-completar los tokens que faltan (z-index, iconos, alturas, `pending`).
+| Qué | Estado |
+|---|---|
+| `MDS.md` y `DESIGN_SYSTEM.md` como punteros | ✅ |
+| **A-13 resuelto** (D-8: manda el azul de la aplicación) | ✅ |
+| `espejo-tokens.test.ts` cubre los 10 pasos + el cyan | ✅ |
+| `scripts/auditar-diseno.mjs` permanente y exportable | ✅ |
+| Techos en `tests/deuda-diseno.test.ts` | ✅ |
+| Tokens que faltaban: z-index, iconos, alturas, `pending`, gráficos | ✅ |
 
-**Riesgo:** bajo. Nada de código de producto.
-**Fin:** una sola fuente, y los números en pruebas.
+**A-13, cerrado.** El espejo pasa de `#2563eb` (azul de Tailwind) a `#006bed`
+(el de la aplicación) en los diez pasos de la escala, y el cyan a sus tres. Los
+correos, las imágenes al compartir, los PDF y los recibos pasan a usar el azul
+que el cliente ya ve cada día.
+
+La guardia que existía no lo cazó porque miraba **cuatro tokens de veinticuatro**
+—solo los estados semánticos—. Ahora cubre la escala entera. Una guardia parcial
+da la sensación de estar cubierto sin estarlo, que es peor que no tener guardia.
+
+**`--pending` ya existe** y está medido: 4,96:1 sobre tarjeta en claro, 6,41:1
+en oscuro. Antes se resolvía con `--muted-foreground`, el color del texto
+secundario — un estado que comparte color con «esto es menos importante» no se
+lee como estado, y nadie lo había medido como texto, que es como se usa.
 
 ## Fase 2 · Limpiar lo que se reparte
 
@@ -1291,7 +1356,8 @@ Alias de sombra (`.shadow-card`, `.shadow-premium`) · tokens `--radius-sm/md` �
 | D-5 | Cuál `CampanaForm` es el canónico | Depende de qué flujo sobrevive |
 | D-6 | ¿Storybook o alternativa más ligera? | Coste de mantenimiento |
 | D-7 | Publicación de los paquetes: ¿GitHub Packages, como `@membego/ui`? | Operativa |
-| D-8 | **A-13: ¿manda el azul de `globals.css` o el de `tokens.ts`?** | Cambia el color de marca en correos, OG y PDF (o en la aplicación). Es visible para el cliente |
+| ~~D-8~~ | ~~A-13: ¿qué azul manda?~~ | **Resuelta:** manda `globals.css` (`#006bed`), el que ve el cliente en la aplicación. El espejo se sincronizó |
+| D-9 | **A-14: ¿se pasan las tarjetas compartidas al azul de marca?** | Cambia el aspecto de TODOS los enlaces compartidos. Hoy salen con el morado y verde de antes del DS 2.0 |
 
 ## 30.2 · Riesgos
 
@@ -1420,9 +1486,10 @@ confirmación (§ 31.1).
 | A-1 | Dos maestros contradictorios | 2 | 🔴 | 1 |
 | A-2 | Campos sin nombre accesible | 99 | 🔴 | 3 |
 | A-3 | Textos < 12 px | 160 | 🔴 | 3 |
-| A-4 | Color crudo de Tailwind | 333 (30 en `ui`) | 🟠 | 2 y 5 |
+| A-4 | Color crudo de Tailwind | 333 (69 en `ui`) | 🟠 | 2 y 5 |
 | A-5 | Sin shell compartido | — | 🟠 | 4 |
-| A-13 | **Escala de marca desincronizada entre las dos fuentes** | 10 pasos | 🔴 | 1 |
+| A-13 | ~~Escala de marca desincronizada~~ | 10 pasos | ✅ | 1 |
+| A-14 | **Tarjetas compartidas con la paleta anterior a la marca azul** | 3 colores | 🟠 | pendiente D-9 |
 | A-6 | Espejo de tokens manual | — | 🟠 | 4 |
 | A-7 | Radios fuera de vocabulario | 95 (6 en `ui`) | 🟡 | 2 y 5 |
 | A-8 | HEX en interfaz | 85 | 🟡 | 5 |

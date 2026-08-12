@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
+import { misClienteIds, propagarDatosPersonales } from '@/modules/cliente/afiliacion'
 
 async function requireCliente() {
   const user = await getUser()
@@ -47,22 +48,47 @@ export async function actualizarPerfil(
   try {
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Empresa requerida.' }
-    const clienteId = user.metadata.clienteId!
-    await conEmpresa(companyId, (tx) =>
-      tx.cliente.update({
-        where: { id: clienteId },
-        data: {
-          nombre,
-          telefono,
-          fechaNacimiento,
-          ciudad,
-          genero,
-          notifPromos,
-          notifRecordatorios,
-          ...(avatarUrl !== null ? { avatarUrl } : {}),
-        },
-      })
-    )
+
+    /**
+     * UNA PERSONA, UN PERFIL — aunque por dentro sean N fichas.
+     *
+     * ────────────────────────────────────────────────────────────────────────
+     * LO QUE PASABA
+     *
+     * Este formulario guardaba solo en la ficha ACTIVA. Su nombre, su
+     * teléfono, su cumpleaños y su foto son de la PERSONA, pero cada negocio
+     * guardaba su propia copia — así que al corregir un teléfono mal escrito,
+     * la corrección llegaba a un negocio y no a los otros dos.
+     *
+     * Y nadie se enteraba: la pantalla enseña la ficha activa, así que después
+     * de guardar todo parecía correcto. El número viejo seguía vivo donde no
+     * se miraba, que es exactamente donde importa cuando llaman para avisar de
+     * que el pedido está listo.
+     *
+     * ────────────────────────────────────────────────────────────────────────
+     * QUÉ SE PROPAGA Y QUÉ NO
+     *
+     * Se propaga lo que es de la persona: nombre, teléfono, fecha de
+     * nacimiento, ciudad, género, foto y sus preferencias de aviso.
+     *
+     * NO se toca nada de la relación comercial —membresías, beneficios,
+     * historial, notas del negocio—: eso es de cada empresa y no es suyo para
+     * copiarlo de un lado a otro.
+     *
+     * Cada ficha se escribe con `conEmpresa` de SU empresa, no con una lectura
+     * omnisciente: el aislamiento sigue puesto en cada escritura.
+     */
+    const escritas = await propagarDatosPersonales(user.supabaseId, {
+      nombre,
+      telefono,
+      fechaNacimiento,
+      ciudad,
+      genero,
+      notifPromos,
+      notifRecordatorios,
+      ...(avatarUrl !== null ? { avatarUrl } : {}),
+    })
+    if (escritas === 0) return { error: 'No se pudo guardar. Intenta de nuevo.' }
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')
     revalidatePath('/mis-membresias')
@@ -134,8 +160,19 @@ export async function eliminarVehiculo(
         },
       })
     )
-    const clienteId = user.metadata.clienteId!
-    if (!v || v.clienteId !== clienteId) return { error: 'No autorizado.' }
+    /**
+     * Contra TODAS sus fichas: la lista de vehículos enseña los de todos sus
+     * negocios, así que comprobar la ficha ACTIVA dejaba el botón de borrar
+     * contestando «No autorizado» sobre un coche suyo.
+     *
+     * `clienteId` pasa a ser el del VEHÍCULO —no el de la sesión—, que es el
+     * que hace falta más abajo para elegir el sucesor como principal: con el
+     * de la sesión, borrar el principal de un negocio le habría marcado como
+     * principal un coche de OTRO.
+     */
+    const misFichas = await misClienteIds(user.supabaseId)
+    if (!v || !misFichas.includes(v.clienteId)) return { error: 'No autorizado.' }
+    const clienteId = v.clienteId
     const companyId = v.cliente.companyId
 
     const visitas = await conEmpresa(companyId, (tx) => tx.visit.count({ where: { vehiculoId } }))

@@ -1,6 +1,7 @@
 import { requireRole } from '@/lib/auth/guards'
 import { conEmpresaOTodas } from '@/lib/tenant'
 import { ConfettiCelebration } from '@/components/growth/ConfettiCelebration'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,12 @@ export const dynamic = 'force-dynamic'
 export default async function CelebracionPage() {
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
+  if (!clienteId) {
+    return <SinEmpresaTodavia que="nada que celebrar todavía" />
+  }
 
   // Beneficio recién otorgado: la compra ACTIVA más reciente del cliente.
   let beneficio: string | null = null

@@ -51,6 +51,16 @@ export function VehicleCard({ vehiculo }: { vehiculo: VehiculoCliente }) {
               .join(' · ')}
           </p>
 
+          {/* EN QUÉ NEGOCIO está registrado. Un vehículo cuelga de la ficha de
+              una empresa —cada una le pone su categoría y su tarifa—, así que
+              el mismo coche puede aparecer dos veces en esta lista. Sin el
+              nombre, las dos tarjetas son indistinguibles. */}
+          {vehiculo.empresaNombre && (
+            <p className="mt-1 text-caption text-muted-foreground">
+              Registrado en {vehiculo.empresaNombre}
+            </p>
+          )}
+
           {vehiculo.placa && (
             // La placa en monoespaciada: es un identificador que se compara
             // carácter a carácter con el del parabrisas.

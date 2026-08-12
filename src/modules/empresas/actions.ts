@@ -8,6 +8,7 @@ import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
 import { filasDeAcceso } from '@/modules/empresas/accesos'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { verticalValido } from '@/modules/empresas/verticales'
 
 export interface ActionState {
   error?: string
@@ -143,6 +144,25 @@ export async function crearEmpresa(
   // está migrada, crear empresas NORMALES tiene que seguir funcionando.
   const esDemo = String(formData.get('esDemo') ?? '') === '1'
 
+  /**
+   * EL VERTICAL, EN LA COLUMNA QUE MANDA.
+   *
+   * `registro.ts` resuelve el vertical de una empresa leyendo PRIMERO
+   * `tipoNegocioCodigo` y cayendo a `type` solo si está vacía. Su propio
+   * comentario avisaba del hueco: «creada por un camino que aún no la rellena».
+   * Este era ese camino.
+   *
+   * Sin escribirla, elegir «Hotel» en el selector guardaba la cadena en `type`
+   * y la resolución antigua la mandaba al `default: CAR_WASH`. La empresa
+   * quedaba clasificada como lavadero — el mismo fallo que la Fase 7 encontró
+   * probando contra base real, reaparecido por la puerta del formulario.
+   *
+   * Se valida contra la tabla: un código que no existe deja la columna en null
+   * y la empresa se resuelve como siempre, en vez de apuntar a un vertical
+   * inexistente y quedarse sin ningún sistema.
+   */
+  const codigoVertical = await verticalValido(type)
+
   try {
     const slug = await uniqueCompanySlug(name)
     const company = await sinEmpresa('superadmin: crear empresa', (tx) =>
@@ -152,6 +172,7 @@ export async function crearEmpresa(
           name,
           slug,
           type,
+          ...(codigoVertical ? { tipoNegocioCodigo: codigoVertical } : {}),
           description: String(formData.get('description') ?? '').trim() || null,
           email: String(formData.get('email') ?? '').trim() || null,
           telefono: String(formData.get('telefono') ?? '').trim() || null,
@@ -286,6 +307,8 @@ export async function actualizarEmpresa(
   const name = String(formData.get('name') ?? '').trim()
   if (!name) return { error: 'El nombre es requerido.' }
 
+  const codigoVerticalEdicion = await verticalValido(String(formData.get('type') ?? ''))
+
   try {
     const categoryIds = formData
       .getAll('categoryIds')
@@ -303,6 +326,11 @@ export async function actualizarEmpresa(
           name,
           description: String(formData.get('description') ?? '').trim() || null,
           type: String(formData.get('type') ?? actual.type),
+          // Igual que en el alta: si no se escribe la columna, cambiar el tipo
+          // desde la interfaz no cambia el vertical de verdad. Un código
+          // inválido no la toca, para no dejar a la empresa sin sistemas por
+          // un formulario enviado a mano.
+          ...(codigoVerticalEdicion ? { tipoNegocioCodigo: codigoVerticalEdicion } : {}),
           email: String(formData.get('email') ?? '').trim() || null,
           telefono: String(formData.get('telefono') ?? '').trim() || null,
           direccion: String(formData.get('direccion') ?? '').trim() || null,

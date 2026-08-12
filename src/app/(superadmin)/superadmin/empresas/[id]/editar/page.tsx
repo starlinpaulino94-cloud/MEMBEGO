@@ -9,6 +9,7 @@ import {
 } from '@/modules/empresas/queries'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmpresaEditForm } from '@/components/superadmin/EmpresaEditForm'
+import { verticalesElegibles } from '@/modules/empresas/verticales'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,8 @@ export default async function EditarEmpresaPage({
   )
   if (!company) notFound()
 
-  const [categories, selectedCategoryIds] = await Promise.all([
+  const [verticales, categories, selectedCategoryIds] = await Promise.all([
+    verticalesElegibles(),
     getActiveCategories(),
     getCompanyCategoryIds(company.id),
   ])
@@ -46,10 +48,12 @@ export default async function EditarEmpresaPage({
         </CardHeader>
         <CardContent>
           <EmpresaEditForm
+            verticales={verticales}
             company={{
               id: company.id,
               name: company.name,
               type: company.type,
+              tipoNegocioCodigo: company.tipoNegocioCodigo,
               description: company.description,
               logoUrl: company.logoUrl,
               email: company.email,

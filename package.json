@@ -26,6 +26,13 @@
     "db:doctor": "node scripts/db-doctor.mjs",
     "db:doctor:sql": "node scripts/db-doctor.mjs --sql",
     "cap": "tsx --tsconfig tsconfig.json scripts/capacidad.ts",
+    "verificar:cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cliente-global.mts",
+    "verificar:descubrimiento": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-descubrimiento.mts",
+    "verificar:perfil-empresa": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-perfil-empresa.mts",
+    "verificar:invitaciones": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-invitaciones.mts",
+    "verificar:cuenta-y-ayuda": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cuenta-y-ayuda.mts",
+    "verificar:cerca-de-mi": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cerca-de-mi.mts",
+    "verificar:rls-cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-rls-cliente-global.mts",
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
     "auditar:placas": "node scripts/auditar-placas.mjs"

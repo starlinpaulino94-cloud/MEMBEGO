@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { PROMO_IMG } from '@/modules/promociones/formato-imagen'
 import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
@@ -48,12 +49,26 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
         <div className="mt-8 overflow-hidden rounded-3xl border border-border/80 shadow-premium">
           {/* Image */}
           {promotion.imagenUrl && (
-            <div className="relative h-96 w-full overflow-hidden bg-muted">
+            // LA CAJA MIDE EL FORMATO QUE LA SUBIDA EXIGE (PROMO_IMG, cuadrado
+            // de Instagram): una imagen subida como se pide llena el ancho del
+            // celular de borde a borde, sin recorte y sin paspartú.
+            //
+            // El historial de esta caja, para no repetirlo: con altura fija +
+            // `object-cover` el arte se recortaba por los lados en móvil; con
+            // caja cuadrada y arte apaisado salía diminuto entre franjas
+            // grises. La caja debe medir LO MISMO que el formato exigido — y
+            // leerlo de la fuente única, no copiarlo. `object-contain` queda
+            // como red para el arte anterior a la exigencia (banners
+            // apaisados ya subidos): se ve entero sobre `bg-muted`.
+            <div
+              className="relative w-full overflow-hidden bg-muted"
+              style={{ aspectRatio: `${PROMO_IMG.width} / ${PROMO_IMG.height}` }}
+            >
               <Image
                 src={promotion.imagenUrl}
                 alt={promotion.titulo}
                 fill
-                className="object-cover"
+                className="object-contain"
               />
             </div>
           )}

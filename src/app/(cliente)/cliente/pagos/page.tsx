@@ -19,6 +19,7 @@ import { BillingCycleHeader } from '@/components/cliente/pagos/BillingCycleHeade
 import { EmptyState } from '@/components/system/EmptyState'
 import { PagosLedger } from '@/components/cliente/pagos/PagosLedger'
 import { cn } from '@/lib/utils'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -107,12 +108,12 @@ export default async function PagosPage({
   const aviso = pago ? AVISO_PAGO[pago] : undefined
   const user = await requireRole('CLIENTE')
   const clienteId = user.metadata.clienteId
+  // Una cuenta de Membego que todavía no es cliente de ningún negocio. No
+  // es un error ni una falta de permiso: es el primer día. Ver
+  // `SinEmpresaTodavia`.
   if (!clienteId) {
-    return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">No autorizado.</p>
-      </main>
-    )
+    return <SinEmpresaTodavia que="pagos"
+      detalle="Aquí aparecerán tus pagos cuando adquieras una membresía o una promoción." />
   }
 
   const prefs = await getRegionalPrefs(user.metadata.companyId)
@@ -121,7 +122,11 @@ export default async function PagosPage({
   let data: Awaited<ReturnType<typeof getClientePagos>> = { membership: null, historial: [] }
   let loadError = false
   try {
-    data = await getClientePagos(clienteId)
+    // La PERSONA, no la ficha activa: un pago a un negocio y un pago a otro son
+    // los dos suyos. Con la ficha activa, la mitad de sus recibos desaparecía al
+    // cambiar de empresa y encontrar una factura pasaba por adivinar en qué
+    // contexto se hizo.
+    data = await getClientePagos(user.supabaseId)
   } catch (e) {
     loadError = true
     console.error('[cliente-pagos]', e)

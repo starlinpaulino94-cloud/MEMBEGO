@@ -9,6 +9,7 @@ import {
   ThumbsUp,
   Flame,
   Tag,
+  Search,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -16,8 +17,12 @@ import {
   getPromoFeed,
   getPromocionesGuardadas,
   getGuardadasIds,
+  buscarEnMisEmpresas,
   type PromoFeed,
 } from '@/modules/social/queries'
+import { getPromotionsPublic, getCategoriesPublic } from '@/modules/marketplace/cached'
+import { cn } from '@/lib/utils'
+import type { CategoryPublic } from '@/modules/marketplace/types'
 import { PromotionCard } from '@/components/public/PromotionCard'
 import { EmptyState } from '@/components/system/EmptyState'
 import { BusinessCard } from '@/components/marketplace/BusinessCard'
@@ -92,23 +97,96 @@ function SeccionPromos({
   )
 }
 
-export default async function PromocionesDisponiblesPage() {
+/**
+ * BUSCAR ES OTRA PANTALLA, AUNQUE SEA LA MISMA RUTA.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SIN FILTROS: EL FEED
+ *
+ * Secciones curadas —tus empresas, destacadas, nuevas, expiran pronto,
+ * recomendadas—. Es lo que sirve cuando alguien entra a ver qué hay.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * CON FILTROS: UNA LISTA PLANA
+ *
+ * Quien escribe «barbería» no quiere sus resultados repartidos en seis
+ * secciones con nombres que ya no significan nada: quiere una lista y un
+ * número. Las secciones curadas se apagan y aparece el resultado.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * TODO VA EN LA URL
+ *
+ * `?q=`, `?categoria=`, `?empresa=`. El formulario es GET a propósito: la
+ * búsqueda se puede compartir, el botón «atrás» funciona y recargar no la
+ * pierde. Es el mismo criterio que ya seguía Explorar.
+ */
+export default async function PromocionesDisponiblesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const user = await requireRole('CLIENTE')
+
+  const params = await searchParams
+  const soloTexto = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const q = soloTexto(params.q)
+  const categoria = soloTexto(params.categoria)
+  const empresa = soloTexto(params.empresa)
+  const buscando = Boolean(q || categoria || empresa)
 
   let feed: PromoFeed | null = null
   let guardadas: PromotionPublic[] = []
   let guardadasIds = new Set<string>()
+  let categorias: CategoryPublic[] = []
+  let resultados: PromotionPublic[] = []
   let loadError = false
   try {
-    ;[feed, guardadas, guardadasIds] = await Promise.all([
-      getPromoFeed(user.metadata.dbUserId),
-      getPromocionesGuardadas(user.metadata.dbUserId),
+    ;[guardadasIds, categorias] = await Promise.all([
       getGuardadasIds(user.metadata.dbUserId),
+      getCategoriesPublic().catch(() => []),
     ])
+    if (buscando) {
+      // Dos fuentes, y las dos hacen falta. La vitrina pública trae lo de
+      // cualquier negocio; `buscarEnMisEmpresas` trae lo que solo esta persona
+      // puede ver —las privadas de los negocios donde es cliente—. Sin la
+      // segunda, buscar el nombre de una oferta que tiene delante en su inicio
+      // devolvería «sin resultados».
+      const [publicas, mias] = await Promise.all([
+        getPromotionsPublic({
+          search: q || undefined,
+          category: categoria || undefined,
+          company: empresa || undefined,
+          limit: 60,
+        }),
+        empresa
+          ? Promise.resolve([])
+          : buscarEnMisEmpresas(user.metadata.dbUserId, { texto: q, categoria }),
+      ])
+      const porId = new Map<string, PromotionPublic>()
+      for (const p of [...mias, ...publicas]) porId.set(p.id, p)
+      resultados = [...porId.values()]
+    } else {
+      ;[feed, guardadas] = await Promise.all([
+        getPromoFeed(user.metadata.dbUserId),
+        getPromocionesGuardadas(user.metadata.dbUserId),
+      ])
+    }
   } catch (e) {
     loadError = true
     console.error('[cliente-promociones]', e)
   }
+
+  /** Enlaces de los chips: cambiar de categoría no borra lo que se escribió. */
+  const hrefCon = (cambios: { categoria?: string | null }) => {
+    const qs = new URLSearchParams()
+    if (q) qs.set('q', q)
+    if (empresa) qs.set('empresa', empresa)
+    const cat = cambios.categoria === undefined ? categoria : cambios.categoria
+    if (cat) qs.set('categoria', cat)
+    const s = qs.toString()
+    return `/cliente/promociones${s ? `?${s}` : ''}`
+  }
+  const categoriaActiva = categorias.find((c) => c.slug === categoria)
 
   const sinPromos =
     feed != null &&
@@ -134,7 +212,92 @@ export default async function PromocionesDisponiblesPage() {
         }
       />
 
-      {loadError || feed == null ? (
+      {/* Buscador — GET a propósito: la búsqueda queda en la URL, se puede
+          compartir y el botón «atrás» funciona. */}
+      <search className="mt-6 block">
+        <form action="/cliente/promociones" role="search">
+          {categoria && <input type="hidden" name="categoria" value={categoria} />}
+          {empresa && <input type="hidden" name="empresa" value={empresa} />}
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              name="q"
+              type="search"
+              defaultValue={q}
+              aria-label="Buscar ofertas"
+              placeholder="Buscar ofertas: lavado, pizza, corte…"
+              className="h-12 w-full rounded-xl border border-border bg-card pl-12 pr-4 text-base text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+            />
+          </div>
+        </form>
+      </search>
+
+      {/* Chips de categoría: son del NEGOCIO que publica, no de la oferta.
+          Quien busca «barbería» busca ofertas de barberías. */}
+      {categorias.length > 0 && (
+        <nav aria-label="Categorías" className="mt-4">
+          <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
+              const activa = cat.slug === (categoria || null)
+              return (
+                <li key={cat.slug ?? 'todas'} className="shrink-0">
+                  <Link
+                    href={hrefCon({ categoria: cat.slug })}
+                    aria-current={activa ? 'page' : undefined}
+                    className={cn(
+                      'inline-flex min-h-11 items-center rounded-full px-4 text-small font-semibold transition-colors',
+                      activa
+                        ? 'bg-primary text-primary-foreground'
+                        : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    {cat.name}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+      )}
+
+      {loadError ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="No pudimos cargar las promociones"
+          description="Intenta de nuevo en unos momentos."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/cliente/promociones">Reintentar</Link>
+            </Button>
+          }
+        />
+      ) : buscando ? (
+        /* ── Resultados ─────────────────────────────────────────────────── */
+        <div className="mt-6 space-y-6">
+          <p className="text-small text-muted-foreground" role="status">
+            {resultados.length} {resultados.length === 1 ? 'oferta' : 'ofertas'}
+            {categoriaActiva ? ` en ${categoriaActiva.name}` : ''}
+            {q ? ` para «${q}»` : ''}
+          </p>
+          {resultados.length === 0 ? (
+            <EmptyState
+              icon={Tag}
+              title={q ? `Sin resultados para «${q}»` : 'Sin ofertas con esos filtros'}
+              description="Prueba con otra palabra, cambia de categoría o mira todas las ofertas."
+              action={
+                <Button asChild variant="outline">
+                  <Link href="/cliente/promociones">Ver todas las ofertas</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <PromoGridConGuardar promociones={resultados} guardadasIds={guardadasIds} />
+          )}
+        </div>
+      ) : feed == null ? (
         <EmptyState
           icon={AlertCircle}
           title="No pudimos cargar las promociones"
@@ -146,7 +309,7 @@ export default async function PromocionesDisponiblesPage() {
           }
         />
       ) : (
-        <div className="space-y-10">
+        <div className="mt-6 space-y-10">
           {/* Guardadas */}
           <SeccionPromos
             icon={Heart}

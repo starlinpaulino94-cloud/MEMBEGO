@@ -15,6 +15,7 @@ import { formatDate } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,8 +31,12 @@ export default async function HistorialPage({
   searchParams: Promise<{ page?: string }>
 }) {
   const user = await requireRole('CLIENTE')
-  const clienteId = user.metadata.clienteId
-  if (!clienteId) return <p className="text-muted-foreground">No autorizado.</p>
+  // «No autorizado» era falso: quien acaba de registrarse SÍ está autorizado;
+  // lo que no tiene todavía es una sola visita. Ver `SinEmpresaTodavia`.
+  if (!user.metadata.clienteId) {
+    return <SinEmpresaTodavia que="visitas registradas"
+      detalle="Cada vez que uses un beneficio en un negocio, la visita queda aquí." />
+  }
 
   const { page: pageParam } = await searchParams
   const page = Math.max(1, Number(pageParam ?? 1) || 1)
@@ -39,7 +44,10 @@ export default async function HistorialPage({
   let result: HistorialVisitas = { total: 0, esteMes: 0, visitas: [], pages: 0 }
   let loadError = false
   try {
-    result = await getClienteVisitas(clienteId, page, PAGE_SIZE)
+    // La PERSONA, no la ficha activa: una visita a un negocio y una a otro son
+    // las dos suyas. Filtrando por la ficha, cambiar de empresa le borraba la
+    // mitad del historial sin explicación.
+    result = await getClienteVisitas(user.supabaseId, page, PAGE_SIZE)
   } catch (e) {
     loadError = true
     console.error('[cliente-historial]', e)
