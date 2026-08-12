@@ -3,6 +3,17 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  typescript: {
+    // El chequeo de tipos NO corre en el build de despliegue, y no es una
+    // relajación: `npx tsc --noEmit` es un check REQUERIDO del CI, así que un
+    // error de tipos no puede llegar a `main`. Aquí solo repetía ese trabajo
+    // sumando su pico de memoria (~2 GB medidos) encima de lo que webpack aún
+    // retiene, en la máquina de Vercel (2 núcleos / 8 GB) — donde el build
+    // entero pica en ~6 GB y el OOM killer lo mataba SIN mensaje: el log se
+    // cortaba en seco en un punto distinto cada vez. Si esto se pone en false,
+    // hay que subir la máquina de build de Vercel a la vez.
+    ignoreBuildErrors: true,
+  },
   experimental: {
     // El build de producción en Vercel (2 núcleos / 8 GB) murió por OOM
     // (SIGKILL). Esta opción hace que webpack libere memoria entre fases de
