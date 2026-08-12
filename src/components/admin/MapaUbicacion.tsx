@@ -20,9 +20,17 @@ const round = (n: number) => Number(n.toFixed(6))
 export function MapaUbicacion({
   lat,
   lng,
+  sugerencia,
 }: {
   lat: number | null
   lng: number | null
+  /**
+   * Coordenadas SUGERIDAS desde fuera (hoy: extraídas del enlace de Google
+   * Maps al pegarlo). Mueven el pin y centran el mapa para que el dueño VEA
+   * el punto antes de guardar — y pueda corregirlo arrastrando, que por eso
+   * es una sugerencia y no una imposición.
+   */
+  sugerencia?: { lat: number; lng: number } | null
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<LeafletMap | null>(null)
@@ -76,6 +84,21 @@ export function MapaUbicacion({
     // Init una sola vez; las actualizaciones posteriores mueven el marcador.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Aplicar la sugerencia externa cuando llega (o cambia), sin pisar un pin
+  // que el dueño mueva DESPUÉS: solo reacciona a un valor nuevo. El estado se
+  // deriva EN RENDER (patrón oficial de React para estado derivado de props);
+  // el efecto queda solo para el sistema externo (el marcador de Leaflet).
+  const [sugerenciaAplicada, setSugerenciaAplicada] = useState(sugerencia)
+  if (sugerencia !== sugerenciaAplicada) {
+    setSugerenciaAplicada(sugerencia)
+    if (sugerencia) setCoords({ lat: round(sugerencia.lat), lng: round(sugerencia.lng) })
+  }
+  useEffect(() => {
+    if (!sugerencia) return
+    markerRef.current?.setLatLng([round(sugerencia.lat), round(sugerencia.lng)])
+    mapRef.current?.setView([round(sugerencia.lat), round(sugerencia.lng)], 16)
+  }, [sugerencia])
 
   function locateMe() {
     if (!('geolocation' in navigator)) return
