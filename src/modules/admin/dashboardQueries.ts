@@ -1,5 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
 import { contarColasDePago } from '@/modules/pagos/colasConteo'
+import { whereCobrado } from '@/modules/pagos/cobrado'
 import { diaLocal, limiteDiaLocal, sumarDias } from '@/modules/reportes/rango'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 
@@ -103,7 +104,9 @@ export async function getDashboardEjecutivo(
     // El MISMO recuento que pinta las pestañas de /admin/pagos. Antes eran dos
     // consultas distintas con dos criterios distintos, y el aviso del panel
     // mandaba al administrador a una pantalla que decía cero.
-    contarColasDePago(companyId).then((c) => c.porValidar),
+    // Con el `tx` de esta transacción, no abriendo otra: contar las colas es
+    // parte de esta misma lectura.
+    contarColasDePago(companyId, tx).then((c) => c.porValidar),
     tx.companyFollow.count({ where: { companyId } }),
     tx.companyFollow.count({
       where: { companyId, createdAt: { gte: hace30dias } },
@@ -129,16 +132,7 @@ export async function getDashboardEjecutivo(
     // para que las dos pantallas no den cifras distintas del mismo mes.
     tx.membership
       .aggregate({
-        where: {
-          companyId,
-          pagoConfirmado: true,
-          // Igual que Reportes: por `fechaPago`, con respaldo a `updatedAt`
-          // para los cobros anteriores a esa columna.
-          OR: [
-            { fechaPago: { gte: inicioMes } },
-            { fechaPago: null, updatedAt: { gte: inicioMes } },
-          ],
-        },
+        where: whereCobrado(inicioMes, undefined, { companyId }),
         _sum: { montoPagado: true },
       })
       .then((a) => Number(a._sum.montoPagado ?? 0)),

@@ -63,6 +63,13 @@ async function notificarLote(tx: Tx, items: NotifPendiente[]): Promise<number> {
 export async function ejecutarAutomatizacionesEmpresa(
   companyId: string
 ): Promise<ResultadoAutomatizaciones> {
+  // ANTES de abrir la transacción, no dentro. `getUmbralesRetencion` está
+  // envuelto en `unstable_cache` sobre un `conEmpresa`: con la caché caliente no
+  // abría nada y con la caché fría abría una segunda transacción desde dentro de
+  // esta. Ese «a veces sí» es lo que hace que un agotamiento de pool sea tan
+  // difícil de reproducir.
+  const umbralesEmpresa = await getUmbralesRetencion(companyId)
+
   return conEmpresa(companyId, async (tx) => {
     const now = new Date()
     const hoyMes = now.getMonth()
@@ -149,7 +156,7 @@ export async function ejecutarAutomatizacionesEmpresa(
     // Con el umbral de ESTA empresa, no con un 30 fijo: la frecuencia normal de
     // visita de un car wash y la de un restaurante no se parecen, y el mismo
     // número los trataba igual.
-    const umbrales = await getUmbralesRetencion(companyId)
+    const umbrales = umbralesEmpresa
     const limiteRiesgo = new Date(now.getTime() - umbrales.riesgoDias * 86_400_000)
     const inactivosRows = await tx.cliente.findMany({
       where: {

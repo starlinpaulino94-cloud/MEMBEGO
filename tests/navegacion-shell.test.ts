@@ -61,19 +61,65 @@ test('no hay dos entradas con la misma etiqueta apuntando a rutas distintas', ()
   // Es el defecto concreto que arregló la Fase 0: existían dos "Campañas",
   // /admin/campanas y /admin/audiencia/campanas, en el mismo menú. Etiqueta
   // idéntica y destino distinto es una trampa, no una decisión de diseño.
+  //
+  // Se comprueba POR CONTEXTO y no sobre la lista plana. El superadmin tiene
+  // dos paneles —Plataforma y Panel de empresa— que NUNCA se pintan juntos en
+  // el menú, y cada uno tiene su «Planes», su «Membresías» y sus «Reportes».
+  // Exigir unicidad sobre la unión de los dos obligaba a colgarles un
+  // «globales» que dentro de su propio panel no distinguía nada: allí no hay
+  // otro tipo de planes con el que confundirlos.
+  //
+  // El único sitio donde los dos paneles SÍ aparecen juntos es la paleta de
+  // comandos, y eso lo cubre la prueba siguiente.
   for (const role of ROLES) {
-    const porEtiqueta = new Map<string, Set<string>>()
-    for (const l of allLinks(navForRole(role))) {
-      const set = porEtiqueta.get(l.label) ?? new Set()
-      set.add(l.href)
-      porEtiqueta.set(l.label, set)
+    for (const ctx of navContextsForRole(role)) {
+      const porEtiqueta = new Map<string, Set<string>>()
+      for (const l of allLinks(ctx.groups)) {
+        const set = porEtiqueta.get(l.label) ?? new Set()
+        set.add(l.href)
+        porEtiqueta.set(l.label, set)
+      }
+      for (const [label, hrefs] of porEtiqueta) {
+        assert.equal(
+          hrefs.size,
+          1,
+          `${role} · ${ctx.label}: "${label}" apunta a ${hrefs.size} rutas distintas (${[...hrefs].join(', ')})`
+        )
+      }
     }
-    for (const [label, hrefs] of porEtiqueta) {
-      assert.equal(
-        hrefs.size,
-        1,
-        `${role}: "${label}" apunta a ${hrefs.size} rutas distintas (${[...hrefs].join(', ')})`
-      )
+  }
+})
+
+/**
+ * Y CUANDO LOS PANELES SE JUNTAN, ALGO TIENE QUE SEPARARLOS.
+ *
+ * La paleta de comandos es el único sitio que enseña los dos contextos del
+ * superadmin a la vez. Ahí sí conviven dos «Planes» que van a rutas distintas,
+ * y lo que los distingue es el encabezado del grupo: la paleta lo compone como
+ * «<panel> · <grupo>» justo por esto.
+ *
+ * Esta prueba comprueba que ese encabezado compuesto es único, que es la
+ * garantía de verdad: sin ella, aflojar la prueba de arriba habría dejado la
+ * ambigüedad suelta en el único lugar donde importa.
+ */
+test('en la paleta, panel + grupo + etiqueta identifica una sola ruta', () => {
+  for (const role of ROLES) {
+    const contextos = navContextsForRole(role)
+    const varios = contextos.length > 1
+    const porClave = new Map<string, Set<string>>()
+    for (const ctx of contextos) {
+      for (const g of ctx.groups) {
+        const heading = varios ? `${ctx.label} · ${g.label}` : g.label
+        for (const item of g.items) {
+          const clave = `${heading} → ${item.label}`
+          const set = porClave.get(clave) ?? new Set()
+          set.add(item.href)
+          porClave.set(clave, set)
+        }
+      }
+    }
+    for (const [clave, hrefs] of porClave) {
+      assert.equal(hrefs.size, 1, `${role}: "${clave}" lleva a ${[...hrefs].join(', ')}`)
     }
   }
 })

@@ -11,6 +11,7 @@
  */
 
 import { conEmpresa, type Tx } from '@/lib/tenant'
+import { whereCobrado } from '@/modules/pagos/cobrado'
 import type { Prisma } from '@prisma/client'
 import { diaLocal, diasDelRango, variacion, type Rango } from './rango'
 
@@ -108,14 +109,7 @@ async function sumarMembresias(tx: Tx, companyId: string, desde: Date, hasta: Da
   // sin rellenar: un cobro sin fecha es mejor contarlo por su aproximación que
   // desaparecer de los ingresos sin avisar.
   const agg = await tx.membership.aggregate({
-    where: {
-      companyId,
-      pagoConfirmado: true,
-      OR: [
-        { fechaPago: { gte: desde, lt: hasta } },
-        { fechaPago: null, updatedAt: { gte: desde, lt: hasta } },
-      ],
-    },
+    where: whereCobrado(desde, hasta, { companyId }),
     _sum: { montoPagado: true },
   })
   return Number(agg._sum.montoPagado ?? 0)

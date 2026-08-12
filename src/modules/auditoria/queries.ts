@@ -10,6 +10,33 @@ import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
  * superadmin que puede ver todas las empresas.
  */
 
+/**
+ * A QUÉ se le hizo. Los nombres de modelo son de la base, no del negocio:
+ * «Membership» no significa nada para quien lee la bitácora, y sin esto una
+ * línea dice qué pasó pero no sobre qué. Lo que no esté aquí sale tal cual —
+ * peor que traducido, mejor que oculto.
+ */
+export const ENTIDAD_LABEL: Record<string, string> = {
+  CajaSesion: 'Caja',
+  CampanaGlobal: 'Campaña conjunta',
+  Cliente: 'Cliente',
+  ColaVehiculo: 'Cola',
+  Company: 'Empresa',
+  EvidenciaFoto: 'Foto',
+  Membership: 'Membresía',
+  MovimientoCaja: 'Movimiento de caja',
+  ProductoCompra: 'Compra',
+  ProductoInventario: 'Inventario',
+  QrToken: 'QR',
+  ReceiptTemplate: 'Plantilla de recibo',
+  Referido: 'Referido',
+  ReferralRecompensa: 'Recompensa',
+  Sucursal: 'Sucursal',
+  Transaction: 'Transacción',
+  User: 'Usuario',
+  Visit: 'Visita',
+}
+
 /** Etiquetas legibles de cada acción registrada. */
 export const ACCION_LABEL: Record<string, string> = {
   VISITA_CONFIRMADA: 'Visita confirmada',

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sinEmpresa } from '@/lib/tenant'
+import Form from 'next/form'
 import Image from 'next/image'
 import {
   Building2,
@@ -7,122 +7,79 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
-  UserPlus,
+  Wallet,
   Activity,
   LifeBuoy,
   EyeOff,
+  MoonStar,
   FlaskConical,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { StatCard } from '@/components/ui/stat-card'
+import { AlertTile } from '@/components/ui/alert-tile'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { COLAS_TICKET } from '@/lib/soporte'
 import { formatDate } from '@/lib/format'
+import { ACCION_LABEL, ENTIDAD_LABEL } from '@/modules/auditoria/queries'
+import {
+  DIAS_SILENCIO,
+  PERIODOS,
+  PERIODO_LABEL,
+  getPanelPlataforma,
+  leerPeriodo,
+  type EmpresaPanel,
+  type Metrica,
+} from '@/modules/superadmin/panel'
 
 export const dynamic = 'force-dynamic'
 
-const ACCION_LABEL: Record<string, string> = {
-  VISITA_CONFIRMADA: 'Visita confirmada',
-  PAGO_APROBADO: 'Pago aprobado',
-  PAGO_RECHAZADO: 'Pago rechazado',
-  MEMBRESIA_CANCELADA: 'Membresía cancelada',
-  MEMBRESIA_RENOVADA: 'Membresía renovada',
-  QR_GENERADO: 'QR generado',
-  QR_USADO: 'QR usado',
-  COMPROBANTE_IMPRESO: 'Comprobante impreso',
-  REFERIDO_COMPLETADO: 'Referido completado',
-  RECOMPENSA_OTORGADA: 'Recompensa otorgada',
-  NOTA_INTERNA: 'Nota interna',
-  EMPRESA_DEMO_CAMBIADA: 'Marca de demostración cambiada',
-  EMPRESA_DEMO_REINICIADA: 'Empresa de demostración reiniciada',
-}
-
-/**
- * Hora de la actividad, vía `formatDate`.
- *
- * Antes construía su propio `Intl.DateTimeFormat` con el locale y la zona
- * clavados. Es el panel de la PLATAFORMA, así que los valores por defecto son
- * los correctos — pero escribirlos a mano significa que el día que la
- * plataforma opere en otra zona haya que acordarse de este archivo. El
- * formateador del sistema ya tiene esos mismos defaults.
- */
+/** Hora de la actividad. Los defaults del formateador del sistema son los de la
+ *  plataforma, que es de quien es este panel. */
 function fmtHora(d: Date) {
-  return formatDate(d, null, {
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  return formatDate(d, null, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 }
-
-const SELECT_EMPRESA = {
-  id: true, name: true, slug: true, type: true,
-  isActive: true, isPublished: true, logoUrl: true,
-  _count: { select: { clientes: true, plans: true } },
-} as const
 
 /**
- * Empresas con su marca de demostración.
+ * «hace 2 h» / «hace 23 días». Nunca una fecha suelta: lo que importa aquí no es
+ * CUÁNDO fue sino CUÁNTO hace, que es lo que delata a una empresa apagada.
  *
- * Doble camino a propósito: si la columna `esDemo` todavía no está migrada, la
- * consulta con `esDemo` revienta y se reintenta sin ella. El centro de control
- * no puede quedarse en blanco por una columna que aún no existe; sin la columna
- * simplemente no hay empresas demo todavía, que es la verdad.
+ * Recibe los milisegundos ya medidos, no una fecha: el «ahora» lo fija el módulo
+ * de datos una sola vez. Llamar a `Date.now()` aquí sería leer el reloj durante
+ * el render —impuro, y el linter lo rechaza— y además daría un instante distinto
+ * por cada tarjeta.
  */
-async function empresasDelPanel() {
-  try {
-    return await sinEmpresa(
-      'panel de plataforma: los totales son de todas las empresas',
-      (tx) => tx.company.findMany({
-        orderBy: { name: 'asc' },
-        select: { ...SELECT_EMPRESA, esDemo: true },
-      })
-    )
-  } catch {
-    const filas = await sinEmpresa(
-      'panel de plataforma: los totales son de todas las empresas',
-      (tx) => tx.company
-        .findMany({ orderBy: { name: 'asc' }, select: SELECT_EMPRESA })
-        .catch(() => [])
-    )
-    return filas.map((f) => ({ ...f, esDemo: false }))
-  }
+function desdeHace(ms: number | null): string {
+  if (ms === null) return 'sin actividad'
+  const min = Math.floor(ms / 60_000)
+  if (min < 60) return 'hace un momento'
+  const horas = Math.floor(min / 60)
+  if (horas < 24) return `hace ${horas} h`
+  const dias = Math.floor(horas / 24)
+  return `hace ${dias} día${dias === 1 ? '' : 's'}`
 }
 
-/** Clientes nuevos SIN contar los de las empresas de práctica. */
-async function nuevosReales(desde: Date) {
-  try {
-    return await sinEmpresa(
-      'panel de plataforma: los totales son de todas las empresas',
-      (tx) => tx.cliente.count({
-        where: { createdAt: { gte: desde }, company: { esDemo: false } },
-      })
-    )
-  } catch {
-    // Respaldo por si la columna `esDemo` todavía no está migrada: cuenta sin
-    // excluir las empresas de práctica. También necesita contexto.
-    return sinEmpresa(
-      'panel de plataforma: los totales son de todas las empresas',
-      (tx) => tx.cliente.count({ where: { createdAt: { gte: desde } } })
-    ).catch(() => 0)
-  }
+const money = (n: number) =>
+  new Intl.NumberFormat('es-DO', {
+    style: 'currency',
+    currency: 'DOP',
+    maximumFractionDigits: 0,
+  }).format(n)
+
+/**
+ * Comparación contra el mismo tramo anterior.
+ *
+ * Cuando antes no hubo NADA no se pinta un porcentaje: no existe el «infinito
+ * por ciento» y un «+100 %» al pasar de 0 a 3 sería una escala inventada. En ese
+ * caso se dice que no hay con qué comparar, que es la verdad.
+ */
+function comparacion(m: Metrica, formato: (n: number) => string = String): string {
+  if (m.variacion === null) return m.anterior === 0 ? 'sin periodo previo' : ''
+  const signo = m.variacion >= 0 ? '+' : ''
+  return `${signo}${m.variacion} % · antes ${formato(m.anterior)}`
 }
 
-interface EmpresaPanel {
-  id: string
-  name: string
-  logoUrl: string | null
-  isActive: boolean
-  isPublished: boolean
-  esDemo: boolean
-  activas: number
-  pendientes: number
-  _count: { clientes: number; plans: number }
-}
-
-/** La misma tarjeta para las reales y para las de práctica: se distinguen por
- *  el apartado donde salen y por la etiqueta, no por verse distinto. */
+/** La misma tarjeta para las reales y las de práctica: las distingue el apartado
+ *  donde salen y su etiqueta, no un aspecto distinto. */
 function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
   return (
     <Card className="card-interactive border-border/60 shadow-card">
@@ -140,28 +97,40 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
             )}
             <CardTitle className="truncate text-base">{c.name}</CardTitle>
           </div>
-          <div className="flex shrink-0 gap-1.5">
-            {c.esDemo ? (
-              <Badge variant="warning">Demo</Badge>
-            ) : !c.isActive ? (
-              <Badge variant="destructive">Inactiva</Badge>
-            ) : !c.isPublished ? (
-              <Badge variant="warning">Sin publicar</Badge>
-            ) : (
-              <Badge variant="success">Publicada</Badge>
+          {/* ESTAR ACTIVA Y ESTAR PUBLICADA SON DOS COSAS. Antes compartían un
+              solo hueco y la insignia «Inactiva» tapaba si además estaba
+              publicada o no, que es lo que hay que arreglar en cada caso. */}
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {c.esDemo && <Badge variant="warning">Demo</Badge>}
+            {!c.isActive && <Badge variant="destructive">Inactiva</Badge>}
+            {!c.esDemo && (
+              <Badge variant={c.isPublished ? 'success' : 'warning'}>
+                {c.isPublished ? 'Publicada' : 'Sin publicar'}
+              </Badge>
             )}
           </div>
         </div>
       </CardHeader>
       <CardContent>
+        {/* «Planes» salía de aquí: lo repetían las tarjetas de arriba y no
+            distinguía una empresa de otra. Lo que sí distingue —y avisa de la
+            que se está apagando— es cuánto hace que pasó algo. */}
         <div className="grid grid-cols-3 gap-3 text-center">
           {[
-            { label: 'Clientes', value: c._count.clientes },
-            { label: 'Planes', value: c._count.plans },
-            { label: 'Activas', value: c.activas },
+            { label: 'Clientes', value: String(c.clientes), alerta: false },
+            { label: 'Activas', value: String(c.activas), alerta: false },
+            { label: 'Actividad', value: desdeHace(c.desdeUltimaActividad), alerta: c.enSilencio },
           ].map((s) => (
             <div key={s.label} className="rounded-xl bg-muted/40 py-3">
-              <p className="text-h2 tabular-nums text-foreground">{s.value}</p>
+              <p
+                className={`tabular-nums ${
+                  s.label === 'Actividad'
+                    ? `text-small font-semibold ${s.alerta ? 'text-warning' : 'text-foreground'}`
+                    : 'text-h2 text-foreground'
+                }`}
+              >
+                {s.value}
+              </p>
               <p className="text-caption text-muted-foreground">{s.label}</p>
             </div>
           ))}
@@ -181,157 +150,140 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
   )
 }
 
-export default async function SuperadminDashboard() {
+export default async function SuperadminDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ dias?: string }>
+}) {
   await requireRole('SUPERADMIN')
-
-  const hace30d = new Date()
-  hace30d.setDate(hace30d.getDate() - 30)
-
-  // Conteos agregados en pocas queries: los de membresías salen de un solo
-  // groupBy por companyId/estado.
-  const [companies, membershipCounts, clientesNuevos30d, ticketsAbiertos, actividad] =
-    await sinEmpresa(
-      'panel de plataforma: los totales son de todas las empresas',
-      (tx) => Promise.all([
-        empresasDelPanel(),
-        tx.membership
-          .groupBy({
-            by: ['companyId', 'estado'],
-            where: { estado: { in: ['ACTIVA', 'PENDIENTE_PAGO'] } },
-            _count: { _all: true },
-          })
-          .catch(() => []),
-        nuevosReales(hace30d),
-        // Cuenta la cola "Te toca a ti", no "todo lo no cerrado". El enlace lleva
-        // a /admin/tickets, que desde la Fase 15 abre en esa cola: si aquí se
-        // contara también ESPERANDO_CLIENTE, el panel diría "7" y la bandeja
-        // enseñaría 5 — el aviso y su destino tienen que hablar del mismo
-        // trabajo. Y un ticket esperando al cliente no es trabajo pendiente de
-        // la plataforma.
-        tx.supportTicket
-          .count({ where: { estado: { in: [...COLAS_TICKET.pendientes] } } })
-          .catch(() => 0),
-        tx.auditLog
-          .findMany({
-            orderBy: { createdAt: 'desc' },
-            take: 8,
-            select: {
-              id: true,
-              accion: true,
-              entidadTipo: true,
-              createdAt: true,
-              company: { select: { name: true } },
-              user: { select: { name: true } },
-            },
-          })
-          .catch(() => []),
-      ])
-    )
-
-  const countFor = (companyId: string, estado: string) =>
-    membershipCounts.find((g) => g.companyId === companyId && g.estado === estado)
-      ?._count._all ?? 0
-
-  const perCompany = companies.map((c) => ({
-    ...c,
-    activas: countFor(c.id, 'ACTIVA'),
-    pendientes: countFor(c.id, 'PENDIENTE_PAGO'),
-  }))
-
-  // Los números de arriba son los del NEGOCIO. Las empresas de práctica se
-  // apartan: si los 40 clientes inventados de un entrenamiento suman a
-  // "clientes totales", el número deja de servir para decidir nada — y lo peor
-  // es que nadie se entera de que dejó de servir. Las demo siguen visibles más
-  // abajo, en su propio apartado, porque ocultarlas del todo sería peor.
-  const reales = perCompany.filter((c) => !c.esDemo)
-  const demos = perCompany.filter((c) => c.esDemo)
-
-  const totalClientes = reales.reduce((s, c) => s + c._count.clientes, 0)
-  const totalActivas = reales.reduce((s, c) => s + c.activas, 0)
-  // Pendientes y sin publicar SÍ cuentan solo lo real: son avisos de trabajo
-  // por hacer, y nadie tiene que ir a validar el pago de mentira de un
-  // entrenamiento ni a publicar una empresa que no debe publicarse nunca.
-  const totalPendientes = reales.reduce((s, c) => s + c.pendientes, 0)
-  const sinPublicar = reales.filter((c) => !c.isPublished).length
+  const periodo = leerPeriodo((await searchParams).dias)
+  const d = await getPanelPlataforma(periodo)
 
   return (
     <div className="space-y-8 animate-fade-up">
-      <div>
-        <p className="text-overline">Plataforma</p>
-        <h1 className="text-h1 mt-1 text-foreground">Centro de control</h1>
-      </div>
-
-      {/* Estadísticas globales */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Empresas" value={companies.length} icon={Building2} accent="sky" />
-        <StatCard label="Clientes totales" value={totalClientes} icon={Users} accent="indigo" />
-        <StatCard label="Membresías activas" value={totalActivas} icon={CheckCircle2} accent="green" />
-        <StatCard
-          label="Clientes nuevos"
-          value={clientesNuevos30d}
-          icon={UserPlus}
-          accent="violet"
-          sub="Últimos 30 días"
-        />
-      </div>
-
-      {/* Salud de la plataforma: cada alerta lleva a donde se resuelve */}
-      <div>
-        <h2 className="text-h4 mb-3 text-foreground">Salud de la plataforma</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Link
-            href="/superadmin/operaciones"
-            className={`card-interactive flex items-center justify-between rounded-xl border p-4 ${
-              totalPendientes > 0
-                ? 'border-warning/30 bg-warning/10'
-                : 'border-border/60 bg-card shadow-card'
-            }`}
-          >
-            <span className="flex items-center gap-2.5 text-small font-medium text-foreground">
-              <Clock className={`h-4 w-4 ${totalPendientes > 0 ? 'text-warning' : 'text-muted-foreground'}`} />
-              Pagos por validar
-            </span>
-            <span className="inline-flex items-center gap-1 text-h3 tabular-nums text-foreground">
-              {totalPendientes} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-            </span>
-          </Link>
-          <Link
-            href="/superadmin/empresas"
-            className={`card-interactive flex items-center justify-between rounded-xl border p-4 ${
-              sinPublicar > 0
-                ? 'border-info/30 bg-info/10'
-                : 'border-border/60 bg-card shadow-card'
-            }`}
-          >
-            <span className="flex items-center gap-2.5 text-small font-medium text-foreground">
-              <EyeOff className={`h-4 w-4 ${sinPublicar > 0 ? 'text-info' : 'text-muted-foreground'}`} />
-              Empresas sin publicar
-            </span>
-            <span className="inline-flex items-center gap-1 text-h3 tabular-nums text-foreground">
-              {sinPublicar} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-            </span>
-          </Link>
-          <Link
-            href="/admin/tickets"
-            className={`card-interactive flex items-center justify-between rounded-xl border p-4 ${
-              ticketsAbiertos > 0
-                ? 'border-destructive/30 bg-destructive/10'
-                : 'border-border/60 bg-card shadow-card'
-            }`}
-          >
-            <span className="flex items-center gap-2.5 text-small font-medium text-foreground">
-              <LifeBuoy className={`h-4 w-4 ${ticketsAbiertos > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
-              Tickets abiertos
-            </span>
-            <span className="inline-flex items-center gap-1 text-h3 tabular-nums text-foreground">
-              {ticketsAbiertos} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-            </span>
-          </Link>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-overline">Plataforma</p>
+          <h1 className="text-h1 mt-1 text-foreground">Centro de control</h1>
         </div>
+        {/* Selector de periodo. `next/form` = sin JavaScript de cliente: el
+            panel entero sigue siendo un componente de servidor. */}
+        <Form action="/superadmin/dashboard" className="flex items-center gap-2">
+          <label htmlFor="dias" className="sr-only">
+            Periodo
+          </label>
+          <select
+            id="dias"
+            name="dias"
+            defaultValue={String(periodo)}
+            className="h-9 rounded-xl border border-input bg-background px-3 text-sm"
+          >
+            {PERIODOS.map((p) => (
+              <option key={p} value={p}>
+                {PERIODO_LABEL[p]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="h-9 rounded-xl border border-input bg-card px-3 text-sm font-medium hover:bg-muted"
+          >
+            Ver
+          </button>
+        </Form>
+      </div>
+
+      {/*
+        EN MÓVIL, LO ACCIONABLE PRIMERO. Las métricas informan; la salud pide
+        trabajo. En pantalla ancha caben las dos cosas a la vista y el orden de
+        lectura natural es de arriba abajo, así que se conserva; apiladas en un
+        teléfono, poner cuatro cifras por delante deja los avisos a un scroll de
+        distancia. `order-*` cambia el orden visual sin tocar el del DOM, que es
+        el que siguen el teclado y los lectores de pantalla.
+      */}
+      <div className="flex flex-col gap-8">
+        <section className="order-2 lg:order-1">
+          <h2 className="sr-only">Métricas de la plataforma</h2>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <StatCard
+              label="Empresas"
+              value={d.totalEmpresas}
+              icon={Building2}
+              accent="brand"
+              href="/superadmin/empresas"
+              hrefLabel="ver todas las empresas"
+              sub={d.demos.length > 0 ? `+${d.demos.length} de práctica` : undefined}
+            />
+            <StatCard
+              label="Clientes totales"
+              value={d.totalClientes}
+              icon={Users}
+              accent="brand"
+              href="/superadmin/usuarios"
+              hrefLabel="ver los usuarios"
+              sub={`+${d.nuevos.valor} en el periodo · ${comparacion(d.nuevos)}`}
+            />
+            <StatCard
+              label="Membresías activas"
+              value={d.totalActivas}
+              icon={CheckCircle2}
+              accent="success"
+              href="/superadmin/membresias"
+              hrefLabel="ver las membresías"
+            />
+            {/* El dinero faltaba por completo: un centro de control de una
+                plataforma sin lo cobrado no contesta la primera pregunta que se
+                hace quien la opera. Misma definición que usan el Resumen de la
+                empresa y Reportes (`modules/pagos/cobrado.ts`). */}
+            <StatCard
+              label="Cobrado"
+              value={money(d.cobrado.valor)}
+              icon={Wallet}
+              accent="brand"
+              href="/superadmin/reportes"
+              hrefLabel="ver los reportes"
+              sub={comparacion(d.cobrado, money) || PERIODO_LABEL[periodo]}
+            />
+          </div>
+        </section>
+
+        <section className="order-1 lg:order-2">
+          <h2 className="text-h4 mb-3 text-foreground">Salud de la plataforma</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <AlertTile
+              label="Pagos por validar"
+              value={d.porValidar}
+              href="/superadmin/operaciones"
+              icon={Clock}
+              tono="warning"
+            />
+            <AlertTile
+              label="Empresas sin publicar"
+              value={d.sinPublicar}
+              href="/superadmin/empresas"
+              icon={EyeOff}
+              tono="info"
+            />
+            <AlertTile
+              label="Empresas en silencio"
+              value={d.enSilencio}
+              href="/superadmin/empresas"
+              icon={MoonStar}
+              tono="warning"
+              sufijo={`sin actividad en ${DIAS_SILENCIO} días`}
+            />
+            <AlertTile
+              label="Tickets abiertos"
+              value={d.ticketsAbiertos}
+              href="/superadmin/tickets"
+              icon={LifeBuoy}
+              tono="danger"
+            />
+          </div>
+        </section>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        {/* Empresas */}
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-h4 text-foreground">Empresas</h2>
@@ -343,20 +295,20 @@ export default async function SuperadminDashboard() {
             </Link>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {reales.map((c) => (
+            {d.empresas.map((c) => (
               <TarjetaEmpresa key={c.id} c={c} />
             ))}
           </div>
 
-          {/* Empresas de práctica: aparte y etiquetadas. Sus números no suman
-              arriba, pero siguen a la vista — una empresa demo que no se ve es
-              una empresa demo que alguien deja encendida y olvida. */}
-          {demos.length > 0 && (
+          {/* Las de práctica siguen a la vista: una empresa demo que no se ve es
+              una que alguien deja encendida y olvida. Pero sin encabezado con
+              enlace propio cuando es una sola — era más cabecera que contenido. */}
+          {d.demos.length > 0 && (
             <div className="mt-6">
-              <div className="mb-3 flex items-center justify-between">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-h4 flex items-center gap-2 text-foreground">
-                  <FlaskConical className="h-4 w-4 text-warning" />
-                  Empresas de demostración
+                  <FlaskConical aria-hidden className="h-4 w-4 text-warning" />
+                  De demostración
                 </h2>
                 <Link
                   href="/superadmin/demo"
@@ -366,11 +318,11 @@ export default async function SuperadminDashboard() {
                 </Link>
               </div>
               <p className="mb-3 text-caption text-muted-foreground">
-                Son para entrenar al personal. Sus clientes, cobros y números no cuentan en las
-                estadísticas de la plataforma.
+                Para entrenar al personal. Sus clientes, cobros y números no cuentan en ninguna
+                cifra de esta pantalla.
               </p>
               <div className="grid gap-4 md:grid-cols-2">
-                {demos.map((c) => (
+                {d.demos.map((c) => (
                   <TarjetaEmpresa key={c.id} c={c} />
                 ))}
               </div>
@@ -378,29 +330,46 @@ export default async function SuperadminDashboard() {
           )}
         </div>
 
-        {/* Actividad global */}
         <div>
-          <h2 className="text-h4 mb-3 text-foreground">Actividad reciente</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-h4 text-foreground">Actividad reciente</h2>
+            <Link
+              href="/superadmin/auditoria"
+              className="inline-flex items-center gap-1 text-small font-medium text-primary hover:underline"
+            >
+              Ver todo <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
           <Card className="border-border/60 shadow-card">
             <CardContent className="pt-5">
-              {actividad.length === 0 ? (
+              {d.actividad.length === 0 ? (
                 <p className="py-6 text-center text-small text-muted-foreground">
                   La actividad de todas las empresas aparecerá aquí.
                 </p>
               ) : (
                 <ul className="divide-y divide-border/50">
-                  {actividad.map((a) => (
+                  {d.actividad.map((a) => (
                     <li key={a.id} className="flex items-center gap-3 py-2.5 text-sm">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary dark:text-primary">
-                        <Activity className="h-3.5 w-3.5" />
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Activity aria-hidden className="h-3.5 w-3.5" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-foreground">
+                          {/* El mapa CANÓNICO de la bitácora, no una copia local
+                              a la que le faltaban entradas: por eso esta lista
+                              enseñaba «CUENTA_ELIMINADA» en crudo. */}
                           {ACCION_LABEL[a.accion] ?? a.accion}
                         </p>
                         <p className="truncate text-caption text-muted-foreground">
-                          {a.company?.name ?? 'Plataforma'}
-                          {a.user?.name ? ` · ${a.user.name}` : ''}
+                          {/* `entidadTipo` ya se consultaba y no se pintaba: la
+                              lista decía QUÉ pasó pero no A QUÉ. */}
+                          {[
+                            a.entidadTipo ? (ENTIDAD_LABEL[a.entidadTipo] ?? a.entidadTipo) : null,
+                            a.empresa ?? 'Plataforma',
+                            a.autor,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </p>
                       </div>
                       <span className="shrink-0 text-caption text-muted-foreground/70">
