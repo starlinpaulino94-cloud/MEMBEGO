@@ -149,12 +149,19 @@ export async function registrarCliente(
   // select explícito: si la BD de producción aún no tiene una columna recién
   // agregada al modelo Company, un findUnique sin select falla y bloquea TODO
   // el registro. Con select, solo dependemos de columnas que siempre existen.
-  let company: { id: string; name: string; slug: string; type: string; capacidades: unknown } | null = null
+  let company: {
+    id: string
+    name: string
+    slug: string
+    type: string
+    capacidades: unknown
+    tipoNegocioCodigo: string | null
+  } | null = null
   try {
     company = await sinEmpresa('registro: buscar empresa por slug (catálogo global)', (tx) =>
       tx.company.findUnique({
         where: { slug: companySlug },
-        select: { id: true, name: true, slug: true, type: true, capacidades: true },
+        select: { id: true, name: true, slug: true, type: true, capacidades: true, tipoNegocioCodigo: true },
       })
     )
   } catch (e) {
@@ -179,7 +186,8 @@ export async function registrarCliente(
   // existió. Así quedó atrapado el registro de un restaurante sin categoría
   // configurada, con la campaña de pago mandándole tráfico.
   const requiereVehiculo = flujoRequiereVehiculo(
-    capacidadesEfectivas(company.type, company.capacidades).categoriaExplicita
+    capacidadesEfectivas(company.type, company.capacidades, company.tipoNegocioCodigo)
+      .categoriaExplicita
   )
   const companyIdVerificado = company.id
   let vehiculoV2: import('@/modules/registro/vehiculo-nuevo').VehiculoNuevoValidado | null = null

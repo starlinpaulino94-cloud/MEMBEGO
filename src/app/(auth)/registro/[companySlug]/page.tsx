@@ -38,6 +38,7 @@ export default async function RegistroPage({
       bannerUrl: true,
       colorPrimario: true,
       capacidades: true,
+      tipoNegocioCodigo: true,
     },
   })
 
@@ -81,7 +82,11 @@ export default async function RegistroPage({
   // le exigía la placa del carro al cliente de un restaurante sin categoría
   // configurada — la regla de catalogo.ts es la contraria: un requisito es
   // una puerta cerrada, y ante la duda NO se exige vehículo.
-  const { categoriaExplicita } = capacidadesEfectivas(company.type, company.capacidades)
+  const { categoriaExplicita } = capacidadesEfectivas(
+    company.type,
+    company.capacidades,
+    company.tipoNegocioCodigo
+  )
   const flujoConVehiculo = flujoRequiereVehiculo(categoriaExplicita)
 
   // Categorías de vehículo del negocio, para las tarjetas del paso 1 del
