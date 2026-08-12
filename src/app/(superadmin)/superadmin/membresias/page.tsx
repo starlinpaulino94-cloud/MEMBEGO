@@ -1,23 +1,71 @@
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
+import { AlertTriangle, CalendarClock, Download, ShieldCheck, X } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { sinEmpresa } from '@/lib/tenant'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
-import { EstadoBadge } from '@/components/EstadoBadge'
-import { membresiaEstadoUi } from '@/lib/estados'
+import { StatCard } from '@/components/ui/stat-card'
+import { Badge } from '@/components/ui/badge'
+import { buttonVariants } from '@/components/ui/button'
 import { formatDate } from '@/lib/format'
+import { plural } from '@/lib/plural'
+import { membresiaEstadoUi } from '@/lib/estados'
 import { MembershipAdminActions } from '@/components/admin/MembershipAdminActions'
 import { AjustarLavados } from '@/components/superadmin/AjustarLavados'
+import { listarMembresias, type MembresiaFila } from '@/modules/membresias/lista'
+import {
+  AMBITOS,
+  AMBITO_LABEL,
+  ESTADO_LABEL,
+  FILTROS_ESTADO,
+  fichasDeFiltro,
+  hayFiltro,
+  hrefFiltro,
+  leerFiltroMembresias,
+} from '@/modules/membresias/filtros'
 import type { MembershipEstado } from '@/types'
 
+export const metadata = { title: 'Membresías' }
+
+const BASE = '/superadmin/membresias'
+
 function fmtDate(d: Date | null) {
-  if (!d) return '—'
-  return formatDate(d)
+  return d ? formatDate(d) : '—'
 }
 
-const ESTADOS = ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA', 'ACTIVA', 'VENCIDA', 'CANCELADA'] as const
-
+/**
+ * EL ESTADO, Y SI VALE HOY.
+ *
+ * `ACTIVA` no significa vigente: significa «nadie la ha tocado desde que se
+ * activó». Lo dice el propio módulo de vigencia, y por eso existe
+ * `membresiaVigente()`. La tabla pintaba `estado` en crudo, así que una
+ * membresía vencida en marzo salía como «Activa» en agosto mientras el escáner
+ * del mostrador la rechazaba — y ésta es la pantalla a la que se viene a
+ * averiguar por qué la rechazó.
+ *
+ * No se sustituye la etiqueta: se le añade la advertencia. El estado guardado
+ * sigue siendo un dato (es lo que hay que arreglar), y taparlo con «Vencida»
+ * escondería que la base dice otra cosa.
+ */
+function EstadoConVigencia({ fila }: { fila: MembresiaFila }) {
+  const ui = membresiaEstadoUi(fila.estado)
+  const desfasada = fila.estado === 'ACTIVA' && !fila.vigente
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <Badge variant={desfasada ? 'outline' : ui.variant}>{ui.label}</Badge>
+      {desfasada && (
+        <Badge
+          variant="outline"
+          className="border-warning/40 bg-warning/10 text-caption text-warning"
+          title="Sigue marcada como activa en la base, pero su fecha ya pasó: el escáner la rechaza."
+        >
+          ya venció
+        </Badge>
+      )}
+    </span>
+  )
+}
 
 export default async function SuperadminMembresiasPage({
   searchParams,
@@ -26,122 +74,176 @@ export default async function SuperadminMembresiasPage({
 }) {
   await requireRole('SUPERADMIN')
   const sp = await searchParams
-  const { estado, empresa, q } = sp
+  const f = leerFiltroMembresias(sp)
   const paginacion = leerPaginacion(sp)
 
-  let companies: { id: string; name: string }[] = []
-  let total = 0
-  let membresias: {
-    id: string
-    estado: string
-    fechaInicio: Date | null
-    fechaVencimiento: Date | null
-    lavadosRestantes: number
-    clienteId: string
-    cliente: { nombre: string; email: string; company: { name: string } }
-    plan: { nombre: string; precio: unknown; lavadosIncluidos: number; esIlimitado: boolean }
-  }[] = []
-
-  try {
-    companies = await sinEmpresa(
-      'membresías globales: el superadmin las revisa a través de todas las empresas',
-      (tx) => tx.company.findMany({
-        where: { isActive: true },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true },
-      })
-    )
-  } catch (e) {
-    console.error('[superadmin-membresias] companies', e)
+  let d = {
+    filas: [] as MembresiaFila[],
+    total: 0,
+    resumen: { porValidar: 0, vigentes: 0, vencenPronto: 0, vencidasSinMarcar: 0 },
+    empresas: [] as { id: string; name: string; esDemo: boolean }[],
   }
-
-  const where = {
-    ...(estado ? { estado: estado as MembershipEstado } : {}),
-    cliente: {
-      ...(empresa ? { companyId: empresa } : {}),
-      ...(q ? { OR: [{ nombre: { contains: q, mode: 'insensitive' as const } }, { email: { contains: q, mode: 'insensitive' as const } }] } : {}),
-    },
-  }
-
   try {
-    const [data, cuenta] = await sinEmpresa(
-      'membresías globales: el superadmin las revisa a través de todas las empresas',
-      (tx) => Promise.all([
-        tx.membership.findMany({
-        where,
-        select: {
-          id: true,
-          estado: true,
-          fechaInicio: true,
-          fechaVencimiento: true,
-          lavadosRestantes: true,
-          clienteId: true,
-          plan: { select: { nombre: true, precio: true, lavadosIncluidos: true, esIlimitado: true } },
-          cliente: {
-            select: {
-              nombre: true,
-              email: true,
-              company: { select: { name: true } },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: paginacion.saltar,
-        take: paginacion.tomar,
-        }),
-        tx.membership.count({ where }),
-      ])
-    )
-    membresias = data
-    total = cuenta
+    d = await listarMembresias(f, paginacion)
   } catch (e) {
     console.error('[superadmin-membresias]', e)
   }
 
+  const fichas = fichasDeFiltro(f, BASE, d.empresas)
+  const clase = 'rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring'
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-h1 text-foreground">Solicitudes de membresía</h1>
-        <p className="text-muted-foreground">Gestiona el estado de las membresías de clientes.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          {/*
+            Se llamaba «Solicitudes de membresía» y la tabla enseñaba también
+            las activas, las vencidas y las canceladas. El título describía una
+            de las seis cosas que hay aquí.
+          */}
+          <h1 className="text-h1 text-foreground">Membresías</h1>
+          <p className="text-muted-foreground">
+            Todas las membresías de la plataforma: valida comprobantes, renueva,
+            desactiva y ajusta usos.
+          </p>
+        </div>
+        <Link
+          href={hrefFiltro(f, `${BASE}/exportar`)}
+          prefetch={false}
+          className={buttonVariants({ variant: 'secondary' })}
+        >
+          <Download className="mr-2 h-4 w-4" /> Exportar
+        </Link>
       </div>
 
-      {/* Filters */}
-      <form className="flex flex-wrap gap-3">
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="Buscar cliente..."
-          className="rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+      {/*
+        LAS CIFRAS SON DEL ÁMBITO, NO DEL FILTRO, y llevan a su propia lista.
+        Son el trabajo pendiente: si menguaran al filtrar dejarían de servir
+        para decidir qué mirar, que es justo para lo que están.
+      */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard
+          label="Por validar"
+          value={d.resumen.porValidar}
+          icon={ShieldCheck}
+          accent={d.resumen.porValidar > 0 ? 'warning' : 'success'}
+          sub="Comprobantes esperando"
+          href={hrefFiltro({ ...f, estado: 'PENDIENTE_PAGO' }, BASE)}
+          hrefLabel="Ver los comprobantes por validar"
         />
-        <select
-          name="estado"
-          defaultValue={estado ?? ''}
-          className="rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">Todos los estados</option>
-          {ESTADOS.map((e) => (
-            <option key={e} value={e}>{membresiaEstadoUi(e).label}</option>
-          ))}
-        </select>
-        <select
-          name="empresa"
-          defaultValue={empresa ?? ''}
-          className="rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">Todas las empresas</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Filtrar
-        </button>
-      </form>
+        <StatCard
+          label="Vigentes hoy"
+          value={d.resumen.vigentes.toLocaleString('es-DO')}
+          accent="brand"
+          sub="Activas y sin vencer"
+          href={hrefFiltro({ ...f, estado: 'vigentes' }, BASE)}
+          hrefLabel="Ver las membresías vigentes"
+        />
+        <StatCard
+          label="Vencen en 7 días"
+          value={d.resumen.vencenPronto}
+          icon={CalendarClock}
+          accent={d.resumen.vencenPronto > 0 ? 'warning' : 'brand'}
+          sub="Para avisar antes"
+        />
+        {/*
+          Debería ser 0 SIEMPRE: `vencerMembresias()` corre a diario. Si no lo
+          es, el job no está corriendo, y ésta es la única pantalla donde eso se
+          nota antes de que un cliente se plante en el mostrador.
+        */}
+        <StatCard
+          label="Vencidas sin marcar"
+          value={d.resumen.vencidasSinMarcar}
+          icon={AlertTriangle}
+          accent={d.resumen.vencidasSinMarcar > 0 ? 'danger' : 'success'}
+          sub={d.resumen.vencidasSinMarcar > 0 ? 'El proceso diario no corrió' : 'Al día'}
+          href={hrefFiltro({ ...f, estado: 'vencidas-sin-marcar' }, BASE)}
+          hrefLabel="Ver las membresías vencidas sin marcar"
+        />
+      </div>
 
-      <p className="text-small text-muted-foreground">{total.toLocaleString('es-DO')} resultado(s)</p>
+      <div className="space-y-3">
+        <form className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor="q" className="mb-1 block text-caption text-muted-foreground">
+              Buscar
+            </label>
+            <input id="q" name="q" defaultValue={f.q} placeholder="Nombre o correo…" className={clase} />
+          </div>
+
+          <div>
+            <label htmlFor="estado" className="mb-1 block text-caption text-muted-foreground">
+              Estado
+            </label>
+            <select id="estado" name="estado" defaultValue={f.estado} className={clase}>
+              {FILTROS_ESTADO.map((e) => (
+                <option key={e} value={e}>
+                  {ESTADO_LABEL[e]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="empresa" className="mb-1 block text-caption text-muted-foreground">
+              Empresa
+            </label>
+            <select id="empresa" name="empresa" defaultValue={f.empresa ?? 'todas'} className={clase}>
+              <option value="todas">Todas</option>
+              {d.empresas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.esDemo ? `${c.name} (práctica)` : c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="ambito" className="mb-1 block text-caption text-muted-foreground">
+              Incluir
+            </label>
+            <select id="ambito" name="ambito" defaultValue={f.ambito} className={clase}>
+              {AMBITOS.map((a) => (
+                <option key={a} value={a}>
+                  {AMBITO_LABEL[a]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Filtrar
+          </button>
+        </form>
+
+        {fichas.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {fichas.map((ficha) => (
+              <Link
+                key={ficha.clave}
+                href={ficha.quitarHref}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1 text-caption text-foreground hover:bg-muted"
+                aria-label={`Quitar filtro ${ficha.texto}`}
+              >
+                {ficha.texto}
+                <X aria-hidden className="h-3 w-3" />
+              </Link>
+            ))}
+            {hayFiltro(f) && (
+              <Link href={BASE} className="text-caption text-primary hover:underline">
+                Limpiar todo
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="text-small text-muted-foreground">
+        {plural(d.total, 'resultado', 'resultados')}
+      </p>
 
       <div className="overflow-x-auto rounded-xl border bg-card">
         <table className="w-full text-sm">
@@ -150,7 +252,9 @@ export default async function SuperadminMembresiasPage({
               <th className="px-4 py-3 text-left">Cliente</th>
               <th className="px-4 py-3 text-left">Empresa</th>
               <th className="px-4 py-3 text-left">Plan</th>
-              <th className="px-4 py-3 text-left">Lavados</th>
+              {/* «Usos», no «Lavados»: esta pantalla cruza empresas que no
+                  lavan carros, y el plan ya dice «usos incluidos». */}
+              <th className="px-4 py-3 text-left">Usos</th>
               <th className="px-4 py-3 text-left">Estado</th>
               <th className="px-4 py-3 text-left">Inicio</th>
               <th className="px-4 py-3 text-left">Vencimiento</th>
@@ -158,23 +262,36 @@ export default async function SuperadminMembresiasPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {membresias.map((m) => (
+            {d.filas.map((m) => (
               <tr key={m.id} className="hover:bg-muted">
                 <td className="px-4 py-3 font-medium text-foreground">
-                  <div>{m.cliente.nombre}</div>
-                  <div className="text-caption text-muted-foreground">{m.cliente.email}</div>
+                  {/* La ficha del cliente estaba a un id de distancia —la
+                      página ya lo pasaba— y no había forma de abrirla desde
+                      aquí. Es la pregunta siguiente en cuanto algo no cuadra. */}
+                  <Link
+                    href={`/admin/clientes/${m.clienteId}`}
+                    className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {m.clienteNombre}
+                  </Link>
+                  <div className="text-caption text-muted-foreground">{m.clienteEmail}</div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{m.cliente.company.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{m.plan.nombre}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {m.empresaNombre}
+                  {m.empresaEsDemo && (
+                    <span className="ml-1 text-caption font-medium text-warning">· práctica</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground">{m.planNombre}</td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <AjustarLavados
                     membershipId={m.id}
-                    lavados={m.lavadosRestantes}
-                    esIlimitado={m.plan.esIlimitado}
+                    lavados={m.usosRestantes}
+                    esIlimitado={m.planEsIlimitado}
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <EstadoBadge estado={m.estado as MembershipEstado} />
+                  <EstadoConVigencia fila={m} />
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{fmtDate(m.fechaInicio)}</td>
                 <td className="px-4 py-3 text-muted-foreground">{fmtDate(m.fechaVencimiento)}</td>
@@ -182,18 +299,23 @@ export default async function SuperadminMembresiasPage({
                   <MembershipAdminActions
                     membershipId={m.id}
                     estado={m.estado as MembershipEstado}
-                    clienteId={m.clienteId}
-                    planPrecio={Number(m.plan.precio)}
-                    planLavados={m.plan.lavadosIncluidos}
-                    planEsIlimitado={m.plan.esIlimitado}
                   />
                 </td>
               </tr>
             ))}
-            {membresias.length === 0 && (
+            {d.filas.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
-                  No hay membresías.
+                  {hayFiltro(f) ? (
+                    <>
+                      Sin resultados con estos filtros.{' '}
+                      <Link href={BASE} className="text-primary hover:underline">
+                        Limpiar
+                      </Link>
+                    </>
+                  ) : (
+                    'No hay membresías.'
+                  )}
                 </td>
               </tr>
             )}
@@ -201,10 +323,10 @@ export default async function SuperadminMembresiasPage({
         </table>
       </div>
 
-      {membresias.length > 0 && (
+      {d.filas.length > 0 && (
         <TablaPaginacion
           paginacion={paginacion}
-          total={total}
+          total={d.total}
           params={sp}
           etiqueta="membresías"
         />

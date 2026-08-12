@@ -47,6 +47,10 @@ enum AuditAccion {
   PAGO_APROBADO
   PAGO_RECHAZADO
   MEMBRESIA_CANCELADA
+  /// Un superadmin la caducó A MANO (pasa a VENCIDA). NO es cancelar: la
+  /// membresía termina su ciclo antes de tiempo en vez de darse por terminada.
+  /// Compartían etiqueta y la bitácora llamaba «cancelada» a las dos.
+  MEMBRESIA_DESACTIVADA
   MEMBRESIA_RENOVADA
   QR_GENERADO
   QR_USADO

@@ -443,19 +443,40 @@ export async function desactivarMembresia(
     if (!m) return { error: 'Membresía no encontrada.' }
     if (m.estado !== 'ACTIVA') return { error: 'Solo se puede desactivar una membresía activa.' }
 
+    /**
+     * LA FECHA TAMBIÉN, no solo el estado.
+     *
+     * Se ponía `VENCIDA` y se dejaba `fechaVencimiento` en el futuro. Eso es un
+     * estado que no puede darse solo —el job diario vence por fecha— y cualquier
+     * consulta que razone por fecha en vez de por estado la ve de otra manera.
+     * Peor: si el cliente reclama, no hay forma de saber cuándo dejó de valer.
+     *
+     * Se corta AHORA. Y solo hacia atrás: si ya vencía antes de hoy se respeta
+     * su fecha, porque adelantarla reescribiría un vencimiento que ya ocurrió.
+     */
+    const ahora = new Date()
+    const cortada =
+      m.fechaVencimiento && m.fechaVencimiento < ahora ? m.fechaVencimiento : ahora
+
     await conEmpresa(m.cliente.companyId, async (tx) => {
       await tx.membership.update({
         where: { id: membershipId },
-        data: { estado: 'VENCIDA' },
+        data: { estado: 'VENCIDA', fechaVencimiento: cortada },
       })
       await tx.auditLog.create({
         data: {
           companyId: m.cliente.companyId,
           userId: user.metadata.dbUserId ?? null,
-          accion: 'MEMBRESIA_CANCELADA',
+          // Desactivar NO es cancelar. Compartían etiqueta y en la bitácora
+          // —y en el filtro de Auditoría— las dos salían como «cancelada».
+          accion: 'MEMBRESIA_DESACTIVADA',
           entidadTipo: 'Membership',
           entidadId: m.id,
-          payload: { prevEstado: 'ACTIVA', nuevaAccion: 'VENCIDA' },
+          payload: {
+            antes: 'ACTIVA',
+            despues: 'VENCIDA',
+            vencimientoAnterior: m.fechaVencimiento?.toISOString() ?? null,
+          },
         },
       })
     })
