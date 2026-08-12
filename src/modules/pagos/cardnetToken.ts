@@ -8,6 +8,7 @@ import {
   cardnetTokensConfigurado,
   cobrarConToken,
   consultarClienteCardnet,
+  activarPerfilCardnet,
 } from '@/lib/payments/cardnet-tokens'
 import { MENSAJE_ACTIVACION_PENDIENTE } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
@@ -268,4 +269,147 @@ export async function cobrarPendienteConPerfil(input: {
     }
   }
   return res
+}
+
+// ── Activación del perfil (llaves CON autenticación · §4.1.2.3) ─────────────
+
+export type ActivacionResultado =
+  /** Activó y además cobró el pendiente: el flujo completo en un movimiento. */
+  | {
+      estado: 'aprobado'
+      compraId: string | null
+      membershipId: string | null
+      /** Referencias del perfil cobrado (para «guardar tarjeta», como en el cobro). */
+      perfil: PerfilCobrado
+    }
+  /** Activó, pero el cobro posterior no aprobó (o no había qué cobrar). */
+  | { estado: 'activada_sin_cobro'; motivo: string }
+  /**
+   * CardNET no aceptó el código. OJO: el manual da 3 intentos y al tercero
+   * BORRA la tarjeta — el mensaje se lo advierte al cliente.
+   */
+  | { estado: 'codigo_rechazado'; motivo: string }
+  /** No hay perfil pendiente de activar (ya se activó, o la tarjeta se borró). */
+  | { estado: 'sin_perfil'; motivo: string }
+  | { estado: 'error'; motivo: string }
+
+/**
+ * ACTIVA la tarjeta con el código del banco y, si CardNET la habilita, COBRA
+ * el pendiente en el mismo movimiento — por la misma tubería idempotente de
+ * siempre (`cobrarPendienteConPerfil`). El cliente teclea el código UNA vez y
+ * sale con la membresía activa, no con un segundo botón que apretar.
+ *
+ * El customerId se resuelve con las mismas reglas de pertenencia que el cobro:
+ * el de la sesión solo se usa si su email coincide con el del usuario; si no
+ * llegó, se usa el guardado del cliente. Nunca se activa un Customer ajeno.
+ */
+export async function activarTarjetaPendiente(input: {
+  objetivo: ObjetivoPago
+  emailCliente: string
+  codigo: string
+  clienteIp: string
+  userAgent?: string | null
+  customerId?: string | null
+  conteoAntes?: number | null
+}): Promise<ActivacionResultado> {
+  if (!(await puedeCobrarToken(input.objetivo.companyId))) {
+    return { estado: 'error', motivo: 'El pago con tarjeta no está disponible.' }
+  }
+
+  // Resolver el Customer con las mismas reglas de pertenencia del cobro.
+  let customerId = input.customerId?.trim() || null
+  if (customerId) {
+    const consulta = await consultarClienteCardnet(customerId)
+    const emailCoincide =
+      !!consulta.email &&
+      consulta.email.trim().toLowerCase() === input.emailCliente.trim().toLowerCase()
+    if (!emailCoincide) customerId = null
+  }
+  if (!customerId) {
+    const guardado = await conEmpresa(input.objetivo.companyId, (tx) =>
+      tx.cliente
+        .findUnique({
+          where: { id: input.objetivo.clienteId },
+          select: { cardnetCustomerId: true },
+        })
+        .catch(() => null)
+    )
+    customerId = guardado?.cardnetCustomerId?.trim() || null
+  }
+  if (!customerId) {
+    return { estado: 'sin_perfil', motivo: 'No se encontró la tarjeta a activar. Regístrala de nuevo.' }
+  }
+
+  // El perfil a activar: el MÁS RECIENTE deshabilitado (mismo criterio que el
+  // cobro usa para "el recién agregado").
+  const { perfiles } = await consultarClienteCardnet(customerId)
+  const pendientes = perfiles.filter((p) => !p.habilitado)
+  if (pendientes.length === 0) {
+    // Nada deshabilitado: o ya se activó (otra pestaña) o CardNET la borró al
+    // tercer intento fallido. El cobro normal decide cuál de los dos es.
+    return {
+      estado: 'sin_perfil',
+      motivo: 'No hay ninguna tarjeta pendiente de activar. Si el pago sigue pendiente, registra la tarjeta de nuevo.',
+    }
+  }
+  const perfil = pendientes[pendientes.length - 1]
+
+  let activacion
+  try {
+    activacion = await activarPerfilCardnet({
+      customerId,
+      paymentProfileId: perfil.paymentProfileId,
+      codigo: input.codigo,
+    })
+  } catch (e) {
+    logErrorBd('pagos:cardnet-token:activar', e, { clienteId: input.objetivo.clienteId })
+    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+  }
+
+  if (!activacion.ok) {
+    // El proveedor no aceptó. Sin contrato de error confirmado, la distinción
+    // fiable es re-consultar: si el perfil desapareció, fue el tercer intento.
+    const despues = await consultarClienteCardnet(customerId)
+    const sigueAhi = despues.perfiles.some(
+      (p) => !p.habilitado && p.paymentProfileId === perfil.paymentProfileId
+    )
+    if (!sigueAhi) {
+      return {
+        estado: 'sin_perfil',
+        motivo: 'La tarjeta se eliminó tras varios intentos fallidos (así opera el banco). Regístrala de nuevo para reintentar el pago.',
+      }
+    }
+    return {
+      estado: 'codigo_rechazado',
+      motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+    }
+  }
+
+  // Activada → cobrar el pendiente por la tubería de siempre. `conteoAntes: 0`
+  // a propósito: la tarjeta ya existe y está habilitada; la guarda de "solo
+  // cobrar perfiles nuevos" aplicaba a la ventana de captura, no aquí.
+  const cobro = await cobrarPendienteConPerfil({
+    objetivo: input.objetivo,
+    emailCliente: input.emailCliente,
+    clienteIp: input.clienteIp,
+    userAgent: input.userAgent,
+    conteoAntes: 0,
+    customerId,
+  })
+  if (cobro.estado === 'aprobado') {
+    return {
+      estado: 'aprobado',
+      compraId: cobro.compraId,
+      membershipId: cobro.membershipId,
+      perfil: cobro.perfil,
+    }
+  }
+  if (cobro.estado === 'sin_pendiente') {
+    return { estado: 'activada_sin_cobro', motivo: 'Tu tarjeta quedó activa. No había ningún pago pendiente.' }
+  }
+  const motivo =
+    'motivo' in cobro && cobro.motivo
+      ? cobro.motivo
+      : 'Tu tarjeta quedó activa, pero el cobro no se completó. Intenta pagar de nuevo.'
+  return { estado: 'activada_sin_cobro', motivo }
 }

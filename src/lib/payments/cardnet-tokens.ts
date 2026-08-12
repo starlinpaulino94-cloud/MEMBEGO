@@ -576,6 +576,42 @@ export async function cobrarConCredencialGuardada(input: {
 }
 
 /**
+ * ACTIVA el perfil de pago con el código de 6 dígitos del banco (§4.1.2.3).
+ *
+ * Con las llaves CON autenticación, la tarjeta recién capturada nace
+ * `Enabled: false`: CardNET cobra RD$1.00 y el banco le muestra al cliente un
+ * código («Cardnet:Z2R78V») que debe ingresar aquí. El endpoint sale del
+ * Postman de tokenización: `POST /api/Customer/{id}/activate`.
+ *
+ * VERIFICAR-QA (mismo criterio que `cobrarConCredencialGuardada`): el NOMBRE
+ * exacto del campo del código solo lo confirma una activación real contra el
+ * ambiente de pruebas. Se envían las grafías plausibles a la vez —el servicio
+ * ignora los campos que no conoce— y el expediente devuelto (status + cuerpo
+ * sin sensibles) permite fijar el contrato real y dejar UN solo campo cuando
+ * QA lo revele.
+ *
+ * El código de activación NO es un dato sensible de tarjeta (no es PAN ni
+ * CVV): es un reto de un solo uso que ya viajó por el estado de cuenta.
+ */
+export async function activarPerfilCardnet(input: {
+  customerId: string
+  paymentProfileId?: string | null
+  codigo: string
+}): Promise<{ ok: boolean; status: number; crudo: Record<string, unknown> }> {
+  const { ok, status, json } = await llamarTokensConRuta(
+    'POST',
+    `/Customer/${encodeURIComponent(input.customerId)}/activate`,
+    {
+      ActivationCode: input.codigo,
+      ActivationKey: input.codigo,
+      Code: input.codigo,
+      ...(input.paymentProfileId ? { PaymentProfileId: input.paymentProfileId } : {}),
+    }
+  )
+  return { ok, status, crudo: evidencia(status, json) }
+}
+
+/**
  * Borra un perfil de pago guardado (el cliente quita su tarjeta).
  * `POST /api/Customer/{id}/PaymentProfileDelete`.
  */

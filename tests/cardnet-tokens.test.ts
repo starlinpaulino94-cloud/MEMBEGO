@@ -539,3 +539,27 @@ test('la referencia del cobro cabe en los campos del adquirente', async () => {
   assert.equal(referenciaCobro(''), 'MEMBEGO')
   assert.equal(referenciaCobro('---'), 'MEMBEGO')
 })
+
+// ── Activación (llaves CON autenticación · §4.1.2.3) ────────────────────────
+
+test('activación: el código limpio de 6 caracteres pasa en mayúsculas', async () => {
+  const { normalizarCodigoActivacion } = await import('../src/lib/payments/cardnet-tokens-core')
+  assert.equal(normalizarCodigoActivacion('Z2R78V'), 'Z2R78V')
+  assert.equal(normalizarCodigoActivacion('z2r78v'), 'Z2R78V')
+})
+
+test('activación: se admite la línea del estado de cuenta pegada entera', async () => {
+  const { normalizarCodigoActivacion } = await import('../src/lib/payments/cardnet-tokens-core')
+  // Como aparece en el banco («Cardnet:Z2R78V»), con espacios y minúsculas.
+  assert.equal(normalizarCodigoActivacion('Cardnet:Z2R78V'), 'Z2R78V')
+  assert.equal(normalizarCodigoActivacion('  cardnet : z2r78v  '), 'Z2R78V')
+})
+
+test('activación: lo que no reduce a 6 alfanuméricos se rechaza antes de gastar un intento', async () => {
+  const { normalizarCodigoActivacion } = await import('../src/lib/payments/cardnet-tokens-core')
+  assert.equal(normalizarCodigoActivacion(''), null)
+  assert.equal(normalizarCodigoActivacion('12345'), null)
+  assert.equal(normalizarCodigoActivacion('1234567'), null)
+  // «cardnet» solo, sin código: no debe convertirse en cadena vacía válida.
+  assert.equal(normalizarCodigoActivacion('Cardnet:'), null)
+})

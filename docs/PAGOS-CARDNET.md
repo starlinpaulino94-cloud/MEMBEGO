@@ -142,15 +142,24 @@ CardNET entrega dos pares, y cambian el flujo, no solo las credenciales:
 | Tras capturar la tarjeta | El token queda **activo solo** (§3.1.2 operativo) | El perfil nace `Enabled: false` (§4.1.2.2 p.12) |
 | Paso extra | Ninguno | CardNET cobra **RD$1.00** y el banco muestra un código de 6 dígitos (`Cardnet:Z2R78V`) que el cliente debe ingresar (§4.1.2.3) |
 | Reintentos | — | 3; al tercero CardNET **borra la tarjeta** |
-| ¿Implementado aquí? | Sí, completo | **No.** Falta la pantalla de activación y la llamada `POST /Customer/{id}/activate` |
+| ¿Implementado aquí? | Sí, completo | **Sí** (12-08-2026): pantalla de activación + `POST /Customer/{id}/activate` |
 
-Hoy el código **detecta** el perfil deshabilitado y le explica al cliente qué
-pasó (`estado: 'pendiente_activacion'`), en vez de intentar un cobro que iba a
-fallar sin decir por qué. Pero no puede completarlo: eso requiere la pantalla
-de activación.
+**Decisión de producción tomada: las llaves son CON autenticación (3DS).**
 
-**Para probar y certificar: usa el juego SIN autenticación.** La decisión de
-producción (menos fricción vs. más protección antifraude) está abierta.
+Cómo funciona: cuando el sondeo encuentra el perfil deshabilitado
+(`pendiente_activacion`), la pantalla de pago muestra el campo del código. El
+cliente pega lo que ve en su banco («Cardnet:Z2R78V» entero vale — el servidor
+lo normaliza en `normalizarCodigoActivacion` ANTES de gastar un intento), y el
+servidor activa y **cobra en el mismo movimiento** (`activarTarjetaPendiente`
+→ `cobrarPendienteConPerfil`, la misma tubería idempotente). Si CardNET
+rechaza el código, el mensaje advierte de los 3 intentos; si el perfil
+desapareció (tercer fallo), se le pide registrar la tarjeta de nuevo.
+
+> **VERIFICAR-QA**: el NOMBRE exacto del campo del código en el cuerpo del
+> `activate` no está en el manual — se envían las grafías plausibles a la vez
+> (`ActivationCode`/`ActivationKey`/`Code`, más `PaymentProfileId`), igual que
+> se hizo con el Purchase de credencial guardada. La primera activación real
+> contra el ambiente de pruebas fija el contrato; entonces se deja UN campo.
 
 ### Lo que solo confirma un cobro real
 
