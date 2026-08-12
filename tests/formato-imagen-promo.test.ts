@@ -26,12 +26,20 @@ test('un recorte casi cuadrado dentro de la tolerancia pasa', () => {
 test('el banner apaisado de las tarjetas OG (1728×910) se rechaza con medidas', () => {
   const error = validarDimensionesPromo(1728, 910)
   assert.ok(error, 'debe rechazarse')
-  assert.match(error!, /cuadrada/i)
+  assert.match(error!, /Instagram/i)
   assert.match(error!, /1728×910/, 'el mensaje debe decir qué midió el archivo')
 })
 
-test('el vertical 4:5 de Instagram también se rechaza: la regla es el cuadrado', () => {
-  assert.ok(validarDimensionesPromo(1080, 1350))
+test('el vertical 4:5 de Instagram pasa: el formato es un rango, no solo el cuadrado', () => {
+  assert.equal(validarDimensionesPromo(1080, 1350), null)
+})
+
+test('el arte real que destapó el rango (1122×1402, 4:5) pasa', () => {
+  assert.equal(validarDimensionesPromo(1122, 1402), null)
+})
+
+test('el vertical extremo de historia (9:16) se rechaza', () => {
+  assert.ok(validarDimensionesPromo(1080, 1920))
 })
 
 test('un cuadrado pequeño se rechaza por nitidez, no por proporción', () => {

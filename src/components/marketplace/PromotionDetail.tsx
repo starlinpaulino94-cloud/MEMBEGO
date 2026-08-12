@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { PROMO_IMG } from '@/modules/promociones/formato-imagen'
 import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
@@ -49,26 +48,27 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
         <div className="mt-8 overflow-hidden rounded-3xl border border-border/80 shadow-premium">
           {/* Image */}
           {promotion.imagenUrl && (
-            // LA CAJA MIDE EL FORMATO QUE LA SUBIDA EXIGE (PROMO_IMG, cuadrado
-            // de Instagram): una imagen subida como se pide llena el ancho del
-            // celular de borde a borde, sin recorte y sin paspartú.
+            // LA IMAGEN SE MUESTRA A SU PROPORCIÓN REAL, a todo el ancho.
             //
-            // El historial de esta caja, para no repetirlo: con altura fija +
-            // `object-cover` el arte se recortaba por los lados en móvil; con
-            // caja cuadrada y arte apaisado salía diminuto entre franjas
-            // grises. La caja debe medir LO MISMO que el formato exigido — y
-            // leerlo de la fuente única, no copiarlo. `object-contain` queda
-            // como red para el arte anterior a la exigencia (banners
-            // apaisados ya subidos): se ve entero sobre `bg-muted`.
-            <div
-              className="relative w-full overflow-hidden bg-muted"
-              style={{ aspectRatio: `${PROMO_IMG.width} / ${PROMO_IMG.height}` }}
-            >
-              <Image
+            // El historial de esta caja, para no repetirlo: altura fija +
+            // `cover` recortaba el arte por los lados en móvil; una caja de
+            // proporción fija + `contain` le ponía franjas a todo lo que no
+            // midiera exactamente eso. Desde que la subida EXIGE el formato
+            // Instagram (1:1 a 4:5, ver formato-imagen.ts) hay un RANGO
+            // válido, y la única caja que no castiga a ninguno es la de la
+            // propia imagen: ancho completo, alto el suyo, ni recorte ni
+            // paspartú. El arte apaisado anterior a la exigencia también se
+            // ve entero — simplemente más bajo.
+            //
+            // <img> nativo a propósito: `next/image` exige declarar una
+            // proporción por adelantado (fill o width/height), que es
+            // exactamente lo que ya no existe.
+            <div className="overflow-hidden bg-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={promotion.imagenUrl}
                 alt={promotion.titulo}
-                fill
-                className="object-contain"
+                className="block w-full h-auto"
               />
             </div>
           )}

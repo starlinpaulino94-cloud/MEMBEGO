@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { OG_RECOMENDACION } from '@/lib/share/og-tamano'
+import { PROMO_IMG_DESCRIPCION } from '@/modules/promociones/formato-imagen'
 
 interface Existing {
   id: string
@@ -224,8 +224,8 @@ export function PromocionForm({
             currentUrl={existing?.imagenUrl ?? null}
           />
           <p className="text-xs text-muted-foreground">
-            Al compartir el enlace (WhatsApp, Facebook…) esta imagen se muestra
-            ENTERA como vista previa. Ideal {OG_RECOMENDACION} (horizontal).
+            {PROMO_IMG_DESCRIPCION}. Al compartir el enlace (WhatsApp,
+            Facebook…) se muestra ENTERA como vista previa.
           </p>
         </div>
       </div>
