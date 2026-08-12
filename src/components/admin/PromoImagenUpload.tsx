@@ -12,7 +12,7 @@ import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { OG_MAX_MB } from '@/lib/share/og-tamano'
-import { PROMO_IMG, validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
+import { PROMO_IMG_DESCRIPCION, validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
 import { uniqueFileName } from '@/lib/storage'
 import { Button } from '@/components/ui/button'
 
@@ -114,9 +114,7 @@ export function PromoImagenUpload({
           )}
           <span className="text-sm">Subir imagen desde tu dispositivo</span>
           <span className="text-xs">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
-          <span className="text-xs opacity-80">
-            Cuadrada, {PROMO_IMG.width}×{PROMO_IMG.height} px (formato Instagram)
-          </span>
+          <span className="text-xs opacity-80">{PROMO_IMG_DESCRIPCION}</span>
         </button>
       )}
 
