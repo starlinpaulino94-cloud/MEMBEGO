@@ -48,12 +48,19 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
         <div className="mt-8 overflow-hidden rounded-3xl border border-border/80 shadow-premium">
           {/* Image */}
           {promotion.imagenUrl && (
-            <div className="relative h-96 w-full overflow-hidden bg-muted">
+            // El arte lo sube el negocio y suele llevar el TEXTO en los bordes
+            // (formato de Instagram, 1:1). Con altura fija + `object-cover`,
+            // en un celular la caja quedaba casi cuadrada y el recorte se
+            // comía justo ese texto. En móvil la caja es cuadrada (el formato
+            // real del arte) y `object-contain` garantiza la imagen ENTERA en
+            // cualquier proporción; el fondo `bg-muted` hace de paspartú
+            // cuando sobra espacio.
+            <div className="relative aspect-square w-full overflow-hidden bg-muted sm:aspect-auto sm:h-96">
               <Image
                 src={promotion.imagenUrl}
                 alt={promotion.titulo}
                 fill
-                className="object-cover"
+                className="object-contain"
               />
             </div>
           )}
