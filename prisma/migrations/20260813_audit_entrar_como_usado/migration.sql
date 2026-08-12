@@ -1,0 +1,12 @@
+-- Rastro de la SUPLANTACIÓN, no solo de su preparación.
+--
+-- Hasta ahora solo se registraba ENTRAR_COMO_GENERADO, que se escribe cuando el
+-- superadmin pide el enlace. Si el enlace se abría, la sesión que quedaba
+-- activa era la del usuario suplantado y TODO lo que se hiciera después entraba
+-- en la bitácora a nombre de él. Ante un «yo no cancelé esa membresía» la
+-- bitácora decía que sí la canceló él.
+--
+-- Este valor lo escribe el callback /confirmar al canjear el token, con quién
+-- generó el enlace y para quién. Es el único momento en que se sabe que la
+-- suplantación de verdad OCURRIÓ.
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ENTRAR_COMO_USADO';

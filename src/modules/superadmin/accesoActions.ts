@@ -6,6 +6,7 @@ import { getUser } from '@/lib/auth'
 import { getAppUrl } from '@/lib/site'
 import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { huellaToken } from './entrarComo'
 
 /**
  * ACCESOS DEL SUPERADMIN: promover/quitar superadmins y "entrar como"
@@ -108,7 +109,13 @@ export async function alternarSuperadmin(
  * ENTRAR COMO: genera un enlace de acceso de UN SOLO USO para el usuario del
  * email indicado (cliente, staff o superadmin). Quien abra el enlace queda con
  * la sesión de ESE usuario — ábrelo en una ventana de incógnito para no
- * reemplazar la tuya. El enlace expira solo y queda registrado en la bitácora.
+ * reemplazar la tuya. El enlace expira solo.
+ *
+ * QUEDAN DOS LÍNEAS EN LA BITÁCORA, no una: `ENTRAR_COMO_GENERADO` al pedir el
+ * enlace y `ENTRAR_COMO_USADO` cuando alguien lo abre de verdad. La segunda es
+ * la que importa y la que faltaba: sin ella, todo lo que el suplantador hiciera
+ * después quedaba registrado a nombre de la persona suplantada, y lo único que
+ * existía era la prueba de que *se preparó* un enlace. Ver `entrarComo.ts`.
  */
 export async function generarEnlaceEntrarComo(
   _prev: AccesoState,
@@ -153,7 +160,16 @@ export async function generarEnlaceEntrarComo(
             accion: 'ENTRAR_COMO_GENERADO',
             entidadTipo: 'User',
             entidadId: target.id,
-            payload: { email: target.email, por: session.email },
+            payload: {
+              email: target.email,
+              por: session.email,
+              // La HUELLA del token, no el token. Es lo que permite reconocer
+              // este enlace cuando alguien lo canjee y registrar entonces
+              // `ENTRAR_COMO_USADO`; guardar el token sería guardar la
+              // credencial viva en la tabla que más gente puede leer.
+              // Ver `entrarComo.ts`.
+              huella: huellaToken(tokenHash),
+            },
           },
         })
         .catch(anotarFallo('superadmin:entrarComo:auditoria'))
