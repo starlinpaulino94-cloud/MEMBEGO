@@ -39,6 +39,12 @@ export interface DatosSSO {
   rol: string
   /** Empresa de MembeGo a la que pertenece — el tenant en el satélite. */
   companyId: string
+  /**
+   * Nombre comercial de la empresa. Opcional como todo lo nuevo: existe para
+   * que un satélite con AUTO-VINCULACIÓN pueda crear el tenant con su nombre
+   * real en vez de un marcador. Un satélite que no lo mire, ni se entera.
+   */
+  companyName?: string
   /** Epoch en segundos; después de esto el token no vale. */
   exp: number
 

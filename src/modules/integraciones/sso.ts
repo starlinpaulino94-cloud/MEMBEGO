@@ -1,5 +1,6 @@
 import 'server-only'
 import { crearTokenSSO } from '@/modules/integraciones/nucleo'
+import { conEmpresa } from '@/lib/tenant'
 import { mensajeDenegado } from '@/modules/plataforma/acceso'
 import { accesoASistema, sistemasDeEmpresa } from '@/modules/plataforma/registro'
 import {
@@ -74,11 +75,18 @@ export async function urlAperturaSSO(
   }
 
   const jti = nuevoJti()
+  // El nombre viaja para la AUTO-VINCULACIÓN del satélite: si la empresa no
+  // existe allá, nace con su nombre real y no con un marcador. Best-effort —
+  // sin nombre, el token sale igual que siempre.
+  const nombreEmpresa = await conEmpresa(companyId, (tx) =>
+    tx.company.findUnique({ where: { id: companyId }, select: { name: true } })
+  ).catch(() => null)
   const token = crearTokenSSO(sistema.secreto, {
     sub: user.supabaseId,
     email: user.email,
     rol: user.metadata.role,
     companyId,
+    ...(nombreEmpresa?.name ? { companyName: nombreEmpresa.name } : {}),
     exp: Math.floor(Date.now() / 1000) + TTL_SSO_SEGUNDOS,
     jti,
     ...(acceso.systemRole ? { systemRole: acceso.systemRole } : {}),
