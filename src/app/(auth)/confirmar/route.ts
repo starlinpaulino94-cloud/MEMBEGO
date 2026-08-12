@@ -3,6 +3,7 @@ import type { EmailOtpType } from '@supabase/supabase-js'
 import { createRouteClient, redirectWithCookies } from '@/lib/supabase/route-client'
 import { getAppUrl } from '@/lib/site'
 import { registrarVerificacionReferido } from '@/lib/referidos-attribution'
+import { registrarUsoEntrarComo } from '@/modules/superadmin/entrarComoUso'
 import { ROLE_HOME, type AppRole } from '@/types'
 
 /**
@@ -31,6 +32,28 @@ export async function GET(request: NextRequest) {
   if (error) {
     console.error('[confirmar] verifyOtp falló:', error)
     return loginError
+  }
+
+  /**
+   * ¿ERA UN ENLACE DE «ENTRAR COMO»?
+   *
+   * Este callback lo comparten dos cosas muy distintas: la verificación de
+   * correo de cualquier usuario y la suplantación que genera el superadmin.
+   * Las dos llegan con `type=magiclink` y son indistinguibles desde fuera; lo
+   * único que las separa es si el token tiene una línea de
+   * `ENTRAR_COMO_GENERADO` con su huella. Eso es lo que se comprueba aquí.
+   *
+   * Va DESPUÉS del `verifyOtp` porque solo se registra la suplantación que de
+   * verdad ocurrió, no cada intento con un enlace ya gastado. Y no se espera
+   * nada de ella: `registrarUsoEntrarComo` se traga sus propios errores y
+   * devuelve `false`, para que un problema al escribir en la bitácora no deje a
+   * nadie fuera de su cuenta.
+   */
+  if (type === 'magiclink') {
+    await registrarUsoEntrarComo(tokenHash, {
+      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+      userAgent: request.headers.get('user-agent'),
+    })
   }
 
   // Sesión abierta: llevar al usuario directo a su panel según el rol.

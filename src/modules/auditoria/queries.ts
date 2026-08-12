@@ -37,7 +37,21 @@ export const ENTIDAD_LABEL: Record<string, string> = {
   Visit: 'Visita',
 }
 
-/** Etiquetas legibles de cada acción registrada. */
+/**
+ * Etiquetas legibles de cada acción registrada.
+ *
+ * TIENE QUE ESTAR COMPLETO, y `tests/bitacora-etiquetas.test.ts` lo obliga:
+ * compara este mapa contra el enum `AuditAccion` del esquema y falla si sobra o
+ * falta uno. Sin esa guardia el mapa se quedaba atrás en silencio — trece de
+ * los treinta y tres valores no estaban, y entre ellos los TRES que registran
+ * privilegio: `ENTRAR_COMO_GENERADO`, `SUPERADMIN_OTORGADO` y
+ * `SUPERADMIN_RETIRADO`. Salían en crudo, en mayúsculas con guiones bajos,
+ * justo las líneas que alguien busca cuando investiga algo.
+ *
+ * Y no es solo cosmético: la pantalla de Auditoría construye su desplegable de
+ * filtros con `Object.entries(ACCION_LABEL)`. Una acción sin etiqueta no se
+ * podía FILTRAR.
+ */
 export const ACCION_LABEL: Record<string, string> = {
   VISITA_CONFIRMADA: 'Visita confirmada',
   PAGO_APROBADO: 'Pago aprobado',
@@ -58,6 +72,27 @@ export const ACCION_LABEL: Record<string, string> = {
   NOTA_INTERNA: 'Nota interna',
   PLANTILLA_RECIBO_ACTUALIZADA: 'Plantilla de recibo actualizada',
   CUENTA_ELIMINADA: 'Cuenta eliminada',
+  // Empresas de práctica.
+  EMPRESA_DEMO_CAMBIADA: 'Empresa de práctica: cambió su condición',
+  EMPRESA_DEMO_REINICIADA: 'Empresa de práctica reiniciada',
+  // Privilegio y suplantación. Los nombres dicen QUÉ PASÓ, no qué se guardó:
+  // «Entró como otro usuario» es lo que busca quien investiga; «enlace
+  // generado» es un paso intermedio y por eso lleva su propia etiqueta.
+  SUPERADMIN_OTORGADO: 'Superadmin otorgado',
+  SUPERADMIN_RETIRADO: 'Superadmin retirado',
+  ENTRAR_COMO_GENERADO: 'Enlace para entrar como otro usuario',
+  ENTRAR_COMO_USADO: 'Entró como otro usuario',
+  // Geolocalización (docs/GEOLOCALIZACION.md).
+  UBICACION_GUARDADA: 'Ubicación guardada',
+  UBICACION_ELIMINADA: 'Ubicación eliminada',
+  CONSENTIMIENTO_GEO_OTORGADO: 'Permiso de ubicación otorgado',
+  CONSENTIMIENTO_GEO_REVOCADO: 'Permiso de ubicación revocado',
+  SUCURSAL_UBICACION_GUARDADA: 'Ubicación de sucursal guardada',
+  SUCURSAL_UBICACION_VERIFICADA: 'Ubicación de sucursal verificada',
+  CATALOGO_GEO_APROBADO: 'Sector o ciudad aprobado',
+  // Campañas por segmento.
+  SEGMENTO_EVALUADO: 'Segmento evaluado',
+  CAMPANA_DIRIGIDA_ENVIADA: 'Campaña dirigida enviada',
 }
 
 /**

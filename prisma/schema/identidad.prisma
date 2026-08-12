@@ -72,6 +72,11 @@ enum AuditAccion {
   SUPERADMIN_RETIRADO
   /// El superadmin generó un enlace para entrar como otro usuario.
   ENTRAR_COMO_GENERADO
+  /// Alguien ABRIÓ ese enlace y la sesión de la otra persona quedó activa.
+  /// Es el registro que importa: `ENTRAR_COMO_GENERADO` solo prueba que se
+  /// preparó el enlace, y a partir de aquí todo lo que se haga queda en la
+  /// bitácora a nombre del suplantado.
+  ENTRAR_COMO_USADO
   // Módulo de Geolocalización (docs/GEOLOCALIZACION.md).
   /// La persona guardó/actualizó una ubicación declarada (CustomerLocation).
   UBICACION_GUARDADA

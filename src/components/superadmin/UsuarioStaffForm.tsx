@@ -30,12 +30,20 @@ interface Company {
 const init: UsuarioStaffState = {}
 
 /**
- * Edición de un usuario de staff por el superadmin: datos, rol, empresas a
- * las que tiene acceso (multi-empresa) y contraseña opcional.
+ * Edición de un usuario por el superadmin: datos, rol, empresas a las que tiene
+ * acceso (multi-empresa) y contraseña opcional.
+ *
+ * TAMBIÉN SIRVE PARA LOS SUPERADMIN, y por eso existe `esSuperadmin`. La ficha
+ * de un superadmin no se podía abrir, así que corregirle el nombre exigía la
+ * base de datos. Lo que se protege es el RANGO: con `esSuperadmin` el select de
+ * rol no se dibuja —no hay nada que elegir— y las empresas dejan de ser
+ * obligatorias, porque un superadmin puede no tener ninguna. El servidor no se
+ * fía de esto: vuelve a comprobarlo.
  */
 export function UsuarioStaffForm({
   usuario,
   companies,
+  esSuperadmin = false,
 }: {
   usuario: {
     id: string
@@ -46,6 +54,7 @@ export function UsuarioStaffForm({
     accesoIds: string[]
   }
   companies: Company[]
+  esSuperadmin?: boolean
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(actualizarUsuarioStaff, init)
@@ -113,24 +122,37 @@ export function UsuarioStaffForm({
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="role">Rol *</Label>
-        <Select name="role" defaultValue={usuario.role} required>
-          <SelectTrigger id="role">
-            <SelectValue placeholder="Selecciona rol" />
-          </SelectTrigger>
-          <SelectContent>
-            {INVITABLE_ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {ROL_LABEL[r] ?? r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {esSuperadmin ? (
+        // Un desplegable con una sola opción imposible de cambiar es peor que
+        // no tenerlo: parece que se puede y no se puede. Se dice dónde SÍ.
+        <div className="space-y-2">
+          <Label>Rol</Label>
+          <Input value="Superadmin" disabled className="bg-muted" />
+          <p className="text-xs text-muted-foreground">
+            El rango de superadmin se otorga y se retira desde la lista de
+            usuarios, con su confirmación.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="role">Rol *</Label>
+          <Select name="role" defaultValue={usuario.role} required>
+            <SelectTrigger id="role">
+              <SelectValue placeholder="Selecciona rol" />
+            </SelectTrigger>
+            <SelectContent>
+              {INVITABLE_ROLES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {ROL_LABEL[r] ?? r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="space-y-2">
-        <Label>Empresas que puede administrar *</Label>
+        <Label>Empresas que puede administrar{esSuperadmin ? '' : ' *'}</Label>
         <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-border/60 p-3">
           {companies.map((c) => (
             <label
@@ -153,16 +175,18 @@ export function UsuarioStaffForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="empresaActiva">Empresa activa *</Label>
+        <Label htmlFor="empresaActiva">Empresa activa{esSuperadmin ? '' : ' *'}</Label>
         <select
           id="empresaActiva"
           name="empresaActiva"
           value={activa}
           onChange={(e) => setActiva(e.target.value)}
-          required
+          required={!esSuperadmin}
           className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          <option value="">Seleccionar…</option>
+          <option value="">
+            {esSuperadmin ? 'Ninguna' : 'Seleccionar…'}
+          </option>
           {seleccionadas.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -170,8 +194,9 @@ export function UsuarioStaffForm({
           ))}
         </select>
         <p className="text-xs text-muted-foreground">
-          La que verá al entrar al panel; puede cambiarla desde el selector si
-          tiene varias.
+          {esSuperadmin
+            ? 'Un superadmin ve toda la plataforma; la empresa activa solo decide qué panel de empresa abre por defecto.'
+            : 'La que verá al entrar al panel; puede cambiarla desde el selector si tiene varias.'}
         </p>
       </div>
 

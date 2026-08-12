@@ -40,10 +40,17 @@ export function EntrarComoCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/*
+          EL ALCANCE, DICHO ANTES DE PEDIR EL CORREO.
+          La lista de arriba es de STAFF; esta caja no. Acepta a cualquiera de
+          la plataforma, clientes incluidos, y estaba dentro de una pantalla
+          titulada «Usuarios de staff» sin decirlo en ningún sitio.
+        */}
         <p className="text-sm text-muted-foreground">
-          Escribe el email de cualquier usuario (cliente, empleado o admin) y
-          genera un enlace de acceso de un solo uso para ver la plataforma
-          exactamente como la ve esa persona.
+          Escribe el correo de <strong className="text-foreground">cualquier
+          usuario de la plataforma</strong> —también de un cliente, esté o no en
+          la lista de arriba— y genera un enlace de acceso de un solo uso para
+          ver la plataforma exactamente como la ve esa persona.
         </p>
         <form action={action} className="flex flex-wrap gap-2">
           <Input
@@ -84,8 +91,9 @@ export function EntrarComoCard() {
               ⚠️ Ábrelo en una <strong>ventana de incógnito</strong>: quien lo
               abra queda con la sesión de ese usuario (si lo abres aquí,
               reemplaza tu sesión de superadmin y tendrás que volver a entrar).
-              Es de un solo uso y expira solo. Cada enlace queda en la
-              bitácora de auditoría.
+              Es de un solo uso y expira solo. Quedan{' '}
+              <strong>dos líneas en la bitácora</strong>: una al generarlo y
+              otra a tu nombre cuando alguien lo abra.
             </p>
           </div>
         )}

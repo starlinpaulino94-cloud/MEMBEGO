@@ -141,7 +141,14 @@ export const ROUTE_PROTECTION: { prefix: string; roles: AppRole[] }[] = [
   { prefix: '/membresia', roles: ['CLIENTE'] },
 ]
 
-/** Etiqueta corta de cada rol de staff, para selects/badges administrativos. */
+/**
+ * Etiqueta corta de cada rol INVITABLE, para el select de «qué rol le doy».
+ *
+ * Es deliberadamente incompleto: aquí solo están los roles que se pueden
+ * ASIGNAR desde un formulario. `SUPERADMIN` no se asigna así (se otorga desde
+ * la lista de usuarios, con su confirmación), `CLIENTE` no es staff y
+ * `ADMIN_EMPRESA` es histórico. Para PINTAR un rol cualquiera está `ROL_LABEL`.
+ */
 export const ROL_STAFF_LABEL: Record<string, string> = {
   ADMINISTRADOR: 'Administrador',
   GERENTE: 'Gerente',
@@ -150,4 +157,23 @@ export const ROL_STAFF_LABEL: Record<string, string> = {
   MARKETING: 'Marketing',
   SUPERVISOR: 'Supervisor',
   EMPLEADO: 'Empleado',
+}
+
+/**
+ * TODOS los roles con nombre legible. El mapa canónico para mostrar.
+ *
+ * Existe porque la pantalla de usuarios del superadmin tenía su propia copia
+ * —`ROL_STAFF_LABEL` más dos entradas escritas a mano allí mismo—, que era la
+ * tercera copia local de un mapa de este panel. Copias así no dan error: se
+ * separan. Una pantalla dice «Administrador (legacy)» y la de al lado
+ * «ADMIN_EMPRESA», y nadie sabe si son lo mismo.
+ *
+ * Se construye SOBRE el mapa de staff en lugar de repetir sus siete entradas:
+ * si mañana «Recepción» pasa a llamarse otra cosa, se cambia en un sitio.
+ */
+export const ROL_LABEL: Record<string, string> = {
+  ...ROL_STAFF_LABEL,
+  SUPERADMIN: 'Superadmin',
+  CLIENTE: 'Cliente',
+  ADMIN_EMPRESA: 'Administrador (legacy)',
 }
