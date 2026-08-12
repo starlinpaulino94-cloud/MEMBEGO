@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client'
+import { whereCobrado } from '@/modules/pagos/cobrado'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import type { SessionUser } from '@/types'
 
@@ -31,7 +33,7 @@ export async function adminMetrics(user: SessionUser) {
     const [totalClientes, activas, pendientes, visitasHoy] = await Promise.all([
       safeCount(tx.cliente.count({ where: clienteWhere })),
       safeCount(tx.membership.count({
-        where: { ...membershipWhere, estado: 'ACTIVA' },
+        where: { ...membershipWhere, ...membresiaVigente() },
       })),
       safeCount(tx.membership.count({
         where: { ...membershipWhere, estado: 'PENDIENTE' },
@@ -85,11 +87,9 @@ async function ingresosDelMes(
   try {
     const agg = await tx.membership.aggregate({
       _sum: { montoPagado: true },
-      where: {
-        ...where,
-        pagoConfirmado: true,
-        updatedAt: { gte: monthStart, lt: monthEnd },
-      },
+      // Por `fechaPago`, no por `updatedAt`: con `updatedAt`, editar una
+      // membresía vieja la movía de mes y un informe ya cerrado cambiaba solo.
+      where: whereCobrado(monthStart, monthEnd, where),
     })
     return Number(agg._sum.montoPagado ?? 0)
   } catch {
@@ -106,7 +106,7 @@ async function activasPorPlanQuery(
     // activas (con include del plan) solo para contarlas en memoria.
     const grupos = await tx.membership.groupBy({
       by: ['planId'],
-      where: { ...where, estado: 'ACTIVA' },
+      where: { ...where, ...membresiaVigente() },
       _count: { _all: true },
     })
     if (grupos.length === 0) return []
@@ -268,7 +268,7 @@ export async function getReportesGlobales(): Promise<ReportesGlobales> {
           .groupBy({
             by: ['companyId', 'planId'],
             _count: { _all: true },
-            where: { estado: 'ACTIVA' },
+            where: membresiaVigente(),
           })
           .catch(() => [])
       ),

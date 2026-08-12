@@ -10,6 +10,24 @@ interface StatCardProps {
   icon?: LucideIcon
   trend?: { value: number; positive?: boolean }
   /**
+   * Destino al pulsar la tarjeta.
+   *
+   * Existe porque la mitad de las tarjetas de un panel llevaban a algún sitio y
+   * la otra mitad no, con el mismo aspecto: el usuario aprende «las tarjetas se
+   * pulsan» y las que no responden parecen rotas. Con `href` la tarjeta entera
+   * es el área pulsable —no un enlace pequeño dentro— y lleva su propio foco de
+   * teclado.
+   *
+   * Se renderiza como `<a>` nativo y no como `Link` de Next: este paquete no
+   * depende del framework. En rutas internas Next lo intercepta igual.
+   */
+  href?: string
+  /**
+   * Qué hay al otro lado, para quien no ve la pantalla. Sin esto un lector
+   * anuncia «enlace, Clientes totales 99» sin decir a dónde va.
+   */
+  hrefLabel?: string
+  /**
    * DS 2.0 · Los acentos SEMÁNTICOS son los buenos: dicen qué significa el
    * dato, no de qué color es. Los nombres de tono (`sky`, `green`…) son de
    * antes del sistema de tokens y siguen funcionando para no restyle de
@@ -52,13 +70,34 @@ const ACCENT = {
   violet: { bar: 'bg-violet-500',  iconBg: 'bg-violet-500/10 ring-violet-500/20',   iconText: 'text-violet-600 dark:text-violet-400' },
 }
 
-export function StatCard({ label, value, sub, icon: Icon, trend, accent, className }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  trend,
+  accent,
+  href,
+  hrefLabel,
+  className,
+}: StatCardProps) {
   const a = accent ? ACCENT[accent] : null
+  const Contenedor = href ? 'a' : 'div'
 
   return (
-    <div
+    <Contenedor
+      {...(href
+        ? {
+            href,
+            'aria-label': hrefLabel ? `${label}: ${hrefLabel}` : undefined,
+          }
+        : {})}
       className={cn(
-        'group relative overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all duration-200 hover:shadow-card-hover hover:-translate-y-0.5',
+        'group relative block overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all duration-200 hover:shadow-card-hover hover:-translate-y-0.5',
+        // El foco visible solo cuando es pulsable: un anillo en algo que no
+        // hace nada al pulsarlo es una promesa falsa.
+        href &&
+          'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         className
       )}
     >
@@ -95,6 +134,6 @@ export function StatCard({ label, value, sub, icon: Icon, trend, accent, classNa
           </div>
         )}
       </div>
-    </div>
+    </Contenedor>
   )
 }

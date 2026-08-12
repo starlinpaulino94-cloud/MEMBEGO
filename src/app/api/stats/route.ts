@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { unstable_cache } from 'next/cache'
-import { sinEmpresa } from '@/lib/tenant'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 
 export const dynamic = 'force-dynamic'
@@ -54,15 +55,13 @@ interface StatsPublicas {
  * recién creada que nunca se analizó; por eso se acota a 0 por abajo. Para un
  * contador de portada sobra.
  */
-async function filasAproximadas(tabla: string): Promise<number> {
+async function filasAproximadas(tx: Tx, tabla: string): Promise<number> {
   try {
-    const filas = await sinEmpresa('stats-reltuples', (tx) =>
-      tx.$queryRaw<{ n: number }[]>`
-        SELECT GREATEST(reltuples, 0)::bigint::int AS n
-        FROM pg_class
-        WHERE oid = to_regclass(${`public.${tabla}`})
-      `
-    )
+    const filas = await tx.$queryRaw<{ n: number }[]>`
+      SELECT GREATEST(reltuples, 0)::bigint::int AS n
+      FROM pg_class
+      WHERE oid = to_regclass(${`public.${tabla}`})
+    `
     return filas[0]?.n ?? 0
   } catch {
     return 0
@@ -74,9 +73,11 @@ const leerStats = unstable_cache(
     return sinEmpresa('stats-publicas', async (tx) => {
       const [empresas, membresiasActivas, clientes, visitas] = await Promise.all([
         tx.company.count({ where: { isActive: true, esDemo: false } }).catch(() => 0),
-        tx.membership.count({ where: { estado: 'ACTIVA' } }).catch(() => 0),
-        filasAproximadas('clientes'),
-        filasAproximadas('visitas'),
+        tx.membership.count({ where: membresiaVigente() }).catch(() => 0),
+        // Con el `tx` de esta transacción: antes cada una abría la suya, y eran
+        // dos conexiones nuevas pedidas desde dentro de una ya abierta.
+        filasAproximadas(tx, 'clientes'),
+        filasAproximadas(tx, 'visitas'),
       ])
       return { empresas, clientes, membresiasActivas, visitas }
     })

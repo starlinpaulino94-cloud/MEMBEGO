@@ -1,4 +1,5 @@
 import { sinEmpresa } from '@/lib/tenant'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { promocionVigente, EMPRESA_EN_VITRINA } from '@/modules/promociones/vigencia'
 import { categoriasVisibles } from './types'
 import type {
@@ -773,7 +774,7 @@ export async function getPlatformStats(): Promise<PlatformStats> {
       await sinEmpresa('marketplace: métricas globales de la plataforma', (tx) =>
         Promise.all([
           tx.company.count({ where: { isActive: true, isPublished: true, esDemo: false } }),
-          tx.membership.count({ where: { estado: 'ACTIVA' } }),
+          tx.membership.count({ where: membresiaVigente() }),
           tx.promocion.count({
             where: {
               activo: true,

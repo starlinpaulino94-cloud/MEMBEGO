@@ -320,22 +320,44 @@ const SUPERADMIN_PLATAFORMA: NavGroup[] = [
     label: 'Inicio',
     items: [{ href: '/superadmin/dashboard', label: 'Resumen', icon: LayoutDashboard }],
   },
+  // TRECE ENTRADAS PLANAS ERAN UNA LISTA, NO UN MENÚ. Se leen de arriba abajo
+  // cada vez porque nada dice dónde mirar. Agrupadas por la pregunta que
+  // responden —quién nos paga, qué está pasando hoy, cómo va el sistema— se
+  // busca dentro de un grupo de cuatro y no dentro de trece.
+  //
+  // Y SE VA LA PALABRA «GLOBALES». Estaba en cuatro entradas de un panel donde
+  // TODO es global: no distinguía «Planes globales» de ningún otro tipo de
+  // planes, porque aquí no hay otro tipo. Solo alargaba la etiqueta y empujaba
+  // el texto a truncarse en pantallas estrechas.
   {
-    id: 'plataforma',
-    label: 'Plataforma',
+    id: 'negocio',
+    label: 'Negocio',
     items: [
       { href: '/superadmin/empresas', label: 'Empresas', icon: Building2 },
-      { href: '/superadmin/demo', label: 'Demostración', icon: FlaskConical },
       { href: '/superadmin/usuarios', label: 'Usuarios', icon: UserCog },
-      { href: '/superadmin/planes', label: 'Planes globales', icon: Package },
-      { href: '/superadmin/membresias', label: 'Membresías globales', icon: CreditCard },
+      { href: '/superadmin/planes', label: 'Planes', icon: Package },
+      { href: '/superadmin/membresias', label: 'Membresías', icon: CreditCard },
+    ],
+  },
+  {
+    id: 'operacion',
+    label: 'Operación',
+    items: [
       { href: '/superadmin/operaciones', label: 'Operaciones', icon: ClipboardList },
-      { href: '/superadmin/campanas', label: 'Campañas conjuntas', icon: Megaphone },
+      { href: '/superadmin/tickets', label: 'Tickets', icon: LifeBuoy },
+      { href: '/superadmin/campanas', label: 'Campañas', icon: Megaphone },
       { href: '/superadmin/capacidades', label: 'Capacidades', icon: SlidersHorizontal },
       { href: '/superadmin/integraciones', label: 'Integraciones', icon: Plug },
+    ],
+  },
+  {
+    id: 'sistema',
+    label: 'Sistema',
+    items: [
+      { href: '/superadmin/reportes', label: 'Reportes', icon: BarChart3 },
       { href: '/superadmin/observabilidad', label: 'Observabilidad', icon: Activity },
       { href: '/superadmin/auditoria', label: 'Auditoría', icon: History },
-      { href: '/superadmin/reportes', label: 'Reportes globales', icon: BarChart3 },
+      { href: '/superadmin/demo', label: 'Demostración', icon: FlaskConical },
     ],
   },
 ]

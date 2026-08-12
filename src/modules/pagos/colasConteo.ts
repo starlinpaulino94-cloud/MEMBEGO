@@ -34,6 +34,16 @@ export interface ConteoColasPago {
   porValidar: number
 }
 
+/**
+ * Lo mínimo que esta función necesita saber leer. Escrito así —y no como el
+ * cliente entero de Prisma— para que sirva igual el `tx` de una transacción ya
+ * abierta que el que abre esta función por su cuenta.
+ */
+type LectorColas = {
+  membership: { count: (a: { where: Prisma.MembershipWhereInput }) => Promise<number> }
+  productoCompra: { count: (a: { where: Prisma.ProductoCompraWhereInput }) => Promise<number> }
+}
+
 const VACIO: ConteoColasPago = {
   sucursal: 0,
   transferencias: 0,
@@ -53,13 +63,17 @@ const VACIO: ConteoColasPago = {
  * pagos sigue siendo el que informa del problema.
  */
 export async function contarColasDePago(
-  companyId: string | null | undefined
+  companyId: string | null | undefined,
+  /**
+   * Transacción ya abierta. El Resumen del administrador cuenta estas colas
+   * DENTRO de su propia transacción: sin este parámetro, esta función abría una
+   * segunda y pedía otra conexión desde dentro de la primera — que con el
+   * pooler delante es como se agota el pool, sin dar un error que lo explique.
+   */
+  txAbierta?: LectorColas
 ): Promise<ConteoColasPago> {
   const cero = () => 0
-  const correr = async (tx: {
-    membership: { count: (a: { where: Prisma.MembershipWhereInput }) => Promise<number> }
-    productoCompra: { count: (a: { where: Prisma.ProductoCompraWhereInput }) => Promise<number> }
-  }): Promise<ConteoColasPago> => {
+  const correr = async (tx: LectorColas): Promise<ConteoColasPago> => {
     const [
       sucursalMembresias,
       sucursalCompras,
@@ -89,6 +103,9 @@ export async function contarColasDePago(
   }
 
   try {
+    // Con transacción prestada se usa esa y no se abre ninguna: el contexto de
+    // empresa ya lo puso quien la abrió.
+    if (txAbierta) return await correr(txAbierta)
     return companyId
       ? await conEmpresa(companyId, correr)
       : await sinEmpresa('pagos: colas de toda la plataforma', correr)

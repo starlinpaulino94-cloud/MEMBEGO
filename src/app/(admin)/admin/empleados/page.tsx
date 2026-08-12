@@ -40,20 +40,22 @@ export default async function EmpleadosPage() {
   }[] = []
   let loadError = false
   try {
-    const [team, invs] = await conEmpresaOTodas(
+    // Las invitaciones van FUERA de la transacción de abajo:
+    // `listInvitacionesPendientes` abre la suya, y pedirla desde dentro de otra
+    // ya abierta consume dos conexiones del pool a la vez por cada carga.
+    const invs = user.metadata.companyId
+      ? await listInvitacionesPendientes(user.metadata.companyId).catch(() => [])
+      : []
+
+    const team = await conEmpresaOTodas(
       companyId,
       'empleados: sin empresa activa es el superadmin, que cruza empresas a propósito',
-      (tx) => Promise.all([
-        tx.user.findMany({
-          where: { role: { in: TEAM_ROLES }, ...(companyId ? { companyId } : {}) },
-          orderBy: { createdAt: 'desc' },
-          take: 200,
-          select: { id: true, name: true, email: true, role: true, createdAt: true },
-        }),
-        user.metadata.companyId
-          ? listInvitacionesPendientes(user.metadata.companyId).catch(() => [])
-          : Promise.resolve([]),
-      ])
+      (tx) => tx.user.findMany({
+        where: { role: { in: TEAM_ROLES }, ...(companyId ? { companyId } : {}) },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: { id: true, name: true, email: true, role: true, createdAt: true },
+      })
     )
     miembros = team.map((m) => ({
       id: m.id,

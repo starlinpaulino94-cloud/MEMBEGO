@@ -29,7 +29,10 @@ function paginas(dir: string, acc: string[] = []): string[] {
 }
 
 test('el aviso de tickets cuenta la misma cola que abre su destino', () => {
-  const src = readFileSync(join(AREA, 'superadmin', 'dashboard', 'page.tsx'), 'utf8')
+  // Los datos del panel salen de este módulo, no del archivo de la página: se
+  // separaron para que todo se lea en UNA transacción (antes la página llamaba,
+  // desde dentro de la suya, a funciones que abrían otra).
+  const src = readFileSync(join('src', 'modules', 'superadmin', 'panel.ts'), 'utf8')
   assert.ok(
     src.includes('COLAS_TICKET.pendientes'),
     'el panel debe contar COLAS_TICKET.pendientes, no una lista de estados a mano: ' +
@@ -37,6 +40,24 @@ test('el aviso de tickets cuenta la misma cola que abre su destino', () => {
   )
   // Y la cola tiene que seguir siendo la que la bandeja abre por defecto.
   assert.deepEqual([...COLAS_TICKET.pendientes], ['NUEVO', 'EN_PROCESO'])
+})
+
+/**
+ * Y EL AVISO NO PUEDE SACARTE DEL PANEL.
+ *
+ * «Tickets abiertos» llevaba a `/admin/tickets`, que es el panel de EMPRESA: la
+ * barra lateral cambiaba entera al pulsar un aviso del panel de plataforma.
+ * La bandeja es la misma pantalla (`BandejaTickets`) montada en las dos rutas,
+ * así que no hay motivo para cruzar de contexto.
+ */
+test('los avisos del panel de plataforma llevan a rutas del propio panel', () => {
+  const src = readFileSync(join(AREA, 'superadmin', 'dashboard', 'page.tsx'), 'utf8')
+  const fuera = [...src.matchAll(/href="(\/admin\/[^"]+)"/g)].map((m) => m[1])
+  assert.deepEqual(
+    fuera,
+    [],
+    'el Centro de control no debe enlazar al panel de empresa: ' + fuera.join(', ')
+  )
 })
 
 test('el panel de plataforma no baja del suelo tipográfico', () => {
