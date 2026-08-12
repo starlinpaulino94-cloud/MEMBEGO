@@ -329,6 +329,26 @@ export const MENSAJE_ACTIVACION_PENDIENTE =
   'Tu tarjeta quedó registrada pero falta activarla. Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo para completar el pago.'
 
 /**
+ * NORMALIZA lo que el cliente teclea como código de activación (§4.1.2.3).
+ *
+ * En el estado de cuenta el código aparece como «Cardnet:Z2R78V», y la gente
+ * copia y pega la línea entera, con el prefijo, con espacios, en minúsculas.
+ * Rechazar eso por formato sería castigar al que siguió las instrucciones al
+ * pie de la letra. Se admite todo lo anterior y se reduce a los 6 caracteres
+ * alfanuméricos en mayúsculas que CardNET espera.
+ *
+ * @returns el código listo para enviar, o `null` si tras limpiar no quedan
+ *   exactamente 6 caracteres alfanuméricos.
+ */
+export function normalizarCodigoActivacion(entrada: string): string | null {
+  const limpio = entrada
+    .replace(/cardnet/gi, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .toUpperCase()
+  return /^[A-Z0-9]{6}$/.test(limpio) ? limpio : null
+}
+
+/**
  * Traduce el error del proveedor a algo que el cliente pueda ACCIONAR.
  *
  * «El token no está activo» es técnicamente exacto e inútil para quien acaba

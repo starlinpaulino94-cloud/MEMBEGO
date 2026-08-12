@@ -102,7 +102,7 @@ const SESION_TTL_MS = 4 * 60 * 1000
 // §3.2: `form_id` es obligatorio; el input debe llamarse PWToken).
 const FORM_ID = 'membego_pago_form'
 
-type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'aprobado' | 'error'
+type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'activacion' | 'aprobado' | 'error'
 
 // Rastro de diagnóstico en la consola del navegador (estados y presencia,
 // nunca el token ni datos de tarjeta). Va por console.warn porque es el único
@@ -129,6 +129,9 @@ export function PagoTokenCardnet({
   const [estado, setEstado] = useState<Estado>('cargando')
   const [mensaje, setMensaje] = useState<string | null>(null)
   const [guardar, setGuardar] = useState(false)
+  // Pantalla de activación (llaves CON autenticación): el código del banco.
+  const [codigoActivacion, setCodigoActivacion] = useState('')
+  const [activando, setActivando] = useState(false)
   const cobrandoRef = useRef(false)
   // Confirmación por servidor en curso (no solapar sondeos).
   const confirmandoRef = useRef(false)
@@ -363,11 +366,11 @@ export function PagoTokenCardnet({
         return true
       }
       if (data.estado === 'pendiente_activacion') {
-        // Terminal: la tarjeta existe pero CardNET la dejó deshabilitada hasta
-        // que el cliente ingrese el código que le cobró su banco. Seguir
-        // sondeando no la habilita, y dejar la pantalla girando en silencio es
-        // peor que decirle qué hacer.
-        setEstado('error')
+        // La tarjeta existe pero CardNET la dejó deshabilitada hasta que el
+        // cliente ingrese el código que le cobró su banco (§4.1.2.3). Ya no es
+        // un callejón: se abre la pantalla de activación, que activa y cobra
+        // en el mismo movimiento.
+        setEstado('activacion')
         setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
         return true
       }
@@ -621,6 +624,59 @@ export function PagoTokenCardnet({
     }
   }, [pedirSesion, companyName, logoUrl, montoTexto])
 
+  /**
+   * ACTIVA LA TARJETA con el código del banco y cobra en el mismo movimiento.
+   * El servidor normaliza el código (admite «Cardnet:z2r78v» pegado entero),
+   * activa el perfil contra CardNET y, si queda habilitado, cobra por la
+   * tubería idempotente de siempre.
+   */
+  const activarYCobrar = useCallback(async () => {
+    if (activando || !codigoActivacion.trim()) return
+    setActivando(true)
+    setMensaje(null)
+    try {
+      const resp = await fetch('/api/pagos/cardnet-token/activar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          membershipId,
+          codigo: codigoActivacion,
+          customerId: customerIdRef.current,
+          guardar: guardarRef.current,
+        }),
+      })
+      const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+      rastro('[pago] resultado de la activación:', data.estado ?? resp.status)
+      if (data.estado === 'aprobado') {
+        setEstado('aprobado')
+        toast.success('¡Tarjeta activada y pago aprobado! Tu membresía está activa.')
+        if (urlExito) router.push(urlExito)
+        else router.refresh()
+        return
+      }
+      if (data.estado === 'codigo_rechazado') {
+        // Se queda en la pantalla: el cliente corrige y reintenta. El motivo
+        // ya le advierte que al tercer fallo el banco elimina la tarjeta.
+        setMensaje(data.motivo ?? 'El código no fue aceptado. Revísalo e intenta de nuevo.')
+        return
+      }
+      if (data.estado === 'activada_sin_cobro') {
+        // La tarjeta quedó activa pero el cobro no cerró: volver al botón de
+        // pagar — ahora el cobro normal encontrará el perfil habilitado.
+        setEstado('error')
+        setMensaje(data.motivo ?? 'Tu tarjeta quedó activa. Toca pagar para completar el cobro.')
+        return
+      }
+      // sin_perfil / error: se explica y se vuelve al inicio del flujo.
+      setEstado('error')
+      setMensaje(data.motivo ?? 'No se pudo activar la tarjeta. Intenta de nuevo.')
+    } catch {
+      setMensaje('No se pudo contactar el servidor. Revisa tu conexión e intenta de nuevo.')
+    } finally {
+      setActivando(false)
+    }
+  }, [activando, codigoActivacion, membershipId, router, urlExito])
+
   if (estado === 'aprobado') {
     return (
       <div className="rounded-2xl border border-success/25 bg-success/10 p-6 text-center">
@@ -646,6 +702,75 @@ export function PagoTokenCardnet({
         <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
         </p>
+      )}
+
+      {/* ACTIVACIÓN (llaves CON autenticación · §4.1.2.3): el banco cobró
+          RD$1.00 y mostró un código de 6 dígitos; se ingresa aquí y el
+          servidor activa la tarjeta y cobra en el mismo movimiento. */}
+      {estado === 'activacion' && (
+        <div className="space-y-3 rounded-2xl border border-warning/30 bg-warning/5 p-4">
+          <p className="text-sm font-semibold text-foreground">Activa tu tarjeta para completar el pago</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {mensaje ??
+              'Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo aquí.'}
+          </p>
+          <label className="block">
+            <span className="sr-only">Código de activación</span>
+            <input
+              type="text"
+              inputMode="text"
+              autoComplete="one-time-code"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={24}
+              value={codigoActivacion}
+              onChange={(e) => setCodigoActivacion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void activarYCobrar()
+                }
+              }}
+              placeholder="Cardnet:XXXXXX"
+              disabled={activando}
+              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-center font-mono text-lg tracking-widest uppercase placeholder:normal-case placeholder:tracking-normal placeholder:font-sans placeholder:text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="premium"
+            onClick={() => void activarYCobrar()}
+            disabled={activando || !codigoActivacion.trim()}
+            className="w-full rounded-2xl py-6 text-base font-semibold"
+          >
+            {activando ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Activando y cobrando…
+              </>
+            ) : (
+              <>
+                <Lock className="mr-2 h-4 w-4" /> Activar y pagar {montoTexto}
+              </>
+            )}
+          </Button>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Tienes 3 intentos: al tercero fallido, el banco elimina la tarjeta y
+            tendrás que registrarla de nuevo. El cargo de RD$1.00 es solo de
+            verificación.
+          </p>
+          <button
+            type="button"
+            disabled={activando}
+            onClick={() => {
+              setEstado('listo')
+              setMensaje(null)
+              setCodigoActivacion('')
+            }}
+            className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Usar otra tarjeta
+          </button>
+        </div>
       )}
 
       {/* Fase 2: renovación automática, con interruptor. Solo antes de pagar. */}
@@ -677,6 +802,7 @@ export function PagoTokenCardnet({
         </label>
       )}
 
+      {estado !== 'activacion' && (
       <Button
         type="button"
         variant="premium"
@@ -706,6 +832,7 @@ export function PagoTokenCardnet({
           </>
         )}
       </Button>
+      )}
 
       {/* Salida de emergencia: si el cliente cerró la ventana del proveedor,
           la pantalla no se queda colgada. */}
