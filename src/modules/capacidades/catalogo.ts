@@ -270,6 +270,33 @@ export function capacidadesEfectivas(
   return { categoria, categoriaExplicita, activas, modulosCliente: config.modulosCliente ?? {} }
 }
 
+/**
+ * La afirmación MÁS RECIENTE gana: al asignar un vertical desde la pantalla de
+ * edición del superadmin, una `categoria` vieja fijada en el JSON de
+ * capacidades que lo contradiga se RETIRA (conservando overrides y módulos).
+ *
+ * Así quedó atrapado MESTIZO: vertical RESTAURANTE bien asignado y visible, y
+ * un `"categoria":"CAR_WASH"` invisible —de cuando la empresa se configuró
+ * como car wash— ganándole la precedencia. El registro exigía vehículo y
+ * ninguna pantalla mostraba por qué. Si el panel de capacidades vuelve a fijar
+ * una categoría DESPUÉS, esa volverá a ganar: recencia, no jerarquía fija.
+ *
+ * Devuelve el JSON limpio, `null` si no queda nada (columna a NULL), o
+ * `undefined` si no hay nada que retirar (el caller no escribe la columna).
+ */
+export function capacidadesSinCategoriaContradictoria(
+  raw: unknown,
+  vertical: string | null | undefined
+): Record<string, unknown> | null | undefined {
+  const v = (vertical ?? '').trim().toUpperCase()
+  if (!v) return undefined
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const cfg = raw as Record<string, unknown>
+  if (typeof cfg.categoria !== 'string' || cfg.categoria === v) return undefined
+  const { categoria: _retirada, ...resto } = cfg
+  return Object.keys(resto).length ? resto : null
+}
+
 // ── Módulos del CLIENTE ──────────────────────────────────────────────────────
 
 /**

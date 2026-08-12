@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   capacidadesEfectivas,
+  capacidadesSinCategoriaContradictoria,
   categoriaDeVertical,
   categoriaExplicitaDeType,
 } from '../src/modules/capacidades/catalogo'
@@ -39,6 +40,48 @@ test('un vertical desconocido no afirma nada (cae al type)', () => {
   assert.equal(categoriaDeVertical('OTRO_RARO'), null)
   assert.equal(categoriaDeVertical(''), null)
   assert.equal(categoriaDeVertical(null), null)
+})
+
+/**
+ * SEGUNDO ROUND del bug de MESTIZO (12-08-2026): el vertical ya ganaba sobre
+ * el `type`… pero la empresa tenía además `"categoria":"CAR_WASH"` fijada en
+ * el JSON de capacidades (de cuando se configuró como car wash), y esa gana
+ * sobre todo. Regla nueva: asignar el vertical desde la pantalla de edición
+ * RETIRA la categoría vieja contradictoria — la afirmación más reciente gana.
+ */
+
+test('asignar el vertical retira la categoría contradictoria conservando el resto (MESTIZO)', () => {
+  const caps = {
+    categoria: 'CAR_WASH',
+    overrides: { TURNOS: true, COLA_VEHICULOS: true },
+    modulosCliente: { VEHICULOS: 'OCULTAR' },
+  }
+  const limpio = capacidadesSinCategoriaContradictoria(caps, 'RESTAURANTE')
+  assert.deepEqual(limpio, {
+    overrides: { TURNOS: true, COLA_VEHICULOS: true },
+    modulosCliente: { VEHICULOS: 'OCULTAR' },
+  })
+  // Y con el JSON limpio, la decisión final es la del vertical: sin vehículo.
+  assert.equal(capacidadesEfectivas('carwash', limpio, 'RESTAURANTE').categoriaExplicita, 'RESTAURANTE')
+})
+
+test('si la categoría coincide con el vertical no hay nada que escribir', () => {
+  assert.equal(
+    capacidadesSinCategoriaContradictoria({ categoria: 'CAR_WASH' }, 'CAR_WASH'),
+    undefined
+  )
+})
+
+test('sin vertical o sin categoría fijada, la columna no se toca', () => {
+  assert.equal(capacidadesSinCategoriaContradictoria({ categoria: 'CAR_WASH' }, ''), undefined)
+  assert.equal(capacidadesSinCategoriaContradictoria({ categoria: 'CAR_WASH' }, null), undefined)
+  assert.equal(capacidadesSinCategoriaContradictoria({ overrides: {} }, 'RESTAURANTE'), undefined)
+  assert.equal(capacidadesSinCategoriaContradictoria(null, 'RESTAURANTE'), undefined)
+  assert.equal(capacidadesSinCategoriaContradictoria('basura', 'RESTAURANTE'), undefined)
+})
+
+test('si solo quedaba la categoría, el JSON entero se vacía (columna a NULL)', () => {
+  assert.equal(capacidadesSinCategoriaContradictoria({ categoria: 'CAR_WASH' }, 'RESTAURANTE'), null)
 })
 
 test('el código canónico del vertical guardado en type se reconoce (bug latente)', () => {
