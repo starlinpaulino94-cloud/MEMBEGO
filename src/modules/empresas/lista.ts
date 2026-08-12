@@ -161,7 +161,7 @@ export async function listarEmpresas(
   const enMemoria = orderBy === null
 
   return sinEmpresa('superadmin: CRM de todas las empresas', async (tx) => {
-    const [companies, total, totalAmbito, activas, clientes, historico, mes, opciones, demos] =
+    const [companies, total, totalAmbito, activas, clientes, historico, mes, valoresFiltro, demos] =
       await Promise.all([
         tx.company.findMany({
           where,
@@ -298,8 +298,8 @@ export async function listarEmpresas(
       clientes,
       ingresosHistoricos: historico,
       cobradoMes: mes,
-      categorias: unicos(opciones.map((o) => o.categoria)),
-      ciudades: unicos(opciones.map((o) => o.ciudad)),
+      categorias: unicos(valoresFiltro.map((o) => o.categoria)),
+      ciudades: unicos(valoresFiltro.map((o) => o.ciudad)),
       hayDemos: demos > 0,
     }
   })
