@@ -171,8 +171,15 @@ export async function registrarCliente(
   // capacidades): el navegador no decide si el vehículo es obligatorio. El
   // formulario clásico (flujoV2 vacío, bandera de emergencia) conserva su
   // comportamiento de siempre — regla de compatibilidad.
+  // La categoría EXPLÍCITA, no la efectiva (que rellena lo desconocido con
+  // CAR_WASH). Debe ser el MISMO criterio que usa la página al construir el
+  // asistente: cuando divergen, la página omite las pantallas de vehículo y
+  // esta validación lo exige igual — el cliente llega a «Revisa y confirma»
+  // con un error que no puede resolver, porque el paso donde se elige no
+  // existió. Así quedó atrapado el registro de un restaurante sin categoría
+  // configurada, con la campaña de pago mandándole tráfico.
   const requiereVehiculo = flujoRequiereVehiculo(
-    capacidadesEfectivas(company.type, company.capacidades).categoria
+    capacidadesEfectivas(company.type, company.capacidades).categoriaExplicita
   )
   const companyIdVerificado = company.id
   let vehiculoV2: import('@/modules/registro/vehiculo-nuevo').VehiculoNuevoValidado | null = null

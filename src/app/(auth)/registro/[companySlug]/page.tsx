@@ -75,8 +75,14 @@ export default async function RegistroPage({
 
   // Onboarding v2: el flujo lo decide la CATEGORÍA del negocio (declarativo,
   // resuelto en el servidor), no un `type === 'carwash'` en el cliente.
-  const { categoria } = capacidadesEfectivas(company.type, company.capacidades)
-  const flujoConVehiculo = flujoRequiereVehiculo(categoria)
+  //
+  // La EXPLÍCITA, no la efectiva. La efectiva rellena lo desconocido con
+  // CAR_WASH (fail-open pensado para no apagar módulos), y aquí ese default
+  // le exigía la placa del carro al cliente de un restaurante sin categoría
+  // configurada — la regla de catalogo.ts es la contraria: un requisito es
+  // una puerta cerrada, y ante la duda NO se exige vehículo.
+  const { categoriaExplicita } = capacidadesEfectivas(company.type, company.capacidades)
+  const flujoConVehiculo = flujoRequiereVehiculo(categoriaExplicita)
 
   // Categorías de vehículo del negocio, para las tarjetas del paso 1 del
   // vehículo. Si la empresa no configuró ninguna, el asistente omite los pasos
