@@ -89,14 +89,24 @@ export function AnularTransaccionesClienteButton({
           <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancelar
           </Button>
-          <Button
-            variant="destructive"
-            onClick={confirmar}
-            disabled={pending || motivo.trim().length < 3}
-            className="gap-2"
-          >
-            {pending && <Loader2 className="h-4 w-4 animate-spin" />} Anular todo
-          </Button>
+          <div className="flex flex-col items-end gap-1.5">
+            <Button
+              variant="destructive"
+              onClick={confirmar}
+              disabled={pending || motivo.trim().length < 3}
+              className="gap-2"
+            >
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />} Anular todo
+            </Button>
+            {/* El botón deshabilitado sin explicación se reportó como «no hace
+                nada»: quien no escribía el motivo hacía clic en un botón muerto
+                y no pasaba nada, sin error. El porqué tiene que estar escrito. */}
+            {motivo.trim().length < 3 && !pending && (
+              <span className="text-xs text-muted-foreground">
+                Escribe el motivo para habilitar el botón.
+              </span>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
