@@ -1,4 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import {
   calcularPuntos,
   nivelPara,
@@ -65,7 +66,7 @@ export async function getGamificacion(
         tx.referido.count({
           where: { referenteClienteId: clienteId, companyId, estado: 'COMPLETADO' },
         }),
-        tx.membership.count({ where: { clienteId, companyId, estado: 'ACTIVA' } }),
+        tx.membership.count({ where: { clienteId, companyId, ...membresiaVigente() } }),
         tx.ruletaJugada.aggregate({
           where: { clienteId, companyId },
           _sum: { costoPuntos: true },

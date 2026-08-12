@@ -4,6 +4,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { contarColasDePago } from '@/modules/pagos/colasConteo'
 import { periodoAnterior, variacion, whereCobrado } from '@/modules/pagos/cobrado'
 import { COLAS_TICKET } from '@/lib/soporte'
+import { estaEnSilencio } from '@/modules/empresas/silencio'
 
 /**
  * Los datos del Centro de control (panel de plataforma).
@@ -29,15 +30,10 @@ export const PERIODO_LABEL: Record<Periodo, string> = {
   90: 'Últimos 90 días',
 }
 
-/**
- * Sin señal de vida en este tiempo, una empresa está en silencio.
- *
- * Fijo y no atado al periodo elegido A PROPÓSITO: el aviso tiene que significar
- * lo mismo mirando 7 días que mirando 90. Si dependiera del selector, cambiar el
- * periodo cambiaría cuántas empresas «están en silencio», que es justo la clase
- * de número que deja de creerse.
- */
-export const DIAS_SILENCIO = 14
+// La regla de «en silencio» vive en `@/modules/empresas/silencio`: la comparten
+// este panel y el CRM. No se reexporta desde aquí — un solo camino hasta el
+// dato es lo que evita que dentro de un año haya dos constantes con el mismo
+// nombre y valores distintos.
 
 export function leerPeriodo(valor: string | undefined): Periodo {
   const n = Number(valor)
@@ -113,7 +109,6 @@ export async function getPanelPlataforma(periodoDias: Periodo): Promise<PanelPla
   const ahora = new Date()
   const desde = new Date(ahora.getTime() - periodoDias * 86_400_000)
   const previo = periodoAnterior(desde, ahora)
-  const limiteSilencio = new Date(ahora.getTime() - DIAS_SILENCIO * 86_400_000)
 
   return sinEmpresa('panel de plataforma: los totales son de todas las empresas', async (tx) => {
     // `esDemo` puede no estar migrada todavía. Se intenta con la columna y se
@@ -215,10 +210,9 @@ export async function getPanelPlataforma(periodoDias: Periodo): Promise<PanelPla
       activas: conteo(c.id, 'ACTIVA'),
       pendientes: conteo(c.id, 'PENDIENTE_PAGO'),
       desdeUltimaActividad: ultima.get(c.id) ? ahora.getTime() - ultima.get(c.id)!.getTime() : null,
-      // Solo las activas: una empresa dada de baja no está «en silencio», está
-      // cerrada, y mezclarlas convertiría el aviso en ruido permanente.
       enSilencio:
-        c.isActive && !c.esDemo && (!ultima.get(c.id) || ultima.get(c.id)! < limiteSilencio),
+        !c.esDemo &&
+        estaEnSilencio({ isActive: c.isActive, ultimaActividad: ultima.get(c.id) ?? null }, ahora),
     }))
 
     const empresas = todas.filter((c) => !c.esDemo)

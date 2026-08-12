@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { unstable_cache } from 'next/cache'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
@@ -72,7 +73,7 @@ const leerStats = unstable_cache(
     return sinEmpresa('stats-publicas', async (tx) => {
       const [empresas, membresiasActivas, clientes, visitas] = await Promise.all([
         tx.company.count({ where: { isActive: true, esDemo: false } }).catch(() => 0),
-        tx.membership.count({ where: { estado: 'ACTIVA' } }).catch(() => 0),
+        tx.membership.count({ where: membresiaVigente() }).catch(() => 0),
         // Con el `tx` de esta transacción: antes cada una abría la suya, y eran
         // dos conexiones nuevas pedidas desde dentro de una ya abierta.
         filasAproximadas(tx, 'clientes'),

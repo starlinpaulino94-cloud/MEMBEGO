@@ -21,8 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/format'
 import { ACCION_LABEL, ENTIDAD_LABEL } from '@/modules/auditoria/queries'
+import { DIAS_SILENCIO } from '@/modules/empresas/silencio'
 import {
-  DIAS_SILENCIO,
   PERIODOS,
   PERIODO_LABEL,
   getPanelPlataforma,

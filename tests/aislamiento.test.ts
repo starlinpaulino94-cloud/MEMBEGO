@@ -197,6 +197,34 @@ function identificadoresDe(bloque: string): string[] {
   for (const m of bloque.matchAll(/where\s*:\s*(\w+)/g)) nombres.add(m[1])
   // `{ where }` abreviado.
   if (/\{\s*where\s*[,}]/.test(bloque)) nombres.add('where')
+
+  // `where: ayudante(a, b, filtro)` — EL ACOTADO VIAJA EN LOS ARGUMENTOS, no en
+  // el nombre del ayudante. La regla de arriba captura `whereCobrado`, busca su
+  // definición en este archivo, no la encuentra —está importado— y la consulta
+  // parece sin acotar aunque el `companyId` vaya en el tercer argumento.
+  //
+  // Apareció al unificar los criterios repetidos (`whereCobrado`,
+  // `membresiaVigente`): delegar el filtro a una función es ahora el patrón
+  // normal, y la guardia tenía que aprender a seguirlo.
+  for (const m of bloque.matchAll(/where\s*:\s*\w+\s*\(/g)) {
+    const abre = m.index + m[0].length - 1
+    let profundidad = 0
+    let fin = abre
+    for (let i = abre; i < bloque.length; i++) {
+      if (bloque[i] === '(') profundidad++
+      else if (bloque[i] === ')') {
+        profundidad--
+        if (profundidad === 0) {
+          fin = i
+          break
+        }
+      }
+    }
+    for (const a of bloque.slice(abre + 1, fin).matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) {
+      nombres.add(a[1])
+    }
+  }
+
   return [...nombres]
 }
 

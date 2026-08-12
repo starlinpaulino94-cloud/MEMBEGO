@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { getClientePerfil } from '@/modules/cliente/queries'
@@ -78,8 +79,10 @@ export default async function PerfilPage() {
       tx.membership.count({
         where: {
           cliente: { id: cliente.id },
-          estado: 'ACTIVA',
-          OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: new Date() } }],
+          // La condición estaba copiada a mano aquí; es la misma que define
+          // `membresiaVigente`, y con dos copias solo hace falta que una se
+          // quede atrás para que dos pantallas discrepen.
+          ...membresiaVigente(),
         },
       })
     ).catch(() => 0),

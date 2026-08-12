@@ -6,6 +6,7 @@
  */
 
 import { Prisma, type ReferralEventTipo } from '@prisma/client'
+import { whereCobrado } from '@/modules/pagos/cobrado'
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { logReferralEvent, PUNTOS, TIPOS_EMPRESA, TIPOS_GLOBAL } from '@/lib/referidos'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
@@ -813,14 +814,15 @@ export async function getEmpresaReferidosDashboard(
       Promise.all([
         // Ingresos atribuibles: pagos confirmados de clientes referidos LEGÍTIMOS.
         tx.membership.aggregate({
-          where: {
-            pagoConfirmado: true,
+          // Mismo criterio de «cobrado» que el resto del sistema, sin límite de
+          // fecha: aquí interesa todo lo que ha entrado por vía de referidos.
+          where: whereCobrado(new Date(0), undefined, {
             cliente: {
               referidoComo: {
                 some: { estado: 'COMPLETADO', sospechoso: false, ...(companyId ? { companyId } : {}) },
               },
             },
-          },
+          }),
           _sum: { montoPagado: true },
         }),
         tx.referido.count({ where: { ...whereRef, sospechoso: true } }),

@@ -1,4 +1,6 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { whereCobrado } from '@/modules/pagos/cobrado'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 
 export interface CategoryOption {
   id: string
@@ -37,145 +39,6 @@ export async function getCompanyCategoryIds(companyId: string): Promise<string[]
     console.error('[getCompanyCategoryIds]', e)
     return []
   }
-}
-
-export interface EmpresaListItem {
-  id: string
-  name: string
-  slug: string
-  type: string
-  description: string | null
-  logoUrl: string | null
-  email: string | null
-  telefono: string | null
-  direccion: string | null
-  ciudad: string | null
-  categoria: string | null
-  website: string | null
-  isActive: boolean
-  createdAt: Date
-  updatedAt: Date
-  _count: {
-    clientes: number
-    users: number
-    sucursales: number
-    plans: number
-    promociones: number
-  }
-  _membresiaActivas: number
-  _ingresos: number
-  _ultimaActividad: Date | null
-}
-
-export async function listEmpresas(): Promise<EmpresaListItem[]> {
-  return sinEmpresa('superadmin: listar todas las empresas', async (tx) => {
-    const companies = await tx.company.findMany({
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        type: true,
-        description: true,
-        logoUrl: true,
-        isActive: true,
-        createdAt: true,
-        _count: {
-          select: {
-            clientes: true,
-            users: true,
-            plans: true,
-          },
-        },
-      },
-    })
-
-    // Agregaciones globales por companyId en 5 queries fijas (antes 5 queries
-    // POR empresa). Cada bloque conserva su fallback ante drift de esquema.
-    const [activasGrupos, ingresosGrupos, actividadGrupos, sucursalesGrupos, promocionesGrupos] =
-      await Promise.all([
-        tx.membership
-          .groupBy({
-            by: ['companyId'],
-            where: { estado: 'ACTIVA' },
-            _count: { _all: true },
-          })
-          .catch((e) => {
-            console.error('[empresas] Error counting active memberships:', e)
-            return []
-          }),
-        tx.membership
-          .groupBy({
-            by: ['companyId'],
-            where: { montoPagado: { not: null } },
-            _sum: { montoPagado: true },
-          })
-          .catch((e) => {
-            console.error('[empresas] Error aggregating ingresos:', e)
-            return []
-          }),
-        tx.auditLog
-          .groupBy({
-            by: ['companyId'],
-            where: { companyId: { not: null } },
-            _max: { createdAt: true },
-          })
-          .catch((e) => {
-            console.error('[empresas] Error getting ultima actividad:', e)
-            return []
-          }),
-        tx.sucursal.groupBy({ by: ['companyId'], _count: { _all: true } }).catch(() => []),
-        tx.promocion.groupBy({ by: ['companyId'], _count: { _all: true } }).catch(() => []),
-      ])
-
-    const activasDe = new Map(activasGrupos.map((g) => [g.companyId, g._count._all]))
-    const ingresosDe = new Map(
-      ingresosGrupos.map((g) => [g.companyId, Number(g._sum.montoPagado ?? 0)])
-    )
-    const actividadDe = new Map(
-      actividadGrupos.map((g) => [g.companyId, g._max.createdAt ?? null])
-    )
-    const sucursalesDe = new Map(sucursalesGrupos.map((g) => [g.companyId, g._count._all]))
-    const promocionesDe = new Map(promocionesGrupos.map((g) => [g.companyId, g._count._all]))
-
-    const enriched = companies.map((c) => {
-        const activas = activasDe.get(c.id) ?? 0
-        const ingresos = ingresosDe.get(c.id) ?? 0
-        const ultimaActividad = actividadDe.get(c.id) ?? null
-        const sucursalesCount = sucursalesDe.get(c.id) ?? 0
-        const promocionesCount = promocionesDe.get(c.id) ?? 0
-
-        return {
-          id: c.id,
-          name: c.name,
-          slug: c.slug,
-          type: c.type,
-          description: c.description,
-          logoUrl: c.logoUrl,
-          email: (c as Record<string, unknown>).email as string | null ?? null,
-          telefono: (c as Record<string, unknown>).telefono as string | null ?? null,
-          direccion: (c as Record<string, unknown>).direccion as string | null ?? null,
-          ciudad: (c as Record<string, unknown>).ciudad as string | null ?? null,
-          categoria: (c as Record<string, unknown>).categoria as string | null ?? null,
-          website: (c as Record<string, unknown>).website as string | null ?? null,
-          isActive: c.isActive,
-          createdAt: c.createdAt,
-          updatedAt: (c as Record<string, unknown>).updatedAt as Date ?? c.createdAt,
-          _count: {
-            clientes: c._count.clientes,
-            users: c._count.users,
-            sucursales: sucursalesCount,
-            plans: c._count.plans,
-            promociones: promocionesCount,
-          },
-          _membresiaActivas: activas,
-          _ingresos: ingresos,
-          _ultimaActividad: ultimaActividad,
-        }
-    })
-
-    return enriched
-  })
 }
 
 export interface EmpresaDashboard {
@@ -255,7 +118,7 @@ export async function getEmpresaDashboard(companyId: string): Promise<EmpresaDas
       safeCount(tx.user.count({ where: { companyId } })),
       safeCount(tx.plan.count({ where: { companyId } })),
       safeCount(tx.plan.count({ where: { companyId, activo: true } })),
-      safeCount(tx.membership.count({ where: { estado: 'ACTIVA', cliente: { companyId } } })),
+      safeCount(tx.membership.count({ where: { ...membresiaVigente(), cliente: { companyId } } })),
       safeCount(tx.membership.count({ where: { cliente: { companyId } } })),
     ])
 
@@ -276,14 +139,14 @@ export async function getEmpresaDashboard(companyId: string): Promise<EmpresaDas
     try { pagosConfirmados = await tx.membership.count({ where: { pagoConfirmado: true, cliente: { companyId } } }) } catch (e) { console.error('[empresas-dash] Error counting confirmed payments:', e) }
     try {
       const agg = await tx.membership.aggregate({
-        where: { cliente: { companyId }, montoPagado: { not: null } },
+        where: whereCobrado(new Date(0), undefined, { cliente: { companyId } }),
         _sum: { montoPagado: true },
       })
       ingresosTotales = Number(agg._sum.montoPagado ?? 0)
     } catch (e) { console.error('[empresas-dash] Error aggregating total ingresos:', e) }
     try {
       const agg = await tx.membership.aggregate({
-        where: { cliente: { companyId }, montoPagado: { not: null }, updatedAt: { gte: inicioMes } },
+        where: whereCobrado(inicioMes, undefined, { cliente: { companyId } }),
         _sum: { montoPagado: true },
       })
       ingresosEsteMes = Number(agg._sum.montoPagado ?? 0)
