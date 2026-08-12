@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { OG_SIZE } from '@/lib/share/og-tamano'
 import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
@@ -48,14 +49,21 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
         <div className="mt-8 overflow-hidden rounded-3xl border border-border/80 shadow-premium">
           {/* Image */}
           {promotion.imagenUrl && (
-            // El arte lo sube el negocio y suele llevar el TEXTO en los bordes
-            // (formato de Instagram, 1:1). Con altura fija + `object-cover`,
-            // en un celular la caja quedaba casi cuadrada y el recorte se
-            // comía justo ese texto. En móvil la caja es cuadrada (el formato
-            // real del arte) y `object-contain` garantiza la imagen ENTERA en
-            // cualquier proporción; el fondo `bg-muted` hace de paspartú
-            // cuando sobra espacio.
-            <div className="relative aspect-square w-full overflow-hidden bg-muted sm:aspect-auto sm:h-96">
+            // LA CAJA TIENE EL FORMATO QUE LA PLATAFORMA RECOMIENDA AL SUBIR
+            // (OG_SIZE, 1728×910): una imagen subida como se pide llena el
+            // ancho del celular de borde a borde, sin recorte y sin paspartú.
+            //
+            // El historial de esta caja, para no repetirlo: con altura fija +
+            // `object-cover` el arte horizontal se recortaba por los lados en
+            // móvil (la caja quedaba casi cuadrada); con caja cuadrada +
+            // `contain` el mismo arte salía diminuto entre franjas grises. La
+            // caja debe medir LO MISMO que el formato exigido — y leerlo de la
+            // fuente única, no copiarlo. `object-contain` queda como red para
+            // arte fuera de formato: se ve entero sobre `bg-muted`.
+            <div
+              className="relative w-full overflow-hidden bg-muted"
+              style={{ aspectRatio: `${OG_SIZE.width} / ${OG_SIZE.height}` }}
+            >
               <Image
                 src={promotion.imagenUrl}
                 alt={promotion.titulo}
