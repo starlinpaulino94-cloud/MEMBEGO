@@ -260,3 +260,84 @@ propósito, la guardia salta.
 `whereCobrado` y `membresiaVigente` hacen que **«Ingresos» y «Activas» muestren
 menos que antes** en varias pantallas. No es una regresión: antes contaban de
 más.
+
+---
+
+# Demostración — tercera revisión
+
+Siete mejoras aplicadas (M27–M33). **M34 —sembrar datos de práctica— queda
+fuera**: es la única que añade superficie nueva, y conviene decidirla viendo un
+entrenamiento real, no imaginándolo.
+
+## El hallazgo no estaba en la pantalla
+
+`tests/superadmin-coherencia.test.ts` prohíbe colores literales de Tailwind,
+textos por debajo de 12px y fechas formateadas a mano… y **escaneaba solo
+`src/app/(superadmin)`**, que casi no contiene interfaz: las rutas resuelven
+datos y delegan el dibujo a `src/components/superadmin/`.
+
+Al ampliar el área aparecieron, medidos:
+
+| Infracción | Archivos |
+|---|---|
+| Colores literales (`amber-400`, `amber-700`…) | `DemoPanel`, `AvisoMigraciones` |
+| Texto por debajo de 12px | `DemoPanel`, `EmpresaDashboard`, `SistemaConectadoCard` |
+| `toLocaleDateString` a mano | `EmpresaDashboard`, `SistemaConectadoCard` |
+
+Los dos últimos son el defecto de siempre: `toLocaleDateString` formatea en la
+zona del **servidor**, que en Vercel es UTC, así que publica horas movidas sin
+que nadie lo note.
+
+Es el mismo patrón que el gate de RLS mirando `.ts` mientras el panel vivía en
+`.tsx`. **Una guardia que mide donde no está el problema es peor que no
+tenerla**: da un visto bueno que nadie vuelve a cuestionar.
+
+## La fricción estaba en la acción equivocada
+
+| | Antes | Ahora |
+|---|---|---|
+| **Reiniciar** (borra datos inventados) | escribir `REINICIAR` | igual |
+| **Convertir en real** (la saca del sandbox, habilita cobros, sus números pasan a contar) | **un clic, sin nada** | escribir el **nombre de la empresa** |
+
+Se pide el nombre y no una palabra genérica: en una lista de tarjetas,
+«CONVERTIR» vale para cualquiera y el nombre solo para esa. Y **se exige en el
+servidor**, no solo en la pantalla — un campo que la interfaz pide y el servidor
+no mira es un teatro: quien envíe el formulario desde otra pestaña convierte la
+empresa igual.
+
+El botón además **desaparece** mientras haya datos. Antes se podía pulsar y
+siempre fallaba con un aviso, que hace dudar de si el error es tuyo.
+
+## Tres copias de «hace X»
+
+Al escribir el helper de plurales me encontré con que iba a crear una **cuarta**
+implementación de `desdeHace`: había una en el Centro de control, otra en
+`empresas/silencio.ts` y otra en el CRM. Vive una sola vez en `@/lib/plural`, con
+sus pruebas — incluidas las que fallan de verdad: «0 clientes» (el cero es plural
+en español) y «1 mes», que un `+s` mecánico convierte en «1 mess».
+
+## Lo demás
+
+- **Una cuenta de clientes en vez de dos.** `getEmpresasDemo` la calculaba, la
+  pasaba a la tarjeta y **nadie la pintaba**: la tarjeta usa la del inventario.
+- **`estadoDemo`** reúne inventario, antigüedad y último reinicio en **una
+  transacción**. Antes cada empresa abría dos y el inventario lanzaba siete
+  consultas.
+- **«Acumulando desde hace N días»** — «1 cliente» no distingue el rastro de ayer
+  del de hace tres meses.
+- **«Último reinicio hace N días · Fulano»** — una empresa de práctica la
+  comparten varios instructores. El dato ya estaba en la bitácora; solo no se
+  enseñaba.
+- **El enlace se parte en dos líneas** en vez de truncarse: truncado, en un móvil
+  no se ve a qué empresa apunta.
+- **El botón de copiar** gana `aria-label` y una región `aria-live`: el icono que
+  cambia no dice nada a quien no ve la pantalla.
+
+## Reparto
+
+**Solo frontend:** M27 (mitad), M29, M32, M33.
+**Backend:** M27 (validación), M30, M31.
+**Base de datos:** ninguno. **Sin migración.**
+
+Y el techo de `colorCrudo` baja de 333 a 315 en el mismo commit que lo baja, que
+es la regla del trinquete.

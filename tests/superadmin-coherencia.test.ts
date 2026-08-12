@@ -19,11 +19,27 @@ import { COLAS_TICKET } from '../src/lib/soporte'
 
 const AREA = join('src', 'app', '(superadmin)')
 
-function paginas(dir: string, acc: string[] = []): string[] {
-  for (const entrada of readdirSync(dir)) {
-    const ruta = join(dir, entrada)
-    if (statSync(ruta).isDirectory()) paginas(ruta, acc)
-    else if (ruta.endsWith('.tsx')) acc.push(ruta)
+/**
+ * DÓNDE MIRAN ESTAS GUARDIAS. Las dos, y esto es lo que faltaba.
+ *
+ * Escaneaban solo `src/app/(superadmin)`, que casi no contiene interfaz: las
+ * rutas resuelven datos y delegan el dibujo a `src/components/superadmin/`.
+ * Resultado, medido: el panel de demostración llevaba tres colores literales de
+ * Tailwind y un texto de 10px, y las guardias daban verde porque no miraban ahí.
+ *
+ * Es el mismo patrón que el gate de RLS, que recorría `.ts` mientras el panel
+ * vivía en `.tsx`. Una guardia que mide donde no está el problema es peor que no
+ * tenerla: da un visto bueno que nadie vuelve a cuestionar.
+ */
+const AREAS = [AREA, join('src', 'components', 'superadmin')]
+
+function paginas(dirs: string | string[], acc: string[] = []): string[] {
+  for (const dir of Array.isArray(dirs) ? dirs : [dirs]) {
+    for (const entrada of readdirSync(dir)) {
+      const ruta = join(dir, entrada)
+      if (statSync(ruta).isDirectory()) paginas(ruta, acc)
+      else if (ruta.endsWith('.tsx')) acc.push(ruta)
+    }
   }
   return acc
 }
@@ -62,7 +78,7 @@ test('los avisos del panel de plataforma llevan a rutas del propio panel', () =>
 
 test('el panel de plataforma no baja del suelo tipográfico', () => {
   // El área quedó a cero en la Fase 16; aquí la exigencia ya no es un techo.
-  for (const f of paginas(AREA)) {
+  for (const f of paginas(AREAS)) {
     for (const m of readFileSync(f, 'utf8').matchAll(/text-\[(\d+(?:\.\d+)?)px\]/g)) {
       assert.ok(
         Number(m[1]) >= 12,
@@ -79,7 +95,7 @@ test('los estados se pintan con tokens, no con colores literales', () => {
   // distintos.
   const prohibidos = /\b(?:text|bg|border|ring)-(?:emerald|green|teal|red|amber)-\d{3}\b/
   const infractores: string[] = []
-  for (const f of paginas(AREA)) {
+  for (const f of paginas(AREAS)) {
     const src = readFileSync(f, 'utf8')
     const m = src.match(prohibidos)
     if (m) infractores.push(`${f}: ${m[0]}`)
@@ -96,7 +112,7 @@ test('las fechas pasan por el formateador del sistema', () => {
   // Un `Intl.DateTimeFormat` a mano clava locale y zona horaria en el archivo:
   // el servidor corre en UTC, así que quien lo olvide publica horas movidas.
   const infractores: string[] = []
-  for (const f of paginas(AREA)) {
+  for (const f of paginas(AREAS)) {
     const src = readFileSync(f, 'utf8')
     if (/new Intl\.DateTimeFormat|toLocaleDateString\(/.test(src)) infractores.push(f)
   }

@@ -13,7 +13,7 @@ import {
   Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatMoneyRD } from '@/lib/format'
+import { formatDate, formatMoneyRD } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/ui/stat-card'
@@ -77,8 +77,11 @@ function fmtMoney(n: number) {
   return formatMoneyRD(n)
 }
 
+/** Por el formateador del sistema: un `toLocaleDateString` a mano clava el
+ *  idioma Y formatea en la zona del servidor, que en Vercel es UTC — así es como
+ *  se publican horas movidas sin que nadie lo note. */
 function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('es-DO', {
+  return formatDate(d, null, {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -150,7 +153,7 @@ export function EmpresaDashboard({
             </div>
             <div className="min-w-0">
               <p className="text-lg font-bold tabular-nums leading-tight">{s.value}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{s.label}</p>
+              <p className="text-caption truncate text-muted-foreground">{s.label}</p>
             </div>
           </div>
         ))}

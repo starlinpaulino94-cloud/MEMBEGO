@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { formatDate } from '@/lib/format'
 import { Activity, Loader2, RefreshCw, Stethoscope } from 'lucide-react'
 import {
   sondearWebhookAction,
@@ -127,7 +128,7 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
             {sistema.esperandoDesde && (
               <>
                 {' '}· el más viejo espera desde el{' '}
-                {sistema.esperandoDesde.toLocaleDateString('es-DO')}
+                {formatDate(sistema.esperandoDesde)}
               </>
             )}
             . Al llegar a 8 intentos los eventos quedan agotados; se pueden devolver a la cola con
@@ -213,7 +214,7 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
                     {resp.status === 0 ? 'sin respuesta' : resp.status}
                   </p>
                   {(resp.error || resp.cuerpo) && (
-                    <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background/60 p-2 text-[11px] text-muted-foreground">
+                    <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background/60 p-2 text-caption text-muted-foreground">
                       {resp.error ?? resp.cuerpo}
                     </pre>
                   )}

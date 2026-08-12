@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { FlaskConical, Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { getAppUrl } from '@/lib/site'
-import { getEmpresasDemo, contarDatosDemo } from '@/modules/demo'
+import { getEmpresasDemo, estadoDemo } from '@/modules/demo'
 import { getAccesosDeEmpresa, getAdminsVinculables } from '@/modules/empresas/accesos'
 import { DemoPanel, type EmpresaDemoUI } from '@/components/superadmin/DemoPanel'
 import { Button } from '@/components/ui/button'
@@ -20,17 +20,15 @@ export default async function SuperadminDemoPage() {
   // apriete "Reiniciar", no después.
   const conDatos: EmpresaDemoUI[] = await Promise.all(
     empresas.map(async (e) => {
-      const [inventario, accesos] = await Promise.all([
-        contarDatosDemo(e.id),
-        getAccesosDeEmpresa(e.id),
-      ])
+      const [estado, accesos] = await Promise.all([estadoDemo(e.id), getAccesosDeEmpresa(e.id)])
       return {
         id: e.id,
         name: e.name,
         slug: e.slug,
-        clientes: e.clientes,
         enlaceRegistro: e.enlaceRegistro,
-        inventario,
+        inventario: estado.inventario,
+        desdePrimerDato: estado.desdePrimerDato,
+        ultimoReinicio: estado.ultimoReinicio,
         accesos,
       }
     })

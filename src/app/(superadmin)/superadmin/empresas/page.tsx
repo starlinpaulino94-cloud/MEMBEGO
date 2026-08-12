@@ -9,7 +9,7 @@ import {
   leerFiltroEmpresas,
   type FiltroEmpresas,
 } from '@/modules/empresas/filtros'
-import { desdeHace } from '@/modules/empresas/silencio'
+import { desdeHace } from '@/lib/plural'
 import { FiltrosEmpresas } from '@/components/empresas/FiltrosEmpresas'
 import { AccionesEmpresa } from '@/components/empresas/AccionesEmpresa'
 import { EstadoEmpresa } from '@/components/empresas/EstadoEmpresa'
