@@ -74,6 +74,10 @@ export function OfertasParaTi({ feed }: { feed: PromoFeed }) {
               <PromotionCard
                 promotion={p}
                 variant="compact"
+                // Sin esto, la tarjeta cae al default PÚBLICO ('/promocion') y
+                // el cliente autenticado aterriza en la Landing con «Ingresar /
+                // Registrarse» — la regla es que ninguna oferta saca de la app.
+                hrefBase="/cliente/promociones"
                 retorno="/cliente/inicio"
               />
             </CarruselItem>
