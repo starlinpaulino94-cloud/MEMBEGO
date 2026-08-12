@@ -282,6 +282,16 @@ export default async function ClienteDetailPage({
                   />
                 </div>
 
+                {/* El cliente programó su cancelación desde la app: el negocio
+                    tiene que verlo ANTES de renovar a mano por costumbre. */}
+                {membership.canceladaAlVencimiento && (
+                  <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+                    El cliente canceló esta membresía el{' '}
+                    {fmtDate(membership.canceladaAlVencimiento)}: sigue activa hasta su
+                    vencimiento y no debe renovarse.
+                  </p>
+                )}
+
                 {/* Comprobante de pago */}
                 {membership.comprobanteUrl && (
                   <div className="rounded-lg border border-warning/30 bg-warning/15 p-4 space-y-3">

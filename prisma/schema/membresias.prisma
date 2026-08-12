@@ -128,6 +128,12 @@ model Membership {
   // lo enciende el cliente al pagar y guardar su tarjeta; el cron de renovación
   // cobra la `tarjetaTokenizada` cuando la membresía está por vencer.
   autoRenovar          Boolean            @default(false)
+  /// Cancelación pedida por EL CLIENTE, con efecto a fin de período (decisión
+  /// de producto, 12-08-2026): la membresía sigue ACTIVA con sus usos hasta
+  /// `fechaVencimiento`, no se renueva (el mismo update apaga `autoRenovar`),
+  /// y al vencer muere sola. La fecha es CUÁNDO lo pidió — sirve de rastro.
+  /// Null = sin cancelación programada.
+  canceladaAlVencimiento DateTime?
   tarjetaTokenizadaId  String?
   tarjetaTokenizada    TarjetaTokenizada? @relation(fields: [tarjetaTokenizadaId], references: [id], onDelete: SetNull)
 
