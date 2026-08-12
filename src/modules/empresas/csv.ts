@@ -1,4 +1,4 @@
-import { desdeHace } from './silencio'
+import { desdeHace } from '@/lib/plural'
 import type { EmpresaFila } from './lista'
 
 /**

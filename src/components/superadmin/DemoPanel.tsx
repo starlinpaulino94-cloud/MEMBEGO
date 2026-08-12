@@ -26,14 +26,18 @@ import type { AccesoEmpresa, AdminVinculable } from '@/modules/empresas/accesos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { desdeHace, plural } from '@/lib/plural'
 
 export interface EmpresaDemoUI {
   id: string
   name: string
   slug: string
-  clientes: number
   enlaceRegistro: string
   inventario: InventarioDemo
+  /** Milisegundos desde el primer dato de práctica; `null` = está limpia. */
+  desdePrimerDato: number | null
+  /** Último reinicio: cuánto hace y quién. `null` = nunca se reinició. */
+  ultimoReinicio: { hace: number; quien: string | null } | null
   /** Quién puede entrar hoy a esta empresa de práctica. */
   accesos: AccesoEmpresa[]
 }
@@ -98,10 +102,10 @@ function TarjetaDemo({ e, admins }: { e: EmpresaDemoUI; admins: AdminVinculable[
   const total = Object.values(e.inventario).reduce((s, n) => s + n, 0)
 
   return (
-    <Card className="border-amber-500/30 shadow-card">
+    <Card className="border-warning/30 shadow-card">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
-          <FlaskConical className="h-4 w-4 text-amber-500" />
+          <FlaskConical aria-hidden className="h-4 w-4 text-warning" />
           {e.name}
         </CardTitle>
       </CardHeader>
@@ -120,14 +124,14 @@ function TarjetaDemo({ e, admins }: { e: EmpresaDemoUI; admins: AdminVinculable[
             <ul className="flex flex-wrap gap-1.5">
               {(
                 [
-                  ['clientes', 'clientes'],
-                  ['membresias', 'membresías'],
-                  ['compras', 'compras'],
-                  ['transacciones', 'cobros'],
-                  ['colaVehiculos', 'vehículos en pista'],
-                  ['incidencias', 'incidencias'],
-                  ['turnos', 'turnos'],
-                ] as [keyof InventarioDemo, string][]
+                  ['clientes', ['cliente', 'clientes']],
+                  ['membresias', ['membresía', 'membresías']],
+                  ['compras', ['compra', 'compras']],
+                  ['transacciones', ['cobro', 'cobros']],
+                  ['colaVehiculos', ['vehículo en pista', 'vehículos en pista']],
+                  ['incidencias', ['incidencia', 'incidencias']],
+                  ['turnos', ['turno', 'turnos']],
+                ] as [keyof InventarioDemo, [string, string]][]
               )
                 .filter(([k]) => e.inventario[k] > 0)
                 .map(([k, etiqueta]) => (
@@ -135,11 +139,29 @@ function TarjetaDemo({ e, admins }: { e: EmpresaDemoUI; admins: AdminVinculable[
                     key={k}
                     className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground"
                   >
-                    {e.inventario[k]} {etiqueta}
+                    {plural(e.inventario[k], etiqueta[0], etiqueta[1])}
                   </li>
                 ))}
             </ul>
           )}
+          {/* CUÁNTO no es lo mismo que DESDE CUÁNDO: «1 cliente» no distingue el
+              rastro de ayer del de hace tres meses, y de eso depende si hay que
+              reiniciar antes del próximo grupo. */}
+          {e.desdePrimerDato !== null && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Acumulando desde {desdeHace(e.desdePrimerDato)}.
+            </p>
+          )}
+          {/* Una empresa de práctica la comparten varios instructores. Sin esto,
+              «¿está limpia porque la reinicié yo o porque nadie la ha usado?» no
+              se puede contestar — y el dato ya estaba en la bitácora. */}
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {e.ultimoReinicio
+              ? `Último reinicio ${desdeHace(e.ultimoReinicio.hace)}${
+                  e.ultimoReinicio.quien ? ` · ${e.ultimoReinicio.quien}` : ''
+                }.`
+              : 'Nunca se ha reiniciado.'}
+          </p>
         </div>
 
         {/* Reiniciar */}
@@ -147,8 +169,9 @@ function TarjetaDemo({ e, admins }: { e: EmpresaDemoUI; admins: AdminVinculable[
           <input type="hidden" name="companyId" value={e.id} />
           <p className="text-sm font-medium text-foreground">Dejarla lista para el siguiente grupo</p>
           <p className="text-xs text-muted-foreground">
-            Borra los {total} registro(s) de práctica de arriba. Conserva la configuración: planes,
-            promociones, servicios, precios, empleados y capacidades se quedan como están.
+            Borra {plural(total, 'registro', 'registros')} de práctica de los de arriba. Conserva la
+            configuración: planes, promociones, servicios, precios, empleados y capacidades se
+            quedan como están.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -163,18 +186,43 @@ function TarjetaDemo({ e, admins }: { e: EmpresaDemoUI; admins: AdminVinculable[
           </div>
         </form>
 
-        {/* Convertir en real */}
-        <form action={accionMarca} className="flex flex-wrap items-center justify-between gap-2">
+        {/*
+          CONVERTIR EN REAL — LA FRICCIÓN ESTABA EN LA ACCIÓN EQUIVOCADA.
+
+          Reiniciar, que borra datos INVENTADOS, pedía escribir una palabra.
+          Convertir en real —que saca la empresa del sandbox, la habilita para
+          cobros de verdad y hace que sus números empiecen a contar— era un solo
+          clic. La operación reversible pedía teclear; la irreversible, nada.
+
+          Ahora pide el NOMBRE de la empresa, no una palabra genérica: con dos
+          tarjetas abiertas, «CONVERTIR» sirve para cualquiera de las dos y el
+          nombre solo para esta. Y el botón se DESHABILITA cuando todavía hay
+          datos: antes se podía pulsar y siempre fallaba con un aviso, que hace
+          dudar de si el error es tuyo.
+        */}
+        <form action={accionMarca} className="space-y-2 rounded-xl border border-border/70 p-3">
           <input type="hidden" name="companyId" value={e.id} />
           <input type="hidden" name="activar" value="0" />
+          <p className="text-sm font-medium text-foreground">Convertirla en empresa real</p>
           <p className="text-xs text-muted-foreground">
             {total === 0
-              ? 'Está vacía: puede convertirse en una empresa real.'
-              : 'Para convertirla en real hay que reiniciarla primero.'}
+              ? 'Dejará de ser de práctica: sus números pasarán a contar en las estadísticas de la plataforma y podrá publicarse y cobrar de verdad. No se deshace desde aquí.'
+              : `Primero hay que reiniciarla: con ${plural(total, 'registro', 'registros')} de práctica dentro, esos datos inventados pasarían a contar como reales.`}
           </p>
-          <Enviar variant="outline">
-            <ShieldCheck className="mr-1.5 h-4 w-4" /> Convertir en real
-          </Enviar>
+          {total === 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                name="confirmacion"
+                placeholder={`Escribe ${e.name}`}
+                className="h-9 max-w-[240px]"
+                autoComplete="off"
+                aria-label={`Escribe ${e.name} para confirmar`}
+              />
+              <Enviar variant="outline">
+                <ShieldCheck className="mr-1.5 h-4 w-4" /> Convertir en real
+              </Enviar>
+            </div>
+          )}
         </form>
       </CardContent>
     </Card>
@@ -241,7 +289,7 @@ function QuienEntra({
                 <span className="block truncate text-sm font-medium text-foreground">
                   {a.name}
                   {a.activaAhora && (
-                    <span className="ml-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700 dark:text-amber-200">
+                    <span className="text-overline ml-2 rounded-full bg-warning/20 px-2 py-0.5 text-warning">
                       dentro ahora
                     </span>
                   )}
@@ -321,13 +369,31 @@ function EnlaceRegistro({ url }: { url: string }) {
         Enlace de registro para el entrenamiento
       </p>
       <div className="flex gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
+        {/* `break-all` y no `truncate`: truncado, en un móvil no se ve a qué
+            empresa apunta el enlace, que es justo lo que hay que comprobar antes
+            de mandárselo a un grupo. Parte en dos líneas y se lee entero. */}
+        <code className="min-w-0 flex-1 break-all rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
           {url}
         </code>
-        <Button type="button" size="sm" variant="outline" onClick={copiar} className="shrink-0">
-          {copiado ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={copiar}
+          className="h-9 shrink-0"
+          aria-label={copiado ? 'Enlace copiado' : 'Copiar el enlace de registro'}
+        >
+          {copiado ? (
+            <Check aria-hidden className="h-4 w-4 text-success" />
+          ) : (
+            <Copy aria-hidden className="h-4 w-4" />
+          )}
         </Button>
       </div>
+      {/* Para quien no ve la pantalla: el icono que cambia no dice nada. */}
+      <span aria-live="polite" className="sr-only">
+        {copiado ? 'Enlace copiado al portapapeles' : ''}
+      </span>
       <p className="mt-1.5 text-xs text-muted-foreground">
         Quien se registre por aquí es un cliente de práctica: sus datos y sus cobros existen solo
         dentro de esta empresa.

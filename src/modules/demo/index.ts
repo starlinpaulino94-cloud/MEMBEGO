@@ -121,7 +121,6 @@ export interface ResumenDemo {
   id: string
   name: string
   slug: string
-  clientes: number
   createdAt: Date
   /** Enlace de registro que se le pasa a quien entrena. */
   enlaceRegistro: string
@@ -134,20 +133,17 @@ export async function getEmpresasDemo(baseUrl: string): Promise<ResumenDemo[]> {
       tx.company.findMany({
         where: { esDemo: true },
         orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          createdAt: true,
-          _count: { select: { clientes: true } },
-        },
+        // Sin `_count: { clientes }` a propósito: `contarDatosDemo` ya los
+        // cuenta, y este campo se calculaba, se pasaba a la tarjeta y no se
+        // pintaba nunca. Dos cuentas del mismo dato son dos oportunidades de
+        // que digan cosas distintas; una de ellas ni siquiera se veía.
+        select: { id: true, name: true, slug: true, createdAt: true },
       })
     )
     return empresas.map((e) => ({
       id: e.id,
       name: e.name,
       slug: e.slug,
-      clientes: e._count.clientes,
       createdAt: e.createdAt,
       enlaceRegistro: `${baseUrl.replace(/\/$/, '')}/registro/${e.slug}`,
     }))
@@ -173,7 +169,39 @@ export interface InventarioDemo {
   turnos: number
 }
 
+export interface EstadoDemo {
+  inventario: InventarioDemo
+  /** Milisegundos desde el primer dato de práctica. `null` = está limpia. */
+  desdePrimerDato: number | null
+  /** Último reinicio: cuánto hace y quién lo hizo. `null` = nunca se reinició. */
+  ultimoReinicio: { hace: number; quien: string | null } | null
+}
+
 export async function contarDatosDemo(companyId: string): Promise<InventarioDemo> {
+  const { inventario } = await estadoDemo(companyId)
+  return inventario
+}
+
+/**
+ * Qué hay dentro, DESDE CUÁNDO, y quién la dejó así.
+ *
+ * Las tres preguntas se responden en una sola transacción porque se hacen a la
+ * vez y siempre juntas. Antes cada empresa abría DOS —el inventario y los
+ * accesos— y el inventario lanzaba siete consultas; con cuatro empresas de
+ * práctica eran treinta y dos idas a la base para pintar una pantalla.
+ *
+ * LAS DOS PREGUNTAS NUEVAS, y por qué no son adorno:
+ *
+ *  · «Desde cuándo hay datos» — «1 cliente» no distingue el rastro de ayer del
+ *    de hace tres meses, y de eso depende si hace falta reiniciar antes del
+ *    próximo grupo.
+ *
+ *  · «Quién la reinició y cuándo» — una empresa de práctica la comparten varios
+ *    instructores. Sin esto, «¿está limpia porque la reinicié el lunes o porque
+ *    nadie la ha usado?» no se puede contestar. El dato ya estaba en la
+ *    bitácora; solo no se enseñaba.
+ */
+export async function estadoDemo(companyId: string): Promise<EstadoDemo> {
   const cero = async () => 0
   const [
     clientes,
@@ -183,6 +211,8 @@ export async function contarDatosDemo(companyId: string): Promise<InventarioDemo
     colaVehiculos,
     incidencias,
     turnos,
+    primerCliente,
+    ultimoReinicio,
   ] = await conEmpresa(companyId, (tx) =>
     Promise.all([
       tx.cliente.count({ where: { companyId } }).catch(cero),
@@ -192,7 +222,26 @@ export async function contarDatosDemo(companyId: string): Promise<InventarioDemo
       tx.colaVehiculo.count({ where: { companyId } }).catch(cero),
       tx.incidencia.count({ where: { companyId } }).catch(cero),
       tx.turno.count({ where: { companyId } }).catch(cero),
+      // El cliente MÁS VIEJO marca desde cuándo se está acumulando rastro.
+      tx.cliente
+        .findFirst({ where: { companyId }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } })
+        .catch(() => null),
+      tx.auditLog
+        .findFirst({
+          where: { companyId, accion: 'EMPRESA_DEMO_REINICIADA' },
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true, user: { select: { name: true } } },
+        })
+        .catch(() => null),
     ])
   )
-  return { clientes, membresias, compras, transacciones, colaVehiculos, incidencias, turnos }
+
+  const ahora = Date.now()
+  return {
+    inventario: { clientes, membresias, compras, transacciones, colaVehiculos, incidencias, turnos },
+    desdePrimerDato: primerCliente ? ahora - primerCliente.createdAt.getTime() : null,
+    ultimoReinicio: ultimoReinicio
+      ? { hace: ahora - ultimoReinicio.createdAt.getTime(), quien: ultimoReinicio.user?.name ?? null }
+      : null,
+  }
 }

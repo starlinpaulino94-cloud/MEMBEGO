@@ -1,6 +1,9 @@
 /**
  * Cuándo una empresa está «en silencio». Módulo PURO y compartido.
  *
+ * El «hace X» que acompaña a este dato NO vive aquí: está en `@/lib/plural`,
+ * porque ya lo piden tres pantallas y ninguna de ellas es de empresas.
+ *
  * Lo usan el Centro de control (para el aviso y para marcar las tarjetas) y el
  * CRM de empresas (para el filtro y el orden). Vive aquí, en el dominio de
  * empresas, y no en el módulo del panel de plataforma: un dato de negocio no
@@ -32,27 +35,4 @@ export function estaEnSilencio(
   if (!opciones.isActive) return false
   if (!opciones.ultimaActividad) return true
   return ahora.getTime() - opciones.ultimaActividad.getTime() > DIAS_SILENCIO * 86_400_000
-}
-
-/**
- * «hace 2 h» / «hace 23 días», a partir de milisegundos ya medidos.
- *
- * Recibe la distancia y no una fecha A PROPÓSITO: el «ahora» lo fija quien
- * consulta los datos, una sola vez. Leer el reloj dentro del render es impuro
- * —el linter de React lo rechaza— y además daría un instante distinto por cada
- * tarjeta de la lista.
- *
- * Había dos implementaciones de esto, una en el Centro de control y otra en el
- * CRM, ya divergiendo en formato («Hace 4d» contra «hace 4 días»).
- */
-export function desdeHace(ms: number | null): string {
-  if (ms === null) return 'sin actividad'
-  const min = Math.floor(ms / 60_000)
-  if (min < 60) return 'hace un momento'
-  const horas = Math.floor(min / 60)
-  if (horas < 24) return `hace ${horas} h`
-  const dias = Math.floor(horas / 24)
-  if (dias < 31) return `hace ${dias} día${dias === 1 ? '' : 's'}`
-  const meses = Math.floor(dias / 30)
-  return `hace ${meses} mes${meses === 1 ? '' : 'es'}`
 }

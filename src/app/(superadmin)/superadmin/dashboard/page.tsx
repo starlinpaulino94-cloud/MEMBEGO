@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/format'
 import { ACCION_LABEL, ENTIDAD_LABEL } from '@/modules/auditoria/queries'
 import { DIAS_SILENCIO } from '@/modules/empresas/silencio'
+import { desdeHace } from '@/lib/plural'
 import {
   PERIODOS,
   PERIODO_LABEL,
@@ -39,24 +40,6 @@ function fmtHora(d: Date) {
   return formatDate(d, null, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 }
 
-/**
- * «hace 2 h» / «hace 23 días». Nunca una fecha suelta: lo que importa aquí no es
- * CUÁNDO fue sino CUÁNTO hace, que es lo que delata a una empresa apagada.
- *
- * Recibe los milisegundos ya medidos, no una fecha: el «ahora» lo fija el módulo
- * de datos una sola vez. Llamar a `Date.now()` aquí sería leer el reloj durante
- * el render —impuro, y el linter lo rechaza— y además daría un instante distinto
- * por cada tarjeta.
- */
-function desdeHace(ms: number | null): string {
-  if (ms === null) return 'sin actividad'
-  const min = Math.floor(ms / 60_000)
-  if (min < 60) return 'hace un momento'
-  const horas = Math.floor(min / 60)
-  if (horas < 24) return `hace ${horas} h`
-  const dias = Math.floor(horas / 24)
-  return `hace ${dias} día${dias === 1 ? '' : 's'}`
-}
 
 const money = (n: number) =>
   new Intl.NumberFormat('es-DO', {

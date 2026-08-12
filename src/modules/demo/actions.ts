@@ -101,6 +101,21 @@ export async function marcarComoDemo(
             'Esta empresa todavía tiene datos de práctica. Reiníciala primero: si se convierte en real con ellos dentro, los números inventados pasan a contar como reales.',
         }
       }
+
+      // LA CONFIRMACIÓN SE EXIGE AQUÍ, NO SOLO EN LA PANTALLA. Un campo que la
+      // pide y un servidor que no la mira es un teatro: cualquiera que envíe el
+      // formulario sin él —o desde otra pestaña— convierte la empresa igual.
+      //
+      // Se pide el NOMBRE y no una palabra genérica: en una lista de tarjetas,
+      // «CONVERTIR» vale para cualquiera y el nombre solo para esta. Se compara
+      // sin distinguir mayúsculas ni espacios de los extremos, que es lo que
+      // falla al copiarlo, no la intención.
+      const confirmacion = String(formData.get('confirmacion') ?? '').trim()
+      if (confirmacion.toLocaleLowerCase() !== empresa.name.trim().toLocaleLowerCase()) {
+        return {
+          error: `Para convertirla en real, escribe el nombre exacto de la empresa: ${empresa.name}`,
+        }
+      }
     }
 
     await sinEmpresa('demo: marcar empresa como de demostración', (tx) =>
