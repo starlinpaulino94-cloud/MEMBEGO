@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Loader2, Save } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import {
 import { MediaUpload } from './MediaUpload'
 import { GalleryManager } from './GalleryManager'
 import { MapaUbicacion } from './MapaUbicacion'
+import { coordenadasDeEnlaceGoogleMaps } from '@/modules/geo/enlace-google-maps'
 import { MONEDAS, IDIOMAS } from '@/lib/format'
 
 export interface PerfilCompanyData {
@@ -83,6 +84,9 @@ export function PerfilPublicoForm({
   selectedCategoryIds: string[]
 }) {
   const [state, action] = useActionState(actualizarPerfilPublico, init)
+  // Coordenadas extraídas del enlace de Google Maps al pegarlo: mueven el pin
+  // del selector para que el dueño las VEA (y corrija si hace falta).
+  const [coordsDelEnlace, setCoordsDelEnlace] = useState<{ lat: number; lng: number } | null>(null)
   const logoRef = useRef<HTMLInputElement>(null)
   const bannerRef = useRef<HTMLInputElement>(null)
 
@@ -244,7 +248,22 @@ export function PerfilPublicoForm({
               type="url"
               defaultValue={company.googleMapsUrl ?? ''}
               placeholder="https://maps.app.goo.gl/…"
+              onChange={(e) => {
+                // Si el enlace trae coordenadas, el pin se marca solo — el
+                // dato ya lo dio, no se le pide dos veces. Los enlaces cortos
+                // no las traen: esos los resuelve el servidor al guardar.
+                const c = coordenadasDeEnlaceGoogleMaps(e.target.value)
+                if (c) {
+                  setCoordsDelEnlace(c)
+                  toast.success('Ubicación tomada del enlace. Verifica el pin y guarda.')
+                }
+              }}
             />
+            <p className="text-caption text-muted-foreground">
+              Si el enlace incluye la ubicación, el punto del mapa se marca
+              solo. Con un enlace corto (maps.app.goo.gl) se resuelve al
+              guardar.
+            </p>
           </div>
           {/* El campo iba justo debajo del enlace de Google Maps, con la misma
               pinta y sin decir qué esperaba, así que se rellenaba pegando otra
@@ -269,7 +288,7 @@ export function PerfilPublicoForm({
               Sin este punto tu negocio no sale en «Cerca de mí». Se copia a tu
               sucursal principal al guardar.
             </p>
-            <MapaUbicacion lat={company.latitud} lng={company.longitud} />
+            <MapaUbicacion lat={company.latitud} lng={company.longitud} sugerencia={coordsDelEnlace} />
           </div>
         </div>
       </FormSection>

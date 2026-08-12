@@ -5,6 +5,10 @@ import { conEmpresa } from '@/lib/tenant'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
+import {
+  coordenadasDeEnlaceGoogleMaps,
+  esEnlaceCortoGoogleMaps,
+} from '@/modules/geo/enlace-google-maps'
 
 // F4.1: la empresa administra su propio perfil público del marketplace.
 // Solo puede tocar campos de presentación — nunca isActive/isPublished/
@@ -50,6 +54,36 @@ export async function actualizarPerfilPublico(
     .map(String)
     .filter(Boolean)
 
+  // RED DE SEGURIDAD: si el dueño pegó su enlace de Google Maps pero no marcó
+  // el pin, las coordenadas se toman del enlace — el dato ya lo dio, no se le
+  // pide dos veces. Los enlaces cortos (maps.app.goo.gl) no traen coordenadas:
+  // son una redirección, y aquí (servidor) sí se puede seguir para leer el
+  // destino. Best-effort con timeout corto: si falla, se guarda igual sin
+  // coordenadas, exactamente como antes.
+  let latitud = num(formData, 'latitud')
+  let longitud = num(formData, 'longitud')
+  const enlaceMaps = val(formData, 'googleMapsUrl')
+  if ((latitud == null || longitud == null) && enlaceMaps) {
+    let delEnlace = coordenadasDeEnlaceGoogleMaps(enlaceMaps)
+    if (!delEnlace && esEnlaceCortoGoogleMaps(enlaceMaps)) {
+      try {
+        const r = await fetch(enlaceMaps, {
+          method: 'HEAD',
+          redirect: 'manual',
+          signal: AbortSignal.timeout(4000),
+        })
+        const destino = r.headers.get('location')
+        if (destino) delEnlace = coordenadasDeEnlaceGoogleMaps(destino)
+      } catch {
+        /* sin red o sin redirección: se sigue sin coordenadas */
+      }
+    }
+    if (delEnlace) {
+      latitud = delEnlace.lat
+      longitud = delEnlace.lng
+    }
+  }
+
   try {
     await conEmpresa(companyId, async (tx) => {
       await tx.company.update({
@@ -67,8 +101,8 @@ export async function actualizarPerfilPublico(
           codigoPostal: val(formData, 'codigoPostal'),
           razonSocial: val(formData, 'razonSocial'),
           zonaCobertura: val(formData, 'zonaCobertura'),
-          latitud: num(formData, 'latitud'),
-          longitud: num(formData, 'longitud'),
+          latitud,
+          longitud,
           // Paso 4: configuración regional/marca/políticas. moneda/idioma/
           // zonaHoraria son NOT NULL: si vinieran vacíos se conserva el default.
           moneda: val(formData, 'moneda') ?? undefined,
