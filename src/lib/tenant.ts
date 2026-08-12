@@ -39,6 +39,30 @@ import type { Prisma } from '@prisma/client'
 export type Tx = Prisma.TransactionClient
 
 /**
+ * OPCIONES DE TODAS LAS TRANSACCIONES DE CONTEXTO (incidente 12-08-2026).
+ *
+ * Los valores por defecto de Prisma —2 s de espera para ARRANCAR la
+ * transacción, 5 s para terminarla— tumbaron el panel entero en producción
+ * con `P2028: Unable to start a transaction in the given time`.
+ *
+ * La aritmética del fallo: cada pantalla del panel pasa por aquí, cada
+ * transacción retiene una conexión mientras dura, y en Vercel con Fluid
+ * varias peticiones CONCURRENTES comparten la instancia — y por tanto el
+ * pool de esa instancia. Con `connection_limit` bajo, las transacciones
+ * hacen cola por la conexión; a la que la de delante tarda más de 2 s, la
+ * de detrás muere sin llegar a empezar. Bajo tráfico real (campaña de
+ * Instagram) eso fue «No se pudo cargar esta sección» en todos los módulos
+ * a la vez.
+ *
+ * `maxWait` alto convierte ese error en espera: la página tarda, pero
+ * carga. `timeout` acota el daño de una transacción colgada sin cortar los
+ * dashboards legítimamente lentos. Si estos números vuelven a quedarse
+ * cortos, el ajuste que falta es `connection_limit` en DATABASE_URL
+ * (ver la guardia en src/lib/prisma.ts).
+ */
+const OPCIONES_TX = { maxWait: 10_000, timeout: 15_000 } as const
+
+/**
  * `cuid()` o `cuid2`, que es lo que genera el esquema. Se comprueba antes de
  * meterlo en la sesión: `set_config` recibe el valor como parámetro y no hay
  * riesgo de inyección, pero un id con basura dentro significa que algo va mal
@@ -72,7 +96,7 @@ export async function conEmpresa<T>(
     // = '...'` no admite parámetros y habría que interpolar la cadena a mano.
     await tx.$queryRaw`SELECT set_config('app.company_id', ${companyId}, true)`
     return fn(tx)
-  })
+  }, OPCIONES_TX)
 }
 
 /**
@@ -94,7 +118,7 @@ export async function sinEmpresa<T>(motivo: string, fn: (tx: Tx) => Promise<T>):
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT set_config('app.omnisciente', 'on', true)`
     return fn(tx)
-  })
+  }, OPCIONES_TX)
 }
 
 /**
@@ -135,5 +159,5 @@ export async function conUsuario<T>(userId: string, fn: (tx: Tx) => Promise<T>):
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT set_config('app.user_id', ${userId}, true)`
     return fn(tx)
-  })
+  }, OPCIONES_TX)
 }
