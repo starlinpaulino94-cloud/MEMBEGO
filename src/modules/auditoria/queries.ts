@@ -24,6 +24,7 @@ export const ENTIDAD_LABEL: Record<string, string> = {
   Company: 'Empresa',
   EvidenciaFoto: 'Foto',
   Membership: 'Membresía',
+  Plan: 'Plan',
   MovimientoCaja: 'Movimiento de caja',
   ProductoCompra: 'Compra',
   ProductoInventario: 'Inventario',
@@ -82,6 +83,12 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPERADMIN_RETIRADO: 'Superadmin retirado',
   ENTRAR_COMO_GENERADO: 'Enlace para entrar como otro usuario',
   ENTRAR_COMO_USADO: 'Entró como otro usuario',
+  // Catálogo de planes: lo que los clientes compran.
+  PLAN_CREADO: 'Plan creado',
+  PLAN_ACTUALIZADO: 'Plan actualizado',
+  PLAN_PAUSADO: 'Plan pausado',
+  PLAN_REANUDADO: 'Plan reanudado',
+  PLAN_ELIMINADO: 'Plan eliminado',
   // Geolocalización (docs/GEOLOCALIZACION.md).
   UBICACION_GUARDADA: 'Ubicación guardada',
   UBICACION_ELIMINADA: 'Ubicación eliminada',

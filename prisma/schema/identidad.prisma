@@ -92,6 +92,18 @@ enum AuditAccion {
   SUCURSAL_UBICACION_VERIFICADA
   /// El superadmin aprobó un sector/ciudad del catálogo propuesto por un usuario.
   CATALOGO_GEO_APROBADO
+  // Catálogo de planes. Es lo que los clientes COMPRAN: sin estas cuatro no
+  // hay forma de saber cuánto costaba un plan el mes pasado ni quién lo cambió.
+  /// Se creó un plan.
+  PLAN_CREADO
+  /// Se editó un plan (el payload lleva el precio anterior y el nuevo).
+  PLAN_ACTUALIZADO
+  /// El plan dejó de ofrecerse (las membresías ya vendidas no se tocan).
+  PLAN_PAUSADO
+  /// El plan volvió a ofrecerse.
+  PLAN_REANUDADO
+  /// Se eliminó un plan.
+  PLAN_ELIMINADO
   /// Se evaluó un segmento de audiencia (auditoría de la estimación).
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.

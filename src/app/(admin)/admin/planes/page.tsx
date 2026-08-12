@@ -6,6 +6,8 @@ import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney } from '@/lib/format'
+import { sufijoPeriodo, textoVigencia } from '@/modules/planes/periodo'
+import { plural } from '@/lib/plural'
 import { prisma } from '@/lib/prisma'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,7 +37,8 @@ export default async function PlanesPage() {
     lavadosIncluidos: number; activo: boolean; descripcion: string | null;
     beneficios: string[]; companyId: string; vigenciaDias: number;
     condiciones: string | null; color: string | null; orden: number;
-    company: { name: string }; _count: { memberships: number }
+    company: { name: string }
+    _count: { memberships: number; membershipsSolicitadas: number }
   }[] = []
 
   // O-13: configuración del beneficio de bienvenida (solo vista por empresa;
@@ -75,7 +78,10 @@ export default async function PlanesPage() {
           beneficios: true, companyId: true, vigenciaDias: true,
           condiciones: true, color: true, orden: true,
           company: { select: { name: true } },
-          _count: { select: { memberships: true } },
+          // También los cambios de plan pendientes: impiden borrar igual que
+          // una membresía vendida, y sin contarlos el botón se ofrecía
+          // habilitado para fallar al pulsarlo.
+          _count: { select: { memberships: true, membershipsSolicitadas: true } },
         },
         orderBy: [{ companyId: 'asc' }, { orden: 'asc' }, { precio: 'asc' }],
       })
@@ -177,13 +183,19 @@ export default async function PlanesPage() {
               <CardContent className="space-y-3">
                 <p className="text-2xl font-bold">
                   {formatMoney(Number(plan.precio), prefs)}
-                  <span className="text-sm font-normal text-muted-foreground">/mes</span>
+                  {/* El «/mes» estaba escrito a mano aquí también, y esta
+                      pantalla la lee el dueño del negocio: un plan anual se le
+                      presentaba como mensual. Misma definición que usa el panel
+                      de plataforma — ver `@/modules/planes/periodo`. */}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {sufijoPeriodo(plan.vigenciaDias)}
+                  </span>
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {plan.esIlimitado
                     ? 'Usos ilimitados'
-                    : `${plan.lavadosIncluidos} usos`}{' '}
-                  · Vigencia {plan.vigenciaDias} días
+                    : plural(plan.lavadosIncluidos, 'uso', 'usos')}{' '}
+                  · {textoVigencia(plan.vigenciaDias)}
                 </p>
                 <ul className="space-y-1.5">
                   {plan.beneficios.map((b) => (
@@ -217,6 +229,7 @@ export default async function PlanesPage() {
                     <DeletePlanButton
                       planId={plan.id}
                       memberships={plan._count.memberships}
+                      solicitudes={plan._count.membershipsSolicitadas}
                     />
                   </div>
                 </div>
