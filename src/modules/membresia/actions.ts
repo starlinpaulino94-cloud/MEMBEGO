@@ -548,3 +548,96 @@ export async function cancelarPago(
   revalidatePath(`/membresia/${membershipId}`)
   return { success: true, eraCambioDePlan: false }
 }
+
+// ── Cancelación por el cliente, con efecto a fin de período ─────────────────
+
+export interface CancelarMembresiaState {
+  error?: string
+  success?: boolean
+}
+
+/**
+ * EL CLIENTE CANCELA SU PROPIA MEMBRESÍA (decisión de producto, 12-08-2026).
+ *
+ * No pierde nada hoy: la membresía sigue ACTIVA con sus usos hasta
+ * `fechaVencimiento`. Lo que cambia es el futuro — se apaga la renovación
+ * automática y queda la marca `canceladaAlVencimiento`, visible para él y
+ * para el negocio. Al vencer, muere sola (el flujo de vencimiento de
+ * siempre); los servicios restantes se van con el período, como pidió el
+ * dueño.
+ *
+ * La pertenencia es DE LA PERSONA, no de la ficha activa (cliente global):
+ * la misma regla que usa la pantalla del detalle — el `supabaseId` del
+ * dueño de la ficha debe ser el del usuario.
+ */
+export async function cancelarMiMembresia(
+  _prev: CancelarMembresiaState,
+  formData: FormData
+): Promise<CancelarMembresiaState> {
+  try {
+    const user = await getUser()
+    if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
+      return { error: 'No autorizado.' }
+    }
+    if (!(await formSubmitLimiter(user.metadata.clienteId))) {
+      return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
+    }
+
+    const membershipId = String(formData.get('membershipId') ?? '')
+    if (!membershipId) return { error: 'Falta la membresía.' }
+
+    const membership = await sinEmpresa(
+      'cancelar membresía: la persona la busca entre todas sus fichas',
+      (tx) =>
+        tx.membership.findUnique({
+          where: { id: membershipId },
+          select: {
+            id: true,
+            estado: true,
+            canceladaAlVencimiento: true,
+            cliente: { select: { id: true, supabaseId: true, companyId: true } },
+          },
+        })
+    )
+    if (!membership) return { error: 'Membresía no encontrada.' }
+    const esSuya =
+      membership.cliente.supabaseId === user.supabaseId ||
+      membership.cliente.id === user.metadata.clienteId
+    if (!esSuya) return { error: 'No autorizado.' }
+
+    if (membership.estado !== 'ACTIVA') {
+      return { error: 'Solo se puede cancelar una membresía activa.' }
+    }
+    if (membership.canceladaAlVencimiento) {
+      return { error: 'Esta membresía ya tiene la cancelación programada.' }
+    }
+
+    await conEmpresa(membership.cliente.companyId, async (tx) => {
+      await tx.membership.update({
+        where: { id: membership.id },
+        data: { canceladaAlVencimiento: new Date(), autoRenovar: false },
+      })
+      await tx.auditLog.create({
+        data: {
+          companyId: membership.cliente.companyId,
+          userId: null,
+          accion: 'MEMBRESIA_CANCELADA',
+          entidadTipo: 'Membership',
+          entidadId: membership.id,
+          payload: {
+            tipo: 'cancelacion_programada_por_cliente',
+            detalle:
+              'Sigue activa hasta el vencimiento, sin renovación. Pedida por el cliente desde la app.',
+          },
+        },
+      })
+    })
+
+    revalidatePath(`/membresia/${membership.id}`)
+    revalidatePath('/mis-membresias')
+    return { success: true }
+  } catch (e) {
+    console.error('[membresia] cancelarMiMembresia:', e)
+    return { error: 'No se pudo programar la cancelación. Intenta de nuevo.' }
+  }
+}

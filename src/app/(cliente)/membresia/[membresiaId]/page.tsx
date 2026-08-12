@@ -21,6 +21,7 @@ import {
 import { QRShareCard } from '@/components/qr/QRShareCard'
 import { OpcionesPago } from '@/components/membresia/OpcionesPago'
 import { CancelarPagoBoton } from '@/components/membresia/CancelarPagoBoton'
+import { CancelarMembresiaBoton } from '@/components/membresia/CancelarMembresiaBoton'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
@@ -531,6 +532,28 @@ export default async function MembershipDetail({
             </div>
           </section>
         )}
+
+        {/* Cancelación por el cliente (decisión de producto 12-08-2026):
+            posible sin ser la invitación — discreto, al final. Con la
+            cancelación ya programada, el aviso reemplaza al botón: se dice
+            hasta cuándo sigue activa y que no se renovará. */}
+        {isActive &&
+          (membership.canceladaAlVencimiento ? (
+            <p className="rounded-xl border border-warning/30 bg-warning/5 p-4 text-center text-sm text-foreground">
+              Cancelación programada: tu membresía sigue activa
+              {membership.fechaVencimiento
+                ? ` hasta el ${fmtFechaLarga(membership.fechaVencimiento)}`
+                : ' hasta su vencimiento'}{' '}
+              y no se renovará.
+            </p>
+          ) : (
+            <CancelarMembresiaBoton
+              membershipId={membership.id}
+              venceTexto={
+                membership.fechaVencimiento ? fmtFechaLarga(membership.fechaVencimiento) : null
+              }
+            />
+          ))}
       </div>
     </div>
   )

@@ -101,8 +101,15 @@ export function RenewForm({
     }
   }, [state.success, router])
 
+  // EL DIÁLOGO VIVE EN UN PORTAL, FUERA DEL <form> EN EL DOM. Un botón con
+  // type="submit" ahí dentro no envía nada: el diálogo se cerraba y no pasaba
+  // NADA, sin error — así se reportó («no hace nada»). El atributo form=
+  // re-asocia el botón con el formulario por id, que es exactamente el caso
+  // para el que existe en HTML.
+  const formId = `renovar-membresia-${membershipId}`
+
   return (
-    <form action={action} className="space-y-3">
+    <form id={formId} action={action} className="space-y-3">
       <input type="hidden" name="membershipId" value={membershipId} />
       {state.error && (
         <Alert variant="destructive">
@@ -130,7 +137,9 @@ export function RenewForm({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction type="submit">Confirmar renovación</AlertDialogAction>
+            <AlertDialogAction type="submit" form={formId}>
+              Confirmar renovación
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -152,8 +161,12 @@ export function CancelForm({ membershipId }: { membershipId: string }) {
     }
   }, [state.success, router])
 
+  // Mismo bug del portal que en RenewForm: el submit del diálogo no llegaba
+  // al formulario. Ver el comentario de arriba.
+  const formId = `cancelar-membresia-${membershipId}`
+
   return (
-    <form action={action}>
+    <form id={formId} action={action}>
       <input type="hidden" name="membershipId" value={membershipId} />
       {state.error && (
         <Alert variant="destructive" className="mb-3">
@@ -184,6 +197,7 @@ export function CancelForm({ membershipId }: { membershipId: string }) {
             <AlertDialogCancel>Volver</AlertDialogCancel>
             <AlertDialogAction
               type="submit"
+              form={formId}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
               Sí, cancelar
