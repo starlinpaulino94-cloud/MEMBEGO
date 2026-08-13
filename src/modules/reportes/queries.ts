@@ -11,6 +11,7 @@
  */
 
 import { conEmpresa, type Tx } from '@/lib/tenant'
+import { armarCsvBloques } from '@/lib/csv'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { whereCobrado } from '@/modules/pagos/cobrado'
 import type { Prisma } from '@prisma/client'
@@ -311,23 +312,28 @@ export async function getReporte(
   }
 }
 
-/** Escapa un campo para CSV (comillas, comas y saltos de línea). */
-function celda(v: string | number): string {
-  const s = String(v ?? '')
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-
 /**
- * CSV del reporte: la serie diaria, que es la tabla que la gente lleva a su
- * hoja de cálculo. Se usa `;` porque Excel en español lo espera como separador
- * y con `,` deja todo en una sola columna.
+ * CSV del reporte COMPLETO.
+ *
+ * Antes exportaba solo la serie diaria: una sexta parte de lo que la pantalla
+ * enseñaba, sin ninguna señal de que faltara el resto. Quien abría el archivo
+ * buscando «cómo pagaron» o «activas por plan» no encontraba nada y no tenía
+ * forma de saber si es que no había datos o es que no se exportaban.
+ *
+ * Van los seis bloques, cada uno con su título, separados por una línea en
+ * blanco: es lo que Excel abre de una pieza y lo que cualquiera sabe recortar.
+ * Un archivo por bloque obligaría a pulsar seis botones, y las hojas de un
+ * libro no caben en un CSV.
+ *
+ * El ALCANCE abre el archivo, igual que en el reporte de plataforma: un CSV
+ * descargado no lleva encima el periodo con el que se generó, y sin esa línea
+ * dos exportaciones del mismo día son indistinguibles.
  */
-export function reporteToCsv(serie: PuntoSerie[]): string {
-  const cabecera = ['Día', 'Ventas', 'Entregas sin cobro', 'Ingresos de caja']
-  const filas = serie.map((p) =>
-    [celda(p.dia), celda(p.ventas), celda(p.entregas), celda(p.ingresos.toFixed(2))].join(';')
-  )
-  const total = serie.reduce(
+export function reporteToCsv(
+  r: Reporte,
+  contexto: { empresa: string; desdeDia: string; hastaDia: string; dias: number }
+): string {
+  const totalSerie = r.serie.reduce(
     (acc, p) => ({
       ventas: acc.ventas + p.ventas,
       entregas: acc.entregas + p.entregas,
@@ -335,9 +341,73 @@ export function reporteToCsv(serie: PuntoSerie[]): string {
     }),
     { ventas: 0, entregas: 0, ingresos: 0 }
   )
-  return [
-    cabecera.join(';'),
-    ...filas,
-    ['TOTAL', total.ventas, total.entregas, total.ingresos.toFixed(2)].join(';'),
-  ].join('\n')
+
+  const conVariacion = (label: string, k: Kpi, dinero = false) => [
+    label,
+    dinero ? k.valor.toFixed(2) : k.valor,
+    dinero ? k.anterior.toFixed(2) : k.anterior,
+    k.variacion ?? '',
+  ]
+
+  return armarCsvBloques([
+    {
+      titulo: 'Alcance del reporte',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Empresa', contexto.empresa],
+        ['Periodo', `${contexto.desdeDia} a ${contexto.hastaDia}`],
+        ['Dias', contexto.dias],
+        ['Datos completos', r.incompleto ? 'NO - alguna consulta fallo' : 'Si'],
+      ],
+    },
+    {
+      titulo: 'Totales',
+      encabezados: ['Metrica', 'Periodo', 'Periodo anterior', 'Variacion %'],
+      filas: [
+        conVariacion('Ingresos de caja', r.ingresosCaja, true),
+        conVariacion('Cobros de membresias', r.ingresosMembresias, true),
+        conVariacion('Ventas', r.operaciones),
+        conVariacion('Entregas sin cobro', r.entregas),
+        conVariacion('Clientes nuevos', r.clientesNuevos),
+      ],
+    },
+    {
+      titulo: 'Actividad por dia',
+      encabezados: ['Dia', 'Ventas', 'Entregas sin cobro', 'Ingresos de caja'],
+      filas: [
+        ...r.serie.map((p) => [p.dia, p.ventas, p.entregas, p.ingresos.toFixed(2)]),
+        ['TOTAL', totalSerie.ventas, totalSerie.entregas, totalSerie.ingresos.toFixed(2)],
+      ],
+    },
+    {
+      titulo: 'Operaciones por tipo',
+      encabezados: ['Tipo', 'Operaciones', 'Ingresos'],
+      filas: r.porTipo.map((t) => [
+        TIPO_TX_LABEL[t.tipo] ?? t.tipo,
+        t.operaciones,
+        t.ingresos.toFixed(2),
+      ]),
+    },
+    {
+      titulo: 'Como pagaron',
+      encabezados: ['Metodo', 'Operaciones', 'Ingresos'],
+      filas: r.porMetodo.map((m) => [
+        METODO_LABEL[m.metodo] ?? m.metodo,
+        m.operaciones,
+        m.ingresos.toFixed(2),
+      ]),
+    },
+    {
+      titulo: 'Clientes mas activos',
+      encabezados: ['Cliente', 'Operaciones'],
+      filas: r.topClientes.map((c) => [c.nombre, c.operaciones]),
+    },
+    {
+      // Foto de hoy: no depende del periodo, y el título lo dice para que
+      // nadie la cruce con las cifras de arriba.
+      titulo: 'Membresias activas por plan (foto de hoy)',
+      encabezados: ['Plan', 'Activas'],
+      filas: r.activasPorPlan.map((p) => [p.plan, p.count]),
+    },
+  ])
 }

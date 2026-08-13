@@ -4,7 +4,8 @@ import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { getReporteOperativo } from '@/modules/apps/reportes'
-import { PageHeader } from '@/components/ui/page-header'
+import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -113,16 +114,37 @@ export default async function ReportesOperativosPage({
   ]
 
   return (
-    <div className="space-y-6">
-      {volver}
-      <PageHeader
-        title="Reportes operativos"
-        description="Cómo nos fue: vehículos atendidos, tiempo de servicio, canjes y consumo de insumos."
-      />
+    <ReporteImprimible
+      titulo="Reportes operativos"
+      subtitulo={`${reporte.rango.desde} a ${reporte.rango.hasta}`}
+      generadoEn={new Intl.DateTimeFormat('es-DO', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date())}
+      controles={
+        <>
+          <Button asChild variant="secondary" className="gap-1.5">
+            <Link href={`/admin/app/carwash/reportes/export?${exportQs}`}>
+              <Download className="h-4 w-4" aria-hidden /> Exportar CSV
+            </Link>
+          </Button>
+          <BotonImprimir />
+        </>
+      }
+      pie={
+        reporte.minutosPromedio != null
+          ? `El tiempo promedio se calcula sobre ${reporte.entregasMedidas} entregas con hora de entrada y salida registrada.`
+          : undefined
+      }
+    >
+      <div className="print:hidden">{volver}</div>
+      <p className="text-small text-muted-foreground print:hidden">
+        Cómo nos fue: vehículos atendidos, tiempo de servicio, canjes y consumo de insumos.
+      </p>
 
       <Form
         action="/admin/app/carwash/reportes"
-        className="flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card p-4"
+        className="print:hidden flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card p-4"
       >
         <label className="text-xs text-muted-foreground">
           Desde
@@ -133,11 +155,6 @@ export default async function ReportesOperativosPage({
           <Input type="date" name="hasta" defaultValue={reporte.rango.hasta} className="mt-1" />
         </label>
         <Button type="submit" variant="secondary">Ver</Button>
-        <Button asChild variant="ghost" className="gap-1.5">
-          <Link href={`/admin/app/carwash/reportes/export?${exportQs}`}>
-            <Download className="h-4 w-4" /> CSV
-          </Link>
-        </Button>
       </Form>
 
       {reporte.recortado && (
@@ -157,12 +174,9 @@ export default async function ReportesOperativosPage({
         ))}
       </dl>
 
-      {reporte.minutosPromedio != null && (
-        <p className="text-xs text-muted-foreground">
-          El tiempo promedio se calcula sobre {reporte.entregasMedidas} entrega
-          {reporte.entregasMedidas !== 1 ? 's' : ''} con hora de entrada y salida registrada.
-        </p>
-      )}
+      {/* La nota del promedio la pone `ReporteImprimible` en el pie: ahí sale
+          también en papel, que es donde más falta hace explicar de qué está
+          hecho un número. */}
 
       {conMovimiento.length === 0 ? (
         <EmptyState
@@ -251,6 +265,6 @@ export default async function ReportesOperativosPage({
           )}
         </section>
       </div>
-    </div>
+    </ReporteImprimible>
   )
 }

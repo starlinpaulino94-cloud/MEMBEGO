@@ -1,5 +1,7 @@
 import { requireRole } from '@/lib/auth/guards'
+import { plural } from '@/lib/plural'
 import { getPanelIntegraciones } from '@/modules/integraciones/panel'
+import { anclaSistema } from '@/modules/integraciones/diagnostico'
 import { SistemaConectadoCard } from '@/components/superadmin/SistemaConectadoCard'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -37,11 +39,27 @@ export default async function IntegracionesPage() {
       {atascados.length > 0 && (
         <StatusBanner
           variant="warning"
-          title={`${atascados.length === 1 ? 'Un sistema no está recibiendo' : `${atascados.length} sistemas no están recibiendo`} sus eventos`}
+          title={`${plural(atascados.length, 'sistema no está recibiendo', 'sistemas no están recibiendo')} sus eventos`}
         >
-          Los eventos no se pierden: quedan en cola y se reintentan una vez al día, hasta 8 veces.
-          Usa «Probar el webhook» para ver qué responde el otro sistema y a quién le toca
-          arreglarlo.
+          {/* CUÁLES. El aviso decía «2 sistemas» y ahí se acababa: con varios
+              satélites conectados había que bajar leyendo tarjetas una por una
+              hasta dar con los que fallan. */}
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {atascados.map((s) => (
+              <a
+                key={s.id}
+                href={`#${anclaSistema(s.slug)}`}
+                className="font-medium underline underline-offset-2"
+              >
+                {s.nombre} ({plural(s.pendientes, 'pendiente', 'pendientes')})
+              </a>
+            ))}
+          </span>
+          <span className="mt-2 block">
+            Los eventos no se pierden: quedan en cola y se reintentan una vez al día, hasta 8
+            veces. Usa «Probar el webhook» para ver qué responde el otro sistema y a quién le toca
+            arreglarlo.
+          </span>
         </StatusBanner>
       )}
 

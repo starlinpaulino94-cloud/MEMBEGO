@@ -11,6 +11,25 @@
  */
 
 /**
+ * EL SEPARADOR, DE UNA VEZ Y EN UN SOLO SITIO.
+ *
+ * Había dos dialectos conviviendo: este helper unía con coma y siete módulos
+ * unían con punto y coma. El comentario de `reportes/queries.ts` explicaba por
+ * qué el punto y coma es el correcto —«Excel en español lo espera como
+ * separador y con `,` deja todo en una sola columna»— y el helper compartido,
+ * que es el que más gente usa, hacía justo lo contrario. El resultado eran
+ * cuatro exportaciones (Clientes, Membresías, Riesgo, Empresas) que llegaban
+ * al usuario con las diecinueve columnas metidas en la primera.
+ *
+ * Ahora hay uno. Cambiarlo rompe cualquier hoja de cálculo que ya consumiera
+ * los cuatro archivos de coma, y aun así es lo correcto: el resto de la
+ * plataforma —incluida la Auditoría— ya usaba punto y coma, así que la
+ * alternativa era dejar al usuario adivinando cuál de sus descargas se abre
+ * bien.
+ */
+export const SEPARADOR_CSV = ';'
+
+/**
  * Escapa un valor de celda. Se entrecomilla también ante `;` porque Excel en
  * configuración regional española usa el punto y coma como separador y una
  * dirección con `;` partiría la fila en dos.
@@ -29,11 +48,29 @@ export function celdaCsv(valor: unknown): string {
  * con los nombres rotos no se usa dos veces.
  */
 export function armarCsv(encabezados: string[], filas: unknown[][]): string {
-  const lineas = [
-    encabezados.map(celdaCsv).join(','),
-    ...filas.map((f) => f.map(celdaCsv).join(',')),
-  ]
-  return `﻿${lineas.join('\n')}`
+  const linea = (celdas: unknown[]) => celdas.map(celdaCsv).join(SEPARADOR_CSV)
+  return `﻿${[linea(encabezados), ...filas.map(linea)].join('\n')}`
+}
+
+/**
+ * Une varias tablas en un solo archivo, cada una con su título.
+ *
+ * Existe porque un reporte no es UNA tabla: el de empresa tiene cinco KPIs,
+ * una serie diaria y cuatro desgloses, y hasta ahora el CSV exportaba solo la
+ * serie. Quien abría el archivo esperando el reporte que estaba viendo se
+ * encontraba una sexta parte de él, sin ninguna señal de que faltara el resto.
+ *
+ * Un archivo por bloque obligaría a pulsar seis botones; las hojas de un libro
+ * de Excel no caben en un CSV. Bloques separados por una línea en blanco es lo
+ * que Excel abre de una pieza y lo que cualquiera sabe recortar.
+ */
+export function armarCsvBloques(
+  bloques: { titulo: string; encabezados: string[]; filas: unknown[][] }[]
+): string {
+  const partes = bloques.map((b) =>
+    [celdaCsv(b.titulo), armarCsv(b.encabezados, b.filas).replace('﻿', '')].join('\n')
+  )
+  return `﻿${partes.join('\n\n')}`
 }
 
 /** Fecha para una celda, en la zona horaria del negocio (vacío si no hay). */
@@ -50,13 +87,21 @@ export function fechaCsv(
   }).format(fecha)
 }
 
-/** Cabeceras de una descarga de CSV con nombre fechado. */
-export function respuestaCsv(csv: string, nombre: string): Response {
+/**
+ * Cabeceras de una descarga de CSV con nombre fechado.
+ *
+ * `fechar: false` para los archivos que YA llevan su periodo en el nombre
+ * (`reportes-plataforma-2026-05-01_2026-05-31`): añadirles la fecha de descarga
+ * da un nombre con tres fechas donde solo una significa algo, y en una carpeta
+ * de descargas eso se lee peor que un nombre corto.
+ */
+export function respuestaCsv(csv: string, nombre: string, opciones?: { fechar?: boolean }): Response {
   const hoy = new Date().toISOString().slice(0, 10)
+  const archivo = opciones?.fechar === false ? nombre : `${nombre}-${hoy}`
   return new Response(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${nombre}-${hoy}.csv"`,
+      'Content-Disposition': `attachment; filename="${archivo}.csv"`,
       'Cache-Control': 'no-store',
     },
   })

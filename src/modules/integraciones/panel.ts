@@ -16,6 +16,7 @@ import {
   type Diagnostico,
   type RespuestaSonda,
 } from '@/modules/integraciones/diagnostico'
+import { ultimasSondas, type SondaGuardada } from '@/modules/integraciones/auditoria'
 
 /**
  * Integraciones · PANEL DEL SUPERADMIN.
@@ -38,6 +39,27 @@ import {
 const TIMEOUT_SONDA_MS = 10_000
 /** Recorte del cuerpo: lo justo para reconocer una página de error. */
 const MAX_CUERPO = 300
+
+/**
+ * Un evento concreto que no está saliendo.
+ *
+ * El panel solo daba números: «37 pendientes». Con eso no se puede decidir
+ * nada, porque las dos situaciones que llevan a ese 37 piden respuestas
+ * opuestas: si son 37 eventos de un tipo que el satélite todavía no implementa,
+ * lo que toca es hablar con su equipo; si son de todos los tipos y de varias
+ * empresas, el webhook está caído y hay que arreglarlo ya. Ver tres filas
+ * distingue las dos en un vistazo.
+ */
+export interface EventoAtascado {
+  id: string
+  /** Nombre interno del evento (`cliente.visita`). */
+  tipo: string
+  /** Nombre de la empresa, o su id si ya no existe. */
+  empresa: string
+  intentos: number
+  ultimoError: string | null
+  createdAt: Date
+}
 
 export interface ResumenSistema {
   id: string
@@ -62,7 +84,14 @@ export interface ResumenSistema {
   /** Cuántos intentos lleva el evento pendiente más castigado (tope: 8). */
   maxIntentos: number
   esperandoDesde: Date | null
+  /** Muestra de la cola: los más castigados, los que están a punto de agotarse. */
+  atascados: EventoAtascado[]
+  /** Última vez que se probó el webhook, según la bitácora. */
+  ultimaSonda: SondaGuardada | null
 }
+
+/** Cuántos eventos atascados se enseñan por sistema. */
+export const MUESTRA_ATASCADOS = 5
 
 interface FilaSistema {
   id: string
@@ -140,36 +169,127 @@ async function leerCatalogo(tx: Tx): Promise<FilaSistema[]> {
   }
 }
 
-/** Estado de cada sistema conectado y de su cola de eventos. */
+/**
+ * Estado de cada sistema conectado y de su cola de eventos.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * UNA CONSULTA CUANDO NO HAY NADA ATASCADO
+ *
+ * Antes esto era un bucle: por cada sistema, un `groupBy` de su cola y un
+ * `findFirst` del pendiente más viejo. Veintiuna consultas con diez sistemas,
+ * y las hacía SIEMPRE, aunque estuviera todo verde. Es el mismo N+1 que el
+ * panel de Operaciones documenta haber evitado.
+ *
+ * Ahora un solo `groupBy` por `[sistemaId, estado]` resuelve los tres conteos,
+ * el máximo de intentos y desde cuándo espera el más viejo, para TODOS los
+ * sistemas y sin traer una sola fila. Lo demás solo se pide para los sistemas
+ * que de verdad tienen cola —normalmente ninguno o uno— y con tope: leer los
+ * pendientes enteros haría que esta pantalla se volviera lenta justo cuando un
+ * satélite lleva una semana caído, que es exactamente cuando se abre.
+ */
 export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
   return sinEmpresa('panel del superadmin: estado de las integraciones y colas de todas las empresas', async (tx) => {
     const sistemas = await leerCatalogo(tx)
+    if (sistemas.length === 0) return []
+    const ids = sistemas.map((s) => s.id)
 
-    const resumenes: ResumenSistema[] = []
+    const porEstado = await tx.eventoSaliente
+      .groupBy({
+        by: ['sistemaId', 'estado'],
+        where: { sistemaId: { in: ids } },
+        _count: { _all: true },
+        // El más castigado y el más viejo de la cola, agregados por la base:
+        // salían de traerse las filas y recorrerlas.
+        _max: { intentos: true },
+        _min: { createdAt: true },
+      })
+      .catch(() => [])
+
+    const pendientesDe = (id: string) => porEstado.find((g) => g.sistemaId === id && g.estado === 'PENDIENTE')
+
+    /**
+     * LA MUESTRA DE LO QUE ESTÁ ATASCADO, Y EL ÚLTIMO ERROR DE VERDAD.
+     *
+     * El error salía del MISMO evento que la espera: el pendiente más viejo. Y
+     * eso rompe justo después de pulsar «reencolar», que es cuando más se mira
+     * esta pantalla: revivir pone `ultimoError: null` e `intentos: 0`, y los
+     * revividos son por definición los más antiguos de la cola. Resultado: el
+     * panel decía «sin error, 0 intentos» mientras el resto seguía rebotando
+     * con un 401. Enseñaba el hueco que acababa de abrir el propio botón.
+     *
+     * Se pide por `intentos` descendente, así que la primera fila es la más
+     * castigada: la que más pasadas del cron ha recibido y, por tanto, la que
+     * tiene el error más reciente. `EventoSaliente` no guarda CUÁNDO fue el
+     * último intento, solo cuántos van, pero sirve igual porque el cron drena
+     * siempre de más viejo a más nuevo (`orderBy: createdAt asc` en
+     * `reintentarPendientes`). Un `updatedAt` daría la fecha exacta a cambio de
+     * una columna NOT NULL nueva de la que dependería esta consulta — y entre
+     * el despliegue del código y el de la migración la pantalla se quedaría en
+     * blanco, que es el fallo que `leerCatalogo` ya tiene que sortear.
+     */
+    const muestra = new Map<string, EventoAtascado[]>()
+    const errorReciente = new Map<string, string>()
+    const crudo = new Map<string, { companyId: string; id: string; tipo: string; intentos: number; ultimoError: string | null; createdAt: Date }[]>()
     for (const s of sistemas) {
-      // Un groupBy por estado y una lectura del pendiente más viejo: el detalle
-      // fila por fila no aporta nada cuando hay decenas de eventos iguales.
-      const porEstado = await tx.eventoSaliente
-        .groupBy({
-          by: ['estado'],
-          where: { sistemaId: s.id },
-          _count: { _all: true },
-          _max: { intentos: true },
+      if ((pendientesDe(s.id)?._count._all ?? 0) === 0) continue
+      const filas = await tx.eventoSaliente
+        .findMany({
+          where: { sistemaId: s.id, estado: 'PENDIENTE' },
+          orderBy: [{ intentos: 'desc' }, { createdAt: 'asc' }],
+          take: MUESTRA_ATASCADOS,
+          select: {
+            id: true,
+            companyId: true,
+            tipo: true,
+            createdAt: true,
+            ultimoError: true,
+            intentos: true,
+          },
         })
         .catch(() => [])
+      crudo.set(s.id, filas)
+      const conError = filas.find((f) => f.ultimoError)
+      if (conError?.ultimoError) errorReciente.set(s.id, conError.ultimoError)
+    }
 
+    /**
+     * El nombre de la empresa, no su cuid.
+     *
+     * Un `cmp3k9...` en pantalla obliga a ir a buscarlo a otra tabla para
+     * responder a la única pregunta que importa aquí: «¿esto le está pasando a
+     * un cliente o a la empresa de pruebas?». Se resuelven solo las que
+     * aparecen en la muestra, que son pocas.
+     */
+    const empresaIds = [...new Set([...crudo.values()].flat().map((p) => p.companyId))]
+    const nombres = new Map(
+      (empresaIds.length > 0
+        ? await tx.company
+            .findMany({ where: { id: { in: empresaIds } }, select: { id: true, name: true } })
+            .catch(() => [])
+        : []
+      ).map((c) => [c.id, c.name])
+    )
+    for (const [sistemaId, filas] of crudo) {
+      muestra.set(
+        sistemaId,
+        filas.map((p) => ({
+          id: p.id,
+          tipo: p.tipo,
+          empresa: nombres.get(p.companyId) ?? p.companyId,
+          intentos: p.intentos,
+          ultimoError: p.ultimoError,
+          createdAt: p.createdAt,
+        }))
+      )
+    }
+
+    const sondas = await ultimasSondas(tx, ids)
+
+    return sistemas.map((s) => {
+      const suyos = porEstado.filter((g) => g.sistemaId === s.id)
       const cuenta = (estado: string) =>
-        porEstado.find((g) => g.estado === estado)?._count._all ?? 0
-
-      const masViejo = await tx.eventoSaliente
-        .findFirst({
-          where: { sistemaId: s.id, estado: 'PENDIENTE' },
-          orderBy: { createdAt: 'asc' },
-          select: { createdAt: true, ultimoError: true, intentos: true },
-        })
-        .catch(() => null)
-
-      resumenes.push({
+        suyos.find((g) => g.estado === estado)?._count._all ?? 0
+      return {
         id: s.id,
         slug: s.slug,
         nombre: s.nombre,
@@ -186,15 +306,13 @@ export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
         // llamaba antes de la Fase 3, y sigue en las filas anteriores a la
         // migración. Contar solo uno haría desaparecer del panel media cola.
         fallidos: cuenta('DEAD_LETTER') + cuenta('FALLIDO'),
-        ultimoError: masViejo?.ultimoError ?? null,
-        maxIntentos: Math.max(
-          0,
-          ...porEstado.map((g) => (g.estado === 'PENDIENTE' ? (g._max.intentos ?? 0) : 0))
-        ),
-        esperandoDesde: masViejo?.createdAt ?? null,
-      })
-    }
-    return resumenes
+        ultimoError: errorReciente.get(s.id) ?? null,
+        maxIntentos: pendientesDe(s.id)?._max.intentos ?? 0,
+        esperandoDesde: pendientesDe(s.id)?._min.createdAt ?? null,
+        atascados: muestra.get(s.id) ?? [],
+        ultimaSonda: sondas.get(s.id) ?? null,
+      }
+    })
   })
 }
 

@@ -39,7 +39,9 @@ const DECLARADOS = new Map<string, string>([
   ['src/components/facturas/FacturaPrintDialog.tsx', 'comprobante impreso'],
   ['src/components/scanner/ComprobanteReceipt.tsx', 'comprobante impreso'],
   ['src/components/admin/ReceiptTemplateEditor.tsx', 'vista previa del ticket impreso'],
-  ['src/app/(admin)/admin/registros/page.tsx', 'reporte imprimible'],
+  // `src/app/(admin)/admin/registros/page.tsx` estaba aquí por su
+  // `text-black`: ahora el color del papel lo pone `ReporteImprimible` en su
+  // `@media print`, así que la página ya no mezcla nada.
   // QR: el lector necesita blanco real detrás del código.
   ['src/components/cliente/IdMembegoCard.tsx', 'fondo del QR'],
   ['src/components/admin/CompanyQRRegistro.tsx', 'fondo del QR'],

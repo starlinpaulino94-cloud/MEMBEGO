@@ -203,12 +203,25 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
  * El coste es una consulta por empresa —no por evento— gracias al memo: cien
  * eventos pendientes suelen ser de dos o tres empresas.
  */
-export async function reintentarPendientes(limite = 100): Promise<{ enviados: number; fallidos: number }> {
+export async function reintentarPendientes(
+  limite = 100,
+  /**
+   * Acota el reintento a UN sistema. Sin él se despacha todo, que es lo que
+   * quiere el cron.
+   *
+   * Existe porque el botón «reintentar» vive en la tarjeta de un satélite
+   * concreto y llamaba a esta función SIN argumento: pulsarlo en el sistema del
+   * restaurante disparaba también la cola del car wash — que podía estar
+   * encolada precisamente porque ese otro sistema estaba caído. Y el mensaje de
+   * vuelta («12 entregados») mezclaba los de todos.
+   */
+  sistemaId?: string
+): Promise<{ enviados: number; fallidos: number }> {
   let enviados = 0
   let fallidos = 0
-  const pendientes = await sinEmpresa('integraciones: reintento global de eventos pendientes (cron)', (tx) =>
+  const pendientes = await sinEmpresa('integraciones: reintento de eventos pendientes', (tx) =>
     tx.eventoSaliente.findMany({
-      where: { estado: 'PENDIENTE' },
+      where: { estado: 'PENDIENTE', ...(sistemaId ? { sistemaId } : {}) },
       orderBy: { createdAt: 'asc' },
       take: limite,
     })

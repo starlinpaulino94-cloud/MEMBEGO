@@ -7,7 +7,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
-import { ImprimirReporteButton } from '@/components/registros/ImprimirReporteButton'
+import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { AnularTransaccionButton } from '@/components/registros/AnularTransaccionButton'
 import {
   getRegistros,
@@ -182,7 +183,7 @@ export default async function RegistrosPage({
               <Download className="h-3.5 w-3.5" /> Exportar CSV
             </a>
           </Button>
-          {items.length > 0 && <ImprimirReporteButton />}
+          {items.length > 0 && <BotonImprimir variant="outline" label="Imprimir reporte" />}
         </div>
       </div>
 
@@ -268,57 +269,52 @@ export default async function RegistrosPage({
         />
       )}
 
-      {/* Reporte imprimible (aislado por @media print) */}
+      {/* LA VERSIÓN DE PAPEL, que es distinta de la de pantalla a propósito:
+          la tabla de arriba tiene nueve columnas y 860 px de ancho mínimo, y en
+          A4 sale cortada. El `@media print` ya no vive aquí — lo pone
+          `ReporteImprimible`, que es el único sitio del panel donde está
+          escrito. Eran cinco copias del mismo truco de CSS. */}
       {items.length > 0 && (
-        <div className="registros-print hidden" aria-hidden>
-          <style>{`
-            @media print {
-              @page { margin: 12mm; }
-              body * { visibility: hidden !important; }
-              .registros-print, .registros-print * { visibility: visible !important; }
-              .registros-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
-            }
-          `}</style>
-          <div className="text-black">
-            <h1 className="text-lg font-bold">{empresa?.name ?? 'MembeGo'} · Reporte de registros</h1>
-            <p className="text-xs">
-              Generado {fmtFecha(new Date().toISOString())} · {items.length} de {total} registros
-            </p>
-            <div className="my-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
-              <span><strong>Ingresos:</strong> {fmtRD(resumen.total)}</span>
-              <span><strong>Operaciones:</strong> {resumen.cantidad}</span>
-              <span><strong>Efectivo:</strong> {fmtRD(resumen.porMetodo.efectivo)}</span>
-              <span><strong>Transferencia:</strong> {fmtRD(resumen.porMetodo.transferencia)}</span>
-              <span><strong>Otro:</strong> {fmtRD(resumen.porMetodo.otro)}</span>
-            </div>
-            <table className="w-full border-collapse text-[10px]">
-              <thead>
-                <tr className="border-b border-black text-left">
-                  <th className="py-1 pr-2">Fecha</th>
-                  <th className="py-1 pr-2">Comprobante</th>
-                  <th className="py-1 pr-2">Tipo</th>
-                  <th className="py-1 pr-2">Cliente</th>
-                  <th className="py-1 pr-2">Empleado</th>
-                  <th className="py-1 pr-2 text-right">Monto</th>
-                  <th className="py-1 pr-2">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((r) => (
-                  <tr key={r.id} className="border-b border-black/20">
-                    <td className="py-0.5 pr-2 whitespace-nowrap">{fmtFecha(r.fecha)}</td>
-                    <td className="py-0.5 pr-2 font-mono">{r.ticketNumero}</td>
-                    <td className="py-0.5 pr-2">{r.tipoLabel}</td>
-                    <td className="py-0.5 pr-2">{r.cliente ?? '—'}</td>
-                    <td className="py-0.5 pr-2">{r.empleado ?? '—'}</td>
-                    <td className="py-0.5 pr-2 text-right tabular-nums">{r.monto == null ? '—' : fmtRD(r.monto)}</td>
-                    <td className="py-0.5 pr-2">{r.estadoLabel}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <ReporteImprimible
+          soloPapel
+          titulo={`${empresa?.name ?? 'MembeGo'} · Reporte de registros`}
+          subtitulo={`${items.length} de ${total} registros${hayFiltro ? ' (con filtros aplicados)' : ''}`}
+          generadoEn={fmtFecha(new Date().toISOString())}
+        >
+          <div className="my-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+            <span><strong>Ingresos:</strong> {fmtRD(resumen.total)}</span>
+            <span><strong>Operaciones:</strong> {resumen.cantidad}</span>
+            <span><strong>Efectivo:</strong> {fmtRD(resumen.porMetodo.efectivo)}</span>
+            <span><strong>Transferencia:</strong> {fmtRD(resumen.porMetodo.transferencia)}</span>
+            <span><strong>Otro:</strong> {fmtRD(resumen.porMetodo.otro)}</span>
           </div>
-        </div>
+          <table className="w-full border-collapse text-[10px]">
+            <thead>
+              <tr className="border-b border-black text-left">
+                <th className="py-1 pr-2">Fecha</th>
+                <th className="py-1 pr-2">Comprobante</th>
+                <th className="py-1 pr-2">Tipo</th>
+                <th className="py-1 pr-2">Cliente</th>
+                <th className="py-1 pr-2">Empleado</th>
+                <th className="py-1 pr-2 text-right">Monto</th>
+                <th className="py-1 pr-2">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r.id} className="border-b border-black/20">
+                  <td className="py-0.5 pr-2 whitespace-nowrap">{fmtFecha(r.fecha)}</td>
+                  <td className="py-0.5 pr-2 font-mono">{r.ticketNumero}</td>
+                  <td className="py-0.5 pr-2">{r.tipoLabel}</td>
+                  <td className="py-0.5 pr-2">{r.cliente ?? '—'}</td>
+                  <td className="py-0.5 pr-2">{r.empleado ?? '—'}</td>
+                  <td className="py-0.5 pr-2 text-right tabular-nums">{r.monto == null ? '—' : fmtRD(r.monto)}</td>
+                  <td className="py-0.5 pr-2">{r.estadoLabel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ReporteImprimible>
       )}
     </div>
   )

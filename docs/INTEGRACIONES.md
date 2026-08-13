@@ -306,7 +306,25 @@ no estorba: se reemplaza el transporte sin tocar el mapeo de usuarios.
 
 ## Operación (lado MembeGo)
 
-- Outbox: tabla `eventos_salientes` (PENDIENTE → ENVIADO/FALLIDO, 8 intentos).
-- Cron de reintentos: `/api/cron/integraciones` (cada hora, `CRON_SECRET`).
+- Outbox: tabla `eventos_salientes` (PENDIENTE → ENVIADO/DEAD_LETTER, 8 intentos).
+- Cron de reintentos: `/api/cron/integraciones` (cada hora, `CRON_SECRET`). El
+  cron despacha TODAS las colas; el botón del panel acota a un solo sistema.
 - Alta de un sistema nuevo: fila en `sistemas_conectados` con secreto de 64 hex
   (`SELECT encode(gen_random_bytes(32), 'hex')`).
+
+### Panel del superadmin (`/superadmin/integraciones`)
+
+Tres acciones, y las tres quedan en la bitácora (`Auditoría`, filtrando por la
+acción). Se registran porque salen del sistema: dos tocan el dominio de un
+tercero y una pone en movimiento eventos de todas las empresas que lo usan.
+
+| Acción | Qué hace | Acción de bitácora |
+| --- | --- | --- |
+| Probar el webhook | Un GET y un POST firmado a la URL, con `membego.ping` | `INTEGRACION_SONDEADA` |
+| Reenviar ahora | Despacha los PENDIENTE **de ese sistema** sin esperar al cron | `INTEGRACION_REINTENTADA` |
+| Devolver los agotados | DEAD_LETTER → PENDIENTE (pide confirmación) | `INTEGRACION_REENCOLADA` |
+
+De la sonda se guarda el veredicto (código, titular, gravedad), **nunca el
+cuerpo** de la respuesta del satélite: puede traer datos de sus clientes y la
+bitácora la consulta más gente que este panel. El cuerpo crudo se enseña en
+pantalla, en ese momento, para reenviárselo a su equipo.

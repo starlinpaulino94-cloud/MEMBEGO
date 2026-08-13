@@ -161,3 +161,15 @@ export function diagnosticarSonda(get: RespuestaSonda, post: RespuestaSonda): Di
     siguiente: 'Manda este código y este cuerpo al equipo del satélite.',
   }
 }
+
+/**
+ * Ancla de la tarjeta de un sistema dentro del panel.
+ *
+ * Vive en el módulo puro para que la usen los dos lados: la tarjeta (cliente)
+ * la pone y el aviso de cabecera (servidor) enlaza a ella. Escrita dos veces
+ * sería exactamente el tipo de cadena que se desincroniza en silencio — el
+ * enlace no rompe nada, solo deja de llevar a ningún sitio.
+ */
+export function anclaSistema(slug: string): string {
+  return `sistema-${slug.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+}

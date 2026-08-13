@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { armarCsv } from '@/lib/csv'
 
 /**
  * Registros / Comprobantes (Control de comprobantes · Fase 3 · G7+G10).
@@ -301,7 +302,13 @@ export async function getRegistrosParaExport(
   return rows.map(mapItem)
 }
 
-/** Serializa registros a CSV (con BOM para Excel es-DO). */
+/**
+ * Serializa registros a CSV.
+ *
+ * Por `armarCsv` (`lib/csv.ts`), que es la única puerta: este archivo tenía su
+ * propio escapado y unía con coma, así que en Excel es-DO las doce columnas
+ * llegaban metidas en la primera.
+ */
 export function registrosToCsv(items: RegistroItem[], timeZone: string): string {
   const fmtFecha = (iso: string) =>
     new Intl.DateTimeFormat('es-DO', {
@@ -310,27 +317,22 @@ export function registrosToCsv(items: RegistroItem[], timeZone: string): string 
       timeStyle: 'short',
     }).format(new Date(iso))
 
-  const esc = (v: string | number | null) => {
-    const s = v == null ? '' : String(v)
-    return /[",\n;]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s
-  }
-
-  const cabeceras = [
-    'Fecha',
-    'Ticket',
-    'Codigo',
-    'Tipo',
-    'Estado',
-    'Cliente',
-    'Detalle',
-    'Empleado',
-    'Sucursal',
-    'Metodo',
-    'Monto',
-    'Impresiones',
-  ]
-  const lineas = items.map((i) =>
+  return armarCsv(
     [
+      'Fecha',
+      'Ticket',
+      'Codigo',
+      'Tipo',
+      'Estado',
+      'Cliente',
+      'Detalle',
+      'Empleado',
+      'Sucursal',
+      'Metodo',
+      'Monto',
+      'Impresiones',
+    ],
+    items.map((i) => [
       fmtFecha(i.fecha),
       i.ticketNumero,
       i.codigo,
@@ -343,9 +345,6 @@ export function registrosToCsv(items: RegistroItem[], timeZone: string): string 
       i.metodoCobro ? METODO_LABEL[i.metodoCobro] ?? i.metodoCobro : '',
       i.monto == null ? '' : i.monto.toFixed(2),
       i.impresiones,
-    ]
-      .map(esc)
-      .join(',')
+    ])
   )
-  return '﻿' + [cabeceras.join(','), ...lineas].join('\r\n')
 }

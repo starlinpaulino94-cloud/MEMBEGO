@@ -3,7 +3,8 @@ import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { Button } from '@/components/ui/button'
-import { ImprimirReporteButton } from '@/components/registros/ImprimirReporteButton'
+import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import {
   getSeguimiento,
   getConversionPorPromo,
@@ -77,35 +78,22 @@ export default async function SeguimientoImprimirPage({
   ).toString()
 
   return (
-    <div className="seguimiento-print space-y-6 print:space-y-4">
-      {/* En papel solo se ve el reporte (sin sidebar/encabezado del panel). */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .seguimiento-print, .seguimiento-print * { visibility: visible !important; }
-          .seguimiento-print { position: absolute; left: 0; top: 0; width: 100%; }
-          .seguimiento-print .print\\:hidden, .seguimiento-print .print\\:hidden * { display: none !important; }
-        }
-      `}</style>
-      {/* Controles (no salen en papel) */}
-      <div className="flex items-center justify-between gap-2 print:hidden">
+    <ReporteImprimible
+      titulo={`Reporte de recompensas gratis · ${empresa?.name ?? ''}`}
+      subtitulo={periodo}
+      generadoEn={generado}
+      controles={<BotonImprimir variant="outline" />}
+    >
+      {/* El `@media print` ya no vive aquí: lo pone `ReporteImprimible`, que es
+          el único sitio del panel donde está escrito. Eran cinco copias del
+          mismo truco de CSS, cada una con su propia variante. */}
+      <div className="print:hidden">
         <Button asChild variant="ghost" size="sm" className="gap-1.5">
           <Link href={`/admin/seguimiento${qs ? `?${qs}` : ''}`}>
-            <ArrowLeft className="h-4 w-4" /> Volver al seguimiento
+            <ArrowLeft className="h-4 w-4" aria-hidden /> Volver al seguimiento
           </Link>
         </Button>
-        <ImprimirReporteButton label="Imprimir / guardar PDF" />
       </div>
-
-      {/* Cabecera del reporte */}
-      <header className="border-b border-border pb-4">
-        <h1 className="text-xl font-bold text-foreground">
-          Reporte de recompensas gratis · {empresa?.name ?? ''}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {periodo} · Generado el {generado}
-        </p>
-      </header>
 
       {/* Resumen */}
       <section>
@@ -214,6 +202,6 @@ export default async function SeguimientoImprimirPage({
           </tbody>
         </table>
       </section>
-    </div>
+    </ReporteImprimible>
   )
 }

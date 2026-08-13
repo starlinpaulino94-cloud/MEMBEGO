@@ -1,12 +1,13 @@
 import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Download } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatMoney } from '@/lib/format'
+import { formatDateTime, formatMoney } from '@/lib/format'
 import { getRetencion } from '@/modules/riesgo/retencion'
-import { PageHeader } from '@/components/ui/page-header'
+import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -59,12 +60,23 @@ export default async function RetencionPage() {
   const maxTramo = Math.max(1, ...r.inactividad.map((t) => t.clientes))
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        eyebrow="Analítica"
-        title="Retención y consumo"
-        description="Quién se está enfriando, cuántos vuelven al vencer, y cuánto servicio pagado sigue sin prestarse."
-      />
+    <ReporteImprimible
+      titulo="Retención y consumo"
+      subtitulo="Quién se está enfriando, cuántos vuelven al vencer, y cuánto servicio pagado sigue sin prestarse."
+      generadoEn={formatDateTime(new Date(), prefs)}
+      
+      controles={
+        <>
+          <Button asChild variant="secondary">
+            <a href="/admin/retencion/export">
+              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
+            </a>
+          </Button>
+          <BotonImprimir />
+        </>
+      }
+      pie="Los usos pagados sin consumir son un PASIVO: servicio ya cobrado que el negocio todavía tiene que prestar."
+    >
 
       {/* ── Enfriamiento ────────────────────────────────────────────────── */}
       <section className="space-y-4">
@@ -167,7 +179,9 @@ export default async function RetencionPage() {
       </section>
 
       {/* ── Umbrales ────────────────────────────────────────────────────── */}
-      <section className="space-y-4">
+      {/* Fuera del papel: es un formulario de configuración, no un dato del
+          reporte. En una hoja impresa sería una caja de campos vacíos. */}
+      <section className="print:hidden space-y-4">
         <SectionHeader
           title="Cuándo se considera que un cliente se está yendo"
           description="Estos números definen el semáforo que verás en la tabla de clientes, en su ficha y en el reporte de riesgo. También son los que usan los avisos automáticos."
@@ -218,6 +232,6 @@ export default async function RetencionPage() {
           </div>
         </section>
       )}
-    </div>
+    </ReporteImprimible>
   )
 }

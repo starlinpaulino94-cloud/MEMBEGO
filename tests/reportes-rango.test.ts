@@ -146,23 +146,95 @@ test('paramsDeRango deja limpia la URL por defecto', () => {
 // Vive en `queries.ts` junto a las consultas, pero la función es pura: importar
 // el módulo no abre conexión (el cliente de Prisma es perezoso).
 
-test('el CSV lleva cabecera, filas y una fila de TOTAL que cuadra', async () => {
-  const { reporteToCsv } = await import('../src/modules/reportes/queries')
-  const csv = reporteToCsv([
-    { dia: '2026-03-01', ventas: 2, entregas: 1, ingresos: 1500.5 },
-    { dia: '2026-03-02', ventas: 0, entregas: 3, ingresos: 0 },
-  ])
-  const lineas = csv.split('\n')
-  assert.equal(lineas.length, 4, 'cabecera + 2 días + total')
-  assert.match(lineas[0], /^Día;Ventas;Entregas sin cobro;Ingresos de caja$/)
-  assert.equal(lineas[1], '2026-03-01;2;1;1500.50')
-  assert.equal(lineas[3], 'TOTAL;2;4;1500.50')
+const kpi = (valor: number, anterior = 0, variacion: number | null = null) => ({
+  valor,
+  anterior,
+  variacion,
 })
 
-test('el CSV de un periodo sin actividad sigue siendo un archivo válido', async () => {
+const CONTEXTO = { empresa: 'Car Wash Bella Vista', desdeDia: '2026-03-01', hastaDia: '2026-03-02', dias: 2 }
+
+const REPORTE = {
+  ingresosCaja: kpi(1500.5, 1000, 50),
+  ingresosMembresias: kpi(800),
+  operaciones: kpi(2),
+  entregas: kpi(4),
+  clientesNuevos: kpi(3),
+  serie: [
+    { dia: '2026-03-01', ventas: 2, entregas: 1, ingresos: 1500.5 },
+    { dia: '2026-03-02', ventas: 0, entregas: 3, ingresos: 0 },
+  ],
+  porTipo: [{ tipo: 'SALE', operaciones: 2, ingresos: 1500.5 }],
+  porMetodo: [{ metodo: 'EFECTIVO', operaciones: 2, ingresos: 1500.5 }],
+  topClientes: [{ nombre: 'Ramón Polanco', operaciones: 4 }],
+  activasPorPlan: [{ plan: 'Mensual', count: 12 }],
+  incompleto: false,
+}
+
+test('el CSV lleva la serie con su fila de TOTAL, que cuadra', async () => {
   const { reporteToCsv } = await import('../src/modules/reportes/queries')
-  const csv = reporteToCsv([])
-  const lineas = csv.split('\n')
-  assert.equal(lineas.length, 2, 'cabecera + total en cero')
-  assert.equal(lineas[1], 'TOTAL;0;0;0.00')
+  const csv = reporteToCsv(REPORTE, CONTEXTO)
+  // Sin BOM, «Ramón Polanco» llega como «RamÃ³n Polanco».
+  assert.match(csv, /^﻿/)
+  // Cabeceras sin acentos, como el resto de las exportaciones del panel.
+  assert.match(csv, /Dia;Ventas;Entregas sin cobro;Ingresos de caja/)
+  assert.match(csv, /\n2026-03-01;2;1;1500\.50\n/)
+  assert.match(csv, /\nTOTAL;2;4;1500\.50/)
+})
+
+test('el CSV trae los SEIS bloques del reporte, no solo la serie', async () => {
+  // Exportaba únicamente la serie diaria: una sexta parte de lo que la pantalla
+  // enseñaba, y sin ninguna señal de que faltara el resto.
+  const { reporteToCsv } = await import('../src/modules/reportes/queries')
+  const csv = reporteToCsv(REPORTE, CONTEXTO)
+  for (const bloque of [
+    'Alcance del reporte',
+    'Totales',
+    'Actividad por dia',
+    'Operaciones por tipo',
+    'Como pagaron',
+    'Clientes mas activos',
+    'Membresias activas por plan (foto de hoy)',
+  ]) {
+    assert.ok(csv.includes(bloque), `falta el bloque «${bloque}»`)
+  }
+  // Y las etiquetas son las de la pantalla, no los códigos internos.
+  assert.ok(csv.includes('Efectivo'), 'el método sale con su nombre legible')
+  assert.ok(csv.includes('Ramón Polanco'))
+})
+
+test('el alcance viaja DENTRO del archivo', async () => {
+  // Un CSV descargado no lleva encima el periodo con el que se generó: sin
+  // estas líneas, dos exportaciones del mismo día son indistinguibles.
+  const { reporteToCsv } = await import('../src/modules/reportes/queries')
+  const csv = reporteToCsv(REPORTE, CONTEXTO)
+  assert.ok(csv.includes('Car Wash Bella Vista'))
+  assert.ok(csv.includes('2026-03-01 a 2026-03-02'))
+  assert.match(csv, /Datos completos;Si/)
+})
+
+test('si el reporte venía incompleto, el archivo lo dice', async () => {
+  const { reporteToCsv } = await import('../src/modules/reportes/queries')
+  const csv = reporteToCsv({ ...REPORTE, incompleto: true }, CONTEXTO)
+  assert.match(csv, /Datos completos;NO - alguna consulta fallo/)
+})
+
+test('un periodo sin actividad sigue siendo un archivo válido', async () => {
+  const { reporteToCsv } = await import('../src/modules/reportes/queries')
+  const csv = reporteToCsv(
+    {
+      ...REPORTE,
+      ingresosCaja: kpi(0),
+      serie: [],
+      porTipo: [],
+      porMetodo: [],
+      topClientes: [],
+      activasPorPlan: [],
+    },
+    CONTEXTO
+  )
+  assert.match(csv, /\nTOTAL;0;0;0\.00/)
+  // Los bloques vacíos siguen apareciendo con su cabecera: un bloque que
+  // desaparece se confunde con uno que no se exporta.
+  assert.ok(csv.includes('Como pagaron'))
 })

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
+import { armarCsvBloques } from '@/lib/csv'
 
 /**
  * RETENCIÓN Y CONSUMO — las tres preguntas que nadie podía responder.
@@ -199,4 +200,59 @@ export async function getRetencion(
     console.error('[retencion]', e)
     return { ...VACIO, ventanaDias }
   }
+}
+
+/**
+ * El reporte de retención en CSV.
+ *
+ * Era el único reporte del panel sin ninguna forma de sacarlo: los tres bloques
+ * —enfriamiento, renovación y consumo pendiente— solo existían en pantalla, y
+ * el pasivo de servicio (lo que se cobró y todavía no se ha prestado) es
+ * justamente el número que alguien quiere cruzar con su contabilidad.
+ *
+ * `dinero` llega desde fuera para que el archivo salga en la moneda de la
+ * empresa sin que este módulo tenga que conocer las preferencias regionales.
+ */
+export function retencionToCsv(r: Retencion, valorPendienteFormateado: string): string {
+  return armarCsvBloques([
+    {
+      titulo: 'Hace cuanto que no vienen',
+      encabezados: ['Tramo', 'Clientes'],
+      filas: r.inactividad.map((t) => [t.label, t.clientes]),
+    },
+    {
+      titulo: 'Renovacion y pasivo',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Clientes con membresia vigente', r.totalVigentes],
+        [`Membresias vencidas (ultimos ${r.ventanaDias} dias)`, r.vencidas],
+        ['De esas, renovadas', r.renovadas],
+        [
+          'Tasa de renovacion %',
+          // Sin vencimientos no hay tasa. Un 0 % ahí diría «nadie renueva»
+          // cuando lo cierto es que nadie tuvo ocasión.
+          r.vencidas > 0 ? Math.round((r.renovadas / r.vencidas) * 100) : '',
+        ],
+        ['Usos pagados sin consumir', r.usosPendientes],
+        ['Valor de esos usos', valorPendienteFormateado],
+      ],
+    },
+    {
+      titulo: 'Consumo por plan',
+      encabezados: [
+        'Plan',
+        'Membresias',
+        'Usos incluidos',
+        'Usos restantes',
+        'Consumido %',
+      ],
+      filas: r.porPlan.map((p) => [
+        p.plan,
+        p.membresias,
+        p.usosIncluidos,
+        p.usosRestantes,
+        p.consumido,
+      ]),
+    },
+  ])
 }

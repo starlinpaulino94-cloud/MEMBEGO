@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { History, Search } from 'lucide-react'
+import { Download, History, Search } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,11 +55,27 @@ export default async function AuditoriaPage({
     error = true
   }
 
+  const qs = new URLSearchParams(
+    Object.entries({ accion, empresa, q, desde, hasta }).filter(([, v]) => !!v) as [string, string][]
+  ).toString()
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Auditoría"
         description="Todas las acciones de la plataforma, con la fecha y la hora exactas de cada una."
+        action={
+          items.length > 0 && (
+            // Con los MISMOS filtros que la pantalla: un export que descarga
+            // todo cuando la pantalla enseña un tramo filtrado es la forma más
+            // silenciosa de dar un dato equivocado.
+            <Button asChild variant="secondary">
+              <a href={`/superadmin/auditoria/exportar${qs ? `?${qs}` : ''}`}>
+                <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
+              </a>
+            </Button>
+          )
+        }
       />
 
       <Form
