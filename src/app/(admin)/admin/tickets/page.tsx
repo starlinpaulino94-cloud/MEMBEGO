@@ -9,9 +9,8 @@ export const dynamic = 'force-dynamic'
 export default async function TicketsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ company?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const { company } = await searchParams
-  return <BandejaTickets user={user} company={company} />
+  return <BandejaTickets user={user} searchParams={await searchParams} alcance="empresa" />
 }
