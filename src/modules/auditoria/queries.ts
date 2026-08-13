@@ -107,6 +107,10 @@ export const ACCION_LABEL: Record<string, string> = {
   // Campañas conjuntas: reparto y retirada en varias empresas a la vez.
   CAMPANA_APLICADA: 'Campaña conjunta aplicada',
   CAMPANA_ARCHIVADA: 'Campaña conjunta archivada',
+  // Integraciones: lo que sale hacia sistemas de terceros.
+  INTEGRACION_SONDEADA: 'Webhook probado',
+  INTEGRACION_REINTENTADA: 'Cola de eventos reenviada',
+  INTEGRACION_REENCOLADA: 'Eventos agotados devueltos a la cola',
 }
 
 /**

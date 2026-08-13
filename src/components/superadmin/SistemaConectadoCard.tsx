@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState } from 'react'
-import { formatDate } from '@/lib/format'
+import { useActionState, useRef, useState } from 'react'
+import { formatDate, formatDateTime } from '@/lib/format'
+import { plural, soloPlural } from '@/lib/plural'
 import { Activity, Loader2, RefreshCw, Stethoscope } from 'lucide-react'
 import {
   sondearWebhookAction,
@@ -10,9 +11,11 @@ import {
   type ReintentoState,
 } from '@/modules/integraciones/panelActions'
 import type { ResumenSistema } from '@/modules/integraciones/panel'
+import { anclaSistema } from '@/modules/integraciones/diagnostico'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { StatusBanner } from '@/components/ui/status-banner'
 
 /**
@@ -31,6 +34,13 @@ const VARIANTE = {
   ok: 'success',
   aviso: 'warning',
   falla: 'destructive',
+} as const
+
+/** El mismo semáforo, en texto, para la línea de la última prueba guardada. */
+const TONO_SONDA = {
+  ok: 'text-success',
+  aviso: 'text-warning',
+  falla: 'text-destructive',
 } as const
 
 /**
@@ -60,11 +70,42 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
     reintentarPendientesAction,
     REINTENTO_INIT
   )
+  const revivirRef = useRef<HTMLFormElement>(null)
+  const [confirmarRevivir, setConfirmarRevivir] = useState(false)
+  /**
+   * Ref y no estado: `requestSubmit()` dispara el `submit` de forma SÍNCRONA,
+   * antes de que React haya aplicado un `setState` de este mismo manejador. Con
+   * estado, el segundo envío volvería a leer el valor viejo y a preguntar en
+   * bucle; con ref, el paso queda marcado en el acto.
+   */
+  const revivirConfirmado = useRef(false)
+
+  /**
+   * PREGUNTAR ANTES DE DEVOLVER LOS AGOTADOS A LA COLA.
+   *
+   * Es la única acción del panel que no se puede deshacer con otro clic: cada
+   * evento revivido se vuelve a entregar al satélite, y si el problema no
+   * estaba resuelto, lo que se consigue es volver a golpear un sistema ajeno
+   * con cientos de peticiones. Estaba a un clic sin ninguna barrera, al lado de
+   * dos botones inofensivos y con el mismo aspecto.
+   */
+  function alRevivir(e: React.FormEvent<HTMLFormElement>) {
+    if (revivirConfirmado.current) {
+      revivirConfirmado.current = false
+      return
+    }
+    e.preventDefault()
+    setConfirmarRevivir(true)
+  }
 
   const r = sonda.resultado
+  const s = sistema.ultimaSonda
 
   return (
-    <Card>
+    // El aviso de arriba enlaza aquí: con varios satélites conectados, «2
+    // sistemas no están recibiendo sus eventos» obligaba a bajar leyendo
+    // tarjetas hasta dar con cuáles.
+    <Card id={anclaSistema(sistema.slug)} className="scroll-mt-24">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <CardTitle className="text-base">
@@ -95,14 +136,17 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
         <p className="text-sm text-muted-foreground">
           {sistema.autoHabilitar ? (
             <>
-              Abierto a <strong className="text-foreground">toda empresa compatible</strong>; {sistema.habilitadas}{' '}
-              {sistema.habilitadas === 1 ? 'tiene' : 'tienen'} habilitación explícita.
+              Abierto a <strong className="text-foreground">toda empresa compatible</strong>;{' '}
+              {plural(sistema.habilitadas, 'empresa tiene', 'empresas tienen')} habilitación
+              explícita.
             </>
           ) : (
             <>
               Solo por habilitación:{' '}
-              <strong className="text-foreground">{sistema.habilitadas}</strong>{' '}
-              {sistema.habilitadas === 1 ? 'empresa habilitada' : 'empresas habilitadas'}.
+              <strong className="text-foreground">
+                {plural(sistema.habilitadas, 'empresa habilitada', 'empresas habilitadas')}
+              </strong>
+              .
             </>
           )}
         </p>
@@ -136,6 +180,49 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
           </StatusBanner>
         )}
 
+        {/* QUÉ hay atascado, y no solo cuánto. «37 pendientes» tiene dos causas
+            que piden respuestas opuestas: un tipo de evento que el satélite no
+            implementa (hablar con su equipo) o el webhook caído (arreglarlo
+            ahora). Tres filas bastan para distinguirlas. */}
+        {sistema.atascados.length > 0 && (
+          <details className="rounded-xl border border-border/60 bg-muted/20">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-foreground">
+              Ver qué está atascado
+              <span className="ml-1 font-normal text-muted-foreground">
+                ({sistema.atascados.length === sistema.pendientes
+                  ? soloPlural(sistema.pendientes, 'el único', 'todos')
+                  : `los ${sistema.atascados.length} más castigados de ${sistema.pendientes}`}
+                )
+              </span>
+            </summary>
+            <ul className="space-y-2 border-t border-border/60 px-3 py-2">
+              {sistema.atascados.map((ev) => (
+                <li key={ev.id} className="text-caption text-muted-foreground">
+                  <span className="font-mono text-foreground">{ev.tipo}</span> ·{' '}
+                  {ev.empresa} · {formatDateTime(ev.createdAt)} ·{' '}
+                  {plural(ev.intentos, 'intento', 'intentos')}
+                  {ev.ultimoError && (
+                    <span className="mt-0.5 block break-all font-mono">{ev.ultimoError}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        {/* La sonda anterior, traída de la bitácora: su resultado vivía solo en
+            el estado de este componente y se perdía al cambiar de página, así
+            que «¿esto ya fallaba ayer?» no tenía respuesta sin volver a probar
+            —y volver a probar toca otra vez el sistema del tercero—. */}
+        {s && (
+          <p className="text-caption text-muted-foreground">
+            Última prueba: {formatDateTime(s.cuando)} ·{' '}
+            <span className={TONO_SONDA[s.gravedad]}>{s.titulo}</span>
+            {s.status > 0 && <> · HTTP {s.status}</>}
+            {s.quien && <> · {s.quien}</>}
+          </p>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <form action={sondear}>
             <input type="hidden" name="sistemaId" value={sistema.id} />
@@ -162,7 +249,7 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
           </form>
 
           {sistema.fallidos > 0 && (
-            <form action={reintentar}>
+            <form ref={revivirRef} action={reintentar} onSubmit={alRevivir}>
               <input type="hidden" name="sistemaId" value={sistema.id} />
               <input type="hidden" name="revivir" value="1" />
               <Button type="submit" variant="ghost" disabled={reintentando}>
@@ -172,6 +259,25 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
             </form>
           )}
         </div>
+
+        <ConfirmDialog
+          open={confirmarRevivir}
+          title={`¿Devolver ${plural(sistema.fallidos, 'evento', 'eventos')} a la cola?`}
+          description={
+            `Se reintentará la entrega de ${plural(sistema.fallidos, 'evento agotado', 'eventos agotados')} a ` +
+            `${sistema.nombre}. Si la causa del fallo sigue ahí, volverán a agotarse tras 8 intentos ` +
+            `y mientras tanto ese sistema recibirá toda esa carga de golpe. Prueba el webhook antes.`
+          }
+          confirmText="Devolver a la cola"
+          isDangerous
+          isLoading={reintentando}
+          onConfirm={() => {
+            revivirConfirmado.current = true
+            setConfirmarRevivir(false)
+            revivirRef.current?.requestSubmit()
+          }}
+          onCancel={() => setConfirmarRevivir(false)}
+        />
 
         {reintento.error && (
           <StatusBanner variant="destructive" title="No se pudo reenviar">

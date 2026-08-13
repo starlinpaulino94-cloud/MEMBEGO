@@ -120,6 +120,16 @@ enum AuditAccion {
   /// Se archivó una campaña, y con ella se DESACTIVÓ lo que generó en todas
   /// las empresas. No se auditaba en absoluto.
   CAMPANA_ARCHIVADA
+  // Integraciones con sistemas satélite. Las tres acciones del panel tocan
+  // sistemas de TERCEROS —salen peticiones a su dominio y se mueve la cola de
+  // eventos de todas las empresas— y no dejaban ni una línea: si alguien
+  // reencolaba mil eventos un martes, no había forma de saber quién ni cuándo.
+  /// Se probó el webhook de un sistema conectado (payload: código y veredicto).
+  INTEGRACION_SONDEADA
+  /// Se forzó el reenvío de la cola pendiente de un sistema, sin esperar al cron.
+  INTEGRACION_REINTENTADA
+  /// Se devolvieron a la cola los eventos que habían agotado sus intentos.
+  INTEGRACION_REENCOLADA
   /// Se evaluó un segmento de audiencia (auditoría de la estimación).
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.
