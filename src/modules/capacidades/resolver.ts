@@ -3,9 +3,10 @@ import { conEmpresa } from '@/lib/tenant'
 import type { AdminSection } from '@/lib/auth/permissions'
 import {
   CAPACIDAD_DE_SECCION,
-  capacidadesEfectivas,
+  capacidadesDeEmpresa,
   type Capacidad,
   type CategoriaNegocio,
+  type EmpresaParaCapacidades,
 } from './catalogo'
 
 /**
@@ -29,29 +30,41 @@ export interface CapacidadesEmpresa {
   navegacionV2: boolean
 }
 
-/** Fila mínima de la empresa, tolerante a la columna sin migrar. */
-async function leerEmpresa(companyId: string): Promise<{ type: string | null; raw: unknown }> {
+/**
+ * Fila mínima de la empresa, tolerante a la columna sin migrar.
+ *
+ * `tipoNegocioCodigo` SE LEE. No se leía, y por eso este resolutor —que decide a
+ * qué secciones puede entrar cada empresa— resolvía la categoría con el `type`
+ * heredado aunque el superadmin hubiera asignado el vertical correcto. Es el
+ * mismo fallo que las fases anteriores corrigieron en el registro y en la
+ * elegibilidad; aquí se había quedado.
+ */
+async function leerEmpresa(companyId: string): Promise<EmpresaParaCapacidades> {
   try {
     const c = await conEmpresa(companyId, (tx) =>
       tx.company.findUnique({
         where: { id: companyId },
-        select: { type: true, capacidades: true },
+        select: { type: true, tipoNegocioCodigo: true, capacidades: true },
       })
     )
-    return { type: c?.type ?? null, raw: c?.capacidades ?? null }
+    return {
+      type: c?.type ?? null,
+      tipoNegocioCodigo: c?.tipoNegocioCodigo ?? null,
+      capacidades: c?.capacidades ?? null,
+    }
   } catch {
     // Columna aún sin migrar: solo el type (paquete base de la categoría).
     const c = await conEmpresa(companyId, (tx) =>
       tx.company.findUnique({ where: { id: companyId }, select: { type: true } })
     ).catch(() => null)
-    return { type: c?.type ?? null, raw: null }
+    return { type: c?.type ?? null, tipoNegocioCodigo: null, capacidades: null }
   }
 }
 
 export const getCapacidadesEmpresa = unstable_cache(
   async (companyId: string): Promise<CapacidadesEmpresa> => {
-    const { type, raw } = await leerEmpresa(companyId)
-    const { categoria, activas } = capacidadesEfectivas(type, raw)
+    const empresa = await leerEmpresa(companyId)
+    const { categoria, activas } = capacidadesDeEmpresa(empresa)
     return {
       categoria,
       activas: [...activas],

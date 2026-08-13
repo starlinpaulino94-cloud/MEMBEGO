@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { registrarRegistroIniciado } from '@/lib/referidos-attribution'
-import { capacidadesEfectivas } from '@/modules/capacidades/catalogo'
+import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
 import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
 import { isRegistroV2Enabled } from '@/lib/registroV2'
 import { RegisterForm } from '@/components/auth/RegisterForm'
@@ -82,11 +82,7 @@ export default async function RegistroPage({
   // le exigía la placa del carro al cliente de un restaurante sin categoría
   // configurada — la regla de catalogo.ts es la contraria: un requisito es
   // una puerta cerrada, y ante la duda NO se exige vehículo.
-  const { categoriaExplicita } = capacidadesEfectivas(
-    company.type,
-    company.capacidades,
-    company.tipoNegocioCodigo
-  )
+  const { categoriaExplicita } = capacidadesDeEmpresa(company)
   const flujoConVehiculo = flujoRequiereVehiculo(categoriaExplicita)
 
   // Categorías de vehículo del negocio, para las tarjetas del paso 1 del

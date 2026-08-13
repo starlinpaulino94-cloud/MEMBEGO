@@ -184,6 +184,25 @@ export const CAPACIDAD_DE_SECCION: Partial<Record<AdminSection, Capacidad>> = Ob
 )
 
 /**
+ * Nombre de cada sección del panel TAL COMO SE LEE EN EL MENÚ.
+ *
+ * Sin esto, apagar una capacidad decía «CITAS» y no «se va a apagar la sección
+ * Citas del panel de esa empresa». El mapa `SECCIONES_POR_CAPACIDAD` ya existía
+ * y no se enseñaba en ninguna parte: quien mueve el interruptor tenía que
+ * saberse de memoria qué controla.
+ */
+export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
+  citas: 'Citas',
+  seguimiento: 'Seguimiento de beneficios',
+  gamificacion: 'Ruleta y gamificación',
+}
+
+/** Las secciones del panel que se apagan al desactivar esta capacidad. */
+export function seccionesQueApaga(cap: Capacidad): string[] {
+  return (SECCIONES_POR_CAPACIDAD[cap] ?? []).map((s) => SECCION_LABEL[s] ?? s)
+}
+
+/**
  * Paquete BASE de capacidades por categoría: lo que una empresa de esa
  * categoría tiene encendido sin configurar nada. Para CAR_WASH incluye TODO
  * lo que hoy está activo en producción (fail-open del D4); lo nuevo
@@ -268,6 +287,47 @@ export function capacidadesEfectivas(
     else activas.delete(cap as Capacidad)
   }
   return { categoria, categoriaExplicita, activas, modulosCliente: config.modulosCliente ?? {} }
+}
+
+/**
+ * LA FILA MÍNIMA DE UNA EMPRESA para resolver sus capacidades.
+ *
+ * Existe para que nadie pueda volver a olvidarse del vertical. `capacidadesEfectivas`
+ * recibe tres argumentos sueltos y el tercero es opcional, así que omitirlo
+ * compila igual — y eso es exactamente lo que pasó: el panel de capacidades, el
+ * resolutor que decide a qué secciones entra cada empresa y el menú del cliente
+ * lo llamaban con dos.
+ *
+ * Con un objeto, olvidarse de `tipoNegocioCodigo` es olvidarse de una propiedad
+ * que el tipo EXIGE: deja de compilar. La comprobación pasa del criterio de
+ * quien escribe al compilador.
+ */
+export interface EmpresaParaCapacidades {
+  type: string | null | undefined
+  tipoNegocioCodigo: string | null | undefined
+  capacidades: unknown
+}
+
+/**
+ * Capacidades efectivas de una empresa. **Es la puerta única.**
+ *
+ * Envuelve a `capacidadesEfectivas` sin cambiarle nada: la precedencia sigue
+ * siendo categoría fijada a mano → vertical → `type` heredado → CAR_WASH. Lo
+ * único que aporta es que el vertical no se pueda omitir por descuido.
+ */
+export function capacidadesDeEmpresa(e: EmpresaParaCapacidades) {
+  return capacidadesEfectivas(e.type, e.capacidades, e.tipoNegocioCodigo)
+}
+
+/**
+ * La categoría efectiva, sin lo demás. Para quien solo necesita eso.
+ *
+ * `guardarCapacidades` derivaba la suya con `categoriaDeType(company.type)`, que
+ * ignora el vertical igual que las tres puertas: decidía si hacía falta escribir
+ * la categoría comparándola contra la información equivocada.
+ */
+export function categoriaDeEmpresa(e: EmpresaParaCapacidades): CategoriaNegocio {
+  return capacidadesDeEmpresa(e).categoria
 }
 
 /**

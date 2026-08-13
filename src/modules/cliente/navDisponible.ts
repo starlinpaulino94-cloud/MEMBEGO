@@ -2,7 +2,7 @@ import { unstable_cache } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { getGrowthConfig } from '@/modules/growth/config'
 import {
-  capacidadesEfectivas,
+  capacidadesDeEmpresa,
   rutasOcultasCliente,
   CATEGORIAS_CON_VEHICULO,
   type ModuloCliente,
@@ -108,7 +108,10 @@ export async function getNavOcultoCliente(
         }),
         tx.company.findUnique({
           where: { id: companyId },
-          select: { type: true, capacidades: true },
+          // `tipoNegocioCodigo` incluido: sin él, el menú del cliente decidía
+          // si enseñar «Vehículos» con el `type` heredado, así que a los
+          // clientes de un restaurante mal tipado se les ofrecía cargar carro.
+          select: { type: true, tipoNegocioCodigo: true, capacidades: true },
         }),
       ])
     )
@@ -116,10 +119,11 @@ export async function getNavOcultoCliente(
     // de la transacción: getGrowthConfig abre su propio contexto.
     const growth = await getGrowthConfig(companyId)
 
-    const { categoriaExplicita, activas, modulosCliente } = capacidadesEfectivas(
-      empresa?.type ?? null,
-      empresa?.capacidades ?? null
-    )
+    const { categoriaExplicita, activas, modulosCliente } = capacidadesDeEmpresa({
+      type: empresa?.type ?? null,
+      tipoNegocioCodigo: empresa?.tipoNegocioCodigo ?? null,
+      capacidades: empresa?.capacidades ?? null,
+    })
 
     // Referidos: se oculta solo si el negocio apagó TODAS las recompensas
     // (por defecto el programa premia registro/membresía/compra → visible).

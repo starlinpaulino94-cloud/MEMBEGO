@@ -19,7 +19,7 @@ import { primerErrorZod } from '@/lib/validacion'
 import { capturarErrorInesperado } from '@/lib/sentry'
 import { registroSchema } from '@/modules/registro/schema'
 import { validarVehiculoNuevo, normalizarPlaca } from '@/modules/registro/vehiculo-nuevo'
-import { capacidadesEfectivas } from '@/modules/capacidades/catalogo'
+import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
 import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
 import { PAIS_PLACA_DEFECTO } from '@/modules/onboarding/vehiculo'
 import { leerUbicacionDeForm } from '@/modules/registro/geo-form'
@@ -186,8 +186,7 @@ export async function registrarCliente(
   // existió. Así quedó atrapado el registro de un restaurante sin categoría
   // configurada, con la campaña de pago mandándole tráfico.
   const requiereVehiculo = flujoRequiereVehiculo(
-    capacidadesEfectivas(company.type, company.capacidades, company.tipoNegocioCodigo)
-      .categoriaExplicita
+    capacidadesDeEmpresa(company).categoriaExplicita
   )
   const companyIdVerificado = company.id
   let vehiculoV2: import('@/modules/registro/vehiculo-nuevo').VehiculoNuevoValidado | null = null

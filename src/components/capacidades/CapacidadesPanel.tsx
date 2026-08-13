@@ -6,11 +6,11 @@
  * paquete base de la categoría (solo se guardan las diferencias).
  */
 
-import { useActionState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { Loader2, Save } from 'lucide-react'
 import { toast } from 'sonner'
-import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   guardarCapacidades,
   type CapacidadesActionState,
@@ -25,6 +25,7 @@ import {
   MODULO_CLIENTE_LABELS,
   VISIBILIDADES,
   VISIBILIDAD_LABELS,
+  seccionesQueApaga,
   type Capacidad,
   type CategoriaNegocio,
   type ModuloCliente,
@@ -48,14 +49,39 @@ export function CapacidadesPanel({
 }) {
   const [state, action, pending] = useActionState(guardarCapacidades, init)
   const activasSet = new Set(activas)
+  const formRef = useRef<HTMLFormElement>(null)
+  /** Secciones que se apagarían con lo que hay marcado ahora mismo. */
+  const [porApagar, setPorApagar] = useState<string[] | null>(null)
 
   useEffect(() => {
     if (state.success) toast.success(state.success)
     if (state.error) toast.error(state.error)
   }, [state])
 
+  /**
+   * AVISAR ANTES DE DEJAR A UNA EMPRESA SIN UNA SECCIÓN DE SU PANEL.
+   *
+   * Los interruptores no tenían ninguna barrera: apagar la capacidad
+   * equivocada le quita al negocio una sección entera de su administración, y
+   * quien lo hace no se entera hasta que llaman.
+   *
+   * Solo se pregunta cuando de verdad se apaga algo que HOY está encendido y
+   * que controla una sección. Preguntar siempre convertiría el aviso en un
+   * paso que se despacha con Enter sin leerlo.
+   */
+  function alEnviar(e: React.FormEvent<HTMLFormElement>) {
+    if (porApagar !== null) return // ya confirmado: dejar pasar
+    const datos = new FormData(e.currentTarget)
+    const secciones = CAPACIDADES.filter(
+      (cap) => activasSet.has(cap) && datos.get(`cap_${cap}`) !== 'on'
+    ).flatMap((cap) => seccionesQueApaga(cap))
+    if (secciones.length === 0) return
+    e.preventDefault()
+    setPorApagar(secciones)
+  }
+
   return (
-    <form action={action} className="space-y-5">
+    <form ref={formRef} action={action} onSubmit={alEnviar} className="space-y-5">
       <input type="hidden" name="companyId" value={companyId} />
 
       <label className="block max-w-xs space-y-1.5 text-sm font-medium text-foreground">
@@ -90,7 +116,15 @@ export function CapacidadesPanel({
             />
             <span>
               <span className="font-medium text-foreground">{CAPACIDAD_LABELS[cap]}</span>
-              <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">
+              {/* QUÉ APAGA. El mapa existía y no se enseñaba en ningún sitio:
+                  quien mueve el interruptor tenía que saberse de memoria qué
+                  controla. */}
+              {seccionesQueApaga(cap).length > 0 && (
+                <span className="mt-0.5 block text-caption text-muted-foreground">
+                  Controla: {seccionesQueApaga(cap).join(', ')}
+                </span>
+              )}
+              <span className="block text-caption uppercase tracking-wide text-muted-foreground/70">
                 {cap}
               </span>
             </span>
@@ -148,6 +182,29 @@ export function CapacidadesPanel({
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         Guardar capacidades
       </Button>
+
+      {/* Las secciones se nombran UNA A UNA, no «se apagarán algunas»: el
+          objetivo es que quien confirma reconozca lo que va a desaparecer del
+          panel de ese negocio. */}
+      <ConfirmDialog
+        open={porApagar !== null && porApagar.length > 0}
+        title="¿Apagar secciones del panel de esta empresa?"
+        description={
+          porApagar
+            ? `Dejará de ver: ${porApagar.join(', ')}. Sus datos se conservan y vuelven al encenderla de nuevo.`
+            : ''
+        }
+        confirmText="Apagar y guardar"
+        isDangerous
+        isLoading={pending}
+        onConfirm={() => {
+          // `porApagar` pasa a lista vacía: `alEnviar` deja pasar el siguiente
+          // envío en vez de volver a preguntar en bucle.
+          setPorApagar([])
+          formRef.current?.requestSubmit()
+        }}
+        onCancel={() => setPorApagar(null)}
+      />
     </form>
   )
 }
