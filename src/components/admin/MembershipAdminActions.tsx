@@ -10,20 +10,25 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ConfirmarPagoButton, RechazarPagoButton } from '@/components/admin/ValidarPagoActions'
 import type { MembershipEstado } from '@/types'
 
+/**
+ * LO QUE ESTE COMPONENTE NECESITA, Y NADA MÁS.
+ *
+ * Recibía además `clienteId`, `planLavados` y `planEsIlimitado`, que ni
+ * siquiera se desestructuraban: la página los calculaba y los mandaba para
+ * nada. `planPrecio` viajaba a un campo oculto que la acción ya no lee — el
+ * monto de una renovación lo calcula el servidor a partir del plan, porque un
+ * precio pintado al renderizar se queda viejo en cuanto alguien lo cambia.
+ *
+ * Props que no se usan no son inofensivas: engañan al leer, y sobre todo hacen
+ * pensar que el dato importa. `clienteId` sí importaba — pero para ENLAZAR a la
+ * ficha del cliente, cosa que ahora hace la propia tabla.
+ */
 interface Props {
   membershipId: string
   estado: MembershipEstado
-  clienteId: string
-  planPrecio: number
-  planLavados: number
-  planEsIlimitado: boolean
 }
 
-export function MembershipAdminActions({
-  membershipId,
-  estado,
-  planPrecio,
-}: Props) {
+export function MembershipAdminActions({ membershipId, estado }: Props) {
   const [activarState, activarAction, activarPending] = useActionState(confirmarPago, {})
   const [cancelarState, cancelarAction, cancelarPending] = useActionState(cancelarMembresia, {})
   const [desactivarState, desactivarAction, desactivarPending] = useActionState(desactivarMembresia, {})
@@ -45,13 +50,19 @@ export function MembershipAdminActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {/* `role="alert"` porque este error aparece DESPUÉS de pulsar y dentro de
+          una celda: sin él, un lector de pantalla no anuncia que la acción
+          falló y quien no ve la tabla se queda esperando. */}
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
 
       {/* Activar pago — for PENDIENTE */}
       {estado === 'PENDIENTE' && (
         <form action={activarAction}>
           <input type="hidden" name="membershipId" value={membershipId} />
-          <input type="hidden" name="monto" value={planPrecio} />
           <Button
             size="sm"
             type="submit"
@@ -75,7 +86,6 @@ export function MembershipAdminActions({
       {(estado === 'ACTIVA' || estado === 'VENCIDA') && (
         <form action={renovarAction}>
           <input type="hidden" name="membershipId" value={membershipId} />
-          <input type="hidden" name="monto" value={planPrecio} />
           <Button
             size="sm"
             variant="outline"

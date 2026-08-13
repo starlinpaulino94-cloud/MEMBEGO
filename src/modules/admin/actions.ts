@@ -616,7 +616,6 @@ export async function renovarMembresia(
   if (!user) return { error: 'No autorizado.' }
 
   const membershipId = String(formData.get('membershipId') ?? '')
-  const montoRaw = String(formData.get('monto') ?? '').trim()
   const meta = await getRequestMeta()
 
   const membership = await assertOwnership(membershipId, user)
@@ -630,20 +629,49 @@ export async function renovarMembresia(
   }
 
   const now = new Date()
-  const monto = montoRaw ? Number(montoRaw) : Number(membership.plan.precio)
+
+  /**
+   * EL MONTO LO DECIDE EL SERVIDOR, NO EL FORMULARIO.
+   *
+   * Venía de un `<input type="hidden" name="monto">` pintado con el precio del
+   * plan en el momento de renderizar la página. Ese número acababa en
+   * `montoPagado` junto a `pagoConfirmado: true`, es decir, EN LOS INGRESOS.
+   *
+   * No hace falta mala fe para que salga mal: basta con dejar la pestaña
+   * abierta, que se cambie el precio del plan y renovar — se registra el precio
+   * viejo, como cobrado, y nada avisa. `confirmarPago` ya lo calculaba aquí;
+   * renovar era el que se había quedado atrás.
+   */
+  const monto = Number(membership.plan.precio)
   const vigenciaDias = membership.plan.vigenciaDias ?? 30
+
+  /**
+   * RENOVAR NO PUEDE QUITAR LOS DÍAS QUE QUEDAN.
+   *
+   * El período nuevo empezaba SIEMPRE hoy. A quien renovaba con 20 días por
+   * delante se le daban 30 y se le quitaban 20 — y el único que lo iba a notar
+   * era el cliente, semanas después.
+   *
+   * Ahora se encadena: si todavía está vigente, el período nuevo arranca donde
+   * terminaba el anterior. Si ya venció (o nunca tuvo fecha), arranca hoy.
+   *
+   * `fechaInicio` sí pasa a ser el arranque del período nuevo, que es lo que
+   * significa el campo; lo que no se pierde es el tiempo pagado.
+   */
+  const sigueVigente = membership.fechaVencimiento != null && membership.fechaVencimiento > now
+  const arranque = sigueVigente ? membership.fechaVencimiento! : now
 
   await conEmpresa(membership.cliente.companyId, async (tx) => {
     await tx.membership.update({
       where: { id: membership.id },
       data: {
         estado: 'ACTIVA',
-        fechaInicio: now,
-        fechaVencimiento: periodEnd(now, vigenciaDias),
+        fechaInicio: arranque,
+        fechaVencimiento: periodEnd(arranque, vigenciaDias),
         lavadosRestantes: membership.plan.esIlimitado
           ? 0
           : membership.plan.lavadosIncluidos,
-        montoPagado: Number.isNaN(monto) ? Number(membership.plan.precio) : monto,
+        montoPagado: monto,
         pagoConfirmado: true,
         fechaPago: now,
       },
@@ -656,7 +684,13 @@ export async function renovarMembresia(
         accion: 'MEMBRESIA_RENOVADA',
         entidadTipo: 'Membership',
         entidadId: membership.id,
-        payload: { monto: Number.isNaN(monto) ? Number(membership.plan.precio) : monto },
+        payload: {
+          monto,
+          // Encadenada o desde hoy: es lo que explica la fecha resultante
+          // cuando alguien la revise dentro de tres meses.
+          desde: arranque.toISOString(),
+          encadenada: sigueVigente,
+        },
         ...meta,
       },
     })

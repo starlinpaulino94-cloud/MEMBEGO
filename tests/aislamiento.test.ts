@@ -138,6 +138,11 @@ const EXENTOS: Record<string, string> = {
   'src/modules/demo': 'Cuenta e inventaría empresas de práctica a nivel de plataforma.',
   'src/modules/admin/automatizaciones': 'Reparte trabajo por empresa; lee la lista de empresas.',
   'src/modules/empresas': 'Administra las empresas mismas.',
+  // El puesto de mando de membresías del superadmin. Cruza empresas por
+  // definición —es su única razón de existir— y lo hace por `sinEmpresa`, que
+  // exige declarar el motivo en la propia llamada. El acotado que sí tiene es
+  // el de ÁMBITO (reales / de práctica), no el de empresa.
+  'src/modules/membresias': 'Vista de plataforma: el superadmin revisa todas las empresas.',
   'src/modules/jobs': 'El ejecutor recibe el companyId como parámetro del trabajo.',
   'src/lib/seed': 'Sembrado de datos de desarrollo.',
   'src/modules/campanas': 'Campañas conjuntas: cruzan empresas por diseño.',

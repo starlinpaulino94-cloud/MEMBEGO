@@ -58,6 +58,7 @@ export const ACCION_LABEL: Record<string, string> = {
   PAGO_APROBADO: 'Pago aprobado',
   PAGO_RECHAZADO: 'Pago rechazado',
   MEMBRESIA_CANCELADA: 'Membresía cancelada',
+  MEMBRESIA_DESACTIVADA: 'Membresía desactivada',
   MEMBRESIA_RENOVADA: 'Membresía renovada',
   QR_GENERADO: 'QR generado',
   QR_USADO: 'QR usado',
