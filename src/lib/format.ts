@@ -19,7 +19,15 @@ export interface RegionalPrefs {
 
 const DEFAULT_IDIOMA = 'es-DO'
 const DEFAULT_MONEDA = 'DOP'
-const DEFAULT_TZ = 'America/Santo_Domingo'
+/**
+ * Zona horaria de la plataforma. Exportada porque los reportes que cruzan
+ * TODAS las empresas no tienen una empresa de la que sacarla, y el corte del
+ * periodo tiene que hacerse en alguna: sin una constante compartida cada
+ * pantalla se inventaba la suya —o peor, usaba la del servidor, que en el
+ * despliegue es UTC y mueve de mes los cobros de la noche del día 31—.
+ */
+export const TZ_PLATAFORMA = 'America/Santo_Domingo'
+const DEFAULT_TZ = TZ_PLATAFORMA
 
 /** Formatea un monto con el símbolo de la moneda de la empresa. */
 export function formatMoney(

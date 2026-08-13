@@ -35,9 +35,18 @@ const archivos = (d) => {
 }
 const TODOS = RAIZ.flatMap(archivos)
 
-/** ¿Es un sitio donde el hexadecimal es la ÚNICA opción? */
+/**
+ * ¿Es un sitio donde el hexadecimal es la ÚNICA opción?
+ *
+ * `reporte-imprimible` entra por un motivo distinto al de los OG y los correos,
+ * y conviene dejarlo escrito: ahí las variables SÍ existen, pero usarlas sería
+ * el error. El papel es blanco y la tinta negra pase lo que pase; si el bloque
+ * `@media print` heredara el tema, quien tenga el panel en oscuro imprimiría
+ * texto casi blanco sobre una hoja blanca. El color de la impresión no es una
+ * decisión de tema, es una propiedad del papel.
+ */
 const SIN_VARIABLES_CSS = (ruta) =>
-  /opengraph-image|\/og\/|share\/og|correo|email/i.test(ruta)
+  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible/i.test(ruta)
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
 export const cuenta = (re, filtro = () => true) => {

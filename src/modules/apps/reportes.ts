@@ -1,4 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
+import { armarCsvBloques } from '@/lib/csv'
 import { utcDesdeLocal, ymdEnTz, sumarDias } from '@/modules/citas/disponibilidad'
 
 /**
@@ -208,24 +209,68 @@ export async function getReporteOperativo(
   }
 }
 
-/** CSV del detalle por día (con BOM para que Excel respete los acentos). */
+/**
+ * CSV del reporte operativo COMPLETO.
+ *
+ * Llevaba solo el detalle por día. Los dos bloques que faltaban son justo los
+ * que se abren en una hoja de cálculo para decidir algo: qué servicios se
+ * piden más —que es lo que ordena la carta— y qué insumos se consumieron —que
+ * es lo que ordena la compra—. En pantalla estaban; en el archivo, no.
+ *
+ * El aviso de RECORTE viaja dentro del archivo. Un rango de seis meses se
+ * atiende con los primeros 92 días; en pantalla hay un cartel que lo dice, y el
+ * CSV descargado no se lo lleva encima. Sin esa línea, el archivo parece el
+ * periodo completo.
+ */
 export function reporteToCsv(reporte: ReporteOperativo): string {
-  const esc = (v: string | number) => {
-    const s = String(v ?? '')
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const encabezados = ['Fecha', 'Vehiculos', 'Canjes', 'Ventas', 'Monto vendido']
-  const filas = reporte.dias.map((d) =>
-    [d.fecha, d.vehiculos, d.canjes, d.ventas, d.montoVentas.toFixed(2)].map(esc).join(';')
-  )
-  const totales = [
-    'TOTAL',
-    reporte.totalVehiculos,
-    reporte.totalCanjes,
-    reporte.totalVentas,
-    reporte.montoTotal.toFixed(2),
-  ]
-    .map(esc)
-    .join(';')
-  return `﻿${[encabezados.join(';'), ...filas, totales].join('\n')}`
+  return armarCsvBloques([
+    {
+      titulo: 'Alcance del reporte',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Periodo', `${reporte.rango.desde} a ${reporte.rango.hasta}`],
+        ['Dias con datos', reporte.dias.length],
+        [
+          'Rango recortado',
+          reporte.recortado ? `Si - solo los primeros ${reporte.dias.length} dias` : 'No',
+        ],
+        [
+          'Base del tiempo promedio',
+          reporte.minutosPromedio == null
+            ? 'sin entregas con hora de entrada y salida'
+            : `${reporte.entregasMedidas} entregas medidas`,
+        ],
+      ],
+    },
+    {
+      titulo: 'Detalle por dia',
+      encabezados: ['Fecha', 'Vehiculos', 'Canjes', 'Ventas', 'Monto vendido'],
+      filas: [
+        ...reporte.dias.map((d) => [
+          d.fecha,
+          d.vehiculos,
+          d.canjes,
+          d.ventas,
+          d.montoVentas.toFixed(2),
+        ]),
+        [
+          'TOTAL',
+          reporte.totalVehiculos,
+          reporte.totalCanjes,
+          reporte.totalVentas,
+          reporte.montoTotal.toFixed(2),
+        ],
+      ],
+    },
+    {
+      titulo: 'Servicios mas pedidos',
+      encabezados: ['Servicio', 'Veces'],
+      filas: reporte.serviciosTop.map((s) => [s.servicio, s.veces]),
+    },
+    {
+      titulo: 'Consumo de insumos',
+      encabezados: ['Producto', 'Unidad', 'Cantidad'],
+      filas: reporte.consumo.map((c) => [c.producto, c.unidad, c.cantidad]),
+    },
+  ])
 }

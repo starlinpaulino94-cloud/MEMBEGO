@@ -1,4 +1,5 @@
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
+import { armarCsv } from '@/lib/csv'
 
 /**
  * Bitácora de actividad (AuditLog).
@@ -257,7 +258,14 @@ export async function getAuditoria(
   })
 }
 
-/** Serializa la bitácora a CSV (con BOM para que Excel respete los acentos). */
+/**
+ * Serializa la bitácora a CSV, por `armarCsv` (`lib/csv.ts`), que es la única
+ * puerta: este archivo tenía su propio escapado, y un dialecto por módulo es
+ * exactamente lo que hizo que cuatro exportaciones del panel se abrieran mal.
+ *
+ * La hora va con SEGUNDOS: en un registro de auditoría, el orden exacto de dos
+ * acciones seguidas es a menudo lo único que importa.
+ */
 export function auditoriaToCsv(items: AuditoriaItem[], timeZone: string): string {
   const fmt = (d: Date) =>
     new Intl.DateTimeFormat('es-DO', {
@@ -266,24 +274,19 @@ export function auditoriaToCsv(items: AuditoriaItem[], timeZone: string): string
       timeStyle: 'medium',
     }).format(d)
 
-  const esc = (v: string | null) => {
-    const s = v == null ? '' : String(v)
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-
-  const encabezados = [
-    'Fecha y hora',
-    'Accion',
-    'Detalle',
-    'Usuario',
-    'Correo',
-    'Empresa',
-    'Entidad',
-    'ID entidad',
-    'IP',
-  ]
-  const lineas = items.map((i) =>
+  return armarCsv(
     [
+      'Fecha y hora',
+      'Accion',
+      'Detalle',
+      'Usuario',
+      'Correo',
+      'Empresa',
+      'Entidad',
+      'ID entidad',
+      'IP',
+    ],
+    items.map((i) => [
       fmt(i.fecha),
       i.accionLabel,
       i.detalle,
@@ -293,9 +296,6 @@ export function auditoriaToCsv(items: AuditoriaItem[], timeZone: string): string
       i.entidadTipo,
       i.entidadId,
       i.ip,
-    ]
-      .map(esc)
-      .join(';')
+    ])
   )
-  return `﻿${[encabezados.join(';'), ...lineas].join('\n')}`
 }

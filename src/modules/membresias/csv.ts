@@ -1,4 +1,5 @@
 import { membresiaEstadoUi } from '@/lib/estados'
+import { armarCsv } from '@/lib/csv'
 import type { MembresiaFila } from './lista'
 
 /**
@@ -7,8 +8,7 @@ import type { MembresiaFila } from './lista'
  * Mismas dos reglas que el CSV de empresas, y por los mismos motivos:
  *
  *  · El dinero va SIN símbolo ni separador de miles. Un «RD$1,600.00» entra en
- *    Excel como texto y deja de sumarse, y la coma de los miles se come el
- *    separador del propio archivo.
+ *    Excel como texto y deja de sumarse.
  *
  *  · Las fechas van en ISO (`2026-08-12`), no formateadas para leer. Es el
  *    único formato que Excel ordena bien en cualquier idioma, y este archivo se
@@ -19,11 +19,6 @@ import type { MembresiaFila } from './lista'
  * «nadie la ha tocado», no «vale hoy». Con una sola columna, quien abra el
  * archivo daría por hecho lo segundo.
  */
-function esc(v: unknown): string {
-  const s = v == null ? '' : String(v)
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : '')
 
 const ENCABEZADOS = [
@@ -41,8 +36,9 @@ const ENCABEZADOS = [
 ]
 
 export function membresiasToCsv(filas: MembresiaFila[]): string {
-  const lineas = filas.map((m) =>
-    [
+  return armarCsv(
+    ENCABEZADOS,
+    filas.map((m) => [
       m.clienteNombre,
       m.clienteEmail,
       m.empresaNombre,
@@ -54,10 +50,6 @@ export function membresiasToCsv(filas: MembresiaFila[]): string {
       m.planEsIlimitado ? 'Ilimitado' : m.usosRestantes,
       iso(m.fechaInicio),
       iso(m.fechaVencimiento),
-    ]
-      .map(esc)
-      .join(';')
+    ])
   )
-  // BOM para que Excel respete los acentos.
-  return `﻿${[ENCABEZADOS.join(';'), ...lineas].join('\n')}`
 }

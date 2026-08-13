@@ -1,9 +1,10 @@
+import { armarCsv } from '@/lib/csv'
 import type { OperacionEmpresa } from './lista'
 
 /**
  * Operaciones por empresa en CSV. Módulo PURO: se prueba sin base de datos.
  *
- * Se escapa con la regla de siempre —comillas si hay coma, comilla o salto— y
+ * El armado va por `armarCsv` (`lib/csv.ts`), que es la única puerta: escapa
  * también el punto y coma, porque Excel en español lo usa como separador y un
  * nombre de empresa con `;` partiría la fila en dos.
  *
@@ -11,11 +12,6 @@ import type { OperacionEmpresa } from './lista'
  * «3 / 12». En una celda, esa barra convierte el dato en texto y deja de poder
  * ordenarse ni sumarse — que es para lo único que se abre un CSV.
  */
-function esc(v: unknown): string {
-  const s = v == null ? '' : String(v)
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-
 const ENCABEZADOS = [
   'Empresa',
   'Vertical',
@@ -32,8 +28,9 @@ const ENCABEZADOS = [
 ]
 
 export function operacionesToCsv(filas: OperacionEmpresa[]): string {
-  const lineas = filas.map((e) =>
-    [
+  return armarCsv(
+    ENCABEZADOS,
+    filas.map((e) => [
       e.name,
       e.verticalNombre,
       e.esDemo ? 'Si' : 'No',
@@ -48,10 +45,6 @@ export function operacionesToCsv(filas: OperacionEmpresa[]): string {
       // la misma consecuencia para el cliente pero se arreglan distinto.
       e.whatsapp ? (e.whatsapp.activo ? 'Activo' : 'Inactivo') : 'Sin configurar',
       e.whatsapp?.numero ?? '',
-    ]
-      .map(esc)
-      .join(';')
+    ])
   )
-  // BOM para que Excel respete los acentos.
-  return `﻿${[ENCABEZADOS.join(';'), ...lineas].join('\n')}`
 }

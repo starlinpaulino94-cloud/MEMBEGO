@@ -4,7 +4,7 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatMoney } from '@/lib/format'
+import { formatDateTime, formatMoney } from '@/lib/format'
 import { clientesEnRiesgo, leerFiltroRiesgo } from '@/modules/riesgo'
 import {
   DIAS_PARA_VENCER,
@@ -14,7 +14,8 @@ import {
   urlConFiltros,
 } from '@/modules/admin/filtrosComunes'
 import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
-import { PageHeader } from '@/components/ui/page-header'
+import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/system/EmptyState'
 import { leerPaginacion } from '@/lib/paginacion'
@@ -111,24 +112,27 @@ export default async function RiesgoPage({
   const hasta = Math.min(pag.saltar + pag.tomar, total)
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Clientes"
-        title="Clientes en riesgo"
-        description={
-          total === 0
-            ? 'Con estos criterios no hay nadie en riesgo. Prueba a ampliar las ventanas.'
-            : `${desde}–${hasta} de ${total} · ${dinero(valorTotal)} en juego`
-        }
-        action={
+    <ReporteImprimible
+      titulo="Clientes en riesgo"
+      subtitulo={
+        total === 0
+          ? 'Con estos criterios no hay nadie en riesgo. Prueba a ampliar las ventanas.'
+          : `${desde}–${hasta} de ${total} · ${dinero(valorTotal)} en juego`
+      }
+      generadoEn={formatDateTime(new Date(), prefs)}
+      controles={
+        <>
           <Button asChild variant="outline">
             <a href={urlConFiltros('/admin/riesgo/export', sp, {})}>
-              <Download className="mr-2 h-4 w-4" /> Exportar
+              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
             </a>
           </Button>
-        }
-      />
-
+          {/* En papel: la lista de a quién llamar, para repartirla entre el
+              equipo sin que cada persona necesite una pantalla. */}
+          <BotonImprimir />
+        </>
+      }
+    >
       <FiltrosChips
         base="/admin/riesgo"
         params={sp}
@@ -267,6 +271,6 @@ export default async function RiesgoPage({
           </div>
         </>
       )}
-    </div>
+    </ReporteImprimible>
   )
 }
