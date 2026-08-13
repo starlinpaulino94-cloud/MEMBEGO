@@ -45,10 +45,11 @@ export type { AccionElegibilidad, DecisionPlan, VehiculoInfo } from '@/modules/e
 export async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<CategoriaNegocio | null> {
   const company = await tx.company.findUnique({
     where: { id: companyId },
-    select: { type: true, capacidades: true },
+    select: { type: true, capacidades: true, tipoNegocioCodigo: true },
   })
   if (!company) return null
-  return capacidadesEfectivas(company.type, company.capacidades).categoriaExplicita
+  return capacidadesEfectivas(company.type, company.capacidades, company.tipoNegocioCodigo)
+    .categoriaExplicita
 }
 
 /** Vehículos del cliente en la forma plana que consume el motor puro. */

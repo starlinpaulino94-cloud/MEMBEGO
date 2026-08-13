@@ -37,6 +37,25 @@ export const CATEGORIA_LABELS: Record<CategoriaNegocio, string> = {
  *
  * Por eso el desconocido cae en null aquí y en CAR_WASH allá.
  */
+/**
+ * Categoría desde el VERTICAL de la plataforma (`Company.tipoNegocioCodigo`,
+ * el campo que asigna el superadmin desde la interfaz). Sus códigos son los
+ * mismos de `CATEGORIAS` ('CAR_WASH', 'RESTAURANTE', …) por diseño.
+ *
+ * Existe porque conviven DOS sistemas de categoría: este (moderno, afirmado a
+ * mano) y el `type` heredado (texto libre de la creación de la empresa). El
+ * bug que lo destapó: el superadmin asignaba el vertical Restaurante, la
+ * pantalla lo mostraba, y el registro seguía pidiendo vehículo porque leía el
+ * `type` viejo que aún decía carwash. La pantalla y la decisión miraban campos
+ * distintos.
+ */
+export function categoriaDeVertical(
+  codigo: string | null | undefined
+): CategoriaNegocio | null {
+  const c = (codigo ?? '').trim().toUpperCase()
+  return (CATEGORIAS as readonly string[]).includes(c) ? (c as CategoriaNegocio) : null
+}
+
 export function categoriaExplicitaDeType(
   type: string | null | undefined
 ): CategoriaNegocio | null {
@@ -44,6 +63,11 @@ export function categoriaExplicitaDeType(
     case 'carwash':
     case 'car wash':
     case 'car-wash':
+    // El código CANÓNICO del vertical: el formulario de edición del superadmin
+    // guarda en `type` el código del catálogo ('CAR_WASH'), y esta función lo
+    // recibía en minúsculas ('car_wash') sin reconocerlo — un car wash real
+    // editado desde ahí perdía el requisito de vehículo sin que nadie lo viera.
+    case 'car_wash':
     case 'lavado':
     case 'lavadero':
     case 'autolavado':
@@ -218,7 +242,13 @@ export function resolverConfig(raw: unknown): CapacidadesConfig {
 /** Capacidades efectivas: paquete base de la categoría + overrides. */
 export function capacidadesEfectivas(
   type: string | null | undefined,
-  raw: unknown
+  raw: unknown,
+  /**
+   * `Company.tipoNegocioCodigo` — el vertical moderno. Opcional: quien no lo
+   * pase se comporta exactamente como antes. Quien lo pase hace que la
+   * afirmación del superadmin GANE sobre el `type` heredado de la creación.
+   */
+  tipoNegocioCodigo?: string | null
 ): {
   categoria: CategoriaNegocio
   /** null = el tipo de negocio no dice nada reconocible (ver arriba el porqué). */
@@ -229,7 +259,8 @@ export function capacidadesEfectivas(
   const config = resolverConfig(raw)
   // Una categoría elegida a mano en el panel SÍ es explícita: alguien la
   // afirmó. Lo que no vale como afirmación es el default de un `type` ilegible.
-  const categoriaExplicita = config.categoria ?? categoriaExplicitaDeType(type)
+  const categoriaExplicita =
+    config.categoria ?? categoriaDeVertical(tipoNegocioCodigo) ?? categoriaExplicitaDeType(type)
   const categoria = categoriaExplicita ?? categoriaDeType(type)
   const activas = new Set<Capacidad>(CAPACIDADES_BASE[categoria])
   for (const [cap, on] of Object.entries(config.overrides ?? {})) {
@@ -237,6 +268,33 @@ export function capacidadesEfectivas(
     else activas.delete(cap as Capacidad)
   }
   return { categoria, categoriaExplicita, activas, modulosCliente: config.modulosCliente ?? {} }
+}
+
+/**
+ * La afirmación MÁS RECIENTE gana: al asignar un vertical desde la pantalla de
+ * edición del superadmin, una `categoria` vieja fijada en el JSON de
+ * capacidades que lo contradiga se RETIRA (conservando overrides y módulos).
+ *
+ * Así quedó atrapado MESTIZO: vertical RESTAURANTE bien asignado y visible, y
+ * un `"categoria":"CAR_WASH"` invisible —de cuando la empresa se configuró
+ * como car wash— ganándole la precedencia. El registro exigía vehículo y
+ * ninguna pantalla mostraba por qué. Si el panel de capacidades vuelve a fijar
+ * una categoría DESPUÉS, esa volverá a ganar: recencia, no jerarquía fija.
+ *
+ * Devuelve el JSON limpio, `null` si no queda nada (columna a NULL), o
+ * `undefined` si no hay nada que retirar (el caller no escribe la columna).
+ */
+export function capacidadesSinCategoriaContradictoria(
+  raw: unknown,
+  vertical: string | null | undefined
+): Record<string, unknown> | null | undefined {
+  const v = (vertical ?? '').trim().toUpperCase()
+  if (!v) return undefined
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const cfg = raw as Record<string, unknown>
+  if (typeof cfg.categoria !== 'string' || cfg.categoria === v) return undefined
+  const { categoria: _retirada, ...resto } = cfg
+  return Object.keys(resto).length ? resto : null
 }
 
 // ── Módulos del CLIENTE ──────────────────────────────────────────────────────

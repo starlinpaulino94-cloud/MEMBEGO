@@ -9,6 +9,9 @@ import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
 import { filasDeAcceso } from '@/modules/empresas/accesos'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { verticalValido } from '@/modules/empresas/verticales'
+import { capacidadesSinCategoriaContradictoria } from '@/modules/capacidades/catalogo'
+import { CAPACIDADES_TAG } from '@/modules/capacidades/resolver'
+import { Prisma } from '@prisma/client'
 
 export interface ActionState {
   error?: string
@@ -320,6 +323,15 @@ export async function actualizarEmpresa(
       const actual = await tx.company.findUnique({ where: { id } })
       if (!actual) return null
 
+      // La afirmación más reciente gana: asignar un vertical aquí retira una
+      // `categoria` vieja del JSON de capacidades que lo contradiga (con ella
+      // puesta, el vertical no decide nada y ninguna pantalla muestra por qué:
+      // así MESTIZO exigía vehículo con el vertical RESTAURANTE bien visible).
+      const capsLimpias = capacidadesSinCategoriaContradictoria(
+        actual.capacidades,
+        codigoVerticalEdicion
+      )
+
       await tx.company.update({
         where: { id },
         data: {
@@ -331,6 +343,12 @@ export async function actualizarEmpresa(
           // inválido no la toca, para no dejar a la empresa sin sistemas por
           // un formulario enviado a mano.
           ...(codigoVerticalEdicion ? { tipoNegocioCodigo: codigoVerticalEdicion } : {}),
+          ...(capsLimpias !== undefined
+            ? {
+                capacidades:
+                  capsLimpias === null ? Prisma.DbNull : (capsLimpias as Prisma.InputJsonValue),
+              }
+            : {}),
           email: String(formData.get('email') ?? '').trim() || null,
           telefono: String(formData.get('telefono') ?? '').trim() || null,
           direccion: String(formData.get('direccion') ?? '').trim() || null,
@@ -350,9 +368,13 @@ export async function actualizarEmpresa(
           skipDuplicates: true,
         })
       }
-      return actual
+      return { capacidadesCambiaron: capsLimpias !== undefined }
     })
     if (!existing) return { error: 'Empresa no encontrada.' }
+
+    // El resolutor de capacidades está cacheado por tag: si se retiró la
+    // categoría vieja, el registro y el panel deben verlo de inmediato.
+    if (existing.capacidadesCambiaron) revalidateTag(CAPACIDADES_TAG, 'max')
 
     revalidatePath('/superadmin/empresas')
     revalidatePath(`/superadmin/empresas/${id}`)
