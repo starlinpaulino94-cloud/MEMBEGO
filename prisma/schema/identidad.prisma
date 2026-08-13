@@ -108,6 +108,14 @@ enum AuditAccion {
   PLAN_REANUDADO
   /// Se eliminó un plan.
   PLAN_ELIMINADO
+  /// Se creó una promoción. Existe por el reparto de las campañas conjuntas:
+  /// crea filas reales en empresas ajenas y no dejaba ni una línea.
+  PROMOCION_CREADA
+  /// Campañas conjuntas: el reparto a las empresas participantes.
+  CAMPANA_APLICADA
+  /// Se archivó una campaña, y con ella se DESACTIVÓ lo que generó en todas
+  /// las empresas. No se auditaba en absoluto.
+  CAMPANA_ARCHIVADA
   /// Se evaluó un segmento de audiencia (auditoría de la estimación).
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.
