@@ -1,8 +1,8 @@
 import { resolveCompanyContext, listTicketsAdmin } from '@/modules/soporte/queries'
+import { leerFiltroTickets } from '@/modules/soporte/filtros'
 import { PageHeader } from '@/components/ui/page-header'
 import { CompanySelector } from '@/components/admin/CompanySelector'
-import { TicketsTable, type TicketRow } from '@/components/admin/TicketsTable'
-import { formatDate } from '@/lib/format'
+import { TicketsTable } from '@/components/admin/TicketsTable'
 import type { SessionUser } from '@/types'
 
 /**
@@ -15,44 +15,52 @@ import type { SessionUser } from '@/types'
  * POR QUÉ HAY DOS RUTAS. El aviso «Tickets abiertos» del Centro de control
  * llevaba a `/admin/tickets`, y eso saca al superadmin del panel de PLATAFORMA y
  * lo mete en el de EMPRESA: la barra lateral cambia entera y volver no es obvio.
- * La barra tiene dos pestañas explícitas —Plataforma y Panel de empresa—, así que
- * cruzar de una a otra al pulsar un aviso contradice lo que la propia navegación
- * promete. Con la ruta gemela, el aviso lleva a la misma bandeja sin mover al
- * usuario de sitio.
  *
- * Y NO SE DUPLICA NADA: las dos rutas son cuatro líneas que renderizan esto.
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ CAMBIA EL `alcance`, Y POR QUÉ NO BASTABA CON LA RUTA GEMELA
+ *
+ * Al montar la ruta se dio por hecho que `resolveCompanyContext` dejaba al
+ * superadmin sin empresa —«ya sabe que ve las de todas», decía el comentario— y
+ * era falso: elegía SIEMPRE una, y sin elección explícita, la primera
+ * alfabéticamente. La bandeja de plataforma enseñaba los tickets de una sola
+ * empresa sin decirlo, y como `showEmpresa` se activa solo cuando no hay
+ * empresa, tampoco salía la columna que lo habría delatado.
+ *
+ * El aviso del Centro de control, en cambio, cuenta los pendientes de TODAS las
+ * empresas. Decía «7 abiertos» y al pulsar aparecían 2.
+ *
+ * `alcance` hace explícito lo que antes se suponía: en `plataforma` el
+ * superadmin arranca viéndolo todo y acota si quiere; en `empresa`, nada
+ * cambia.
  */
 export async function BandejaTickets({
   user,
-  company,
+  searchParams,
+  alcance,
 }: {
   user: SessionUser
-  /** Empresa elegida en el selector (solo la usa el superadmin). */
-  company?: string
+  searchParams: Record<string, string | undefined>
+  alcance: 'plataforma' | 'empresa'
 }) {
-  const ctx = await resolveCompanyContext(user, company)
-  const tickets = await listTicketsAdmin(ctx.companyId, ctx.isSuperadmin)
+  const f = leerFiltroTickets(searchParams)
+  const ctx = await resolveCompanyContext(user, f.empresa ?? undefined, {
+    ambitoPlataforma: alcance === 'plataforma',
+  })
+  const d = await listTicketsAdmin(ctx.companyId, ctx.isSuperadmin, f)
 
-  const rows: TicketRow[] = tickets.map((t) => ({
-    id: t.id,
-    asunto: t.asunto,
-    estado: t.estado,
-    categoria: t.categoria,
-    clienteNombre: t.cliente.nombre,
-    empresaNombre: t.company.name,
-    mensajes: t._count.mensajes,
-    // `formatDate` respeta el idioma y la zona horaria de la empresa; el
-    // `toLocaleDateString('es-DO')` de antes los ignoraba y además formateaba
-    // en la zona del servidor, que corre en UTC.
-    actualizado: formatDate(t.updatedAt, null, { day: '2-digit', month: 'short' }),
-    showEmpresa: ctx.isSuperadmin && !ctx.companyId,
-  }))
+  const base = alcance === 'plataforma' ? '/superadmin/tickets' : '/admin/tickets'
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Tickets de soporte"
-        description="Gestiona las solicitudes de soporte de tus clientes."
+        description={
+          // En el panel de plataforma los tickets NO son tuyos: son de las
+          // empresas, y quien los responde es cada negocio.
+          alcance === 'plataforma'
+            ? 'Solicitudes de soporte abiertas por los clientes de cada empresa.'
+            : 'Gestiona las solicitudes de soporte de tus clientes.'
+        }
         action={
           ctx.isSuperadmin ? (
             <CompanySelector companies={ctx.companies} current={ctx.companyId} />
@@ -67,7 +75,14 @@ export async function BandejaTickets({
           pulsable: cuatro números y después un desplegable aparte para filtrar
           por lo mismo. Los contadores viven ahora en las pestañas de cola, que
           además llevan a su lista. */}
-      <TicketsTable tickets={rows} />
+      <TicketsTable
+        datos={d}
+        f={f}
+        base={base}
+        detalleBase={`${base}/`}
+        mostrarEmpresa={ctx.companyId === null}
+        mostrarAmbito={ctx.companyId === null}
+      />
     </div>
   )
 }

@@ -13,15 +13,15 @@ export const metadata = { title: 'Tickets de soporte' }
  * Panel de empresa— y cruzar de una a otra al pulsar un aviso contradice lo que
  * esa navegación promete.
  *
- * `resolveCompanyContext` ya sabe que un superadmin sin empresa elegida ve las de
- * todas, así que aquí no hace falta nada más.
+ * `alcance="plataforma"` es lo que hace que se vean TODAS las empresas. Aquí
+ * había un comentario que afirmaba que eso ya pasaba solo; era falso, y por eso
+ * la bandeja enseñaba una sola empresa mientras el aviso contaba todas.
  */
 export default async function TicketsPlataformaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ company?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole('SUPERADMIN')
-  const { company } = await searchParams
-  return <BandejaTickets user={user} company={company} />
+  return <BandejaTickets user={user} searchParams={await searchParams} alcance="plataforma" />
 }
