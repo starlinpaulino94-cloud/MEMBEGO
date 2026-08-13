@@ -28,19 +28,50 @@ aparecían vacíos. Ya pasó con `companies.capacidades`.
 Aplica `prisma migrate deploy` **antes** de disparar el despliegue. Si la
 migración falla, no se despliega: el código nunca va por delante de la base.
 
+**Cuándo se pone rojo.** Solo cuando el estado es de verdad incorrecto: el push
+trae migraciones nuevas y no se pueden aplicar porque falta
+`MIGRATIONS_DATABASE_URL`. Ahí el código desplegado espera columnas que la base
+no tiene, y el rojo es exacto. Si el push no toca migraciones, calla.
+
+Antes se ponía **verde** en ese caso, tras emitir un `::warning::`. Un aviso en
+la interfaz de Actions no lo lee nadie —hay que entrar al run, abrir el job y
+mirar—, y el resultado medido fue que se acumularon dos migraciones sin aplicar
+mientras todos los checks decían que estaba bien. Se corrigió poniéndolo rojo
+**condicionalmente**, no siempre: un check rojo permanente entrena a ignorar los
+checks, que es peor que no tenerlo.
+
+**Qué trae el resumen del job.** Con el secreto puesto, la salida de
+`prisma migrate status` antes de migrar y la de `migrate deploy` después. Sin
+él, y solo si hay algo pendiente, **el SQL de cada migración listo para pegar**
+en el SQL Editor de Supabase — que es lo que se va a hacer de todos modos, y
+buscar los archivos a mano es justo el paso donde se olvida uno.
+
+**Su límite, dicho claro.** Sin el secreto no hay base a la que preguntar, así
+que detecta las migraciones nuevas comparando este push con el anterior. Eso
+solo ve lo de ESTE push: una migración que quedó sin aplicar hace tres semanas
+no vuelve a avisar hoy. La única forma de cerrar ese hueco es configurar el
+secreto, y entonces la verdad la da `migrate status` contra la base real.
+
 ## Configuración manual pendiente (sin esto, los flujos no protegen)
 
 1. **Marcar los checks como obligatorios.** Settings → Branches → regla para
    `main` → *Require status checks to pass*: `verificar`, `construir`,
    `dependencias`, `esquema`. Sin esto siguen siendo informativos y el agujero
    continúa abierto.
-2. **Dos secretos del repositorio** (Settings → Secrets → Actions):
+2. **Dos secretos del repositorio** (Settings → Secrets and variables →
+   Actions). Es lo único que separa a este proyecto de tener las migraciones
+   automatizadas de verdad:
    - `MIGRATIONS_DATABASE_URL` — la **DIRECT_URL** de Supabase (puerto 5432,
      sin `pgbouncer`). El pooler no sirve para migrar: las sentencias DDL
      necesitan conexión directa.
    - `VERCEL_DEPLOY_HOOK_URL` — el deploy hook del proyecto en Vercel.
 3. **Desactivar el auto-deploy de Vercel desde Git** para `main`, o el
    despliegue saldría en paralelo a la migración y se perdería el orden.
+
+   ⚠️ Los tres puntos van **juntos**. Hoy el punto 2 no está hecho, así que el
+   flujo no dispara el despliegue: si además se hiciera el punto 3, `main` se
+   mezclaría y **no se desplegaría nada**. Configura el secreto ANTES de tocar
+   el auto-deploy de Vercel.
 
 ## Lo que sigue siendo manual, a propósito
 
