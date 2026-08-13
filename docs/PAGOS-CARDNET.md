@@ -161,6 +161,26 @@ desapareció (tercer fallo), se le pide registrar la tarjeta de nuevo.
 > se hizo con el Purchase de credencial guardada. La primera activación real
 > contra el ambiente de pruebas fija el contrato; entonces se deja UN campo.
 
+### Cómo fijar el contrato SIN pasar por la pantalla de pago (sonda `?activar`)
+
+La ruta de diagnóstico `/api/pagos/cardnet-token/estado` tiene una sonda
+dedicada a la activación (logueado, en el deploy que se quiere probar):
+
+1. Registrar la tarjeta de prueba en la ventana de captura (es el único paso
+   que no puede saltarse: el PAN solo entra por la página hospedada de
+   CardNET). El perfil queda `Enabled: false`.
+2. `GET /api/pagos/cardnet-token/estado?activar=1` — consulta pura, enseña
+   los perfiles con su estado y cuál está pendiente. **No gasta intentos.**
+3. `GET /api/pagos/cardnet-token/estado?activar=1&codigo=Z2R78V` — ejecuta la
+   activación real contra el último perfil pendiente y devuelve el expediente
+   completo: cuerpo enviado, status y respuesta cruda del `activate`, y la
+   re-consulta (¿quedó `habilitado`?). **Un código incorrecto gasta 1 de los
+   3 intentos.** A propósito no cobra después: aísla la pregunta del contrato.
+
+Con ese expediente se decide: si el `activate` acepta el cuerpo combinado, se
+deja UN solo campo (el que la respuesta confirme); si lo rechaza, el texto del
+error dice qué esperaba.
+
 ### Lo que solo confirma un cobro real
 
 - [ ] Un cobro aprobado de punta a punta, con la consola del navegador abierta.

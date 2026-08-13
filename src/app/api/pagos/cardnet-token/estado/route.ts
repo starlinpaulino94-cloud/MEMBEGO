@@ -159,6 +159,125 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  // ?activar=1[&codigo=XXXXXX]: la sonda del contrato de ACTIVACIÓN 3DS.
+  //
+  // El endpoint `POST /Customer/{id}/activate` no está en el manual (sale del
+  // Postman) y el NOMBRE del campo del código está marcado VERIFICAR-QA: hoy
+  // se envían las grafías plausibles a la vez. Esta sonda es la manera de
+  // fijar el contrato real SIN pasar por la pantalla de pago: registra la
+  // tarjeta de prueba en la ventana de captura, entra aquí y mira el
+  // expediente crudo de la activación.
+  //
+  //   · SIN código: solo consulta — enseña los perfiles del Customer con su
+  //     estado (habilitado o pendiente). No gasta intentos.
+  //   · CON código: ejecuta la activación REAL contra el último perfil
+  //     pendiente y devuelve el cuerpo enviado + status + respuesta cruda,
+  //     más la re-consulta (¿quedó Enabled?). OJO: un código incorrecto
+  //     GASTA uno de los 3 intentos; al tercero CardNET borra la tarjeta.
+  //
+  // A propósito NO cobra después (a diferencia del flujo real, que activa y
+  // cobra en un movimiento): aísla la pregunta del contrato de activación.
+  if (req.nextUrl.searchParams.get('activar') === '1' && base.configurado) {
+    const { consultarClienteCardnet, consultarClienteDiagnostico, activarPerfilCardnet } =
+      await import('@/lib/payments/cardnet-tokens')
+    const { normalizarCodigoActivacion, leerCustomerIdDeCuenta } = await import(
+      '@/lib/payments/cardnet-tokens-core'
+    )
+    const { prisma } = await import('@/lib/prisma')
+
+    const clienteId = user.metadata.clienteId ?? null
+    const fila = clienteId
+      ? await prisma.cliente
+          .findUnique({ where: { id: clienteId }, select: { cardnetCustomerId: true } })
+          .catch(() => null)
+      : null
+    const customerId = leerCustomerIdDeCuenta(
+      fila?.cardnetCustomerId ?? null,
+      base.publicKey ?? '',
+      process.env.CARDNET_TOKENS_PRIVATE_KEY ?? ''
+    )
+    if (!customerId) {
+      return NextResponse.json({
+        ...base,
+        activacion: {
+          error:
+            'Tu cuenta aún no tiene Customer en CardNET: registra primero la tarjeta de prueba en la ventana de captura (pantalla de pago), y vuelve aquí.',
+        },
+      })
+    }
+
+    const consulta = await consultarClienteCardnet(customerId)
+    const perfiles = consulta.perfiles.map((p) => ({
+      paymentProfileId: p.paymentProfileId,
+      marca: p.marca,
+      ultimos4: p.ultimos4,
+      habilitado: p.habilitado,
+    }))
+    const pendientes = consulta.perfiles.filter((p) => !p.habilitado)
+    const perfil = pendientes[pendientes.length - 1] ?? null
+
+    const codigo = normalizarCodigoActivacion(req.nextUrl.searchParams.get('codigo') ?? '')
+    if (!codigo) {
+      return NextResponse.json({
+        ...base,
+        activacion: {
+          customerId,
+          perfiles,
+          pendienteDeActivar: perfil
+            ? { paymentProfileId: perfil.paymentProfileId, ultimos4: perfil.ultimos4 }
+            : null,
+          nota: perfil
+            ? 'Agrega &codigo=XXXXXX (los 6 caracteres del banco, p. ej. el «z2r78v» de «Cardnet:z2r78v») para ejecutar la activación real. Un código incorrecto gasta 1 de los 3 intentos.'
+            : 'No hay perfil pendiente de activar: registra la tarjeta de prueba en la ventana de captura primero.',
+        },
+      })
+    }
+    if (!perfil) {
+      return NextResponse.json({
+        ...base,
+        activacion: {
+          customerId,
+          perfiles,
+          error: 'No hay perfil pendiente de activar (¿ya se activó, o la tarjeta se borró?).',
+        },
+      })
+    }
+
+    // El cuerpo que se envía, espejado aquí para que el expediente sea
+    // autocontenido (debe coincidir con activarPerfilCardnet).
+    const cuerpoEnviado = {
+      ActivationCode: codigo,
+      ActivationKey: codigo,
+      Code: codigo,
+      PaymentProfileId: perfil.paymentProfileId,
+    }
+    const resultado = await activarPerfilCardnet({
+      customerId,
+      paymentProfileId: perfil.paymentProfileId,
+      codigo,
+    })
+    // Re-consulta: la prueba de fuego no es el status, es si el perfil quedó
+    // habilitado (o si desapareció — tercer intento fallido).
+    const despues = await consultarClienteCardnet(customerId)
+    const despuesCrudo = await consultarClienteDiagnostico(customerId)
+
+    return NextResponse.json({
+      ...base,
+      activacion: {
+        customerId,
+        perfilProbado: { paymentProfileId: perfil.paymentProfileId, ultimos4: perfil.ultimos4 },
+        cuerpoEnviado,
+        respuestaActivate: { ok: resultado.ok, status: resultado.status, crudo: resultado.crudo },
+        perfilesDespues: despues.perfiles.map((p) => ({
+          paymentProfileId: p.paymentProfileId,
+          ultimos4: p.ultimos4,
+          habilitado: p.habilitado,
+        })),
+        consultaDespuesCruda: despuesCrudo,
+      },
+    })
+  }
+
   if (req.nextUrl.searchParams.get('probar') !== '1' || !base.configurado) {
     return NextResponse.json(base)
   }
