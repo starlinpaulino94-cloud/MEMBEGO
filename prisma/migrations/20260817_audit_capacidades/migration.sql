@@ -1,0 +1,11 @@
+-- Cambiar los módulos de una empresa deja de ser una «nota interna».
+--
+-- `guardarCapacidades` escribía `NOTA_INTERNA` con
+-- `payload.tipo = 'CAPACIDADES_ACTUALIZADAS'`. Ese subtipo SÍ estaba en
+-- `SUBTIPO_LABEL`, así que la línea se leía bien — pero no se podía FILTRAR por
+-- acción en Auditoría, que es como se busca cuando alguien pregunta «¿quién le
+-- apagó las citas a este negocio?».
+--
+-- Con acción propia, además, el payload pasa a guardar el ANTES y el DESPUÉS de
+-- lo que se movió, en vez del estado completo sin punto de comparación.
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'CAPACIDADES_ACTUALIZADAS';

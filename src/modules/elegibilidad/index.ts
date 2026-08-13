@@ -17,7 +17,7 @@ import 'server-only'
  */
 
 import { conEmpresa } from '@/lib/tenant'
-import { capacidadesEfectivas, type CategoriaNegocio } from '@/modules/capacidades/catalogo'
+import { capacidadesDeEmpresa, type CategoriaNegocio } from '@/modules/capacidades/catalogo'
 import type { Tx } from '@/lib/tenant'
 import {
   decidirPlan,
@@ -48,8 +48,7 @@ export async function categoriaDeEmpresa(tx: Tx, companyId: string): Promise<Cat
     select: { type: true, capacidades: true, tipoNegocioCodigo: true },
   })
   if (!company) return null
-  return capacidadesEfectivas(company.type, company.capacidades, company.tipoNegocioCodigo)
-    .categoriaExplicita
+  return capacidadesDeEmpresa(company).categoriaExplicita
 }
 
 /** Vehículos del cliente en la forma plana que consume el motor puro. */

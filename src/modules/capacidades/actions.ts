@@ -18,7 +18,8 @@ import {
   CATEGORIAS,
   CAPACIDADES_BASE,
   MODULOS_CLIENTE,
-  categoriaDeType,
+  capacidadesDeEmpresa,
+  categoriaDeEmpresa,
   type Capacidad,
   type CategoriaNegocio,
   type ModuloCliente,
@@ -47,7 +48,11 @@ export async function guardarCapacidades(
     const company = await conEmpresa(companyId, (tx) =>
       tx.company.findUnique({
         where: { id: companyId },
-        select: { id: true, name: true, type: true },
+        // `tipoNegocioCodigo` y `capacidades`: la categoría derivada tiene que
+        // salir de LO MISMO que muestra la pantalla. Derivarla solo del `type`
+        // hacía que la decisión de «¿hace falta fijar la categoría?» se tomara
+        // sobre la información equivocada.
+        select: { id: true, name: true, type: true, tipoNegocioCodigo: true, capacidades: true },
       })
     )
     if (!company) return { error: 'Empresa no encontrada.' }
@@ -56,7 +61,7 @@ export async function guardarCapacidades(
     const categoriaRaw = String(formData.get('categoria') ?? '').trim()
     const categoria: CategoriaNegocio = (CATEGORIAS as readonly string[]).includes(categoriaRaw)
       ? (categoriaRaw as CategoriaNegocio)
-      : categoriaDeType(company.type)
+      : categoriaDeEmpresa(company)
 
     // Toggles del formulario → overrides SOLO donde difieren del paquete base.
     const base = new Set(CAPACIDADES_BASE[categoria])
@@ -75,12 +80,31 @@ export async function guardarCapacidades(
       if (valor === 'MOSTRAR' || valor === 'OCULTAR') modulosCliente[modulo] = valor
     }
 
-    const derivada = categoriaDeType(company.type)
+    const derivada = categoriaDeEmpresa(company)
     const config = {
       ...(categoria !== derivada ? { categoria } : {}),
       ...(Object.keys(overrides).length ? { overrides } : {}),
       ...(Object.keys(modulosCliente).length ? { modulosCliente } : {}),
     }
+
+    /**
+     * QUÉ CAMBIÓ, no cuál es el estado final.
+     *
+     * La bitácora guardaba `overrides` y `modulosCliente` completos: para saber
+     * si alguien había apagado las citas de un negocio había que comparar dos
+     * líneas a mano. Y lo hacía como `NOTA_INTERNA` con un subtipo, así que
+     * tampoco se podía filtrar por acción — que es como se busca cuando
+     * preguntan «¿quién le apagó esto a este negocio?».
+     */
+    const antesActivas = capacidadesDeEmpresa(company).activas
+    const despuesActivas = new Set(base)
+    for (const [cap, on] of Object.entries(overrides)) {
+      if (on) despuesActivas.add(cap as Capacidad)
+      else despuesActivas.delete(cap as Capacidad)
+    }
+    const encendidas = [...despuesActivas].filter((c) => !antesActivas.has(c)).sort()
+    const apagadas = [...antesActivas].filter((c) => !despuesActivas.has(c)).sort()
+    const categoriaAntes = categoriaDeEmpresa(company)
 
     const meta = await getRequestMeta()
     await conEmpresa(companyId, (tx) =>
@@ -94,10 +118,20 @@ export async function guardarCapacidades(
         data: {
           companyId,
           userId: user.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
+          accion: 'CAPACIDADES_ACTUALIZADAS',
           entidadTipo: 'Company',
           entidadId: companyId,
-          payload: { tipo: 'CAPACIDADES_ACTUALIZADAS', categoria, overrides, modulosCliente },
+          payload: {
+            empresa: company.name,
+            // `antes`/`despues` los pinta la bitácora como «X → Y» sin abrir el
+            // payload, así que el cambio de categoría se lee desde la lista.
+            ...(categoriaAntes !== categoria
+              ? { antes: categoriaAntes, despues: categoria }
+              : { categoria }),
+            encendidas,
+            apagadas,
+            modulosCliente,
+          },
           ...meta,
         },
       })

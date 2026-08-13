@@ -84,6 +84,8 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPERADMIN_RETIRADO: 'Superadmin retirado',
   ENTRAR_COMO_GENERADO: 'Enlace para entrar como otro usuario',
   ENTRAR_COMO_USADO: 'Entró como otro usuario',
+  // Qué módulos tiene encendidos cada empresa: decide a qué secciones entra.
+  CAPACIDADES_ACTUALIZADAS: 'Módulos de la empresa actualizados',
   // Catálogo de planes: lo que los clientes compran.
   PLAN_CREADO: 'Plan creado',
   PROMOCION_CREADA: 'Promoción creada',

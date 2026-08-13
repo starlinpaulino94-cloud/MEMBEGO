@@ -108,6 +108,10 @@ enum AuditAccion {
   PLAN_REANUDADO
   /// Se eliminó un plan.
   PLAN_ELIMINADO
+  /// El superadmin cambió los módulos encendidos de una empresa. Iba como
+  /// `NOTA_INTERNA` con un subtipo, así que no se podía filtrar por acción — y
+  /// es lo que decide a qué secciones entra un negocio.
+  CAPACIDADES_ACTUALIZADAS
   /// Se creó una promoción. Existe por el reparto de las campañas conjuntas:
   /// crea filas reales en empresas ajenas y no dejaba ni una línea.
   PROMOCION_CREADA
