@@ -86,6 +86,7 @@ export const ACCION_LABEL: Record<string, string> = {
   ENTRAR_COMO_USADO: 'Entró como otro usuario',
   // Catálogo de planes: lo que los clientes compran.
   PLAN_CREADO: 'Plan creado',
+  PROMOCION_CREADA: 'Promoción creada',
   PLAN_ACTUALIZADO: 'Plan actualizado',
   PLAN_PAUSADO: 'Plan pausado',
   PLAN_REANUDADO: 'Plan reanudado',
@@ -101,6 +102,9 @@ export const ACCION_LABEL: Record<string, string> = {
   // Campañas por segmento.
   SEGMENTO_EVALUADO: 'Segmento evaluado',
   CAMPANA_DIRIGIDA_ENVIADA: 'Campaña dirigida enviada',
+  // Campañas conjuntas: reparto y retirada en varias empresas a la vez.
+  CAMPANA_APLICADA: 'Campaña conjunta aplicada',
+  CAMPANA_ARCHIVADA: 'Campaña conjunta archivada',
 }
 
 /**

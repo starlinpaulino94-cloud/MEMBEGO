@@ -155,6 +155,28 @@ export function CampanaGlobalForm({
               <Label htmlFor="p-desc">Descripción</Label>
               <Input id="p-desc" name="p_descripcion" maxLength={300} />
             </div>
+            {/*
+              BENEFICIOS Y ORDEN, que faltaban.
+              Sin ellos cada copia nacía con `beneficios: []` y `orden: 0`: un
+              plan peor que el que cualquiera crea a mano —sin la lista de lo
+              que incluye— y empatado al final de la vitrina con los demás.
+            */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="p-beneficios">Beneficios</Label>
+              <textarea
+                id="p-beneficios"
+                name="p_beneficios"
+                rows={3}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={'Ej: 4 servicios incluidos\nAtención preferencial'}
+              />
+              <p className="text-caption text-muted-foreground">Uno por línea.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="p-orden">Orden en la vitrina</Label>
+              <Input id="p-orden" name="p_orden" inputMode="numeric" placeholder="0" />
+              <p className="text-caption text-muted-foreground">Menor = aparece primero.</p>
+            </div>
             <label className="flex items-center gap-2 text-sm text-foreground">
               <input type="checkbox" name="p_ilimitado" className="h-4 w-4 rounded border-border" />
               Usos ilimitados
