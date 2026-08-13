@@ -1,14 +1,37 @@
 # Migraciones de base de datos automáticas al desplegar (auditoría · C-03).
 #
-# Hasta ahora las 68 migraciones se aplicaban A MANO copiándolas en el SQL
-# Editor de Supabase. Eso deja dos fallos posibles y ninguno da error visible:
-# el deploy puede ir ADELANTADO a la base (el código busca columnas que no
-# existen y, por la tolerancia fail-open, los módulos aparecen vacíos en vez de
+# Hasta ahora las migraciones se aplicaban A MANO copiándolas en el SQL Editor
+# de Supabase. Eso deja dos fallos posibles y ninguno da error visible: el
+# deploy puede ir ADELANTADO a la base (el código busca columnas que no existen
+# y, por la tolerancia fail-open, los módulos aparecen vacíos en vez de
 # romperse), o alguien puede olvidarse de una migración durante días. Ya pasó
 # con `companies.capacidades`.
 #
 # Este flujo aplica las migraciones ANTES de que el nuevo código reciba
 # tráfico. Si fallan, no se despliega.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# POR QUÉ ESTE FLUJO SE PONE ROJO Y ANTES NO
+#
+# La versión anterior, sin el secreto configurado, se saltaba la migración Y el
+# despliegue y **terminaba en verde** tras emitir un `::warning::`. Un aviso en
+# la interfaz de Actions no lo lee nadie: hay que entrar al run, abrir el job y
+# mirar. El resultado medido fue que se acumularon dos migraciones sin aplicar
+# mientras todos los checks decían que estaba todo bien. Un flujo que informa
+# por un canal que nadie mira no informa.
+#
+# La corrección NO es ponerlo rojo siempre —un check rojo permanente entrena a
+# ignorar los checks, que es peor que no tenerlo—. Es ponerlo rojo **solo
+# cuando el estado es de verdad incorrecto**: cuando este push trae migraciones
+# nuevas y no se han aplicado. En ese momento el código desplegado espera
+# columnas que la base no tiene, y decirlo en rojo es exacto, no ruido. Si el
+# push no toca migraciones, el flujo calla.
+#
+# Y cuando hay algo pendiente, el resumen del job trae **el SQL listo para
+# pegar** en el editor de Supabase: es lo que se va a hacer de todos modos
+# mientras el secreto no esté puesto, y obligar a buscar los archivos a mano
+# es justo el paso donde se olvida uno.
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # REQUIERE dos secretos en el repositorio:
 #   · MIGRATIONS_DATABASE_URL — la DIRECT_URL de Supabase (puerto 5432, sin
@@ -37,29 +60,74 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Hace falta el historial para comparar este push con el anterior y
+          # saber si trae migraciones nuevas.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
 
-      # Sin el secreto, Prisma falla con un error críptico ("DIRECT_URL resolved
-      # to an empty string"). Mientras el secreto no esté configurado, las
-      # migraciones se aplican A MANO en el SQL Editor de Supabase (el flujo
-      # vigente hoy) y este job se marca como omitido con un aviso — un check
-      # rojo permanente entrena a ignorar los checks, que es peor que no
-      # tenerlo. Al configurar el secreto, la automatización se enciende sola.
+      # ¿Este push trae migraciones nuevas?
+      #
+      # Se mira el DIFF y no la base porque sin el secreto no hay base a la que
+      # preguntar. Es un proxy y tiene un límite honesto: solo ve lo de ESTE
+      # push. Una migración que quedó sin aplicar hace tres semanas no vuelve a
+      # avisar en el push de hoy. Cuando el secreto está puesto, la verdad la da
+      # `prisma migrate status` contra la base real, que es lo que se usa abajo.
+      - name: Detectar migraciones nuevas en este push
+        id: nuevas
+        env:
+          ANTES: ${{ github.event.before }}
+          CERO: '0000000000000000000000000000000000000000'
+        run: |
+          base=""
+          if [ -n "$ANTES" ] && [ "$ANTES" != "$CERO" ] && git cat-file -e "$ANTES^{commit}" 2>/dev/null; then
+            base="$ANTES"
+          elif git rev-parse -q --verify HEAD~1 >/dev/null 2>&1; then
+            # `workflow_dispatch` no trae rango: se compara con el commit previo.
+            base="HEAD~1"
+          fi
+
+          : > migraciones-nuevas.txt
+          if [ -n "$base" ]; then
+            git diff --name-only --diff-filter=A "$base" HEAD -- 'prisma/migrations/*/migration.sql' \
+              | sort > migraciones-nuevas.txt
+          fi
+
+          cuantas=$(grep -c . migraciones-nuevas.txt || true)
+          echo "cuantas=$cuantas" >> "$GITHUB_OUTPUT"
+          echo "Migraciones añadidas en este push: $cuantas"
+
       - name: Comprobar que el secreto está configurado
         id: secreto
         env:
           URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
         run: |
           if [ -z "$URL" ]; then
-            echo "::warning::MIGRATIONS_DATABASE_URL no está configurado: las migraciones se aplican a mano (docs/DEVOPS.md). Configura el secreto en Settings → Secrets → Actions para activar la migración automática."
             echo "configurado=false" >> "$GITHUB_OUTPUT"
           else
             echo "configurado=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # Qué va a pasar, ANTES de que pase. Con el secreto puesto es la única
+      # fuente de verdad: compara `_prisma_migrations` con el repositorio.
+      - name: Estado de las migraciones
+        if: steps.secreto.outputs.configurado == 'true'
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+        run: |
+          {
+            echo '## Estado antes de migrar'
+            echo
+            echo '```'
+            npx prisma migrate status 2>&1 | tail -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Aplicar migraciones pendientes
         if: steps.secreto.outputs.configurado == 'true'
@@ -74,10 +142,100 @@ jobs:
         # NO lo automatiza a propósito: marcar migraciones como aplicadas sin
         # correrlas es una operación delicada que no debe pasar sola en cada push.
         run: |
-          if ! npx prisma migrate deploy; then
-            echo '::error::migrate deploy falló. Si es el PRIMER despliegue contra esta base, falta el baseline de una sola vez: corre "npm run migraciones:baseline -- --aplicar" con la DIRECT_URL ANTES de este flujo. Procedimiento completo en docs/DEVOPS.md.'
+          if ! npx prisma migrate deploy 2>&1 | tee salida-migrate.txt; then
+            {
+              echo '## ❌ La migración falló'
+              echo
+              echo 'Si es el PRIMER despliegue contra esta base, falta el baseline de una sola vez:'
+              echo '`npm run migraciones:baseline -- --aplicar` con la DIRECT_URL, ANTES de este flujo.'
+              echo 'Procedimiento completo en `docs/DEVOPS.md`.'
+              echo
+              echo '```'
+              tail -40 salida-migrate.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo '::error::migrate deploy falló. Revisa el resumen del job.'
             exit 1
           fi
+          {
+            echo '## ✅ Migraciones aplicadas'
+            echo
+            echo '```'
+            tail -20 salida-migrate.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ─────────────────────────────────────────────────────────────────────
+      # SIN SECRETO: el flujo no puede hacer su trabajo. Lo dice, y con qué.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Avisar de lo que queda pendiente a mano
+        if: steps.secreto.outputs.configurado == 'false'
+        env:
+          CUANTAS: ${{ steps.nuevas.outputs.cuantas }}
+        run: |
+          if [ "$CUANTAS" -eq 0 ]; then
+            # Nada que aplicar: callar es lo correcto. Un aviso en cada push
+            # sin migraciones convierte el canal en ruido, y entonces tampoco
+            # se lee el que sí importa.
+            {
+              echo '## Migración automática desactivada'
+              echo
+              echo 'Este push no añade migraciones, así que no hay nada pendiente por aquí.'
+              echo
+              echo 'Para encender la automatización: configura `MIGRATIONS_DATABASE_URL`'
+              echo 'en Settings → Secrets and variables → Actions (ver `docs/DEVOPS.md`).'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Migración automática desactivada; este push no trae migraciones nuevas."
+            exit 0
+          fi
+
+          # Hay migraciones nuevas Y no se pueden aplicar: el código que se
+          # despliegue va por delante de la base. El check rojo es exacto.
+          {
+            echo '## ⛔ Hay migraciones sin aplicar'
+            echo
+            echo "Este push añade **$CUANTAS** migración(es) y \`MIGRATIONS_DATABASE_URL\` no está"
+            echo 'configurado, así que **no se han aplicado**. El código desplegado espera columnas'
+            echo 'o valores de enum que la base todavía no tiene.'
+            echo
+            echo '### Qué hacer ahora'
+            echo
+            echo 'Pega esto en el SQL Editor de Supabase, en orden:'
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          while IFS= read -r archivo; do
+            [ -z "$archivo" ] && continue
+            {
+              echo "<details open><summary><code>$archivo</code></summary>"
+              echo
+              echo '```sql'
+              # Recorte defensivo: una migración de creación de tablas puede ser
+              # enorme y el resumen tiene un tope de 1 MiB.
+              head -c 6000 "$archivo"
+              if [ "$(wc -c < "$archivo")" -gt 6000 ]; then
+                echo
+                echo "-- … recortado. El archivo completo está en el repositorio."
+              fi
+              echo '```'
+              echo
+              echo '</details>'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          done < migraciones-nuevas.txt
+
+          {
+            echo '### Para que deje de hacer falta'
+            echo
+            echo 'Configura `MIGRATIONS_DATABASE_URL` (la DIRECT_URL de Supabase, puerto 5432,'
+            echo 'sin `pgbouncer`) en Settings → Secrets and variables → Actions. A partir de ahí'
+            echo 'este flujo las aplica solo y este check no vuelve a ponerse rojo por esto.'
+            echo
+            echo 'Detalle completo, incluido el baseline de una sola vez, en `docs/DEVOPS.md`.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::$CUANTAS migración(es) sin aplicar. El SQL está en el resumen del job."
+          exit 1
 
       - name: Desplegar en Vercel
         if: success() && steps.secreto.outputs.configurado == 'true'
@@ -86,7 +244,9 @@ jobs:
         run: |
           if [ -z "$HOOK" ]; then
             echo "::warning::VERCEL_DEPLOY_HOOK_URL sin configurar; se omite el despliegue."
+            echo '> ⚠️ `VERCEL_DEPLOY_HOOK_URL` sin configurar: no se disparó el despliegue desde aquí.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           curl -fsS -X POST "$HOOK" > /dev/null
           echo "Despliegue disparado."
+          echo '> Despliegue disparado en Vercel, después de las migraciones.' >> "$GITHUB_STEP_SUMMARY"
