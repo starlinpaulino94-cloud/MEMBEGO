@@ -81,17 +81,17 @@ model Cliente {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  vehiculos           Vehiculo[]
-  memberships         Membership[]
+  vehiculos       Vehiculo[]
+  memberships     Membership[]
   tarjetasTokenizadas TarjetaTokenizada[]
-  qrTokens            QrToken[] // vacío hasta que tenga membresía activa
-  visits              Visit[]
-  referidosHechos     Referido[]          @relation("Referente")
-  referidoComo        Referido[]          @relation("Referido")
-  referralEvents      ReferralEvent[]     @relation("ReferralEvents")
-  tickets             SupportTicket[]
-  ratings             CompanyRating[]
-  notas               ClienteNota[]
+  qrTokens        QrToken[] // vacío hasta que tenga membresía activa
+  visits          Visit[]
+  referidosHechos Referido[]      @relation("Referente")
+  referidoComo    Referido[]      @relation("Referido")
+  referralEvents  ReferralEvent[] @relation("ReferralEvents")
+  tickets         SupportTicket[]
+  ratings         CompanyRating[]
+  notas           ClienteNota[]
 
   transacciones       Transaction[]
   compras             ProductoCompra[]
@@ -134,14 +134,14 @@ model Cliente {
 }
 
 model Vehiculo {
-  id               String   @id @default(cuid())
-  clienteId        String
-  cliente          Cliente  @relation(fields: [clienteId], references: [id])
-  marca            String
-  modelo           String
-  anio             Int
-  color            String
-  placa            String?
+  id        String   @id @default(cuid())
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id])
+  marca     String
+  modelo    String
+  anio      Int
+  color     String
+  placa     String?
   /// Onboarding v2 · identidad técnica del vehículo: `pais + placaNormalizada`
   /// (mayúsculas, solo A-Z0-9 — ver `modules/onboarding/vehiculo.ts`). Nullable
   /// a propósito: los vehículos históricos sin placa siguen siendo válidos
@@ -155,7 +155,7 @@ model Vehiculo {
   /// registrado lo será; el cliente puede cambiarlo. Los vehículos históricos
   /// quedan en false y nada cambia para ellos.
   esPrincipal      Boolean  @default(false)
-  createdAt        DateTime @default(now())
+  createdAt DateTime @default(now())
 
   visits Visit[]
   citas  Cita[]
@@ -175,15 +175,15 @@ model Vehiculo {
   // Onboarding v2 · membresías a las que este vehículo está asociado.
   membresias MembresiaVehiculo[]
 
+  @@index([clienteId])
+  // Selector de vehículo del cliente (planes, checkout) y búsqueda del principal.
+  @@index([clienteId, esPrincipal])
   // Identidad técnica del vehículo (§7): una placa = un vehículo. SEGURO
   // sobre los datos históricos: sus filas tienen placaNormalizada NULL y en
   // Postgres los NULL no chocan entre sí (NULLS DISTINCT) — el constraint
   // solo aplica a capturas nuevas y al backfill (scripts/backfill-placas.mjs,
   // que salta colisiones y las reporta en vez de reventar).
   @@unique([pais, placaNormalizada])
-  @@index([clienteId])
-  // Selector de vehículo del cliente (planes, checkout) y búsqueda del principal.
-  @@index([clienteId, esPrincipal])
   @@map("vehiculos")
 }
 
