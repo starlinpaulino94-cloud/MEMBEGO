@@ -167,21 +167,21 @@ model Sector {
 /// JAMÁS leen esta tabla (docs/GEOLOCALIZACION.md §7.7): la segmentación
 /// devuelve agregados e IDs, nunca coordenadas.
 model CustomerLocation {
-  id     String @id @default(cuid())
+  id     String                @id @default(cuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   label String? // "Casa", "Trabajo", "Otra"
-  type  CustomerLocationType @default(HOME)
+  type  CustomerLocationType   @default(HOME)
 
   countryId String?
-  country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  country   Country?           @relation(fields: [countryId], references: [id], onDelete: SetNull)
   regionId  String?
-  region    Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  region    Region?            @relation(fields: [regionId], references: [id], onDelete: SetNull)
   cityId    String?
-  city      City?    @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  city      City?              @relation(fields: [cityId], references: [id], onDelete: SetNull)
   sectorId  String?
-  sector    Sector?  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  sector    Sector?            @relation(fields: [sectorId], references: [id], onDelete: SetNull)
 
   // Textos originales como respaldo (regla §30): el catálogo puede no tener
   // aún el valor, pero el dato del usuario no se pierde.
@@ -194,17 +194,17 @@ model CustomerLocation {
   /// Coordenadas aproximadas, SOLO si el usuario las confirmó (MAP_SELECTION /
   /// GEOCODED_ADDRESS / DEVICE_LOCATION guardada como vivienda). Sin ellas,
   /// verificationStatus = UNVERIFIED y la ubicación no participa en radio.
-  latitud          Float?
-  longitud         Float?
+  latitud  Float?
+  longitud Float?
   // PostGIS (G-4): columna `geography` sincronizada por trigger (§6), no la
   // gestiona Prisma.
 
-  isPrimary                 Boolean                    @default(false)
-  source                    CustomerLocationSource
-  verificationStatus        LocationVerificationStatus @default(UNVERIFIED)
+  isPrimary          Boolean                  @default(false)
+  source             CustomerLocationSource
+  verificationStatus LocationVerificationStatus @default(UNVERIFIED)
   /// Separación de consentimientos (§33): guardar la vivienda ≠ usarla para
   /// campañas. MARKETING_GEO se valida aparte en LocationConsentService.
-  consentForPersonalization Boolean                    @default(false)
+  consentForPersonalization Boolean              @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -248,22 +248,22 @@ model GeoConsent {
 /// Constructor de audiencias. La audiencia se RECALCULA al ejecutar (§24);
 /// nunca se guarda una lista estática de personas.
 model SavedSegment {
-  id                      String         @id @default(cuid())
-  companyId               String
-  company                 Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                    String
-  description             String?
-  createdById             String? // userId del admin que lo creó (sin relación: puede borrarse)
-  estado                  SegmentoEstado @default(BORRADOR)
+  id          String         @id @default(cuid())
+  companyId   String
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdById String? // userId del admin que lo creó (sin relación: puede borrarse)
+  estado      SegmentoEstado @default(BORRADOR)
   /// Números agregados de la última estimación (§23) — nunca datos personales.
   ultimaAudienciaEstimada Int?
   ultimaEvaluacionAt      DateTime?
-  createdAt               DateTime       @default(now())
-  updatedAt               DateTime       @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  conditions      SegmentCondition[]
+  conditions SegmentCondition[]
   conditionGroups SegmentConditionGroup[]
-  campaigns       CampanaDirigida[]
+  campaigns  CampanaDirigida[]
 
   @@index([companyId, estado])
   @@map("saved_segments")
@@ -273,18 +273,18 @@ model SavedSegment {
 /// (prisma/schema/motores.prisma, decisión G-5): `campo` dot-path + `operador`
 /// + `valor` JSON, con árbol AND/OR/NOT anidable.
 model SegmentCondition {
-  id        String                 @id @default(cuid())
+  id        String                  @id @default(cuid())
   segmentId String
-  segment   SavedSegment           @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  segment   SavedSegment            @relation(fields: [segmentId], references: [id], onDelete: Cascade)
   groupId   String?
-  group     SegmentConditionGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group     SegmentConditionGroup?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   /// Dot-path del contexto de segmentación, ej. "cliente.ubicacion.sectorId".
-  campo     String
+  campo    String
   /// "eq" | "in" | "not_in" | "radius" | "within_region" | "has_membership" | ...
-  operador  String
-  valor     Json                   @default("{}")
-  orden     Int                    @default(0)
-  createdAt DateTime               @default(now())
+  operador String
+  valor    Json     @default("{}")
+  orden    Int      @default(0)
+  createdAt DateTime @default(now())
 
   @@index([segmentId, orden])
   @@index([groupId])
@@ -314,26 +314,26 @@ model SegmentConditionGroup {
 /// una sucursal). Nuevo modelo a propósito: NO reescribe MarketingCampaign ni
 /// Campana/CampanaGlobal (docs/GEOLOCALIZACION.md §3.6).
 model CampanaDirigida {
-  id           String                @id @default(cuid())
-  companyId    String
-  company      Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  segmentId    String?
-  segment      SavedSegment?         @relation(fields: [segmentId], references: [id], onDelete: SetNull)
-  nombre       String
-  mensaje      String                @db.Text
-  canales      CampanaCanal[] // canales habilitados (validados contra el catálogo)
+  id        String                 @id @default(cuid())
+  companyId String
+  company   Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  segmentId String?
+  segment   SavedSegment?          @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  nombre    String
+  mensaje   String                 @db.Text
+  canales   CampanaCanal[]         // canales habilitados (validados contra el catálogo)
   programadaEn DateTime?
-  estado       CampanaDirigidaEstado @default(BORRADOR)
+  estado    CampanaDirigidaEstado  @default(BORRADOR)
   /// Controles de frecuencia (§28).
-  maxPorDia    Int?                  @default(1)
-  maxPorSemana Int?                  @default(2)
-  prioridad    Int                   @default(0)
+  maxPorDia   Int? @default(1)
+  maxPorSemana Int? @default(2)
+  prioridad   Int  @default(0)
   /// Radio alrededor de una sucursal (§25). null = sin geografía (usa segmento).
-  sucursalId   String?
-  sucursal     Sucursal?             @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
-  radioKm      Int?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  sucursalId String?
+  sucursal   Sucursal?              @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
+  radioKm    Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   snapshots CampanaAudienciaSnapshot[]
   entregas  CampanaEntrega[]
@@ -345,16 +345,16 @@ model CampanaDirigida {
 /// Instantánea de audiencia calculada al programar/activar (§23, §24).
 /// Solo números agregados — nunca listas de personas.
 model CampanaAudienciaSnapshot {
-  id                String          @id @default(cuid())
-  campanaId         String
-  campana           CampanaDirigida @relation(fields: [campanaId], references: [id], onDelete: Cascade)
-  totalElegibles    Int
-  totalExcluidos    Int
+  id        String          @id @default(cuid())
+  campanaId String
+  campana   CampanaDirigida @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  totalElegibles  Int
+  totalExcluidos  Int
   sinConsentimiento Int
-  porCiudad         Json            @default("{}") // { cityId: count }
-  porSector         Json            @default("{}")
-  advertencias      Json            @default("[]") // audiencia pequeña/grande, sin canal, etc.
-  calculadaAt       DateTime        @default(now())
+  porCiudad    Json            @default("{}") // { cityId: count }
+  porSector    Json            @default("{}")
+  advertencias Json            @default("[]") // audiencia pequeña/grande, sin canal, etc.
+  calculadaAt  DateTime        @default(now())
 
   @@index([campanaId])
   @@map("campana_audiencia_snapshots")
@@ -362,17 +362,17 @@ model CampanaAudienciaSnapshot {
 
 /// Entrega a un cliente (fan-out en lotes vía src/modules/jobs/cola).
 model CampanaEntrega {
-  id              String          @id @default(cuid())
-  campanaId       String
-  campana         CampanaDirigida @relation(fields: [campanaId], references: [id], onDelete: Cascade)
+  id        String          @id @default(cuid())
+  campanaId String
+  campana   CampanaDirigida @relation(fields: [campanaId], references: [id], onDelete: Cascade)
   /// `clienteId` es la de la empresa de la campaña (no hay relación: la entrega
   /// es el rastro de un envío, no un dato que se borre con el cliente).
-  clienteId       String
-  canal           CampanaCanal
-  estado          String          @default("PENDIENTE") // PENDIENTE | ENVIADA | FALLIDA | EXCLUIDA
+  clienteId String
+  canal     CampanaCanal
+  estado    String          @default("PENDIENTE") // PENDIENTE | ENVIADA | FALLIDA | EXCLUIDA
   motivoExclusion String?
-  enviadaAt       DateTime?
-  createdAt       DateTime        @default(now())
+  enviadaAt  DateTime?
+  createdAt  DateTime @default(now())
 
   @@index([campanaId, estado])
   @@index([clienteId])
@@ -381,20 +381,20 @@ model CampanaEntrega {
 
 /// Evento de búsqueda en el mapa (analítica AGREGADA, §35) — nunca recorridos.
 model LocationSearchEvent {
-  id          String   @id @default(cuid())
-  userId      String? // null = anónimo; no se guarda para identificar recorridos
+  id       String   @id @default(cuid())
+  userId   String? // null = anónimo; no se guarda para identificar recorridos
   /// "CURRENT" | "HOME" | "MANUAL"
-  contexto    String
-  countryId   String?
-  cityId      String?
-  sectorId    String?
+  contexto String
+  countryId String?
+  cityId    String?
+  sectorId  String?
   /// Aproximada; se redondea (≈1km) para métricas (§35).
-  latitud     Float?
-  longitud    Float?
-  radioKm     Int?
-  filtros     Json     @default("{}")
-  resultCount Int      @default(0)
-  createdAt   DateTime @default(now())
+  latitud  Float?
+  longitud Float?
+  radioKm  Int?
+  filtros  Json     @default("{}")
+  resultCount Int  @default(0)
+  createdAt DateTime @default(now())
 
   @@index([contexto, createdAt])
   @@index([cityId, createdAt])
