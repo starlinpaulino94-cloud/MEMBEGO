@@ -173,6 +173,10 @@ model OfertaInvitado {
   createdAt   DateTime      @default(now())
 
   usos OfertaUso[]
+  /// El regalo VIP se canjea con el MISMO proceso de QR que las compras: el
+  /// invitado tiene su token de un solo uso que el scanner reconoce y que se
+  /// regenera tras cada canje (el cupo es por período, no un contador fijo).
+  qrTokens QrToken[]
 
   @@unique([ofertaId, clienteId])
   @@index([clienteId])

@@ -10,6 +10,7 @@ import { generarCodigo } from '@/lib/codes'
 import { inicioPeriodo } from '@/modules/ofertas/periodo'
 import { ofertaVigente } from '@/modules/ofertas/queries'
 import { registrarEntregaBeneficio } from '@/modules/transacciones/entrega'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 /**
  * Ofertas VIP · acciones. La elegibilidad SIEMPRE se decide por cuenta
@@ -26,28 +27,42 @@ export interface OfertaActionState {
   transactionId?: string
 }
 
-/** Notifica "tienes un regalo" a una lista de clientes (mejor esfuerzo). */
-async function notificarInvitados(clienteIds: string[], titulo: string, codigo: string) {
-  if (clienteIds.length === 0) return
+/**
+ * Notifica "tienes un regalo" (mejor esfuerzo). El enlace lleva a SU regalo
+ * DENTRO de la app (regla de producto: ninguna oferta saca al cliente de su
+ * sesión) — por eso se notifica por invitación, no por lista de clientes.
+ */
+async function notificarInvitados(
+  invitaciones: { clienteId: string; invitadoId: string }[],
+  titulo: string
+) {
+  if (invitaciones.length === 0) return
   await sinEmpresa('ofertas: notificaciones y users son globales (no tienen empresa)', async (tx) => {
     const clientes = await tx.cliente.findMany({
-      where: { id: { in: clienteIds } },
-      select: { supabaseId: true },
+      where: { id: { in: invitaciones.map((i) => i.clienteId) } },
+      select: { id: true, supabaseId: true },
     })
     const users = await tx.user.findMany({
       where: { supabaseId: { in: clientes.map((c) => c.supabaseId) } },
-      select: { id: true },
+      select: { id: true, supabaseId: true },
     })
-    await tx.notificacion
-      .createMany({
-        data: users.map((u) => ({
-          userId: u.id,
+    const userPorSupabase = new Map(users.map((u) => [u.supabaseId, u.id]))
+    const supabasePorCliente = new Map(clientes.map((c) => [c.id, c.supabaseId]))
+    const data = invitaciones.flatMap((i) => {
+      const userId = userPorSupabase.get(supabasePorCliente.get(i.clienteId) ?? '')
+      if (!userId) return []
+      return [
+        {
+          userId,
           tipo: 'PROMOCION_NUEVA' as const,
           titulo: '🎁 Tienes un regalo',
-          mensaje: `Fuiste seleccionado para "${titulo}". Ábrelo y reclámalo.`,
-          href: `/oferta/${codigo}`,
-        })),
-      })
+          mensaje: `"${titulo}" ya está en tus beneficios, listo para usar con tu QR.`,
+          href: `/cliente/mis-promociones/regalo/${i.invitadoId}`,
+        },
+      ]
+    })
+    await tx.notificacion
+      .createMany({ data })
       .catch((e) => console.error('[ofertas] notificar:', e))
   })
 }
@@ -91,8 +106,13 @@ export async function crearOfertaPrivada(
       return { error: 'Hay clientes seleccionados que no pertenecen a la empresa.' }
     }
 
-    const oferta = await conEmpresa(companyId, (tx) =>
-      tx.ofertaPrivada.create({
+    // EL REGALO NACE ENTREGADO (decisión de producto, 14-08-2026): entra
+    // directo a los beneficios del invitado —reclamadaAt puesto— y con su QR
+    // listo, el mismo proceso de canje que cualquier compra. Nada de mandarlo
+    // a reclamar a una página.
+    const ahora = new Date()
+    const oferta = await conEmpresa(companyId, async (tx) => {
+      const creada = await tx.ofertaPrivada.create({
         data: {
           companyId,
           codigo: generarCodigo(10),
@@ -102,16 +122,36 @@ export async function crearOfertaPrivada(
           periodo,
           vigenciaHasta,
           creadaPorId: user.metadata.dbUserId ?? null,
-          invitados: { createMany: { data: clienteIds.map((clienteId) => ({ clienteId })) } },
+          invitados: {
+            createMany: {
+              data: clienteIds.map((clienteId) => ({ clienteId, reclamadaAt: ahora })),
+            },
+          },
         },
-        select: { id: true, codigo: true },
+        select: { id: true, codigo: true, invitados: { select: { id: true, clienteId: true } } },
       })
+      await tx.qrToken.createMany({
+        data: creada.invitados.map((i) => ({
+          clienteId: i.clienteId,
+          ofertaInvitadoId: i.id,
+          token: nuevoTokenQr(),
+          expiraAt: vencimientoQr(),
+        })),
+      })
+      return creada
+    })
+
+    await notificarInvitados(
+      oferta.invitados.map((i) => ({ clienteId: i.clienteId, invitadoId: i.id })),
+      titulo
     )
 
-    await notificarInvitados(clienteIds, titulo, oferta.codigo)
-
     revalidatePath('/admin/ofertas/vip')
-    return { success: true, ofertaId: oferta.id, mensaje: 'Oferta creada. Comparte el link con tus clientes.' }
+    return {
+      success: true,
+      ofertaId: oferta.id,
+      mensaje: 'Regalo creado: ya está en los beneficios de cada cliente, con su QR listo.',
+    }
   } catch (e) {
     console.error('[ofertas] crear:', e)
     return { error: 'No se pudo crear la oferta.' }
@@ -184,14 +224,38 @@ export async function gestionarInvitado(
         })
       )
       if (!cliente) return { error: 'Cliente no válido.' }
-      await conEmpresa(oferta.companyId, (tx) =>
-        tx.ofertaInvitado.upsert({
+      // Mismo trato que al crear la oferta: el regalo nace ENTREGADO (con su
+      // QR listo). Si la invitación ya existía sin reclamar, se completa.
+      const invitado = await conEmpresa(oferta.companyId, async (tx) => {
+        const inv = await tx.ofertaInvitado.upsert({
           where: { ofertaId_clienteId: { ofertaId, clienteId } },
-          create: { ofertaId, clienteId },
+          create: { ofertaId, clienteId, reclamadaAt: new Date() },
           update: {},
+          select: { id: true, reclamadaAt: true },
         })
-      )
-      await notificarInvitados([clienteId], oferta.titulo, oferta.codigo)
+        if (!inv.reclamadaAt) {
+          await tx.ofertaInvitado.update({
+            where: { id: inv.id },
+            data: { reclamadaAt: new Date() },
+          })
+        }
+        const qrActivo = await tx.qrToken.findFirst({
+          where: { ofertaInvitadoId: inv.id, activo: true },
+          select: { id: true },
+        })
+        if (!qrActivo) {
+          await tx.qrToken.create({
+            data: {
+              clienteId,
+              ofertaInvitadoId: inv.id,
+              token: nuevoTokenQr(),
+              expiraAt: vencimientoQr(),
+            },
+          })
+        }
+        return inv
+      })
+      await notificarInvitados([{ clienteId, invitadoId: invitado.id }], oferta.titulo)
     } else if (accion === 'quitar') {
       // Al quitarlo pierde el acceso (el historial de usos se va con la
       // invitación: cascade). Para conservar historial, mejor FINALIZAR.
