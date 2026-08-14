@@ -183,6 +183,28 @@ export interface EvaluateResponse {
   reserved: false
 }
 
+/**
+ * Lo que devuelve `POST /redemptions/{visitId}/reverse`.
+ *
+ * El identificador que se revierte es el `visitId` del canje, no el
+ * `redemptionId`: lo que consumió el lavado fue la visita; la transacción
+ * comercial se arrastra a `REVERTED` detrás.
+ */
+export interface ReversalResponse {
+  visitId: string
+  membershipId: string
+  customerId: string
+  companyId: string
+  /** Saldo tras devolver el lavado. `null` en planes ilimitados. */
+  usesLeft: number | null
+  /**
+   * `false` = ya estaba revertida y esta llamada no cambió nada. Revertir dos
+   * veces devuelve 200 y un lavado, no dos.
+   */
+  applied: boolean
+  reversedAt: string
+}
+
 export interface RedemptionResponse {
   redemptionId: string
   visitId: string
@@ -238,6 +260,8 @@ export interface KeysResponse {
 export interface EvaluateRequest {
   companyId: string
   customerId: string
+  /** Qué carro hay delante. Sin él, `coverage.covers` viene `null`. */
+  context?: EvaluateContext
 }
 
 export interface RedemptionRequest {
@@ -248,6 +272,16 @@ export interface RedemptionRequest {
   sucursalId?: string | null
   qrTokenId?: string | null
   notas?: string | null
+}
+
+/** Cuerpo de `POST /redemptions/{visitId}/reverse`. */
+export interface ReversalRequest {
+  companyId: string
+  /**
+   * Por qué se revierte. OBLIGATORIO: una reversa sin motivo es un descuadre
+   * que nadie puede explicar tres meses después.
+   */
+  reason: string
 }
 
 /**

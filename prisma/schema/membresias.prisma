@@ -73,7 +73,7 @@ model Plan {
   precioVehiculoExtra Decimal? @db.Decimal(10, 2)
 
   memberships            Membership[]
-  membershipsSolicitadas Membership[] @relation("PlanSolicitado")
+  membershipsSolicitadas Membership[]          @relation("PlanSolicitado")
   preciosPorCategoria    PlanPrecioCategoria[]
 
   @@index([companyId])
@@ -127,15 +127,15 @@ model Membership {
   // Fase 2 CardNET: renovación automática con tarjeta guardada. `autoRenovar`
   // lo enciende el cliente al pagar y guardar su tarjeta; el cron de renovación
   // cobra la `tarjetaTokenizada` cuando la membresía está por vencer.
-  autoRenovar          Boolean            @default(false)
+  autoRenovar            Boolean            @default(false)
   /// Cancelación pedida por EL CLIENTE, con efecto a fin de período (decisión
   /// de producto, 12-08-2026): la membresía sigue ACTIVA con sus usos hasta
   /// `fechaVencimiento`, no se renueva (el mismo update apaga `autoRenovar`),
   /// y al vencer muere sola. La fecha es CUÁNDO lo pidió — sirve de rastro.
   /// Null = sin cancelación programada.
   canceladaAlVencimiento DateTime?
-  tarjetaTokenizadaId  String?
-  tarjetaTokenizada    TarjetaTokenizada? @relation(fields: [tarjetaTokenizadaId], references: [id], onDelete: SetNull)
+  tarjetaTokenizadaId    String?
+  tarjetaTokenizada      TarjetaTokenizada? @relation(fields: [tarjetaTokenizadaId], references: [id], onDelete: SetNull)
 
   // Período activo
   fechaInicio      DateTime?
@@ -198,15 +198,15 @@ model PlanPrecioCategoria {
 // funcionando sin vehículo: la asociación aplica a compras nuevas (regla de
 // compatibilidad), nunca retroactivamente.
 model MembresiaVehiculo {
-  id           String     @id @default(cuid())
-  membershipId String
-  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  vehiculoId   String
-  vehiculo     Vehiculo   @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
+  id                     String     @id @default(cuid())
+  membershipId           String
+  membership             Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  vehiculoId             String
+  vehiculo               Vehiculo   @relation(fields: [vehiculoId], references: [id], onDelete: Cascade)
   /// Nivel tarifario CONGELADO al asociar (`nivelDeCompra`): renivelar la
   /// categoría después no cambia lo ya comprado.
-  nivelTarifarioComprado Int @default(1)
-  createdAt    DateTime   @default(now())
+  nivelTarifarioComprado Int        @default(1)
+  createdAt              DateTime   @default(now())
 
   @@unique([membershipId, vehiculoId])
   @@index([vehiculoId])
@@ -232,10 +232,10 @@ model TarjetaTokenizada {
   token            String?
 
   /// Solo para mostrar "•••• 1234 · Visa · 12/27". Nunca el PAN completo.
-  marca      String?
-  ultimos4   String?
-  vencMes    Int?
-  vencAnio   Int?
+  marca    String?
+  ultimos4 String?
+  vencMes  Int?
+  vencAnio Int?
 
   activa    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -308,6 +308,24 @@ model Visit {
   ipAddress    String?
   userAgent    String?
   createdAt    DateTime   @default(now())
+
+  /// REVERSA. Una visita revertida NO se borra: se marca.
+  ///
+  /// Borrarla dejaría el saldo cuadrado y el historial mintiendo — el lavado
+  /// se registró, y que después se anulara la factura que lo cobraba es un
+  /// hecho posterior, no una razón para fingir que nunca ocurrió. Es también lo
+  /// único que permite responder «¿por qué a este cliente le sobra un lavado?».
+  ///
+  /// `null` = visita normal, que es lo que son todas las existentes.
+  revertidaAt         DateTime?
+  /// Por qué se revirtió. El servicio lo exige: una reversa sin motivo es un
+  /// descuadre que nadie puede explicar tres meses después.
+  revertidaMotivo     String?
+  /// Quién la revirtió. `null` si fue un satélite: no tiene usuario aquí.
+  revertidaPorId      String?
+  revertidaPor        User?     @relation("VisitsRevertidas", fields: [revertidaPorId], references: [id])
+  /// Slug del satélite que la revirtió; `null` si fue el panel de MembeGo.
+  revertidaPorSistema String?
 
   comprobante Comprobante?
 

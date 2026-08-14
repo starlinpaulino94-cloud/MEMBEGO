@@ -56,6 +56,7 @@ export const ENTIDAD_LABEL: Record<string, string> = {
  */
 export const ACCION_LABEL: Record<string, string> = {
   VISITA_CONFIRMADA: 'Visita confirmada',
+  VISITA_REVERTIDA: 'Visita revertida',
   PAGO_APROBADO: 'Pago aprobado',
   PAGO_RECHAZADO: 'Pago rechazado',
   MEMBRESIA_CANCELADA: 'Membresía cancelada',
