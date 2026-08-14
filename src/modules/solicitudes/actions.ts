@@ -55,6 +55,17 @@ export async function enviarSolicitudEmpresa(
   _prev: EnviarSolicitudState,
   formData: FormData
 ): Promise<EnviarSolicitudState> {
+  // Blindaje total: un throw aquí no debe tumbar la página del negocio con
+  // el «Algo salió mal» genérico — siempre se responde con un mensaje.
+  try {
+    return await procesarSolicitud(formData)
+  } catch (e) {
+    console.error('[solicitudes] inesperado:', e)
+    return { error: 'No se pudo enviar tu solicitud. Espera un minuto e intenta de nuevo.' }
+  }
+}
+
+async function procesarSolicitud(formData: FormData): Promise<EnviarSolicitudState> {
   const meta = await getRequestMeta()
   if (!(await registerLimiter(meta.ipAddress ?? 'unknown'))) {
     return { error: 'Demasiados intentos. Espera unos minutos e intenta de nuevo.' }
