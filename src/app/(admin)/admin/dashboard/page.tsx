@@ -36,6 +36,7 @@ const fmt = (n: number) => new Intl.NumberFormat('es-DO').format(n)
 
 const ACCION_LABEL: Record<string, string> = {
   VISITA_CONFIRMADA: 'Visita confirmada',
+  VISITA_REVERTIDA: 'Visita revertida',
   PAGO_APROBADO: 'Pago aprobado',
   PAGO_RECHAZADO: 'Pago rechazado',
   MEMBRESIA_CANCELADA: 'Membresía cancelada',

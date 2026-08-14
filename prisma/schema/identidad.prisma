@@ -44,6 +44,10 @@ enum NotifTipo {
 
 enum AuditAccion {
   VISITA_CONFIRMADA
+  /// Una visita ya registrada se deshizo y el lavado volvió al saldo del
+  /// cliente. Va aparte de VISITA_CONFIRMADA porque se pregunta por ella sola:
+  /// «¿por qué a este cliente le sobra un lavado?».
+  VISITA_REVERTIDA
   PAGO_APROBADO
   PAGO_RECHAZADO
   MEMBRESIA_CANCELADA
@@ -157,18 +161,19 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  memberships     Membership[]
-  visits          Visit[]             @relation("EmpleadoVisits")
-  auditLogs       AuditLog[]
-  comprobantes    Comprobante[]
-  notificaciones  Notificacion[]
-  follows         CompanyFollow[]
-  promosGuardadas PromocionGuardada[]
-  notasCliente    ClienteNota[]
-  intereses       UserInteres[]
-  empresasAcceso  UserCompanyAccess[]
+  memberships      Membership[]
+  visits           Visit[]             @relation("EmpleadoVisits")
+  visitsRevertidas Visit[]             @relation("VisitsRevertidas")
+  auditLogs        AuditLog[]
+  comprobantes     Comprobante[]
+  notificaciones   Notificacion[]
+  follows          CompanyFollow[]
+  promosGuardadas  PromocionGuardada[]
+  notasCliente     ClienteNota[]
+  intereses        UserInteres[]
+  empresasAcceso   UserCompanyAccess[]
   /// Acceso a los sistemas verticales, con su rol DENTRO de cada uno.
-  sistemasAcceso  UsuarioSistema[]
+  sistemasAcceso   UsuarioSistema[]
 
   // Geolocalización (G-1): la ubicación es de la PERSONA, cross-empresa.
   customerLocations CustomerLocation[]
@@ -472,14 +477,14 @@ model Sucursal {
 
   // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
   // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.
-  countryId String?
-  country   Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
-  regionId  String?
-  region    Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
-  cityId    String?
-  city      City?    @relation(fields: [cityId], references: [id], onDelete: SetNull)
-  sectorId  String?
-  sector    Sector?  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  countryId   String?
+  country     Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  regionId    String?
+  region      Region?  @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  cityId      String?
+  city        City?    @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  sectorId    String?
+  sector      Sector?  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
   // Textos originales como respaldo (regla §30).
   ciudadTexto String?
   sectorTexto String?
@@ -489,12 +494,12 @@ model Sucursal {
   // gestiona Prisma.
 
   // Publicación en el mapa y radio de servicio.
-  mostrarEnMapa       Boolean  @default(true)
-  radioServicioKm     Int? // radio de atención (segmentación por radio, §25)
-  ubicacionVerificada Boolean  @default(false) // coordenadas validadas visualmente por el admin (§8)
+  mostrarEnMapa          Boolean   @default(true)
+  radioServicioKm        Int? // radio de atención (segmentación por radio, §25)
+  ubicacionVerificada    Boolean   @default(false) // coordenadas validadas visualmente por el admin (§8)
   ubicacionActualizadaAt DateTime?
   /// Horario estructurado (amplía el texto libre de Company.horario).
-  horarioDetallado Json?
+  horarioDetallado       Json?
 
   // Campañas geosegmentadas por radio alrededor de esta sucursal.
   campanasDirigidas CampanaDirigida[]
