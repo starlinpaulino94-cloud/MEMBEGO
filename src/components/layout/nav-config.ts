@@ -1,5 +1,6 @@
 import {
   Activity,
+  Inbox,
   WalletCards,
   LayoutDashboard,
   Users,
@@ -333,6 +334,9 @@ const SUPERADMIN_PLATAFORMA: NavGroup[] = [
     id: 'negocio',
     label: 'Negocio',
     items: [
+      // Solicitudes va ANTES de Empresas: es el embudo que las alimenta
+      // (formulario público /solicitud-empresa → revisión → empresa creada).
+      { href: '/superadmin/solicitudes', label: 'Solicitudes', icon: Inbox },
       { href: '/superadmin/empresas', label: 'Empresas', icon: Building2 },
       { href: '/superadmin/usuarios', label: 'Usuarios', icon: UserCog },
       { href: '/superadmin/planes', label: 'Planes', icon: Package },

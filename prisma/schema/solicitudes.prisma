@@ -1,0 +1,49 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Solicitudes de alta de empresa (etapa concierge del onboarding B2B).
+//
+// En esta etapa el negocio NO se crea solo: llena el formulario público
+// (/solicitud-empresa) con todo lo necesario —datos, horarios, planes,
+// promociones, imágenes— y el superadmin lo revisa en su módulo de
+// Solicitudes, lo contacta y crea la empresa con un clic cuando está listo.
+//
+// `datos` guarda el formulario completo tal como lo llenó el negocio
+// (versionado {v:1,...}): el formulario puede crecer sin migraciones. Los
+// tres campos denormalizados (nombre, tipo, correo) existen solo para que el
+// listado y la búsqueda del superadmin no tengan que abrir el JSON.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SolicitudEmpresaEstado {
+  NUEVA
+  EN_REVISION
+  CONTACTADA
+  CREADA
+  DESCARTADA
+}
+
+model SolicitudEmpresa {
+  id     String                 @id @default(cuid())
+  estado SolicitudEmpresaEstado @default(NUEVA)
+
+  nombreNegocio  String
+  tipoNegocio    String
+  contactoCorreo String
+
+  /// El formulario completo, versionado ({v:1, negocio, ubicacion, horario,
+  /// sucursales, marca, admin, planes, promos, cobros, extras}).
+  datos    Json
+  /// Adjuntos subidos al storage: [{tipo:'logo'|'portada'|'promo',
+  /// promoIndice?, url, path}].
+  imagenes Json?
+
+  /// Bitácora libre del superadmin (llamadas, acuerdos, pendientes).
+  notasInternas String?
+  /// Empresa creada a partir de esta solicitud (cuando estado = CREADA).
+  companyId     String?
+  ipAddress     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([estado, createdAt])
+  @@map("solicitudes_empresa")
+}
