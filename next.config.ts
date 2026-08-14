@@ -20,6 +20,15 @@ const nextConfig: NextConfig = {
     // compilación a costa de un build algo más lento — necesario porque la app
     // ya tiene cientos de rutas.
     webpackMemoryOptimizations: true,
+    serverActions: {
+      // El formulario público de solicitudes (/solicitud-empresa) sube logo,
+      // portada e imágenes de promoción (≤ 5 MB cada una) por Server Action.
+      // El límite por defecto es 1 MB: con cualquier foto real, la petición
+      // moría en el transporte y el negocio veía «Algo salió mal» — sin
+      // llegar nunca a la validación. El formulario limita el TOTAL a 28 MB
+      // en el navegador; este techo lo respalda con margen.
+      bodySizeLimit: '30mb',
+    },
   },
   images: {
     remotePatterns: [

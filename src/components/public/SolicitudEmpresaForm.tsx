@@ -147,6 +147,16 @@ export function SolicitudEmpresaForm() {
   const [promoImgs, setPromoImgs] = useState<Record<number, Adjunto>>({})
   const [imgErrores, setImgErrores] = useState<Record<string, string>>({})
   const [state, formAction, pending] = useActionState(enviarSolicitudEmpresa, initState)
+  const [errorLocal, setErrorLocal] = useState<string | null>(null)
+
+  // El TOTAL de adjuntos debe caber en el cuerpo de la Server Action (techo
+  // del servidor: 30 MB). Se avisa ANTES de enviar: pasado el límite, la
+  // petición muere en el transporte y el negocio solo vería «Algo salió mal».
+  const MAX_TOTAL_BYTES = 28 * 1024 * 1024
+  const totalAdjuntos =
+    (logo?.file.size ?? 0) +
+    (portada?.file.size ?? 0) +
+    Object.values(promoImgs).reduce((s, a) => s + a.file.size, 0)
 
   // Autosave del TEXTO (los File no sobreviven a un reload).
   useEffect(() => {
@@ -235,6 +245,13 @@ export function SolicitudEmpresaForm() {
   return (
     <form
       action={(fd) => {
+        if (totalAdjuntos > MAX_TOTAL_BYTES) {
+          setErrorLocal(
+            'Las imágenes juntas pesan demasiado (máximo 28 MB en total). Reduce alguna e intenta de nuevo.'
+          )
+          return
+        }
+        setErrorLocal(null)
         fd.set('datos', JSON.stringify(datos))
         if (logo) fd.set('logo', logo.file)
         if (portada) fd.set('portada', portada.file)
@@ -845,9 +862,9 @@ export function SolicitudEmpresaForm() {
         </div>
       </Seccion>
 
-      {state.error ? (
+      {errorLocal || state.error ? (
         <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
+          <AlertDescription>{errorLocal ?? state.error}</AlertDescription>
         </Alert>
       ) : null}
 
