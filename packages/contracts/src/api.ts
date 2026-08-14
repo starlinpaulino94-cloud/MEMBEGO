@@ -111,6 +111,42 @@ export interface MembershipsActiveResponse {
 
 export type TipoBeneficio = 'MEMBERSHIP' | 'PROMOTION'
 
+/** Un vehículo que la membresía protege. */
+export interface VehiculoCubiertoDTO {
+  vehiculoId: string
+  placa: string | null
+  /** Nivel congelado al asociarlo (ver `vehicleLevelMax`). */
+  nivelTarifario: number
+}
+
+export type MotivoNoCubre =
+  | 'VEHICLE_LEVEL_ABOVE_PLAN'
+  | 'VEHICLE_NOT_IN_MEMBERSHIP'
+  | 'NO_USES_LEFT'
+
+/**
+ * QUÉ cubre la membresía. Solo en los beneficios de tipo `MEMBERSHIP`.
+ *
+ * NO lleva importes, y no es un olvido: MembeGo no conoce la tarifa del
+ * satélite. Dice hasta qué vehículo llega el plan y cuántos lavados quedan; lo
+ * que cuesta un lavado de SUV en ESE car wash lo pone el car wash, con su
+ * propio catálogo. Un precio inventado que sale por una API acaba cobrado.
+ */
+export interface CoberturaMembresia {
+  /** Tope de vehículo del plan. `null` = acepta cualquiera. */
+  vehicleLevelMax: number | null
+  unlimited: boolean
+  washesIncluded: number
+  vehicles: VehiculoCubiertoDTO[]
+  /**
+   * `true` cubre · `false` no cubre · `null` NO SE PREGUNTÓ (la llamada no
+   * mandó `context`). Los tres son distintos: tratar `null` como `false` cobra
+   * de más, y como `true` regala el lavado.
+   */
+  covers: boolean | null
+  reason: MotivoNoCubre | null
+}
+
 export interface BeneficioEvaluado {
   type: TipoBeneficio
   id: string
@@ -120,6 +156,21 @@ export interface BeneficioEvaluado {
   expiresAt: string | null
   /** `SIN_USOS`, `EXPIRED`, `DAY_NOT_ALLOWED`… `null` si es elegible. */
   reason: string | null
+  /** Solo en `MEMBERSHIP`; `null` en las promociones. */
+  coverage: CoberturaMembresia | null
+}
+
+/**
+ * Contexto opcional de `POST /benefits/evaluate`: qué carro hay delante.
+ *
+ * Sin él, la respuesta es la de siempre y `coverage.covers` viene `null`. Con
+ * él, cada membresía dice si cubre ESE vehículo.
+ */
+export interface EvaluateContext {
+  /** Nivel tarifario del vehículo que llegó. */
+  vehicleLevel?: number | null
+  /** Placa del vehículo, normalizada por el satélite. */
+  plate?: string | null
 }
 
 export interface EvaluateResponse {

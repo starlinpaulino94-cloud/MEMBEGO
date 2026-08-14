@@ -3,6 +3,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { validarConsumoCompra } from '@/modules/promociones/compra'
+import { coberturaDeMembresia, type ContextoConsumo } from '@/modules/plataforma/cobertura'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,15 @@ export const dynamic = 'force-dynamic'
 interface Cuerpo {
   companyId?: string
   customerId?: string
+  /**
+   * Qué carro hay delante. OPCIONAL: sin él la respuesta es exactamente la de
+   * antes y cada `coverage.covers` viene `null` («no se preguntó»). Los
+   * satélites que ya llamaban a este endpoint no se enteran.
+   */
+  context?: {
+    vehicleLevel?: number | null
+    plate?: string | null
+  }
 }
 
 /** Reglas del motor puro, traducidas a un código estable para el satélite. */
@@ -66,6 +76,17 @@ export async function POST(req: NextRequest) {
 
   const ahora = new Date()
 
+  // El contexto se normaliza UNA vez: una placa que llegue con guiones o en
+  // minúsculas no debe decidir que la membresía no cubre el carro de su dueño.
+  const contexto: ContextoConsumo | undefined = cuerpo.context
+    ? {
+        nivelVehiculo: cuerpo.context.vehicleLevel ?? null,
+        placa: cuerpo.context.plate
+          ? cuerpo.context.plate.toUpperCase().replace(/[^A-Z0-9]/g, '')
+          : null,
+      }
+    : undefined
+
   const datos = await conEmpresa(auth.companyId, async (tx) => {
     // La zona horaria de la empresa NO es un detalle de presentación: las
     // promociones con restricción de días y horas se evalúan en la hora del
@@ -82,7 +103,21 @@ export async function POST(req: NextRequest) {
         id: true,
         lavadosRestantes: true,
         fechaVencimiento: true,
-        plan: { select: { nombre: true } },
+        // Lo que hace falta para decir QUÉ cubre, no solo si puede consumir.
+        plan: {
+          select: {
+            nombre: true,
+            nivelTarifarioMax: true,
+            esIlimitado: true,
+            lavadosIncluidos: true,
+          },
+        },
+        vehiculos: {
+          select: {
+            nivelTarifarioComprado: true,
+            vehiculo: { select: { id: true, placaNormalizada: true } },
+          },
+        },
       },
       orderBy: { fechaVencimiento: 'desc' },
     })
@@ -118,6 +153,22 @@ export async function POST(req: NextRequest) {
         usesLeft: m.lavadosRestantes,
         expiresAt: m.fechaVencimiento?.toISOString() ?? null,
         reason: vencida ? 'EXPIRED' : sinUsos ? 'NO_USES_LEFT' : null,
+        // El veredicto sobre el carro concreto. Con el MISMO módulo puro que
+        // se prueba aparte, para no tener la regla escrita dos veces.
+        coverage: coberturaDeMembresia(
+          {
+            nivelTarifarioMax: m.plan.nivelTarifarioMax,
+            esIlimitado: m.plan.esIlimitado,
+            lavadosIncluidos: m.plan.lavadosIncluidos,
+          },
+          m.vehiculos.map((v) => ({
+            vehiculoId: v.vehiculo.id,
+            placa: v.vehiculo.placaNormalizada,
+            nivelTarifario: v.nivelTarifarioComprado,
+          })),
+          m.lavadosRestantes,
+          contexto
+        ),
       }
     }),
     ...datos.compras.map((c) => {
@@ -142,6 +193,8 @@ export async function POST(req: NextRequest) {
         usesLeft: c.usosRestantes,
         expiresAt: c.fechaVencimiento?.toISOString() ?? null,
         reason: v.puedeUsar ? null : motivoDe(v.mensaje),
+        /** Una promoción no tiene tope de vehículo: cubre lo que dice su título. */
+        coverage: null,
       }
     }),
   ]
