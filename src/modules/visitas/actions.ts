@@ -12,6 +12,8 @@ import {
   type TransaccionScanInfo,
 } from '@/modules/transacciones/actions'
 import { validarConsumoCompra, registrarTransicionCompra } from '@/modules/promociones/compra'
+import { inicioPeriodo } from '@/modules/ofertas/periodo'
+import { ofertaVigente } from '@/modules/ofertas/queries'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { qrVencido } from '@/modules/qr/token'
 import { primerErrorZod } from '@/lib/validacion'
@@ -82,6 +84,26 @@ export interface PromoCompraLookup {
   alertas: string[]
 }
 
+/** REGALO VIP: lookup de su QR (mismo escáner; cupo por período). */
+export interface RegaloLookup {
+  invitadoId: string
+  qrTokenId: string
+  clienteId: string
+  nombre: string
+  avatarUrl: string | null
+  empresa: string
+  titulo: string
+  descripcion: string
+  usosPorPeriodo: number
+  /** SEMANAL | MENSUAL | TOTAL — para el texto «al mes / a la semana». */
+  periodo: string
+  usadosPeriodo: number
+  restantesPeriodo: number
+  vigenciaHasta: string | null
+  puedeUsar: boolean
+  mensaje?: string
+}
+
 export interface LookupResult {
   error?: string
   errorCode?: 'QR_NOT_FOUND' | 'QR_INACTIVE' | 'WRONG_COMPANY' | 'NO_MEMBERSHIP' | 'MEMBERSHIP_INACTIVE' | 'MEMBERSHIP_EXPIRED' | 'NO_USES_LEFT' | 'RATE_LIMITED' | 'UNAUTHORIZED' | 'INTERNAL'
@@ -91,6 +113,8 @@ export interface LookupResult {
   transaccion?: TransaccionScanInfo
   /** Fase E5: QR de una promoción comprada (canje). */
   promoCompra?: PromoCompraLookup
+  /** Regalo VIP: QR del invitado de una oferta privada (canje por período). */
+  regalo?: RegaloLookup
 }
 
 export async function buscarPorToken(token: string): Promise<LookupResult> {
@@ -175,6 +199,13 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
               include: {
                 promocion: true,
                 company: { select: { name: true, zonaHoraria: true } },
+              },
+            },
+            // Regalo VIP: el QR también puede pertenecer al invitado de una
+            // oferta privada (canje contra el cupo del período).
+            ofertaInvitado: {
+              include: {
+                oferta: { include: { company: { select: { name: true, zonaHoraria: true } } } },
               },
             },
           },
@@ -286,6 +317,58 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
             compra.usosRestantes === 1 && validacion.puedeUsar
               ? ['Este es el último uso disponible de la promoción.']
               : [],
+        },
+      }
+    }
+
+    // ── Regalo VIP: QR del invitado de una oferta privada ───────────────────
+    // Mismo circuito del escáner; lo que cambia es el cupo: por PERÍODO
+    // (se renueva solo), no un contador fijo de usos.
+    if (qr.ofertaInvitado) {
+      const invitado = qr.ofertaInvitado
+      const oferta = invitado.oferta
+      if (
+        user.metadata.role !== 'SUPERADMIN' &&
+        user.metadata.companyId &&
+        oferta.companyId !== user.metadata.companyId
+      ) {
+        await logScanInvalido(user.metadata.dbUserId, clean, 'WRONG_COMPANY')
+        return { error: 'Este regalo pertenece a otra empresa.', errorCode: 'WRONG_COMPANY' }
+      }
+      const vigente = oferta.estado === 'ACTIVA' && ofertaVigente(oferta)
+      const usados = vigente
+        ? await conEmpresa(oferta.companyId, (tx) =>
+            tx.ofertaUso.count({
+              where: {
+                invitadoId: invitado.id,
+                createdAt: { gte: inicioPeriodo(oferta.periodo, oferta.company.zonaHoraria) },
+              },
+            })
+          ).catch(() => 0)
+        : 0
+      const restantes = Math.max(0, oferta.usosPorPeriodo - usados)
+      const puedeUsar = vigente && restantes > 0
+      return {
+        regalo: {
+          invitadoId: invitado.id,
+          qrTokenId: qr.id,
+          clienteId: cliente.id,
+          nombre: cliente.nombre,
+          avatarUrl: cliente.avatarUrl ?? null,
+          empresa: oferta.company.name,
+          titulo: oferta.titulo,
+          descripcion: oferta.descripcion ?? '',
+          usosPorPeriodo: oferta.usosPorPeriodo,
+          periodo: oferta.periodo,
+          usadosPeriodo: usados,
+          restantesPeriodo: restantes,
+          vigenciaHasta: oferta.vigenciaHasta?.toISOString() ?? null,
+          puedeUsar,
+          mensaje: !vigente
+            ? 'Este regalo ya no está disponible.'
+            : restantes <= 0
+              ? 'El cupo del período está agotado. Se renueva solo al empezar el próximo.'
+              : undefined,
         },
       }
     }

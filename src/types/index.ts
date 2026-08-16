@@ -48,6 +48,12 @@ export interface AppMetadata {
   clienteId?: string | null
   companyId?: string | null
   sucursalId?: string | null
+  /**
+   * Módulo de PERMISOS: ajustes por empleado espejados en el token para el
+   * gate de VISTA del proxy (llegan con el refresco del token). La fuente de
+   * verdad vive en `users.permisos` y la leen VIVA las server actions.
+   */
+  permisos?: unknown
 }
 
 export interface SessionUser {

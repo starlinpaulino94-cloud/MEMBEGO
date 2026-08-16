@@ -186,7 +186,9 @@ export default async function MisPromocionesPage() {
           {regalos.map((r) => (
             <Link
               key={r.invitadoId}
-              href={`/oferta/${r.codigo}`}
+              // DENTRO de la app (regla de producto: ninguna oferta saca al
+              // cliente de su sesión) y con el QR de canje en el detalle.
+              href={`/cliente/mis-promociones/regalo/${r.invitadoId}`}
               className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 transition hover:-translate-y-0.5 hover:shadow-premium"
             >
               <div className="min-w-0">

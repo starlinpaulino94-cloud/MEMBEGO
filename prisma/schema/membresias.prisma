@@ -259,6 +259,11 @@ model QrToken {
   // FASE E5: QR de una compra de promoción (excluyente con membresiaId).
   compraId         String?
   compra           ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  /// REGALO VIP: tercera variante (excluyente con las dos de arriba). El QR
+  /// del regalo vive en el invitado de la oferta privada y se canjea contra
+  /// el cupo del período con el mismo circuito del scanner.
+  ofertaInvitadoId String?
+  ofertaInvitado   OfertaInvitado? @relation(fields: [ofertaInvitadoId], references: [id], onDelete: Cascade)
   /// Auditoría de producción · A-02. Ya NO se genera con `cuid()`: cuid está
   /// hecho para no colisionar, no para no adivinarse (marca de tiempo +
   /// contador + huella de máquina). Un token QR es una credencial al portador
@@ -285,6 +290,7 @@ model QrToken {
   @@index([clienteId, activo])
   @@index([membresiaId])
   @@index([compraId])
+  @@index([ofertaInvitadoId])
   @@index([expiraAt])
   @@map("qr_tokens")
 }

@@ -1,7 +1,14 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth'
 import { FULL_ADMIN_ROLES, type AppRole, type SessionUser } from '@/types'
-import { canAccessAdminSection, type AdminSection } from '@/lib/auth/permissions'
+import {
+  ROLES_EXENTOS_PERMISOS,
+  funcionPermitida,
+  resolverPermisosUsuario,
+  seccionPermitida,
+  type AdminSection,
+  type PermisosUsuario,
+} from '@/lib/auth/permissions'
 import { anotarFallo } from '@/lib/prisma-errors'
 
 function setSentryContext(user: SessionUser) {
@@ -60,11 +67,31 @@ export async function requireAdminUser(): Promise<SessionUser | null> {
  * del path del request (a diferencia del middleware).
  */
 export async function requireSection(
-  section: AdminSection
+  section: AdminSection,
+  /**
+   * Función concreta dentro de la sección (catálogo en `funciones.ts`).
+   * Sin ella, la guardia decide solo a nivel de módulo.
+   */
+  funcion?: string
 ): Promise<SessionUser | null> {
   const user = await getUser()
   if (!user) return null
-  if (!canAccessAdminSection(user.metadata.role, section)) return null
+  const role = user.metadata.role
+
+  // Permisos POR EMPLEADO (módulo de Permisos): se leen VIVOS de la base —
+  // negarle algo a alguien surte efecto en su próximo clic, sin esperar el
+  // refresco del token. Los roles exentos ni consultan la columna. La base
+  // sigue siendo el rol; el ajuste concede o niega encima.
+  let permisos: PermisosUsuario | null = null
+  if (!ROLES_EXENTOS_PERMISOS.includes(role) && user.metadata.dbUserId) {
+    const { prisma } = await import('@/lib/prisma')
+    const fila = await prisma.user
+      .findUnique({ where: { id: user.metadata.dbUserId }, select: { permisos: true } })
+      .catch(() => null)
+    permisos = resolverPermisosUsuario(fila?.permisos)
+  }
+  if (!seccionPermitida(role, section, permisos)) return null
+  if (funcion && !funcionPermitida(role, section, funcion, permisos)) return null
 
   // Plataforma modular · E1: capa de CAPACIDADES por empresa (rol Y capacidad
   // deben permitir). El superadmin no se gatea; el resolutor es fail-open

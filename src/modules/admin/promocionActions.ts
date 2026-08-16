@@ -272,7 +272,7 @@ export async function crearPromocion(
   _prev: PromocionState,
   formData: FormData
 ): Promise<PromocionState> {
-  const user = await requireSection('promociones')
+  const user = await requireSection('promociones', 'crear')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId =
@@ -335,7 +335,7 @@ export async function actualizarPromocion(
   _prev: PromocionState,
   formData: FormData
 ): Promise<PromocionState> {
-  const user = await requireSection('promociones')
+  const user = await requireSection('promociones', 'editar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -384,7 +384,7 @@ export async function eliminarPromocion(
   _prev: PromocionState,
   formData: FormData
 ): Promise<PromocionState> {
-  const user = await requireSection('promociones')
+  const user = await requireSection('promociones', 'eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -410,7 +410,7 @@ export async function alternarPausaPromocion(
   _prev: PromocionState,
   formData: FormData
 ): Promise<PromocionState> {
-  const user = await requireSection('promociones')
+  const user = await requireSection('promociones', 'pausar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -443,7 +443,7 @@ export async function duplicarPromocion(
   _prev: PromocionState,
   formData: FormData
 ): Promise<PromocionState> {
-  const user = await requireSection('promociones')
+  const user = await requireSection('promociones', 'duplicar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -513,7 +513,7 @@ export async function alternarArchivoPromocion(
   _prev: PromocionState,
   formData: FormData
 ): Promise<PromocionState> {
-  const user = await requireSection('promociones')
+  const user = await requireSection('promociones', 'archivar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()

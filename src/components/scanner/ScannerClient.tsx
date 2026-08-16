@@ -22,11 +22,12 @@ import {
   Bluetooth,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { buscarPorToken, type ClienteLookup, type LookupResult, type PromoCompraLookup } from '@/modules/visitas/actions'
+import { buscarPorToken, type ClienteLookup, type LookupResult, type PromoCompraLookup, type RegaloLookup } from '@/modules/visitas/actions'
 import type { TransaccionScanInfo } from '@/modules/transacciones/actions'
 import { guardarEscanerModoEmpresa } from '@/modules/scanner/actions'
 import { ConfirmVisit } from '@/components/scanner/ConfirmVisit'
 import { ConfirmPromo } from '@/components/scanner/ConfirmPromo'
+import { ConfirmRegalo } from '@/components/scanner/ConfirmRegalo'
 import { TransaccionRecord } from '@/components/scanner/TransaccionRecord'
 import { ScannerErrorBoundary } from '@/components/scanner/ScannerErrorBoundary'
 import { useHidScanner } from '@/components/scanner/useHidScanner'
@@ -216,6 +217,7 @@ export function ScannerClient({
   const [scanning, setScanning] = useState(false)
   const [cliente, setCliente] = useState<ClienteLookup | null>(null)
   const [promoCompra, setPromoCompra] = useState<PromoCompraLookup | null>(null)
+  const [regalo, setRegalo] = useState<RegaloLookup | null>(null)
   const [txRecord, setTxRecord] = useState<{ info: TransaccionScanInfo; esQrUsado: boolean } | null>(null)
   const [errorState, setErrorState] = useState<{ message: string; code: ErrorCode | null } | null>(null)
   const [lectorDetectado, setLectorDetectado] = useState(false)
@@ -228,7 +230,7 @@ export function ScannerClient({
     try { localStorage.setItem(STORAGE_KEY, m) } catch { /* ignore */ }
   }, [])
 
-  const hayResultado = !!(cliente || promoCompra || txRecord)
+  const hayResultado = !!(cliente || promoCompra || regalo || txRecord)
 
   const lookup = useCallback((token: string) => {
     const clean = token.trim()
@@ -242,6 +244,8 @@ export function ScannerClient({
           setTxRecord({ info: res.transaccion, esQrUsado: res.errorCode === 'QR_INACTIVE' })
         } else if (res.promoCompra) {
           setPromoCompra(res.promoCompra)
+        } else if (res.regalo) {
+          setRegalo(res.regalo)
         } else if (res.error) {
           setErrorState({ message: res.error, code: res.errorCode ?? null })
         } else if (res.cliente) {
@@ -272,6 +276,7 @@ export function ScannerClient({
       if (hayResultado) {
         setCliente(null)
         setPromoCompra(null)
+        setRegalo(null)
         setTxRecord(null)
       }
       if (fromReader && !lectorDetectado) {
@@ -292,6 +297,7 @@ export function ScannerClient({
   function reset() {
     setCliente(null)
     setPromoCompra(null)
+    setRegalo(null)
     setTxRecord(null)
     setErrorState(null)
     setScanning(false)
@@ -363,6 +369,18 @@ export function ScannerClient({
           <CardContent className="space-y-4 p-6">
             <IndicadorCola cola={cola} />
             <ConfirmPromo compra={promoCompra} sucursales={sucursales} onDone={reset} onScanNext={scanNext} />
+          </CardContent>
+        </Card>
+      </ScannerErrorBoundary>
+    )
+  }
+  if (regalo) {
+    return (
+      <ScannerErrorBoundary onReset={reset}>
+        <Card className="border-border/60 shadow-card-hover animate-scale-in">
+          <CardContent className="space-y-4 p-6">
+            <IndicadorCola cola={cola} />
+            <ConfirmRegalo regalo={regalo} onDone={reset} onScanNext={scanNext} />
           </CardContent>
         </Card>
       </ScannerErrorBoundary>

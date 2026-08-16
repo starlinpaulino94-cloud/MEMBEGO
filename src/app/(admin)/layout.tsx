@@ -1,5 +1,11 @@
 import { requireRole } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
+import {
+  ROLES_EXENTOS_PERMISOS,
+  resolverPermisosUsuario,
+  type PermisosUsuario,
+} from '@/lib/auth/permissions'
+import { hrefsNegadosPorPermisos } from '@/components/layout/nav-config'
 import { AppShell } from '@/components/layout/AppShell'
 import { AdminCompanySwitcher } from '@/components/admin/AdminCompanySwitcher'
 import { SentryUserSync } from '@/components/SentryUserSync'
@@ -53,6 +59,24 @@ async function empresasDisponibles(
   }
 }
 
+/** Ajustes de permisos del empleado (null = hereda su rol tal cual). */
+async function permisosDelUsuario(
+  role: string,
+  dbUserId: string
+): Promise<PermisosUsuario | null> {
+  if (ROLES_EXENTOS_PERMISOS.includes(role as (typeof ROLES_EXENTOS_PERMISOS)[number])) {
+    return null
+  }
+  try {
+    const fila = await sinEmpresa('permisos: ajustes del propio usuario (users es global)', (tx) =>
+      tx.user.findUnique({ where: { id: dbUserId }, select: { permisos: true } })
+    )
+    return resolverPermisosUsuario(fila?.permisos)
+  } catch {
+    return null
+  }
+}
+
 export default async function AdminLayout({
   children,
 }: {
@@ -70,7 +94,7 @@ export default async function AdminLayout({
   //
   // Escondidas, quien retiraba el launcher se quedaba sin ellas por ningún
   // sitio. Vuelven al menú, que es de donde salieron.
-  const [notifCount, empresas, demo, sistemasExternos] = await Promise.all([
+  const [notifCount, empresas, demo, sistemasExternos, permisos] = await Promise.all([
     getUnreadCount().catch(() => 0),
     empresasDisponibles(
       user.metadata.role,
@@ -79,7 +103,12 @@ export default async function AdminLayout({
     ),
     nombreSiEsDemo(user.metadata.companyId),
     sistemasParaLanzador(user),
+    // Módulo de PERMISOS: ajustes del empleado, leídos VIVOS (el menú se
+    // renderiza en el servidor en cada request, así que negar una sección la
+    // quita de todas las superficies de navegación de inmediato).
+    permisosDelUsuario(user.metadata.role, user.metadata.dbUserId),
   ])
+  const hiddenNav = hrefsNegadosPorPermisos(user.metadata.role, permisos)
   return (
     <AppShell
       // Resolvemos el menú por el rol real del usuario. Así un SUPERADMIN que
@@ -91,6 +120,7 @@ export default async function AdminLayout({
       userEmail={user.email}
       notifCount={notifCount}
       sistemasExternos={sistemasExternos}
+      hiddenNav={hiddenNav}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el

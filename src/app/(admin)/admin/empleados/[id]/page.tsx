@@ -65,6 +65,14 @@ export default async function EmpleadoDetailPage({
             <Info label="Creado" value={fmtDate(empleado.createdAt)} />
           </div>
           <div className="border-t pt-4">
+            <Link
+              href={`/admin/empleados/${empleado.id}/permisos`}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            >
+              🛡️ Permisos: qué módulos y funciones puede usar
+            </Link>
+          </div>
+          <div className="border-t pt-4">
             <EliminarEmpleadoForm empleadoId={empleado.id} />
           </div>
         </CardContent>
