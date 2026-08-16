@@ -73,7 +73,7 @@ export async function crearOfertaPrivada(
   formData: FormData
 ): Promise<OfertaActionState> {
   try {
-    const user = await requireSection('ofertas')
+    const user = await requireSection('ofertas', 'crear')
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
@@ -164,7 +164,7 @@ export async function cambiarEstadoOferta(
   formData: FormData
 ): Promise<OfertaActionState> {
   try {
-    const user = await requireSection('ofertas')
+    const user = await requireSection('ofertas', 'estado')
     if (!user) return { error: 'No autorizado.' }
 
     const ofertaId = String(formData.get('ofertaId') ?? '')
@@ -201,7 +201,7 @@ export async function gestionarInvitado(
   formData: FormData
 ): Promise<OfertaActionState> {
   try {
-    const user = await requireSection('ofertas')
+    const user = await requireSection('ofertas', 'invitados')
     if (!user) return { error: 'No autorizado.' }
 
     const ofertaId = String(formData.get('ofertaId') ?? '')
@@ -280,7 +280,7 @@ export async function registrarUsoOferta(
   formData: FormData
 ): Promise<OfertaActionState> {
   try {
-    const user = await requireSection('ofertas')
+    const user = await requireSection('ofertas', 'registrar_uso')
     if (!user) return { error: 'No autorizado.' }
 
     const invitadoId = String(formData.get('invitadoId') ?? '')

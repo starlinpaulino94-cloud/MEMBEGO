@@ -48,7 +48,12 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { AppRole } from '@/types'
-import { adminSectionForPath, canAccessAdminSection } from '@/lib/auth/permissions'
+import {
+  adminSectionForPath,
+  canAccessAdminSection,
+  seccionPermitida,
+  type PermisosUsuario,
+} from '@/lib/auth/permissions'
 
 export interface NavLink {
   href: string
@@ -385,6 +390,28 @@ const EMPLEADO_NAV: NavGroup[] = [
     ],
   },
 ]
+
+/**
+ * Módulo de PERMISOS: enlaces del panel cuya sección le fue NEGADA a este
+ * empleado. El layout del admin los suma a `hiddenNav` y con eso desaparecen
+ * de TODAS las superficies de navegación (menú lateral, paleta de comandos,
+ * barra inferior) sin tocar cada componente. La barrera real siguen siendo
+ * las server actions; esto es que el menú no ofrezca puertas cerradas.
+ */
+export function hrefsNegadosPorPermisos(
+  role: AppRole,
+  permisos: PermisosUsuario | null
+): string[] {
+  if (!permisos) return []
+  const negados: string[] = []
+  for (const grupo of ADMIN_NAV) {
+    for (const item of grupo.items) {
+      const seccion = adminSectionForPath(item.href)
+      if (seccion && !seccionPermitida(role, seccion, permisos)) negados.push(item.href)
+    }
+  }
+  return negados
+}
 
 /** Deja solo los enlaces cuya sección puede abrir el rol (Marketing/Supervisor). */
 function filterNavBySection(groups: NavGroup[], role: AppRole): NavGroup[] {

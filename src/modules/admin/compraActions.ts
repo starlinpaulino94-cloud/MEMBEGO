@@ -47,7 +47,7 @@ export async function aprobarCompra(
   formData: FormData
 ): Promise<CompraAdminState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'aprobar_compra')
     if (!user) return { error: 'No autorizado.' }
     if (!(await paymentLimiter(user.metadata.dbUserId ?? 'admin'))) {
       return { error: 'Demasiadas operaciones. Espera un momento.' }
@@ -95,7 +95,7 @@ export async function rechazarCompra(
   formData: FormData
 ): Promise<CompraAdminState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'rechazar_compra')
     if (!user) return { error: 'No autorizado.' }
 
     const compraId = String(formData.get('compraId') ?? '')

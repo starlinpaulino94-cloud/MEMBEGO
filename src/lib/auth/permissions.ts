@@ -80,6 +80,120 @@ export function canAccessAdminSection(role: AppRole, section: AdminSection): boo
   return RESTRICTED_ACCESS[role]?.includes(section) ?? false
 }
 
+// ── Permisos POR EMPLEADO (módulo de Permisos, 14-08-2026) ───────────────────
+//
+// El rol da el punto de partida; los permisos del empleado lo AJUSTAN en las
+// dos direcciones: conceder una sección que su rol no trae, o negarle una que
+// sí trae — y dentro de una sección permitida, negar funciones concretas.
+//
+// Se guardan como DIFERENCIAS contra el rol (mismo patrón que los overrides
+// de capacidades): si mañana cambia lo que un rol trae de serie, los
+// empleados sin ajuste lo heredan solo.
+
+export interface PermisosUsuario {
+  v: 1
+  /** Sección → true (conceder más allá del rol) | false (negar pese al rol). */
+  secciones?: Record<string, boolean>
+  /** Sección → función → false (negada). Solo se guardan negaciones. */
+  funciones?: Record<string, Record<string, boolean>>
+}
+
+/**
+ * Roles a los que los ajustes NO se aplican: el superadmin por definición, y
+ * los administradores de la empresa para que nadie pueda dejar al dueño
+ * fuera de su propio panel (ni un admin a otro, ni a sí mismo por error).
+ */
+export const ROLES_EXENTOS_PERMISOS: readonly AppRole[] = [
+  'SUPERADMIN',
+  'ADMINISTRADOR',
+  'ADMIN_EMPRESA',
+] as AppRole[]
+
+/** Normaliza el JSON guardado (tolerante a null/basura). Null = sin ajustes. */
+export function resolverPermisosUsuario(raw: unknown): PermisosUsuario | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as { secciones?: unknown; funciones?: unknown }
+  const secciones: Record<string, boolean> = {}
+  if (r.secciones && typeof r.secciones === 'object') {
+    for (const [k, v] of Object.entries(r.secciones as Record<string, unknown>)) {
+      if ((ADMIN_SECTIONS as readonly string[]).includes(k) && typeof v === 'boolean') {
+        secciones[k] = v
+      }
+    }
+  }
+  const funciones: Record<string, Record<string, boolean>> = {}
+  if (r.funciones && typeof r.funciones === 'object') {
+    for (const [sec, fns] of Object.entries(r.funciones as Record<string, unknown>)) {
+      if (!(ADMIN_SECTIONS as readonly string[]).includes(sec)) continue
+      if (!fns || typeof fns !== 'object') continue
+      const limpio: Record<string, boolean> = {}
+      for (const [f, v] of Object.entries(fns as Record<string, unknown>)) {
+        if (v === false) limpio[f] = false
+      }
+      if (Object.keys(limpio).length) funciones[sec] = limpio
+    }
+  }
+  if (!Object.keys(secciones).length && !Object.keys(funciones).length) return null
+  return { v: 1, secciones, funciones }
+}
+
+/**
+ * ¿Puede ESTE empleado abrir esta sección? Rol como base, ajuste encima.
+ * Los roles exentos ignoran los ajustes (nunca pueden quedar bloqueados).
+ */
+export function seccionPermitida(
+  role: AppRole,
+  section: AdminSection,
+  permisos: PermisosUsuario | null | undefined
+): boolean {
+  const base = canAccessAdminSection(role, section)
+  if (ROLES_EXENTOS_PERMISOS.includes(role)) return base
+  return permisos?.secciones?.[section] ?? base
+}
+
+/**
+ * ¿Puede ejecutar esta FUNCIÓN de la sección? Exige la sección permitida y
+ * que la función no esté negada. Las funciones no negadas se permiten: la
+ * negación es la excepción, no la regla.
+ */
+export function funcionPermitida(
+  role: AppRole,
+  section: AdminSection,
+  funcion: string,
+  permisos: PermisosUsuario | null | undefined
+): boolean {
+  if (!seccionPermitida(role, section, permisos)) return false
+  if (ROLES_EXENTOS_PERMISOS.includes(role)) return true
+  return permisos?.funciones?.[section]?.[funcion] !== false
+}
+
+/**
+ * Convierte la SELECCIÓN del formulario (estado efectivo deseado por sección
+ * y función) en el JSON de diferencias contra el rol. Devuelve null si no
+ * queda ningún ajuste (la columna se limpia).
+ */
+export function permisosDesdeSeleccion(
+  role: AppRole,
+  seleccion: {
+    secciones: Partial<Record<AdminSection, boolean>>
+    funcionesNegadas: Partial<Record<AdminSection, string[]>>
+  }
+): PermisosUsuario | null {
+  const secciones: Record<string, boolean> = {}
+  for (const [sec, efectivo] of Object.entries(seleccion.secciones)) {
+    if (typeof efectivo !== 'boolean') continue
+    const base = canAccessAdminSection(role, sec as AdminSection)
+    if (efectivo !== base) secciones[sec] = efectivo
+  }
+  const funciones: Record<string, Record<string, boolean>> = {}
+  for (const [sec, negadas] of Object.entries(seleccion.funcionesNegadas)) {
+    if (!negadas?.length) continue
+    funciones[sec] = Object.fromEntries(negadas.map((f) => [f, false]))
+  }
+  if (!Object.keys(secciones).length && !Object.keys(funciones).length) return null
+  return { v: 1, secciones, funciones }
+}
+
 /**
  * Deriva la sección de un path del panel: `/admin/promociones/nuevo` →
  * `promociones`. Solo `/admin` exacto → `dashboard`. Devuelve null si el path

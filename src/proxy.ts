@@ -3,7 +3,11 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/env'
 import { sessionCookieDomain } from '@/lib/site'
 import { ROLE_HOME, ROUTE_PROTECTION, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
-import { adminSectionForPath, canAccessAdminSection } from '@/lib/auth/permissions'
+import {
+  adminSectionForPath,
+  resolverPermisosUsuario,
+  seccionPermitida,
+} from '@/lib/auth/permissions'
 import { verifyLocalSession } from '@/lib/auth/jwt'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
 import {
@@ -222,13 +226,22 @@ export async function proxy(request: NextRequest) {
         url.pathname = ROLE_HOME[role]
         return redirectWithCookies(url, response)
       }
-      // Autorización fina del panel: roles acotados (Marketing/Supervisor)
-      // solo acceden a sus secciones; el resto se les redirige al dashboard.
-      // 'dashboard' siempre se permite para cualquier rol admin, para que el
-      // destino del redirect nunca vuelva a fallar el gate (evita bucles).
-      if (path.startsWith('/admin') && !FULL_ADMIN_ROLES.includes(role)) {
+      // Autorización fina del panel: el rol da la base y los PERMISOS del
+      // empleado (módulo de Permisos, espejados en app_metadata) la ajustan —
+      // negar 'pagos' a un cajero también le cierra la VISTA, no solo las
+      // acciones. 'dashboard' siempre se permite para cualquier rol admin,
+      // para que el destino del redirect nunca vuelva a fallar el gate.
+      // Los cambios de permisos llegan aquí con el refresco del token; la
+      // barrera inmediata son las server actions (requireSection lee la BD).
+      if (path.startsWith('/admin')) {
         const section = adminSectionForPath(path)
-        if (section !== 'dashboard' && (!section || !canAccessAdminSection(role, section))) {
+        const permisos = resolverPermisosUsuario(metadata.permisos)
+        const bloqueado = section
+          ? section !== 'dashboard' && !seccionPermitida(role, section, permisos)
+          : // Path de /admin no reconocido: mismo trato de siempre — los
+            // roles plenos pasan, los acotados no (fail-closed).
+            !FULL_ADMIN_ROLES.includes(role)
+        if (bloqueado) {
           const url = request.nextUrl.clone()
           url.pathname = '/admin/dashboard'
           return redirectWithCookies(url, response)

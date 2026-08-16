@@ -152,6 +152,10 @@ model User {
   role               AppRole   @default(CLIENTE)
   companyId          String?
   company            Company?  @relation(fields: [companyId], references: [id])
+  /// Módulo de PERMISOS: ajustes por empleado sobre lo que su rol trae de
+  /// serie ({v:1, secciones:{sec:bool}, funciones:{sec:{fn:false}}}). Solo
+  /// diferencias; null = hereda el rol tal cual. Ver lib/auth/permissions.ts.
+  permisos           Json?
   // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
   // y opt-in de comunicaciones de marketing, con la versión y el momento.
   termsAcceptedAt    DateTime?

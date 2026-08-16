@@ -37,7 +37,7 @@ export async function agregarNotaCliente(
   _prev: CrmState,
   formData: FormData
 ): Promise<CrmState> {
-  const user = await requireSection('clientes')
+  const user = await requireSection('clientes', 'nota_crear')
   if (!user) return { error: 'No autorizado.' }
 
   const clienteId = String(formData.get('clienteId') ?? '').trim()
@@ -72,7 +72,7 @@ export async function eliminarNotaCliente(
   _prev: CrmState,
   formData: FormData
 ): Promise<CrmState> {
-  const user = await requireSection('clientes')
+  const user = await requireSection('clientes', 'nota_eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   const notaId = String(formData.get('notaId') ?? '').trim()

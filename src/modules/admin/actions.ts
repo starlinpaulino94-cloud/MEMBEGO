@@ -61,7 +61,7 @@ export async function confirmarPago(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'confirmar_pago')
     if (!user) return { error: 'No autorizado.' }
 
     const adminId = user.metadata.dbUserId || 'anonymous'
@@ -169,7 +169,7 @@ export async function aprobarCambioPlan(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'aprobar_cambio_plan')
     if (!user) return { error: 'No autorizado.' }
 
     const membershipId = String(formData.get('membershipId') ?? '')
@@ -286,7 +286,7 @@ export async function cambiarPlanDeMembresia(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('membresias')
+    const user = await requireSection('membresias', 'cambiar_plan')
     if (!user) return { error: 'No autorizado.' }
 
     const membershipId = String(formData.get('membershipId') ?? '')
@@ -396,7 +396,7 @@ export async function rechazarCambioPlan(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'rechazar_cambio_plan')
     if (!user) return { error: 'No autorizado.' }
 
     const membershipId = String(formData.get('membershipId') ?? '')
@@ -449,7 +449,7 @@ export async function crearMembresia(
   _companyId: string
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'crear_membresia')
     if (!user) return { error: 'No autorizado.' }
 
     const cliente = await sinEmpresa(
@@ -501,7 +501,7 @@ export async function cancelarMembresia(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'cancelar_membresia')
     if (!user) return { error: 'No autorizado.' }
 
     const membershipId = String(formData.get('membershipId') ?? '')
@@ -548,7 +548,7 @@ export async function rechazarPago(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireSection('pagos')
+    const user = await requireSection('pagos', 'rechazar_pago')
     if (!user) return { error: 'No autorizado.' }
 
     const membershipId = String(formData.get('membershipId') ?? '')
@@ -612,7 +612,7 @@ export async function renovarMembresia(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-  const user = await requireSection('membresias')
+  const user = await requireSection('membresias', 'renovar')
   if (!user) return { error: 'No autorizado.' }
 
   const membershipId = String(formData.get('membershipId') ?? '')
@@ -858,7 +858,7 @@ export async function solicitarNuevaEvidencia(
   _prev: AdminActionState,
   formData: FormData
 ): Promise<AdminActionState> {
-  const user = await requireSection('pagos')
+  const user = await requireSection('pagos', 'solicitar_evidencia')
   if (!user) return { error: 'No autorizado.' }
 
   const membershipId = String(formData.get('membershipId') ?? '')
@@ -927,7 +927,7 @@ export async function guardarNotaInterna(
   _prev: AdminActionState,
   formData: FormData
 ): Promise<AdminActionState> {
-  const user = await requireSection('clientes')
+  const user = await requireSection('clientes', 'nota_crear')
   if (!user) return { error: 'No autorizado.' }
 
   const membershipId = String(formData.get('membershipId') ?? '')
