@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Inbox } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import {
   ESTADOS_SOLICITUD,
   ESTADO_SOLICITUD_LABEL,
@@ -30,22 +30,29 @@ export default async function SolicitudesPage({
     ? (estado as EstadoSolicitud)
     : null
 
-  const [solicitudes, conteos] = await Promise.all([
-    prisma.solicitudEmpresa.findMany({
-      where: filtro ? { estado: filtro } : undefined,
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      select: {
-        id: true,
-        estado: true,
-        nombreNegocio: true,
-        tipoNegocio: true,
-        contactoCorreo: true,
-        createdAt: true,
-      },
-    }),
-    prisma.solicitudEmpresa.groupBy({ by: ['estado'], _count: true }),
-  ])
+  // Una sola transacción para las dos consultas: `sinEmpresa` abre una y las
+  // dos van dentro. Con dos envoltorios serían dos conexiones del pool a la vez
+  // para una pantalla que cabe en una.
+  const [solicitudes, conteos] = await sinEmpresa(
+    'embudo de altas: las solicitudes son de negocios que TODAVÍA no son empresa',
+    (tx) =>
+      Promise.all([
+        tx.solicitudEmpresa.findMany({
+          where: filtro ? { estado: filtro } : undefined,
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+          select: {
+            id: true,
+            estado: true,
+            nombreNegocio: true,
+            tipoNegocio: true,
+            contactoCorreo: true,
+            createdAt: true,
+          },
+        }),
+        tx.solicitudEmpresa.groupBy({ by: ['estado'], _count: true }),
+      ])
+  )
   const totalPorEstado = new Map(conteos.map((c) => [c.estado, c._count]))
   const total = conteos.reduce((s, c) => s + c._count, 0)
 

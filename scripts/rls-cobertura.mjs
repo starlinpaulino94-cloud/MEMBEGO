@@ -61,6 +61,11 @@ const BLANCA = new Map([
   ['app/api/stats/route.ts', 'conteos de pg_class (catálogo de sistema)'],
   ['app/api/pagos/cardnet-token/estado/route.ts', 'diagnóstico/ops (login-gated): solo lee el propio Cliente del usuario en la rama ?sesion=1'],
   ['modules/observabilidad/metricas.ts', 'métricas de plataforma cross-tenant (sinEmpresa)'],
+  // Lee SOLO la columna `permisos` de la propia fila del usuario que llama, por
+  // su clave primaria, y lo hace DENTRO de la función que decide el acceso.
+  // Envolverlo sería circular —el contexto de empresa lo establece este mismo
+  // guardia— y metería una transacción en cada comprobación de permiso.
+  ['lib/auth/guards.ts', 'el propio guardia: lee los permisos del usuario que llama, por su id, antes de que exista contexto'],
 ])
 
 /**

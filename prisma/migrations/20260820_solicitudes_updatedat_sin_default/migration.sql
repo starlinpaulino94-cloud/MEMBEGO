@@ -1,0 +1,26 @@
+-- `solicitudes_empresa.updatedAt` vuelve a alinearse con el esquema.
+--
+-- La migración que creó la tabla le puso `DEFAULT CURRENT_TIMESTAMP`, y el
+-- modelo declara `updatedAt DateTime @updatedAt` — que en Prisma significa que
+-- el valor lo escribe el cliente en cada `create` y cada `update`, SIN default
+-- en la base. La diferencia deja `prisma migrate diff` viendo un cambio
+-- pendiente para siempre:
+--
+--   [*] Changed the `solicitudes_empresa` table
+--     [*] Altered column `updatedAt` (default changed from `Some(Now)` to `None`)
+--
+-- Y mientras eso pase, el trabajo `esquema` del CI está en rojo: deja de poder
+-- avisar de una migración que SÍ falte, que es para lo que existe.
+--
+-- ESTO YA SE HABÍA RESUELTO ANTES, igual. `20260770_reconciliacion` quitó este
+-- mismo default de quince tablas por el mismo motivo, y lo dejó escrito. La
+-- tabla de solicitudes se creó después y volvió a traerlo.
+--
+-- Se quita el default y no se añade `@default(now())` al modelo porque las
+-- veintidós tablas del esquema usan `@updatedAt` a secas: la convención está
+-- decidida, y hacer la excepción aquí sería la tercera forma de escribir lo
+-- mismo.
+--
+-- SEGURA: ninguna consulta inserta en esta tabla por SQL crudo — todas pasan
+-- por Prisma, que siempre escribe el valor. No toca una sola fila de datos.
+ALTER TABLE "solicitudes_empresa" ALTER COLUMN "updatedAt" DROP DEFAULT;

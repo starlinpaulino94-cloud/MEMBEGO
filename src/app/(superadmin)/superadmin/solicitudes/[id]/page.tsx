@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import {
   validarDatosSolicitud,
   horarioComoTexto,
@@ -49,7 +49,13 @@ export default async function SolicitudDetallePage({
 }) {
   await requireRole('SUPERADMIN')
   const { id } = await params
-  const solicitud = await prisma.solicitudEmpresa.findUnique({ where: { id } })
+  // `sinEmpresa` y no `conEmpresa`: una solicitud es de un negocio que todavía
+  // NO es empresa —de eso trata la pantalla—, así que no hay inquilino al que
+  // acotarla. El acceso lo cierra `requireRole('SUPERADMIN')` de arriba.
+  const solicitud = await sinEmpresa(
+    'embudo de altas: la solicitud aún no pertenece a ninguna empresa',
+    (tx) => tx.solicitudEmpresa.findUnique({ where: { id } })
+  )
   if (!solicitud) notFound()
 
   const v = validarDatosSolicitud(solicitud.datos)
