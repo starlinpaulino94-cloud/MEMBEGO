@@ -1,12 +1,9 @@
 'use client'
 
-import { useActionState, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 import { confirmarPago, renovarMembresia } from '@/modules/admin/actions'
 import { cancelarMembresia, desactivarMembresia } from '@/modules/admin/planActions'
-import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { ConfirmarPagoButton, RechazarPagoButton } from '@/components/admin/ValidarPagoActions'
 import type { MembershipEstado } from '@/types'
 
@@ -28,53 +25,38 @@ interface Props {
   estado: MembershipEstado
 }
 
+/**
+ * LOS ERRORES SE CUENTAN POR TOAST, COMO EN TODO EL PANEL.
+ *
+ * Antes este componente sostenía cuatro `useActionState` solo para juntar sus
+ * errores en un `<span role="alert">` dentro de la celda. La intención era
+ * buena —que un lector de pantalla anunciara el fallo—, pero era el único sitio
+ * de la aplicación que lo hacía así, y aprender dónde mirar el resultado de una
+ * acción no debería depender de en qué tabla estás. El toaster de la aplicación
+ * ya es una región `aria-live`, así que el anuncio se conserva y el sitio pasa
+ * a ser el mismo que en el resto del panel.
+ */
 export function MembershipAdminActions({ membershipId, estado }: Props) {
-  const [activarState, activarAction, activarPending] = useActionState(confirmarPago, {})
-  const [cancelarState, cancelarAction, cancelarPending] = useActionState(cancelarMembresia, {})
-  const [desactivarState, desactivarAction, desactivarPending] = useActionState(desactivarMembresia, {})
-  const [renovarState, renovarAction, renovarPending] = useActionState(renovarMembresia, {})
   const router = useRouter()
-
-  const desactivarFormRef = useRef<HTMLFormElement>(null)
-  const cancelarFormRef = useRef<HTMLFormElement>(null)
-  const [confirmDesactivar, setConfirmDesactivar] = useState(false)
-  const [confirmCancelar, setConfirmCancelar] = useState(false)
-
-  useEffect(() => {
-    if (activarState.success || cancelarState.success || desactivarState.success || renovarState.success) {
-      router.refresh()
-    }
-  }, [activarState.success, cancelarState.success, desactivarState.success, renovarState.success, router])
-
-  const error = activarState.error ?? cancelarState.error ?? desactivarState.error ?? renovarState.error
+  // Cualquiera de las cuatro cambia la fila: hay que recargar los datos del
+  // servidor para que la tabla deje de enseñar el estado anterior.
+  const refrescar = () => router.refresh()
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* `role="alert"` porque este error aparece DESPUÉS de pulsar y dentro de
-          una celda: sin él, un lector de pantalla no anuncia que la acción
-          falló y quien no ve la tabla se queda esperando. */}
-      {error && (
-        <span role="alert" className="text-xs text-destructive">
-          {error}
-        </span>
-      )}
-
-      {/* Activar pago — for PENDIENTE */}
       {estado === 'PENDIENTE' && (
-        <form action={activarAction}>
-          <input type="hidden" name="membershipId" value={membershipId} />
-          <Button
-            size="sm"
-            type="submit"
-            variant="success"
-            disabled={activarPending}
-          >
-            {activarPending ? '…' : 'Activar'}
-          </Button>
-        </form>
+        <BotonConfirmado
+          accion={confirmarPago}
+          estadoInicial={{}}
+          campos={{ membershipId }}
+          size="sm"
+          variant="success"
+          alExito={refrescar}
+        >
+          Activar
+        </BotonConfirmado>
       )}
 
-      {/* Validar comprobante — for PENDIENTE_PAGO */}
       {estado === 'PENDIENTE_PAGO' && (
         <>
           <ConfirmarPagoButton membershipId={membershipId} />
@@ -82,81 +64,57 @@ export function MembershipAdminActions({ membershipId, estado }: Props) {
         </>
       )}
 
-      {/* Renovar — for ACTIVA or VENCIDA */}
       {(estado === 'ACTIVA' || estado === 'VENCIDA') && (
-        <form action={renovarAction}>
-          <input type="hidden" name="membershipId" value={membershipId} />
-          <Button
-            size="sm"
-            variant="outline"
-            type="submit"
-            disabled={renovarPending}
-          >
-            {renovarPending ? '…' : 'Renovar'}
-          </Button>
-        </form>
+        <BotonConfirmado
+          accion={renovarMembresia}
+          estadoInicial={{}}
+          campos={{ membershipId }}
+          size="sm"
+          variant="outline"
+          alExito={refrescar}
+        >
+          Renovar
+        </BotonConfirmado>
       )}
 
-      {/* Desactivar — for ACTIVA */}
       {estado === 'ACTIVA' && (
-        <>
-          <form ref={desactivarFormRef} action={desactivarAction}>
-            <input type="hidden" name="membershipId" value={membershipId} />
-            <Button
-              size="sm"
-              variant="outline"
-              type="button"
-              disabled={desactivarPending}
-              className="border-warning/30 text-warning hover:bg-warning/15 hover:text-warning"
-              onClick={() => setConfirmDesactivar(true)}
-            >
-              {desactivarPending ? '…' : 'Desactivar'}
-            </Button>
-          </form>
-          <ConfirmDialog
-            open={confirmDesactivar}
-            title="¿Desactivar esta membresía?"
-            confirmText="Desactivar"
-            isLoading={desactivarPending}
-            onConfirm={() => {
-              setConfirmDesactivar(false)
-              desactivarFormRef.current?.requestSubmit()
-            }}
-            onCancel={() => setConfirmDesactivar(false)}
-          />
-        </>
+        <BotonConfirmado
+          accion={desactivarMembresia}
+          estadoInicial={{}}
+          campos={{ membershipId }}
+          size="sm"
+          variant="outline"
+          className="border-warning/30 text-warning hover:bg-warning/15 hover:text-warning"
+          alExito={refrescar}
+          confirmacion={{
+            titulo: '¿Desactivar esta membresía?',
+            descripcion:
+              'La membresía pasa a vencida y el cliente deja de poder usarla. Se puede renovar después.',
+            textoConfirmar: 'Desactivar',
+          }}
+        >
+          Desactivar
+        </BotonConfirmado>
       )}
 
-      {/* Cancelar — for anything except CANCELADA */}
       {estado !== 'CANCELADA' && (
-        <>
-          <form ref={cancelarFormRef} action={cancelarAction}>
-            <input type="hidden" name="membershipId" value={membershipId} />
-            <Button
-              size="sm"
-              variant="outline"
-              type="button"
-              disabled={cancelarPending}
-              className="border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setConfirmCancelar(true)}
-            >
-              {cancelarPending ? '…' : 'Cancelar'}
-            </Button>
-          </form>
-          <ConfirmDialog
-            open={confirmCancelar}
-            title="¿Cancelar esta membresía?"
-            description="No se puede deshacer."
-            confirmText="Sí, cancelar"
-            isDangerous
-            isLoading={cancelarPending}
-            onConfirm={() => {
-              setConfirmCancelar(false)
-              cancelarFormRef.current?.requestSubmit()
-            }}
-            onCancel={() => setConfirmCancelar(false)}
-          />
-        </>
+        <BotonConfirmado
+          accion={cancelarMembresia}
+          estadoInicial={{}}
+          campos={{ membershipId }}
+          size="sm"
+          variant="outline"
+          className="border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          alExito={refrescar}
+          confirmacion={{
+            titulo: '¿Cancelar esta membresía?',
+            descripcion: 'No se puede deshacer.',
+            textoConfirmar: 'Sí, cancelar',
+            peligrosa: true,
+          }}
+        >
+          Cancelar
+        </BotonConfirmado>
       )}
     </div>
   )

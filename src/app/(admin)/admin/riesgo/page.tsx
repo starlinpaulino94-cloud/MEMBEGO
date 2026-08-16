@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Download, ExternalLink, MessageCircle, TriangleAlert } from 'lucide-react'
+import { ExternalLink, MessageCircle, TriangleAlert } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
@@ -17,6 +17,7 @@ import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { Button } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import { EmptyState } from '@/components/system/EmptyState'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
@@ -122,11 +123,7 @@ export default async function RiesgoPage({
       generadoEn={formatDateTime(new Date(), prefs)}
       controles={
         <>
-          <Button asChild variant="outline">
-            <a href={urlConFiltros('/admin/riesgo/export', sp, {})}>
-              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
-            </a>
-          </Button>
+          <BotonExportar href={urlConFiltros('/admin/riesgo/export', sp, {})} variant="outline" />
           {/* En papel: la lista de a quién llamar, para repartirla entre el
               equipo sin que cada persona necesite una pantalla. */}
           <BotonImprimir />

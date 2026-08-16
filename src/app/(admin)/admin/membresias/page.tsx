@@ -1,7 +1,7 @@
 import Form from 'next/form'
 import { conEmpresaOTodas } from '@/lib/tenant'
 import Link from 'next/link'
-import { Download, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input'
 import { formatMoney } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 
 export const dynamic = 'force-dynamic'
 
@@ -217,11 +218,11 @@ export default async function MembresiasPage({
           <Search className="h-4 w-4" />
         </Button>
         {/* Enlace al servidor: se lleva TODO el filtro, no la página visible. */}
-        <Button asChild variant="outline" className="shrink-0">
-          <a href={urlConFiltros('/admin/membresias/export', sp, {})}>
-            <Download className="mr-2 h-4 w-4" /> Exportar
-          </a>
-        </Button>
+        <BotonExportar
+          href={urlConFiltros('/admin/membresias/export', sp, {})}
+          variant="outline"
+          className="shrink-0"
+        />
       </Form>
 
       <MembresíasTable data={memberships} planes={planes} />

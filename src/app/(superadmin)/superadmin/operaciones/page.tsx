@@ -3,7 +3,6 @@ import Form from 'next/form'
 import {
   Building2,
   ChevronRight,
-  Download,
   Gift,
   Megaphone,
   MessageCircle,
@@ -13,7 +12,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { StatCard } from '@/components/ui/stat-card'
-import { buttonVariants } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import { plural } from '@/lib/plural'
 import { listarOperaciones, type OperacionEmpresa } from '@/modules/operaciones/lista'
 import { verticalesElegibles } from '@/modules/empresas/verticales'
@@ -253,13 +252,7 @@ export default async function OperacionesPage({
             Qué tiene montado cada empresa: promociones, referidos y WhatsApp.
           </p>
         </div>
-        <Link
-          href={hrefFiltro(f, `${BASE}/exportar`)}
-          prefetch={false}
-          className={buttonVariants({ variant: 'secondary' })}
-        >
-          <Download className="mr-2 h-4 w-4" /> Exportar
-        </Link>
+        <BotonExportar href={hrefFiltro(f, `${BASE}/exportar`)} />
       </div>
 
       {/*

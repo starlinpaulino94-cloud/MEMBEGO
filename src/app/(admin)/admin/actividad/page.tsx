@@ -8,7 +8,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Download, History, Search } from 'lucide-react'
+import { BotonExportar } from '@/components/ui/boton-exportar'
+import { History, Search } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,11 +99,10 @@ export default async function ActividadPage({
             <Link href="/admin/actividad">Limpiar</Link>
           </Button>
         )}
-        <Button asChild variant="ghost" className="gap-1.5">
-          <Link href={`/admin/actividad/export${exportQs ? `?${exportQs}` : ''}`}>
-            <Download className="h-4 w-4" /> CSV
-          </Link>
-        </Button>
+        <BotonExportar
+          href={`/admin/actividad/export${exportQs ? `?${exportQs}` : ''}`}
+          variant="ghost"
+        />
       </Form>
 
       {error ? (

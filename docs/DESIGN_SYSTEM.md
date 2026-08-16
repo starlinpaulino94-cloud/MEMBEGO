@@ -267,6 +267,40 @@ Lucide, sistema único. Tamaños normalizados:
   Dos estados (asomada / abierta) y un tirador que es un botón real; **no** es
   un diálogo, porque el mapa de detrás sigue siendo interactivo.
 
+### Acciones que preguntan antes
+
+Tres piezas, y elegir mal es lo que hizo que ocho pantallas escribieran su
+propia copia:
+
+- **ConfirmDialog** — la primitiva. Solo se usa suelta cuando hay que
+  **interceptar el envío de un formulario que ya existe** y preguntar de forma
+  condicional (apagar capacidades de una empresa, reencolar eventos muertos).
+  Para todo lo demás, una de las dos de abajo.
+- **DeleteButton** — borrar algo, por llamada directa a la acción. Icono +
+  diálogo peligroso + toast.
+- **BotonConfirmado** — cualquier otra acción de servidor que va por
+  `<form action>`. Es la que hay que preferir cuando hay campos que enviar: el
+  formulario funciona aunque el JavaScript no haya cargado.
+
+`BotonConfirmado` se queda con el formulario, el `useActionState`, los toasts de
+éxito y error, el estado del diálogo y el paso fino de `requestSubmit()`. Y
+**deshabilita el botón mientras la acción corre** — varias de las copias que
+sustituye no lo hacían, así que se podían disparar dos veces.
+
+Sin `confirmacion`, es un botón de envío normal. Que la confirmación sea un
+objeto y no un booleano es a propósito: quien la quiere tiene que escribir el
+texto de la pregunta, que es la parte que hace falta pensar. **Preguntar por
+todo enseña a confirmar sin leer**, y entonces tampoco protege el aviso que sí
+importa.
+
+### Reportes
+
+- **ReporteImprimible** — el único `@media print` del panel (A4, no tickets de
+  80 mm). **TablaReporte** da a los desgloses la semántica de tabla que las
+  listas con `flex justify-between` les negaban. **BotonImprimir** dice
+  «Imprimir o guardar PDF», porque quien quiere el PDF no pulsa un botón que
+  parece exigir una impresora. Detalle completo en `docs/REPORTES.md`.
+
 ## Shell global
 
 El armazón vive en `src/components/layout/` y **ninguna pantalla lo reimplementa**.

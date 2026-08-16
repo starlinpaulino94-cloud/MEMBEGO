@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
@@ -17,7 +18,7 @@ import {
   METODO_LABEL,
   type RegistroFiltro,
 } from '@/modules/registros/queries'
-import { FileText, Search, Download } from 'lucide-react'
+import { FileText, Search } from 'lucide-react'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 
@@ -178,11 +179,11 @@ export default async function RegistrosPage({
           {hayFiltro ? ' con estos filtros' : ''}.
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm" className="gap-1.5">
-            <a href={`/admin/registros/export${exportQs ? `?${exportQs}` : ''}`}>
-              <Download className="h-3.5 w-3.5" /> Exportar CSV
-            </a>
-          </Button>
+          <BotonExportar
+            href={`/admin/registros/export${exportQs ? `?${exportQs}` : ''}`}
+            variant="outline"
+            size="sm"
+          />
           {items.length > 0 && <BotonImprimir variant="outline" label="Imprimir reporte" />}
         </div>
       </div>
