@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Building2, ChevronRight, Download, Plus } from 'lucide-react'
+import { Building2, ChevronRight, Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { listarEmpresas, type EmpresaFila } from '@/modules/empresas/lista'
 import {
@@ -17,6 +17,7 @@ import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { formatMoneyRD } from '@/lib/format'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 
 export const dynamic = 'force-dynamic'
 
@@ -174,13 +175,7 @@ export default async function SuperadminEmpresas({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href={exportHref}
-            prefetch={false}
-            className={buttonVariants({ variant: 'secondary' })}
-          >
-            <Download className="mr-2 h-4 w-4" /> Exportar
-          </Link>
+          <BotonExportar href={exportHref} />
           <Link href={`${BASE}/nueva`} className={buttonVariants()}>
             <Plus className="mr-2 h-4 w-4" /> Nueva empresa
           </Link>

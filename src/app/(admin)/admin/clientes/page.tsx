@@ -20,7 +20,7 @@ import { semaforoDeFila } from '@/modules/riesgo/clasificar'
 import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
 import { resolverUmbrales } from '@/modules/riesgo/semaforo'
 import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
-import { Download } from 'lucide-react'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 
 export const dynamic = 'force-dynamic'
 
@@ -206,11 +206,11 @@ export default async function ClientesPage({
         </Button>
         {/* La exportación es un ENLACE al servidor, no un botón en la tabla: se
             lleva todo el filtro, no las 50 filas que el navegador tenga a mano. */}
-        <Button asChild variant="outline" className="shrink-0">
-          <a href={urlConFiltros('/admin/clientes/export', sp, {})}>
-            <Download className="mr-2 h-4 w-4" /> Exportar
-          </a>
-        </Button>
+        <BotonExportar
+          href={urlConFiltros('/admin/clientes/export', sp, {})}
+          variant="outline"
+          className="shrink-0"
+        />
       </Form>
 
       <ClientesTable data={clientes} />

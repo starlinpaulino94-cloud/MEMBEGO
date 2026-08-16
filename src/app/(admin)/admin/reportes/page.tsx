@@ -9,9 +9,8 @@ import { getReporte } from '@/modules/reportes/queries'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteEmpresaVista } from '@/components/reportes/ReporteEmpresaVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { Button } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
-import { Download } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,11 +62,7 @@ export default async function ReportesPage({
       eyebrow={<RangoFechas rango={rango} accion="/admin/reportes" />}
       controles={
         <>
-          <Button asChild variant="secondary">
-            <a href={`/admin/reportes/export${qs}`}>
-              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
-            </a>
-          </Button>
+          <BotonExportar href={`/admin/reportes/export${qs}`} />
           <BotonImprimir />
         </>
       }

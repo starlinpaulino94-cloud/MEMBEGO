@@ -9,7 +9,8 @@ import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteEmpresaVista } from '@/components/reportes/ReporteEmpresaVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Download } from 'lucide-react'
+import { BotonExportar } from '@/components/ui/boton-exportar'
+import { ArrowLeft } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,11 +84,7 @@ export default async function ReporteDeEmpresaPage({
       }
       controles={
         <>
-          <Button asChild variant="secondary">
-            <a href={`/superadmin/reportes/${id}/exportar${qs}`}>
-              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
-            </a>
-          </Button>
+          <BotonExportar href={`/superadmin/reportes/${id}/exportar${qs}`} />
           <BotonImprimir />
         </>
       }

@@ -6,13 +6,14 @@ import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import {
   getSeguimiento,
   getPromosGratisConEntregas,
   SEGUIMIENTO_ESTADO_LABEL,
   type SeguimientoFiltro,
 } from '@/modules/seguimiento/queries'
-import { Gift, Search, Download, Printer } from 'lucide-react'
+import { Gift, Search, Printer } from 'lucide-react'
 import { SeguimientoAcciones } from '@/components/seguimiento/SeguimientoAcciones'
 import { SeguimientoConfigCard } from '@/components/seguimiento/SeguimientoConfigCard'
 import { getSeguimientoConfig, renderMensajeSeguimiento } from '@/modules/seguimiento/config'
@@ -113,11 +114,11 @@ export default async function SeguimientoPage({
 
       {/* Reportes (Fase S3) */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline" size="sm" className="gap-1.5">
-          <a href={`/admin/seguimiento/export${qs ? `?${qs}` : ''}`}>
-            <Download className="h-3.5 w-3.5" /> Exportar CSV
-          </a>
-        </Button>
+        <BotonExportar
+          href={`/admin/seguimiento/export${qs ? `?${qs}` : ''}`}
+          variant="outline"
+          size="sm"
+        />
         <Button asChild variant="outline" size="sm" className="gap-1.5">
           <a href={`/admin/seguimiento/imprimir${qs ? `?${qs}` : ''}`}>
             <Printer className="h-3.5 w-3.5" /> Reporte imprimible

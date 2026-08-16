@@ -1,13 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
-import { AlertTriangle, CalendarClock, Download, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, CalendarClock, ShieldCheck, X } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { StatCard } from '@/components/ui/stat-card'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { formatDate } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import { membresiaEstadoUi } from '@/lib/estados'
@@ -25,6 +24,7 @@ import {
   leerFiltroMembresias,
 } from '@/modules/membresias/filtros'
 import type { MembershipEstado } from '@/types'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 
 export const metadata = { title: 'Membresías' }
 
@@ -107,13 +107,7 @@ export default async function SuperadminMembresiasPage({
             desactiva y ajusta usos.
           </p>
         </div>
-        <Link
-          href={hrefFiltro(f, `${BASE}/exportar`)}
-          prefetch={false}
-          className={buttonVariants({ variant: 'secondary' })}
-        >
-          <Download className="mr-2 h-4 w-4" /> Exportar
-        </Link>
+        <BotonExportar href={hrefFiltro(f, `${BASE}/exportar`)} />
       </div>
 
       {/*

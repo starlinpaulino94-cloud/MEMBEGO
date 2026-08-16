@@ -15,10 +15,11 @@ import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible, TablaReporte } from '@/components/ui/reporte-imprimible'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { Button } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { StatusBanner } from '@/components/ui/status-banner'
-import { BarChart3, Download } from 'lucide-react'
+import { BarChart3 } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,11 +81,7 @@ export default async function SuperadminReportesPage({
       generadoEn={formatDateTime(new Date(), { zonaHoraria: TZ_PLATAFORMA, idioma: 'es-DO' })}
       controles={
         <>
-          <Button asChild variant="secondary">
-            <a href={`/superadmin/reportes/exportar${qs ? `?${qs}` : ''}`}>
-              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
-            </a>
-          </Button>
+          <BotonExportar href={`/superadmin/reportes/exportar${qs ? `?${qs}` : ''}`} />
           <BotonImprimir />
         </>
       }

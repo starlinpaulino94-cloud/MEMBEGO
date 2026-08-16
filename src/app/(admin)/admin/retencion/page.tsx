@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowRight, Download } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
@@ -11,6 +11,7 @@ import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { BotonExportar } from '@/components/ui/boton-exportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { UmbralesRetencionForm } from '@/components/admin/UmbralesRetencionForm'
 import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
@@ -67,11 +68,7 @@ export default async function RetencionPage() {
       
       controles={
         <>
-          <Button asChild variant="secondary">
-            <a href="/admin/retencion/export">
-              <Download className="mr-2 h-4 w-4" aria-hidden /> Exportar CSV
-            </a>
-          </Button>
+          <BotonExportar href="/admin/retencion/export" />
           <BotonImprimir />
         </>
       }

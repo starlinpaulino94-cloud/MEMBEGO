@@ -9,7 +9,8 @@ import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, BarChart3, Download } from 'lucide-react'
+import { BotonExportar } from '@/components/ui/boton-exportar'
+import { ArrowLeft, BarChart3 } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -123,11 +124,7 @@ export default async function ReportesOperativosPage({
       }).format(new Date())}
       controles={
         <>
-          <Button asChild variant="secondary" className="gap-1.5">
-            <Link href={`/admin/app/carwash/reportes/export?${exportQs}`}>
-              <Download className="h-4 w-4" aria-hidden /> Exportar CSV
-            </Link>
-          </Button>
+          <BotonExportar href={`/admin/app/carwash/reportes/export?${exportQs}`} />
           <BotonImprimir />
         </>
       }
