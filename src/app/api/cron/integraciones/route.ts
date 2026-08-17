@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { autorizarCron } from '@/lib/cron-auth'
 import { reintentarPendientes } from '@/modules/integraciones/despacho'
 
 export const dynamic = 'force-dynamic'
@@ -10,11 +11,8 @@ export const maxDuration = 60
  * hasta 8 veces y luego quedan FALLIDO para revisión).
  */
 export async function GET(req: NextRequest) {
-  const secreto = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization')
-  if (!secreto || auth !== `Bearer ${secreto}`) {
-    return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
-  }
+  const denegado = autorizarCron(req)
+  if (denegado) return denegado
   const resultado = await reintentarPendientes()
   return NextResponse.json({ ok: true, ...resultado })
 }

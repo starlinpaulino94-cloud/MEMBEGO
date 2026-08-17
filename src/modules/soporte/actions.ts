@@ -5,6 +5,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { sendEmail } from '@/lib/email'
+import { escaparHtml } from '@/lib/html'
 import { encolarEmail } from '@/modules/jobs/emisiones'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
 import {
@@ -339,10 +340,15 @@ export async function crearTicket(
       await encolarEmail({
         to: config.correoSoporte,
         subject: `Nuevo ticket: ${asunto}`,
+        // Los tres valores los escribe el cliente. Sin escapar, quien abre un
+        // ticket decide el HTML que le llega al buzón del negocio: basta un
+        // <a> para que el correo "de soporte" lleve un enlace a otro sitio.
+        // El asunto NO se escapa: va en `subject`, que es texto plano; con
+        // entidades se leería `&lt;` en la bandeja de entrada.
         html: `<p>Se recibió un nuevo ticket de soporte.</p>
-               <p><strong>Cliente:</strong> ${cliente?.nombre ?? 'Cliente'}<br/>
-               <strong>Asunto:</strong> ${asunto}<br/>
-               <strong>Descripción:</strong> ${descripcion}</p>`,
+               <p><strong>Cliente:</strong> ${escaparHtml(cliente?.nombre ?? 'Cliente')}<br/>
+               <strong>Asunto:</strong> ${escaparHtml(asunto)}<br/>
+               <strong>Descripción:</strong> ${escaparHtml(descripcion)}</p>`,
       }).catch((e) => {
         console.error('[soporte-email]', e)
       })
