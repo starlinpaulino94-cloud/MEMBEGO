@@ -137,5 +137,10 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'reserva_cancelar', label: 'Cancelar reservas' },
     { codigo: 'reserva_pago', label: 'Registrar pagos de reservas' },
     { codigo: 'reserva_anular_pago', label: 'Anular pagos ya registrados' },
+    { codigo: 'venta_confirmar', label: 'Confirmar ventas (genera la comisión)' },
+    { codigo: 'venta_cancelar', label: 'Cancelar ventas confirmadas' },
+    { codigo: 'comision_reglas', label: 'Definir reglas de comisión' },
+    { codigo: 'comision_aprobar', label: 'Aprobar y marcar comisiones como pagadas' },
+    { codigo: 'comision_ajustar', label: 'Ajustar comisiones' },
   ],
 }

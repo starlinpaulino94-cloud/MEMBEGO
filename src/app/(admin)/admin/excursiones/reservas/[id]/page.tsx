@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { reservaDetalle } from '@/modules/excursiones/reservas/queries'
+import { ventaDeReserva } from '@/modules/excursiones/comisiones/queries'
 import {
   ESTADO_RESERVA_LABEL,
   TONO_RESERVA,
@@ -12,6 +13,7 @@ import {
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ReservaPagos } from '@/components/excursiones/ReservaPagos'
 import { ReservaEstadoBotones } from '@/components/excursiones/ReservaEstadoBotones'
+import { VentaAcciones } from '@/components/excursiones/VentaAcciones'
 import { StatusChip } from '@/components/ui/status-chip'
 import { formatDate, formatMoney } from '@/lib/format'
 
@@ -31,6 +33,7 @@ export default async function ReservaDetallePage({
   const detalle = await reservaDetalle(companyId, id)
   if (!detalle) notFound()
   const { reserva, saldo, cliente, excursion, vendedor } = detalle
+  const venta = await ventaDeReserva(companyId, reserva.id)
 
   const moneda = reserva.moneda
   const estado = reserva.estado as EstadoReserva
@@ -143,6 +146,12 @@ export default async function ReservaDetallePage({
           notas: p.notas,
           createdAt: p.createdAt,
         }))}
+      />
+
+      <VentaAcciones
+        reservaId={reserva.id}
+        saldo={saldo.saldo}
+        venta={venta ? { id: venta.id, numero: venta.numero, estado: venta.estado } : null}
       />
     </div>
   )
