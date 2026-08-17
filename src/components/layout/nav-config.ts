@@ -139,6 +139,14 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
+    // Módulo de EXCURSIONES: UNA sola entrada en el sidebar (decisión §4 del
+    // programa); la navegación interna del módulo es secundaria (tabs).
+    // Detrás de la capacidad EXCURSIONES — requireSection la niega sin ella.
+    id: 'excursiones',
+    label: 'Excursiones',
+    items: [{ href: '/admin/excursiones', label: 'Excursiones', icon: Compass }],
+  },
+  {
     id: 'beneficios',
     label: 'Beneficios',
     items: [

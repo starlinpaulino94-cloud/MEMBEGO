@@ -15,6 +15,7 @@ export const TIPOS_NEGOCIO_SOLICITUD = [
   'Restaurante',
   'Barbería / Salón',
   'Gimnasio',
+  'Excursiones / Tours',
   'Otro',
 ] as const
 export type TipoNegocioSolicitud = (typeof TIPOS_NEGOCIO_SOLICITUD)[number]
@@ -29,6 +30,7 @@ export const VERTICAL_POR_TIPO: Partial<Record<TipoNegocioSolicitud, string>> = 
   Restaurante: 'RESTAURANTE',
   'Barbería / Salón': 'BARBERIA',
   Gimnasio: 'GYM',
+  'Excursiones / Tours': 'EXCURSIONES',
 }
 
 // ── Estados de la solicitud ──────────────────────────────────────────────────

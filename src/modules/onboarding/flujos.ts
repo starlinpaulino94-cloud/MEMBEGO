@@ -70,6 +70,11 @@ export const FLUJOS_ONBOARDING: Record<CategoriaNegocio, FlujoOnboarding> = {
     version: 1,
     pasos: [{ id: 'PERFIL_GENERAL', requerido: true }],
   },
+  // Una excursión jamás pregunta por una placa: solo el perfil.
+  EXCURSIONES: {
+    version: 1,
+    pasos: [{ id: 'PERFIL_GENERAL', requerido: true }],
+  },
 }
 
 /**

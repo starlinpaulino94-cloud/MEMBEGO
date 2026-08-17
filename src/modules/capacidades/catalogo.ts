@@ -12,7 +12,7 @@ import type { AdminSection } from '@/lib/auth/permissions'
 // ── Categorías ───────────────────────────────────────────────────────────────
 
 /** Solo CAR_WASH está operativa; las demás son valores reservados (E6+). */
-export const CATEGORIAS = ['CAR_WASH', 'BARBERIA', 'RESTAURANTE', 'GYM'] as const
+export const CATEGORIAS = ['CAR_WASH', 'BARBERIA', 'RESTAURANTE', 'GYM', 'EXCURSIONES'] as const
 export type CategoriaNegocio = (typeof CATEGORIAS)[number]
 
 export const CATEGORIA_LABELS: Record<CategoriaNegocio, string> = {
@@ -20,6 +20,7 @@ export const CATEGORIA_LABELS: Record<CategoriaNegocio, string> = {
   BARBERIA: 'Barbería / Salón',
   RESTAURANTE: 'Restaurante',
   GYM: 'Gimnasio',
+  EXCURSIONES: 'Excursiones y Tours',
 }
 
 /**
@@ -85,6 +86,12 @@ export function categoriaExplicitaDeType(
     case 'gym':
     case 'gimnasio':
       return 'GYM'
+    case 'excursiones':
+    case 'excursion':
+    case 'excursión':
+    case 'tours':
+    case 'tour':
+      return 'EXCURSIONES'
     default:
       return null
   }
@@ -141,6 +148,10 @@ export const CAPACIDADES = [
   'COMPRAS',
   'ACTIVOS',
   'TURNOS',
+  // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Encendida de
+  // serie SOLO en la categoría EXCURSIONES; cualquier otra empresa la
+  // enciende por override desde el panel de capacidades.
+  'EXCURSIONES',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -163,6 +174,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   COMPRAS: 'Proveedores y órdenes de compra',
   ACTIVOS: 'Equipos y mantenimiento',
   TURNOS: 'Turnos y asistencia',
+  EXCURSIONES: 'Excursiones: ventas, vendedores y comisiones',
 }
 
 /**
@@ -174,6 +186,7 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   CITAS: ['citas'],
   SEGUIMIENTO: ['seguimiento'],
   RULETA: ['gamificacion'],
+  EXCURSIONES: ['excursiones'],
 }
 
 /** Índice inverso sección → capacidad que la controla (o undefined). */
@@ -213,6 +226,8 @@ export const CAPACIDADES_BASE: Record<CategoriaNegocio, Capacidad[]> = {
   BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
   RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
   GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
+  // El módulo de Excursiones viene ENCENDIDO de serie en su categoría.
+  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES'],
 }
 
 // ── Configuración guardada (companies.capacidades) ───────────────────────────
