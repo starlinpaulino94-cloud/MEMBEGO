@@ -5,6 +5,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { sendEmail } from '@/lib/email'
+import { crearDireccionRespuesta } from '@/lib/email/respuestas'
 import { escaparHtml } from '@/lib/html'
 import { encolarEmail } from '@/modules/jobs/emisiones'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
@@ -337,18 +338,29 @@ export async function crearTicket(
       })
     )
     if (config?.correoSoporte) {
+      // `Reply-To` firmado: si quien atiende responde desde su gestor de correo
+      // —Zoho, Gmail, el que sea—, esa respuesta vuelve al webhook de Resend y
+      // entra en este mismo ticket. Sin `EMAIL_REPLY_DOMAIN` configurado,
+      // `crearDireccionRespuesta` devuelve null y el correo sale como siempre:
+      // la función nueva no puede romper la que ya andaba.
+      const replyTo = crearDireccionRespuesta(ticket.id)
       await encolarEmail({
         to: config.correoSoporte,
         subject: `Nuevo ticket: ${asunto}`,
+        replyTo,
         // Los tres valores los escribe el cliente. Sin escapar, quien abre un
         // ticket decide el HTML que le llega al buzón del negocio: basta un
         // <a> para que el correo "de soporte" lleve un enlace a otro sitio.
         // El asunto NO se escapa: va en `subject`, que es texto plano; con
         // entidades se leería `&lt;` en la bandeja de entrada.
+        //
+        // La línea del Reply-To es literal nuestra, sin nada del cliente: no
+        // hay nada que escapar en ella.
         html: `<p>Se recibió un nuevo ticket de soporte.</p>
                <p><strong>Cliente:</strong> ${escaparHtml(cliente?.nombre ?? 'Cliente')}<br/>
                <strong>Asunto:</strong> ${escaparHtml(asunto)}<br/>
-               <strong>Descripción:</strong> ${escaparHtml(descripcion)}</p>`,
+               <strong>Descripción:</strong> ${escaparHtml(descripcion)}</p>
+               ${replyTo ? '<p>Puedes responder a este correo: tu respuesta entra en el ticket.</p>' : ''}`,
       }).catch((e) => {
         console.error('[soporte-email]', e)
       })

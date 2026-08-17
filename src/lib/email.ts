@@ -20,6 +20,14 @@ export interface EmailPayload {
    * de práctica hacia una persona real es confuso en el mejor caso.
    */
   companyId?: string | null
+  /**
+   * Dirección a la que debe ir la respuesta si alguien pulsa Responder.
+   *
+   * La generan `crearDireccionRespuesta` y compañía (`lib/email/respuestas.ts`)
+   * y llevan el ticket firmado dentro, para que el correo entrante sepa a qué
+   * conversación pertenece sin fiarse del remitente.
+   */
+  replyTo?: string | null
 }
 
 export interface EmailResult {
@@ -63,6 +71,7 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
         subject: payload.subject,
         html: payload.html ?? undefined,
         text: payload.text ?? (payload.html ? undefined : payload.subject),
+        reply_to: payload.replyTo ?? undefined,
       }),
     })
     if (!res.ok) {

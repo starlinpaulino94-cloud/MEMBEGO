@@ -18,6 +18,7 @@ export function encolarEmail(payload: EmailPayload): Promise<'cola' | 'en-linea'
     html: payload.html,
     text: payload.text,
     companyId: payload.companyId,
+    replyTo: payload.replyTo,
   })
 }
 

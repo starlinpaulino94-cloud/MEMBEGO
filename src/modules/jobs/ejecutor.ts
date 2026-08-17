@@ -80,6 +80,7 @@ async function enviarEmail(carga: CargaEmail): Promise<ResultadoTrabajo> {
     html: carga.html,
     text: carga.text,
     companyId: carga.companyId,
+    replyTo: carga.replyTo,
   })
   return { procesados: res.sent ? 1 : 0, detalle: res.reason }
 }
