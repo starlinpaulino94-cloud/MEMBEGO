@@ -195,3 +195,48 @@ export async function vehiculoPorPlaca(
   ).catch(() => null)
   return v ? vehiculoDTO(v) : null
 }
+
+/**
+ * Los TIPOS DE VEHÍCULO de la empresa con su nivel tarifario.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTO TIENE QUE SALIR AL CONTRATO
+ *
+ * MembeGo decide la cobertura comparando NÚMEROS: el nivel del vehículo contra
+ * el `nivelTarifarioMax` del plan. Un satélite que quiera cobrar la diferencia
+ * cuando el carro se sale del plan necesita saber a qué nivel corresponde cada
+ * una de SUS categorías, y esa equivalencia la tenía que adivinar: los niveles
+ * viven aquí y no había forma de leerlos.
+ *
+ * Adivinarlos no es un inconveniente menor. Un nivel que no existe en MembeGo
+ * no casa con nada, así que el satélite cobraría mal para siempre y nadie
+ * sabría por qué — el cliente solo vería «no cubierto».
+ *
+ * Se sirve con `benefits:read` y no con un ámbito nuevo, a propósito: el nivel
+ * solo sirve para decidir cobertura, y un ámbito nuevo obligaría a reemitir las
+ * credenciales de todos los satélites que ya evalúan beneficios.
+ *
+ * Solo los ACTIVOS: un tipo desactivado no se le ofrece a nadie, y mandarlo
+ * invitaría al satélite a mapear una categoría contra algo retirado.
+ */
+export interface VehicleTypeDTO {
+  id: string
+  nombre: string
+  /** El número que se compara con `nivelTarifarioMax` del plan. */
+  nivelTarifario: number
+}
+
+export async function tiposDeVehiculo(companyId: string): Promise<VehicleTypeDTO[]> {
+  const filas = await conEmpresa(companyId, (tx) =>
+    tx.tipoVehiculo.findMany({
+      where: { companyId, activo: true },
+      select: { id: true, nombre: true, nivelTarifario: true },
+      orderBy: [{ nivelTarifario: 'asc' }, { orden: 'asc' }, { nombre: 'asc' }],
+    })
+  ).catch(() => [])
+  return filas.map((t) => ({
+    id: t.id,
+    nombre: t.nombre,
+    nivelTarifario: t.nivelTarifario,
+  }))
+}
