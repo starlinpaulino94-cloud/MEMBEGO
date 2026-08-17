@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { prisma } from '@/lib/prisma'
+import { conEmpresaOTodas } from '@/lib/tenant'
 import {
   ROLES_EXENTOS_PERMISOS,
   resolverPermisosUsuario,
@@ -25,10 +25,28 @@ export default async function PermisosEmpleadoPage({
   const user = await requireRole(['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA'])
   const { id } = await params
 
-  const empleado = await prisma.user.findUnique({
-    where: { id },
-    select: { id: true, name: true, email: true, role: true, companyId: true, permisos: true },
-  })
+  /**
+   * Con el contexto de la empresa puesto, no sin él.
+   *
+   * La comprobación de abajo —que el empleado sea de TU empresa— seguía
+   * haciéndose en memoria DESPUÉS de haber leído la fila. Funciona, pero deja
+   * la barrera en un solo sitio: si mañana alguien mueve o reordena ese `if`,
+   * la consulta ya trajo el dato de otra empresa. Con `conEmpresa` la barrera
+   * está también en la base (RLS · Capa 2) y el `if` pasa a ser la segunda,
+   * que es el orden correcto.
+   *
+   * `conEmpresaOTodas` porque el superadmin entra aquí sin empresa activa y
+   * tiene que poder abrir la ficha de cualquiera.
+   */
+  const empleado = await conEmpresaOTodas(
+    user.metadata.companyId,
+    'permisos: el superadmin edita los de cualquier empleado, sin empresa activa',
+    (tx) =>
+      tx.user.findUnique({
+        where: { id },
+        select: { id: true, name: true, email: true, role: true, companyId: true, permisos: true },
+      })
+  )
   if (!empleado) notFound()
   if (
     user.metadata.role !== 'SUPERADMIN' &&
