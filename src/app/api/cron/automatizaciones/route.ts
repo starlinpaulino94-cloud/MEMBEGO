@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { autorizarCron } from '@/lib/cron-auth'
 import { ejecutarAutomatizacionesGlobal } from '@/modules/admin/automatizaciones'
 import { mantenimientoRegalos } from '@/modules/regalos/mantenimiento'
 import { recordatoriosSeguimientoAuto } from '@/modules/seguimiento/mantenimiento'
@@ -18,18 +19,8 @@ export const maxDuration = 60
  * cron-job.org, etc.), idealmente una vez al día.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    return NextResponse.json(
-      { error: 'CRON_SECRET no configurado en el servidor.' },
-      { status: 503 }
-    )
-  }
-
-  const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
-  }
+  const denegado = autorizarCron(request)
+  if (denegado) return denegado
 
   try {
     // Lo PRIMERO del día: poner al día el estado de las membresías. Hasta la

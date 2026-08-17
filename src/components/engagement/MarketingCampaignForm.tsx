@@ -61,7 +61,14 @@ function toLocalInput(iso: string | null): string {
   return new Date(d.getTime() - off).toISOString().slice(0, 16)
 }
 
-export function MarketingCampaignForm({ existing }: { existing?: MarketingExisting }) {
+export function MarketingCampaignForm({
+  existing,
+  companyId,
+}: {
+  existing?: MarketingExisting
+  /** Empresa dueña de las imágenes que se suban. Ver `storage-rutas.ts`. */
+  companyId: string | null
+}) {
   const router = useRouter()
   const action = existing ? actualizarCampanaMarketing : crearCampanaMarketing
   const [state, formAction, pending] = useActionState(action, init)
@@ -298,7 +305,8 @@ export function MarketingCampaignForm({ existing }: { existing?: MarketingExisti
             <BannerUploadBridge
               value={banner}
               onChange={setBanner}
-              folder={existing?.id ?? 'nueva'}
+              companyId={companyId}
+              campanaId={existing?.id ?? null}
             />
           </div>
 
@@ -360,11 +368,13 @@ export function MarketingCampaignForm({ existing }: { existing?: MarketingExisti
 function BannerUploadBridge({
   value,
   onChange,
-  folder,
+  companyId,
+  campanaId,
 }: {
   value: string
   onChange: (v: string) => void
-  folder: string
+  companyId: string | null
+  campanaId: string | null
 }) {
   return (
     <div
@@ -377,7 +387,8 @@ function BannerUploadBridge({
     >
       <CampanaImagenUpload
         name="bannerUrl"
-        folder={folder}
+        companyId={companyId}
+        campanaId={campanaId}
         currentUrl={value || null}
         label="Subir imagen de fondo"
       />

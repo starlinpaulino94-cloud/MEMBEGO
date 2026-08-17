@@ -55,6 +55,10 @@ export default async function EditarPromocionPage({
       <PromocionForm
         existing={{ ...promo, precio: promo.precio != null ? Number(promo.precio) : null }}
         campanas={campanas}
+        // La empresa de la PROMOCIÓN, no la de la sesión: `companyFilter`
+        // devuelve undefined para el superadmin, y aquí hace falta un id real
+        // para construir la ruta de la imagen.
+        companyId={promo.companyId}
       />
 
       {/* Share Engine: cómo se verá el enlace al compartirlo (tarjeta REAL). */}

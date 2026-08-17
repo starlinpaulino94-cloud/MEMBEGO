@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { autorizarCron } from '@/lib/cron-auth'
 import { ejecutarRenovacionesTarjeta } from '@/modules/pagos/cardnetTokenGuardado'
 
 export const dynamic = 'force-dynamic'
@@ -13,13 +14,8 @@ export const maxDuration = 60
  * `Authorization: Bearer <CRON_SECRET>`. Programado a diario en vercel.json.
  */
 export async function GET(request: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    return NextResponse.json({ error: 'CRON_SECRET no configurado.' }, { status: 503 })
-  }
-  if (request.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
-  }
+  const denegado = autorizarCron(request)
+  if (denegado) return denegado
 
   try {
     const resumen = await ejecutarRenovacionesTarjeta()

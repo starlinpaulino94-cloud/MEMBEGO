@@ -6,13 +6,37 @@ Storage.
 
 ## Cómo aplicarlo
 
+Son **tres archivos y el orden importa**: cada uno corrige las políticas del
+anterior. Aplicar solo el primero deja el sistema en el estado inseguro que los
+otros dos arreglan.
+
 1. Abre el **SQL Editor** de tu proyecto en Supabase.
-2. Pega y ejecuta `prisma/migrations_manual/2026-07-storage-buckets.sql`.
+2. Ejecuta, en este orden:
+   1. `prisma/migrations_manual/2026-07-storage-buckets.sql` — crea los buckets
+      `avatars`, `logos` y `comprobantes`.
+   2. `prisma/migrations_manual/2026-07-comprobantes-privado.sql` — pasa
+      `comprobantes` a privado y le quita toda política: a partir de aquí solo
+      se lee y escribe con URL firmada por el servidor.
+   3. `prisma/migrations_manual/2026-08-storage-ownership.sql` — añade la
+      comprobación de **propiedad** en `avatars` y `logos`. Sin este, cualquier
+      usuario autenticado puede sobrescribir o borrar el logo de cualquier
+      empresa.
 3. Reintenta subir una imagen en la app.
 
-El script es idempotente: crea los buckets `avatars`, `logos` y `comprobantes`
-como públicos y añade las políticas RLS que permiten a un usuario autenticado
-subir/reemplazar y a cualquiera leer. Correrlo varias veces no hace daño.
+Los tres son idempotentes: correrlos varias veces no hace daño.
+
+> **Si ya tenías el paso 1 aplicado de antes**, ejecuta igualmente el 2 y el 3.
+> Son los que cierran los dos huecos que encontró la auditoría (C-01 y C-04).
+
+### Buckets que este setup NO cubre
+
+El código sube además a `promociones` (promociones, campañas de invitación,
+adjuntos de solicitudes) y a `evidencias` (carwash). Ningún SQL de este
+repositorio los crea ni define sus políticas: si funcionan, es porque alguien
+los configuró a mano en el panel. Eso significa que **nadie puede revisar esa
+configuración leyendo el código**, y que un proyecto nuevo de Supabase no la
+tendrá. Está pendiente decidir su visibilidad y llevarlos a un archivo como los
+otros tres.
 
 ## Por qué fallaba
 

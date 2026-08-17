@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Camera, Loader2, UploadCloud } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { uniqueFileName } from '@/lib/storage'
+import { rutaEvidencia } from '@/lib/storage-rutas'
 import { guardarEvidencia } from '@/modules/carwash/evidencias-actions'
 import {
   EVIDENCIA_MOMENTOS,
@@ -23,9 +24,16 @@ const BUCKET = 'evidencias'
  * la acción del servidor solo registra la URL con su contexto.
  */
 export function EvidenciaForm({
+  companyId,
   colaId,
   placaInicial,
 }: {
+  /**
+   * Empresa dueña. Va SIEMPRE en el primer segmento de la ruta: es lo único
+   * que la política de RLS comprueba. La página que monta este formulario ya
+   * corta antes si no hay empresa, así que aquí no es opcional.
+   */
+  companyId: string
   /** Entrada de la cola a la que se liga la foto (opcional). */
   colaId?: string
   placaInicial?: string
@@ -61,7 +69,7 @@ export function EvidenciaForm({
     try {
       const supabase = createClient()
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `${colaId || 'sueltas'}/${uniqueFileName(ext)}`
+      const path = rutaEvidencia(companyId, colaId, uniqueFileName(ext))
       const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
       if (error) throw error
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)

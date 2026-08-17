@@ -38,10 +38,15 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const C = { ok: '\x1b[32m', mal: '\x1b[31m', avi: '\x1b[33m', dim: '\x1b[2m', off: '\x1b[0m' }
-const RAIZ = new URL('../src', import.meta.url).pathname
+// `fileURLToPath`, no `.pathname`: en Windows el pathname de un file:// es
+// `/C:/…`, con una barra delante que convierte el `join` en `C:\C:\…` y hace
+// que el gate reviente con ENOENT antes de mirar un solo archivo. Un gate que
+// no corre en la máquina de quien programa es un gate que no existe.
+const RAIZ = fileURLToPath(new URL('../src', import.meta.url))
 const INFO = process.argv.includes('--info')
 
 /**
@@ -141,7 +146,10 @@ let archivosCubiertos = 0
 let sitiosDeConsulta = 0
 
 for (const ruta of archivosTS(RAIZ)) {
-  const relativa = ruta.replace(`${RAIZ}/`, '')
+  // Separadores normalizados a `/`: las claves de BLANCA/PENDIENTES se
+  // escriben con barra, y en Windows `relative` devuelve `lib\prisma.ts`.
+  // Sin esto la lista blanca no acierta ni una y todo sale como hueco.
+  const relativa = relative(RAIZ, ruta).split(sep).join('/')
   const contenido = readFileSync(ruta, 'utf8')
 
   const conTenant = usaTenant(contenido)

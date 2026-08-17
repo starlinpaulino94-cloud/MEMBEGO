@@ -11,6 +11,7 @@ import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { uniqueFileName } from '@/lib/storage'
+import { rutaCampana } from '@/lib/storage-rutas'
 import { Button } from '@/components/ui/button'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
@@ -19,14 +20,20 @@ const BUCKET = 'promociones'
 
 export function CampanaImagenUpload({
   name,
-  folder,
+  companyId,
+  campanaId,
   currentUrl,
   label,
 }: {
   /** Nombre del hidden input (imagenUrl | bannerUrl). */
   name: string
-  /** Carpeta dentro de invitaciones/ (id de la campaña o 'nueva'). */
-  folder: string
+  /**
+   * Empresa dueña. Va SIEMPRE en el primer segmento de la ruta: es lo único
+   * que la política de RLS comprueba. Si llega `null` la subida se deshabilita.
+   */
+  companyId: string | null
+  /** Id de la campaña, o `null` si todavía no se ha guardado. */
+  campanaId: string | null
   currentUrl: string | null
   label: string
 }) {
@@ -35,6 +42,12 @@ export function CampanaImagenUpload({
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(file: File) {
+    // Sin empresa no hay ruta con dueño posible: mejor cortar y decirlo que
+    // subir a una carpeta que ninguna política puede comprobar.
+    if (!companyId) {
+      toast.error('Selecciona una empresa activa antes de subir imágenes.')
+      return
+    }
     if (!ALLOWED.includes(file.type)) {
       toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
       return
@@ -47,7 +60,7 @@ export function CampanaImagenUpload({
     try {
       const supabase = createClient()
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `invitaciones/${folder}/${uniqueFileName(ext)}`
+      const path = rutaCampana(companyId, campanaId, uniqueFileName(ext))
       const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
       if (error) throw error
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
