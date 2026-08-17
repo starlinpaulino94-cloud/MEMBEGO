@@ -51,6 +51,9 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
+  // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
+  // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
+  'excursiones',
   // `/admin/app/<vertical>/*`. El launchpad `/admin/aplicaciones` se retiró
   // —los sistemas de cada oficio se construyen aparte y se conectan por
   // contrato—, pero las pantallas de Car Wash siguen en el repositorio para su
@@ -99,15 +102,31 @@ export interface PermisosUsuario {
 }
 
 /**
- * Roles a los que los ajustes NO se aplican: el superadmin por definición, y
- * los administradores de la empresa para que nadie pueda dejar al dueño
- * fuera de su propio panel (ni un admin a otro, ni a sí mismo por error).
+ * Roles a los que los ajustes NO se aplican al RESOLVER: solo el superadmin.
+ *
+ * DECISIÓN DE PRODUCTO (15-08-2026, dueño de la plataforma): en esta etapa la
+ * plataforma tiene control total sobre lo que cada empresa puede usar — así
+ * que los ajustes SÍ aplican a los ADMINISTRADORES de empresa… pero solo el
+ * superadmin puede ponérselos (ver `puedeEditarPermisos`): un admin sigue
+ * sin poder bloquear a otro admin ni a sí mismo. El candado cambió de "los
+ * admins son intocables" a "a los admins solo los toca la plataforma".
  */
-export const ROLES_EXENTOS_PERMISOS: readonly AppRole[] = [
-  'SUPERADMIN',
-  'ADMINISTRADOR',
-  'ADMIN_EMPRESA',
-] as AppRole[]
+export const ROLES_EXENTOS_PERMISOS: readonly AppRole[] = ['SUPERADMIN']
+
+const ROLES_ADMIN_EMPRESA: readonly AppRole[] = ['ADMINISTRADOR', 'ADMIN_EMPRESA']
+
+/**
+ * ¿Puede `editor` ajustar los permisos de `objetivo`?
+ *  · SUPERADMIN → a cualquiera menos a otro superadmin.
+ *  · Admin de empresa → a su equipo, nunca a otro admin (ni a la plataforma).
+ *  · Nadie se edita a sí mismo (eso lo valida el caller con los ids).
+ */
+export function puedeEditarPermisos(editor: AppRole, objetivo: AppRole): boolean {
+  if (objetivo === 'SUPERADMIN') return false
+  if (editor === 'SUPERADMIN') return true
+  if (ROLES_ADMIN_EMPRESA.includes(editor)) return !ROLES_ADMIN_EMPRESA.includes(objetivo)
+  return false
+}
 
 /** Normaliza el JSON guardado (tolerante a null/basura). Null = sin ajustes. */
 export function resolverPermisosUsuario(raw: unknown): PermisosUsuario | null {

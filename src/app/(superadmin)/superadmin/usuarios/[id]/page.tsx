@@ -85,6 +85,25 @@ export default async function EditarUsuarioStaffPage({
         esSuperadmin={esSuperadmin}
       />
 
+      {/* Módulo de Permisos: control de plataforma sobre lo que este usuario
+          puede abrir y hacer — incluye a los ADMINISTRADORES de empresa (el
+          filtro fino de esta etapa; solo el superadmin llega hasta aquí). */}
+      {!esSuperadmin ? (
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5">
+          <h2 className="text-sm font-semibold text-foreground">Permisos por módulo y función</h2>
+          <p className="mt-1 mb-3 text-small text-muted-foreground">
+            Concede o niega módulos del panel y funciones concretas dentro de ellos, por
+            encima de lo que su rol trae de serie.
+          </p>
+          <Link
+            href={`/admin/empleados/${usuario.id}/permisos?volver=${encodeURIComponent(`/superadmin/usuarios/${usuario.id}`)}`}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+          >
+            🛡️ Abrir el editor de permisos
+          </Link>
+        </div>
+      ) : null}
+
       {/* Zona de peligro: eliminación definitiva (solo superadmin) */}
       <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5">
         <h2 className="text-sm font-semibold text-foreground">Zona de peligro</h2>

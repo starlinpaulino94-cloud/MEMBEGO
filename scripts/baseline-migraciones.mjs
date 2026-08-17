@@ -9,9 +9,15 @@
  * Editor de Supabase. El SQL Editor **no escribe en `_prisma_migrations`**, así
  * que la base tiene todos los cambios y Prisma no lo sabe.
  *
- * Si se corriera `prisma migrate deploy` tal cual, intentaría aplicar las 74
- * migraciones desde cero sobre una base que ya está completa: fallaría en la
- * primera con "type AppRole already exists", y bloquearía el despliegue.
+ * Si se corriera `prisma migrate deploy` tal cual, intentaría aplicar TODAS las
+ * migraciones del repositorio desde cero sobre una base que ya está completa:
+ * fallaría en la primera con "type AppRole already exists", y bloquearía el
+ * despliegue.
+ *
+ * (Aquí había un número escrito a mano —«las 74»— que llevaba tiempo sin
+ * coincidir: hoy son 103. El script cuenta los directorios que encuentra y lo
+ * imprime al arrancar, así que el número correcto siempre está en la salida;
+ * en el texto solo servía para envejecer mal.)
  *
  * Este script hace lo que Prisma llama *baselining*: le dice "esto ya está
  * hecho" sin ejecutar nada. Después de correrlo, `migrate deploy` solo aplicará

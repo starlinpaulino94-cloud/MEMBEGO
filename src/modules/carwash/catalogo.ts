@@ -24,6 +24,16 @@ export interface TipoVehiculoItem {
   nombre: string
   orden: number
   activo: boolean
+  /**
+   * NIVEL TARIFARIO. Es el número con el que se decide si una membresía cubre
+   * este vehículo: un plan con `nivelTarifarioMax` 2 cubre los niveles 1 y 2.
+   *
+   * Nace en 1 para todos, y mientras nadie los diferencie CUALQUIER plan cubre
+   * CUALQUIER vehículo. Eso era el comportamiento anterior a los niveles y por
+   * eso es el valor de fábrica, pero también significa que la cobertura por
+   * categoría no empieza a funcionar hasta que aquí haya números distintos.
+   */
+  nivelTarifario: number
   /** Cuántos servicios tienen precio definido para este tipo. */
   serviciosConPrecio: number
 }
@@ -41,6 +51,7 @@ export async function getTiposVehiculo(companyId: string): Promise<TipoVehiculoI
     nombre: t.nombre,
     orden: t.orden,
     activo: t.activo,
+    nivelTarifario: t.nivelTarifario,
     serviciosConPrecio: t._count.precios,
   }))
 }

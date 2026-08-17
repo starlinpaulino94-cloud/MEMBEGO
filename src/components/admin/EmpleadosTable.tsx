@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { type ColumnDef } from '@tanstack/react-table'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, ShieldCheck } from 'lucide-react'
 import { DataTable } from '@/components/ui/data-table'
 
 export interface EmpleadoRow {
@@ -11,6 +11,8 @@ export interface EmpleadoRow {
   email: string
   rol: string
   esEmpleado: boolean
+  /** Módulo de Permisos: los roles no exentos (todos menos administradores). */
+  permisosEditables: boolean
   createdAt: Date
 }
 
@@ -54,12 +56,27 @@ const columns: ColumnDef<EmpleadoRow>[] = [
   {
     id: 'actions',
     header: 'Acciones',
-    cell: ({ row }) =>
-      row.original.esEmpleado ? (
-        <Link href={`/admin/empleados/${row.original.id}`} title="Ver detalles">
-          <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-muted-foreground" />
-        </Link>
-      ) : null,
+    cell: ({ row }) => (
+      <div className="flex items-center gap-3">
+        {row.original.esEmpleado ? (
+          <Link href={`/admin/empleados/${row.original.id}`} title="Ver detalles">
+            <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-muted-foreground" />
+          </Link>
+        ) : null}
+        {/* Módulo de Permisos: la ÚNICA puerta para todo el equipo — la ficha
+            de detalle solo existe para el rol EMPLEADO, pero los permisos se
+            editan para cajeros, recepción, gerentes… (todos menos admins). */}
+        {row.original.permisosEditables ? (
+          <Link
+            href={`/admin/empleados/${row.original.id}/permisos`}
+            title="Permisos: qué módulos y funciones puede usar"
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            <ShieldCheck className="h-4 w-4" /> Permisos
+          </Link>
+        ) : null}
+      </div>
+    ),
   },
 ]
 

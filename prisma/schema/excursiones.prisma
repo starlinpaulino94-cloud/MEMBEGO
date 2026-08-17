@@ -1,0 +1,524 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// EXCURSIONES — Sales & Commission Management para empresas de tours (Fase 1).
+//
+// Arquitectura (docs de Fase 0): cinco dominios — catálogo, vendedores,
+// reservas, comisiones y analítica — detrás de la capacidad EXCURSIONES.
+// La cadena completa que el módulo debe poder auditar:
+//   Empresa → vendedor → enlace/QR → cliente → registro → reserva →
+//   venta → comisión (con snapshot) → liquidación → pago.
+//
+// CONVENCIÓN DE ACOPLAMIENTO: dentro del módulo hay relaciones Prisma reales;
+// hacia el núcleo (companies, clientes, users, sucursales, campañas) se guarda
+// el id PLANO sin @relation — mismo precedente que solicitudes_empresa. El
+// aislamiento lo garantizan conEmpresa/RLS y las acciones; así el módulo no
+// obliga a tocar los modelos del núcleo en su fase fundacional.
+//
+// ESTADOS como String (precedente: carwash.Comision) con su dominio documentado
+// — evolucionan sin migrar enums.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Catálogo ─────────────────────────────────────────────────────────────────
+
+model Excursion {
+  id          String  @id @default(cuid())
+  companyId   String
+  nombre      String
+  slug        String
+  codigo      String?
+  descripcion String?
+  portadaUrl  String?
+  /// URLs de la galería.
+  galeria     Json?
+  duracionMin Int?
+  ubicacion   String?
+  categoria   String?
+  moneda      String  @default("DOP")
+  impuestoPct Decimal? @db.Decimal(5, 2)
+  /// Capacidad total por salida (las variantes pueden acotarla).
+  capacidad   Int?
+  puntoSalida String?
+  horaSalida  String?
+  horaRegreso String?
+  politicas   String?
+  incluye     String?
+  noIncluye   String?
+  /// 'ACTIVA' | 'PAUSADA' | 'AGOTADA' | 'TEMPORAL' | 'ARCHIVADA'.
+  estado      String  @default("ACTIVA")
+  /// Preparado para operadores terceros (Fase futura de proveedores).
+  providerId  String?
+
+  variantes ExcursionVariante[]
+  horarios  ExcursionHorario[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, slug])
+  @@index([companyId, estado])
+  @@map("excursiones")
+}
+
+model ExcursionVariante {
+  id              String    @id @default(cuid())
+  excursionId     String
+  excursion       Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  companyId       String
+  nombre          String
+  precioAdulto    Decimal   @db.Decimal(12, 2)
+  precioNino      Decimal?  @db.Decimal(12, 2)
+  precioResidente Decimal?  @db.Decimal(12, 2)
+  precioTurista   Decimal?  @db.Decimal(12, 2)
+  capacidad       Int?
+  activa          Boolean   @default(true)
+  orden           Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([excursionId, activa])
+  @@map("excursion_variantes")
+}
+
+model ExcursionHorario {
+  id          String    @id @default(cuid())
+  excursionId String
+  excursion   Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  companyId   String
+  /// Días de la semana en que sale ([1..7], ISO: 1 = lunes).
+  diasSemana  Json
+  horaSalida  String
+  /// Cupo específico de esta salida (null = el de la excursión).
+  cupo        Int?
+  activo      Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([excursionId, activo])
+  @@map("excursion_horarios")
+}
+
+// ── Vendedores y atribución ──────────────────────────────────────────────────
+
+model Vendedor {
+  id           String    @id @default(cuid())
+  companyId    String
+  /// Cuenta de MembeGo SOLO si el vendedor usará su panel (un hotel o un
+  /// taxista no la necesitan). Las ventas cuelgan del vendedor, no del user.
+  userId       String?
+  nombre       String
+  apellido     String?
+  fotoUrl      String?
+  telefono     String?
+  whatsapp     String?
+  email        String?
+  documento    String?
+  direccion    String?
+  /// Código comercial estable (RAF-00125). NUNCA derivado del nombre: el
+  /// nombre cambia, el código no. Es lo que viaja en el QR y el enlace.
+  codigo       String
+  /// Texto del catálogo TipoVendedor de la empresa (empleado, hotel, taxi…).
+  tipo         String?
+  sucursalId   String?
+  /// Jerarquía comercial (supervisor → equipo). Self-relation.
+  supervisorId String?
+  supervisor   Vendedor?  @relation("VendedorSupervisor", fields: [supervisorId], references: [id])
+  equipo       Vendedor[] @relation("VendedorSupervisor")
+  fechaIngreso DateTime  @default(now())
+  /// 'ACTIVO' | 'SUSPENDIDO' | 'INACTIVO'. Nunca se borra: sus ventas,
+  /// clientes y comisiones históricas permanecen (§99).
+  estado       String    @default("ACTIVO")
+
+  enlaces       VendedorEnlace[]
+  atribuciones  VendedorAtribucion[]
+  metas         VendedorMeta[]
+  bonos         VendedorBono[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, codigo])
+  @@index([companyId, estado])
+  @@index([userId])
+  @@index([supervisorId])
+  @@map("vendedores")
+}
+
+model VendedorEnlace {
+  id         String   @id @default(cuid())
+  companyId  String
+  vendedorId String
+  vendedor   Vendedor @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  /// Slug único GLOBAL del enlace (va en el QR): membego.com/e/<slug>.
+  slug       String   @unique
+  /// Campaña específica (QR "Macao Agosto / Juan"), opcional.
+  campanaId  String?
+  activo     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([vendedorId, activo])
+  @@map("vendedor_enlaces")
+}
+
+/// EL EMBUDO ENTERO, fila por fila e INMUTABLE: cada evento de captación con
+/// su origen. La política de la empresa (primera/última/por reserva) se aplica
+/// AL VENDER leyendo este histórico — cambiarla no reescribe el pasado.
+/// De aquí sale la respuesta a «¿cuántos clientes se registraron por el QR de
+/// cada vendedor?»: etapa REGISTRO agrupada por vendedor.
+model VendedorAtribucion {
+  id         String   @id @default(cuid())
+  companyId  String
+  vendedorId String
+  vendedor   Vendedor @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  /// Ficha comercial (Cliente) cuando ya se conoce; una visita anónima aún no
+  /// la tiene y se enlaza al registrarse por la cookie de visitante.
+  clienteId  String?
+  /// Cookie de visitante (misma del módulo de referidos).
+  visitorId  String?
+  /// 'VISITA' | 'REGISTRO' | 'RESERVA' | 'COMPRA'.
+  etapa      String
+  /// Canal declarado del enlace/QR ('QR', 'ENLACE', 'WHATSAPP', …).
+  canal      String?
+  /// Slug del enlace usado (para distinguir QRs de campaña).
+  enlaceSlug String?
+  campanaId  String?
+  landing    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, vendedorId, etapa, createdAt])
+  @@index([clienteId])
+  @@index([visitorId])
+  @@map("vendedor_atribuciones")
+}
+
+model VendedorMeta {
+  id            String    @id @default(cuid())
+  companyId     String
+  vendedorId    String
+  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  /// 'DIARIA' | 'SEMANAL' | 'MENSUAL' | 'RANGO'.
+  periodo       String
+  desde         DateTime?
+  hasta         DateTime?
+  metaVentas    Int?
+  metaPasajeros Int?
+  metaIngresos  Decimal?  @db.Decimal(12, 2)
+  metaRegistros Int?
+  metaReservas  Int?
+  activa        Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendedorId, activa])
+  @@map("vendedor_metas")
+}
+
+/// Bonificación (concepto SEPARADO de la comisión por diseño, §41).
+model VendedorBono {
+  id            String    @id @default(cuid())
+  companyId     String
+  vendedorId    String
+  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  descripcion   String
+  /// Condición que lo otorgó ({pasajeros: 50} → +US$100), para el expediente.
+  condicion     Json?
+  monto         Decimal   @db.Decimal(12, 2)
+  moneda        String    @default("DOP")
+  /// 'PENDIENTE' | 'OTORGADO' | 'PAGADO' | 'ANULADO'.
+  estado        String    @default("PENDIENTE")
+  liquidacionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, vendedorId, estado])
+  @@map("vendedor_bonos")
+}
+
+/// Catálogo de tipos de vendedor por empresa (empleado, hotel, taxi… + libres).
+model TipoVendedor {
+  id        String  @id @default(cuid())
+  companyId String
+  nombre    String
+  activo    Boolean @default(true)
+
+  @@unique([companyId, nombre])
+  @@map("vendedor_tipos")
+}
+
+/// Canales de adquisición por empresa (calle, hotel, playa… + personalizados).
+model CanalVenta {
+  id        String  @id @default(cuid())
+  companyId String
+  nombre    String
+  activo    Boolean @default(true)
+
+  @@unique([companyId, nombre])
+  @@map("canales_venta")
+}
+
+// ── Reservas, pagos y ventas ─────────────────────────────────────────────────
+
+model ReservaExc {
+  id          String    @id @default(cuid())
+  companyId   String
+  /// EXC-2026-000184: único por empresa, legible, buscable (§17).
+  numero      String
+  clienteId   String
+  /// El vendedor atribuido puede faltar (venta directa sin vendedor, §98).
+  vendedorId  String?
+  excursionId String
+  varianteId  String?
+  sucursalId  String?
+  fecha       DateTime
+  hora        String?
+  adultos     Int       @default(0)
+  ninos       Int       @default(0)
+  subtotal    Decimal   @db.Decimal(12, 2)
+  descuento   Decimal   @default(0) @db.Decimal(12, 2)
+  impuestos   Decimal   @default(0) @db.Decimal(12, 2)
+  total       Decimal   @db.Decimal(12, 2)
+  moneda      String    @default("DOP")
+  /// Tasa usada SI hubo conversión — congelada, jamás se recalcula (§63).
+  tasaCambio  Decimal?  @db.Decimal(12, 6)
+  /// 'BORRADOR' | 'PENDIENTE' | 'CONFIRMADA' | 'PARCIALMENTE_PAGADA' |
+  /// 'PAGADA' | 'COMPLETADA' | 'CANCELADA' | 'REEMBOLSADA' | 'NO_SHOW'.
+  estado      String    @default("PENDIENTE")
+  canal       String?
+  notas       String?
+  creadaPorId String?
+
+  pasajeros ReservaPasajero[]
+  pagos     ReservaPago[]
+  venta     VentaExc?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, numero])
+  @@index([companyId, estado, fecha])
+  @@index([companyId, vendedorId, createdAt])
+  @@index([clienteId])
+  @@index([excursionId])
+  @@map("reservas_excursion")
+}
+
+model ReservaPasajero {
+  id        String     @id @default(cuid())
+  reservaId String
+  reserva   ReservaExc @relation(fields: [reservaId], references: [id], onDelete: Cascade)
+  companyId String
+  /// 'ADULTO' | 'NINO'.
+  tipo      String
+  nombre    String?
+
+  @@index([reservaId])
+  @@map("reserva_pasajeros")
+}
+
+/// PAGOS PARCIALES (§21): una reserva puede cobrarse en varios abonos; el
+/// historial completo permanece. La suma de pagos mueve el estado de la
+/// reserva (PARCIALMENTE_PAGADA → PAGADA) — nunca al revés.
+model ReservaPago {
+  id             String     @id @default(cuid())
+  reservaId      String
+  reserva        ReservaExc @relation(fields: [reservaId], references: [id], onDelete: Cascade)
+  companyId      String
+  monto          Decimal    @db.Decimal(12, 2)
+  moneda         String     @default("DOP")
+  /// 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'LINK' | 'DEPOSITO' | libre.
+  metodo         String
+  referencia     String?
+  comprobanteUrl String?
+  /// 'REGISTRADO' | 'ANULADO' (anular = movimiento nuevo, no borrar).
+  estado         String     @default("REGISTRADO")
+  confirmadoPorId String?
+  notas          String?
+
+  createdAt DateTime @default(now())
+
+  @@index([reservaId, estado])
+  @@index([companyId, createdAt])
+  @@map("reserva_pagos")
+}
+
+model VentaExc {
+  id            String     @id @default(cuid())
+  companyId     String
+  /// SAL-000184: único por empresa.
+  numero        String
+  reservaId     String     @unique
+  reserva       ReservaExc @relation(fields: [reservaId], references: [id])
+  clienteId     String
+  /// Atribución CONGELADA al confirmar (§59): compras futuras del mismo
+  /// cliente pueden atribuirse a otro vendedor sin tocar esta.
+  vendedorId    String?
+  excursionId   String
+  pasajeros     Int
+  total         Decimal    @db.Decimal(12, 2)
+  moneda        String     @default("DOP")
+  /// 'PENDIENTE' | 'CONFIRMADA' | 'COMPLETADA' | 'CANCELADA' | 'REEMBOLSADA'.
+  estado        String     @default("PENDIENTE")
+  /// Puente al Transaction Engine: el registro financiero oficial de MembeGo.
+  transactionId String?
+  confirmadaAt  DateTime?
+  canceladaAt   DateTime?
+
+  reembolsos ReembolsoExc[]
+  comisiones ComisionEntrada[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, numero])
+  @@index([companyId, estado, createdAt])
+  @@index([companyId, vendedorId, createdAt])
+  @@index([clienteId])
+  @@map("ventas_excursion")
+}
+
+model ReembolsoExc {
+  id            String   @id @default(cuid())
+  ventaId       String
+  venta         VentaExc @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  companyId     String
+  monto         Decimal  @db.Decimal(12, 2)
+  motivo        String?
+  responsableId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ventaId])
+  @@map("reembolsos_excursion")
+}
+
+// ── Motor de comisiones y liquidaciones ──────────────────────────────────────
+
+/// REGLAS del Commission Engine (§22–23). La prioridad al resolver:
+/// VENDEDOR_EXCURSION > VENDEDOR > EXCURSION > CATEGORIA > GENERAL.
+model ComisionRegla {
+  id           String    @id @default(cuid())
+  companyId    String
+  /// 'GENERAL' | 'CATEGORIA' | 'EXCURSION' | 'VENDEDOR' | 'VENDEDOR_EXCURSION'.
+  ambito       String
+  excursionId  String?
+  vendedorId   String?
+  categoria    String?
+  /// 'PORCENTAJE' | 'FIJO_VENTA' | 'FIJO_PASAJERO' | 'FIJO_ADULTO' |
+  /// 'FIJO_NINO' | 'ESCALON'.
+  tipoCalculo  String
+  valor        Decimal   @db.Decimal(12, 2)
+  /// Para ESCALON: [{desde:1, hasta:10, pct:10}, …].
+  escalones    Json?
+  activa       Boolean   @default(true)
+  vigenciaDesde DateTime?
+  vigenciaHasta DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, activa, ambito])
+  @@map("comision_reglas")
+}
+
+/// LA COMISIÓN, con su fotografía (§26): reglaSnapshot congela la regla que
+/// la produjo y desglose la explica en lenguaje humano
+/// («3 adultos × US$10 = US$30»). Cambiar reglas después NO la toca.
+model ComisionEntrada {
+  id            String   @id @default(cuid())
+  companyId     String
+  ventaId       String
+  venta         VentaExc @relation(fields: [ventaId], references: [id])
+  vendedorId    String
+  base          Decimal  @db.Decimal(12, 2)
+  monto         Decimal  @db.Decimal(12, 2)
+  moneda        String   @default("DOP")
+  reglaSnapshot Json
+  desglose      String
+  /// 'ESTIMADA' | 'GENERADA' | 'APROBADA' | 'PENDIENTE_PAGO' | 'PAGADA' |
+  /// 'ANULADA'. Una PAGADA jamás se anula: se ajusta (§27, §52).
+  estado        String   @default("GENERADA")
+  liquidacionId String?
+  liquidacion   Liquidacion? @relation(fields: [liquidacionId], references: [id])
+
+  ajustes ComisionAjuste[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, vendedorId, estado, createdAt])
+  @@index([ventaId])
+  @@index([liquidacionId])
+  @@map("comision_entradas")
+}
+
+/// Movimientos con signo (+/−): la trazabilidad contable de correcciones,
+/// cancelaciones y reembolsos parciales. Nunca se edita la entrada original.
+model ComisionAjuste {
+  id            String          @id @default(cuid())
+  comisionId    String
+  comision      ComisionEntrada @relation(fields: [comisionId], references: [id], onDelete: Cascade)
+  companyId     String
+  monto         Decimal         @db.Decimal(12, 2)
+  motivo        String
+  responsableId String?
+  liquidacionId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([comisionId])
+  @@index([companyId, liquidacionId])
+  @@map("comision_ajustes")
+}
+
+model Liquidacion {
+  id            String    @id @default(cuid())
+  companyId     String
+  /// PAY-2026-0014: único por empresa.
+  numero        String
+  vendedorId    String
+  periodoDesde  DateTime
+  periodoHasta  DateTime
+  total         Decimal   @db.Decimal(12, 2)
+  moneda        String    @default("DOP")
+  /// 'BORRADOR' | 'PENDIENTE' | 'APROBADA' | 'PAGADA' | 'ANULADA'.
+  estado        String    @default("BORRADOR")
+  metodo        String?
+  referencia    String?
+  comprobanteUrl String?
+  notas         String?
+  pagadaPorId   String?
+  pagadaAt      DateTime?
+
+  comisiones ComisionEntrada[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, numero])
+  @@index([companyId, vendedorId, estado])
+  @@map("liquidaciones")
+}
+
+// ── Configuración del módulo por empresa ─────────────────────────────────────
+
+model ExcursionesConfig {
+  id                    String  @id @default(cuid())
+  companyId             String  @unique
+  /// 'PRIMERA' | 'ULTIMA' | 'RESERVA' (§12).
+  politicaAtribucion    String  @default("PRIMERA")
+  /// Días que vive una atribución de visita sin registro.
+  ventanaAtribucionDias Int     @default(30)
+  monedaDefecto         String  @default("DOP")
+  /// 'AUTOMATICA' (venta confirmada → APROBADA) | 'MANUAL'.
+  reglaAprobacion       String  @default("MANUAL")
+  /// Prefijos de numeración ({reserva:'EXC', venta:'SAL', liquidacion:'PAY'}).
+  config                Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("excursiones_config")
+}

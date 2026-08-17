@@ -220,10 +220,15 @@ test('nadie decide ya con `categoria` ni con `activo` del sistema', () => {
  * deja a sus empresas sin ningún sistema compatible.
  */
 test('la semilla de la migración cubre todas las categorías del catálogo', () => {
-  const sql = readFileSync(
+  // La semilla puede vivir en la migración fundacional (las cuatro originales)
+  // o en la migración que ESTRENA una categoría (EXCURSIONES, 20260817): lo
+  // que la prueba exige es que exista en alguna, no en cuál.
+  const sql = [
     join('prisma', 'migrations', '20260803_plataforma_registro', 'migration.sql'),
-    'utf8'
-  )
+    join('prisma', 'migrations', '20260817_excursiones_fundacion', 'migration.sql'),
+  ]
+    .map((p) => readFileSync(p, 'utf8'))
+    .join('\n')
   for (const codigo of CATEGORIAS) {
     assert.ok(sql.includes(`'${codigo}'`), `la migración no siembra el tipo de negocio "${codigo}"`)
     assert.ok(

@@ -77,7 +77,11 @@ export default async function EditarCampanaPage({
         title="Editar campaña"
         description={`Editando: ${campana.nombre}`}
       />
-      <CampanaInvitacionForm existing={existing} promociones={promociones} />
+      <CampanaInvitacionForm
+        existing={existing}
+        promociones={promociones}
+        companyId={campana.companyId}
+      />
     </div>
   )
 }

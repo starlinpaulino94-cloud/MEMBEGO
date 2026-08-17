@@ -51,12 +51,40 @@ export async function guardarTipoVehiculo(
     const orden = Number(formData.get('orden') ?? 0) || 0
     if (!nombre) return { error: 'Escribe el nombre del tipo de vehículo.' }
 
+    /*
+     * NIVEL TARIFARIO. Es lo que decide si una membresía cubre este vehículo, y
+     * hasta ahora no se podía tocar desde ninguna pantalla: todos los tipos
+     * nacían en 1 y ahí se quedaban, de modo que cualquier plan cubría
+     * cualquier carro y la cobertura por categoría no servía para nada.
+     *
+     * El tope de 9 atrapa el dedazo. Un 30 en vez de un 3 haría que ningún plan
+     * cubriera este tipo y nadie sabría por qué: el cliente vería «no cubierto»
+     * sin explicación posible.
+     *
+     * Si el campo no viene —un formulario viejo, una llamada que no lo manda—
+     * NO se toca lo que había. Poner 1 por defecto en una edición bajaría el
+     * nivel de un camión sin que nadie lo pidiera, y eso regala lavados.
+     */
+    const nivelCrudo = formData.get('nivelTarifario')
+    const nivelPedido = nivelCrudo === null || String(nivelCrudo).trim() === ''
+      ? null
+      : Number(nivelCrudo)
+
+    if (nivelPedido !== null &&
+        (!Number.isInteger(nivelPedido) || nivelPedido < 1 || nivelPedido > 9)) {
+      return { error: 'El nivel tarifario debe ser un número entero del 1 al 9.' }
+    }
+
     if (id) {
       // La cláusula por companyId impide editar el tipo de otra empresa.
       const upd = await conEmpresa(companyId, (tx) =>
         tx.tipoVehiculo.updateMany({
           where: { id, companyId },
-          data: { nombre, orden },
+          data: {
+            nombre,
+            orden,
+            ...(nivelPedido !== null ? { nivelTarifario: nivelPedido } : {}),
+          },
         })
       )
       if (upd.count === 0) return { error: 'Tipo de vehículo no encontrado.' }
@@ -69,7 +97,9 @@ export async function guardarTipoVehiculo(
       )
       if (existe) return { error: `Ya tienes un tipo llamado "${nombre}".` }
       await conEmpresa(companyId, (tx) =>
-        tx.tipoVehiculo.create({ data: { companyId, nombre, orden } })
+        tx.tipoVehiculo.create({
+          data: { companyId, nombre, orden, nivelTarifario: nivelPedido ?? 1 },
+        })
       )
     }
 

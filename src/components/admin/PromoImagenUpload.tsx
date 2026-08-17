@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client'
 import { OG_MAX_MB } from '@/lib/share/og-tamano'
 import { PROMO_IMG_DESCRIPCION, validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
 import { uniqueFileName } from '@/lib/storage'
+import { rutaPromocion } from '@/lib/storage-rutas'
 import { Button } from '@/components/ui/button'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
@@ -24,11 +25,18 @@ const MAX_MB = OG_MAX_MB
 const BUCKET = 'promociones'
 
 export function PromoImagenUpload({
-  folder,
+  companyId,
+  promocionId,
   currentUrl,
 }: {
-  /** Carpeta dentro del bucket (id de la promo o 'nueva'). */
-  folder: string
+  /**
+   * Empresa dueña. Va SIEMPRE en el primer segmento de la ruta: es lo único
+   * que la política de RLS comprueba. Si llega `null` la subida se deshabilita
+   * en vez de caer en una ruta sin dueño — ver el aviso del render.
+   */
+  companyId: string | null
+  /** Id de la promoción, o `null` si todavía no se ha guardado. */
+  promocionId: string | null
   currentUrl: string | null
 }) {
   const [url, setUrl] = useState(currentUrl ?? '')
@@ -36,6 +44,13 @@ export function PromoImagenUpload({
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(file: File) {
+    // Sin empresa no hay ruta con dueño posible. Se corta aquí y se dice por
+    // qué: subir a una carpeta sin prefijo dejaría el archivo fuera del
+    // alcance de la política y la subida parecería haber ido bien.
+    if (!companyId) {
+      toast.error('Selecciona una empresa activa antes de subir imágenes.')
+      return
+    }
     if (!ALLOWED.includes(file.type)) {
       toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
       return
@@ -66,7 +81,7 @@ export function PromoImagenUpload({
     try {
       const supabase = createClient()
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = `${folder}/${uniqueFileName(ext)}`
+      const path = rutaPromocion(companyId, promocionId, uniqueFileName(ext))
       const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
       if (error) throw error
       const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)

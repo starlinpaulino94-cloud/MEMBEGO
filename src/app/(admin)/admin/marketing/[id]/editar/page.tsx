@@ -49,7 +49,7 @@ export default async function EditarCampanaMarketingPage({
   return (
     <div className="space-y-6">
       <PageHeader title="Editar campaña" description="Ajusta tu oferta y su ventana de tiempo." />
-      <MarketingCampaignForm existing={existing} />
+      <MarketingCampaignForm existing={existing} companyId={companyId} />
     </div>
   )
 }

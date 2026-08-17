@@ -3,6 +3,7 @@ import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import { Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
+import { puedeEditarPermisos } from '@/lib/auth/permissions'
 import { companyFilter } from '@/modules/admin/queries'
 import { listInvitacionesPendientes } from '@/modules/admin/invitacionActions'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,10 @@ export default async function EmpleadosPage() {
       email: m.email,
       rol: roleLabel(m.role),
       esEmpleado: m.role === 'EMPLEADO',
+      // Módulo de Permisos: el superadmin edita a cualquiera (incluidos los
+      // administradores); un admin solo a su equipo. Nadie a sí mismo.
+      permisosEditables:
+        puedeEditarPermisos(user.metadata.role, m.role) && m.id !== user.metadata.dbUserId,
       createdAt: m.createdAt,
     }))
     invitacionesPendientes = invs

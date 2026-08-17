@@ -63,7 +63,7 @@ export default async function NuevaPromocionPage({
         </div>
       )}
 
-      <PromocionForm campanas={campanas} prefill={prefill ?? undefined} />
+      <PromocionForm campanas={campanas} prefill={prefill ?? undefined} companyId={companyId} />
     </div>
   )
 }

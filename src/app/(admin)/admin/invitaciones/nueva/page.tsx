@@ -33,7 +33,7 @@ export default async function NuevaCampanaInvitacionPage() {
         title="Nueva campaña"
         description="Configura una campaña 'Invita y Gana' para que tus clientes traigan amigos."
       />
-      <CampanaInvitacionForm promociones={promociones} />
+      <CampanaInvitacionForm promociones={promociones} companyId={companyId} />
     </div>
   )
 }

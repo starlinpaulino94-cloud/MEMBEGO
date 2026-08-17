@@ -1,6 +1,6 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { createRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
+import { comparacionConstante } from '@/lib/secretos'
 
 /**
  * Guard compartido para los endpoints de operación sensibles
@@ -25,13 +25,10 @@ const bootstrapLimiter = createRateLimiter({
   maxRequests: 5, // 5 intentos por IP cada 15 min
 })
 
-function constantTimeEqual(a: string, b: string): boolean {
-  // Hash a longitud fija para no filtrar el largo y poder comparar con
-  // timingSafeEqual (que exige buffers del mismo tamaño).
-  const ha = createHash('sha256').update(a).digest()
-  const hb = createHash('sha256').update(b).digest()
-  return timingSafeEqual(ha, hb)
-}
+// La comparación en tiempo constante vive en `@/lib/secretos`: estaba aquí
+// como función privada, así que los crons no podían usarla y comparaban
+// con `!==`. Se mantiene el nombre local para no tocar las llamadas de abajo.
+const constantTimeEqual = comparacionConstante
 
 export async function checkBootstrapAccess(
   req: NextRequest

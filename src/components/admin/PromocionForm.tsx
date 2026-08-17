@@ -109,10 +109,17 @@ export function PromocionForm({
   existing,
   prefill,
   campanas = [],
+  companyId,
 }: {
   existing?: Existing
   prefill?: PromocionPrefillValues
   campanas?: CampanaOption[]
+  /**
+   * Empresa dueña de las imágenes que se suban. Al editar es la de la propia
+   * promoción —así funciona también cuando un superadmin edita la de otra
+   * empresa—; al crear, la empresa activa de la sesión, que puede ser `null`.
+   */
+  companyId: string | null
 }) {
   const router = useRouter()
   const action = existing ? actualizarPromocion : crearPromocion
@@ -220,7 +227,8 @@ export function PromocionForm({
         <div className="space-y-2">
           <Label>Imagen de la promoción</Label>
           <PromoImagenUpload
-            folder={existing?.id ?? 'nueva'}
+            companyId={companyId}
+            promocionId={existing?.id ?? null}
             currentUrl={existing?.imagenUrl ?? null}
           />
           <p className="text-xs text-muted-foreground">

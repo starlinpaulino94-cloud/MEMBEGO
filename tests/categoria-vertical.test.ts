@@ -92,3 +92,16 @@ test('el código canónico del vertical guardado en type se reconoce (bug latent
   assert.equal(categoriaExplicitaDeType('RESTAURANTE'), 'RESTAURANTE')
   assert.equal(categoriaExplicitaDeType('GYM'), 'GYM')
 })
+
+test('EXCURSIONES es una categoría de primera clase (Fase 1 del módulo)', () => {
+  // El vertical y el type heredado la reconocen; jamás exige vehículo.
+  assert.equal(categoriaDeVertical('EXCURSIONES'), 'EXCURSIONES')
+  assert.equal(categoriaExplicitaDeType('excursiones'), 'EXCURSIONES')
+  assert.equal(categoriaExplicitaDeType('tours'), 'EXCURSIONES')
+  const { categoriaExplicita, activas } = capacidadesEfectivas('excursiones', null, 'EXCURSIONES')
+  assert.equal(categoriaExplicita, 'EXCURSIONES')
+  // El módulo viene encendido de serie en su categoría…
+  assert.equal(activas.has('EXCURSIONES'), true)
+  // …y apagado para las demás (se enciende por override del panel).
+  assert.equal(capacidadesEfectivas('restaurante', null, 'RESTAURANTE').activas.has('EXCURSIONES'), false)
+})

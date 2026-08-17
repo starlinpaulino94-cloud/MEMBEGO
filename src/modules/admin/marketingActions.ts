@@ -106,7 +106,7 @@ export async function crearCampanaMarketing(
   _prev: MarketingState,
   fd: FormData
 ): Promise<MarketingState> {
-  const user = await requireSection('marketing')
+  const user = await requireSection('marketing', 'crear')
   if (!user) return { error: 'No autorizado.' }
   const companyId = (await resolveCompanyId(user, fd)) ?? ''
   if (!companyId) return { error: 'Empresa requerida.' }
@@ -134,7 +134,7 @@ export async function actualizarCampanaMarketing(
   _prev: MarketingState,
   fd: FormData
 ): Promise<MarketingState> {
-  const user = await requireSection('marketing')
+  const user = await requireSection('marketing', 'editar')
   if (!user) return { error: 'No autorizado.' }
   const companyId = (await resolveCompanyId(user, fd)) ?? ''
   if (!companyId) return { error: 'Empresa requerida.' }
@@ -171,7 +171,7 @@ export async function cambiarEstadoCampanaMarketing(
   id: string,
   estado: MarketingCampaignEstado
 ): Promise<{ ok: boolean }> {
-  const user = await requireSection('marketing')
+  const user = await requireSection('marketing', 'estado')
   if (!user) return { ok: false }
   const companyId = (await resolveCompanyId(user)) ?? ''
   if (!companyId) return { ok: false }
@@ -187,7 +187,7 @@ export async function cambiarEstadoCampanaMarketing(
 }
 
 export async function eliminarCampanaMarketing(id: string): Promise<{ ok: boolean }> {
-  const user = await requireSection('marketing')
+  const user = await requireSection('marketing', 'eliminar')
   if (!user) return { ok: false }
   const companyId = (await resolveCompanyId(user)) ?? ''
   if (!companyId) return { ok: false }

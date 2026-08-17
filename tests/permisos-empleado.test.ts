@@ -5,6 +5,7 @@ import {
   seccionPermitida,
   funcionPermitida,
   permisosDesdeSeleccion,
+  puedeEditarPermisos,
   canAccessAdminSection,
 } from '../src/lib/auth/permissions'
 
@@ -33,11 +34,35 @@ test('conceder una sección que el rol no trae (Marketing con Clientes)', () => 
   assert.equal(seccionPermitida('MARKETING', 'clientes', p), true)
 })
 
-test('los roles exentos ignoran cualquier ajuste: nadie deja al dueño fuera', () => {
+test('el superadmin ignora cualquier ajuste; los ADMINISTRADORES ya no (control de plataforma)', () => {
   const p = resolverPermisosUsuario({ v: 1, secciones: { pagos: false, clientes: false } })
   assert.equal(seccionPermitida('SUPERADMIN', 'pagos', p), true)
-  assert.equal(seccionPermitida('ADMINISTRADOR', 'pagos', p), true)
-  assert.equal(seccionPermitida('ADMIN_EMPRESA', 'clientes', p), true)
+  // Decisión de producto (15-08-2026): la plataforma puede restringir a los
+  // administradores de una empresa — sus ajustes SÍ resuelven.
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'pagos', p), false)
+  assert.equal(seccionPermitida('ADMIN_EMPRESA', 'clientes', p), false)
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'membresias', p), true)
+})
+
+test('quién edita a quién: superadmin a cualquiera (menos superadmin); admin solo a su equipo', () => {
+  assert.equal(puedeEditarPermisos('SUPERADMIN', 'ADMINISTRADOR'), true)
+  assert.equal(puedeEditarPermisos('SUPERADMIN', 'CAJERO'), true)
+  assert.equal(puedeEditarPermisos('SUPERADMIN', 'SUPERADMIN'), false)
+  assert.equal(puedeEditarPermisos('ADMINISTRADOR', 'CAJERO'), true)
+  assert.equal(puedeEditarPermisos('ADMINISTRADOR', 'ADMINISTRADOR'), false)
+  assert.equal(puedeEditarPermisos('ADMINISTRADOR', 'ADMIN_EMPRESA'), false)
+  assert.equal(puedeEditarPermisos('ADMINISTRADOR', 'SUPERADMIN'), false)
+  assert.equal(puedeEditarPermisos('CAJERO', 'EMPLEADO'), false)
+})
+
+test('el ejemplo de citas: módulo abierto, configurar negado', () => {
+  const p = resolverPermisosUsuario({ v: 1, funciones: { citas: { configurar: false } } })
+  assert.equal(seccionPermitida('CAJERO', 'citas', p), true)
+  assert.equal(funcionPermitida('CAJERO', 'citas', 'gestionar', p), true)
+  assert.equal(funcionPermitida('CAJERO', 'citas', 'configurar', p), false)
+  // Y aplica también a un ADMINISTRADOR (puesto por la plataforma).
+  assert.equal(funcionPermitida('ADMINISTRADOR', 'citas', 'configurar', p), false)
+  assert.equal(funcionPermitida('ADMINISTRADOR', 'citas', 'gestionar', p), true)
 })
 
 test('negar una función bloquea esa función y solo esa', () => {

@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
+import { escaparHtml } from '@/lib/html'
 import { encolarEmail } from '@/modules/jobs/emisiones'
 import { getAppUrl, SITE_NAME } from '@/lib/site'
 import { TERMS_VERSION } from '@/lib/legal'
@@ -21,7 +22,8 @@ export interface InvitacionState {
 
 const DIAS_VALIDEZ = 7
 
-const escapeHtml = (s: string) => s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
+// El escapado vive en `@/lib/html`: esta copia cubría `<>&` pero no las
+// comillas, y el nombre de empresa acaba pegado a plantillas con atributos.
 
 /** Solo los administradores plenos con empresa pueden invitar. */
 async function requireOwner() {
@@ -123,7 +125,7 @@ export async function invitarMiembro(
   )
 
   const nombreEmpresa = company?.name ?? 'Una empresa'
-  const nombreSeguro = escapeHtml(nombreEmpresa)
+  const nombreSeguro = escaparHtml(nombreEmpresa)
   const url = `${getAppUrl()}/invitacion/${invitacion.token}`
   await encolarEmail({
     to: email,
