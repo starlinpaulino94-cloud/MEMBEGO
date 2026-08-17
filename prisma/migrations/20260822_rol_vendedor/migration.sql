@@ -1,0 +1,21 @@
+-- Rol VENDEDOR: acceso externo al panel del vendedor de Excursiones.
+--
+-- POR QUÉ UN ROL NUEVO Y NO REUSAR EMPLEADO
+--
+-- Los vendedores de excursiones son gente de FUERA de la empresa: hoteles,
+-- taxistas, promotores, agencias. Necesitan ver su QR, sus clientes captados y
+-- lo que se les debe — y nada más. Reusar EMPLEADO les habría dado alcance al
+-- escáner (`SCANNER_ROLES` lo incluye por diseño) y su aislamiento habría
+-- dependido de configurar bien los permisos de cada uno.
+--
+-- Con un rol propio el aislamiento es ESTRUCTURAL: `ROUTE_PROTECTION` solo le
+-- abre `/vendedor`, así que aunque escriba `/admin/clientes` a mano, el proxy
+-- lo rechaza sin consultar ninguna configuración. Una puerta cerrada con
+-- llave, no una puerta abierta con un cartel.
+--
+-- SEGURA: solo AÑADE un valor al enum. No toca una sola fila ni cambia el rol
+-- de ningún usuario existente. Nota de PostgreSQL: un valor de enum no se
+-- puede eliminar después, así que este cambio es permanente.
+--
+-- IF NOT EXISTS hace la migración repetible sin error.
+ALTER TYPE "AppRole" ADD VALUE IF NOT EXISTS 'VENDEDOR';

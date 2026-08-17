@@ -26,6 +26,9 @@ export type AppRole =
   | 'SUPERVISOR'
   | 'EMPLEADO'
   | 'CLIENTE'
+  // Vendedor de Excursiones (acceso externo: hoteles, taxistas, promotores).
+  // Solo alcanza /vendedor — nunca el panel de la empresa ni el escáner.
+  | 'VENDEDOR'
   // Legacy (se mantiene para no romper usuarios existentes)
   | 'ADMIN_EMPRESA'
 
@@ -78,6 +81,7 @@ export const ROLE_HOME: Record<AppRole, string> = {
   // Directo a /mis-membresias: /cliente/dashboard era solo un redirect y
   // duplicaba middleware + layout justo después del login.
   CLIENTE: '/cliente/inicio',
+  VENDEDOR: '/vendedor',
   // Legacy
   ADMIN_EMPRESA: '/admin/dashboard',
 }
@@ -142,6 +146,9 @@ export const ROUTE_PROTECTION: { prefix: string; roles: AppRole[] }[] = [
   { prefix: '/onboarding', roles: FULL_ADMIN_ROLES },
   { prefix: '/empleado', roles: SCANNER_ROLES },
   { prefix: '/cliente', roles: ['CLIENTE'] },
+  // Panel del vendedor de Excursiones: un solo rol, y ese rol no entra a
+  // ningún otro sitio. El aislamiento del externo es estructural.
+  { prefix: '/vendedor', roles: ['VENDEDOR'] },
   // Vistas de cliente fuera del prefijo /cliente (grupo (cliente)).
   { prefix: '/mis-membresias', roles: ['CLIENTE'] },
   { prefix: '/membresia', roles: ['CLIENTE'] },
@@ -181,5 +188,6 @@ export const ROL_LABEL: Record<string, string> = {
   ...ROL_STAFF_LABEL,
   SUPERADMIN: 'Superadmin',
   CLIENTE: 'Cliente',
+  VENDEDOR: 'Vendedor (excursiones)',
   ADMIN_EMPRESA: 'Administrador (legacy)',
 }

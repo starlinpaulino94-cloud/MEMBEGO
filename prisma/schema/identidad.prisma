@@ -22,6 +22,11 @@ enum AppRole {
   RECEPCION
   MARKETING // difusión: promociones, campañas, publicaciones, audiencia, notificaciones
   SUPERVISOR // operación: dashboard/reportes, clientes, validar pagos, scanner
+  /// Vendedor de Excursiones: solo alcanza /vendedor. Es un rol de ACCESO
+  /// EXTERNO (hoteles, taxistas, promotores) y por eso no está en ningún grupo
+  /// de administración ni del escáner: su aislamiento es estructural, no una
+  /// configuración de permisos que alguien pueda equivocarse al poner.
+  VENDEDOR
 }
 
 enum NotifTipo {
