@@ -34,7 +34,7 @@ export async function guardarSucursalGeo(
   formData: FormData
 ): Promise<SucursalGeoState> {
   try {
-    const user = await requireSection('sucursales')
+    const user = await requireSection('sucursales', 'editar')
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
@@ -141,7 +141,7 @@ export async function verificarCoordenadasSucursal(
   formData: FormData
 ): Promise<SucursalGeoState> {
   try {
-    const user = await requireSection('sucursales')
+    const user = await requireSection('sucursales', 'editar')
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
@@ -193,7 +193,7 @@ export async function toggleMostrarEnMapa(
   formData: FormData
 ): Promise<SucursalGeoState> {
   try {
-    const user = await requireSection('sucursales')
+    const user = await requireSection('sucursales', 'mapa')
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }

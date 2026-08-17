@@ -53,7 +53,7 @@ export async function instalarEstrategia(
   _prev: EstrategiaState,
   formData: FormData
 ): Promise<EstrategiaState> {
-  const user = await requireSection('automatizaciones')
+  const user = await requireSection('automatizaciones', 'instalar')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = await resolveCompanyId(user, formData)
@@ -93,7 +93,7 @@ export async function publicarEstrategia(
   _prev: EstrategiaState,
   formData: FormData
 ): Promise<EstrategiaState> {
-  const user = await requireSection('automatizaciones')
+  const user = await requireSection('automatizaciones', 'publicar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -115,7 +115,7 @@ export async function pausarEstrategia(
   _prev: EstrategiaState,
   formData: FormData
 ): Promise<EstrategiaState> {
-  const user = await requireSection('automatizaciones')
+  const user = await requireSection('automatizaciones', 'pausar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -137,7 +137,7 @@ export async function archivarEstrategia(
   _prev: EstrategiaState,
   formData: FormData
 ): Promise<EstrategiaState> {
-  const user = await requireSection('automatizaciones')
+  const user = await requireSection('automatizaciones', 'archivar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()

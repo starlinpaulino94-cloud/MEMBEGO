@@ -25,6 +25,7 @@ import {
   ADMIN_SECTIONS,
   ROLES_EXENTOS_PERMISOS,
   permisosDesdeSeleccion,
+  puedeEditarPermisos,
   type AdminSection,
 } from '@/lib/auth/permissions'
 import { FUNCIONES_POR_SECCION } from '@/lib/auth/funciones'
@@ -63,8 +64,15 @@ export async function guardarPermisosEmpleado(
     ) {
       return { error: 'Ese empleado no pertenece a tu empresa.' }
     }
-    if (ROLES_EXENTOS_PERMISOS.includes(objetivo.role)) {
-      return { error: 'Los administradores no se pueden restringir: cámbiale el rol si hace falta.' }
+    // El superadmin ajusta a cualquiera (incluidos administradores — control
+    // de plataforma); un admin de empresa solo a su equipo, nunca a otro admin.
+    if (!puedeEditarPermisos(user.metadata.role, objetivo.role)) {
+      return {
+        error:
+          user.metadata.role === 'SUPERADMIN'
+            ? 'Los permisos de un superadmin no se editan.'
+            : 'A los administradores solo los ajusta la plataforma (superadmin).',
+      }
     }
 
     // La selección llega como JSON del formulario y se valida ENTERA contra

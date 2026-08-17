@@ -3,10 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { conEmpresaOTodas } from '@/lib/tenant'
-import {
-  ROLES_EXENTOS_PERMISOS,
-  resolverPermisosUsuario,
-} from '@/lib/auth/permissions'
+import { puedeEditarPermisos, resolverPermisosUsuario } from '@/lib/auth/permissions'
 import { PermisosEmpleadoForm } from '@/components/admin/PermisosEmpleadoForm'
 
 export const dynamic = 'force-dynamic'
@@ -54,8 +51,13 @@ export default async function PermisosEmpleadoPage({
   ) {
     notFound()
   }
-  // Los administradores no se restringen (y nadie edita sus propios permisos).
-  if (ROLES_EXENTOS_PERMISOS.includes(empleado.role) || empleado.id === user.metadata.dbUserId) {
+  // Quién puede editar a quién: el superadmin a cualquiera (incluidos los
+  // administradores de la empresa — control de plataforma en esta etapa); un
+  // admin solo a su equipo, nunca a otro admin. Nadie se edita a sí mismo.
+  if (
+    !puedeEditarPermisos(user.metadata.role, empleado.role) ||
+    empleado.id === user.metadata.dbUserId
+  ) {
     redirect(`/admin/empleados/${empleado.id}`)
   }
 

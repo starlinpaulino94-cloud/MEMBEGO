@@ -66,6 +66,30 @@ export async function requireAdminUser(): Promise<SessionUser | null> {
  * esa sección permitida), o null. Segunda barrera server-side que NO depende
  * del path del request (a diferencia del middleware).
  */
+/**
+ * ¿Puede ESTE usuario (ya autenticado por otra guardia) ejecutar la función?
+ * Para acciones que guardan con `requireAdminUser` u otra barrera y solo
+ * necesitan sumarle el chequeo del módulo de Permisos. Lee la base en vivo,
+ * igual que requireSection.
+ */
+export async function usuarioPuedeFuncion(
+  user: SessionUser,
+  section: AdminSection,
+  funcion: string
+): Promise<boolean> {
+  const role = user.metadata.role
+  if (ROLES_EXENTOS_PERMISOS.includes(role)) return true
+  let permisos: PermisosUsuario | null = null
+  if (user.metadata.dbUserId) {
+    const { prisma } = await import('@/lib/prisma')
+    const fila = await prisma.user
+      .findUnique({ where: { id: user.metadata.dbUserId }, select: { permisos: true } })
+      .catch(() => null)
+    permisos = resolverPermisosUsuario(fila?.permisos)
+  }
+  return funcionPermitida(role, section, funcion, permisos)
+}
+
 export async function requireSection(
   section: AdminSection,
   /**
