@@ -121,6 +121,7 @@ export default async function EvidenciasPage({
       )}
 
       <EvidenciaForm
+        companyId={companyId}
         colaId={entradaCola?.id}
         placaInicial={entradaCola?.placa ?? undefined}
       />

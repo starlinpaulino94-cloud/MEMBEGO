@@ -134,7 +134,11 @@ begin
      where t.id = any(cands)
        and t."companyId" in (select public.membego_mis_empresas())
   ) or exists (
-    select 1 from public.campanas t
+    -- `marketing_campaigns`, NO `campanas`: el formulario de marketing usa el
+    -- modelo MarketingCampaign, que es el que guarda `imagenUrl`/`bannerUrl`.
+    -- `campanas` (Campana) no tiene ningún campo de imagen, así que nunca es
+    -- dueña de un archivo del bucket.
+    select 1 from public.marketing_campaigns t
      where t.id = any(cands)
        and t."companyId" in (select public.membego_mis_empresas())
   ) or exists (

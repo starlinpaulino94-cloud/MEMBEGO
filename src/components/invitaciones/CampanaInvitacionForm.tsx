@@ -81,9 +81,12 @@ function toDateInput(d: string | null) {
 export function CampanaInvitacionForm({
   existing,
   promociones = [],
+  companyId,
 }: {
   existing?: Existing
   promociones?: PromocionOption[]
+  /** Empresa dueña de las imágenes que se suban. Ver `storage-rutas.ts`. */
+  companyId: string | null
 }) {
   const router = useRouter()
   const action = existing ? actualizarCampanaInvitacion : crearCampanaInvitacion
@@ -263,7 +266,8 @@ export function CampanaInvitacionForm({
             <Label>Imagen (compartir / OG)</Label>
             <CampanaImagenUpload
               name="imagenUrl"
-              folder={existing?.id ?? 'nueva'}
+              companyId={companyId}
+              campanaId={existing?.id ?? null}
               currentUrl={existing?.imagenUrl ?? null}
               label="Subir imagen"
             />
@@ -272,7 +276,8 @@ export function CampanaInvitacionForm({
             <Label>Banner del landing</Label>
             <CampanaImagenUpload
               name="bannerUrl"
-              folder={existing?.id ?? 'nueva'}
+              companyId={companyId}
+              campanaId={existing?.id ?? null}
               currentUrl={existing?.bannerUrl ?? null}
               label="Subir banner"
             />
