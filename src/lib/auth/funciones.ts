@@ -125,4 +125,9 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'estado', label: 'Activar / pausar campañas' },
     { codigo: 'eliminar', label: 'Eliminar campañas de marketing' },
   ],
+  excursiones: [
+    { codigo: 'catalogo_crear', label: 'Crear excursiones' },
+    { codigo: 'catalogo_editar', label: 'Editar excursiones, variantes y horarios' },
+    { codigo: 'catalogo_archivar', label: 'Archivar excursiones' },
+  ],
 }
