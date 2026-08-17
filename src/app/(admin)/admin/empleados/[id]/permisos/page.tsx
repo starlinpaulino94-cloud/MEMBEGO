@@ -4,6 +4,7 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { conEmpresaOTodas } from '@/lib/tenant'
 import { puedeEditarPermisos, resolverPermisosUsuario } from '@/lib/auth/permissions'
+import { safeInternalPath } from '@/lib/utils'
 import { PermisosEmpleadoForm } from '@/components/admin/PermisosEmpleadoForm'
 
 export const dynamic = 'force-dynamic'
@@ -16,11 +17,14 @@ export const metadata = { title: 'Permisos del empleado' }
  */
 export default async function PermisosEmpleadoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ volver?: string }>
 }) {
   const user = await requireRole(['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA'])
   const { id } = await params
+  const { volver: volverParam } = await searchParams
 
   /**
    * Con el contexto de la empresa puesto, no sin él.
@@ -51,6 +55,16 @@ export default async function PermisosEmpleadoPage({
   ) {
     notFound()
   }
+  // ADÓNDE SE VUELVE. La ficha de detalle solo existe para el rol EMPLEADO:
+  // enlazarla para un cajero o un administrador era un 404 servido en bandeja
+  // (reportado con captura). El retorno respeta `?volver=` (sanitizado contra
+  // open redirect — el superadmin llega desde su panel de Usuarios) y si no,
+  // cae a la ficha solo cuando existe; para el resto, al listado del equipo.
+  const volver = safeInternalPath(
+    volverParam,
+    empleado.role === 'EMPLEADO' ? `/admin/empleados/${empleado.id}` : '/admin/empleados'
+  )
+
   // Quién puede editar a quién: el superadmin a cualquiera (incluidos los
   // administradores de la empresa — control de plataforma en esta etapa); un
   // admin solo a su equipo, nunca a otro admin. Nadie se edita a sí mismo.
@@ -58,14 +72,14 @@ export default async function PermisosEmpleadoPage({
     !puedeEditarPermisos(user.metadata.role, empleado.role) ||
     empleado.id === user.metadata.dbUserId
   ) {
-    redirect(`/admin/empleados/${empleado.id}`)
+    redirect(volver)
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <Link
-          href={`/admin/empleados/${empleado.id}`}
+          href={volver}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> {empleado.name}
