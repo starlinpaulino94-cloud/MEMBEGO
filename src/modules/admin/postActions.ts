@@ -81,7 +81,7 @@ export async function crearPost(
   _prev: PostState,
   formData: FormData
 ): Promise<PostState> {
-  const user = await requireSection('publicaciones')
+  const user = await requireSection('publicaciones', 'crear')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId =
@@ -123,7 +123,7 @@ export async function actualizarPost(
   _prev: PostState,
   formData: FormData
 ): Promise<PostState> {
-  const user = await requireSection('publicaciones')
+  const user = await requireSection('publicaciones', 'editar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '')
@@ -171,7 +171,7 @@ export async function eliminarPost(
   _prev: PostState,
   formData: FormData
 ): Promise<PostState> {
-  const user = await requireSection('publicaciones')
+  const user = await requireSection('publicaciones', 'eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '')

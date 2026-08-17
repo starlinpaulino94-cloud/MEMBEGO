@@ -22,7 +22,7 @@ export async function enviarRecordatorioSeguimiento(
   compraId: string
 ): Promise<{ ok?: true; error?: string }> {
   try {
-    const user = await requireSection('seguimiento')
+    const user = await requireSection('seguimiento', 'recordatorio')
     if (!user) return { error: 'No tienes permisos para enviar recordatorios.' }
 
     const compra = await sinEmpresa(
@@ -129,7 +129,7 @@ export async function guardarSeguimientoConfig(
   formData: FormData
 ): Promise<SeguimientoConfigState> {
   try {
-    const user = await requireSection('seguimiento')
+    const user = await requireSection('seguimiento', 'configurar')
     if (!user) return { error: 'No autorizado.' }
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }

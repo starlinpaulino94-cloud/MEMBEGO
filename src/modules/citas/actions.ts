@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
-import { requireAdminUser, requireSection } from '@/lib/auth/guards'
+import { requireAdminUser, requireSection, usuarioPuedeFuncion } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
@@ -282,7 +282,7 @@ export async function actualizarEstadoCita(
   formData: FormData
 ): Promise<CitaActionState> {
   try {
-    const user = await requireSection('citas')
+    const user = await requireSection('citas', 'gestionar')
     if (!user) return { error: 'No autorizado.' }
 
     const citaId = String(formData.get('citaId') ?? '').trim()
@@ -389,6 +389,11 @@ export async function guardarAgendaConfig(
   try {
     const user = await requireAdminUser()
     if (!user) return { error: 'No autorizado.' }
+    // Módulo de Permisos: llevar la agenda y CONFIGURARLA son poderes
+    // distintos — se puede dejar el módulo de citas y negar solo este.
+    if (!(await usuarioPuedeFuncion(user, 'citas', 'configurar'))) {
+      return { error: 'No tienes permiso para configurar la agenda.' }
+    }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
 

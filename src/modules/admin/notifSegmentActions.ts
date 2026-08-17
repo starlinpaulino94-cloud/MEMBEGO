@@ -17,7 +17,7 @@ export async function enviarNotificacionSegmento(
   _prev: NotifSegmentState,
   formData: FormData
 ): Promise<NotifSegmentState> {
-  const user = await requireSection('notificaciones')
+  const user = await requireSection('notificaciones', 'enviar')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId

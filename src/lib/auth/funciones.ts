@@ -89,4 +89,39 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'invitados', label: 'Agregar o quitar invitados' },
     { codigo: 'registrar_uso', label: 'Registrar un uso manual' },
   ],
+  citas: [
+    { codigo: 'gestionar', label: 'Gestionar citas (confirmar, completar, cancelar)' },
+    { codigo: 'configurar', label: 'Configurar la agenda y sus horarios' },
+  ],
+  publicaciones: [
+    { codigo: 'crear', label: 'Crear publicaciones' },
+    { codigo: 'editar', label: 'Editar publicaciones' },
+    { codigo: 'eliminar', label: 'Eliminar publicaciones' },
+  ],
+  sucursales: [
+    { codigo: 'editar', label: 'Editar sucursales y su ubicación' },
+    { codigo: 'mapa', label: 'Mostrar u ocultar en el mapa' },
+  ],
+  campanas: [
+    { codigo: 'crear', label: 'Crear campañas' },
+    { codigo: 'editar', label: 'Editar campañas' },
+    { codigo: 'eliminar', label: 'Eliminar campañas' },
+  ],
+  seguimiento: [
+    { codigo: 'recordatorio', label: 'Enviar recordatorios' },
+    { codigo: 'configurar', label: 'Configurar el seguimiento' },
+  ],
+  notificaciones: [{ codigo: 'enviar', label: 'Enviar notificaciones a segmentos' }],
+  automatizaciones: [
+    { codigo: 'instalar', label: 'Instalar automatizaciones' },
+    { codigo: 'publicar', label: 'Publicar automatizaciones' },
+    { codigo: 'pausar', label: 'Pausar automatizaciones' },
+    { codigo: 'archivar', label: 'Archivar automatizaciones' },
+  ],
+  marketing: [
+    { codigo: 'crear', label: 'Crear campañas de marketing' },
+    { codigo: 'editar', label: 'Editar campañas de marketing' },
+    { codigo: 'estado', label: 'Activar / pausar campañas' },
+    { codigo: 'eliminar', label: 'Eliminar campañas de marketing' },
+  ],
 }

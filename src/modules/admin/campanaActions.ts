@@ -63,7 +63,7 @@ export async function crearCampana(
   _prev: CampanaState,
   formData: FormData
 ): Promise<CampanaState> {
-  const user = await requireSection('campanas')
+  const user = await requireSection('campanas', 'crear')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = await resolveCompanyId(user, formData)
@@ -86,7 +86,7 @@ export async function actualizarCampana(
   _prev: CampanaState,
   formData: FormData
 ): Promise<CampanaState> {
-  const user = await requireSection('campanas')
+  const user = await requireSection('campanas', 'editar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -119,7 +119,7 @@ export async function eliminarCampana(
   _prev: CampanaState,
   formData: FormData
 ): Promise<CampanaState> {
-  const user = await requireSection('campanas')
+  const user = await requireSection('campanas', 'eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
