@@ -129,5 +129,8 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'catalogo_crear', label: 'Crear excursiones' },
     { codigo: 'catalogo_editar', label: 'Editar excursiones, variantes y horarios' },
     { codigo: 'catalogo_archivar', label: 'Archivar excursiones' },
+    { codigo: 'vendedor_crear', label: 'Crear vendedores' },
+    { codigo: 'vendedor_editar', label: 'Editar vendedores' },
+    { codigo: 'vendedor_desactivar', label: 'Suspender o desactivar vendedores' },
   ],
 }
