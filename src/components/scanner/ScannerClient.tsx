@@ -254,9 +254,15 @@ export function ScannerClient({
           setErrorState({ message: 'Respuesta vacía del servidor.', code: 'INTERNAL' })
         }
       } catch (err) {
+        // Aquí caen DOS cosas distintas: que el mostrador se quedó sin internet
+        // y que el servidor falló al responder. Culpar a la conexión manda al
+        // cajero a revisar el wifi cuando el problema está del otro lado —
+        // pasó el 17-08-2026 con el escáner del car wash. El mensaje dice lo
+        // único que se sabe de verdad, y el resto lo cuenta el log.
         console.error('[scanner] lookup error:', err)
         setErrorState({
-          message: 'No se pudo conectar con el servidor. Verifica tu conexión a internet.',
+          message:
+            'No se pudo completar la búsqueda. Revisa tu conexión; si hay internet y sigue fallando, avisa al administrador.',
           code: 'INTERNAL',
         })
       }
