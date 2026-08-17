@@ -7,6 +7,7 @@ import { getEmpresaPrincipal } from '@/modules/marketplace/marcaUnica'
 import { otorgarBienvenidaDirecta } from '@/modules/invitaciones/beneficios'
 import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
 import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
+import { capturarAtribucionVendedor } from '@/modules/excursiones/atribucion/registrar'
 import { ROLE_HOME, type AppRole } from '@/types'
 
 /**
@@ -164,6 +165,8 @@ async function afiliarUsuarioExistente(
   if (esAltaNueva) {
     // Atribución de marketing: canal (?src=) con el que llegó, si lo hay.
     await capturarCanalRegistro(cliente.id)
+    // Excursiones: el QR del vendedor también cuenta si entró por Google.
+    await capturarAtribucionVendedor(cliente.id, company.id)
     // Usuario EXISTENTE afiliándose a otra empresa: solo cuenta con ?ref
     // explícito, nunca por la cookie silenciosa.
     await vincularReferido(refCode, company.id, cliente.id, ipAddress, {
@@ -260,6 +263,8 @@ export async function completeGoogleOnboarding(
       vincularReferido(refCode, company.id, result.cliente.id, ipAddress),
       // Atribución de marketing: canal (?src=) con el que llegó, si lo hay.
       capturarCanalRegistro(result.cliente.id),
+      // Excursiones: el QR del vendedor también cuenta si entró por Google.
+      capturarAtribucionVendedor(result.cliente.id, company.id),
     ])
 
     // Regalo de bienvenida de la campaña activa (aunque no venga de un enlace)

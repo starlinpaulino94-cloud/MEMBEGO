@@ -102,8 +102,17 @@ export function validarVendedor(
   }
 }
 
-/** URL pública del enlace de un vendedor (la que viaja dentro del QR). */
+/** URL pública del enlace de un vendedor (la que se copia y se comparte). */
 export function urlDeEnlace(slug: string): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://membego.com').replace(/\/$/, '')
   return `${base}/e/${slug}`
+}
+
+/**
+ * La misma URL, marcada como QR. El servidor no puede distinguir un escaneo de
+ * un clic en WhatsApp; declararlo en el enlace impreso es lo que permite decir
+ * después «esto vino del QR» sin adivinar.
+ */
+export function urlDeQr(slug: string): string {
+  return `${urlDeEnlace(slug)}?c=qr`
 }

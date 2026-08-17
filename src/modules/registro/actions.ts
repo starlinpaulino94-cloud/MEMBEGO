@@ -11,6 +11,7 @@ import { otorgarRegaloBienvenida, otorgarBienvenidaDirecta } from '@/modules/inv
 import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
 import { procesarRegistroGrowth } from '@/modules/growth/registro'
 import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
+import { capturarAtribucionVendedor } from '@/modules/excursiones/atribucion/registrar'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
@@ -305,6 +306,10 @@ export async function registrarCliente(
       // Atribución de marketing: cookie del enlace ?src= o canal declarado.
       await capturarCanalRegistro(cliente.id, canalDeclarado)
 
+      // Excursiones: ¿entró por el QR o el enlace de un vendedor? (cookie de
+      // la ventana de atribución). Nunca bloquea el registro.
+      await capturarAtribucionVendedor(cliente.id, company.id)
+
       // FASE 3/5.2: seguir la empresa al registrarse (salvo que lo desmarque).
       if (seguirEmpresa) {
         await conEmpresa(company.id, (tx) =>
@@ -495,6 +500,10 @@ export async function registrarCliente(
 
     // Atribución de marketing: cookie del enlace ?src= o canal declarado.
     await capturarCanalRegistro(result.cliente.id, canalDeclarado)
+
+    // Excursiones: ¿entró por el QR o el enlace de un vendedor? (cookie de la
+    // ventana de atribución). Nunca bloquea el registro.
+    await capturarAtribucionVendedor(result.cliente.id, company.id)
 
     await vincularReferido(refCode, company.id, result.cliente.id, ipAddress, {
       campanaInvitacionId,

@@ -4,6 +4,7 @@ import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { otorgarBienvenidaDirecta } from '@/modules/invitaciones/beneficios'
 import { vincularRegalosPorContacto } from '@/modules/regalos/entrega'
 import { capturarCanalRegistro } from '@/modules/adquisicion/canal'
+import { capturarAtribucionVendedor } from '@/modules/excursiones/atribucion/registrar'
 
 /**
  * UNIRSE A UNA EMPRESA — una sola vez en todo el código.
@@ -128,6 +129,9 @@ export async function asegurarClienteEnEmpresa(
   )
   await capturarCanalRegistro(cliente.id).catch((e) =>
     console.error('[afiliación] canal de registro:', e)
+  )
+  await capturarAtribucionVendedor(cliente.id, companyId).catch((e) =>
+    console.error('[afiliación] atribución de vendedor:', e)
   )
   if (email) {
     await vincularRegalosPorContacto({ clienteId: cliente.id, companyId, email }).catch((e) =>

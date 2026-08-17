@@ -1,4 +1,4 @@
-import { Gift } from 'lucide-react'
+import { Gift, UserCheck } from 'lucide-react'
 
 /**
  * Encabezado con la marca de la empresa en el registro por empresa
@@ -12,12 +12,15 @@ export function CompanyRegistroHeader({
   bannerUrl,
   colorPrimario,
   referido,
+  vendedor,
 }: {
   name: string
   logoUrl: string | null
   bannerUrl: string | null
   colorPrimario: string | null
   referido: boolean
+  /** Vendedor cuyo QR o enlace trajo a esta persona (Excursiones). */
+  vendedor?: string | null
 }) {
   const accent = colorPrimario || '#0ea5e9'
 
@@ -49,14 +52,21 @@ export function CompanyRegistroHeader({
         </div>
       </div>
 
-      {referido && (
-        <div className="px-4 pb-4">
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white"
-            style={{ background: accent }}
-          >
-            <Gift className="h-3.5 w-3.5" /> Vienes por una invitación
-          </span>
+      {(referido || vendedor) && (
+        <div className="flex flex-wrap gap-2 px-4 pb-4">
+          {referido && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white"
+              style={{ background: accent }}
+            >
+              <Gift className="h-3.5 w-3.5" /> Vienes por una invitación
+            </span>
+          )}
+          {vendedor && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground">
+              <UserCheck className="h-3.5 w-3.5" /> Te atiende {vendedor}
+            </span>
+          )}
         </div>
       )}
     </div>

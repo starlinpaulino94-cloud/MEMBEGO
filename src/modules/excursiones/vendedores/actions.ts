@@ -21,6 +21,7 @@ import {
   prefijoDeEmpresa,
   validarVendedor,
   urlDeEnlace,
+  urlDeQr,
   type EstadoVendedor,
 } from './nucleo'
 
@@ -28,7 +29,7 @@ export interface VendedorActionState {
   error?: string
   success?: string
   /** Recién creado: lo que la pantalla de éxito enseña de inmediato (§67). */
-  creado?: { vendedorId: string; codigo: string; enlaceUrl: string }
+  creado?: { vendedorId: string; codigo: string; enlaceUrl: string; qrUrl: string }
 }
 
 const CAMPOS = ['nombre', 'apellido', 'telefono', 'whatsapp', 'email', 'documento', 'direccion', 'tipo', 'supervisorId']
@@ -127,6 +128,7 @@ export async function crearVendedor(
         vendedorId: creado.id,
         codigo: creado.codigo,
         enlaceUrl: urlDeEnlace(creado.enlaces[0]?.slug ?? ''),
+        qrUrl: urlDeQr(creado.enlaces[0]?.slug ?? ''),
       },
     }
   } catch (e) {

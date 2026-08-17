@@ -1,4 +1,3 @@
-import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 
 /** Listado del equipo comercial con su embudo (captados = atribuciones). */
@@ -67,26 +66,34 @@ export async function vendedoresParaSupervisor(companyId: string) {
 }
 
 /**
- * PÚBLICO · destino del enlace /e/[slug]: la página de registro de la empresa
- * con el código del vendedor (`v`) y el enlace usado (`e` — distingue QRs de
- * campaña). Enlace inactivo, vendedor no activo o empresa apagada → null.
- * La Fase 4 registra aquí la atribución de VISITA.
+ * Últimos clientes captados por el vendedor: quién entró por su enlace, en qué
+ * etapa y cuándo. Es el detalle del embudo — el nombre detrás del número.
  */
-export async function destinoDeEnlace(slug: string): Promise<string | null> {
-  const enlace = await prisma.vendedorEnlace
-    .findUnique({
-      where: { slug },
-      select: {
-        activo: true,
-        slug: true,
-        vendedor: { select: { codigo: true, estado: true, companyId: true } },
-      },
+export async function clientesCaptados(companyId: string, vendedorId: string, limite = 15) {
+  const filas = await conEmpresa(companyId, (tx) =>
+    tx.vendedorAtribucion.findMany({
+      where: { companyId, vendedorId, clienteId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: limite,
+      select: { id: true, clienteId: true, etapa: true, canal: true, createdAt: true },
     })
-    .catch(() => null)
-  if (!enlace || !enlace.activo || enlace.vendedor.estado !== 'ACTIVO') return null
-  const empresa = await prisma.company
-    .findUnique({ where: { id: enlace.vendedor.companyId }, select: { slug: true, isActive: true } })
-    .catch(() => null)
-  if (!empresa?.isActive) return null
-  return `/registro/${empresa.slug}?v=${encodeURIComponent(enlace.vendedor.codigo)}&e=${encodeURIComponent(enlace.slug)}`
+  )
+  if (filas.length === 0) return []
+
+  const ids = [...new Set(filas.map((f) => f.clienteId!))]
+  const clientes = await conEmpresa(companyId, (tx) =>
+    tx.cliente.findMany({
+      where: { id: { in: ids }, companyId },
+      select: { id: true, nombre: true, telefono: true },
+    })
+  )
+  const porId = new Map(clientes.map((c) => [c.id, c]))
+  return filas.map((f) => ({
+    id: f.id,
+    etapa: f.etapa,
+    canal: f.canal,
+    createdAt: f.createdAt,
+    nombre: porId.get(f.clienteId!)?.nombre ?? 'Cliente',
+    telefono: porId.get(f.clienteId!)?.telefono ?? null,
+  }))
 }
