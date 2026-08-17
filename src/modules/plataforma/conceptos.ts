@@ -67,6 +67,11 @@ export const FUNCIONES_EMPRESA = [
   'POS_CAJA',
   'PAGO_TRANSFERENCIA',
   'PAGO_CARDNET',
+  // Módulo comercial de excursiones (ventas, vendedores, comisiones). Es
+  // función de EMPRESA y no módulo de vertical porque vive DENTRO del Core
+  // por decisión de producto (no es un satélite) y cualquier empresa puede
+  // encenderlo desde el panel de capacidades, no solo las de su categoría.
+  'EXCURSIONES',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]

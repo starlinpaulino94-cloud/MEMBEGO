@@ -51,6 +51,9 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
+  // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
+  // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
+  'excursiones',
   // `/admin/app/<vertical>/*`. El launchpad `/admin/aplicaciones` se retiró
   // —los sistemas de cada oficio se construyen aparte y se conectan por
   // contrato—, pero las pantallas de Car Wash siguen en el repositorio para su

@@ -53,6 +53,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   gamificacion: 'Gamificación',
   personalizacion: 'Personalización',
   app: 'App Car Wash',
+  excursiones: 'Excursiones',
 }
 
 export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[]>> = {

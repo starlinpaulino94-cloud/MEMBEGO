@@ -132,12 +132,14 @@ test('cada grupo tiene al menos un enlace', () => {
   }
 })
 
-test('el panel de administrador son ocho dominios', () => {
+test('el panel de administrador son nueve dominios', () => {
+  // El noveno (17-08-2026) es Excursiones: un módulo operativo completo con
+  // UNA sola entrada en el sidebar (su navegación interna es secundaria).
   const grupos = navForRole('ADMINISTRADOR')
-  assert.equal(grupos.length, 8)
+  assert.equal(grupos.length, 9)
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Inicio', 'Clientes', 'Beneficios', 'Marketing', 'Operaciones', 'Analítica', 'Empresa', 'Soporte']
+    ['Inicio', 'Clientes', 'Excursiones', 'Beneficios', 'Marketing', 'Operaciones', 'Analítica', 'Empresa', 'Soporte']
   )
 })
 
