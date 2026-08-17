@@ -3,6 +3,7 @@ import { conEmpresaOTodas } from '@/lib/tenant'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import { Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
+import { ROLES_EXENTOS_PERMISOS } from '@/lib/auth/permissions'
 import { companyFilter } from '@/modules/admin/queries'
 import { listInvitacionesPendientes } from '@/modules/admin/invitacionActions'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,10 @@ export default async function EmpleadosPage() {
       email: m.email,
       rol: roleLabel(m.role),
       esEmpleado: m.role === 'EMPLEADO',
+      // Módulo de Permisos: editable para todo el equipo salvo administradores
+      // (los roles exentos no se restringen) y salvo uno mismo.
+      permisosEditables:
+        !ROLES_EXENTOS_PERMISOS.includes(m.role) && m.id !== user.metadata.dbUserId,
       createdAt: m.createdAt,
     }))
     invitacionesPendientes = invs
