@@ -40,15 +40,16 @@ const DISPONIBLES = [
     detalle:
       'Reglas por vendedor y excursión. Cada comisión nace con su regla dentro y ya no cambia.',
   },
+  {
+    href: '/admin/excursiones/liquidaciones',
+    icon: Wallet,
+    titulo: 'Liquidaciones',
+    detalle:
+      'Agrupa las comisiones aprobadas de un período en un pago, con su detalle y su referencia.',
+  },
 ]
 
 const PENDIENTES = [
-  {
-    icon: Wallet,
-    titulo: 'Liquidaciones',
-    detalle: 'Agrupar las comisiones aprobadas de un período en un pago con su comprobante.',
-    fase: 'Fase 7',
-  },
   {
     icon: Smartphone,
     titulo: 'Panel del vendedor',

@@ -15,6 +15,7 @@ const TABS = [
   { href: '/admin/excursiones/vendedores', label: 'Vendedores', exacto: false },
   { href: '/admin/excursiones/reservas', label: 'Reservas', exacto: false },
   { href: '/admin/excursiones/comisiones', label: 'Comisiones', exacto: false },
+  { href: '/admin/excursiones/liquidaciones', label: 'Liquidaciones', exacto: false },
 ]
 
 export function ExcursionesTabs() {
