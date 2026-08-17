@@ -14,10 +14,13 @@ import { Button } from '@/components/ui/button'
 export function VendedorQrCard({
   codigo,
   enlaceUrl,
+  qrUrl,
   nombre,
 }: {
   codigo: string
   enlaceUrl: string
+  /** URL marcada como QR; si falta, el QR lleva el enlace tal cual. */
+  qrUrl?: string
   nombre: string
 }) {
   const mensaje = `¡Hola! Soy ${nombre}. Regístrate aquí para reservar tus excursiones: ${enlaceUrl}`
@@ -29,7 +32,7 @@ export function VendedorQrCard({
         Los clientes que escaneen este QR se registran atribuidos a este vendedor.
       </p>
       <div className="mt-4 flex justify-center">
-        <QRDisplay token={enlaceUrl} />
+        <QRDisplay token={qrUrl ?? enlaceUrl} />
       </div>
       <p className="mt-3 font-mono text-sm font-semibold text-foreground">{codigo}</p>
       <p className="break-all text-caption text-muted-foreground">{enlaceUrl}</p>

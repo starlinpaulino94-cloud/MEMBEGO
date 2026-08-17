@@ -60,6 +60,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
         <VendedorQrCard
           codigo={state.creado.codigo}
           enlaceUrl={state.creado.enlaceUrl}
+          qrUrl={state.creado.qrUrl}
           nombre={datos.nombre ?? ''}
         />
         <div className="flex flex-wrap gap-2">

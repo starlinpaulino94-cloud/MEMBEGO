@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { registrarRegistroIniciado } from '@/lib/referidos-attribution'
+import { resolverEnlace } from '@/modules/excursiones/atribucion/registrar'
 import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
 import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
 import { isRegistroV2Enabled } from '@/lib/registroV2'
@@ -18,10 +19,10 @@ export default async function RegistroPage({
   searchParams,
 }: {
   params: Promise<{ companySlug: string }>
-  searchParams: Promise<{ ref?: string }>
+  searchParams: Promise<{ ref?: string; e?: string }>
 }) {
   const { companySlug } = await params
-  const { ref } = await searchParams
+  const { ref, e: enlaceSlug } = await searchParams
 
   // select explícito: el registro es la puerta de entrada de clientes y no
   // puede caerse porque el modelo Company tenga una columna más nueva que la
@@ -46,6 +47,14 @@ export default async function RegistroPage({
 
   // Fase E6 · Embudo: landing de registro con atribución (dedup 24 h).
   if (ref) await registrarRegistroIniciado(ref)
+
+  // Excursiones: si llegó por el enlace de un vendedor (/e/[slug]), se le
+  // saluda con su nombre. Solo para mostrar: quien atribuye es la cookie.
+  let vendedorQueTrae: string | null = null
+  if (enlaceSlug) {
+    const enlace = await resolverEnlace(enlaceSlug.trim().toLowerCase())
+    if (enlace && enlace.companyId === company.id) vendedorQueTrae = enlace.nombreVendedor
+  }
 
   // Si el usuario ya inició sesión como cliente, no debe registrarse de nuevo:
   // se afilia a esta empresa con su cuenta existente (un clic). El chequeo es
@@ -108,6 +117,7 @@ export default async function RegistroPage({
         bannerUrl={company.bannerUrl}
         colorPrimario={company.colorPrimario}
         referido={!!ref}
+        vendedor={vendedorQueTrae}
       />
       {isRegistroV2Enabled() ? (
         <AsistenteRegistro

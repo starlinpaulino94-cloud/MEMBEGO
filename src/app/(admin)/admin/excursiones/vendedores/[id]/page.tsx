@@ -6,13 +6,20 @@ import { ADMIN_ROLES } from '@/types'
 import {
   vendedorDetalle,
   vendedoresParaSupervisor,
+  clientesCaptados,
 } from '@/modules/excursiones/vendedores/queries'
 import {
   ESTADO_VENDEDOR_LABEL,
   TONO_VENDEDOR,
   urlDeEnlace,
+  urlDeQr,
   type EstadoVendedor,
 } from '@/modules/excursiones/vendedores/nucleo'
+import {
+  ETAPA_ATRIBUCION_LABEL,
+  type EtapaAtribucion,
+} from '@/modules/excursiones/atribucion/nucleo'
+import { formatDateTime } from '@/lib/format'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { VendedorEstadoBotones } from '@/components/excursiones/VendedorEstadoBotones'
 import { VendedorQrCard } from '@/components/excursiones/VendedorQrCard'
@@ -46,7 +53,11 @@ export default async function VendedorDetallePage({
   const { vendedor, embudo } = detalle
 
   const enlace = vendedor.enlaces[0] ?? null
-  const supervisores = (await vendedoresParaSupervisor(companyId)).filter((s) => s.id !== vendedor.id)
+  const [supervisoresTodos, captados] = await Promise.all([
+    vendedoresParaSupervisor(companyId),
+    clientesCaptados(companyId, vendedor.id),
+  ])
+  const supervisores = supervisoresTodos.filter((s) => s.id !== vendedor.id)
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -101,9 +112,42 @@ export default async function VendedorDetallePage({
           <VendedorQrCard
             codigo={vendedor.codigo}
             enlaceUrl={urlDeEnlace(enlace.slug)}
+            qrUrl={urlDeQr(enlace.slug)}
             nombre={vendedor.nombre}
           />
         </>
+      ) : null}
+
+      {/* El nombre detrás del número: quién entró por su enlace y cuándo. */}
+      {captados.length > 0 ? (
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="text-h3 text-foreground">Últimos clientes captados</h2>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 pr-3">Cliente</th>
+                  <th className="py-2 pr-3">Teléfono</th>
+                  <th className="py-2 pr-3">Etapa</th>
+                  <th className="py-2">Cuándo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {captados.map((c) => (
+                  <tr key={c.id} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-3 font-medium text-foreground">{c.nombre}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{c.telefono ?? '—'}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">
+                      {ETAPA_ATRIBUCION_LABEL[c.etapa as EtapaAtribucion] ?? c.etapa}
+                      {c.canal === 'QR' ? ' · QR' : ''}
+                    </td>
+                    <td className="py-2 text-muted-foreground">{formatDateTime(c.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
       <section className="rounded-2xl border border-border bg-card p-5">
