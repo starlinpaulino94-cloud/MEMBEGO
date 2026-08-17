@@ -29,10 +29,18 @@ const DEFAULT_MONEDA = 'DOP'
 export const TZ_PLATAFORMA = 'America/Santo_Domingo'
 const DEFAULT_TZ = TZ_PLATAFORMA
 
-/** Formatea un monto con el símbolo de la moneda de la empresa. */
+/**
+ * Formatea un monto con el símbolo de la moneda de la empresa.
+ *
+ * `decimales` es opcional y por defecto 0, que es como se muestran los precios
+ * en toda la plataforma. Las pantallas de COBRO lo suben a 2: un saldo
+ * pendiente de 0,40 mostrado como «RD$0» es un descuadre que nadie sabe
+ * explicar después.
+ */
 export function formatMoney(
   amount: number | string,
-  prefs?: RegionalPrefs | null
+  prefs?: RegionalPrefs | null,
+  decimales = 0
 ): string {
   const n = typeof amount === 'string' ? Number(amount) : amount
   const value = Number.isFinite(n) ? n : 0
@@ -42,7 +50,8 @@ export function formatMoney(
     return new Intl.NumberFormat(idioma, {
       style: 'currency',
       currency: moneda,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: decimales,
+      maximumFractionDigits: decimales,
     }).format(value)
   } catch {
     // Locale/moneda inválidos: degradar a número + código.
