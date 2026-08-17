@@ -181,8 +181,17 @@ dentro de una transacción, y Prisma envuelve cada migración en una). La versi�
 con `CONCURRENTLY`, que es la que hay que usar en producción, está en
 `prisma/migrations_manual/2026-07-visitas-indices-concurrently.sql`.
 
-Resultado, verificado: **74 migraciones, 0 fallos desde una base vacía, y
-`migrate diff --from-migrations` responde "No difference detected"**.
+Resultado, verificado **el día de esa consolidación**: 74 migraciones, 0 fallos
+desde una base vacía, y `migrate diff --from-migrations` responde "No difference
+detected".
+
+> **Hoy el repositorio lleva 103 migraciones** (`ls prisma/migrations`). El
+> procedimiento de abajo no cambia —el script cuenta los directorios que
+> encuentre, no un número escrito a mano— pero el «74» de arriba se deja como
+> está a propósito: describe una comprobación concreta que se hizo en su
+> momento, no el estado de hoy. Que la reconstrucción desde vacío siga dando 0
+> fallos con las 103 **no está vuelto a verificar**; lo comprueba el trabajo
+> «Esquema de base de datos» de `.github/workflows/ci.yml` en cada push.
 
 ### EL PASO QUE TE TOCA — una sola vez, antes del próximo deploy a `main`
 
