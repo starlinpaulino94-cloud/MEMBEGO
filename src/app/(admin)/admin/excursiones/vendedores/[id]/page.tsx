@@ -24,6 +24,7 @@ import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { VendedorEstadoBotones } from '@/components/excursiones/VendedorEstadoBotones'
 import { VendedorQrCard } from '@/components/excursiones/VendedorQrCard'
 import { VendedorForm } from '@/components/excursiones/VendedorForm'
+import { VendedorAcceso } from '@/components/excursiones/VendedorAcceso'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -50,7 +51,7 @@ export default async function VendedorDetallePage({
   const { id } = await params
   const detalle = await vendedorDetalle(companyId, id)
   if (!detalle) notFound()
-  const { vendedor, embudo } = detalle
+  const { vendedor, embudo, correoAcceso } = detalle
 
   const enlace = vendedor.enlaces[0] ?? null
   const [supervisoresTodos, captados] = await Promise.all([
@@ -149,6 +150,12 @@ export default async function VendedorDetallePage({
           </div>
         </section>
       ) : null}
+
+      <VendedorAcceso
+        vendedorId={vendedor.id}
+        tieneAcceso={!!vendedor.userId}
+        correoActual={correoAcceso}
+      />
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="mb-4 text-h3 text-foreground">Datos del vendedor</h2>

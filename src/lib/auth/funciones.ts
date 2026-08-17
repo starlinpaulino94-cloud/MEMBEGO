@@ -132,6 +132,7 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'vendedor_crear', label: 'Crear vendedores' },
     { codigo: 'vendedor_editar', label: 'Editar vendedores' },
     { codigo: 'vendedor_desactivar', label: 'Suspender o desactivar vendedores' },
+    { codigo: 'vendedor_acceso', label: 'Dar y quitar acceso al panel del vendedor' },
     { codigo: 'reserva_crear', label: 'Crear reservas' },
     { codigo: 'reserva_editar', label: 'Confirmar y completar reservas' },
     { codigo: 'reserva_cancelar', label: 'Cancelar reservas' },
@@ -144,5 +145,6 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'comision_ajustar', label: 'Ajustar comisiones' },
     { codigo: 'liquidacion_crear', label: 'Preparar y aprobar liquidaciones' },
     { codigo: 'liquidacion_pagar', label: 'Marcar liquidaciones como pagadas' },
+    { codigo: 'meta_definir', label: 'Poner y archivar metas de vendedores' },
   ],
 }

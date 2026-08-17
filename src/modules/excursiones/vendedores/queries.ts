@@ -35,6 +35,16 @@ export async function vendedorDetalle(companyId: string, vendedorId: string) {
   )
   if (!vendedor) return null
 
+  // Correo de la cuenta con la que entra a su panel, si tiene acceso.
+  const cuenta = vendedor.userId
+    ? await conEmpresa(companyId, (tx) =>
+        tx.user.findFirst({
+          where: { id: vendedor.userId!, companyId },
+          select: { email: true },
+        })
+      )
+    : null
+
   const embudo = await conEmpresa(companyId, (tx) =>
     tx.vendedorAtribucion.groupBy({
       by: ['etapa'],
@@ -45,6 +55,7 @@ export async function vendedorDetalle(companyId: string, vendedorId: string) {
   const porEtapa = new Map(embudo.map((e) => [e.etapa, e._count._all]))
   return {
     vendedor,
+    correoAcceso: cuenta?.email ?? null,
     embudo: {
       visitas: porEtapa.get('VISITA') ?? 0,
       registros: porEtapa.get('REGISTRO') ?? 0,

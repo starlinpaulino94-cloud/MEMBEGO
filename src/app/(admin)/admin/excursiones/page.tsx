@@ -1,109 +1,214 @@
 import Link from 'next/link'
-import { Map, Users, Ticket, Coins, Wallet, Smartphone, BarChart3, ArrowRight } from 'lucide-react'
+import { Map, Users, Ticket, Coins, Wallet, Target, BarChart3, ArrowRight } from 'lucide-react'
+import { requireRole } from '@/lib/auth/guards'
+import { ADMIN_ROLES } from '@/types'
+import { resumenDelPeriodo, rankingVendedores } from '@/modules/excursiones/metricas/queries'
+import { rangoDelPanel, RANGOS_PANEL } from '@/modules/excursiones/metricas/nucleo'
+import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Excursiones' }
 
 /**
- * Resumen del módulo: las puertas que YA existen y, aparte, lo que todavía no.
+ * Panel del vertical: primero las cifras del período, después las puertas.
  *
- * Esta pantalla se actualiza al publicar cada fase. Dejar anunciado como «lo
- * que viene» algo que ya está construido es tan deshonesto como prometer lo
- * que no existe: el panel dice lo que hay, hoy. El dashboard con KPIs reales
- * llega en su fase — aquí no se inventan métricas.
+ * Todas las cifras se CALCULAN al abrir la pantalla, sobre las filas reales:
+ * no hay contadores guardados que puedan quedar desincronizados. Lo que no se
+ * puede calcular todavía no se pinta — nada de métricas de adorno.
  */
 const DISPONIBLES = [
   {
     href: '/admin/excursiones/catalogo',
     icon: Map,
-    titulo: 'Catálogo de excursiones',
-    detalle: 'Tus excursiones con variantes, precios por adulto y niño, y horarios de salida.',
+    titulo: 'Catálogo',
+    detalle: 'Excursiones, variantes y horarios de salida.',
   },
   {
     href: '/admin/excursiones/vendedores',
     icon: Users,
     titulo: 'Vendedores',
-    detalle:
-      'Cada vendedor con su código, su enlace y su QR. Su perfil muestra cuántos clientes captó, etapa por etapa.',
+    detalle: 'Su código, su enlace, su QR y su acceso al panel.',
   },
   {
     href: '/admin/excursiones/reservas',
     icon: Ticket,
     titulo: 'Reservas',
-    detalle:
-      'Reservas con pasajeros y pagos parciales. El precio y el vendedor se congelan al crearlas.',
+    detalle: 'Pasajeros, pagos parciales y confirmación de venta.',
   },
   {
     href: '/admin/excursiones/comisiones',
     icon: Coins,
     titulo: 'Comisiones',
-    detalle:
-      'Reglas por vendedor y excursión. Cada comisión nace con su regla dentro y ya no cambia.',
+    detalle: 'Reglas por vendedor y excursión, con su snapshot.',
   },
   {
     href: '/admin/excursiones/liquidaciones',
     icon: Wallet,
     titulo: 'Liquidaciones',
-    detalle:
-      'Agrupa las comisiones aprobadas de un período en un pago, con su detalle y su referencia.',
+    detalle: 'El pago de las comisiones aprobadas de un período.',
+  },
+  {
+    href: '/admin/excursiones/metas',
+    icon: Target,
+    titulo: 'Metas',
+    detalle: 'Qué se le pide a cada vendedor y cómo va.',
   },
 ]
 
-const PENDIENTES = [
-  {
-    icon: Smartphone,
-    titulo: 'Panel del vendedor',
-    detalle: 'Su vista móvil: su QR, sus clientes, sus ventas y lo que se le debe.',
-    fase: 'Fase 8',
-  },
-  {
-    icon: BarChart3,
-    titulo: 'Dashboard y reportes',
-    detalle: 'Rankings, metas y exportaciones — con cifras reales, calculadas al consultarlas.',
-    fase: 'Fases 9–10',
-  },
-]
+export default async function ExcursionesPanelPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ r?: string }>
+}) {
+  const user = await requireRole(ADMIN_ROLES)
+  const companyId = user.metadata.companyId
+  if (!companyId) return <SinEmpresaActiva seccion="el panel de excursiones" />
 
-export default function ExcursionesResumenPage() {
+  const { r } = await searchParams
+  const clave = r ?? 'MES'
+  const { label, rango } = rangoDelPanel(clave, new Date())
+  const [resumen, ranking] = await Promise.all([
+    resumenDelPeriodo(companyId, rango),
+    rankingVendedores(companyId, rango),
+  ])
+
+  const dinero = (n: number) => formatMoney(n, { moneda: resumen.moneda }, 2)
+
+  const kpis = [
+    { label: 'Clientes captados', valor: String(resumen.registros), pie: 'por el QR de un vendedor' },
+    { label: 'Reservas', valor: String(resumen.reservas), pie: `${resumen.pasajerosReservados} pasajeros` },
+    { label: 'Ventas', valor: String(resumen.ventas), pie: `${resumen.pasajerosVendidos} pasajeros` },
+    { label: 'Ingresos', valor: dinero(resumen.ingresos), pie: 'ventas confirmadas' },
+    {
+      label: 'Ticket promedio',
+      valor: resumen.ticket !== null ? dinero(resumen.ticket) : '—',
+      pie: resumen.ticket !== null ? 'por venta' : 'sin ventas todavía',
+    },
+    { label: 'Comisiones', valor: dinero(resumen.comisionado), pie: 'generadas en el período' },
+  ]
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <section className="space-y-3">
-        <h2 className="text-h3 text-foreground">Disponible ahora</h2>
-        {DISPONIBLES.map((m) => (
-          <Link
-            key={m.href}
-            href={m.href}
-            className="flex items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-card p-4 transition hover:-translate-y-0.5 hover:shadow-premium"
-          >
-            <span className="flex items-start gap-3">
-              <m.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-              <span>
-                <span className="block font-semibold text-foreground">{m.titulo}</span>
-                <span className="block text-sm text-muted-foreground">{m.detalle}</span>
-              </span>
-            </span>
-            <ArrowRight className="h-5 w-5 shrink-0 text-primary" />
-          </Link>
-        ))}
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-h3 text-foreground">{label}</h2>
+          <nav aria-label="Período" className="flex gap-1">
+            {RANGOS_PANEL.map((opcion) => (
+              <Link
+                key={opcion.clave}
+                href={`/admin/excursiones?r=${opcion.clave}`}
+                className={
+                  opcion.clave === clave
+                    ? 'rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground'
+                    : 'rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground'
+                }
+              >
+                {opcion.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {kpis.map((k) => (
+            <div key={k.label} className="rounded-2xl border border-border bg-card p-4">
+              <dd className="text-h2 text-foreground">{k.valor}</dd>
+              <dt className="text-sm font-medium text-foreground">{k.label}</dt>
+              <p className="text-caption text-muted-foreground">{k.pie}</p>
+            </div>
+          ))}
+        </dl>
+
+        {resumen.conversionReserva !== null || resumen.conversionVenta !== null ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {resumen.conversionReserva !== null
+              ? `${resumen.conversionReserva}% de los captados reservó`
+              : null}
+            {resumen.conversionReserva !== null && resumen.conversionVenta !== null ? ' · ' : null}
+            {resumen.conversionVenta !== null
+              ? `${resumen.conversionVenta}% de las reservas se convirtió en venta`
+              : null}
+          </p>
+        ) : null}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-h3 text-foreground">Lo que viene, por fases</h2>
-        {PENDIENTES.map((f) => (
-          <div
-            key={f.titulo}
-            className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4"
-          >
-            <f.icon className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-foreground">{f.titulo}</p>
-              <p className="text-sm text-muted-foreground">{f.detalle}</p>
-            </div>
-            <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-caption font-semibold text-muted-foreground">
-              {f.fase}
-            </span>
+      {ranking.length > 0 ? (
+        <section className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="text-h3 text-foreground">El equipo en este período</h2>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 pr-3">Vendedor</th>
+                  <th className="py-2 pr-3">Captados</th>
+                  <th className="py-2 pr-3">Ventas</th>
+                  <th className="py-2 pr-3">Pasajeros</th>
+                  <th className="py-2 text-right">Ingresos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranking.map((v) => (
+                  <tr key={v.id} className="border-b border-border last:border-0">
+                    <td className="py-2 pr-3">
+                      <Link
+                        href={`/admin/excursiones/vendedores/${v.id}`}
+                        className="font-medium text-foreground hover:text-primary hover:underline"
+                      >
+                        {v.nombre}
+                      </Link>
+                      <span className="ml-1 font-mono text-caption text-muted-foreground">
+                        {v.codigo}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-muted-foreground">{v.captados}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{v.ventas}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{v.pasajeros}</td>
+                    <td className="py-2 text-right font-medium text-foreground">
+                      {formatMoney(v.ingresos, { moneda: v.moneda }, 2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))}
+        </section>
+      ) : null}
+
+      <section className="space-y-3">
+        <h2 className="text-h3 text-foreground">Módulos</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {DISPONIBLES.map((m) => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-premium"
+            >
+              <span className="flex items-start gap-3">
+                <m.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <span>
+                  <span className="block font-semibold text-foreground">{m.titulo}</span>
+                  <span className="block text-caption text-muted-foreground">{m.detalle}</span>
+                </span>
+              </span>
+              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
+        <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground">Reportes exportables</p>
+          <p className="text-sm text-muted-foreground">
+            Descargar ventas, comisiones y liquidaciones del período para llevarlas a tu
+            contabilidad.
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-caption font-semibold text-muted-foreground">
+          Fase 10
+        </span>
       </section>
     </div>
   )
