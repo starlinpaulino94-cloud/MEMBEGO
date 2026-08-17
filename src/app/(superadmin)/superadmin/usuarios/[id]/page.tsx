@@ -96,7 +96,7 @@ export default async function EditarUsuarioStaffPage({
             encima de lo que su rol trae de serie.
           </p>
           <Link
-            href={`/admin/empleados/${usuario.id}/permisos`}
+            href={`/admin/empleados/${usuario.id}/permisos?volver=${encodeURIComponent(`/superadmin/usuarios/${usuario.id}`)}`}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
           >
             🛡️ Abrir el editor de permisos
