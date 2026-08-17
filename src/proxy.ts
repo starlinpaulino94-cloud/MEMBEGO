@@ -277,6 +277,6 @@ export const config = {
   matcher: [
     // Excluye estáticos, imágenes, el túnel de Sentry (/monitoring) y
     // endpoints operativos que nunca requieren sesión.
-    '/((?!_next/static|_next/image|favicon.ico|monitoring|api/health|api/cron|sitemap\\.xml|robots\\.txt|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|monitoring|api/health|api/cron|api/webhooks|sitemap\\.xml|robots\\.txt|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

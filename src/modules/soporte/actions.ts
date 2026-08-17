@@ -5,6 +5,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { sendEmail } from '@/lib/email'
+import { crearDireccionRespuesta } from '@/lib/email/respuestas'
 import { encolarEmail } from '@/modules/jobs/emisiones'
 import { crearNotificacion, notificarAdmins } from '@/modules/notificaciones/service'
 import {
@@ -336,13 +337,21 @@ export async function crearTicket(
       })
     )
     if (config?.correoSoporte) {
+      // `Reply-To` firmado: si quien atiende responde desde su gestor de correo
+      // —Zoho, Gmail, el que sea—, esa respuesta vuelve al webhook de Resend y
+      // entra en este mismo ticket. Sin `EMAIL_REPLY_DOMAIN` configurado,
+      // `crearDireccionRespuesta` devuelve null y el correo sale como siempre:
+      // la función nueva no puede romper la que ya andaba.
+      const replyTo = crearDireccionRespuesta(ticket.id)
       await encolarEmail({
         to: config.correoSoporte,
         subject: `Nuevo ticket: ${asunto}`,
+        replyTo,
         html: `<p>Se recibió un nuevo ticket de soporte.</p>
                <p><strong>Cliente:</strong> ${cliente?.nombre ?? 'Cliente'}<br/>
                <strong>Asunto:</strong> ${asunto}<br/>
-               <strong>Descripción:</strong> ${descripcion}</p>`,
+               <strong>Descripción:</strong> ${descripcion}</p>
+               ${replyTo ? '<p>Puedes responder a este correo: tu respuesta entra en el ticket.</p>' : ''}`,
       }).catch((e) => {
         console.error('[soporte-email]', e)
       })

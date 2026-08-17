@@ -50,6 +50,8 @@ export interface CargaEmail {
   html?: string
   text?: string
   companyId?: string | null
+  /** Dirección de respuesta firmada (`lib/email/respuestas.ts`), si aplica. */
+  replyTo?: string | null
 }
 
 /**
