@@ -54,10 +54,25 @@ secreto, y entonces la verdad la da `migrate status` contra la base real.
 
 ## Configuración manual pendiente (sin esto, los flujos no protegen)
 
-1. **Marcar los checks como obligatorios.** Settings → Branches → regla para
-   `main` → *Require status checks to pass*: `verificar`, `construir`,
-   `dependencias`, `esquema`. Sin esto siguen siendo informativos y el agujero
-   continúa abierto.
+1. **Marcar los checks como obligatorios.** Settings → Rules → Rulesets → regla
+   para `main` → *Require status checks to pass*. Sin esto siguen siendo
+   informativos y el agujero continúa abierto: entre el 14 y el 17 de agosto de
+   2026 se mezclaron cinco PR con el CI en rojo sin que nada lo impidiera.
+
+   El buscador de esa pantalla usa el **nombre visible** del job, no su
+   identificador en el YAML. Hay que buscar estos cinco, no los `verificar` /
+   `construir` / `dependencias` / `esquema` del archivo:
+
+   | Buscar en la interfaz | Job | Workflow |
+   |---|---|---|
+   | `Tipos, linter y pruebas` | `verificar` | CI |
+   | `Build de producción` | `construir` | CI |
+   | `Vulnerabilidades en dependencias` | `dependencias` | CI |
+   | `Esquema de base de datos` | `esquema` | CI |
+   | `Recorrido público` | `recorrido-publico` | E2E |
+
+   `Esquema de base de datos` es el que detecta una migración que la base no
+   tiene. Es el que habría evitado los cuatro incidentes de agosto de 2026.
 2. **Dos secretos del repositorio** (Settings → Secrets and variables →
    Actions). Es lo único que separa a este proyecto de tener las migraciones
    automatizadas de verdad:
@@ -153,6 +168,56 @@ Ambas documentadas en `.env.example` y en `docs/runbooks/modo-mantenimiento.md`.
 
 ---
 
+## Por qué una columna que falta rompe pantallas que no la usan
+
+Agosto de 2026: cuatro migraciones se mezclaron a `main` y nunca llegaron a la
+base de producción, y cada una rompió algo distinto días después. Conviene
+entender el mecanismo, porque no es intuitivo y por eso costó cuatro veces.
+
+| Migración | Qué faltaba | Qué rompió |
+|---|---|---|
+| `20260813_solicitudes_empresa` | la tabla entera | el embudo de altas del superadmin |
+| `20260814_permisos_empleado` | `users.permisos` | **el registro de clientes** |
+| `20260814_qr_regalo_vip` | `qr_tokens.ofertaInvitadoId` | **el QR del cliente y el escáner del cajero** |
+| `20260819_visita_reversa` | 4 columnas de `visits` | deshacer una visita |
+
+**El mecanismo.** Un `find*` o un `create` de Prisma **sin `select`** pide
+TODAS las columnas escalares del modelo, use el código esas columnas o no. Con
+una sola ausente, la consulta entera falla:
+
+```ts
+// Rompe si a la tabla le falta CUALQUIER columna del modelo.
+tx.qrToken.findFirst({ where: { membresiaId, activo: true } })
+
+// Solo depende de las tres que nombra.
+tx.qrToken.findMany({ where: { … }, select: { id: true, token: true, membresiaId: true } })
+```
+
+Por eso `qr_tokens.ofertaInvitadoId` —una columna del regalo VIP— tumbó la
+pantalla del QR y el escáner, que no saben nada de regalos VIP. Y por eso el
+listado de membresías, que sí usa `select`, siguió funcionando.
+
+**La consecuencia práctica:** el radio de daño de una migración sin aplicar no
+es «la función nueva no va», es «cualquier pantalla que toque esa tabla se
+cae». No se puede acotar mirando qué hace la migración.
+
+**Lo que lo cierra** no es revisar consultas una a una, es que la migración se
+aplique: `MIGRATIONS_DATABASE_URL` configurado y el check `Esquema de base de
+datos` obligatorio en `main`. Mientras falte cualquiera de los dos, esto vuelve.
+
+**Para comprobar si hay deriva ahora mismo**, con la `DIRECT_URL` a mano:
+
+```bash
+npx prisma migrate diff --from-url "$DATABASE_URL" \
+  --to-schema-datamodel prisma/schema --exit-code
+```
+
+Solo lee. Sale 0 si no hay diferencias; si las hay, imprime el SQL que falta.
+Ojo: `migrate status` puede mentir si `_prisma_migrations` está desincronizada;
+`migrate diff` compara la estructura real, que es lo que importa.
+
+---
+
 ## El historial de migraciones (arreglado) y qué hay que hacer UNA vez
 
 ### Qué estaba roto
@@ -181,24 +246,28 @@ dentro de una transacción, y Prisma envuelve cada migración en una). La versi�
 con `CONCURRENTLY`, que es la que hay que usar en producción, está en
 `prisma/migrations_manual/2026-07-visitas-indices-concurrently.sql`.
 
-Resultado, verificado **el día de esa consolidación**: 74 migraciones, 0 fallos
-desde una base vacía, y `migrate diff --from-migrations` responde "No difference
-detected".
+Resultado, verificado: **103 migraciones, 0 fallos desde una base vacía, y
+`migrate diff --from-migrations` responde "No difference detected"**.
 
-> **Hoy el repositorio lleva 103 migraciones** (`ls prisma/migrations`). El
-> procedimiento de abajo no cambia —el script cuenta los directorios que
-> encuentre, no un número escrito a mano— pero el «74» de arriba se deja como
-> está a propósito: describe una comprobación concreta que se hizo en su
-> momento, no el estado de hoy. Que la reconstrucción desde vacío siga dando 0
-> fallos con las 103 **no está vuelto a verificar**; lo comprueba el trabajo
-> «Esquema de base de datos» de `.github/workflows/ci.yml` en cada push.
+### El baseline — HECHO el 17-08-2026
 
-### EL PASO QUE TE TOCA — una sola vez, antes del próximo deploy a `main`
+Producción tenía todos los cambios pero Prisma no lo sabía: se aplicaron en el
+SQL Editor, que no escribe en `_prisma_migrations`. Sin el baseline,
+`migrate deploy` habría intentado crear tablas que ya existen, habría fallado, y
+**el despliegue habría quedado bloqueado**.
 
-Producción tiene todos los cambios pero Prisma no lo sabe: se aplicaron en el
-SQL Editor, que no escribe en `_prisma_migrations`. Sin este paso,
-`migrate deploy` intentaría crear tablas que ya existen, fallaría, y **el
-despliegue quedaría bloqueado**.
+Estado actual, verificado contra producción: **103 de 103 registradas,
+`20260770_reconciliacion` y `20260771_rls_barrera_publica` aplicadas, cero
+tablas de `public` sin RLS y cero alcanzables por `anon`/`authenticated`**.
+
+Se hizo desde el SQL Editor y no con `npm run migraciones:baseline`, porque el
+script necesita un checkout local y `psql`, y quien opera este proyecto trabaja
+desde GitHub. El SQL equivalente es el mismo `INSERT` que emite el script, con
+los checksums SHA-256 de cada `migration.sql` — que es lo que Prisma compara en
+cada despliegue para detectar un historial alterado.
+
+**Si hay que repetirlo alguna vez** (base nueva, entorno de staging, restauración
+desde un volcado viejo), el camino con checkout local sigue siendo el corto:
 
 ```bash
 export DATABASE_URL="<la DIRECT_URL de Supabase, puerto 5432>"
@@ -217,7 +286,7 @@ npm run migraciones:baseline -- --aplicar
 #    UNA SENTENCIA A LA VEZ:
 #    prisma/migrations_manual/2026-07-visitas-indices-concurrently.sql
 
-# 5. Aplicar lo único que queda de verdad: la reconciliación.
+# 5. Aplicar lo que el baseline deja a propósito sin marcar.
 npx prisma migrate deploy
 
 # 6. Confirmar.
