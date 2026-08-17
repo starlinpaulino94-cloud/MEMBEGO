@@ -109,6 +109,20 @@ export function CatalogoPanel({
             sin tipos no se pueden poner tarifas.
           </p>
 
+          {/*
+            El nivel no se explica solo, y de él depende dinero. Sin esta nota
+            alguien deja todos los tipos en 1 —el valor de fábrica— y luego no
+            entiende por qué un plan de sedán le cubre camionetas.
+          */}
+          <p className="rounded-2xl border border-border/70 bg-muted/20 p-3 text-sm text-muted-foreground">
+            El <b>nivel</b> es lo que decide qué cubre cada plan: un plan de nivel 2
+            cubre los vehículos de nivel 1 y 2, y no los de 3. Lo usan también los
+            sistemas conectados —como el car wash— para calcular la diferencia que
+            paga un cliente cuyo carro se sale de su plan.{' '}
+            <b>Mientras todos los tipos estén en 1, cualquier plan cubre cualquier
+            vehículo.</b>
+          </p>
+
           <form
             action={(fd) => enviar(guardarTipoVehiculo, fd)}
             className="flex flex-wrap items-end gap-3 rounded-2xl border border-border/70 bg-card p-4"
@@ -126,6 +140,18 @@ export function CatalogoPanel({
             <div className="w-24 space-y-1.5">
               <Label htmlFor="t-orden">Orden</Label>
               <Input id="t-orden" name="orden" inputMode="numeric" defaultValue={tipos.length} />
+            </div>
+            <div className="w-24 space-y-1.5">
+              <Label htmlFor="t-nivel">Nivel</Label>
+              <Input
+                id="t-nivel"
+                name="nivelTarifario"
+                type="number"
+                min={1}
+                max={9}
+                inputMode="numeric"
+                defaultValue={1}
+              />
             </div>
             <Button type="submit" disabled={pending} className="gap-1.5">
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -152,6 +178,44 @@ export function CatalogoPanel({
                       precio
                     </p>
                   </div>
+
+                  {/*
+                    El nivel se edita EN LA FILA, con su propio formulario. La
+                    lista solo permitía activar y desactivar, así que el nivel de
+                    un tipo ya creado no había forma de cambiarlo — y es el dato
+                    que decide la cobertura.
+
+                    Van `nombre` y `orden` ocultos porque la acción los exige:
+                    mandarla sin ellos rechazaría el guardado por «falta el
+                    nombre» al intentar cambiar solo el número.
+                  */}
+                  <form
+                    action={(fd) => enviar(guardarTipoVehiculo, fd)}
+                    className="flex items-center gap-2"
+                  >
+                    <input type="hidden" name="id" value={t.id} />
+                    <input type="hidden" name="nombre" value={t.nombre} />
+                    <input type="hidden" name="orden" value={t.orden} />
+                    <Label htmlFor={`nivel-${t.id}`} className="text-xs text-muted-foreground">
+                      Nivel
+                    </Label>
+                    <Input
+                      id={`nivel-${t.id}`}
+                      name="nivelTarifario"
+                      type="number"
+                      min={1}
+                      max={9}
+                      inputMode="numeric"
+                      defaultValue={t.nivelTarifario}
+                      disabled={pending}
+                      className="w-16 text-center"
+                      aria-label={`Nivel tarifario de ${t.nombre}`}
+                    />
+                    <Button type="submit" variant="ghost" size="sm" disabled={pending}>
+                      Guardar
+                    </Button>
+                  </form>
+
                   <Button
                     type="button"
                     variant="ghost"
