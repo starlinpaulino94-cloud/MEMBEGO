@@ -290,6 +290,15 @@ model ReservaExc {
   notas       String?
   creadaPorId String?
 
+  /// QR de CHECK-IN (§84): identifica esta reserva el día de la salida. Es
+  /// TRANSACCIONAL —marca quién se subió— y no tiene nada que ver con el QR de
+  /// adquisición del vendedor. Nace con la reserva y no se reutiliza jamás en
+  /// otra: por eso es único global.
+  checkinToken String?  @unique
+  /// Cuándo embarcó el grupo. `null` = todavía no se presentó.
+  checkinAt    DateTime?
+  checkinPorId String?
+
   pasajeros ReservaPasajero[]
   pagos     ReservaPago[]
   venta     VentaExc?
@@ -313,6 +322,10 @@ model ReservaPasajero {
   /// 'ADULTO' | 'NINO'.
   tipo      String
   nombre    String?
+  /// Se subió de verdad. Reservar cuatro y presentarse tres es lo normal, y el
+  /// manifiesto del bus tiene que poder decir cuál de los cuatro faltó.
+  presente  Boolean  @default(false)
+  checkinAt DateTime?
 
   @@index([reservaId])
   @@map("reserva_pasajeros")
