@@ -146,5 +146,6 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'liquidacion_crear', label: 'Preparar y aprobar liquidaciones' },
     { codigo: 'liquidacion_pagar', label: 'Marcar liquidaciones como pagadas' },
     { codigo: 'meta_definir', label: 'Poner y archivar metas de vendedores' },
+    { codigo: 'reporte_exportar', label: 'Exportar reportes de excursiones' },
   ],
 }
