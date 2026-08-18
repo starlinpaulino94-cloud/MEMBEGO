@@ -14,6 +14,7 @@ import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ReservaPagos } from '@/components/excursiones/ReservaPagos'
 import { ReservaEstadoBotones } from '@/components/excursiones/ReservaEstadoBotones'
 import { VentaAcciones } from '@/components/excursiones/VentaAcciones'
+import { ReservaCheckinQr } from '@/components/excursiones/ReservaCheckinQr'
 import { StatusChip } from '@/components/ui/status-chip'
 import { formatDate, formatMoney } from '@/lib/format'
 
@@ -146,6 +147,12 @@ export default async function ReservaDetallePage({
           notas: p.notas,
           createdAt: p.createdAt,
         }))}
+      />
+
+      <ReservaCheckinQr
+        reservaId={reserva.id}
+        numero={reserva.numero}
+        tokenInicial={reserva.checkinToken}
       />
 
       <VentaAcciones
