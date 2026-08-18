@@ -354,11 +354,22 @@ export async function activarTarjetaPendiente(input: {
   }
   const perfil = pendientes[pendientes.length - 1]
 
+  // El servicio identifica el perfil por su TOKEN, no por su PaymentProfileId
+  // (manual §7.5: ambos campos del objeto CustomerActivation son mandatorios).
+  // Un perfil sin token no se puede activar: pedir la tarjeta de nuevo es más
+  // honesto que gastarle un intento al cliente con una llamada que va a fallar.
+  if (!perfil.token) {
+    return {
+      estado: 'sin_perfil',
+      motivo: 'No se pudo identificar la tarjeta a activar. Regístrala de nuevo.',
+    }
+  }
+
   let activacion
   try {
     activacion = await activarPerfilCardnet({
       customerId,
-      paymentProfileId: perfil.paymentProfileId,
+      token: perfil.token,
       codigo: input.codigo,
     })
   } catch (e) {

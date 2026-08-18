@@ -576,37 +576,42 @@ export async function cobrarConCredencialGuardada(input: {
 }
 
 /**
- * ACTIVA el perfil de pago con el código de 6 dígitos del banco (§4.1.2.3).
+ * ACTIVA el perfil de pago con el código de 6 caracteres del banco.
  *
  * Con las llaves CON autenticación, la tarjeta recién capturada nace
  * `Enabled: false`: CardNET cobra RD$1.00 y el banco le muestra al cliente un
- * código («Cardnet:Z2R78V») que debe ingresar aquí. El endpoint sale del
- * Postman de tokenización: `POST /api/Customer/{id}/activate`.
+ * código («Cardnet:Z2R78V») que debe ingresar aquí.
  *
- * VERIFICAR-QA (mismo criterio que `cobrarConCredencialGuardada`): el NOMBRE
- * exacto del campo del código solo lo confirma una activación real contra el
- * ambiente de pruebas. Se envían las grafías plausibles a la vez —el servicio
- * ignora los campos que no conoce— y el expediente devuelto (status + cuerpo
- * sin sensibles) permite fijar el contrato real y dejar UN solo campo cuando
- * QA lo revele.
+ * EL CONTRATO, FIJADO CONTRA LA DOCUMENTACIÓN OFICIAL (18-08-2026)
  *
- * El código de activación NO es un dato sensible de tarjeta (no es PAN ni
- * CVV): es un reto de un solo uso que ya viajó por el estado de cuenta.
+ * El cuerpo es el objeto `CustomerActivation` del manual §7.5 y tiene DOS
+ * campos, ambos MANDATORIOS:
+ *
+ *     { "Token": "CT__…", "ActivationCode": "Z2R78V" }
+ *
+ * Lo dicen dos fuentes independientes: la tabla del §7.5 («Token · Identificador
+ * del Token asociado al perfil que se desea activar · Mandatorio») y la petición
+ * `ActivacionPayment` de la colección Postman de CardNET, que envía exactamente
+ * esos dos campos.
+ *
+ * ANTES se enviaban tres grafías del código a la vez y el `PaymentProfileId` en
+ * lugar del `Token`. Eso nunca se probó contra el proveedor; de haberse probado
+ * habría fallado SIEMPRE, porque faltaba el único identificador que el servicio
+ * exige. Los campos que sobraban no eran el problema: el que faltaba, sí.
+ *
+ * El código de activación NO es un dato sensible de tarjeta (no es PAN ni CVV):
+ * es un reto de un solo uso que ya viajó por el estado de cuenta del cliente.
  */
 export async function activarPerfilCardnet(input: {
   customerId: string
-  paymentProfileId?: string | null
+  /** Token del perfil que se desea activar. Mandatorio (§7.5). */
+  token: string
   codigo: string
 }): Promise<{ ok: boolean; status: number; crudo: Record<string, unknown> }> {
   const { ok, status, json } = await llamarTokensConRuta(
     'POST',
     `/Customer/${encodeURIComponent(input.customerId)}/activate`,
-    {
-      ActivationCode: input.codigo,
-      ActivationKey: input.codigo,
-      Code: input.codigo,
-      ...(input.paymentProfileId ? { PaymentProfileId: input.paymentProfileId } : {}),
-    }
+    { Token: input.token, ActivationCode: input.codigo }
   )
   return { ok, status, crudo: evidencia(status, json) }
 }

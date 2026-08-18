@@ -90,6 +90,15 @@ tarjeta no aparece y el cliente solo ve "pagar en sucursal".
 
 ## 4. El contrato, confirmado contra el manual oficial
 
+> **Nota sobre la autenticación.** Las dos fuentes de CardNET se contradicen:
+> el **§2.4** dice que la llave va «como el dato de *username* de Basic
+> Authentication (sin necesidad de informar *password*)», que sería
+> `base64(llave + ":")`; la **colección Postman de CardNET** envía la llave
+> **cruda** tras `Basic`. Como no se resuelve leyendo, el servidor prueba las
+> grafías en orden —cruda primero, que es la que usa su propia herramienta— y
+> fija la que el proveedor acepte. Confirmarlo en la certificación permite
+> dejar una sola.
+
 Todo lo de abajo está verificado contra el **MANUAL TÉCNICO DE TOKENIZACIÓN
 v1.7**, el Postman y el HTML de ejemplo que entregó CardNET. Ya no son
 suposiciones: cada punto tiene su sección, y una prueba que lo fija.
@@ -101,7 +110,8 @@ suposiciones: cada punto tiene su sección, y una prueba que lo fija.
 | API REST | `{base}/api/{objeto}` | §6.1 |
 | Ventana de captura | `{base}/Capture` | §11 |
 | Script del widget | `{base}/Scripts/PWCheckout.js` | §11 |
-| Autenticación | `Authorization: Basic {llavePrivada}` (cruda) | §2.4 · Postman |
+| Autenticación | `Authorization: Basic {llavePrivada}` (cruda) | Postman · el §2.4 dice «como username de Basic» (ver nota) |
+| Activación de perfil | `{ Token, ActivationCode }` — ambos mandatorios | §7.5 · Postman |
 | Campo del token | **`TokenId`** | §7.1 |
 | Callback del widget | `tokenCreated` | §3.3 |
 | Abrir el iframe | `OpenIframeCustom(captureUrl + "?key=" + publicKey + "&session_id=" + uniqueId, uniqueId)` | §4.1.2.2 |
@@ -155,11 +165,30 @@ servidor activa y **cobra en el mismo movimiento** (`activarTarjetaPendiente`
 rechaza el código, el mensaje advierte de los 3 intentos; si el perfil
 desapareció (tercer fallo), se le pide registrar la tarjeta de nuevo.
 
-> **VERIFICAR-QA**: el NOMBRE exacto del campo del código en el cuerpo del
-> `activate` no está en el manual — se envían las grafías plausibles a la vez
-> (`ActivationCode`/`ActivationKey`/`Code`, más `PaymentProfileId`), igual que
-> se hizo con el Purchase de credencial guardada. La primera activación real
-> contra el ambiente de pruebas fija el contrato; entonces se deja UN campo.
+### El contrato del `activate`, fijado (18-08-2026)
+
+El cuerpo es el objeto **`CustomerActivation`** del manual §7.5, con **dos
+campos, ambos mandatorios**:
+
+```json
+{ "Token": "CT__jCqoIyEqOcig7RUCF_xdtYdV1XcdO50S_XyX93vTsE0_",
+  "ActivationCode": "Z2R78V" }
+```
+
+| Campo | Descripción | Presencia |
+|---|---|---|
+| `Token` | Identificador del Token asociado al perfil que se desea activar | Mandatorio |
+| `ActivationCode` | Código de activación recibido por el cliente | Mandatorio |
+
+Dos fuentes independientes lo confirman: la tabla del **§7.5** del manual
+técnico v1.7 y la petición `ActivacionPayment` de la **colección Postman** de
+CardNET, que envía exactamente esos dos campos.
+
+> **Corrección**: antes se enviaban tres grafías del código a la vez y el
+> `PaymentProfileId` en lugar del `Token`. Nunca llegó a probarse contra el
+> proveedor; de haberse probado habría fallado siempre, porque faltaba el único
+> identificador que el servicio exige. Los campos que sobraban no eran el
+> problema — el que faltaba, sí.
 
 ### Cómo fijar el contrato SIN pasar por la pantalla de pago (sonda `?activar`)
 

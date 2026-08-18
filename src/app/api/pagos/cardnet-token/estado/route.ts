@@ -159,14 +159,13 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ?activar=1[&codigo=XXXXXX]: la sonda del contrato de ACTIVACIÓN 3DS.
+  // ?activar=1[&codigo=XXXXXX]: la sonda de la ACTIVACIÓN 3DS.
   //
-  // El endpoint `POST /Customer/{id}/activate` no está en el manual (sale del
-  // Postman) y el NOMBRE del campo del código está marcado VERIFICAR-QA: hoy
-  // se envían las grafías plausibles a la vez. Esta sonda es la manera de
-  // fijar el contrato real SIN pasar por la pantalla de pago: registra la
-  // tarjeta de prueba en la ventana de captura, entra aquí y mira el
-  // expediente crudo de la activación.
+  // El contrato ya está fijado por la documentación oficial (manual §7.5 +
+  // Postman): el cuerpo es { Token, ActivationCode }. Esta sonda sigue siendo
+  // útil para EJECUTARLO contra el ambiente de pruebas sin pasar por la
+  // pantalla de pago: registra la tarjeta en la ventana de captura, entra aquí
+  // y mira el expediente crudo de la activación.
   //
   //   · SIN código: solo consulta — enseña los perfiles del Customer con su
   //     estado (habilitado o pendiente). No gasta intentos.
@@ -243,17 +242,24 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    if (!perfil.token) {
+      return NextResponse.json({
+        ...base,
+        activacion: {
+          customerId,
+          perfiles,
+          error:
+            'El perfil pendiente no trae Token, y el servicio lo exige para activar (§7.5). Registra la tarjeta de nuevo.',
+        },
+      })
+    }
+
     // El cuerpo que se envía, espejado aquí para que el expediente sea
     // autocontenido (debe coincidir con activarPerfilCardnet).
-    const cuerpoEnviado = {
-      ActivationCode: codigo,
-      ActivationKey: codigo,
-      Code: codigo,
-      PaymentProfileId: perfil.paymentProfileId,
-    }
+    const cuerpoEnviado = { Token: perfil.token, ActivationCode: codigo }
     const resultado = await activarPerfilCardnet({
       customerId,
-      paymentProfileId: perfil.paymentProfileId,
+      token: perfil.token,
       codigo,
     })
     // Re-consulta: la prueba de fuego no es el status, es si el perfil quedó
