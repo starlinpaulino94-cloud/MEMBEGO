@@ -54,6 +54,12 @@ const DISPONIBLES = [
     titulo: 'Metas',
     detalle: 'Qué se le pide a cada vendedor y cómo va.',
   },
+  {
+    href: '/admin/excursiones/reportes',
+    icon: BarChart3,
+    titulo: 'Reportes',
+    detalle: 'Ventas, comisiones y liquidaciones del período, en un CSV.',
+  },
 ]
 
 export default async function ExcursionesPanelPage({
@@ -197,19 +203,6 @@ export default async function ExcursionesPanelPage({
         </div>
       </section>
 
-      <section className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
-        <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-foreground">Reportes exportables</p>
-          <p className="text-sm text-muted-foreground">
-            Descargar ventas, comisiones y liquidaciones del período para llevarlas a tu
-            contabilidad.
-          </p>
-        </div>
-        <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-caption font-semibold text-muted-foreground">
-          Fase 10
-        </span>
-      </section>
     </div>
   )
 }
