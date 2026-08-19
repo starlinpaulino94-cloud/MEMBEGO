@@ -49,6 +49,7 @@ const RESPALDO: VerticalElegible[] = [
   { codigo: 'restaurante', nombre: 'Restaurante' },
   { codigo: 'gimnasio', nombre: 'Gimnasio' },
   { codigo: 'salon', nombre: 'Salón de Belleza' },
+  { codigo: 'excursiones', nombre: 'Excursiones / Tours' },
   { codigo: 'otro', nombre: 'Otro' },
 ]
 
