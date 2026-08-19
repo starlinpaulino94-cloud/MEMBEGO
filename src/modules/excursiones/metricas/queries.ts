@@ -116,14 +116,18 @@ export async function rankingVendedores(companyId: string, rango: Rango) {
 
   const captados = new Map(atribuciones.map((a) => [a.vendedorId, a._count._all]))
   const porVendedor = new Map<string, { ingresos: number; ventas: number; pasajeros: number }>()
-  for (const v of ventas) {
-    if (!v.vendedorId) continue
-    const previo = porVendedor.get(v.vendedorId) ?? { ingresos: 0, ventas: 0, pasajeros: 0 }
-    porVendedor.set(v.vendedorId, {
-      ingresos: centavos(previo.ingresos + Number(v.total)),
+  const monedaPorVendedor = new Map<string, string>()
+  for (const venta of ventas) {
+    if (!venta.vendedorId) continue
+    const previo = porVendedor.get(venta.vendedorId) ?? { ingresos: 0, ventas: 0, pasajeros: 0 }
+    porVendedor.set(venta.vendedorId, {
+      ingresos: centavos(previo.ingresos + Number(venta.total)),
       ventas: previo.ventas + 1,
-      pasajeros: previo.pasajeros + v.pasajeros,
+      pasajeros: previo.pasajeros + venta.pasajeros,
     })
+    if (!monedaPorVendedor.has(venta.vendedorId)) {
+      monedaPorVendedor.set(venta.vendedorId, venta.moneda)
+    }
   }
 
   return vendedores
@@ -135,7 +139,7 @@ export async function rankingVendedores(companyId: string, rango: Rango) {
         codigo: v.codigo,
         captados: captados.get(v.id) ?? 0,
         ...datos,
-        moneda: ventas[0]?.moneda ?? 'DOP',
+        moneda: monedaPorVendedor.get(v.id) ?? ventas[0]?.moneda ?? 'DOP',
       }
     })
     .filter((v) => v.captados > 0 || v.ventas > 0)
@@ -177,7 +181,7 @@ export async function realesDeVendedor(
           estado: { not: 'CANCELADA' },
           confirmadaAt: { gte: rango.desde, lte: rango.hasta },
         },
-        select: { total: true, pasajeros: true },
+        select: { total: true, pasajeros: true, moneda: true },
       })
     ),
   ])
@@ -188,6 +192,7 @@ export async function realesDeVendedor(
     ventas: ventas.length,
     pasajeros: ventas.reduce((t, v) => t + v.pasajeros, 0),
     ingresos: centavos(ventas.reduce((t, v) => t + Number(v.total), 0)),
+    moneda: ventas[0]?.moneda ?? null,
   }
 }
 

@@ -64,7 +64,7 @@ test('la comisión enseña la diferencia entre lo generado y lo que se paga', ()
   const filas = filasDeComisiones([
     {
       fecha: '17/8/2026', vendedor: 'Juan', vendedorCodigo: 'RAF-00001', venta: 'SAL-000001',
-      desglose: '10% sobre 1000', base: 1000, monto: 100, neto: 60,
+      desglose: '10% sobre 1000', base: 1000, monto: 100, ajustes: -40, neto: 60,
       moneda: 'DOP', estado: 'APROBADA', liquidacion: null,
     },
   ])

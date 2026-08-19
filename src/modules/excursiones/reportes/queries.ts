@@ -1,6 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
 import { TOPE_EXPORTACION } from '@/lib/csv'
-import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
+import { netoComision, centavos } from '@/modules/excursiones/comisiones/nucleo'
 import type { Rango } from '@/modules/excursiones/metricas/nucleo'
 import type { FilaVenta, FilaComision, FilaLiquidacion } from './nucleo'
 
@@ -124,6 +124,7 @@ export async function comisionesDelPeriodo(
     total: comisiones.length,
     filas: comisiones.slice(0, TOPE_EXPORTACION).map((c) => {
       const vendedor = apoyo.vendedores.get(c.vendedorId)
+      const ajustes = c.ajustes.reduce((t, a) => t + Number(a.monto), 0)
       return {
         fecha: fecha(c.createdAt),
         vendedor: vendedor?.nombre ?? 'Vendedor',
@@ -132,6 +133,7 @@ export async function comisionesDelPeriodo(
         desglose: c.desglose,
         base: Number(c.base),
         monto: Number(c.monto),
+        ajustes: centavos(ajustes),
         neto: netoComision(Number(c.monto), c.ajustes.map((a) => ({ monto: Number(a.monto) }))),
         moneda: c.moneda,
         estado: c.estado,

@@ -39,7 +39,7 @@ export default async function MetasPage() {
         hasta: m.hasta,
       })
       const reales = await realesDeVendedor(companyId, m.vendedorId, rango)
-      return { meta: m, rango, lineas: progresoMeta(m, reales) }
+      return { meta: m, rango, lineas: progresoMeta(m, reales), moneda: reales.moneda }
     })
   )
 
@@ -61,7 +61,7 @@ export default async function MetasPage() {
       {conProgreso.length > 0 ? (
         <section className="space-y-3">
           <h2 className="text-h3 text-foreground">Metas activas</h2>
-          {conProgreso.map(({ meta, rango, lineas }) => (
+          {conProgreso.map(({ meta, rango, lineas, moneda }) => (
             <article key={meta.id} className="rounded-2xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -81,7 +81,7 @@ export default async function MetasPage() {
                 <ArchivarMetaBoton metaId={meta.id} />
               </div>
               <div className="mt-3">
-                <MetaProgreso lineas={lineas} moneda="DOP" />
+                <MetaProgreso lineas={lineas} moneda={moneda ?? 'DOP'} />
               </div>
             </article>
           ))}
