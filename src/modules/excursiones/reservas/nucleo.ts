@@ -241,6 +241,9 @@ export function validarPago(
     return { ok: false, error: `El pago excede el saldo pendiente (${centavos(saldo)}).` }
   }
   const metodo = texto(form.metodo, 40).toUpperCase() || 'EFECTIVO'
+  if (!(METODOS_PAGO as readonly string[]).includes(metodo)) {
+    return { ok: false, error: `Método de pago no válido: ${metodo}. Use: ${METODOS_PAGO.join(', ')}.` }
+  }
   return {
     ok: true,
     datos: {
