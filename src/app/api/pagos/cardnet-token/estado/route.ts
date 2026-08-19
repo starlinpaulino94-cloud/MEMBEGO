@@ -65,31 +65,78 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json({ ...base, correoPrueba: { destinatario: user.email, ...resultado } })
   }
-  // ?perfiles=1: crea/consulta el Customer del usuario logueado y muestra QUÉ
-  // devuelve el proveedor al consultarlo (forma real de PaymentProfiles, si el
-  // Email viene y cómo, y qué logra extraer nuestro parser). Sin sensibles.
+  // ?perfiles=1: CONSULTA PURA del Customer del usuario y muestra QUÉ devuelve
+  // el proveedor (forma real de PaymentProfiles, si el Email viene y cómo, y
+  // qué logra extraer nuestro parser). Sin sensibles.
+  //
+  // ANTES esta sonda llamaba a `crearClienteCardnet`, que hace un POST
+  // /Customer INCONDICIONAL. Dos consecuencias, las dos malas:
+  //
+  //   1. Cada llamada creaba un Customer NUEVO — que por definición no tiene
+  //      tarjetas. La sonda respondía `perfiles: []` SIEMPRE, y esa respuesta
+  //      no dice nada del cliente que sí registró su tarjeta. Justo la
+  //      pregunta que la sonda existe para contestar.
+  //   2. Cada POST emite una sesión nueva e INVALIDA la anterior: correr la
+  //      sonda con la ventana de pago abierta la mata con
+  //      INTERNAL_SERVER_ERROR (ver la nota histórica de `crearSesionCaptura`).
+  //
+  // Ahora resuelve el id con las MISMAS reglas del flujo real —el guardado en
+  // `Cliente.cardnetCustomerId`, validado contra la cuenta de las llaves
+  // vigentes— y solo hace GET. Si no hay id utilizable lo dice, en vez de
+  // fabricar uno. `?customerId=` permite mirar otro a mano.
   if (req.nextUrl.searchParams.get('perfiles') === '1' && base.configurado) {
-    const { crearClienteCardnet, consultarClienteCardnet, consultarClienteDiagnostico } =
-      await import('@/lib/payments/cardnet-tokens')
+    const { consultarClienteCardnet, consultarClienteDiagnostico } = await import(
+      '@/lib/payments/cardnet-tokens'
+    )
+    const { leerCustomerIdDeCuenta } = await import('@/lib/payments/cardnet-tokens-core')
+    const { prisma } = await import('@/lib/prisma')
+
     const email = user.email || ''
-    const cliente = await crearClienteCardnet({ email })
-    if (!cliente) {
-      return NextResponse.json({ ...base, perfiles: { error: 'No se pudo registrar/consultar el Customer.' } })
+    const clienteId = user.metadata.clienteId ?? null
+    const fila = clienteId
+      ? await prisma.cliente
+          .findUnique({ where: { id: clienteId }, select: { cardnetCustomerId: true } })
+          .catch(() => null)
+      : null
+    const guardadoCrudo = fila?.cardnetCustomerId ?? null
+    const guardadoUtil = leerCustomerIdDeCuenta(
+      guardadoCrudo,
+      base.publicKey ?? '',
+      process.env.CARDNET_TOKENS_PRIVATE_KEY ?? ''
+    )
+    const pedido = req.nextUrl.searchParams.get('customerId')?.trim() || null
+    const customerId = pedido ?? guardadoUtil
+
+    if (!customerId) {
+      return NextResponse.json({
+        ...base,
+        perfiles: {
+          customerId: null,
+          // Se distingue el «no hay nada guardado» del «hay, pero es de otra
+          // cuenta de llaves»: son dos problemas distintos y se arreglan
+          // distinto. El segundo es lo que pasa al cambiar de juego de llaves.
+          guardado: guardadoCrudo ? 'presente pero de OTRA cuenta de llaves' : 'ninguno',
+          nota: 'Este cliente no tiene un CustomerId utilizable con las llaves actuales. Registra la tarjeta en la ventana de captura, o pasa uno a mano con ?customerId=NNNN.',
+        },
+      })
     }
+
     const [consulta, crudo] = await Promise.all([
-      consultarClienteCardnet(cliente.customerId),
-      consultarClienteDiagnostico(cliente.customerId),
+      consultarClienteCardnet(customerId),
+      consultarClienteDiagnostico(customerId),
     ])
     return NextResponse.json({
       ...base,
       perfiles: {
-        customerId: cliente.customerId,
+        customerId,
+        origen: pedido ? 'query' : 'guardado en el cliente',
         emailDelCustomer: consulta.email,
         emailCoincide: (consulta.email ?? '').trim().toLowerCase() === email.trim().toLowerCase(),
         totalExtraidos: consulta.perfiles.length,
         extraidos: consulta.perfiles.map((p) => ({
           paymentProfileId: p.paymentProfileId,
           tieneToken: Boolean(p.token),
+          habilitado: p.habilitado,
           marca: p.marca,
           ultimos4: p.ultimos4,
         })),
