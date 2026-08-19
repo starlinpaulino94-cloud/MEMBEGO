@@ -14,6 +14,17 @@ import { logErrorBd } from '@/lib/prisma-errors'
 export const dynamic = 'force-dynamic'
 
 /**
+ * TIEMPO DE FUNCIÓN. Sin esto, Vercel corta la función a los ~15s por defecto.
+ *
+ * Este camino encadena VARIAS llamadas a CardNET, cada una con su propio
+ * límite de 20s: consultar el cliente, leer sus perfiles, activar, y —si
+ * activó— cobrar. Con el corte por defecto la función muere a media secuencia
+ * y el navegador se queda girando sin respuesta ni error: la peor forma de
+ * fallar, porque el cliente no sabe si se le cobró.
+ */
+export const maxDuration = 60
+
+/**
  * SESIÓN DE CAPTURA — implementa el flujo del MANUAL v1.7 §4.1.2.
  *
  * §4.1.2.1 · Registro de usuarios: el Customer se registra UNA vez y su
