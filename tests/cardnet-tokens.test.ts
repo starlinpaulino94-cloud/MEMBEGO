@@ -4,6 +4,7 @@ import {
   urlsTokens,
   montoEnteroMenor,
   interpretarCompraToken,
+  exigeActivacionPrimero,
   desenvolverRespuesta,
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
@@ -562,4 +563,59 @@ test('activación: lo que no reduce a 6 alfanuméricos se rechaza antes de gasta
   assert.equal(normalizarCodigoActivacion('1234567'), null)
   // «cardnet» solo, sin código: no debe convertirse en cadena vacía válida.
   assert.equal(normalizarCodigoActivacion('Cardnet:'), null)
+})
+
+
+// ── CS012: la tarjeta existe pero falta activarla ──────────────────────────
+//
+// Este error es la fuente MÁS FIABLE de la pantalla del código de activación.
+// La otra (`Enabled: false` en el listado de perfiles) es un campo que puede
+// no venir, y cuando no viene se asume habilitado a propósito. Si CS012 no se
+// reconociera, el cliente vería «no se pudo procesar el pago» con el código de
+// su banco en la mano y ningún lugar donde escribirlo.
+
+test('exigeActivacionPrimero reconoce el CS012 por código', () => {
+  assert.equal(exigeActivacionPrimero([{ codigo: 'CS012', mensaje: '' }]), true)
+  assert.equal(exigeActivacionPrimero([{ codigo: 'cs012', mensaje: '' }]), true)
+  assert.equal(exigeActivacionPrimero([{ codigo: ' CS012 ', mensaje: '' }]), true)
+})
+
+test('exigeActivacionPrimero reconoce el CS012 por mensaje aunque falte el código', () => {
+  assert.equal(
+    exigeActivacionPrimero([{ codigo: '', mensaje: 'PROFILE_MUST_BE_ACTIVATED_FIRST' }]),
+    true
+  )
+  assert.equal(
+    exigeActivacionPrimero([{ codigo: '', mensaje: 'The profile must be activated first' }]),
+    true
+  )
+})
+
+test('exigeActivacionPrimero NO confunde otros errores con falta de activación', () => {
+  assert.equal(exigeActivacionPrimero([]), false)
+  assert.equal(exigeActivacionPrimero([{ codigo: 'TK011', mensaje: 'Cliente no válido' }]), false)
+  assert.equal(exigeActivacionPrimero([{ codigo: 'PR001', mensaje: 'Medio de pago' }]), false)
+})
+
+test('interpretarCompraToken marca requiereActivacion ante CS012', () => {
+  const r = interpretarCompraToken({
+    Response: { Transaction: { TransactionStatusId: 4 } },
+    Errors: [{ ErrorCode: 'CS012', Message: 'PROFILE_MUST_BE_ACTIVATED_FIRST' }],
+  })
+  assert.equal(r.aprobada, false)
+  assert.equal(r.requiereActivacion, true)
+})
+
+test('una compra aprobada nunca pide activación', () => {
+  const r = interpretarCompraToken({ Approved: true, AuthorizationCode: 'A1B2C3' })
+  assert.equal(r.aprobada, true)
+  assert.equal(r.requiereActivacion, false)
+})
+
+test('un rechazo del banco NO se confunde con falta de activación', () => {
+  // Fondos insuficientes es un rechazo real: abrir la pantalla del código de
+  // activación ahí mandaría al cliente a buscar un código que no existe.
+  const r = interpretarCompraToken({ ResponseCode: '51' })
+  assert.equal(r.aprobada, false)
+  assert.equal(r.requiereActivacion, false)
 })

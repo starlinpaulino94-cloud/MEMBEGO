@@ -185,6 +185,13 @@ export function PagoTokenCardnet({
           toast.success('¡Pago aprobado! Tu membresía está activa.')
           if (urlExito) router.push(urlExito)
           else router.refresh()
+        } else if (data.estado === 'pendiente_activacion') {
+          // La pasarela dijo CS012: la tarjeta está registrada pero sin
+          // activar. Este camino ANTES caía en el `else` de abajo y le decía
+          // al cliente «no se pudo procesar el pago», con su código de
+          // activación ya en la app del banco y ningún campo donde ponerlo.
+          setEstado('activacion')
+          setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
         } else {
           setEstado('error')
           // SOLO se dice "rechazada" si el servidor rechazó DE VERDAD. Antes,
