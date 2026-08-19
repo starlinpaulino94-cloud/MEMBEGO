@@ -286,6 +286,13 @@ export function PagoTokenCardnet({
 
   // Pide al servidor una sesión de captura válida (CaptureURL + UniqueID
   // reales del proveedor; con un id inventado la ventana no abre).
+  /**
+   * Motivo por el que la última sesión no se pudo crear. Se guarda para no
+   * quemar el presupuesto del limitador con reintentos en segundo plano.
+   */
+  const limitadoRef = useRef(false)
+  const motivoSesionRef = useRef<string | null>(null)
+
   const pedirSesion = useCallback(async (): Promise<SesionCaptura | null> => {
     try {
       const resp = await fetch('/api/pagos/cardnet-token/sesion', {
@@ -295,6 +302,7 @@ export function PagoTokenCardnet({
       })
       const data = (await resp.json().catch(() => ({}))) as {
         ok?: boolean
+        error?: string
         captureUrl?: string
         scriptUrl?: string
         uniqueId?: string
@@ -302,7 +310,21 @@ export function PagoTokenCardnet({
         conteoPerfiles?: number
         customerId?: string | null
       }
-      if (!data.ok || !data.captureUrl || !data.uniqueId) return null
+      // 429 del limitador de pagos: NO es un fallo de la pasarela. Se anota
+      // para que el prefetch de fondo deje de pedir —cada intento extra
+      // renueva el castigo— y para poder decirle al cliente qué pasa de
+      // verdad. Antes, este caso salía como «No se pudo iniciar la ventana de
+      // pago», que apunta a CardNET y manda a depurar al lugar equivocado.
+      limitadoRef.current = resp.status === 429
+      if (limitadoRef.current) {
+        motivoSesionRef.current = data.error || 'Demasiados intentos. Espera un momento.'
+        return null
+      }
+      if (!data.ok || !data.captureUrl || !data.uniqueId) {
+        motivoSesionRef.current = data.error || null
+        return null
+      }
+      motivoSesionRef.current = null
       return {
         captureUrl: data.captureUrl,
         scriptUrl: data.scriptUrl || scriptUrlProp,
@@ -320,7 +342,11 @@ export function PagoTokenCardnet({
   // PRE-CREA la sesión en segundo plano apenas la pasarela está lista: así el
   // clic en "Pagar" abre la ventana al instante en vez de esperar al proveedor.
   useEffect(() => {
+    // El prefetch NO corre si la última petición chocó con el limitador: el
+    // efecto se redispara con cada 'error', así que seguir pidiendo convierte
+    // un límite pasajero en uno permanente — se renueva solo.
     if ((estado !== 'listo' && estado !== 'error') || sesionRef.current) return
+    if (limitadoRef.current) return
     let cancelado = false
     void pedirSesion().then((s) => {
       if (cancelado || !s) return
@@ -593,7 +619,12 @@ export function PagoTokenCardnet({
     }
     if (!sesion) {
       setEstado('error')
-      setMensaje('No se pudo iniciar la ventana de pago. Intenta de nuevo.')
+      // El motivo real si el servidor lo dio. Un «Demasiados intentos» no se
+      // arregla reintentando, y disfrazarlo de fallo de la pasarela manda a
+      // buscar el problema donde no está.
+      setMensaje(
+        motivoSesionRef.current ?? 'No se pudo iniciar la ventana de pago. Intenta de nuevo.'
+      )
       return
     }
     conteoAntesRef.current = sesion.conteoPerfiles
