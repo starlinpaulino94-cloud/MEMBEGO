@@ -160,6 +160,19 @@ export async function actualizarVendedor(
       return { error: 'Un vendedor no puede ser su propio supervisor.' }
     }
 
+    // Prevención de duplicados (§52): mismo teléfono = mismo vendedor.
+    if (v.datos.telefono) {
+      const duplicado = await conEmpresa(companyId, (tx) =>
+        tx.vendedor.findFirst({
+          where: { companyId, telefono: v.datos.telefono!, estado: { not: 'INACTIVO' }, NOT: { id: vendedorId } },
+          select: { nombre: true, codigo: true },
+        })
+      )
+      if (duplicado) {
+        return { error: `Ese teléfono ya es de ${duplicado.nombre} (${duplicado.codigo}).` }
+      }
+    }
+
     const upd = await conEmpresa(companyId, (tx) =>
       tx.vendedor.updateMany({ where: { id: vendedorId, companyId }, data: v.datos })
     )
@@ -233,21 +246,24 @@ export async function darAccesoVendedor(
   formData: FormData
 ): Promise<VendedorActionState> {
   let supabaseId: string | null = null
+  let dbUserId: string | null = null
+  let companyId: string | null = null
   const supabase = createAdminClient()
   try {
     const user = await requireSection('excursiones', 'vendedor_acceso')
     if (!user) return { error: 'No autorizado.' }
-    const companyId = await resolveCompanyId(user, formData)
+    companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
+    const cid = companyId
     const vendedorId = String(formData.get('vendedorId') ?? '')
     const correo = String(formData.get('correo') ?? '').trim().toLowerCase()
     if (!/^\S+@\S+\.\S+$/.test(correo)) {
       return { error: 'Escribe un correo válido: es con lo que va a entrar.' }
     }
 
-    const vendedor = await conEmpresa(companyId, (tx) =>
+    const vendedor = await conEmpresa(cid, (tx) =>
       tx.vendedor.findFirst({
-        where: { id: vendedorId, companyId },
+        where: { id: vendedorId, companyId: cid },
         select: { id: true, nombre: true, apellido: true, codigo: true, userId: true, estado: true },
       })
     )
@@ -281,26 +297,27 @@ export async function darAccesoVendedor(
     await ensureEmailIdentity(supabaseId, correo)
 
     const idSupabase = supabaseId
-    const dbUser = await conEmpresa(companyId, (tx) =>
+    const dbUser = await conEmpresa(cid, (tx) =>
       tx.user.create({
         data: {
           supabaseId: idSupabase,
           email: correo,
           name: nombreCompleto,
           role: 'VENDEDOR',
-          companyId,
+          companyId: cid,
         },
         select: { id: true },
       })
     )
-    await conEmpresa(companyId, (tx) =>
-      tx.vendedor.updateMany({ where: { id: vendedor.id, companyId }, data: { userId: dbUser.id } })
+    dbUserId = dbUser.id
+    await conEmpresa(cid, (tx) =>
+      tx.vendedor.updateMany({ where: { id: vendedor.id, companyId: cid }, data: { userId: dbUser.id } })
     )
     await supabase.auth.admin.updateUserById(idSupabase, {
-      app_metadata: { role: 'VENDEDOR', dbUserId: dbUser.id, companyId },
+      app_metadata: { role: 'VENDEDOR', dbUserId: dbUser.id, companyId: cid },
     })
 
-    await auditar(companyId, user.metadata.dbUserId ?? null, vendedor.id, {
+    await auditar(cid, user.metadata.dbUserId ?? null, vendedor.id, {
       tipo: 'VENDEDOR_ACCESO_CREADO',
       codigo: vendedor.codigo,
       correo,
@@ -312,8 +329,12 @@ export async function darAccesoVendedor(
     }
   } catch (e) {
     console.error('[excursiones] darAccesoVendedor:', e)
-    // Sin rollback la cuenta quedaría huérfana en Supabase y su correo
-    // bloqueado para siempre en el chequeo de arriba.
+    // Rollback: borrar DB user si se creó, y Supabase user si se creó.
+    if (dbUserId && companyId) {
+      await conEmpresa(companyId, (tx) =>
+        tx.user.delete({ where: { id: dbUserId! } }).catch(anotarFallo('excursiones:acceso-rollback-db'))
+      ).catch(anotarFallo('excursiones:acceso-rollback-tx'))
+    }
     if (supabaseId) {
       await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('excursiones:acceso-rollback'))
     }
@@ -364,7 +385,9 @@ export async function quitarAccesoVendedor(
         .auth.admin.updateUserById(cuenta.supabaseId, {
           app_metadata: { role: 'VENDEDOR', dbUserId: cuenta.id, companyId: null },
         })
-        .catch(anotarFallo('excursiones:acceso-metadata'))
+        .catch((err) => {
+          console.error('[excursiones] quitarAcceso: Supabase metadata update failed', err)
+        })
     }
 
     await auditar(companyId, user.metadata.dbUserId ?? null, vendedor.id, {
