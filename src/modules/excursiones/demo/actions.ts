@@ -53,10 +53,23 @@ export async function sembrarDemoExcursiones(
     }
 
     if (await yaTieneExcursiones(companyId)) {
-      return {
-        error:
-          'Esta empresa ya tiene excursiones. Sembrar otra vez duplicaría la demostración; usa una empresa demo limpia.',
+      // Detectar si el seed anterior falló a mitad (tiene excursiones pero no
+      // reservas): en ese caso limpiar y permitir re-intentar.
+      const tieneReservas = await conEmpresa(companyId, (tx) =>
+        tx.reservaExc.count({ where: { companyId } })
+      ).catch(() => 0)
+      if (tieneReservas > 0) {
+        return {
+          error:
+            'Esta empresa ya tiene excursiones con reservas. Sembrar otra vez duplicaría la demostración; usa una empresa demo limpia.',
+        }
       }
+      // Seed incompleto: limpiar excursiones parciales para permitir re-intento.
+      await conEmpresa(companyId, async (tx) => {
+        await tx.excursionHorario.deleteMany({ where: { companyId } })
+        await tx.excursionVariante.deleteMany({ where: { companyId } })
+        await tx.excursion.deleteMany({ where: { companyId } })
+      })
     }
 
     const r = await sembrarExcursionesDemo(companyId, empresa.name)
