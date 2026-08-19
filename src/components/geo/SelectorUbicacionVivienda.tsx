@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Search, X } from 'lucide-react'
 import {
   listarPaisesOperativos,
@@ -113,6 +113,11 @@ export function SelectorUbicacionVivienda({
   /** Recorrido efectivo: de él salen el indicador de progreso y el «Atrás». */
   const orden = sinMapa ? ORDEN_SIN_MAPA : ORDEN_MINIPASOS
   const [d, setD] = useState<UbicacionSeleccionada>(value)
+  // Evita emitir onChange en el montaje: el padre ya tiene el valor inicial.
+  const omitirSyncInicial = useRef(true)
+  // Ref para que el useEffect lean la última versión sin dependencia directa.
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
 
   /**
    * Listas del catálogo cacheadas por clave (`pais`, `region:<countryId>`, …).
@@ -208,12 +213,17 @@ export function SelectorUbicacionVivienda({
   }
 
   function actualizarDatos(parcial: Partial<UbicacionSeleccionada>) {
-    setD((prev) => {
-      const next = { ...prev, ...parcial }
-      onChange(next)
-      return next
-    })
+    setD((prev) => ({ ...prev, ...parcial }))
   }
+
+  // Emitir al padre después de cada cambio de estado (no DURANTE el updater).
+  useEffect(() => {
+    if (omitirSyncInicial.current) {
+      omitirSyncInicial.current = false
+      return
+    }
+    onChangeRef.current(d)
+  }, [d])
 
   // ── Acciones por mini-paso ────────────────────────────────────────────────
   function elegirPais(op: Opcion) {

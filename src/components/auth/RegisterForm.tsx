@@ -178,7 +178,7 @@ export function RegisterForm({
               </p>
             </div>
 
-            <ComoNosConociste />
+            {!refCode && <ComoNosConociste />}
 
             {isCarwash && (
               <div className="space-y-4 rounded-lg border border-border p-4">
