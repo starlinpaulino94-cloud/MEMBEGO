@@ -65,31 +65,78 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json({ ...base, correoPrueba: { destinatario: user.email, ...resultado } })
   }
-  // ?perfiles=1: crea/consulta el Customer del usuario logueado y muestra QUÉ
-  // devuelve el proveedor al consultarlo (forma real de PaymentProfiles, si el
-  // Email viene y cómo, y qué logra extraer nuestro parser). Sin sensibles.
+  // ?perfiles=1: CONSULTA PURA del Customer del usuario y muestra QUÉ devuelve
+  // el proveedor (forma real de PaymentProfiles, si el Email viene y cómo, y
+  // qué logra extraer nuestro parser). Sin sensibles.
+  //
+  // ANTES esta sonda llamaba a `crearClienteCardnet`, que hace un POST
+  // /Customer INCONDICIONAL. Dos consecuencias, las dos malas:
+  //
+  //   1. Cada llamada creaba un Customer NUEVO — que por definición no tiene
+  //      tarjetas. La sonda respondía `perfiles: []` SIEMPRE, y esa respuesta
+  //      no dice nada del cliente que sí registró su tarjeta. Justo la
+  //      pregunta que la sonda existe para contestar.
+  //   2. Cada POST emite una sesión nueva e INVALIDA la anterior: correr la
+  //      sonda con la ventana de pago abierta la mata con
+  //      INTERNAL_SERVER_ERROR (ver la nota histórica de `crearSesionCaptura`).
+  //
+  // Ahora resuelve el id con las MISMAS reglas del flujo real —el guardado en
+  // `Cliente.cardnetCustomerId`, validado contra la cuenta de las llaves
+  // vigentes— y solo hace GET. Si no hay id utilizable lo dice, en vez de
+  // fabricar uno. `?customerId=` permite mirar otro a mano.
   if (req.nextUrl.searchParams.get('perfiles') === '1' && base.configurado) {
-    const { crearClienteCardnet, consultarClienteCardnet, consultarClienteDiagnostico } =
-      await import('@/lib/payments/cardnet-tokens')
+    const { consultarClienteCardnet, consultarClienteDiagnostico } = await import(
+      '@/lib/payments/cardnet-tokens'
+    )
+    const { leerCustomerIdDeCuenta } = await import('@/lib/payments/cardnet-tokens-core')
+    const { prisma } = await import('@/lib/prisma')
+
     const email = user.email || ''
-    const cliente = await crearClienteCardnet({ email })
-    if (!cliente) {
-      return NextResponse.json({ ...base, perfiles: { error: 'No se pudo registrar/consultar el Customer.' } })
+    const clienteId = user.metadata.clienteId ?? null
+    const fila = clienteId
+      ? await prisma.cliente
+          .findUnique({ where: { id: clienteId }, select: { cardnetCustomerId: true } })
+          .catch(() => null)
+      : null
+    const guardadoCrudo = fila?.cardnetCustomerId ?? null
+    const guardadoUtil = leerCustomerIdDeCuenta(
+      guardadoCrudo,
+      base.publicKey ?? '',
+      process.env.CARDNET_TOKENS_PRIVATE_KEY ?? ''
+    )
+    const pedido = req.nextUrl.searchParams.get('customerId')?.trim() || null
+    const customerId = pedido ?? guardadoUtil
+
+    if (!customerId) {
+      return NextResponse.json({
+        ...base,
+        perfiles: {
+          customerId: null,
+          // Se distingue el «no hay nada guardado» del «hay, pero es de otra
+          // cuenta de llaves»: son dos problemas distintos y se arreglan
+          // distinto. El segundo es lo que pasa al cambiar de juego de llaves.
+          guardado: guardadoCrudo ? 'presente pero de OTRA cuenta de llaves' : 'ninguno',
+          nota: 'Este cliente no tiene un CustomerId utilizable con las llaves actuales. Registra la tarjeta en la ventana de captura, o pasa uno a mano con ?customerId=NNNN.',
+        },
+      })
     }
+
     const [consulta, crudo] = await Promise.all([
-      consultarClienteCardnet(cliente.customerId),
-      consultarClienteDiagnostico(cliente.customerId),
+      consultarClienteCardnet(customerId),
+      consultarClienteDiagnostico(customerId),
     ])
     return NextResponse.json({
       ...base,
       perfiles: {
-        customerId: cliente.customerId,
+        customerId,
+        origen: pedido ? 'query' : 'guardado en el cliente',
         emailDelCustomer: consulta.email,
         emailCoincide: (consulta.email ?? '').trim().toLowerCase() === email.trim().toLowerCase(),
         totalExtraidos: consulta.perfiles.length,
         extraidos: consulta.perfiles.map((p) => ({
           paymentProfileId: p.paymentProfileId,
           tieneToken: Boolean(p.token),
+          habilitado: p.habilitado,
           marca: p.marca,
           ultimos4: p.ultimos4,
         })),
@@ -159,14 +206,13 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // ?activar=1[&codigo=XXXXXX]: la sonda del contrato de ACTIVACIÓN 3DS.
+  // ?activar=1[&codigo=XXXXXX]: la sonda de la ACTIVACIÓN 3DS.
   //
-  // El endpoint `POST /Customer/{id}/activate` no está en el manual (sale del
-  // Postman) y el NOMBRE del campo del código está marcado VERIFICAR-QA: hoy
-  // se envían las grafías plausibles a la vez. Esta sonda es la manera de
-  // fijar el contrato real SIN pasar por la pantalla de pago: registra la
-  // tarjeta de prueba en la ventana de captura, entra aquí y mira el
-  // expediente crudo de la activación.
+  // El contrato ya está fijado por la documentación oficial (manual §7.5 +
+  // Postman): el cuerpo es { Token, ActivationCode }. Esta sonda sigue siendo
+  // útil para EJECUTARLO contra el ambiente de pruebas sin pasar por la
+  // pantalla de pago: registra la tarjeta en la ventana de captura, entra aquí
+  // y mira el expediente crudo de la activación.
   //
   //   · SIN código: solo consulta — enseña los perfiles del Customer con su
   //     estado (habilitado o pendiente). No gasta intentos.
@@ -243,17 +289,24 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    if (!perfil.token) {
+      return NextResponse.json({
+        ...base,
+        activacion: {
+          customerId,
+          perfiles,
+          error:
+            'El perfil pendiente no trae Token, y el servicio lo exige para activar (§7.5). Registra la tarjeta de nuevo.',
+        },
+      })
+    }
+
     // El cuerpo que se envía, espejado aquí para que el expediente sea
     // autocontenido (debe coincidir con activarPerfilCardnet).
-    const cuerpoEnviado = {
-      ActivationCode: codigo,
-      ActivationKey: codigo,
-      Code: codigo,
-      PaymentProfileId: perfil.paymentProfileId,
-    }
+    const cuerpoEnviado = { Token: perfil.token, ActivationCode: codigo }
     const resultado = await activarPerfilCardnet({
       customerId,
-      paymentProfileId: perfil.paymentProfileId,
+      token: perfil.token,
       codigo,
     })
     // Re-consulta: la prueba de fuego no es el status, es si el perfil quedó
