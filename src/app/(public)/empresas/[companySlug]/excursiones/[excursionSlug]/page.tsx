@@ -12,6 +12,8 @@ import { formatMoney } from '@/lib/format'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { DIAS_SEMANA } from '@/modules/excursiones/catalogo/nucleo'
+import { getUser } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { ReservaExcursionForm } from './ReservaExcursionForm'
 
 interface ExcursionDetailPageProps {
@@ -58,6 +60,27 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
   if (!exc) notFound()
 
   const precioDesde = exc.variantes[0]?.precioAdulto
+
+  // Auth + follow check for the booking form
+  const user = await getUser()
+  const isAuthenticated = !!user
+  let isFollowing = false
+  if (user) {
+    const company = await getCompanyPublic(companySlug)
+    if (company) {
+      const usuario = await prisma.user.findUnique({
+        where: { supabaseId: user.supabaseId },
+        select: { id: true },
+      })
+      if (usuario) {
+        const follow = await prisma.companyFollow.findUnique({
+          where: { userId_companyId: { userId: usuario.id, companyId: company.id } },
+          select: { id: true },
+        })
+        isFollowing = !!follow
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -222,6 +245,7 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
           <div className="lg:sticky lg:top-4 lg:self-start">
             <ReservaExcursionForm
               companyId={companyId}
+              companySlug={companySlug}
               excursionId={exc.id}
               moneda={exc.moneda}
               variantes={exc.variantes.map((v) => ({
@@ -236,6 +260,8 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
                 diasSemana: h.diasSemana,
               }))}
               precioDesde={precioDesde != null ? Number(precioDesde) : null}
+              isAuthenticated={isAuthenticated}
+              isFollowing={isFollowing}
             />
           </div>
         </div>

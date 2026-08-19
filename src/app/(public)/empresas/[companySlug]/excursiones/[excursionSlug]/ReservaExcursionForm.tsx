@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useActionState } from 'react'
+import { useState, useEffect, useRef, useActionState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { CalendarDays, Users, Minus, Plus, Loader2 } from 'lucide-react'
 import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-actions'
+import { toggleSeguirEmpresa } from '@/modules/social/actions'
 import { formatMoney } from '@/lib/format'
 import type { ReservaClienteState } from '@/modules/excursiones/reservas/cliente-actions'
 
@@ -22,25 +24,33 @@ interface Horario {
 
 interface ReservaExcursionFormProps {
   companyId: string
+  companySlug: string
   excursionId: string
   moneda: string
   variantes: Variante[]
   horarios: Horario[]
   precioDesde: number | null
+  isAuthenticated: boolean
+  isFollowing: boolean
 }
 
 const initial: ReservaClienteState = {}
 
 export function ReservaExcursionForm({
   companyId,
+  companySlug,
   excursionId,
   moneda,
   variantes,
   horarios,
   precioDesde,
+  isAuthenticated,
+  isFollowing: initialFollowing,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
+  const followedRef = useRef(initialFollowing)
+  const [isFollowing, setIsFollowing] = useState(initialFollowing)
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
   const [fecha, setFecha] = useState('')
@@ -48,18 +58,75 @@ export function ReservaExcursionForm({
   const [adultos, setAdultos] = useState(1)
   const [ninos, setNinos] = useState(0)
   const [notas, setNotas] = useState('')
+  const [followingPending, setFollowingPending] = useState(false)
 
   const varianteActual = variantes.find((v) => v.id === varianteId) ?? variantes[0]
   const precioAdulto = varianteActual?.precioAdulto ?? 0
   const precioNino = varianteActual?.precioNino ?? precioAdulto
   const subtotal = adultos * precioAdulto + ninos * precioNino
 
-  // Redirect on success
-  if (state.success && state.reservaId) {
-    router.push(`/cliente/excursiones/${state.reservaId}`)
+  // Redirect on success — in useEffect to avoid setState-during-render
+  useEffect(() => {
+    if (state.success && state.reservaId) {
+      router.push(`/cliente/excursiones/${state.reservaId}`)
+    }
+  }, [state.success, state.reservaId, router])
+
+  // Auto-follow on first submit attempt if not following
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (!isAuthenticated || pending) return
+    // Ensure the user follows this company before reserving
+    if (!followedRef.current) {
+      e.preventDefault()
+      setFollowingPending(true)
+      const result = await toggleSeguirEmpresa(companyId)
+      setFollowingPending(false)
+      if (result.error) {
+        // If follow fails, still try to reserve — the action handles missing profile
+        ;(e.target as HTMLFormElement).requestSubmit()
+        return
+      }
+      followedRef.current = true
+      setIsFollowing(true)
+      // Now submit the form
+      ;(e.target as HTMLFormElement).requestSubmit()
+      return
+    }
+    // Already following — let the form action proceed
   }
 
   const hoy = new Date().toISOString().split('T')[0]
+
+  // Not authenticated — show CTA
+  if (!isAuthenticated) {
+    return (
+      <div className="rounded-xl border bg-card p-6 text-center shadow-sm">
+        <h3 className="text-h3 font-bold">Reservar</h3>
+        {precioDesde != null && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Desde {formatMoney(precioDesde, { moneda })}
+          </p>
+        )}
+        <p className="mt-4 text-sm text-muted-foreground">
+          Inicia sesión o crea una cuenta para reservar esta excursión.
+        </p>
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <Link
+            href={`/login?redirect=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionId}`)}`}
+            className="flex-1 rounded-lg border bg-card py-3 text-center text-sm font-semibold transition hover:bg-muted"
+          >
+            Iniciar sesión
+          </Link>
+          <Link
+            href={`/registro/${companySlug}?next=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionId}`)}`}
+            className="flex-1 rounded-lg bg-primary py-3 text-center text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            Crear cuenta
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -70,7 +137,7 @@ export function ReservaExcursionForm({
         </p>
       )}
 
-      <form action={action} className="space-y-4">
+      <form action={action} onSubmit={handleSubmit} className="space-y-4">
         <input type="hidden" name="companyId" value={companyId} />
         <input type="hidden" name="excursionId" value={excursionId} />
 
@@ -228,10 +295,15 @@ export function ReservaExcursionForm({
         {/* Submit */}
         <button
           type="submit"
-          disabled={pending || !fecha}
+          disabled={pending || followingPending || !fecha}
           className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {pending ? (
+          {followingPending ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Preparando...
+            </span>
+          ) : pending ? (
             <span className="flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
               Reservando...
