@@ -17,6 +17,7 @@ import { getCompanyResenas, getMiResena } from '@/modules/resenas/queries'
 import { ResenaForm } from '@/components/marketplace/ResenaForm'
 import { requisitosPara } from '@/modules/elegibilidad'
 import { decisionCtaPlanes } from '@/modules/marketplace/conversion'
+import { companyIdPorSlug, excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,7 +70,7 @@ export default async function ClienteEmpresaPage({
   const esCliente = fichaAqui != null
   const esActiva = company.id === user.metadata.companyId
 
-  const [stats, planes, promotions, posts, prefs, resenas, miResena, sucursales, sigo] =
+  const [stats, planes, promotions, posts, prefs, resenas, miResena, sucursales, sigo, excursionesData] =
     await Promise.all([
       getCompanyStats(companySlug),
       getCompanyPlanesPublic(company.id),
@@ -83,7 +84,22 @@ export default async function ClienteEmpresaPage({
       getMiResena(company.id, user.supabaseId),
       getSucursalesPublic(company.id),
       getSeguidasIds(user.metadata.dbUserId).then((s) => s.has(company.id)).catch(() => false),
+      companyIdPorSlug(companySlug).then((cid) =>
+        cid ? excursionesPublicas(cid) : Promise.resolve([])
+      ),
     ])
+
+  const excursiones = excursionesData.map((exc) => ({
+    id: exc.id,
+    nombre: exc.nombre,
+    slug: exc.slug,
+    portadaUrl: exc.portadaUrl,
+    categoria: exc.categoria,
+    moneda: exc.moneda,
+    duracionMin: exc.duracionMin,
+    ubicacion: exc.ubicacion,
+    precioDesde: exc.variantes[0]?.precioAdulto ?? null,
+  }))
 
   // Solo clientes de la empresa pueden opinar (su ficha Cliente existe allí).
   const puedeOpinar = miResena.esCliente
@@ -179,6 +195,7 @@ export default async function ClienteEmpresaPage({
           />
         ) : undefined
       }
+      excursiones={excursiones}
     />
   )
 }

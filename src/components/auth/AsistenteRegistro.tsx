@@ -137,7 +137,9 @@ export function AsistenteRegistro({
   const glCode = searchParams.get('gl') ?? ''
   const nextRaw = searchParams.get('next') ?? ''
   const nextSeguro = nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : null
-  const destino = nextSeguro ?? '/cliente/celebracion'
+  // Si vino con código de referido, aterriza en la pantalla de bienvenida de
+  // la empresa referidora (muestra membresías activas + excursiones disponibles).
+  const destino = nextSeguro ?? (refCode ? `/cliente/bienvenida-ref/${companySlug}` : '/cliente/celebracion')
 
   const accion = modo === 'empresa' ? registrarCliente : registrarCuentaGeneral
   const [state, dispatch, pending] = useActionState(accion, initial)

@@ -195,3 +195,31 @@ export async function clientesParaReserva(companyId: string) {
     })
   )
 }
+
+/** Detalle de reserva para el cliente (solo sus propias reservas). */
+export async function reservaCliente(companyId: string, clienteId: string, reservaId: string) {
+  const reserva = await conEmpresa(companyId, (tx) =>
+    tx.reservaExc.findFirst({
+      where: { id: reservaId, companyId, clienteId },
+      include: {
+        pasajeros: { orderBy: { tipo: 'asc' } },
+        pagos: { where: { estado: 'REGISTRADO' }, orderBy: { createdAt: 'desc' } },
+      },
+    })
+  )
+  if (!reserva) return null
+
+  const excursion = await conEmpresa(companyId, (tx) =>
+    tx.excursion.findFirst({
+      where: { id: reserva.excursionId, companyId },
+      select: { id: true, nombre: true, slug: true, moneda: true, puntoSalida: true },
+    })
+  )
+
+  const saldo = calcularSaldo(
+    Number(reserva.total),
+    reserva.pagos.map((p) => ({ monto: Number(p.monto), estado: p.estado }))
+  )
+
+  return { reserva, excursion, saldo }
+}

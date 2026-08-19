@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Newspaper,
   Clock,
+  Compass,
 } from 'lucide-react'
 import { PromotionGrid } from '@/components/public/PromotionGrid'
 import { FollowButton } from '@/components/public/FollowButton'
@@ -84,6 +85,19 @@ export interface CompanyProfileProps {
   backHref?: string
   backLabel?: string
 
+  /** Excursiones públicas de la empresa (opcional). */
+  excursiones?: {
+    id: string
+    nombre: string
+    slug: string
+    portadaUrl: string | null
+    categoria: string | null
+    moneda: string
+    duracionMin: number | null
+    ubicacion: string | null
+    precioDesde: number | null
+  }[]
+
   /**
    * Botón principal del modo 'app', resuelto por quien conoce la sesión.
    *
@@ -117,6 +131,7 @@ export function CompanyProfile({
   backLabel,
   ctaSlot,
   relacionSlot,
+  excursiones = [],
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
@@ -145,6 +160,7 @@ export function CompanyProfile({
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
     posts.eventos.length > 0 && { id: 'eventos', label: 'Eventos' },
     posts.noticias.length > 0 && { id: 'noticias', label: 'Noticias' },
+    excursiones.length > 0 && { id: 'excursiones', label: 'Excursiones' },
     company.galleryImages.length > 0 && { id: 'galeria', label: 'Galería' },
     hayResenas && { id: 'resenas', label: 'Reseñas' },
     { id: 'informacion', label: 'Información' },
@@ -603,6 +619,72 @@ export function CompanyProfile({
                   <h3 className="mt-2 font-semibold text-foreground">{n.titulo}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">{n.contenido}</p>
                 </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Excursiones */}
+        {excursiones.length > 0 && (
+          <section id="excursiones" className="mt-14 scroll-mt-32">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              Excursiones
+            </h2>
+            <p className="mt-2 text-muted-foreground">
+              Experiencias y tours disponibles.
+            </p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {excursiones.map((exc) => (
+                <Link
+                  key={exc.id}
+                  href={`/empresas/${company.slug}/excursiones/${exc.slug}`}
+                  className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
+                >
+                  <div className="relative aspect-[16/10] bg-muted">
+                    {exc.portadaUrl ? (
+                      <Image
+                        src={exc.portadaUrl}
+                        alt={exc.nombre}
+                        fill
+                        className="object-cover transition group-hover:scale-105"
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Compass className="h-10 w-10 text-muted-foreground/30" />
+                      </div>
+                    )}
+                    {exc.categoria && (
+                      <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
+                        {exc.categoria}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold group-hover:text-primary">
+                      {exc.nombre}
+                    </h3>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      {exc.duracionMin && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />
+                          {exc.duracionMin} min
+                        </span>
+                      )}
+                      {exc.ubicacion && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5" />
+                          {exc.ubicacion}
+                        </span>
+                      )}
+                    </div>
+                    {exc.precioDesde != null && (
+                      <p className="mt-2 text-sm font-semibold text-primary">
+                        Desde {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
+                      </p>
+                    )}
+                  </div>
+                </Link>
               ))}
             </div>
           </section>
