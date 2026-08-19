@@ -49,7 +49,7 @@ export default async function ComisionesPage() {
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {resumen.map((r) => (
             <div key={r.estado} className="rounded-xl border border-border bg-card p-3 text-center">
-              <dd className="text-h3 text-foreground">{formatMoney(r.total, null, 2)}</dd>
+              <dd className="text-h3 text-foreground">{formatMoney(r.total, { moneda: r.moneda }, 2)}</dd>
               <dt className="text-caption text-muted-foreground">
                 {ESTADO_COMISION_LABEL[r.estado as EstadoComision] ?? r.estado} · {r.cantidad}
               </dt>

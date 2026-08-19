@@ -310,7 +310,10 @@ export function calcularComision(
       desglose = 'Tipo de cálculo no reconocido: comisión en cero'
   }
 
-  if (monto > base && base > 0) {
+  if (base === 0) {
+    monto = 0
+    desglose = `${desglose} — base cero (venta sin ingreso): comisión en cero`
+  } else if (monto > base) {
     monto = base
     desglose = `${desglose} — topado a la base (${base}): la regla daba más de lo que entró`
   }
@@ -325,7 +328,7 @@ export function calcularComision(
       tipoCalculo: regla.tipoCalculo,
       valor,
       ...(escalones.length ? { escalones } : {}),
-      aplicadaAt: new Date().toISOString(),
+      aplicadaAt: ctx.fecha.toISOString(),
     },
   }
 }
