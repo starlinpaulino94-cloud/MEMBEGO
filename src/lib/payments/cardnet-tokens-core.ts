@@ -136,6 +136,43 @@ export interface ResultadoCompraToken {
   codigo: string
   /** Mensaje corto para el cliente (sin filtrar detalle del banco). */
   motivo: string | null
+  /**
+   * El servicio dijo que la tarjeta todavía no está activada (CS012). No es un
+   * rechazo del banco: falta que el cliente teclee su código de 6 caracteres.
+   */
+  requiereActivacion: boolean
+}
+
+/**
+ * CS012 · PROFILE_MUST_BE_ACTIVATED_FIRST — «El PaymentProfile aún no ha sido
+ * activado» (tabla de códigos de error del manual §9.1).
+ *
+ * POR QUÉ SE MIRA ESTE ERROR Y NO SOLO EL CAMPO `Enabled`
+ *
+ * La pantalla del código de activación se decidía SOLO por `Enabled: false` en
+ * el listado de perfiles. Ese campo es «Solo Lectura» en el manual (§7.4), pero
+ * no está garantizado que venga en toda respuesta — y cuando no viene, el
+ * parser asume habilitado (a propósito: un campo ausente no debe bloquear un
+ * cobro que sí habría pasado). El resultado es el peor de los dos mundos: se
+ * intenta cobrar, el servicio responde CS012, y al cliente le sale un error
+ * genérico en vez del campo donde escribir el código que su banco acaba de
+ * mandarle.
+ *
+ * Este error es la fuente MÁS FIABLE: no es un campo que puede faltar, es la
+ * respuesta explícita del servicio a la pregunta exacta.
+ */
+export function exigeActivacionPrimero(
+  errores: { codigo: string; mensaje: string }[]
+): boolean {
+  return errores.some((e) => {
+    const codigo = (e.codigo ?? '').trim().toUpperCase()
+    const mensaje = (e.mensaje ?? '').trim().toUpperCase()
+    return (
+      codigo === 'CS012' ||
+      mensaje.includes('PROFILE_MUST_BE_ACTIVATED') ||
+      mensaje.includes('MUST BE ACTIVATED')
+    )
+  })
 }
 
 /**
@@ -287,6 +324,7 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
     // cliente: es lo que hay que mandarle a CardNET cuando toca reclamar.
     codigo: codigo || (aprobada ? '00' : ''),
     motivo,
+    requiereActivacion: !aprobada && exigeActivacionPrimero(errores),
   }
 }
 

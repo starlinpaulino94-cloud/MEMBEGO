@@ -136,6 +136,7 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
       autorizacion: null,
       codigo: '',
       motivo: 'El pago con tarjeta no está disponible.',
+      requiereActivacion: false,
       crudo: {},
     }
   }
@@ -179,6 +180,7 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
       autorizacion: null,
       codigo: '',
       motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.',
+      requiereActivacion: false,
       crudo: evidencia(status, json),
     }
   }

@@ -165,6 +165,30 @@ servidor activa y **cobra en el mismo movimiento** (`activarTarjetaPendiente`
 rechaza el código, el mensaje advierte de los 3 intentos; si el perfil
 desapareció (tercer fallo), se le pide registrar la tarjeta de nuevo.
 
+### Dos disparadores de la pantalla del código (19-08-2026)
+
+La pantalla del código de activación es NUESTRA — vive en
+`src/components/membresia/PagoTokenCardnet.tsx`, estado `activacion` — y se
+abre cuando el servidor lo dice. Ahora tiene **dos** disparadores, no uno:
+
+| Disparador | De dónde sale | Cuándo sirve |
+|---|---|---|
+| `Enabled: false` en el perfil | `GET /Customer/{id}` → `extraerPerfiles` | Cuando el listado trae el campo |
+| **Error `CS012`** en el `Purchase` | `interpretarCompraToken` → `exigeActivacionPrimero` | Siempre que se intente cobrar |
+
+`CS012` (`PROFILE_MUST_BE_ACTIVATED_FIRST`, tabla §9.1) es la fuente más
+fiable de las dos: `Enabled` es un campo «Solo Lectura» (§7.4) que puede no
+venir en una respuesta, y cuando no viene el parser asume **habilitado** —a
+propósito, para que un campo ausente no bloquee un cobro que sí habría
+pasado—. Con solo ese disparador, el caso «el campo no vino» terminaba en un
+callejón: se intentaba cobrar, CardNET respondía `CS012`, y al cliente le
+salía «no se pudo procesar el pago» **con el código de su banco en la mano y
+ningún lugar donde escribirlo**. El error no es un campo opcional: es la
+respuesta explícita del servicio a esa pregunta exacta.
+
+Un rechazo del emisor (fondos, tarjeta vencida) **no** abre esa pantalla:
+mandaría al cliente a buscar un código que no existe. Fijado en pruebas.
+
 ### El contrato del `activate`, fijado (18-08-2026)
 
 El cuerpo es el objeto **`CustomerActivation`** del manual §7.5, con **dos

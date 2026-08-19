@@ -31,6 +31,13 @@ import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
 
 export type CobroTokenResultado =
   | { estado: 'aprobado'; compraId: string | null; membershipId: string | null }
+  /**
+   * La pasarela contestó CS012 (`PROFILE_MUST_BE_ACTIVATED_FIRST`): la tarjeta
+   * existe pero todavía no está activada. NO es un rechazo del banco — falta
+   * que el cliente teclee el código de 6 caracteres del microcargo. Ver
+   * `exigeActivacionPrimero` en cardnet-tokens-core.ts.
+   */
+  | { estado: 'pendiente_activacion'; motivo: string; ultimos4: string | null }
   | { estado: 'rechazado'; motivo: string }
   | { estado: 'error'; motivo: string }
 
@@ -105,6 +112,23 @@ export async function cobrarObjetivoConToken(input: {
 
   if (res.ok) {
     return { estado: 'aprobado', compraId: res.compraId, membershipId: res.membershipId }
+  }
+  // SEGUNDA fuente de la pantalla de activación, y la más fiable.
+  //
+  // Hasta aquí, esa pantalla se abría SOLO si el listado de perfiles traía
+  // `Enabled: false`. Ese campo puede no venir, y cuando no viene se asume
+  // habilitado (a propósito: un campo ausente no debe bloquear un cobro que sí
+  // habría pasado). Entonces se intentaba cobrar, CardNET respondía CS012, y
+  // al cliente le salía «no se pudo procesar el pago» — un callejón sin salida
+  // con el código de activación ya en su app del banco y ningún lugar donde
+  // escribirlo. El error CS012 no es un campo opcional: es la respuesta
+  // explícita del servicio a esa pregunta exacta.
+  if (cobro.requiereActivacion) {
+    return {
+      estado: 'pendiente_activacion',
+      motivo: MENSAJE_ACTIVACION_PENDIENTE,
+      ultimos4: null,
+    }
   }
   if (res.estado === 'RECHAZADO') {
     return { estado: 'rechazado', motivo: cobro.motivo ?? 'La tarjeta fue rechazada.' }
@@ -267,6 +291,12 @@ export async function cobrarPendienteConPerfil(input: {
         ultimos4: perfil.ultimos4,
       },
     }
+  }
+  // El cobro llegó a CS012: aquí SÍ se sabe de qué tarjeta se trata, así que
+  // se completan los últimos 4 antes de devolverlo (el cobro por token suelto
+  // no puede saberlo).
+  if (res.estado === 'pendiente_activacion') {
+    return { ...res, ultimos4: res.ultimos4 ?? perfil.ultimos4 }
   }
   return res
 }
