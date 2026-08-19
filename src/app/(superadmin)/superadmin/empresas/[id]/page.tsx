@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmpresaDashboard } from '@/components/superadmin/EmpresaDashboard'
 import { SembrarDemoExcursiones } from '@/components/superadmin/SembrarDemoExcursiones'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -44,10 +44,12 @@ export default async function EmpresaDetailPage({
   // La siembra de demostración solo se ofrece si la empresa está marcada como
   // demo Y tiene la capacidad: proponer un botón que el servidor va a rechazar
   // es peor que no ofrecerlo.
-  const ficha = await prisma.company.findUnique({
-    where: { id },
-    select: { esDemo: true, capacidades: true, type: true, tipoNegocioCodigo: true },
-  })
+  const ficha = await sinEmpresa('el superadmin abre la ficha de cualquier empresa', (tx) =>
+    tx.company.findUnique({
+      where: { id },
+      select: { esDemo: true, capacidades: true, type: true, tipoNegocioCodigo: true },
+    })
+  )
   const ofreceDemoExcursiones =
     !!ficha?.esDemo && capacidadesDeEmpresa(ficha).activas.has('EXCURSIONES')
   const Icon = company.type === 'carwash' ? Car : UtensilsCrossed
