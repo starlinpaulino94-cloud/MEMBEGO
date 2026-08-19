@@ -10,6 +10,7 @@ import {
   textoSeguroWidget,
   imagenSeguraWidget,
 } from '@/lib/payments/cardnet-widget'
+import { normalizarCodigoActivacion } from '@/lib/payments/cardnet-tokens-core'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -637,17 +638,38 @@ export function PagoTokenCardnet({
    * activa el perfil contra CardNET y, si queda habilitado, cobra por la
    * tubería idempotente de siempre.
    */
+  /**
+   * El código EXACTO que el servidor va a recibir, derivado en cada render.
+   * Se deriva a propósito en vez de guardarse en estado: un segundo estado que
+   * hay que mantener sincronizado con el primero es una forma conocida de que
+   * la vista previa enseñe una cosa y se envíe otra.
+   */
+  const codigoNormalizado = normalizarCodigoActivacion(codigoActivacion)
+
   const activarYCobrar = useCallback(async () => {
-    if (activando || !codigoActivacion.trim()) return
+    // Mismo criterio que el botón y que el servidor: si al normalizar no
+    // quedan 6 caracteres, no se llama a CardNET. Un intento vale demasiado
+    // (3 y el banco borra la tarjeta) como para gastarlo en un formato malo.
+    if (activando || !codigoNormalizado) return
     setActivando(true)
     setMensaje(null)
     try {
       const resp = await fetch('/api/pagos/cardnet-token/activar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // TIEMPO LÍMITE del lado del navegador. Sin esto, si el servidor se
+        // cae a media secuencia —o la plataforma corta la función por tiempo—
+        // la promesa nunca se resuelve y el botón queda girando para siempre.
+        // Un spinner eterno es peor que un error: el cliente no sabe si se le
+        // cobró, y lo único que puede hacer es recargar y arriesgarse a
+        // gastar otro de sus 3 intentos.
+        signal: AbortSignal.timeout(70_000),
         body: JSON.stringify({
           membershipId,
-          codigo: codigoActivacion,
+          // Se manda el YA normalizado para que «Se enviará: XXXXXX» sea
+          // literalmente cierto. El servidor lo normaliza igual (no se confía
+          // en el navegador); normalizar lo normalizado no lo cambia.
+          codigo: codigoNormalizado,
           customerId: customerIdRef.current,
           guardar: guardarRef.current,
         }),
@@ -677,12 +699,22 @@ export function PagoTokenCardnet({
       // sin_perfil / error: se explica y se vuelve al inicio del flujo.
       setEstado('error')
       setMensaje(data.motivo ?? 'No se pudo activar la tarjeta. Intenta de nuevo.')
-    } catch {
-      setMensaje('No se pudo contactar el servidor. Revisa tu conexión e intenta de nuevo.')
+    } catch (e) {
+      // Se distingue «se acabó el tiempo» de «no hay red»: son situaciones
+      // distintas y lo que el cliente debe hacer también. Ante un corte por
+      // tiempo NO se le invita a reintentar a ciegas — la activación pudo
+      // haber ocurrido del otro lado, y reintentar gastaría un intento de los
+      // 3 por algo que quizá ya funcionó.
+      const porTiempo = e instanceof DOMException && e.name === 'TimeoutError'
+      setMensaje(
+        porTiempo
+          ? 'La pasarela está tardando más de lo normal. NO vuelvas a enviar el código todavía: recarga la página para ver si la activación se completó.'
+          : 'No se pudo contactar el servidor. Revisa tu conexión e intenta de nuevo.'
+      )
     } finally {
       setActivando(false)
     }
-  }, [activando, codigoActivacion, membershipId, router, urlExito])
+  }, [activando, codigoNormalizado, membershipId, router, urlExito])
 
   if (estado === 'aprobado') {
     return (
@@ -712,71 +744,153 @@ export function PagoTokenCardnet({
       )}
 
       {/* ACTIVACIÓN (llaves CON autenticación · §4.1.2.3): el banco cobró
-          RD$1.00 y mostró un código de 6 dígitos; se ingresa aquí y el
-          servidor activa la tarjeta y cobra en el mismo movimiento. */}
+          RD$1.00 y mostró un código de 6 caracteres; se ingresa aquí y el
+          servidor activa la tarjeta y cobra en el mismo movimiento.
+
+          La pieza que más trabaja de esta pantalla no es el campo: es el
+          EJEMPLO del cargo y la vista previa de lo que se va a enviar. El
+          cliente tiene 3 intentos y al tercero el banco borra la tarjeta, así
+          que cada intento gastado por una confusión de formato —copiar el
+          prefijo, un espacio de más— es caro. Enseñarle exactamente qué
+          buscar y exactamente qué se va a mandar convierte una apuesta en una
+          comprobación. */}
       {estado === 'activacion' && (
-        <div className="space-y-3 rounded-2xl border border-warning/30 bg-warning/5 p-4">
-          <p className="text-sm font-semibold text-foreground">Activa tu tarjeta para completar el pago</p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {mensaje ??
-              'Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo aquí.'}
-          </p>
-          <label className="block">
-            <span className="sr-only">Código de activación</span>
-            <input
-              type="text"
-              inputMode="text"
-              autoComplete="one-time-code"
-              autoCapitalize="characters"
-              spellCheck={false}
-              maxLength={24}
-              value={codigoActivacion}
-              onChange={(e) => setCodigoActivacion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  void activarYCobrar()
-                }
-              }}
-              placeholder="Cardnet:XXXXXX"
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="flex items-start gap-3 border-b border-border bg-warning/5 px-5 py-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/15">
+              <ShieldCheck className="h-5 w-5 text-warning" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-base font-semibold leading-tight text-foreground">
+                Verifica tu tarjeta
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Último paso para completar el pago
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4 px-5 py-5">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Tu banco hizo un cargo de <strong className="font-semibold text-foreground">RD$1.00</strong>{' '}
+              para confirmar que la tarjeta es tuya. En la descripción de ese cargo viene un
+              código de <strong className="font-semibold text-foreground">6 caracteres</strong>.
+            </p>
+
+            {/* Cómo se ve el cargo en el estado de cuenta. Es un EJEMPLO
+                ilustrativo, rotulado como tal: quien nunca lo ha visto no sabe
+                qué está buscando, y «búscalo en tu banco» no se lo dice. */}
+            <div className="rounded-2xl border border-border bg-muted/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Ejemplo · así aparece en tu app del banco
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-background px-3 py-2.5">
+                <span className="truncate font-mono text-sm text-foreground">
+                  CARDNET:<span className="rounded bg-warning/20 px-1 py-0.5 font-semibold text-foreground">Z2R78V</span>
+                </span>
+                <span className="shrink-0 font-mono text-sm text-muted-foreground">RD$1.00</span>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="codigo-activacion" className="mb-1.5 block text-sm font-medium text-foreground">
+                Tu código de verificación
+              </label>
+              <input
+                id="codigo-activacion"
+                type="text"
+                inputMode="text"
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                autoFocus
+                spellCheck={false}
+                maxLength={24}
+                value={codigoActivacion}
+                onChange={(e) => setCodigoActivacion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void activarYCobrar()
+                  }
+                }}
+                placeholder="Z2R78V"
+                disabled={activando}
+                className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3.5 text-center font-mono text-2xl font-semibold uppercase tracking-[0.35em] text-foreground transition-colors placeholder:text-lg placeholder:font-normal placeholder:tracking-[0.2em] placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none disabled:opacity-60"
+              />
+              {/* VISTA PREVIA de lo que realmente se va a enviar.
+                  `normalizarCodigoActivacion` es la MISMA función pura que usa
+                  el servidor, así que esto no es una aproximación: es el valor
+                  exacto. Puedes pegar «Cardnet:z2r78v» entero y ver que sale
+                  Z2R78V antes de gastar uno de los 3 intentos. */}
+              <p className="mt-2 min-h-[1.25rem] text-center text-xs" aria-live="polite">
+                {codigoActivacion.trim() === '' ? (
+                  <span className="text-muted-foreground">
+                    Puedes pegar la línea completa del banco, con prefijo y todo.
+                  </span>
+                ) : codigoNormalizado ? (
+                  <span className="font-medium text-success">
+                    Se enviará: <span className="font-mono tracking-widest">{codigoNormalizado}</span>
+                  </span>
+                ) : (
+                  <span className="font-medium text-muted-foreground">
+                    Faltan caracteres — el código tiene 6 letras o números.
+                  </span>
+                )}
+              </p>
+            </div>
+
+            {/* El motivo del servidor solo se enseña cuando dice algo que esta
+                pantalla no dice ya. Repetir «falta activarla» debajo de un
+                título que es justamente eso es ruido; un «código rechazado»,
+                en cambio, es la información más importante del momento. */}
+            {mensaje && !mensaje.startsWith('Tu tarjeta quedó registrada') ? (
+              <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
+              </p>
+            ) : null}
+
+            <Button
+              type="button"
+              variant="premium"
+              onClick={() => void activarYCobrar()}
+              disabled={activando || !codigoNormalizado}
+              className="w-full rounded-2xl py-6 text-base font-semibold"
+            >
+              {activando ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando y cobrando…
+                </>
+              ) : (
+                <>
+                  <Lock className="mr-2 h-4 w-4" /> Verificar y pagar {montoTexto}
+                </>
+              )}
+            </Button>
+
+            <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>
+                Tienes <strong className="font-semibold text-foreground">3 intentos</strong>. Al
+                tercero fallido el banco elimina la tarjeta y hay que registrarla de nuevo. El
+                cargo de RD$1.00 es solo de verificación.
+              </span>
+            </p>
+          </div>
+
+          <div className="border-t border-border px-5 py-3">
+            <button
+              type="button"
               disabled={activando}
-              className="w-full rounded-xl border border-border bg-background px-4 py-3 text-center font-mono text-lg tracking-widest uppercase placeholder:normal-case placeholder:tracking-normal placeholder:font-sans placeholder:text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-          </label>
-          <Button
-            type="button"
-            variant="premium"
-            onClick={() => void activarYCobrar()}
-            disabled={activando || !codigoActivacion.trim()}
-            className="w-full rounded-2xl py-6 text-base font-semibold"
-          >
-            {activando ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Activando y cobrando…
-              </>
-            ) : (
-              <>
-                <Lock className="mr-2 h-4 w-4" /> Activar y pagar {montoTexto}
-              </>
-            )}
-          </Button>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Tienes 3 intentos: al tercero fallido, el banco elimina la tarjeta y
-            tendrás que registrarla de nuevo. El cargo de RD$1.00 es solo de
-            verificación.
-          </p>
-          <button
-            type="button"
-            disabled={activando}
-            onClick={() => {
-              setEstado('listo')
-              setMensaje(null)
-              setCodigoActivacion('')
-            }}
-            className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            Usar otra tarjeta
-          </button>
+              onClick={() => {
+                setEstado('listo')
+                setMensaje(null)
+                setCodigoActivacion('')
+              }}
+              className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:opacity-50"
+            >
+              Usar otra tarjeta
+            </button>
+          </div>
         </div>
       )}
 
