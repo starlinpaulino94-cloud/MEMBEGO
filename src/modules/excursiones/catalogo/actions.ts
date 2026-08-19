@@ -218,18 +218,20 @@ export async function guardarVariante(
     if (!v.ok) return { error: v.error }
 
     const varianteId = String(formData.get('varianteId') ?? '').trim()
-    await conEmpresa(companyId, async (tx) => {
+    const resultado = await conEmpresa(companyId, async (tx) => {
       if (varianteId) {
-        await tx.excursionVariante.updateMany({
+        const result = await tx.excursionVariante.updateMany({
           where: { id: varianteId, excursionId, companyId },
           data: v.datos,
         })
-      } else {
-        await tx.excursionVariante.create({
-          data: { excursionId, companyId, ...v.datos },
-        })
+        return result.count === 0 ? 'no_encontrada' : 'ok'
       }
+      await tx.excursionVariante.create({
+        data: { excursionId, companyId, ...v.datos },
+      })
+      return 'ok' as const
     })
+    if (resultado === 'no_encontrada') return { error: 'Variante no encontrada.' }
     revalidatePath(`/admin/excursiones/catalogo/${excursionId}`)
     return { success: varianteId ? 'Variante actualizada.' : 'Variante creada.' }
   } catch (e) {
@@ -310,16 +312,18 @@ export async function guardarHorario(
     if (!v.ok) return { error: v.error }
 
     const horarioId = String(formData.get('horarioId') ?? '').trim()
-    await conEmpresa(companyId, async (tx) => {
+    const resultado = await conEmpresa(companyId, async (tx) => {
       if (horarioId) {
-        await tx.excursionHorario.updateMany({
+        const result = await tx.excursionHorario.updateMany({
           where: { id: horarioId, excursionId, companyId },
           data: v.datos,
         })
-      } else {
-        await tx.excursionHorario.create({ data: { excursionId, companyId, ...v.datos } })
+        return result.count === 0 ? 'no_encontrada' : 'ok'
       }
+      await tx.excursionHorario.create({ data: { excursionId, companyId, ...v.datos } })
+      return 'ok' as const
     })
+    if (resultado === 'no_encontrada') return { error: 'Horario no encontrado.' }
     revalidatePath(`/admin/excursiones/catalogo/${excursionId}`)
     return { success: horarioId ? 'Horario actualizado.' : 'Horario agregado.' }
   } catch (e) {
