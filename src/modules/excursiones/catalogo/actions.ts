@@ -146,9 +146,10 @@ export async function actualizarExcursion(
     const v = validarExcursion(deForm(formData, CAMPOS_EXCURSION))
     if (!v.ok) return { error: v.error }
 
-    await conEmpresa(companyId, (tx) =>
+    await conEmpresa(companyId, async (tx) =>
       tx.excursion.update({ where: { id: excursionId }, data: v.datos })
     )
+    await sincronizarEstadoAgotada(companyId, excursionId)
     await auditar(companyId, user.metadata.dbUserId ?? null, excursionId, {
       tipo: 'EXCURSION_ACTUALIZADA',
     })
@@ -233,6 +234,7 @@ export async function guardarVariante(
     })
     if (resultado === 'no_encontrada') return { error: 'Variante no encontrada.' }
     revalidatePath(`/admin/excursiones/catalogo/${excursionId}`)
+    await sincronizarEstadoAgotada(companyId, excursionId)
     return { success: varianteId ? 'Variante actualizada.' : 'Variante creada.' }
   } catch (e) {
     console.error('[excursiones] variante:', e)
@@ -325,6 +327,7 @@ export async function guardarHorario(
     })
     if (resultado === 'no_encontrada') return { error: 'Horario no encontrado.' }
     revalidatePath(`/admin/excursiones/catalogo/${excursionId}`)
+    await sincronizarEstadoAgotada(companyId, excursionId)
     return { success: horarioId ? 'Horario actualizado.' : 'Horario agregado.' }
   } catch (e) {
     console.error('[excursiones] horario:', e)
@@ -347,10 +350,113 @@ export async function eliminarHorario(
     await conEmpresa(companyId, (tx) =>
       tx.excursionHorario.deleteMany({ where: { id: horarioId, excursionId, companyId } })
     )
+    await sincronizarEstadoAgotada(companyId, excursionId)
     revalidatePath(`/admin/excursiones/catalogo/${excursionId}`)
     return { success: 'Horario eliminado.' }
   } catch (e) {
     console.error('[excursiones] eliminarHorario:', e)
     return { error: 'No se pudo eliminar el horario.' }
   }
+}
+
+/** Recalcula y sincroniza el estado AGOTADA de una excursión según su disponibilidad. */
+export async function sincronizarEstadoAgotada(companyId: string, excursionId: string): Promise<void> {
+  await conEmpresa(companyId, async (tx) => {
+    const excursion = await tx.excursion.findFirst({
+      where: { id: excursionId, companyId },
+      select: { id: true, capacidad: true, estado: true, horarios: { where: { activo: true }, select: { id: true, diasSemana: true, horaSalida: true, cupo: true } } },
+    })
+    if (!excursion || excursion.estado === 'ARCHIVADA') return
+
+    // Calcular disponibilidad real (próximos 90 días)
+    const capacidad = excursion.capacidad ?? 0
+    if (capacidad <= 0 || excursion.horarios.length === 0) {
+      if (excursion.estado !== 'AGOTADA') {
+        await tx.excursion.update({ where: { id: excursionId }, data: { estado: 'AGOTADA' } })
+      }
+      return
+    }
+
+    // Verificar si hay al menos una salida futura con cupo
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const dentroDe90 = new Date(hoy)
+    dentroDe90.setDate(dentroDe90.getDate() + 90)
+
+    const reservas = await tx.reservaExc.findMany({
+      where: {
+        companyId,
+        excursionId: excursion.id,
+        fecha: { gte: hoy, lte: dentroDe90 },
+        estado: { notIn: ['CANCELADA', 'NO_SHOW', 'COMPLETADA'] },
+      },
+      select: { fecha: true, hora: true, adultos: true, ninos: true },
+    })
+
+    const reservasMap = new Map<string, number>()
+    for (const r of reservas) {
+      const fechaStr = r.fecha.toISOString().split('T')[0]
+      const key = `${fechaStr}|${r.hora || ''}`
+      reservasMap.set(key, (reservasMap.get(key) || 0) + r.adultos + r.ninos)
+    }
+
+    const DIAS_SEMANA_MAP = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 0 } as const
+
+    function generarFechasParaDia(diaSemana: number, limiteDias = 90): string[] {
+      const fechas: string[] = []
+      const hoy = new Date()
+      hoy.setHours(0, 0, 0, 0)
+      const targetDay = diaSemana === 7 ? 0 : diaSemana
+      let fecha = new Date(hoy)
+      const diff = (targetDay - fecha.getDay() + 7) % 7
+      fecha.setDate(fecha.getDate() + diff)
+      for (let i = 0; i < limiteDias; i += 7) {
+        if (fecha > new Date()) fechas.push(fecha.toISOString().split('T')[0])
+        fecha.setDate(fecha.getDate() + 7)
+      }
+      return fechas
+    }
+
+    let hayDisponibilidad = false
+
+    for (const horario of excursion.horarios) {
+      const dias = (horario.diasSemana ?? []) as number[]
+      for (const diaSemana of dias) {
+        const fechas = generarFechasParaDia(diaSemana)
+        for (const fecha of fechas) {
+          const key = `${fecha}|${horario.horaSalida}`
+          const reservados = reservasMap.get(key) || 0
+          const cupoEfectivo = excursion.capacidad ?? 0
+          const cupoDisponible = Math.max(0, cupoEfectivo - reservados)
+          const fechaObj = new Date(fecha)
+          const fechaPasada = fechaObj < new Date(new Date().setHours(0, 0, 0, 0))
+          const agotada = cupoDisponible <= 0 || fechaPasada
+          if (!agotada) {
+            hayDisponibilidad = true
+            break
+          }
+        }
+        if (hayDisponibilidad) break
+      }
+      if (hayDisponibilidad) break
+    }
+
+    const nuevoEstado = hayDisponibilidad ? 'ACTIVA' : 'AGOTADA'
+    if (excursion.estado !== nuevoEstado) {
+      await tx.excursion.update({ where: { id: excursionId }, data: { estado: nuevoEstado } })
+    }
+  })
+}
+
+/** Recalcula AGOTADA para todas las excursiones de una empresa (job nocturno). */
+export async function sincronizarTodasAgotadas(companyId: string): Promise<void> {
+  await conEmpresa(companyId, async (tx) => {
+    const excursiones = await tx.excursion.findMany({
+      where: { companyId, estado: { not: 'ARCHIVADA' } },
+      select: { id: true },
+    })
+    for (const exc of excursiones) {
+      await sincronizarEstadoAgotada(companyId, exc.id)
+    }
+  })
 }

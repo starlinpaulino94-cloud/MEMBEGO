@@ -19,13 +19,18 @@ export default async function MisExcursionesPage() {
   const user = await getUser()
   if (!user) redirect('/login')
 
-  const cliente = await prisma.cliente.findFirst({
+  // Obtener TODAS las fichas de cliente del usuario (en todas las empresas)
+  const clienteIds = await prisma.cliente.findMany({
     where: { supabaseId: user.supabaseId },
     select: { id: true, companyId: true },
   })
-  if (!cliente) redirect('/cliente/explorar')
+  if (clienteIds.length === 0) redirect('/cliente/explorar')
 
-  const reservas = await reservasCliente(cliente.companyId, cliente.id)
+  // Consultar reservas en TODAS las empresas donde tiene ficha
+  const allReservas = await Promise.all(
+    clienteIds.map((c) => reservasCliente(c.companyId, c.id))
+  )
+  const reservas = allReservas.flat().sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
   const ahora = new Date()
 
   const proximas = reservas.filter((r) => new Date(r.fecha) >= ahora)

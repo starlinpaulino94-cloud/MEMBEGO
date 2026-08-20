@@ -17,7 +17,9 @@ import {
   calcularTotales,
   numeroReserva,
   validarReserva,
+  validarDisponibilidad,
 } from './nucleo'
+import { sincronizarEstadoAgotada } from '../catalogo/actions'
 
 export interface ReservaClienteState {
   error?: string
@@ -84,6 +86,39 @@ export async function reservarExcursion(
     const variante =
       excursion.variantes.find((x) => x.id === varianteId) ?? excursion.variantes[0]
     if (!variante) return { error: 'Esa excursión no tiene variantes activas.' }
+
+    // Validar disponibilidad: fecha, horario y cupo
+    const excursionCompleta = await conEmpresa(companyId, (tx) =>
+      tx.excursion.findFirst({
+        where: { id: excursionId, companyId, estado: 'ACTIVA' },
+        select: {
+          id: true,
+          capacidad: true,
+          horarios: {
+            where: { activo: true },
+            select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+          },
+        },
+      })
+    )
+    if (!excursionCompleta) return { error: 'Esa excursión no está disponible.' }
+
+    const disp = validarDisponibilidad(
+      v.datos.fecha,
+      v.datos.hora,
+      v.datos.adultos + v.datos.ninos,
+      {
+        capacidad: excursionCompleta.capacidad,
+        horarios: excursionCompleta.horarios.map((h) => ({
+          id: h.id,
+          diasSemana: h.diasSemana as number[],
+          horaSalida: h.horaSalida,
+          cupo: h.cupo,
+        })),
+      },
+      companyId
+    )
+    if (!disp.ok) return { error: disp.error }
 
     const totales = calcularTotales({
       adultos: v.datos.adultos,
@@ -158,6 +193,9 @@ export async function reservarExcursion(
     })
 
     revalidatePath('/cliente/excursiones')
+
+    // Sincronizar estado AGOTADA tras crear reserva
+    await sincronizarEstadoAgotada(companyId, excursionId)
 
     return {
       success: 'Reserva creada. Puedes gestionar tu pago desde tu cuenta.',

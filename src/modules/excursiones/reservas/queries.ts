@@ -212,7 +212,24 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
   const excursion = await conEmpresa(companyId, (tx) =>
     tx.excursion.findFirst({
       where: { id: reserva.excursionId, companyId },
-      select: { id: true, nombre: true, slug: true, moneda: true, puntoSalida: true },
+      select: {
+        id: true,
+        nombre: true,
+        slug: true,
+        descripcion: true,
+        portadaUrl: true,
+        galeria: true,
+        duracionMin: true,
+        ubicacion: true,
+        categoria: true,
+        moneda: true,
+        puntoSalida: true,
+        horaSalida: true,
+        horaRegreso: true,
+        incluye: true,
+        noIncluye: true,
+        politicas: true,
+      },
     })
   )
 

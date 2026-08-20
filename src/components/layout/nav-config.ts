@@ -300,6 +300,7 @@ const CLIENTE_NAV: NavGroup[] = [
       { href: '/cliente/citas', label: 'Mis citas', icon: CalendarDays },
       { href: '/cliente/pagos', label: 'Mis pagos', icon: Wallet },
       { href: '/cliente/historial', label: 'Historial', icon: History },
+      { href: '/cliente/excursiones', label: 'Mis excursiones', icon: CalendarDays },
     ],
   },
   {

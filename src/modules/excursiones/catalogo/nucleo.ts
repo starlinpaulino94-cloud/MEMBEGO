@@ -201,3 +201,43 @@ export function slugExcursion(nombre: string): string {
       .slice(0, 60) || 'excursion'
   )
 }
+
+/** Convierte HH:MM a minutos desde medianoche. */
+export function horaAMinutos(hora: string): number | null {
+  const m = hora.match(/^(\d{2}):(\d{2})$/)
+  if (!m) return null
+  return Number(m[1]) * 60 + Number(m[2])
+}
+
+/** Convierte minutos a HH:MM. */
+export function minutosAHora(min: number): string {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/** Calcula duración en minutos entre horaSalida y horaRegreso. */
+export function calcularDuracion(horaSalida: string, horaRegreso: string): number | null {
+  const ini = horaAMinutos(horaSalida)
+  const fin = horaAMinutos(horaRegreso)
+  if (ini === null || fin === null) return null
+  let diff = fin - ini
+  if (diff < 0) diff += 24 * 60 // cruza medianoche
+  return diff
+}
+
+/** Calcula horaRegreso = horaSalida + duracionMin. */
+export function calcularHoraRegreso(horaSalida: string, duracionMin: number): string | null {
+  const ini = horaAMinutos(horaSalida)
+  if (ini === null) return null
+  return minutosAHora(ini + duracionMin)
+}
+
+/** Convierte minutos a string legible "Xh Ym" o "Xh". */
+export function formatearDuracion(min: number): string {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}

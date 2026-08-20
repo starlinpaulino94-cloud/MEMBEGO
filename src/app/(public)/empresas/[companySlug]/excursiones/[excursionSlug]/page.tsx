@@ -15,6 +15,7 @@ import { DIAS_SEMANA } from '@/modules/excursiones/catalogo/nucleo'
 import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { ReservaExcursionForm } from './ReservaExcursionForm'
+import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
 interface ExcursionDetailPageProps {
   params: Promise<{ companySlug: string; excursionSlug: string }>
@@ -262,6 +263,10 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
               precioDesde={precioDesde != null ? Number(precioDesde) : null}
               isAuthenticated={isAuthenticated}
               isFollowing={isFollowing}
+              proximasSalidas={exc.proximasSalidas as SalidaDisponible[]}
+              agotadaGlobal={exc.agotadaGlobal}
+              todasFechasPasadas={exc.todasFechasPasadas}
+              capacidad={exc.capacidad}
             />
           </div>
         </div>

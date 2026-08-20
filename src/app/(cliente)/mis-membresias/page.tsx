@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { CreditCard, AlertCircle, WalletCards, Gauge, CalendarClock, CalendarDays } from 'lucide-react'
+import { CreditCard, AlertCircle, WalletCards, Gauge, CalendarClock } from 'lucide-react'
 import { differenceInDays } from 'date-fns'
 import { getUser } from '@/lib/auth'
 import { membresiaEstadoUi } from '@/lib/estados'
@@ -13,9 +13,6 @@ import { PageHeader } from '@/components/ui/page-header'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Button } from '@/components/ui/button'
-import { prisma } from '@/lib/prisma'
-import { reservasCliente } from '@/modules/excursiones/reservas/queries'
-import { formatDate } from '@/lib/format'
 
 export const metadata = {
   title: 'Mis membresías',
@@ -50,21 +47,6 @@ export default async function MisMembresias() {
       '[mis-membresias] Error loading memberships:',
       error instanceof Error ? error.message : String(error)
     )
-  }
-
-  // Excursiones del cliente (globales, de todas sus empresas)
-  let reservasExcursiones: Awaited<ReturnType<typeof reservasCliente>> = []
-  try {
-    const clienteIds = await prisma.cliente.findMany({
-      where: { supabaseId: user.supabaseId },
-      select: { id: true, companyId: true },
-    })
-    const allReservas = await Promise.all(
-      clienteIds.map((c) => reservasCliente(c.companyId, c.id))
-    )
-    reservasExcursiones = allReservas.flat()
-  } catch {
-    // Silencioso: no bloquea la wallet
   }
 
   const now = new Date()
@@ -206,54 +188,6 @@ export default async function MisMembresias() {
               }
             />
           </div>
-
-          {reservasExcursiones.length > 0 && (
-            <section className="mt-6">
-              <SectionHeader
-                title="Mis excursiones"
-                description={`Tienes ${reservasExcursiones.length} reserva${reservasExcursiones.length !== 1 ? 's' : ''} de excursiones.`}
-                action={
-                  <Link href="/cliente/excursiones" className="text-sm font-medium text-primary hover:underline">
-                    Ver todas
-                  </Link>
-                }
-              />
-              <div className="mt-3 flex flex-col gap-3">
-                {reservasExcursiones
-                  .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-                  .slice(0, 3)
-                  .map((r) => (
-                    <Link
-                      key={r.id}
-                      href={`/cliente/excursiones/${r.id}`}
-                      className="flex items-center gap-3 rounded-lg border bg-card p-3 transition hover:shadow-md"
-                    >
-                      <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-muted">
-                        {r.excursion.portadaUrl ? (
-                          <img
-                            src={r.excursion.portadaUrl}
-                            alt={r.excursion.nombre}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center">
-                            <CalendarDays className="h-6 w-6 text-muted-foreground/40" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{r.excursion.nombre}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(r.fecha, { moneda: r.moneda })} · Reserva: {r.numero}
-                        </p>
-                      </div>
-                      <span className="text-muted-foreground/50">Ver</span>
-                    </Link>
-                  ))}
-              </div>
-            </section>
-          )}
 
           {porVencer.length > 0 && (
             <section>

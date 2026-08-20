@@ -1,13 +1,12 @@
-'use client'
-
-import { useState, useEffect, useRef, useActionState } from 'react'
+import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarDays, Users, Minus, Plus, Loader2 } from 'lucide-react'
+import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X } from 'lucide-react'
 import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-actions'
 import { toggleSeguirEmpresa } from '@/modules/social/actions'
 import { formatMoney } from '@/lib/format'
 import type { ReservaClienteState } from '@/modules/excursiones/reservas/cliente-actions'
+import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
 interface Variante {
   id: string
@@ -32,6 +31,10 @@ interface ReservaExcursionFormProps {
   precioDesde: number | null
   isAuthenticated: boolean
   isFollowing: boolean
+  proximasSalidas: SalidaDisponible[]
+  agotadaGlobal: boolean
+  todasFechasPasadas: boolean
+  capacidad: number | null
 }
 
 const initial: ReservaClienteState = {}
@@ -46,6 +49,10 @@ export function ReservaExcursionForm({
   precioDesde,
   isAuthenticated,
   isFollowing: initialFollowing,
+  proximasSalidas,
+  agotadaGlobal,
+  todasFechasPasadas,
+  capacidad,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
@@ -54,11 +61,41 @@ export function ReservaExcursionForm({
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
   const [fecha, setFecha] = useState('')
-  const [hora, setHora] = useState(horarios[0]?.horaSalida ?? '')
+  const [hora, setHora] = useState('')
   const [adultos, setAdultos] = useState(1)
   const [ninos, setNinos] = useState(0)
   const [notas, setNotas] = useState('')
   const [followingPending, setFollowingPending] = useState(false)
+
+  // Filtrar salidas futuras con cupo disponible
+  const salidasDisponibles = useMemo(() => {
+    const ahora = new Date()
+    ahora.setHours(0, 0, 0, 0)
+    return proximasSalidas.filter((s) => new Date(s.fecha) >= ahora && s.cupoDisponible > 0 && !s.fechaPasada)
+  }, [proximasSalidas])
+
+  // Fechas únicas disponibles
+  const fechasDisponibles = useMemo(() => {
+    const fechas = new Set(salidasDisponibles.map((s) => s.fecha))
+    return Array.from(fechas).sort()
+  }, [salidasDisponibles])
+
+  // Horarios disponibles para la fecha seleccionada
+  const horariosDisponibles = useMemo(() => {
+    if (!fecha) return []
+    return salidasDisponibles
+      .filter((s) => s.fecha === fecha)
+      .sort((a, b) => a.horaSalida.localeCompare(b.horaSalida))
+  }, [fecha, salidasDisponibles])
+
+  // Reset hora when fecha changes
+  useEffect(() => {
+    if (fecha && horariosDisponibles.length > 0) {
+      setHora(horariosDisponibles[0].horaSalida)
+    } else {
+      setHora('')
+    }
+  }, [fecha, horariosDisponibles])
 
   const varianteActual = variantes.find((v) => v.id === varianteId) ?? variantes[0]
   const precioAdulto = varianteActual?.precioAdulto ?? 0
@@ -128,6 +165,39 @@ export function ReservaExcursionForm({
     )
   }
 
+// Agotada global — show out of stock
+  if (agotadaGlobal) {
+    return (
+      <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="text-center">
+          <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
+          <h3 className="text-h3 font-bold text-destructive">Sin disponibilidad</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Esta excursión no tiene plazas disponibles en las próximas fechas.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Vuelve a consultar más adelante por si hay cancelaciones.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // No hay fechas disponibles (pero no agotada globalmente)
+  if (fechasDisponibles.length === 0) {
+    return (
+      <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="text-center">
+          <X className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+          <h3 className="text-h3 font-bold">Sin fechas disponibles</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            No hay salidas con plazas disponibles en los próximos 90 días.
+          </p>
+        </div>
+      </div>
+)
+}
+
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
       <h3 className="mb-1 text-h3 font-bold">Reservar</h3>
@@ -169,28 +239,43 @@ export function ReservaExcursionForm({
             <CalendarDays className="mr-1 inline h-4 w-4" />
             Fecha
           </label>
-          <input
-            type="date"
+          <select
             name="fecha"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
-            min={hoy}
             required
+            disabled={fechasDisponibles.length === 0}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-          />
+          >
+            <option value="">Selecciona una fecha</option>
+            {fechasDisponibles.map((f) => {
+              const salida = salidasDisponibles.find((s) => s.fecha === f)
+              const cupo = salida?.cupoDisponible ?? 0
+              return (
+                <option key={f} value={f} disabled={cupo <= 0}>
+                  {f} {cupo > 0 ? `(${cupo} plazas)` : '— Completa'}
+                </option>
+              )
+            })}
+          </select>
+          {fechasDisponibles.length === 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">No hay fechas con plazas disponibles</p>
+          )}
         </div>
 
         {/* Horario */}
-        {horarios.length > 0 && (
+        {horariosDisponibles.length > 0 && (
           <div>
             <label className="mb-1.5 block text-sm font-medium">Hora de salida</label>
             <div className="flex flex-wrap gap-2">
-              {horarios.map((h) => (
+              {horariosDisponibles.map((h) => (
                 <label
                   key={h.id}
                   className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition ${
                     hora === h.horaSalida
                       ? 'border-primary bg-primary text-primary-foreground'
+                      : h.agotada
+                      ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed'
                       : 'bg-background hover:bg-muted'
                   }`}
                 >
@@ -200,12 +285,22 @@ export function ReservaExcursionForm({
                     value={h.horaSalida}
                     checked={hora === h.horaSalida}
                     onChange={() => setHora(h.horaSalida)}
+                    disabled={h.agotada}
                     className="sr-only"
                   />
                   {h.horaSalida}
+                  {h.cupoDisponible > 0 && (
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      ({h.cupoDisponible})
+                    </span>
+                  )}
+                  {h.agotada && <X className="ml-1.5 h-3 w-3" />}
                 </label>
               ))}
             </div>
+            {horariosDisponibles.length > 0 && horariosDisponibles.every((h) => h.agotada) && (
+              <p className="mt-1 text-xs text-destructive">Todos los horarios están completos para esta fecha</p>
+            )}
           </div>
         )}
 
@@ -295,7 +390,7 @@ export function ReservaExcursionForm({
         {/* Submit */}
         <button
           type="submit"
-          disabled={pending || followingPending || !fecha}
+          disabled={pending || followingPending || !fecha || !hora || horariosDisponibles.every((h) => h.agotada)}
           className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {followingPending ? (
