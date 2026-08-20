@@ -223,3 +223,66 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
 
   return { reserva, excursion, saldo }
 }
+
+/** Todas las reservas del cliente en una empresa, ordenadas por fecha desc. */
+export async function reservasCliente(
+  companyId: string,
+  clienteId: string
+): Promise<{
+  id: string
+  numero: string
+  estado: string
+  fecha: Date
+  hora: string | null
+  adultos: number
+  ninos: number
+  total: number
+  moneda: string
+  excursion: { id: string; nombre: string; slug: string; portadaUrl: string | null }
+}[]> {
+  const reservas = await conEmpresa(companyId, (tx) =>
+    tx.reservaExc.findMany({
+      where: { companyId, clienteId },
+      orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        numero: true,
+        fecha: true,
+        hora: true,
+        adultos: true,
+        ninos: true,
+        total: true,
+        moneda: true,
+        estado: true,
+        excursionId: true,
+      },
+    })
+  )
+  if (reservas.length === 0) return []
+
+  const excursiones = await conEmpresa(companyId, (tx) =>
+    tx.excursion.findMany({
+      where: { id: { in: reservas.map((r) => r.excursionId) }, companyId },
+      select: { id: true, nombre: true, slug: true, portadaUrl: true },
+    })
+  )
+  const excMap = new Map(excursiones.map((e) => [e.id, e]))
+
+  return reservas.map((r) => {
+    const exc = excMap.get(r.excursionId)
+    return {
+      id: r.id,
+      numero: r.numero,
+      estado: r.estado,
+      fecha: r.fecha,
+      hora: r.hora,
+      adultos: r.adultos,
+      ninos: r.ninos,
+      total: Number(r.total),
+      moneda: r.moneda,
+      excursion: exc
+        ? { id: exc.id, nombre: exc.nombre, slug: exc.slug, portadaUrl: exc.portadaUrl }
+        : { id: '', nombre: '—', slug: '', portadaUrl: null },
+    }
+  })
+}

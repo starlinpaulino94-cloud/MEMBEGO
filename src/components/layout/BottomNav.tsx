@@ -10,6 +10,7 @@ import {
   WalletCards,
   User,
   Compass,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -48,6 +49,7 @@ const PERFIL: BottomNavItem = {
 }
 /** Candidatos para los 2 slots flexibles, en orden de prioridad. */
 const FLEX_CANDIDATOS: BottomNavItem[] = [
+  { href: '/cliente/excursiones', label: 'Mis excursiones', icon: CalendarDays },
   { href: '/cliente/cerca', label: 'Cerca', icon: Compass },
   { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
   { href: '/cliente/mis-promociones', label: 'Beneficios', icon: Ticket },
