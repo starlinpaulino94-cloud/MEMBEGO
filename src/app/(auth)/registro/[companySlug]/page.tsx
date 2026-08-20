@@ -1,9 +1,10 @@
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { registrarRegistroIniciado } from '@/lib/referidos-attribution'
-import { resolverEnlace } from '@/modules/excursiones/atribucion/registrar'
+import { resolverEnlace, VENDEDOR_COOKIE } from '@/modules/excursiones/atribucion/registrar'
 import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
 import { flujoRequiereVehiculo } from '@/modules/onboarding/flujos'
 import { isRegistroV2Enabled } from '@/lib/registroV2'
@@ -109,7 +110,7 @@ export default async function RegistroPage({
   searchParams: Promise<{ ref?: string; e?: string }>
 }) {
   const { companySlug } = await params
-  const { ref, e: enlaceSlug } = await searchParams
+  const { ref, e: enlaceSlugParam } = await searchParams
 
   // select explícito: el registro es la puerta de entrada de clientes y no
   // puede caerse porque el modelo Company tenga una columna más nueva que la
@@ -135,11 +136,22 @@ export default async function RegistroPage({
   // Fase E6 · Embudo: landing de registro con atribución (dedup 24 h).
   if (ref) await registrarRegistroIniciado(ref)
 
+  // Leer cookie de atribución del vendedor (server-side)
+  let cookieEnlaceSlug: string | null = null
+  try {
+    const store = await cookies()
+    cookieEnlaceSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase() ?? null
+  } catch {
+    /* ignore */
+  }
+
   // Excursiones: si llegó por el enlace de un vendedor (/e/[slug]), se le
   // saluda con su nombre. Solo para mostrar: quien atribuye es la cookie.
   let vendedorQueTrae: string | null = null
+  // Prioridad: URL param > cookie
+  const enlaceSlug = (enlaceSlugParam ?? cookieEnlaceSlug)?.trim().toLowerCase()
   if (enlaceSlug) {
-    const enlace = await resolverEnlace(enlaceSlug.trim().toLowerCase())
+    const enlace = await resolverEnlace(enlaceSlug)
     if (enlace && enlace.companyId === company.id) vendedorQueTrae = enlace.nombreVendedor
   }
 
@@ -197,6 +209,7 @@ export default async function RegistroPage({
           companySlug={company.slug}
           companyName={company.name}
           yaEsMiembro={yaEsMiembro}
+          enlaceSlug={enlaceSlug}
         />
         <ExcursionesSection companySlug={company.slug} excursiones={excursiones} />
       </>

@@ -209,6 +209,8 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
   )
   if (!reserva) return null
 
+  const { checkinToken, checkinAt, checkinPorId } = reserva
+
   const excursion = await conEmpresa(companyId, (tx) =>
     tx.excursion.findFirst({
       where: { id: reserva.excursionId, companyId },
@@ -238,7 +240,7 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
     reserva.pagos.map((p) => ({ monto: Number(p.monto), estado: p.estado }))
   )
 
-  return { reserva, excursion, saldo }
+  return { reserva, excursion, saldo, checkinToken, checkinAt, checkinPorId }
 }
 
 /** Todas las reservas del cliente en una empresa, ordenadas por fecha desc. */

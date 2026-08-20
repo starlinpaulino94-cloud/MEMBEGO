@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ScrollText } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import {
@@ -18,6 +18,7 @@ import { ReglaComisionForm } from '@/components/excursiones/ReglaComisionForm'
 import { ReglaEstadoBoton } from '@/components/excursiones/ReglaEstadoBoton'
 import { StatusChip } from '@/components/ui/status-chip'
 import { formatDate } from '@/lib/format'
+import { EmptyState } from '@/components/system/EmptyState'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Reglas de comisión' }
@@ -104,7 +105,13 @@ export default async function ReglasComisionPage() {
             ))}
           </ul>
         </section>
-      ) : null}
+      ) : (
+        <EmptyState
+          icon={ScrollText}
+          title="Sin reglas de comisión"
+          description="Crea tu primera regla arriba. Sin reglas, no se generan comisiones para los vendedores."
+        />
+      )}
     </div>
   )
 }

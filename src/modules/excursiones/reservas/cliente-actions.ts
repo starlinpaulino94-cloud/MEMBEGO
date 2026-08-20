@@ -6,12 +6,14 @@
  * Variante simplificada de crearReserva (admin): el cliente se reserva
  * directamente sin intermediación de un vendedor. El precio se lee del
  * catálogo en el servidor, nunca del formulario.
+ * Si hay cookie de atribución de vendedor válida, se atribuye la reserva.
  */
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
+import { cookies } from 'next/headers'
 import { anotarFallo } from '@/lib/prisma-errors'
 import {
   calcularTotales,
@@ -20,6 +22,7 @@ import {
   validarDisponibilidad,
 } from './nucleo'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
+import { resolverEnlace, VENDEDOR_COOKIE } from '../atribucion/registrar'
 
 export interface ReservaClienteState {
   error?: string
@@ -28,7 +31,7 @@ export interface ReservaClienteState {
   numero?: string
 }
 
-/** CLIENTE · Crear reserva directa (sin vendedor). */
+/** CLIENTE · Crear reserva directa (puede tener vendedor por cookie). */
 export async function reservarExcursion(
   _prev: ReservaClienteState,
   formData: FormData
@@ -51,6 +54,21 @@ export async function reservarExcursion(
     })
     if (!cliente) {
       return { error: 'No se encontró tu perfil de cliente para esta empresa.' }
+    }
+
+    // Leer cookie de atribución de vendedor (server-side)
+    let vendedorId: string | null = null
+    try {
+      const store = await cookies()
+      const cookieSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase()
+      if (cookieSlug) {
+        const enlace = await resolverEnlace(cookieSlug)
+        if (enlace && enlace.companyId === companyId) {
+          vendedorId = enlace.vendedorId
+        }
+      }
+    } catch {
+      /* ignore: sin cookie o error al resolver -> reserva sin vendedor */
     }
 
     const v = validarReserva({
@@ -146,6 +164,7 @@ export async function reservarExcursion(
               companyId,
               numero: numeroReserva('EXC', anio, intento),
               clienteId: cliente.id,
+              vendedorId,
               excursionId: excursion.id,
               varianteId: variante.id,
               fecha: v.datos.fecha,
@@ -175,7 +194,7 @@ export async function reservarExcursion(
                 },
               },
             },
-            select: { id: true, numero: true },
+            select: { id: true, numero: true, vendedorId: true },
           })
         } catch (e: unknown) {
           if (
@@ -192,10 +211,34 @@ export async function reservarExcursion(
       throw new Error('No se pudo generar el número de reserva tras varios intentos.')
     })
 
+    // Atribución de vendedor: etapa RESERVA (hecho inmutable para comisión)
+    if (vendedorId && creada.vendedorId) {
+      await conEmpresa(companyId, (tx) =>
+        tx.vendedorAtribucion.create({
+          data: {
+            companyId,
+            vendedorId: vendedorId,
+            clienteId: cliente.id,
+            etapa: 'RESERVA',
+          },
+        })
+      ).catch(anotarFallo('excursiones:reservarExcursion:atribucion'))
+    }
+
     revalidatePath('/cliente/excursiones')
 
     // Sincronizar estado AGOTADA tras crear reserva
     await sincronizarEstadoAgotada(companyId, excursionId)
+
+    // Consumir cookie de atribución (un solo uso)
+    if (vendedorId) {
+      try {
+        const store = await cookies()
+        store.delete(VENDEDOR_COOKIE)
+      } catch {
+        /* ignore */
+      }
+    }
 
     return {
       success: 'Reserva creada. Puedes gestionar tu pago desde tu cuenta.',

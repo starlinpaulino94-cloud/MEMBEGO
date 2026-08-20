@@ -9,6 +9,9 @@ import {
   type CanalAtribucion,
 } from './nucleo'
 
+// Re-exportar para uso externo
+export { VENDEDOR_COOKIE } from './nucleo'
+
 /**
  * EXCURSIONES · Atribución — escritura de los hechos.
  *

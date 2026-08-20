@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { reservaCliente } from '@/modules/excursiones/reservas/queries'
 import { formatMoney, formatDate } from '@/lib/format'
 import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
+import { ReservaCheckinQrDisplay } from '@/components/excursiones/ReservaCheckinQrDisplay'
 
 interface ReservaDetallePageProps {
   params: Promise<{ reservaId: string }>
@@ -25,17 +26,26 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
   const user = await getUser()
   if (!user) redirect('/login')
 
-  // Resolver companyId del usuario
-  const cliente = await prisma.cliente.findFirst({
+  // Obtener todas las empresas donde el usuario es cliente
+  const clientes = await prisma.cliente.findMany({
     where: { supabaseId: user.supabaseId },
     select: { id: true, companyId: true },
   })
-  if (!cliente) redirect('/cliente/explorar')
+  if (clientes.length === 0) redirect('/cliente/explorar')
 
-  const data = await reservaCliente(cliente.companyId, cliente.id, reservaId)
+  // Buscar la reserva en cada empresa del usuario
+  let data: Awaited<ReturnType<typeof reservaCliente>> = null
+  for (const c of clientes) {
+    const found = await reservaCliente(c.companyId, c.id, reservaId)
+    if (found) {
+      data = found
+      break
+    }
+  }
+
   if (!data) redirect('/cliente/explorar')
 
-  const { reserva, excursion, saldo } = data
+  const { reserva, excursion, saldo, checkinToken, checkinAt, checkinPorId } = data
   const moneda = excursion?.moneda ?? 'DOP'
   const tono = TONO_RESERVA[reserva.estado as keyof typeof TONO_RESERVA] ?? 'neutral'
 
@@ -54,7 +64,14 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+        {/* QR de embarque */}
+        <ReservaCheckinQrDisplay
+          checkinToken={checkinToken}
+          checkinAt={checkinAt}
+          checkinPorId={checkinPorId}
+          numero={reserva.numero}
+        />
         {/* Card principal */}
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
           {/* Header de la reserva */}

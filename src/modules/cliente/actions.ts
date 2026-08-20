@@ -7,6 +7,9 @@ import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { companyIdPorSlug, excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
+import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
+import { cookies } from 'next/headers'
+import { VENDEDOR_COOKIE } from '@/modules/excursiones/atribucion/registrar'
 
 export interface ClienteActionState {
   error?: string
@@ -103,6 +106,7 @@ export async function afiliarmeAEmpresa(
   // Determinar redirect: si la empresa tiene excursiones, ir allí; si no, a planes
   let destino = '/cliente/planes'
   const companySlug = String(formData.get('companySlug') ?? '').trim()
+  const enlaceSlug = String(formData.get('enlaceSlug') ?? '').trim() || null
   if (companySlug) {
     const cid = await companyIdPorSlug(companySlug)
     if (cid) {
@@ -134,62 +138,11 @@ export async function afiliarmeAEmpresa(
     )
     if (!dbUser) return { error: 'No se encontró tu cuenta.' }
 
-    // ¿Ya tiene cuenta de cliente en esta empresa? Si no, la creamos.
-    let cliente = await sinEmpresa('cliente: buscar cuenta en la empresa destino', (tx) =>
-      tx.cliente.findUnique({
-        where: {
-          supabaseId_companyId: { supabaseId: user.supabaseId, companyId: company.id },
-        },
-        select: { id: true, telefono: true },
-      })
-    )
+    // Usar la función centralizada que también maneja atribución de vendedor
+    const resultado = await asegurarClienteEnEmpresa(user.supabaseId, user.email, company.id, enlaceSlug)
+    if ('error' in resultado) return { error: resultado.error }
 
-    if (!cliente) {
-      // Reutiliza nombre/teléfono de una cuenta existente del mismo usuario.
-      const previa = await sinEmpresa('cliente: buscar mi cuenta más antigua', (tx) =>
-        tx.cliente.findFirst({
-          where: { supabaseId: user.supabaseId },
-          select: { nombre: true, telefono: true },
-          orderBy: { createdAt: 'asc' },
-        })
-      )
-      cliente = await sinEmpresa('cliente: crear cuenta en la empresa destino', (tx) =>
-        tx.cliente.create({
-          data: {
-            companyId: company.id,
-            supabaseId: user.supabaseId,
-            nombre: previa?.nombre ?? dbUser.name,
-            email: user.email,
-            telefono: previa?.telefono ?? null,
-          },
-          select: { id: true, telefono: true },
-        })
-      )
-
-      // Seguir la empresa (no bloquea si falla).
-      await conEmpresa(company.id, (tx) =>
-        tx.companyFollow.upsert({
-          where: { userId_companyId: { userId: dbUser.id, companyId: company.id } },
-          update: {},
-          create: { userId: dbUser.id, companyId: company.id },
-        })
-      ).catch((e) => console.error('[cliente] afiliar auto-follow error:', e))
-
-      await emitirEventoEstrategia({
-        companyId: company.id,
-        type: 'cliente.registrado',
-        subjectId: cliente.id,
-        payload: {
-          cliente: {
-            nombre: previa?.nombre ?? dbUser.name,
-            compras: 0,
-            visitas: 0,
-            email: user.email ?? null,
-            telefono: cliente.telefono ?? null,
-          },
-        },
-      })
-    }
+    const clienteId = resultado.clienteId
 
     // Cambia el contexto activo a esta empresa.
     const admin = createAdminClient()
@@ -197,10 +150,20 @@ export async function afiliarmeAEmpresa(
       app_metadata: {
         role: 'CLIENTE',
         dbUserId: dbUser.id,
-        clienteId: cliente.id,
+        clienteId,
         companyId: company.id,
       },
     })
+
+    // Consumir cookie de atribución (un solo uso)
+    if (enlaceSlug) {
+      try {
+        const store = await cookies()
+        store.delete(VENDEDOR_COOKIE)
+      } catch {
+        /* ignore */
+      }
+    }
 
     revalidatePath('/', 'layout')
   } catch (e) {
