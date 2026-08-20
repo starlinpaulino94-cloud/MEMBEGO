@@ -72,7 +72,7 @@ test('ninguna ruta del cliente se perdió al reagrupar', () => {
   // que borrarla, porque nadie se entera.
   const todas = CLIENTE.flatMap((g) => g.items.map((i) => i.href))
   const OBLIGATORIAS = [
-    '/cliente/inicio',
+    '/cliente/dashboard',
     '/cliente/promociones',
     '/cliente/planes',
     '/cliente/cerca',

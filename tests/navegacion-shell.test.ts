@@ -206,10 +206,10 @@ test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {
 })
 
 test('un dominio de un solo módulo no se repite a sí mismo', () => {
-  // "Inicio / Resumen" está bien; "Inicio / Inicio" sería ruido.
-  const m = migasDeRuta(navForRole('CLIENTE'), '/cliente/inicio')
+  // "Dashboard / Dashboard" sería ruido; el dashboard es el inicio del cliente.
+  const m = migasDeRuta(navForRole('CLIENTE'), '/cliente/dashboard')
   assert.equal(m.dominio, null)
-  assert.equal(m.seccion?.label, 'Inicio')
+  assert.equal(m.seccion?.label, 'Dashboard')
 })
 
 test('una ruta fuera del menú no inventa migas', () => {

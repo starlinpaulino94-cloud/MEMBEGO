@@ -28,6 +28,9 @@ function mapRow(r: any): ExcursionPublica {
   }
 }
 
+// Exportar funciones internas para uso en search-queries.ts
+export { mapRow, calcularDisponibilidad }
+
 export interface SalidaDisponible {
   id: string
   fecha: string

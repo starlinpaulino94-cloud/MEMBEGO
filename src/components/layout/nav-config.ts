@@ -249,9 +249,9 @@ const ADMIN_NAV: NavGroup[] = [
  *
  * Por eso los grupos son ahora:
  *
- *   DESCUBRIR    lo que puedes conseguir      (ofertas, planes, cerca de ti)
+ *   DESCUBRIR    lo que puedes conseguir      (ofertas, planes, excursiones, cerca de ti)
  *   MI MEMBEGO   lo que ya es tuyo            (beneficios, membresías, regalos)
- *   ACTIVIDAD    lo que ya hiciste            (citas, pagos, historial)
+ *   ACTIVIDAD    lo que ya hiciste            (citas, pagos, historial, excursiones)
  *   CUENTA       tú                           (perfil, empresas, vehículos)
  *
  * ────────────────────────────────────────────────────────────────────────────
@@ -266,9 +266,8 @@ const CLIENTE_NAV: NavGroup[] = [
   {
     id: 'inicio',
     label: 'Inicio',
-    // Enlace directo a la vista real (evita el salto de redirect por
-    // /cliente/dashboard -> /mis-membresias).
-    items: [{ href: '/cliente/inicio', label: 'Inicio', icon: LayoutDashboard }],
+    // Enlace directo a la vista real (el dashboard con tabs).
+    items: [{ href: '/cliente/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
   },
   {
     id: 'descubrir',
@@ -278,6 +277,7 @@ const CLIENTE_NAV: NavGroup[] = [
       // Aquí, y no en «Mis beneficios»: un plan es lo que puedes contratar,
       // no lo que tienes contratado.
       { href: '/cliente/planes', label: 'Planes', icon: Package },
+      { href: '/cliente/excursiones/buscar', label: 'Buscar excursiones', icon: Compass },
       { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
     ],
   },

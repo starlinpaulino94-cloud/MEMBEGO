@@ -23,6 +23,8 @@ import {
   Newspaper,
   Clock,
   Compass,
+  AlertCircle,
+  X,
 } from 'lucide-react'
 import { PromotionGrid } from '@/components/public/PromotionGrid'
 import { FollowButton } from '@/components/public/FollowButton'
@@ -96,6 +98,8 @@ export interface CompanyProfileProps {
     duracionMin: number | null
     ubicacion: string | null
     precioDesde: number | null
+    agotadaGlobal?: boolean
+    todasFechasPasadas?: boolean
   }[]
 
   /**
@@ -634,58 +638,82 @@ export function CompanyProfile({
               Experiencias y tours disponibles.
             </p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {excursiones.map((exc) => (
-                <Link
-                  key={exc.id}
-                  href={`/empresas/${company.slug}/excursiones/${exc.slug}`}
-                  className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
-                >
-                  <div className="relative aspect-[16/10] bg-muted">
-                    {exc.portadaUrl ? (
-                      <Image
-                        src={exc.portadaUrl}
-                        alt={exc.nombre}
-                        fill
-                        className="object-cover transition group-hover:scale-105"
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <Compass className="h-10 w-10 text-muted-foreground/30" />
+              {excursiones
+                .filter((exc) => !exc.todasFechasPasadas)
+                .map((exc) => {
+                  const isFinalizada = exc.todasFechasPasadas
+                  const isAgotada = exc.agotadaGlobal
+                  const tieneStock = !isFinalizada && !isAgotada
+                  return (
+                    <Link
+                      key={exc.id}
+                      href={`/empresas/${company.slug}/excursiones/${exc.slug}`}
+                      className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                      <div className="relative aspect-[16/10] bg-muted">
+                        {exc.portadaUrl ? (
+                          <Image
+                            src={exc.portadaUrl}
+                            alt={exc.nombre}
+                            fill
+                            className="object-cover transition group-hover:scale-105"
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center">
+                            <Compass className="h-10 w-10 text-muted-foreground/30" />
+                          </div>
+                        )}
+                        {exc.categoria && (
+                          <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
+                            {exc.categoria}
+                          </span>
+                        )}
+                        {(isAgotada || isFinalizada) && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <span className="rounded-full bg-background/90 px-3 py-1 text-sm font-semibold text-destructive flex items-center gap-1.5">
+                              {isFinalizada ? (
+                                <>
+                                  <X className="h-4 w-4" />
+                                  Finalizada
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="h-4 w-4" />
+                                  Agotada
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {exc.categoria && (
-                      <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
-                        {exc.categoria}
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-semibold group-hover:text-primary">
-                      {exc.nombre}
-                    </h3>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      {exc.duracionMin && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {exc.duracionMin} min
-                        </span>
-                      )}
-                      {exc.ubicacion && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {exc.ubicacion}
-                        </span>
-                      )}
-                    </div>
-                    {exc.precioDesde != null && (
-                      <p className="mt-2 text-sm font-semibold text-primary">
-                        Desde {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              ))}
+                      <div className="p-4">
+                        <h3 className="font-semibold group-hover:text-primary">
+                          {exc.nombre}
+                        </h3>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          {exc.duracionMin && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5" />
+                              {exc.duracionMin} min
+                            </span>
+                          )}
+                          {exc.ubicacion && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3.5 w-3.5" />
+                              {exc.ubicacion}
+                            </span>
+                          )}
+                        </div>
+                        {exc.precioDesde != null && (
+                          <p className="mt-2 text-sm font-semibold text-primary">
+                            Desde {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
+                          </p>
+                        )}
+                      </div>
+                    </Link>
+                  )
+                })}
             </div>
           </section>
         )}

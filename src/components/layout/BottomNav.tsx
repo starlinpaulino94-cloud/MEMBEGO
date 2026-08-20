@@ -36,7 +36,7 @@ interface BottomNavItem {
  * disponible, así la barra nunca queda incompleta.
  */
 const INICIO: BottomNavItem = {
-  href: '/cliente/inicio',
+  href: '/cliente/dashboard',
   label: 'Inicio',
   icon: Home,
   match: ['/cliente/dashboard'],
@@ -54,6 +54,7 @@ const FLEX_CANDIDATOS: BottomNavItem[] = [
   { href: '/cliente/cerca', label: 'Cerca', icon: Compass },
   { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
   { href: '/cliente/mis-promociones', label: 'Beneficios', icon: Ticket },
+  { href: '/cliente/explorar', label: 'Buscar excursiones', icon: Compass },
   // Fallbacks siempre disponibles (garantizan 2 slots llenos).
   { href: '/cliente/historial', label: 'Historial', icon: WalletCards },
 ]
