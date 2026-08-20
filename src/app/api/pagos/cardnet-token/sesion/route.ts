@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
-import { paymentLimiter, getClientIdentifier } from '@/lib/rate-limit'
+import { paymentSessionLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import {
   getTokensPublicConfig,
   cardnetTokensConfigurado,
@@ -51,7 +51,9 @@ export const maxDuration = 60
  */
 export async function POST(req: NextRequest) {
   const id = getClientIdentifier(req)
-  if (!(await paymentLimiter(id))) {
+  // Presupuesto PROPIO: abrir la ventana no mueve dinero y no debe gastarse el
+  // de las rutas que sí (ver `paymentSessionLimiter`).
+  if (!(await paymentSessionLimiter(id))) {
     return NextResponse.json({ ok: false, error: 'Demasiados intentos. Espera un momento.' }, { status: 429 })
   }
 

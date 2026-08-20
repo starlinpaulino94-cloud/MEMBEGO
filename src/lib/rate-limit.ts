@@ -138,6 +138,33 @@ export const paymentLimiter = createRateLimiter({
   name: 'payment',
 })
 
+/**
+ * ABRIR LA VENTANA DE PAGO — presupuesto PROPIO, separado del de los cobros.
+ *
+ * Compartía el de `paymentLimiter` (10/min entre las cinco rutas de pago), y
+ * eso mezclaba dos cosas que no se parecen:
+ *
+ *   · Cobrar, activar, confirmar → MUEVEN DINERO. Un límite estrecho ahí es
+ *     exactamente lo que se quiere: un bucle contra esas rutas es una forma de
+ *     probar tarjetas.
+ *   · Pedir la sesión de captura → es un GET al proveedor que devuelve una URL.
+ *     No mueve dinero, no toca una tarjeta, y el navegador la pide sola al
+ *     precargar la ventana.
+ *
+ * Juntas, la barata agotaba el presupuesto de la cara: el cliente se quedaba
+ * sin poder COBRAR porque había abierto la pantalla de pago varias veces. Se
+ * separan para que el límite de las rutas que mueven dinero quede intacto —
+ * este cambio lo protege, no lo relaja.
+ *
+ * 30/min es el mismo techo que el escaneo de QR, otra operación frecuente,
+ * legítima en ráfagas y sin efecto sobre el dinero.
+ */
+export const paymentSessionLimiter = createRateLimiter({
+  interval: 60 * 1000,
+  maxRequests: 30,
+  name: 'payment-session',
+})
+
 export const formSubmitLimiter = createRateLimiter({
   interval: 60 * 1000,
   maxRequests: 20,
