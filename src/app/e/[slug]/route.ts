@@ -38,7 +38,9 @@ export async function GET(
 
   const destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
     enlace.codigoVendedor
-  )}&e=${encodeURIComponent(enlace.slug)}`
+  )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(
+    `/empresas/${enlace.companySlug}/excursiones`
+  )}`
 
   // Los robots de vista previa (WhatsApp, Facebook…) abren el enlace antes que
   // la persona: si contaran, cada compartida sería una visita falsa.

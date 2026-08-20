@@ -11,6 +11,93 @@ import { RegisterForm } from '@/components/auth/RegisterForm'
 import { AsistenteRegistro, type TipoVehiculoOpcion } from '@/components/auth/AsistenteRegistro'
 import { CompanyRegistroHeader } from '@/components/auth/CompanyRegistroHeader'
 import { AfiliarEmpresaCard } from '@/components/cliente/AfiliarEmpresaCard'
+import { companyIdPorSlug, excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
+import Link from 'next/link'
+import { CalendarDays, MapPin, Clock } from 'lucide-react'
+import { formatMoney } from '@/lib/format'
+
+interface ExcursionCard {
+  id: string
+  nombre: string
+  slug: string
+  portadaUrl: string | null
+  categoria: string | null
+  moneda: string
+  duracionMin: number | null
+  ubicacion: string | null
+  precioDesde: number | null
+}
+
+function ExcursionesSection({
+  companySlug,
+  excursiones,
+}: {
+  companySlug: string
+  excursiones: ExcursionCard[]
+}) {
+  if (excursiones.length === 0) return null
+  return (
+    <section className="mt-12" aria-labelledby="excursiones-heading">
+      <h2 id="excursiones-heading" className="text-h3 font-bold text-foreground">
+        Excursiones disponibles
+      </h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Explora y reserva directamente desde aquí.
+      </p>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        {excursiones.map((exc) => (
+          <Link
+            key={exc.id}
+            href={`/empresas/${companySlug}/excursiones/${exc.slug}`}
+            className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md"
+          >
+            <div className="relative aspect-[16/10] bg-muted">
+              {exc.portadaUrl ? (
+                <img
+                  src={exc.portadaUrl}
+                  alt={exc.nombre}
+                  className="h-full w-full object-cover transition group-hover:scale-105"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <CalendarDays className="h-10 w-10 text-muted-foreground/30" />
+                </div>
+              )}
+              {exc.categoria && (
+                <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
+                  {exc.categoria}
+                </span>
+              )}
+            </div>
+            <div className="p-4">
+              <h3 className="font-semibold group-hover:text-primary">{exc.nombre}</h3>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                {exc.duracionMin && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {exc.duracionMin} min
+                  </span>
+                )}
+                {exc.ubicacion && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {exc.ubicacion}
+                  </span>
+                )}
+              </div>
+              {exc.precioDesde != null && (
+                <p className="mt-2 text-sm font-semibold text-primary">
+                  Desde {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
+                </p>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +143,36 @@ export default async function RegistroPage({
     if (enlace && enlace.companyId === company.id) vendedorQueTrae = enlace.nombreVendedor
   }
 
+  // Cargar excursiones si vino de un vendedor (para mostrar antes/después del registro)
+  let excursiones: {
+    id: string
+    nombre: string
+    slug: string
+    portadaUrl: string | null
+    categoria: string | null
+    moneda: string
+    duracionMin: number | null
+    ubicacion: string | null
+    precioDesde: number | null
+  }[] = []
+  if (enlaceSlug) {
+    const cid = await companyIdPorSlug(company.slug)
+    if (cid) {
+      const data = await excursionesPublicas(cid)
+      excursiones = data.map((exc) => ({
+        id: exc.id,
+        nombre: exc.nombre,
+        slug: exc.slug,
+        portadaUrl: exc.portadaUrl,
+        categoria: exc.categoria,
+        moneda: exc.moneda,
+        duracionMin: exc.duracionMin,
+        ubicacion: exc.ubicacion,
+        precioDesde: exc.variantes[0]?.precioAdulto ?? null,
+      }))
+    }
+  }
+
   // Si el usuario ya inició sesión como cliente, no debe registrarse de nuevo:
   // se afilia a esta empresa con su cuenta existente (un clic). El chequeo es
   // opcional: si la verificación de sesión falla, se ofrece el registro normal.
@@ -75,11 +192,14 @@ export default async function RegistroPage({
       .catch(() => false)
 
     return (
-      <AfiliarEmpresaCard
-        companySlug={company.slug}
-        companyName={company.name}
-        yaEsMiembro={yaEsMiembro}
-      />
+      <>
+        <AfiliarEmpresaCard
+          companySlug={company.slug}
+          companyName={company.name}
+          yaEsMiembro={yaEsMiembro}
+        />
+        <ExcursionesSection companySlug={company.slug} excursiones={excursiones} />
+      </>
     )
   }
 
@@ -137,6 +257,7 @@ export default async function RegistroPage({
           colorPrimario={company.colorPrimario}
         />
       )}
+      <ExcursionesSection companySlug={company.slug} excursiones={excursiones} />
     </>
   )
 }
