@@ -61,30 +61,20 @@ export function RegisterGeneralForm() {
 
     if (state.success) {
       handledRef.current = true
-      const creds = credsRef.current
-      if (!creds) {
-        router.replace('/login?redirect=/cliente/celebracion')
-        return
-      }
       setRedirecting(true)
-      const supabase = createClient()
-      supabase.auth
-        .signInWithPassword({ email: creds.email, password: creds.password })
-        .then(({ error }) => {
-          if (error) {
-            toast.success('Cuenta creada. Inicia sesión para continuar.')
-            router.replace('/login?redirect=/cliente/celebracion')
-            return
-          }
-          toast.success('¡Bienvenido a MembeGo! Tu cuenta está lista.')
-          // Igual que todo registro: primero la celebración con su regalo de
-          // bienvenida (la cuenta ya quedó afiliada a la empresa principal).
-          router.replace('/cliente/celebracion')
-          router.refresh()
-        })
-        .catch(() => {
-          router.replace('/login?redirect=/cliente/celebracion')
-        })
+      toast.success('¡Bienvenido a MembeGo! Tu cuenta está lista.')
+      const destino = '/cliente/celebracion'
+      const creds = credsRef.current
+      if (creds) {
+        const supabase = createClient()
+        supabase.auth
+          .signInWithPassword({ email: creds.email, password: creds.password })
+          .finally(() => {
+            window.location.href = destino
+          })
+      } else {
+        window.location.href = destino
+      }
     }
   }, [state.success, state.pendingVerification, router])
 
