@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -80,6 +82,13 @@ export function ReservaExcursionForm({
     return Array.from(fechas).sort()
   }, [salidasDisponibles])
 
+  // Auto-seleccionar primera fecha disponible al cargar
+  useEffect(() => {
+    if (!fecha && fechasDisponibles.length > 0) {
+      setFecha(fechasDisponibles[0])
+    }
+  }, [fecha, fechasDisponibles])
+
   // Horarios disponibles para la fecha seleccionada
   const horariosDisponibles = useMemo(() => {
     if (!fecha) return []
@@ -90,10 +99,11 @@ export function ReservaExcursionForm({
 
   // Reset hora when fecha changes
   useEffect(() => {
-    if (fecha && horariosDisponibles.length > 0) {
-      setHora(horariosDisponibles[0].horaSalida)
-    } else {
-      setHora('')
+    if (horariosDisponibles.length > 0) {
+      const primerDisponible = horariosDisponibles.find((h) => !h.agotada) || horariosDisponibles[0]
+      if (primerDisponible) {
+        setHora(primerDisponible.horaSalida)
+      }
     }
   }, [fecha, horariosDisponibles])
 
@@ -105,7 +115,7 @@ export function ReservaExcursionForm({
   // Redirect on success — in useEffect to avoid setState-during-render
   useEffect(() => {
     if (state.success && state.reservaId) {
-      router.push(`/cliente/excursiones/${state.reservaId}`)
+      router.push(`/cliente/mis-excursiones/${state.reservaId}`)
     }
   }, [state.success, state.reservaId, router])
 
@@ -264,42 +274,51 @@ export function ReservaExcursionForm({
         </div>
 
         {/* Horario */}
+        <input type="hidden" name="hora" value={hora} />
         {horariosDisponibles.length > 0 && (
           <div>
             <label className="mb-1.5 block text-sm font-medium">Hora de salida</label>
             <div className="flex flex-wrap gap-2">
-              {horariosDisponibles.map((h) => (
-                <label
-                  key={h.id}
-                  className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition ${
-                    hora === h.horaSalida
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : h.agotada
-                      ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed'
-                      : 'bg-background hover:bg-muted'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="hora"
-                    value={h.horaSalida}
-                    checked={hora === h.horaSalida}
-                    onChange={() => setHora(h.horaSalida)}
-                    disabled={h.agotada}
-                    className="sr-only"
-                  />
-                  {h.horaSalida}
-                  {h.cupoDisponible > 0 && (
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      ({h.cupoDisponible})
-                    </span>
-                  )}
-                  {h.agotada && <X className="ml-1.5 h-3 w-3" />}
-                </label>
-              ))}
+              {horariosDisponibles.map((h) => {
+                const [hStr, mStr] = h.horaSalida.split(':')
+                const hNum = parseInt(hStr || '0', 10)
+                const ampm = hNum >= 12 ? 'PM' : 'AM'
+                const h12 = hNum % 12 || 12
+                const horaLabel = `${h12}:${mStr} ${ampm}`
+
+                return (
+                  <label
+                    key={h.id}
+                    className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                      hora === h.horaSalida
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : h.agotada
+                        ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="hora_radio"
+                      value={h.horaSalida}
+                      checked={hora === h.horaSalida}
+                      onChange={() => setHora(h.horaSalida)}
+                      disabled={h.agotada}
+                      className="sr-only"
+                    />
+                    {horaLabel}
+                    {h.cupoDisponible > 0 && (
+                      <span className="ml-1.5 text-xs opacity-80">
+                        ({h.cupoDisponible})
+                      </span>
+                    )}
+                    {h.agotada && <X className="ml-1.5 h-3 w-3 inline" />}
+                  </label>
+                )
+              })}
             </div>
             {horariosDisponibles.length > 0 && horariosDisponibles.every((h) => h.agotada) && (
-              <p className="mt-1 text-xs text-destructive">Todos los horarios están completos para esta fecha</p>
+              <p className="mt-1 text-xs text-destructive font-semibold">Todos los horarios están completos para esta fecha</p>
             )}
           </div>
         )}

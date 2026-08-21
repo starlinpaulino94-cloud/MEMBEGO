@@ -102,7 +102,7 @@ function generarFechasParaDia(diaSemana: number, limiteDias = 90): string[] {
   fecha.setDate(fecha.getDate() + diff)
 
   for (let i = 0; i < limiteDias; i += 7) {
-    if (fecha > new Date()) {
+    if (fecha >= hoy) {
       fechas.push(fecha.toISOString().split('T')[0])
     }
     fecha.setDate(fecha.getDate() + 7)
@@ -116,9 +116,24 @@ async function calcularDisponibilidad(
   excursionId: string,
   capacidad: number | null,
   horarios: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-  horaRegreso: string | null
+  horaRegreso: string | null,
+  horaSalidaFallback?: string | null
 ): Promise<{ proximasSalidas: SalidaDisponible[]; agotadaGlobal: boolean; todasFechasPasadas: boolean }> {
-  if (!capacidad || capacidad <= 0 || horarios.length === 0) {
+  const effectiveHorarios =
+    horarios && horarios.length > 0
+      ? horarios
+      : horaSalidaFallback
+        ? [
+            {
+              id: `default-${excursionId}`,
+              diasSemana: [1, 2, 3, 4, 5, 6, 7],
+              horaSalida: horaSalidaFallback,
+              cupo: null,
+            },
+          ]
+        : []
+
+  if (effectiveHorarios.length === 0) {
     return { proximasSalidas: [], agotadaGlobal: true, todasFechasPasadas: true }
   }
 
@@ -142,30 +157,38 @@ async function calcularDisponibilidad(
   const reservasMap = new Map<string, number>()
   for (const r of reservas) {
     const fechaStr = r.fecha.toISOString().split('T')[0]
-    const key = `${fechaStr}|${r.hora || ''}`
+    const horaStr = (r.hora || '').trim().slice(0, 5)
+    const key = `${fechaStr}|${horaStr}`
     reservasMap.set(key, (reservasMap.get(key) || 0) + r.adultos + r.ninos)
   }
 
-  const capacidadTotal = capacidad ?? 0
+  const capacidadTotal = capacidad && capacidad > 0 ? capacidad : 50
   const salidas: SalidaDisponible[] = []
+  const ahoraTimestamp = Date.now()
 
-  for (const horario of horarios) {
-    for (const diaSemana of horario.diasSemana) {
+  for (const horario of effectiveHorarios) {
+    const dias = Array.isArray(horario.diasSemana) ? horario.diasSemana : [1, 2, 3, 4, 5, 6, 7]
+    for (const diaSemana of dias) {
       const fechas = generarFechasParaDia(diaSemana)
       for (const fecha of fechas) {
-        const key = `${fecha}|${horario.horaSalida}`
+        const horaSalida = (horario.horaSalida || '00:00').trim().slice(0, 5)
+        const key = `${fecha}|${horaSalida}`
         const reservados = reservasMap.get(key) || 0
-        const cupoEfectivo = capacidadTotal
+        const cupoEfectivo = horario.cupo && horario.cupo > 0 ? horario.cupo : capacidadTotal
         const cupoDisponible = Math.max(0, cupoEfectivo - reservados)
-        const fechaObj = new Date(fecha)
-        const fechaPasada = fechaObj < new Date(new Date().setHours(0, 0, 0, 0))
+
+        // Calcular timestamp exacto de la salida
+        const [hStr, mStr] = horaSalida.split(':')
+        const [y, m, d] = fecha.split('-').map(Number)
+        const salidaDate = new Date(y, m - 1, d, Number(hStr || 0), Number(mStr || 0), 0, 0)
+        const fechaPasada = salidaDate.getTime() < ahoraTimestamp
         const agotada = cupoDisponible <= 0 || fechaPasada
 
         salidas.push({
           id: `${horario.id}-${fecha}`,
           fecha,
-          horaSalida: horario.horaSalida,
-          horaRegreso: null,
+          horaSalida,
+          horaRegreso: horaRegreso || null,
           cupoDisponible,
           agotada,
           fechaPasada,
@@ -174,9 +197,6 @@ async function calcularDisponibilidad(
     }
   }
 
-  // Agregar horaRegreso a todas las salidas (usar la de la excursión)
-  salidas.forEach(s => { s.horaRegreso = null })
-
   // Ordenar por fecha y hora
   salidas.sort((a, b) => {
     const diff = new Date(a.fecha).getTime() - new Date(b.fecha).getTime()
@@ -184,13 +204,11 @@ async function calcularDisponibilidad(
     return a.horaSalida.localeCompare(b.horaSalida)
   })
 
-  const ahora = new Date()
-  ahora.setHours(0, 0, 0, 0)
-  const salidasFuturas = salidas.filter((s) => new Date(s.fecha) >= ahora)
+  const salidasFuturas = salidas.filter((s) => !s.fechaPasada)
   const agotadaGlobal = salidasFuturas.length === 0 || salidasFuturas.every((s) => s.agotada)
-  const todasFechasPasadas = salidas.every((s) => s.fechaPasada)
+  const todasFechasPasadas = salidas.length === 0 || salidasFuturas.length === 0
 
-  return { proximasSalidas: salidas, agotadaGlobal, todasFechasPasadas }
+  return { proximasSalidas: salidasFuturas, agotadaGlobal, todasFechasPasadas }
 }
 
 /** Excursiones ACTIVAS de una empresa, para listados públicos. */
@@ -250,7 +268,8 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
         exc.id,
         exc.capacidad,
         exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-        exc.horaRegreso
+        exc.horaRegreso,
+        exc.horaSalida
       )
       const mapped = mapRow({
         ...exc,
@@ -260,7 +279,19 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
     })
   )
 
-  return excursionesConDisponibilidad
+  // Filtrar solo las vigentes con salidas futuras y ordenar por fecha de salida más próxima
+  const vigentes = excursionesConDisponibilidad.filter(
+    (e) => !e.todasFechasPasadas && e.proximasSalidas && e.proximasSalidas.length > 0
+  )
+
+  vigentes.sort((a, b) => {
+    const fechaA = a.proximasSalidas[0]?.fecha ? new Date(a.proximasSalidas[0].fecha).getTime() : Infinity
+    const fechaB = b.proximasSalidas[0]?.fecha ? new Date(b.proximasSalidas[0].fecha).getTime() : Infinity
+    if (fechaA !== fechaB) return fechaA - fechaB
+    return a.nombre.localeCompare(b.nombre)
+  })
+
+  return vigentes
 }
 
 /** Detalle de una excursión pública por slug. */
@@ -320,7 +351,8 @@ export async function excursionPublica(
     row.id,
     row.capacidad,
     row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-    row.horaRegreso
+    row.horaRegreso,
+    row.horaSalida
   )
 
   return mapRow({
@@ -386,7 +418,8 @@ export async function excursionPorId(
     row.id,
     row.capacidad,
     row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-    row.horaRegreso
+    row.horaRegreso,
+    row.horaSalida
   )
 
   return mapRow({

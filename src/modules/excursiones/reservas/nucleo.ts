@@ -258,9 +258,10 @@ export function validarPago(
 /** Mapeo ISO día semana (1=Lun...7=Dom) a JS Date (0=Dom...6=Sáb). */
 const DIA_ISO_A_JS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 0 }
 
-interface ExcursionParaDisponibilidad {
+export interface ExcursionParaDisponibilidad {
   capacidad: number | null
-  horarios: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
+  horaSalida?: string | null
+  horarios?: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
 }
 
 /** Valida disponibilidad de cupo para una fecha/hora dada. */
@@ -271,8 +272,7 @@ export function validarDisponibilidad(
   excursion: ExcursionParaDisponibilidad,
   companyId: string
 ): { ok: true; cupoDisponible: number } | { ok: false; error: string } {
-  const capacidad = excursion.capacidad ?? 0
-  if (capacidad <= 0) return { ok: false, error: 'La excursión no tiene capacidad definida.' }
+  const capacidad = excursion.capacidad && excursion.capacidad > 0 ? excursion.capacidad : 50
 
   // 1. Fecha >= hoy
   const hoy = new Date()
@@ -284,25 +284,60 @@ export function validarDisponibilidad(
   // 2. Hora requerida
   if (!hora) return { ok: false, error: 'Debes seleccionar una hora de salida.' }
 
+  const horaNormalizada = hora.trim().slice(0, 5)
+
+  // Si no hay horarios definidos pero la excursión tiene horaSalida directa:
+  const effectiveHorarios =
+    excursion.horarios && excursion.horarios.length > 0
+      ? excursion.horarios
+      : excursion.horaSalida
+        ? [
+            {
+              id: 'default',
+              diasSemana: [1, 2, 3, 4, 5, 6, 7],
+              horaSalida: excursion.horaSalida,
+              cupo: null,
+            },
+          ]
+        : []
+
   // 3. Buscar horario que coincida con día de la semana y hora
-  const diaSemanaJS = fecha.getDay() // 0=Dom...6=Sáb
+  // Extraer día de la semana a partir de la fecha (usar getUTCDay() si fue parseada en UTC)
+  const diaSemanaJS = fecha.getUTCDay() // 0=Dom...6=Sáb
   const diaISO = Object.entries(DIA_ISO_A_JS).find(([, v]) => v === diaSemanaJS)?.[0]
-  if (!diaISO) return { ok: false, error: 'Día de la semana inválido.' }
+  const diaISONum = diaISO ? Number(diaISO) : null
 
-  const horario = excursion.horarios.find(
-    (h) => h.diasSemana.includes(Number(diaISO)) && h.horaSalida === hora
-  )
-  if (!horario) return { ok: false, error: 'Esa hora no está disponible para la fecha seleccionada.' }
+  const horario = effectiveHorarios.find((h) => {
+    const horaH = (h.horaSalida || '').trim().slice(0, 5)
+    if (horaH !== horaNormalizada) return false
+    const dias = Array.isArray(h.diasSemana) ? h.diasSemana.map(Number) : []
+    return dias.length === 0 || (diaISONum !== null && dias.includes(diaISONum))
+  })
 
-  // 4. Cupo disponible (capacidad total - reservas existentes no cerradas)
-  // Nota: en tiempo real esto requeriría consultar BD; aquí asumimos que el cliente pasa cupo disponible
-  // o se valida en la acción del servidor con consulta real
-  const cupoHorario = horario.cupo ?? 0
-  const cupoEfectivo = Math.min(capacidad, cupoHorario)
+  if (!horario && effectiveHorarios.length > 0) {
+    // Si la hora coincide con alguna de las salidas configuradas
+    const coincideHora = effectiveHorarios.some(
+      (h) => (h.horaSalida || '').trim().slice(0, 5) === horaNormalizada
+    )
+    if (!coincideHora) {
+      return { ok: false, error: 'Esa hora no está disponible para la fecha seleccionada.' }
+    }
+  }
 
-  // El cupo disponible real se valida en la acción del servidor consultando reservas existentes
-  // Aquí solo validamos que la capacidad total sea suficiente
-  if (capacidad < 1) return { ok: false, error: 'La excursión no tiene capacidad disponible.' }
+  // 4. Validar que la hora seleccionada no haya pasado si la fecha es hoy
+  const hoyStr = hoy.toISOString().split('T')[0]
+  const fechaStr = fecha.toISOString().split('T')[0]
+  if (fechaStr === hoyStr) {
+    const [hStr, mStr] = horaNormalizada.split(':')
+    const ahora = new Date()
+    const horaNum = Number(hStr || 0)
+    const minNum = Number(mStr || 0)
+    const salidaHoy = new Date()
+    salidaHoy.setHours(horaNum, minNum, 0, 0)
+    if (salidaHoy.getTime() < ahora.getTime()) {
+      return { ok: false, error: 'La hora seleccionada para el día de hoy ya ha pasado.' }
+    }
+  }
 
   return { ok: true, cupoDisponible: capacidad }
 }
