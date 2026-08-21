@@ -12,7 +12,8 @@ import {
   Check, 
   Sparkles,
   Info,
-  DollarSign
+  DollarSign,
+  ImageIcon
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -26,6 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ExcursionImagenUpload } from './ExcursionImagenUpload'
 
 const init: CatalogoActionState = {}
 
@@ -45,6 +47,8 @@ export interface ExcursionEditable {
   incluye: string | null
   noIncluye: string | null
   politicas: string | null
+  portadaUrl?: string | null
+  galeria?: any
   horarios?: {
     id: string
     horaSalida: string
@@ -77,7 +81,13 @@ const HORAS_PRESETS = [
   '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'
 ]
 
-export function ExcursionForm({ excursion }: { excursion?: ExcursionEditable }) {
+export function ExcursionForm({ 
+  companyId, 
+  excursion 
+}: { 
+  companyId: string
+  excursion?: ExcursionEditable 
+}) {
   const router = useRouter()
   const accion = excursion ? actualizarExcursion : crearExcursion
   const [state, formAction, pending] = useActionState(accion, init)
@@ -204,6 +214,21 @@ export function ExcursionForm({ excursion }: { excursion?: ExcursionEditable }) 
       <input type="hidden" name="horaSalida" value={primeraHoraSalida} />
       <input type="hidden" name="horaRegreso" value={primeraHoraRegreso} />
       <input type="hidden" name="horariosData" value={horariosDataJson} />
+
+      {/* SECCIÓN 0: IMÁGENES Y MULTIMEDIA */}
+      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
+        <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
+          <ImageIcon className="h-5 w-5 text-primary" />
+          Imágenes de la excursión
+        </h3>
+        
+        <ExcursionImagenUpload
+          companyId={companyId}
+          excursionId={excursion?.id ?? null}
+          currentPortadaUrl={excursion?.portadaUrl ?? null}
+          currentGaleria={excursion?.galeria ?? null}
+        />
+      </div>
 
       {/* SECCIÓN 1: DATOS PRINCIPALES */}
       <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">

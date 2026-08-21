@@ -74,6 +74,8 @@ export interface ExcursionDatos {
   incluye: string | null
   noIncluye: string | null
   politicas: string | null
+  portadaUrl: string | null
+  galeria: string[] | null
 }
 
 /**
@@ -107,6 +109,18 @@ export function validarExcursion(
     return { ok: false, error: 'El impuesto es un porcentaje: entre 0 y 100.' }
   }
 
+  let galeria: string[] | null = null
+  if (typeof form.galeriaJson === 'string') {
+    try {
+      const parsed = JSON.parse(form.galeriaJson)
+      if (Array.isArray(parsed)) {
+        galeria = parsed.map(u => String(u).trim()).filter(Boolean)
+      }
+    } catch {
+      // Ignorar json inválido
+    }
+  }
+
   return {
     ok: true,
     datos: {
@@ -124,6 +138,8 @@ export function validarExcursion(
       incluye: texto(form.incluye, 2000) || null,
       noIncluye: texto(form.noIncluye, 2000) || null,
       politicas: texto(form.politicas, 2000) || null,
+      portadaUrl: texto(form.portadaUrl, 1000) || null,
+      galeria: galeria && galeria.length > 0 ? galeria : null,
     },
   }
 }
