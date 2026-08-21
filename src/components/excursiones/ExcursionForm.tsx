@@ -6,7 +6,7 @@
  * el editor de variantes. El servidor revalida todo (nucleo.validarExcursion).
  */
 
-import { useActionState, useEffect, useState, useRef, Fragment } from 'react'
+import { useActionState, useEffect, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -217,55 +217,35 @@ function DuracionInput({
    * recalculan en ese mismo momento. Sin efectos no hay ciclo posible, y el
    * usuario puede seguir editando cualquiera de los tres.
    */
-  const enMinutos = (hhmm: string): number | null => {
-    const [h, m] = hhmm.split(':').map(Number)
-    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
-  }
-
-  const aHora = (minutos: number): string => {
-    const total = ((minutos % (24 * 60)) + 24 * 60) % (24 * 60)
-    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
-  }
-
-  /** Minutos entre dos horas, cruzando la medianoche si hace falta. */
-  const diferencia = (desde: number, hasta: number): number => {
-    const diff = hasta - desde
-    return diff < 0 ? diff + 24 * 60 : diff
-  }
-
   const alCambiarDuracion = (valor: number | null) => {
     setDuracion(valor)
-    const ini = hSalida ? enMinutos(hSalida) : null
-    if (valor !== null && ini !== null) setHRegreso(aHora(ini + valor))
+    if (valor !== null && hSalida) {
+      const fin = calcularHoraRegreso(hSalida, valor)
+      if (fin) setHRegreso(fin)
+    }
   }
 
   const alCambiarSalida = (valor: string) => {
     setHSalida(valor)
-    const ini = enMinutos(valor)
-    if (ini === null) return
+    if (!valor) return
     // Con una duración puesta, mover la salida mueve el regreso. Si no la hay
     // pero sí un regreso, lo que queda determinado es la duración.
-    if (duracion !== null) setHRegreso(aHora(ini + duracion))
-    else if (hRegreso) {
-      const fin = enMinutos(hRegreso)
-      if (fin !== null) setDuracion(diferencia(ini, fin))
+    if (duracion !== null) {
+      const fin = calcularHoraRegreso(valor, duracion)
+      if (fin) setHRegreso(fin)
+    } else if (hRegreso) {
+      const d = calcularDuracion(valor, hRegreso)
+      if (d !== null) setDuracion(d)
     }
   }
 
   const alCambiarRegreso = (valor: string) => {
     setHRegreso(valor)
-    const ini = hSalida ? enMinutos(hSalida) : null
-    const fin = enMinutos(valor)
-    if (ini !== null && fin !== null) setDuracion(diferencia(ini, fin))
+    if (!hSalida || !valor) return
+    const d = calcularDuracion(hSalida, valor)
+    if (d !== null) setDuracion(d)
   }
 
-  const formatear = (min: number) => {
-    const h = Math.floor(min / 60)
-    const m = min % 60
-    if (h === 0) return `${m}m`
-    if (min % 60 === 0) return `${min / 60}h`
-    return `${Math.floor(min / 60)}h ${min % 60}m`
-  }
 
   return (
     <Fragment>
@@ -274,7 +254,7 @@ function DuracionInput({
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <Label htmlFor="exc-duracion" className="text-sm font-medium">
-            Duración ({duracion !== null ? formatear(duracion) : '—'})
+            Duración ({duracion !== null ? formatearDuracion(duracion) : '—'})
           </Label>
           <Input
             id="exc-duracion"
@@ -290,7 +270,7 @@ function DuracionInput({
           />
         </div>
         <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {duracion !== null ? `≈ ${formatear(duracion)}` : ''}
+          {duracion !== null ? `≈ ${formatearDuracion(duracion)}` : ''}
         </span>
       </div>
 

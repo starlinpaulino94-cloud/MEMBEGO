@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, CalendarDays, Clock, MapPin, Users, CreditCard, Check, X, Info, Shield, Image as ImageIcon } from 'lucide-react'
+import { ArrowLeft, CalendarDays, Clock, MapPin, Users, CreditCard, Check, X, Shield } from 'lucide-react'
 import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { reservaCliente } from '@/modules/excursiones/reservas/queries'
@@ -108,6 +108,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
               {/* Portada de la excursión */}
               {excursion.portadaUrl && (
                 <div className="mt-4 relative aspect-video overflow-hidden rounded-xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={excursion.portadaUrl}
                     alt={excursion.nombre}
@@ -215,6 +216,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                     {excursion.galeria.slice(0, 6).map((img: unknown, idx: number) => (
                       typeof img === 'string' && img.length > 0 ? (
                         <div key={idx} className="aspect-square overflow-hidden rounded-lg bg-muted">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={img}
                             alt={`${excursion.nombre} ${idx + 1}`}

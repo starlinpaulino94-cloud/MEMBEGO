@@ -112,8 +112,7 @@ async function calcularDisponibilidad(
   companyId: string,
   excursionId: string,
   capacidad: number | null,
-  horarios: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-  horaRegreso: string | null
+  horarios: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
 ): Promise<{ proximasSalidas: SalidaDisponible[]; agotadaGlobal: boolean; todasFechasPasadas: boolean }> {
   if (!capacidad || capacidad <= 0 || horarios.length === 0) {
     return { proximasSalidas: [], agotadaGlobal: true, todasFechasPasadas: true }
@@ -246,8 +245,7 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
         companyId,
         exc.id,
         exc.capacidad,
-        exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-        exc.horaRegreso
+        exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
       )
       const mapped = mapRow({
         ...exc,
@@ -316,8 +314,7 @@ export async function excursionPublica(
     companyId,
     row.id,
     row.capacidad,
-    row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-    row.horaRegreso
+    row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
   )
 
   return mapRow({
@@ -382,8 +379,7 @@ export async function excursionPorId(
     companyId,
     row.id,
     row.capacidad,
-    row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-    row.horaRegreso
+    row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
   )
 
   return mapRow({

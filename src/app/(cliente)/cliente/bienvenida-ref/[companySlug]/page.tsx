@@ -117,6 +117,7 @@ export default async function BienvenidaRefPage({ params }: BienvenidaRefPagePro
                   className="flex items-center gap-4 p-4 transition hover:bg-muted/30"
                 >
                   {exc.portadaUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={exc.portadaUrl}
                       alt={exc.nombre}

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { CalendarDays, Clock, MapPin, Users, Ticket } from 'lucide-react'
+import { CalendarDays, Clock, Users, Ticket } from 'lucide-react'
 import { getUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { reservasCliente } from '@/modules/excursiones/reservas/queries'
@@ -122,6 +122,7 @@ function ReservaCard({
     >
       <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-muted">
         {reserva.excursion.portadaUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={reserva.excursion.portadaUrl}
             alt={reserva.excursion.nombre}

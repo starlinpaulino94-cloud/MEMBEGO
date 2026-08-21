@@ -53,6 +53,7 @@ function ExcursionesSection({
           >
             <div className="relative aspect-[16/10] bg-muted">
               {exc.portadaUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={exc.portadaUrl}
                   alt={exc.nombre}

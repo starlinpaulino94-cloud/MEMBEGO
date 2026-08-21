@@ -47,19 +47,16 @@ export function ReservaExcursionForm({
   excursionId,
   moneda,
   variantes,
-  horarios,
   precioDesde,
   isAuthenticated,
   isFollowing: initialFollowing,
   proximasSalidas,
   agotadaGlobal,
-  todasFechasPasadas,
-  capacidad,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
   const followedRef = useRef(initialFollowing)
-  const [isFollowing, setIsFollowing] = useState(initialFollowing)
+  const [, setIsFollowing] = useState(initialFollowing)
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
   const [fecha, setFecha] = useState('')
@@ -142,8 +139,6 @@ export function ReservaExcursionForm({
     }
     // Already following — let the form action proceed
   }
-
-  const hoy = new Date().toISOString().split('T')[0]
 
   // Not authenticated — show CTA
   if (!isAuthenticated) {

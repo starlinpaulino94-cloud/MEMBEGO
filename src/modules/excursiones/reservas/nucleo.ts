@@ -268,8 +268,7 @@ export function validarDisponibilidad(
   fecha: Date,
   hora: string | null,
   pasajeros: number,
-  excursion: ExcursionParaDisponibilidad,
-  companyId: string
+  excursion: ExcursionParaDisponibilidad
 ): { ok: true; cupoDisponible: number } | { ok: false; error: string } {
   const capacidad = excursion.capacidad ?? 0
   if (capacidad <= 0) return { ok: false, error: 'La excursión no tiene capacidad definida.' }
@@ -294,14 +293,11 @@ export function validarDisponibilidad(
   )
   if (!horario) return { ok: false, error: 'Esa hora no está disponible para la fecha seleccionada.' }
 
-  // 4. Cupo disponible (capacidad total - reservas existentes no cerradas)
-  // Nota: en tiempo real esto requeriría consultar BD; aquí asumimos que el cliente pasa cupo disponible
-  // o se valida en la acción del servidor con consulta real
-  const cupoHorario = horario.cupo ?? 0
-  const cupoEfectivo = Math.min(capacidad, cupoHorario)
-
-  // El cupo disponible real se valida en la acción del servidor consultando reservas existentes
-  // Aquí solo validamos que la capacidad total sea suficiente
+  // 4. Cupo. OJO: esta función es PURA y no consulta la base, así que aquí
+  //    solo se comprueba que la capacidad declarada sea > 0. El cupo real
+  //    —capacidad menos reservas vivas, y el `cupo` propio del horario— lo
+  //    valida la acción del servidor, que sí puede contar. No se toca ese
+  //    reparto aquí: cambiarlo sería alterar una regla comercial.
   if (capacidad < 1) return { ok: false, error: 'La excursión no tiene capacidad disponible.' }
 
   return { ok: true, cupoDisponible: capacidad }
