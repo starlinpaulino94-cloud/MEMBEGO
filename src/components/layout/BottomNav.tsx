@@ -36,10 +36,10 @@ interface BottomNavItem {
  * disponible, así la barra nunca queda incompleta.
  */
 const INICIO: BottomNavItem = {
-  href: '/cliente/dashboard',
+  href: '/cliente/inicio',
   label: 'Inicio',
   icon: Home,
-  match: ['/cliente/dashboard'],
+  match: ['/cliente/inicio'],
 }
 const PERFIL: BottomNavItem = {
   href: '/cliente/perfil',
@@ -49,12 +49,11 @@ const PERFIL: BottomNavItem = {
 }
 /** Candidatos para los 2 slots flexibles, en orden de prioridad. */
 const FLEX_CANDIDATOS: BottomNavItem[] = [
-  { href: '/cliente/excursiones', label: 'Mis excursiones', icon: CalendarDays },
+  { href: '/cliente/mis-excursiones', label: 'Excursiones', icon: CalendarDays, match: ['/cliente/excursiones'] },
   { href: '/mis-membresias', label: 'Membresías', icon: WalletCards },
   { href: '/cliente/cerca', label: 'Cerca', icon: Compass },
   { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
   { href: '/cliente/mis-promociones', label: 'Beneficios', icon: Ticket },
-  { href: '/cliente/explorar', label: 'Buscar excursiones', icon: Compass },
   // Fallbacks siempre disponibles (garantizan 2 slots llenos).
   { href: '/cliente/historial', label: 'Historial', icon: WalletCards },
 ]

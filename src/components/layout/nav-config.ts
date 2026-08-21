@@ -266,18 +266,18 @@ const CLIENTE_NAV: NavGroup[] = [
   {
     id: 'inicio',
     label: 'Inicio',
-    // Enlace directo a la vista real (el dashboard con tabs).
-    items: [{ href: '/cliente/dashboard', label: 'Dashboard', icon: LayoutDashboard }],
+    // Enlace directo a la vista real (el home del cliente).
+    items: [{ href: '/cliente/inicio', label: 'Inicio', icon: LayoutDashboard }],
   },
   {
     id: 'descubrir',
     label: 'Descubrir',
     items: [
       { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
+      { href: '/cliente/excursiones', label: 'Excursiones', icon: Compass },
       // Aquí, y no en «Mis beneficios»: un plan es lo que puedes contratar,
       // no lo que tienes contratado.
       { href: '/cliente/planes', label: 'Planes', icon: Package },
-      { href: '/cliente/excursiones/buscar', label: 'Buscar excursiones', icon: Compass },
       { href: '/cliente/cerca', label: 'Cerca de mí', icon: Compass },
     ],
   },
@@ -300,7 +300,7 @@ const CLIENTE_NAV: NavGroup[] = [
       { href: '/cliente/citas', label: 'Mis citas', icon: CalendarDays },
       { href: '/cliente/pagos', label: 'Mis pagos', icon: Wallet },
       { href: '/cliente/historial', label: 'Historial', icon: History },
-      { href: '/cliente/excursiones', label: 'Mis excursiones', icon: CalendarDays },
+      { href: '/cliente/mis-excursiones', label: 'Mis excursiones', icon: CalendarDays },
     ],
   },
   {

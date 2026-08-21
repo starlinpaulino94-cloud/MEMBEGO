@@ -71,8 +71,8 @@ test('ninguna ruta del cliente se perdió al reagrupar', () => {
   // menú, su pantalla sigue existiendo y deja de tener camino — que es peor
   // que borrarla, porque nadie se entera.
   const todas = CLIENTE.flatMap((g) => g.items.map((i) => i.href))
-  const OBLIGATORIAS = [
-    '/cliente/dashboard',
+const OBLIGATORIAS = [
+    '/cliente/inicio',
     '/cliente/promociones',
     '/cliente/planes',
     '/cliente/cerca',

@@ -1,186 +1,303 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import { CalendarDays, Clock, MapPin, Users, Ticket } from 'lucide-react'
-import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { reservasCliente } from '@/modules/excursiones/reservas/queries'
-import { formatMoney, formatDate } from '@/lib/format'
-import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
+import {
+  AlertCircle,
+  Compass,
+  Star,
+  Sparkles,
+  CalendarDays,
+  Flame,
+  Search,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { requireRole } from '@/lib/auth/guards'
+import {
+  getCategoriasExcursiones,
+  buscarExcursionesCliente,
+  getExcursionFeed,
+  type ExcursionFeed,
+} from '@/modules/excursiones/catalogo/cliente-queries'
+import { cn } from '@/lib/utils'
+import { ExcursionCard, type ExcursionCardData } from '@/components/public/ExcursionCard'
+import { EmptyState } from '@/components/system/EmptyState'
+import { PageHeader } from '@/components/ui/page-header'
+import { SectionHeader } from '@/components/ui/section-header'
+import { Button } from '@/components/ui/button'
 
-const TONO_CLASE: Record<string, string> = {
-  success: 'bg-success/10 text-success',
-  warning: 'bg-warning/10 text-warning',
-  info: 'bg-info/10 text-info',
-  neutral: 'bg-muted text-muted-foreground',
-  danger: 'bg-destructive/10 text-destructive',
+export const dynamic = 'force-dynamic'
+export const metadata = {
+  title: 'Excursiones',
+  description: 'Tours, experiencias y aventuras disponibles para ti',
 }
 
-export default async function MisExcursionesPage() {
-  const user = await getUser()
-  if (!user) redirect('/login')
-
-  // Obtener TODAS las fichas de cliente del usuario (en todas las empresas)
-  const clienteIds = await prisma.cliente.findMany({
-    where: { supabaseId: user.supabaseId },
-    select: { id: true, companyId: true },
-  })
-  if (clienteIds.length === 0) redirect('/cliente/explorar')
-
-  // Consultar reservas en TODAS las empresas donde tiene ficha
-  const allReservas = await Promise.all(
-    clienteIds.map((c) => reservasCliente(c.companyId, c.id))
-  )
-  const reservas = allReservas.flat().sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-  const ahora = new Date()
-
-  const proximas = reservas.filter((r) => new Date(r.fecha) >= ahora)
-  const pasadas = reservas.filter((r) => new Date(r.fecha) < ahora)
-
+function ExcursionGrid({ excursiones }: { excursiones: ExcursionCardData[] }) {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-h2 font-bold">Mis excursiones</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {reservas.length} reserva{reservas.length !== 1 ? 's' : ''} en total
-          </p>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      {excursiones.map((e) => (
+        <div key={e.id} className="relative">
+          <ExcursionCard excursion={e} />
         </div>
-
-        {reservas.length === 0 ? (
-          <div className="rounded-xl border bg-card p-12 text-center shadow-sm">
-            <Ticket className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h2 className="text-h3 font-semibold">Sin reservas todavía</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Cuando reserves una excursión, aparecerá aquí.
-            </p>
-            <Link
-              href="/cliente/explorar"
-              className="mt-6 inline-flex items-center justify-center rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-            >
-              Explorar excursiones
-            </Link>
-          </div>
-        ) : (
-          <>
-            {proximas.length > 0 && (
-              <section aria-labelledby="proximas-heading" className="mb-10">
-                <h2 id="proximas-heading" className="text-h3 font-bold">
-                  Próximas ({proximas.length})
-                </h2>
-                <div className="mt-4 space-y-3">
-                  {proximas.map((r) => (
-                    <ReservaCard key={r.id} reserva={r} ahora={ahora} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {pasadas.length > 0 && (
-              <section aria-labelledby="pasadas-heading">
-                <h2 id="pasadas-heading" className="text-h3 font-bold">
-                  Pasadas ({pasadas.length})
-                </h2>
-                <div className="mt-4 space-y-3">
-                  {pasadas.map((r) => (
-                    <ReservaCard key={r.id} reserva={r} ahora={ahora} />
-                  ))}
-                </div>
-              </section>
-            )}
-          </>
-        )}
-      </div>
+      ))}
     </div>
   )
 }
 
-function ReservaCard({
-  reserva,
-  ahora,
+function SeccionExcursiones({
+  icon: Icon,
+  titulo,
+  descripcion,
+  excursiones,
 }: {
-  reserva: {
-    id: string
-    numero: string
-    estado: string
-    fecha: Date
-    hora: string | null
-    adultos: number
-    ninos: number
-    total: number
-    moneda: string
-    excursion: { id: string; nombre: string; slug: string; portadaUrl: string | null }
-  }
-  ahora: Date
+  icon: LucideIcon
+  titulo: string
+  descripcion?: string
+  excursiones: ExcursionCardData[]
 }) {
-  const esPasada = new Date(reserva.fecha) < ahora
-  const tono = TONO_RESERVA[reserva.estado as keyof typeof TONO_RESERVA] ?? 'neutral'
+  if (excursiones.length === 0) return null
+  return (
+    <section>
+      <SectionHeader
+        title={titulo}
+        description={descripcion}
+        action={
+          <span className="inline-flex items-center gap-1.5 text-caption">
+            <Icon className="h-4 w-4 text-primary" aria-hidden />
+            {excursiones.length}
+            <span className="sr-only">excursiones</span>
+          </span>
+        }
+      />
+      <ExcursionGrid excursiones={excursiones} />
+    </section>
+  )
+}
+
+export default async function ExcursionesDisponiblesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const user = await requireRole('CLIENTE')
+
+  const params = await searchParams
+  const soloTexto = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const q = soloTexto(params.q)
+  const categoria = soloTexto(params.categoria)
+  const empresa = soloTexto(params.empresa)
+  const stock = soloTexto(params.stock)
+  const buscando = Boolean(q || categoria || empresa || stock)
+
+  let feed: ExcursionFeed | null = null
+  let categorias: { slug: string; name: string }[] = []
+  let resultados: ExcursionCardData[] = []
+  let loadError = false
+
+  try {
+    categorias = await getCategoriasExcursiones().catch(() => [])
+
+    if (buscando) {
+      resultados = await buscarExcursionesCliente({
+        texto: q || undefined,
+        categoria: categoria || undefined,
+        empresaId: empresa || undefined,
+        soloConStock: stock === '1',
+      })
+    } else {
+      feed = await getExcursionFeed(user.metadata.dbUserId)
+    }
+  } catch (e) {
+    loadError = true
+    console.error('[cliente-excursiones]', e)
+  }
+
+  /** Enlaces de los chips: cambiar de categoría no borra lo que se escribió. */
+  const hrefCon = (cambios: { categoria?: string | null }) => {
+    const qs = new URLSearchParams()
+    if (q) qs.set('q', q)
+    if (empresa) qs.set('empresa', empresa)
+    if (stock) qs.set('stock', stock)
+    const cat = cambios.categoria === undefined ? categoria : cambios.categoria
+    if (cat) qs.set('categoria', cat)
+    const s = qs.toString()
+    return `/cliente/excursiones${s ? `?${s}` : ''}`
+  }
+
+  const categoriaActiva = categorias.find((c) => c.slug.toLowerCase() === categoria.toLowerCase())
+
+  const sinExcursiones =
+    feed != null &&
+    feed.misEmpresas.length === 0 &&
+    feed.destacadas.length === 0 &&
+    feed.nuevas.length === 0 &&
+    feed.proximasSalidas.length === 0
 
   return (
-    <Link
-      href={`/cliente/excursiones/${reserva.id}`}
-      className="group flex items-center gap-4 rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md hover:border-primary/50"
-    >
-      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-muted">
-        {reserva.excursion.portadaUrl ? (
-          <img
-            src={reserva.excursion.portadaUrl}
-            alt={reserva.excursion.nombre}
-            className="h-full w-full object-cover transition group-hover:scale-105"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <CalendarDays className="h-8 w-8 text-muted-foreground/40" />
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Experiencias"
+        title="Excursiones y Tours"
+        description="Descubre aventuras y paseos de tus empresas favoritas. Reserva tu cupo fácilmente."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="h-10 text-xs sm:text-sm">
+              <Link href="/cliente/mis-excursiones">
+                <CalendarDays aria-hidden className="mr-1.5 h-4 w-4" />
+                Mis reservas
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="h-10 text-xs sm:text-sm">
+              <Link href="/cliente/explorar">
+                <Compass aria-hidden className="mr-1.5 h-4 w-4" />
+                Explorar empresas
+              </Link>
+            </Button>
           </div>
-        )}
-        {esPasada && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="rounded-full bg-background/80 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              Finalizada
-            </span>
-          </div>
-        )}
-      </div>
+        }
+      />
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="font-semibold truncate">{reserva.excursion.nombre}</h3>
-            <p className="mt-0.5 text-sm text-muted-foreground">Reserva: {reserva.numero}</p>
+      {/* Buscador GET Mobile-First */}
+      <search className="block">
+        <form action="/cliente/excursiones" role="search">
+          {categoria && <input type="hidden" name="categoria" value={categoria} />}
+          {empresa && <input type="hidden" name="empresa" value={empresa} />}
+          {stock && <input type="hidden" name="stock" value={stock} />}
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              name="q"
+              type="search"
+              defaultValue={q}
+              aria-label="Buscar excursiones"
+              placeholder="Buscar: saona, catamarán, buggy, tirolesa, buceo…"
+              className="h-12 w-full rounded-xl border border-border bg-card pl-12 pr-4 text-sm sm:text-base text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+            />
           </div>
-          <span
-            className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONO_CLASE[tono] ?? TONO_CLASE.neutral}`}
-          >
-            {ESTADO_RESERVA_LABEL[reserva.estado as keyof typeof ESTADO_RESERVA_LABEL] ?? reserva.estado}
-          </span>
-        </div>
+        </form>
+      </search>
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <CalendarDays className="h-3.5 w-3.5" />
-            {formatDate(reserva.fecha, { moneda: reserva.moneda })}
-          </span>
-          {reserva.hora && (
-            <span className="flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" />
-              {reserva.hora}
-            </span>
+      {/* Chips de categoría - Scroll horizontal táctil sin barra */}
+      {categorias.length > 0 && (
+        <nav aria-label="Categorías">
+          <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+            {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
+              const activa = (cat.slug?.toLowerCase() || null) === (categoria?.toLowerCase() || null)
+              return (
+                <li key={cat.slug ?? 'todas'} className="shrink-0">
+                  <Link
+                    href={hrefCon({ categoria: cat.slug })}
+                    aria-current={activa ? 'page' : undefined}
+                    className={cn(
+                      'inline-flex min-h-10 sm:min-h-11 items-center rounded-full px-4 text-xs sm:text-small font-semibold transition-colors',
+                      activa
+                        ? 'bg-primary text-primary-foreground'
+                        : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    )}
+                  >
+                    {cat.name}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+      )}
+
+      {loadError ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="No pudimos cargar las excursiones"
+          description="Intenta de nuevo en unos momentos."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/cliente/excursiones">Reintentar</Link>
+            </Button>
+          }
+        />
+      ) : buscando ? (
+        /* ── Resultados ─────────────────────────────────────────────────── */
+        <div className="space-y-6">
+          <p className="text-xs sm:text-small text-muted-foreground" role="status">
+            {resultados.length} {resultados.length === 1 ? 'excursión vigente encontrada' : 'excursiones vigentes encontradas'}
+            {categoriaActiva ? ` en ${categoriaActiva.name}` : ''}
+            {q ? ` para «${q}»` : ''}
+          </p>
+          {resultados.length === 0 ? (
+            <EmptyState
+              icon={Compass}
+              title={q ? `Sin resultados para «${q}»` : 'Sin excursiones vigentes con esos filtros'}
+              description="Prueba con otros términos o explora todas las excursiones."
+              action={
+                <Button asChild variant="outline">
+                  <Link href="/cliente/excursiones">Ver todas las excursiones</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <ExcursionGrid excursiones={resultados} />
           )}
-          <span className="flex items-center gap-1">
-            <Users className="h-3.5 w-3.5" />
-            {reserva.adultos} adulto{reserva.adultos !== 1 ? 's' : ''}
-            {reserva.ninos > 0 && `, ${reserva.ninos} niño${reserva.ninos !== 1 ? 's' : ''}`}
-          </span>
         </div>
+      ) : feed == null ? (
+        <EmptyState
+          icon={AlertCircle}
+          title="No pudimos cargar las excursiones"
+          description="Intenta de nuevo en unos momentos."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/cliente/excursiones">Reintentar</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-10 sm:space-y-12">
+          {/* De tus empresas: donde soy cliente + las que sigo */}
+          <SeccionExcursiones
+            icon={Star}
+            titulo="De tus empresas"
+            descripcion="Donde eres cliente y las que sigues. Tus favoritas primero."
+            excursiones={feed.misEmpresas}
+          />
 
-        <p className="mt-2 text-sm font-semibold text-primary">
-          {formatMoney(reserva.total, { moneda: reserva.moneda })}
-        </p>
-      </div>
+          {/* Próximas salidas */}
+          <SeccionExcursiones
+            icon={CalendarDays}
+            titulo="Próximas salidas"
+            descripcion="Tours con salidas programadas y cupos disponibles."
+            excursiones={feed.proximasSalidas}
+          />
 
-      <div className="flex-shrink-0 text-muted-foreground/50">
-        <span className="text-xs">Ver detalle</span>
-      </div>
-    </Link>
+          {/* Destacadas */}
+          <SeccionExcursiones
+            icon={Flame}
+            titulo="Destacadas"
+            descripcion="Las experiencias más populares y reservadas."
+            excursiones={feed.destacadas}
+          />
+
+          {/* Nuevas */}
+          <SeccionExcursiones
+            icon={Sparkles}
+            titulo="Nuevas aventuras"
+            descripcion="Publicadas recientemente por las empresas."
+            excursiones={feed.nuevas}
+          />
+
+          {/* Sin excursiones */}
+          {sinExcursiones && (
+            <EmptyState
+              icon={Compass}
+              title="Sin excursiones activas por el momento"
+              description="Sigue empresas para enterarte tan pronto publiquen nuevas experiencias."
+              action={
+                <Button asChild size="lg">
+                  <Link href="/cliente/explorar">Explorar empresas</Link>
+                </Button>
+              }
+            />
+          )}
+        </div>
+      )}
+    </div>
   )
 }

@@ -41,7 +41,7 @@ export function ReservaCard({ reserva, ahora }: ReservaCardProps) {
 
   return (
     <Link
-      href={`/cliente/excursiones/${reserva.id}`}
+      href={`/cliente/mis-excursiones/${reserva.id}`}
       className="group flex items-center gap-4 rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md hover:border-primary/50"
     >
       <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-muted">

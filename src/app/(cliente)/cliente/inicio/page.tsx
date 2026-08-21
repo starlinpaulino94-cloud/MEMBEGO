@@ -26,7 +26,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { CelebracionBienvenida } from '@/components/cliente/CelebracionBienvenida'
 import { DescubreMas } from '@/components/cliente/DescubreMas'
 import { OnboardingClienteFirstVisit } from '@/components/cliente/OnboardingClienteFirstVisit'
-import { BuscadorInicio } from '@/components/cliente/inicio/BuscadorInicio'
+import { BuscadorSimple } from '@/components/cliente/inicio/BuscadorSimple'
 import { OfertasParaTi } from '@/components/cliente/inicio/OfertasParaTi'
 import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -342,8 +342,8 @@ export default async function InicioCliente() {
         </div>
       </header>
 
-      {/* ── Buscar y categorías (solo con marketplace) ─────────────────────── */}
-      {mostrarDescubrimiento && <BuscadorInicio categorias={chips} />}
+      {/* ── Buscar ofertas y excursiones ─── */}
+      <BuscadorSimple />
 
       {/* ── La acción principal: la elige el motor de experiencias (MEE) ───── */}
       {heroExp && <ExperienciaHero exp={heroExp} />}
