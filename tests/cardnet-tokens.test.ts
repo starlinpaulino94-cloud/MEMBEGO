@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   urlsTokens,
   montoEnteroMenor,
@@ -618,4 +619,51 @@ test('un rechazo del banco NO se confunde con falta de activación', () => {
   const r = interpretarCompraToken({ ResponseCode: '51' })
   assert.equal(r.aprobada, false)
   assert.equal(r.requiereActivacion, false)
+})
+
+
+// ── El presupuesto de abrir la ventana no es el de cobrar ──────────────────
+//
+// Compartían limitador (10/min entre las cinco rutas de pago) y la operación
+// barata —pedir la sesión de captura, que el navegador precarga sola— agotaba
+// el presupuesto de las caras. El cliente se quedaba sin poder COBRAR porque
+// había abierto la pantalla de pago varias veces, y el 429 le llegaba
+// disfrazado de «No se pudo iniciar la ventana de pago».
+//
+// Esta prueba fija la separación estructuralmente: si alguien vuelve a poner
+// `paymentLimiter` en la ruta de sesión, o le quita el freno a una ruta que
+// mueve dinero, se entera aquí y no en producción.
+
+const RUTAS = 'src/app/api/pagos/cardnet-token'
+
+test('las rutas que MUEVEN DINERO conservan el limitador de pagos', () => {
+  for (const ruta of ['cobrar', 'confirmar', 'activar', 'guardar']) {
+    const src = readFileSync(`${RUTAS}/${ruta}/route.ts`, 'utf8')
+    assert.match(
+      src,
+      /await paymentLimiter\(/,
+      `${ruta}: una ruta que cobra tiene que pasar por el limitador de pagos`
+    )
+  }
+})
+
+test('abrir la ventana de pago NO gasta el presupuesto de los cobros', () => {
+  const src = readFileSync(`${RUTAS}/sesion/route.ts`, 'utf8')
+  assert.match(src, /await paymentSessionLimiter\(/)
+  // Y no puede colarse además el de los cobros: el objetivo es no tocarlo.
+  assert.doesNotMatch(src, /await paymentLimiter\(/)
+})
+
+test('el limitador de sesión es más holgado que el de los cobros', () => {
+  // Si fuera igual o más estrecho, separarlos no habría servido de nada.
+  const src = readFileSync('src/lib/rate-limit.ts', 'utf8')
+  const leerTope = (nombre: string) => {
+    const bloque = new RegExp(
+      `export const ${nombre} = createRateLimiter\\(\\{[^}]*maxRequests:\\s*(\\d+)`,
+      'm'
+    ).exec(src)
+    assert.ok(bloque, `no se encontró el limitador ${nombre}`)
+    return Number(bloque[1])
+  }
+  assert.ok(leerTope('paymentSessionLimiter') > leerTope('paymentLimiter'))
 })
