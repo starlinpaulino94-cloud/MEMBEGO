@@ -22,7 +22,11 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { calcularSaldo, ESTADOS_CERRADOS } from '@/modules/excursiones/reservas/nucleo'
+import {
+  calcularSaldo,
+  ESTADOS_CERRADOS,
+  type EstadoReserva,
+} from '@/modules/excursiones/reservas/nucleo'
 import {
   reglaAplicable,
   calcularComision,
@@ -96,7 +100,7 @@ export async function procesarVentaYComisionInterna(
     })
   )
   if (!reserva) return { error: 'Reserva no encontrada.' }
-  if (ESTADOS_CERRADOS.includes(reserva.estado as any)) {
+  if (ESTADOS_CERRADOS.includes(reserva.estado as EstadoReserva)) {
     return { error: 'Esa reserva está cerrada (cancelada, completada o no-show): no genera venta.' }
   }
 

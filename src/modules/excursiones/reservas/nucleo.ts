@@ -264,15 +264,26 @@ export interface ExcursionParaDisponibilidad {
   horarios?: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
 }
 
+/**
+ * Cupo que se asume cuando la excursión no declara capacidad.
+ * Ver la nota en `validarDisponibilidad`: es una decisión de negocio abierta.
+ */
+export const CAPACIDAD_SIN_DECLARAR = 50
+
 /** Valida disponibilidad de cupo para una fecha/hora dada. */
 export function validarDisponibilidad(
   fecha: Date,
   hora: string | null,
   pasajeros: number,
-  excursion: ExcursionParaDisponibilidad,
-  companyId: string
+  excursion: ExcursionParaDisponibilidad
 ): { ok: true; cupoDisponible: number } | { ok: false; error: string } {
-  const capacidad = excursion.capacidad && excursion.capacidad > 0 ? excursion.capacidad : 50
+  // PENDIENTE DE CONFIRMAR (regla comercial): qué hacer cuando la excursión no
+  // declara capacidad. Antes se rechazaba la reserva; esta rama asume este
+  // cupo. Asumir de más puede sobrevender; rechazar bloquea excursiones que el
+  // operador no terminó de configurar. Queda con nombre y a la vista, no
+  // escondido como un número suelto dentro de una condición.
+  const capacidad =
+    excursion.capacidad && excursion.capacidad > 0 ? excursion.capacidad : CAPACIDAD_SIN_DECLARAR
 
   // 1. Fecha >= hoy
   const hoy = new Date()
@@ -338,6 +349,11 @@ export function validarDisponibilidad(
       return { ok: false, error: 'La hora seleccionada para el día de hoy ya ha pasado.' }
     }
   }
+
+  // 5. Cupo. OJO: esta función es PURA y no consulta la base, así que aquí no
+  //    se puede saber el cupo real. El cupo de verdad —capacidad menos
+  //    reservas vivas, y el `cupo` propio del horario— lo valida la acción del
+  //    servidor, que sí puede contar. Ese reparto no se toca aquí.
 
   return { ok: true, cupoDisponible: capacidad }
 }

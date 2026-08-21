@@ -47,23 +47,22 @@ export function ReservaExcursionForm({
   excursionId,
   moneda,
   variantes,
-  horarios,
   precioDesde,
   isAuthenticated,
   isFollowing: initialFollowing,
   proximasSalidas,
   agotadaGlobal,
-  todasFechasPasadas,
-  capacidad,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
   const followedRef = useRef(initialFollowing)
-  const [isFollowing, setIsFollowing] = useState(initialFollowing)
+  const [, setIsFollowing] = useState(initialFollowing)
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
   const [fecha, setFecha] = useState('')
-  const [hora, setHora] = useState('')
+  // Lo que el usuario ELIGIÓ. La hora efectiva (`hora`) se deriva de esto más
+  // los horarios disponibles: ver abajo.
+  const [horaElegida, setHoraElegida] = useState('')
   const [adultos, setAdultos] = useState(1)
   const [ninos, setNinos] = useState(0)
   const [notas, setNotas] = useState('')
@@ -97,15 +96,22 @@ export function ReservaExcursionForm({
       .sort((a, b) => a.horaSalida.localeCompare(b.horaSalida))
   }, [fecha, salidasDisponibles])
 
-  // Reset hora when fecha changes
-  useEffect(() => {
-    if (horariosDisponibles.length > 0) {
-      const primerDisponible = horariosDisponibles.find((h) => !h.agotada) || horariosDisponibles[0]
-      if (primerDisponible) {
-        setHora(primerDisponible.horaSalida)
-      }
-    }
-  }, [fecha, horariosDisponibles])
+  /**
+   * La hora efectiva se DERIVA, no se asigna desde un efecto.
+   *
+   * El efecto anterior escribía `hora` cada vez que cambiaba la fecha, y eso
+   * es un render de más en el que la pantalla enseña la hora de la fecha
+   * ANTERIOR: durante ese instante el formulario está describiendo una salida
+   * que no existe. Derivarlo cierra esa ventana — no hay estado intermedio que
+   * pueda quedar desfasado con la fecha.
+   *
+   * Si lo que el usuario eligió sigue estando disponible, manda su elección;
+   * si dejó de estarlo (cambió de fecha), cae al primer horario CON CUPO de la
+   * nueva — proponer uno agotado sería ofrecer lo que no se puede reservar.
+   */
+  const hora = horariosDisponibles.some((h) => h.horaSalida === horaElegida)
+    ? horaElegida
+    : ((horariosDisponibles.find((h) => !h.agotada) ?? horariosDisponibles[0])?.horaSalida ?? '')
 
   const varianteActual = variantes.find((v) => v.id === varianteId) ?? variantes[0]
   const precioAdulto = varianteActual?.precioAdulto ?? 0
@@ -141,8 +147,6 @@ export function ReservaExcursionForm({
     }
     // Already following — let the form action proceed
   }
-
-  const hoy = new Date().toISOString().split('T')[0]
 
   // Not authenticated — show CTA
   if (!isAuthenticated) {
@@ -224,8 +228,11 @@ export function ReservaExcursionForm({
         {/* Variante */}
         {variantes.length > 1 && (
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Tipo de experiencia</label>
+            <label htmlFor="reserva-variante" className="mb-1.5 block text-sm font-medium">
+              Tipo de experiencia
+            </label>
             <select
+              id="reserva-variante"
               name="varianteId"
               value={varianteId}
               onChange={(e) => setVarianteId(e.target.value)}
@@ -245,11 +252,12 @@ export function ReservaExcursionForm({
 
         {/* Fecha */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium">
+          <label htmlFor="reserva-fecha" className="mb-1.5 block text-sm font-medium">
             <CalendarDays className="mr-1 inline h-4 w-4" />
             Fecha
           </label>
           <select
+            id="reserva-fecha"
             name="fecha"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
@@ -302,7 +310,7 @@ export function ReservaExcursionForm({
                       name="hora_radio"
                       value={h.horaSalida}
                       checked={hora === h.horaSalida}
-                      onChange={() => setHora(h.horaSalida)}
+                      onChange={() => setHoraElegida(h.horaSalida)}
                       disabled={h.agotada}
                       className="sr-only"
                     />

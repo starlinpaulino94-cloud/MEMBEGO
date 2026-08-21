@@ -511,8 +511,9 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
       const fechas: string[] = []
       const hoy = new Date()
       hoy.setHours(0, 0, 0, 0)
-      const targetDay = DIAS_SEMANA_MAP[diaSemana as keyof typeof DIAS_SEMANA_MAP] ?? (diaSemana === 7 ? 0 : diaSemana)
-      let fecha = new Date(hoy)
+      const targetDay =
+        DIAS_SEMANA_MAP[diaSemana as keyof typeof DIAS_SEMANA_MAP] ?? diaSemana
+      const fecha = new Date(hoy)
       const diff = (targetDay - fecha.getDay() + 7) % 7
       fecha.setDate(fecha.getDate() + diff)
       for (let i = 0; i < limiteDias; i += 7) {
