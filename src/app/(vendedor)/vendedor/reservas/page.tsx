@@ -9,6 +9,8 @@ import {
 } from '@/modules/excursiones/reservas/nucleo'
 import { StatusChip } from '@/components/ui/status-chip'
 import { EmptyState } from '@/components/system/EmptyState'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { formatDate, formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -23,18 +25,31 @@ export default async function MisReservasPage() {
 
   const reservas = await misReservas(vendedor.companyId, vendedor.id)
 
+  const header = (
+    <div className="flex items-center justify-between mb-4">
+      <h2 className="text-xl font-bold">Mis reservas</h2>
+      <Link href="/vendedor/reservas/nueva">
+        <Button>Nueva reserva</Button>
+      </Link>
+    </div>
+  )
+
   if (reservas.length === 0) {
     return (
-      <EmptyState
-        icon={Ticket}
-        title="Todavía no tienes reservas"
-        description="Cuando un cliente que entró por tu QR reserve una excursión, la verás aquí con su fecha y lo que falta por cobrar."
-      />
+      <>
+        {header}
+        <EmptyState
+          icon={Ticket}
+          title="Todavía no tienes reservas"
+          description="Cuando un cliente que entró por tu QR reserve una excursión, la verás aquí con su fecha y lo que falta por cobrar."
+        />
+      </>
     )
   }
 
   return (
     <div className="space-y-3">
+      {header}
       {reservas.map((r) => (
         <article key={r.id} className="rounded-2xl border border-border bg-card p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">

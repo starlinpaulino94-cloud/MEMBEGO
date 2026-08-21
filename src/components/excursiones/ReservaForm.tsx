@@ -36,6 +36,7 @@ export interface ExcursionOpcion {
   moneda: string
   impuestoPct: number | null
   variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null }[]
+  horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
 }
 
 export function ReservaForm({
@@ -49,6 +50,7 @@ export function ReservaForm({
   const [state, formAction, pending] = useActionState(crearReserva, init)
   const [excursionId, setExcursionId] = useState(excursiones[0]?.id ?? '')
   const [varianteId, setVarianteId] = useState(excursiones[0]?.variantes[0]?.id ?? '')
+  const [hora, setHora] = useState(excursiones[0]?.horarios?.[0]?.horaSalida ?? '')
   const [adultos, setAdultos] = useState('2')
   const [ninos, setNinos] = useState('0')
   const [descuento, setDescuento] = useState('')
@@ -56,6 +58,15 @@ export function ReservaForm({
   const excursion = excursiones.find((e) => e.id === excursionId) ?? excursiones[0]
   const variante =
     excursion?.variantes.find((v) => v.id === varianteId) ?? excursion?.variantes[0]
+
+  useEffect(() => {
+    if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
+      setVarianteId(excursion.variantes[0]?.id ?? '')
+    }
+    if (excursion && !excursion.horarios?.find((h) => h.horaSalida === hora)) {
+      setHora(excursion.horarios?.[0]?.horaSalida ?? '')
+    }
+  }, [excursion, varianteId, hora])
 
   useEffect(() => {
     if (state.creada) {
@@ -153,7 +164,23 @@ export function ReservaForm({
         </div>
         <div>
           <Label htmlFor="res-hora">Hora de salida</Label>
-          <Input id="res-hora" name="hora" type="time" />
+          <select
+            id="res-hora"
+            name="hora"
+            value={hora}
+            onChange={(e) => setHora(e.target.value)}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            {excursion?.horarios?.length > 0 ? (
+              excursion.horarios.map((h) => (
+                <option key={h.id} value={h.horaSalida}>
+                  {h.horaSalida}
+                </option>
+              ))
+            ) : (
+              <option value="">Sin horarios</option>
+            )}
+          </select>
         </div>
       </div>
 
