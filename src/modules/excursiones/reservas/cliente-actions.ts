@@ -340,55 +340,65 @@ export async function reservarCarritoAction({
         descuentoFijo: 0,
       })
 
+      const fechaObj = new Date(`${item.fecha}T12:00:00.000Z`)
+      const anio = isNaN(fechaObj.getTime()) ? new Date().getUTCFullYear() : fechaObj.getUTCFullYear()
+      const fechaValida = isNaN(fechaObj.getTime()) ? new Date() : fechaObj
+      const prefijo = exc.nombre.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, 'E') || 'EXC'
+
       const reserva = await conEmpresa(exc.companyId, async (tx) => {
-        let intento = 0
-        let creada = null
-        while (intento < 5) {
-          const prefijo = exc.nombre.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, 'E') || 'EXC'
-          const num = numeroReserva(prefijo, new Date())
+        const desde = new Date(Date.UTC(anio, 0, 1))
+        const hasta = new Date(Date.UTC(anio + 1, 0, 1))
+        let intento =
+          (await tx.reservaExc.count({
+            where: { companyId: exc.companyId, fecha: { gte: desde, lt: hasta } },
+          })) + 1
+
+        for (let i = 0; i < 5; i++) {
           try {
-            creada = await tx.reservaExc.create({
+            return await tx.reservaExc.create({
               data: {
                 companyId: exc.companyId,
+                numero: numeroReserva(prefijo, anio, intento),
                 excursionId: exc.id,
                 varianteId: v.id,
                 clienteId: cliente.id,
                 vendedorId,
-                fecha: new Date(`${item.fecha}T12:00:00Z`),
-                horaSalida: item.horaSalida,
+                fecha: fechaValida,
+                hora: item.horaSalida || null,
                 adultos: item.adultos,
                 ninos: item.ninos,
                 moneda: exc.moneda,
                 subtotal: totales.subtotal,
                 descuento: totales.descuento,
-                impuesto: totales.impuestos,
+                impuestos: totales.impuestos,
                 total: totales.total,
-                estado: 'CREADA',
-                origenVenta: 'ONLINE',
-                notas: item.notas,
+                estado: 'PENDIENTE',
+                canal: 'ONLINE',
+                notas: item.notas || null,
                 pasajeros: {
-                  create: [
-                    ...Array.from({ length: item.adultos }).map(() => ({
-                      tipo: 'ADULTO', checkinToken: `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
-                    })),
-                    ...Array.from({ length: item.ninos }).map(() => ({
-                      tipo: 'NINO', checkinToken: `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
-                    }))
-                  ]
-                }
+                  createMany: {
+                    data: [
+                      ...Array.from({ length: item.adultos }, () => ({
+                        companyId: exc.companyId,
+                        tipo: 'ADULTO',
+                      })),
+                      ...Array.from({ length: item.ninos }, () => ({
+                        companyId: exc.companyId,
+                        tipo: 'NINO',
+                      })),
+                    ],
+                  },
+                },
               },
-              select: { id: true, numero: true }
+              select: { id: true, numero: true },
             })
-            break
-          } catch (e: any) {
-            if (e.message?.includes('numero')) {
-              intento++
-              continue
-            }
-            throw e
+          } catch (e: unknown) {
+            const esUnique = e instanceof Error && 'code' in e && (e as { code?: string }).code === 'P2002'
+            if (!esUnique || i === 4) throw e
+            intento += 1
           }
         }
-        return creada
+        throw new Error('No se pudo generar el número de reserva tras varios intentos.')
       })
 
       if (reserva && vendedorId) {
