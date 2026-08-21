@@ -1,4 +1,3 @@
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import type { ExcursionCardData } from '@/components/public/ExcursionCard'
 import { calcularDisponibilidad, mapRow } from './public-queries'
@@ -48,10 +47,12 @@ async function mapearExcursionesConDisponibilidad(
   if (rows.length === 0) return []
 
   const companyIds = [...new Set(rows.map((r) => r.companyId))]
-  const companies = await prisma.company.findMany({
+  const companies = await sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.company.findMany({
     where: { id: { in: companyIds } },
     select: { id: true, slug: true, name: true, logoUrl: true, moneda: true },
   })
+    )
   const companyMap = new Map(companies.map((c) => [c.id, c]))
 
   const mapped = await Promise.all(
@@ -103,11 +104,13 @@ async function mapearExcursionesConDisponibilidad(
  * Obtiene todas las categorías únicas disponibles en excursiones activas.
  */
 export async function getCategoriasExcursiones(): Promise<{ slug: string; name: string }[]> {
-  const rows = await prisma.excursion.findMany({
+  const rows = await sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.excursion.findMany({
     where: { estado: 'ACTIVA' },
     select: { categoria: true },
     distinct: ['categoria'],
   })
+    )
 
   return rows
     .map((r) => r.categoria)
@@ -143,12 +146,18 @@ export async function buscarExcursionesCliente(filtros: {
     ]
   }
 
-  const rows = await prisma.excursion.findMany({
+  const rows = await sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.excursion.findMany({
     where: whereBase,
     orderBy: { createdAt: 'desc' },
     take: 60,
     select: EXCURSION_SELECT,
   })
+    )
+
+  // Las filas crudas no sirven a la tarjeta: hay que resolver empresa y
+  // disponibilidad. El mapeador ya existe en este archivo — faltaba llamarlo.
+  const conDisponibilidad = await mapearExcursionesConDisponibilidad(rows)
 
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
@@ -175,10 +184,12 @@ export async function buscarExcursionesCliente(filtros: {
  * - Próximas salidas
  */
 export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed> {
-  const dbUser = await prisma.user.findUnique({
+  const dbUser = await sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.user.findUnique({
     where: { id: dbUserId },
     select: { supabaseId: true },
   })
+    )
 
   const supabaseId = dbUser?.supabaseId
 
@@ -186,14 +197,18 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
   let companyIdsCliente: string[] = []
   if (supabaseId) {
     const [fichas, follows] = await Promise.all([
-      prisma.cliente.findMany({
+      sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.cliente.findMany({
         where: { supabaseId, company: { isActive: true } },
         select: { companyId: true },
-      }),
-      prisma.companyFollow.findMany({
+      })
+    ),
+      sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.companyFollow.findMany({
         where: { userId: dbUserId, company: { isActive: true } },
         select: { companyId: true },
-      }),
+      })
+    ),
     ])
     companyIdsCliente = [...new Set([...fichas.map((f) => f.companyId), ...follows.map((f) => f.companyId)])]
   }
@@ -201,7 +216,8 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
   // 2. Traer excursiones en paralelo
   const [rowsMisEmpresas, rowsDestacadas, rowsNuevas] = await Promise.all([
     companyIdsCliente.length > 0
-      ? prisma.excursion.findMany({
+      ? sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.excursion.findMany({
           where: {
             companyId: { in: companyIdsCliente },
             estado: 'ACTIVA',
@@ -210,14 +226,18 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
           take: 16,
           select: EXCURSION_SELECT,
         })
+    )
       : Promise.resolve([]),
-    prisma.excursion.findMany({
+    sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.excursion.findMany({
       where: { estado: 'ACTIVA' },
       orderBy: { createdAt: 'desc' },
       take: 16,
       select: EXCURSION_SELECT,
-    }),
-    prisma.excursion.findMany({
+    })
+    ),
+    sinEmpresa('excursiones: catálogo del cliente', (tx) =>
+      tx.excursion.findMany({
       where: {
         estado: 'ACTIVA',
         createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
@@ -225,7 +245,8 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
       orderBy: { createdAt: 'desc' },
       take: 16,
       select: EXCURSION_SELECT,
-    }),
+    })
+    ),
   ])
 
   const [misEmpresas, destacadas, nuevas] = await Promise.all([

@@ -97,7 +97,7 @@ function generarFechasParaDia(diaSemana: number, limiteDias = 90): string[] {
   hoy.setHours(0, 0, 0, 0)
 
   const targetDay = DIAS_SEMANA_MAP[diaSemana as keyof typeof DIAS_SEMANA_MAP] ?? diaSemana
-  let fecha = new Date(hoy)
+  const fecha = new Date(hoy)
   const diff = (targetDay - fecha.getDay() + 7) % 7
   fecha.setDate(fecha.getDate() + diff)
 

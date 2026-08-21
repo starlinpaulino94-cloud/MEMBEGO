@@ -6,9 +6,8 @@
  * (ExcursionPublica, SalidaDisponible) y la lógica de disponibilidad.
  */
 
-import { prisma } from '@/lib/prisma'
-import type { Decimal } from '@prisma/client/runtime/library'
-import { calcularDisponibilidad, mapRow, type ExcursionPublica, type SalidaDisponible } from './public-queries'
+import { sinEmpresa } from '@/lib/tenant'
+import { calcularDisponibilidad, mapRow, type ExcursionPublica } from './public-queries'
 
 export interface FiltrosExcursion {
   companyId?: string
@@ -32,8 +31,28 @@ export interface ResultadoBusqueda {
   empresas: { id: string; slug: string; name: string; logoUrl: string | null }[]
 }
 
-function toNum(d: Decimal | null): number | null {
-  return d == null ? null : Number(d)
+/**
+ * Empresas que PUEDEN salir en la búsqueda pública.
+ *
+ * Excluye las marcadas como demo. Es la misma regla del marketplace
+ * (`marketplace/queries.ts`: `esDemo: false`, y `if (company.esDemo) return
+ * null`), y aquí faltaba: el sembrador de demostración crea una empresa de
+ * tours entera —excursiones, vendedores, reservas— y sin este filtro esos
+ * datos aparecían en la vitrina pública mezclados con los reales. Datos de
+ * demostración mezclados con producción es exactamente lo que no puede pasar.
+ *
+ * Va con `sinEmpresa` porque la pregunta ES cross-tenant: una vitrina pública
+ * enseña la oferta de TODAS las empresas. Mismo precedente que
+ * `marketplace/marcaUnica.ts`.
+ */
+async function empresasVisibles(): Promise<string[]> {
+  const rows = await sinEmpresa('excursiones: vitrina pública (empresas visibles)', (tx) =>
+    tx.company.findMany({
+      where: { isActive: true, esDemo: false },
+      select: { id: true },
+    })
+  )
+  return rows.map((r) => r.id)
 }
 
 /**
@@ -55,10 +74,13 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
   const skip = (pagina - 1) * porPagina
   const take = porPagina
 
-  // Construir where base: solo excursiones ACTIVAS
+  // Construir where base: solo excursiones ACTIVAS de empresas VISIBLES.
+  // El filtro de empresa va primero: una excursión activa de una empresa demo
+  // (o desactivada) no puede aparecer en la vitrina pública.
+  const visibles = await empresasVisibles()
   const whereBase: Record<string, unknown> = {
     estado: 'ACTIVA',
-    ...(companyId ? { companyId } : {}),
+    companyId: companyId && visibles.includes(companyId) ? companyId : { in: visibles },
     ...(categoria ? { categoria } : {}),
   }
 
@@ -74,10 +96,12 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
   }
 
   // Obtener total para paginación
-  const total = await prisma.excursion.count({ where: whereBase })
+  const total = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.excursion.count({ where: whereBase }))
 
   // Obtener excursiones con select (sin include company)
-  const rows = await prisma.excursion.findMany({
+  const rows = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.excursion.findMany({
     where: whereBase,
     orderBy: { nombre: 'asc' },
     skip,
@@ -113,14 +137,15 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
         select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
       },
     },
-  })
+  }))
 
   // Obtener empresas en bulk
   const companyIds = [...new Set(rows.map((r) => r.companyId))]
-  const companies = await prisma.company.findMany({
+  const companies = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.company.findMany({
     where: { id: { in: companyIds } },
     select: { id: true, slug: true, name: true, logoUrl: true },
-  })
+  }))
   const companyMap = new Map(companies.map((c) => [c.id, c]))
 
   // Calcular disponibilidad para cada excursión
@@ -178,10 +203,20 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
 
   return {
     excursiones: filtradas,
-    total: filtradas.length,
+    // El total sale del COUNT en la base, no del largo de esta página.
+    //
+    // Antes era `filtradas.length` —como mucho `porPagina`— así que
+    // `totalPaginas` daba 1 SIEMPRE y no había forma de llegar a la página 2:
+    // el resto del catálogo era inalcanzable desde el buscador.
+    //
+    // Aviso conocido: `filtradas` descarta en memoria las salidas agotadas o
+    // pasadas, así que una página puede venir más corta que `porPagina`. Es
+    // preferible a no poder pasar de página, y es el mismo compromiso que
+    // hace cualquier listado que filtre después de paginar.
+    total,
     pagina,
     porPagina,
-    totalPaginas: Math.ceil(filtradas.length / porPagina),
+    totalPaginas: Math.max(1, Math.ceil(total / porPagina)),
     categorias,
     empresas,
   }
@@ -193,9 +228,12 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
 export async function sugerenciasExcursiones(texto: string, limite = 5): Promise<Pick<ExcursionPublica, 'id' | 'nombre' | 'slug' | 'categoria'>[]> {
   if (!texto.trim() || texto.length < 2) return []
 
-  const rows = await prisma.excursion.findMany({
+  const visibles = await empresasVisibles()
+  const rows = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.excursion.findMany({
     where: {
       estado: 'ACTIVA',
+      companyId: { in: visibles },
       OR: [
         { nombre: { contains: texto, mode: 'insensitive' } },
         { categoria: { contains: texto, mode: 'insensitive' } },
@@ -210,13 +248,14 @@ export async function sugerenciasExcursiones(texto: string, limite = 5): Promise
       categoria: true,
       companyId: true,
     },
-  })
+  }))
 
   const companyIds = [...new Set(rows.map((r) => r.companyId))]
-  const companies = await prisma.company.findMany({
+  const companies = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.company.findMany({
     where: { id: { in: companyIds } },
     select: { id: true, slug: true, name: true },
-  })
+  }))
   const companyMap = new Map(companies.map((c) => [c.id, c]))
 
   return rows.map((r) => {
@@ -235,8 +274,10 @@ export async function sugerenciasExcursiones(texto: string, limite = 5): Promise
  * Excursiones destacadas para homepage / landing.
  */
 export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublica[]> {
-  const rows = await prisma.excursion.findMany({
-    where: { estado: 'ACTIVA' },
+  const visibles = await empresasVisibles()
+  const rows = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.excursion.findMany({
+    where: { estado: 'ACTIVA', companyId: { in: visibles } },
     orderBy: { createdAt: 'desc' },
     take: limite,
     select: {
@@ -270,13 +311,14 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
         select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
       },
     },
-  })
+  }))
 
   const companyIds = [...new Set(rows.map((r) => r.companyId))]
-  const companies = await prisma.company.findMany({
+  const companies = await sinEmpresa('excursiones: vitrina pública', (tx) =>
+    tx.company.findMany({
     where: { id: { in: companyIds } },
     select: { id: true, slug: true, name: true, logoUrl: true },
-  })
+  }))
   const companyMap = new Map(companies.map((c) => [c.id, c]))
 
   const excursionesConDisponibilidad = await Promise.all(

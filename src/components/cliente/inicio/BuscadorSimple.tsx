@@ -2,8 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 
 /**
  * Buscador simple del Home del cliente.

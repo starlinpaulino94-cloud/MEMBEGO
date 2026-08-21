@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { ArrowLeft, CalendarDays, Clock, MapPin, Users, CreditCard, Check, X, Shield, Compass } from 'lucide-react'
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { reservaCliente } from '@/modules/excursiones/reservas/queries'
 import { formatMoney, formatDate } from '@/lib/format'
 import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
@@ -29,11 +29,19 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
   const user = await getUser()
   if (!user) redirect('/login')
 
-  // Obtener todas las empresas donde el usuario es cliente
-  const clientes = await prisma.cliente.findMany({
-    where: { supabaseId: user.supabaseId },
-    select: { id: true, companyId: true },
-  })
+  // Obtener todas las empresas donde el usuario es cliente.
+  //
+  // Va con `sinEmpresa` porque la pregunta ES cross-tenant: un cliente puede
+  // tener ficha en varias empresas y la reserva puede estar en cualquiera de ellas. El aislamiento
+  // no se pierde — lo impone el filtro por `supabaseId`, que es la identidad
+  // del usuario autenticado, y las lecturas de reservas van después empresa
+  // por empresa con `reservasCliente(companyId, clienteId)`.
+  const clientes = await sinEmpresa('cliente: mis fichas en todas las empresas', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId: user.supabaseId },
+      select: { id: true, companyId: true },
+    })
+  )
   if (clientes.length === 0) redirect('/cliente/excursiones')
 
   // Buscar la reserva en cada empresa del usuario
@@ -155,7 +163,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
                     <MapPin className="h-5 w-5 text-primary flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[11px] uppercase font-bold text-muted-foreground">Punto de salida</p>
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Punto de salida</p>
                       <p className="font-semibold text-xs sm:text-sm text-foreground truncate">{excursion.puntoSalida}</p>
                     </div>
                   </div>
@@ -164,7 +172,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
                     <Clock className="h-5 w-5 text-primary flex-shrink-0" />
                     <div>
-                      <p className="text-[11px] uppercase font-bold text-muted-foreground">Hora de salida</p>
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Hora de salida</p>
                       <p className="font-semibold text-xs sm:text-sm text-foreground">{excursion.horaSalida}</p>
                     </div>
                   </div>
@@ -173,7 +181,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
                     <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                     <div>
-                      <p className="text-[11px] uppercase font-bold text-muted-foreground">Regreso estimado</p>
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Regreso estimado</p>
                       <p className="font-semibold text-xs sm:text-sm text-foreground">{excursion.horaRegreso}</p>
                     </div>
                   </div>
@@ -182,7 +190,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
                     <CalendarDays className="h-5 w-5 text-primary flex-shrink-0" />
                     <div>
-                      <p className="text-[11px] uppercase font-bold text-muted-foreground">Duración</p>
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Duración</p>
                       <p className="font-semibold text-xs sm:text-sm text-foreground">{excursion.duracionMin} min</p>
                     </div>
                   </div>
@@ -242,7 +250,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                   <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase font-bold text-muted-foreground">Fecha</p>
+                  <p className="text-xs uppercase font-bold text-muted-foreground">Fecha</p>
                   <p className="font-semibold text-xs sm:text-sm">
                     {formatDate(reserva.fecha, { moneda })}
                   </p>
@@ -255,7 +263,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                     <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
                   <div>
-                    <p className="text-[11px] uppercase font-bold text-muted-foreground">Hora</p>
+                    <p className="text-xs uppercase font-bold text-muted-foreground">Hora</p>
                     <p className="font-semibold text-xs sm:text-sm">{reserva.hora}</p>
                   </div>
                 </div>
@@ -265,7 +273,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                     <Users className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
                   <div>
-                    <p className="text-[11px] uppercase font-bold text-muted-foreground">Pasajeros</p>
+                    <p className="text-xs uppercase font-bold text-muted-foreground">Pasajeros</p>
                     <p className="font-semibold text-xs sm:text-sm">{reserva.adultos + reserva.ninos} total</p>
                   </div>
                 </div>
@@ -277,7 +285,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                 <Users className="h-4 w-4 sm:h-5 sm:w-5" />
               </div>
               <div>
-                <p className="text-[11px] uppercase font-bold text-muted-foreground">Desglose de pasajeros</p>
+                <p className="text-xs uppercase font-bold text-muted-foreground">Desglose de pasajeros</p>
                 <p className="font-semibold text-xs sm:text-sm">
                   {reserva.adultos} adulto{reserva.adultos !== 1 ? 's' : ''}
                   {reserva.ninos > 0 && `, ${reserva.ninos} niño${reserva.ninos !== 1 ? 's' : ''}`}

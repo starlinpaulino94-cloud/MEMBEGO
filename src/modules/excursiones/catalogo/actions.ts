@@ -20,6 +20,7 @@ import {
   validarExcursion,
   validarHorario,
   validarVariante,
+  calcularHoraRegreso,
   type EstadoExcursion,
 } from './nucleo'
 
@@ -92,7 +93,7 @@ export async function crearExcursion(
         const parsed = JSON.parse(horariosRaw)
         if (Array.isArray(parsed)) {
           horariosToCreate = parsed
-            .map((h: any) => ({
+            .map((h: Record<string, unknown>) => ({
               horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
               diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
               cupo: h.cupo ? Number(h.cupo) : null,
@@ -194,7 +195,7 @@ export async function actualizarExcursion(
         const parsed = JSON.parse(horariosRaw)
         if (Array.isArray(parsed)) {
           horariosToSync = parsed
-            .map((h: any) => ({
+            .map((h: Record<string, unknown>) => ({
               horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
               diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
               cupo: h.cupo ? Number(h.cupo) : null,
@@ -511,8 +512,9 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
       const fechas: string[] = []
       const hoy = new Date()
       hoy.setHours(0, 0, 0, 0)
-      const targetDay = DIAS_SEMANA_MAP[diaSemana as keyof typeof DIAS_SEMANA_MAP] ?? (diaSemana === 7 ? 0 : diaSemana)
-      let fecha = new Date(hoy)
+      const targetDay =
+        DIAS_SEMANA_MAP[diaSemana as keyof typeof DIAS_SEMANA_MAP] ?? diaSemana
+      const fecha = new Date(hoy)
       const diff = (targetDay - fecha.getDay() + 7) % 7
       fecha.setDate(fecha.getDate() + diff)
       for (let i = 0; i < limiteDias; i += 7) {

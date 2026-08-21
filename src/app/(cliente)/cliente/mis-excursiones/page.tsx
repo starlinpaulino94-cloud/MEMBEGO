@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { CalendarDays, Clock, Users, Ticket, Compass, ChevronRight } from 'lucide-react'
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { reservasCliente } from '@/modules/excursiones/reservas/queries'
 import { formatMoney, formatDate } from '@/lib/format'
 import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
@@ -24,11 +24,19 @@ export default async function MisExcursionesPage() {
   const user = await getUser()
   if (!user) redirect('/login')
 
-  // Obtener TODAS las fichas de cliente del usuario (en todas las empresas)
-  const clienteIds = await prisma.cliente.findMany({
-    where: { supabaseId: user.supabaseId },
-    select: { id: true, companyId: true },
-  })
+  // Obtener TODAS las fichas de cliente del usuario (en todas las empresas).
+  //
+  // Va con `sinEmpresa` porque la pregunta ES cross-tenant: un cliente puede
+  // tener ficha en varias empresas y esta pantalla las reúne. El aislamiento
+  // no se pierde — lo impone el filtro por `supabaseId`, que es la identidad
+  // del usuario autenticado, y las lecturas de reservas van después empresa
+  // por empresa con `reservasCliente(companyId, clienteId)`.
+  const clienteIds = await sinEmpresa('cliente: mis fichas en todas las empresas', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId: user.supabaseId },
+      select: { id: true, companyId: true },
+    })
+  )
   if (clienteIds.length === 0) redirect('/cliente/excursiones')
 
   // Consultar reservas en TODAS las empresas donde tiene ficha
@@ -148,7 +156,7 @@ function ReservaCard({
             src={reserva.excursion.portadaUrl}
             alt={reserva.excursion.nombre}
             fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            className="object-cover transition-transform group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, 120px"
           />
         ) : (
@@ -175,7 +183,7 @@ function ReservaCard({
             <p className="text-xs text-muted-foreground mt-0.5">Reserva: <span className="font-mono font-semibold">{reserva.numero}</span></p>
           </div>
           <span
-            className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[11px] sm:text-xs font-bold ${TONO_CLASE[tono] ?? TONO_CLASE.neutral}`}
+            className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold ${TONO_CLASE[tono] ?? TONO_CLASE.neutral}`}
           >
             {ESTADO_RESERVA_LABEL[reserva.estado as keyof typeof ESTADO_RESERVA_LABEL] ?? reserva.estado}
           </span>
@@ -202,7 +210,7 @@ function ReservaCard({
         {/* Price and Action row */}
         <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between">
           <div>
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Total pagado</span>
+            <span className="text-xs uppercase font-bold text-muted-foreground block">Total pagado</span>
             <p className="text-sm sm:text-base font-bold text-foreground tabular-nums">
               {formatMoney(reserva.total, { moneda: reserva.moneda })}
             </p>

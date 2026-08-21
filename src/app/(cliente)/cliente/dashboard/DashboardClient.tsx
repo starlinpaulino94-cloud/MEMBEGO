@@ -3,15 +3,15 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { CreditCard, Compass, Search, Ticket, Users, CalendarDays, Gauge, CalendarClock } from 'lucide-react'
+import { CreditCard, Compass, Search, Ticket, Gauge, CalendarClock } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { formatMoney } from '@/lib/format'
+import { } from '@/components/ui/input'
+import { } from '@/lib/format'
 import { EmptyState } from '@/components/system/EmptyState'
-import { ExcursionSearchCard } from './ExcursionSearchCard'
+import { } from './ExcursionSearchCard'
 import { ReservaCard } from './ReservaCard'
-import { WalletStack } from '@/components/wallet/WalletStack'
+import { WalletStack , type WalletStackItem } from '@/components/wallet/WalletStack'
 import { AnimatedCounter } from '@/components/system/AnimatedCounter'
 import { StatCard } from '@/components/ui/stat-card'
 import { membresiaEstadoUi } from '@/lib/estados'
@@ -57,8 +57,7 @@ export function DashboardClient({
   memberships,
   proximas,
   pasadas,
-  now,
-}: DashboardClientProps) {
+  now }: DashboardClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabValue>(
@@ -85,19 +84,19 @@ export function DashboardClient({
         company: {
           name: m.company.name,
           logoUrl: m.company.logoUrl,
-          colorPrimario: m.company.colorPrimario,
-        },
+          colorPrimario: m.company.colorPrimario },
         planNombre: m.plan.nombre,
         estadoLabel: membresiaEstadoUi(m.estado).labelCliente,
         tone: activa ? ('active' as const) : vencida ? ('expired' as const) : ('pending' as const),
         expiryText,
         esIlimitado: m.plan.esIlimitado,
         usosRestantes: m.lavadosRestantes,
-        usosTotales: m.plan.lavadosIncluidos ?? null,
-      },
-      qrToken: m.qrToken ?? null,
-      isActive: activa,
-    }
+        usosTotales: m.plan.lavadosIncluidos ?? null },
+      // `WalletStack` espera la CADENA del token, no el objeto. El tipo
+      // `any` del mapeador tapaba la diferencia: la pila habría recibido
+      // `{ id, token }` donde espera un string, y el QR no se pintaría.
+      qrToken: m.qrToken?.token ?? null,
+      isActive: activa }
   }
 
   const activas = memberships.filter((m) => {
@@ -182,11 +181,10 @@ function MembresiasTab({
   usosDisponibles,
   tieneIlimitado,
   now,
-  memberships,
-}: {
+  memberships }: {
   activas: MembershipData[]
   inactivas: MembershipData[]
-  aItem: (m: MembershipData) => any
+  aItem: (m: MembershipData) => WalletStackItem
   usosDisponibles: number
   tieneIlimitado: boolean
   now: Date
@@ -255,8 +253,7 @@ function MembresiasTab({
 function MisExcursionesTab({
   proximas,
   pasadas,
-  now,
-}: {
+  now }: {
   proximas: ReservaData[]
   pasadas: ReservaData[]
   now: Date

@@ -88,7 +88,7 @@ export default async function ExcursionesPage({ params }: ExcursionesPageProps) 
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
           <div className="w-full">
             <span className="text-caption font-bold uppercase tracking-wider text-primary">Tours y Experiencias</span>
-            <h1 className="mt-1 text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-foreground w-full">
+            <h1 className="mt-1 text-h1 text-foreground w-full">
               Próximas excursiones de {company.name}
             </h1>
             <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground w-full">

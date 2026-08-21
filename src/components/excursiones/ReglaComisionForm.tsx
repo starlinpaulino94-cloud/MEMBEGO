@@ -172,7 +172,7 @@ export function ReglaComisionForm({
             })}
           </div>
           {excursionesSeleccionadas.length === 0 ? (
-            <p className="text-caption text-amber-500">
+            <p className="text-caption text-warning">
               * Selecciona al menos una excursión a la que aplicará esta regla.
             </p>
           ) : null}
@@ -233,7 +233,7 @@ export function ReglaComisionForm({
             })}
           </div>
           {vendedoresSeleccionados.length === 0 ? (
-            <p className="text-caption text-amber-500">
+            <p className="text-caption text-warning">
               * Selecciona al menos un vendedor al que aplicará esta regla.
             </p>
           ) : null}

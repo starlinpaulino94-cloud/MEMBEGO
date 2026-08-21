@@ -347,13 +347,20 @@ export async function activarTarjetaPendiente(input: {
   }
 
   // Resolver el Customer con las mismas reglas de pertenencia del cobro.
+  //
+  // La consulta de pertenencia se REUTILIZA para leer los perfiles. Antes se
+  // consultaba dos veces el mismo Customer, una detrás de otra: 20s de límite
+  // desperdiciados en una secuencia que ya encadena varias llamadas y que la
+  // plataforma corta por tiempo. Es el mismo dato, en la misma petición.
   let customerId = input.customerId?.trim() || null
+  let consultaPrevia: Awaited<ReturnType<typeof consultarClienteCardnet>> | null = null
   if (customerId) {
     const consulta = await consultarClienteCardnet(customerId)
     const emailCoincide =
       !!consulta.email &&
       consulta.email.trim().toLowerCase() === input.emailCliente.trim().toLowerCase()
-    if (!emailCoincide) customerId = null
+    if (emailCoincide) consultaPrevia = consulta
+    else customerId = null
   }
   if (!customerId) {
     const guardado = await conEmpresa(input.objetivo.companyId, (tx) =>
@@ -372,7 +379,7 @@ export async function activarTarjetaPendiente(input: {
 
   // El perfil a activar: el MÁS RECIENTE deshabilitado (mismo criterio que el
   // cobro usa para "el recién agregado").
-  const { perfiles } = await consultarClienteCardnet(customerId)
+  const { perfiles } = consultaPrevia ?? (await consultarClienteCardnet(customerId))
   const pendientes = perfiles.filter((p) => !p.habilitado)
   if (pendientes.length === 0) {
     // Nada deshabilitado: o ya se activó (otra pestaña) o CardNET la borró al

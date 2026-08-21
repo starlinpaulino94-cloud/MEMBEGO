@@ -1,11 +1,16 @@
 'use client'
 
+/**
+ * Formulario de excursión (crear y editar). Al CREAR pide además el precio
+ * base (que nace como variante «Estándar»); al editar, los precios viven en
+ * el editor de variantes. El servidor revalida todo (nucleo.validarExcursion).
+ */
+
 import { useActionState, useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Loader2, 
   Clock, 
-  CalendarDays, 
   Plus, 
   Trash2, 
   MapPin, 

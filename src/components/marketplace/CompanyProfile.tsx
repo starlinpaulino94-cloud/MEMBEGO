@@ -566,7 +566,7 @@ export function CompanyProfile({
                     <span className="text-lg font-bold leading-none">
                       {e.fechaEvento ? new Date(e.fechaEvento).getDate() : '—'}
                     </span>
-                    <span className="text-[10px] font-semibold uppercase">
+                    <span className="text-xs font-semibold uppercase">
                       {e.fechaEvento
                         ? new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', month: 'short' }).format(
                             new Date(e.fechaEvento)
@@ -643,7 +643,6 @@ export function CompanyProfile({
                 .map((exc) => {
                   const isFinalizada = exc.todasFechasPasadas
                   const isAgotada = exc.agotadaGlobal
-                  const tieneStock = !isFinalizada && !isAgotada
                   return (
                     <Link
                       key={exc.id}
@@ -734,7 +733,7 @@ export function CompanyProfile({
                     src={image}
                     alt={`${company.name} - ${idx + 1}`}
                     fill
-                    className="object-cover transition-transform duration-300 hover:scale-105"
+                    className="object-cover transition-transform hover:scale-105"
                   />
                 </div>
               ))}

@@ -140,8 +140,7 @@ export async function reservarExcursion(
           horaSalida: h.horaSalida,
           cupo: h.cupo,
         })),
-      },
-      companyId
+      }
     )
     if (!disp.ok) return { error: disp.error }
 

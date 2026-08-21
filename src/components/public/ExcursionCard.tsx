@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowRight, Clock, MapPin, Compass, Users, AlertCircle, X } from 'lucide-react'
+import { ArrowRight, Clock, MapPin, Compass, Users } from 'lucide-react'
 import { formatMoney } from '@/lib/format'
 
 export interface ExcursionCardData {
@@ -17,7 +17,18 @@ export interface ExcursionCardData {
   agotadaGlobal?: boolean
   todasFechasPasadas?: boolean
   cupoDisponible?: number | null
-  proximasSalidas?: { fecha: string; cupoDisponible: number }[]
+  /**
+   * Salidas próximas. Lleva `fechaPasada` y `agotada` porque quien filtra
+   * estas listas los necesita para decidir qué es vigente; declarar menos de
+   * lo que de verdad llega obliga a castear en el sitio de uso y esconde el
+   * dato al que lea el tipo.
+   */
+  proximasSalidas?: {
+    fecha: string
+    cupoDisponible: number
+    fechaPasada?: boolean
+    agotada?: boolean
+  }[]
   empresa?: {
     id?: string
     slug?: string
@@ -67,7 +78,7 @@ export function ExcursionCard({
                 src={excursion.portadaUrl}
                 alt={excursion.nombre}
                 fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                className="object-cover transition-transform group-hover:scale-105"
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -105,7 +116,7 @@ export function ExcursionCard({
               src={excursion.portadaUrl}
               alt={excursion.nombre}
               fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className="object-cover transition-transform group-hover:scale-105"
             />
           ) : (
             <>

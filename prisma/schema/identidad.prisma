@@ -287,8 +287,6 @@ model Company {
   // inicial que la empresa configura.
   escanerModo           String   @default("camara")
   colorPrimario         String? // hex de marca, ej. "#0ea5e9"
-  // Excursiones
-  excursiones Excursion[]
   // Engagement Engine · Fase 7: personalización del motor por empresa.
   // JSON: { color?, gamificacion?, pruebaSocial?, campanas?, carruseles? }.
   // Ausente/null = todo activado y color = colorPrimario.

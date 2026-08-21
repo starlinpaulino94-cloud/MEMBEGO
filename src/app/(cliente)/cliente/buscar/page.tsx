@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { Search, Filter, Tag, Compass, ChevronRight, Store } from 'lucide-react'
-import { buscarUnificado } from '@/modules/cliente/actions'
+import { buscarUnificado, type BuscadorUnificadoResult } from '@/modules/cliente/actions'
 import { getUser } from '@/lib/auth'
 import { getGuardadasIds } from '@/modules/social/queries'
 import { SITE_NAME } from '@/lib/site'
@@ -38,8 +38,7 @@ export async function generateMetadata({ searchParams }: BuscarPageProps): Promi
     description: query 
       ? `Resultados para "${query}". Encuentra ofertas, excursiones y empresas.`
       : 'Explora empresas, ofertas, promociones y excursiones en MembeGo. Filtra por categoría, precio y disponibilidad.',
-    url: `/cliente/buscar${query ? `?q=${encodeURIComponent(query)}` : ''}`,
-  })
+    url: `/cliente/buscar${query ? `?q=${encodeURIComponent(query)}` : ''}` })
 }
 
 export default async function BuscarPage({ searchParams }: BuscarPageProps) {
@@ -51,16 +50,17 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
   const query = params.q ?? ''
   
   const [resultado, guardadasIds] = await Promise.all([
-    buscarUnificado(query) as Promise<{ promociones: any[]; excursiones: any[]; empresas: any[] } | { error: string }>,
+    // Sin cast: `buscarUnificado` ya declara su forma (BuscadorUnificadoResult).
+    buscarUnificado(query),
     user?.metadata?.dbUserId
       ? getGuardadasIds(user.metadata.dbUserId).catch(() => new Set<string>())
       : Promise.resolve(new Set<string>()),
   ])
 
   const hayError = 'error' in resultado
-  const rawPromociones: any[] = hayError ? [] : resultado.promociones || []
-  const rawExcursiones: any[] = hayError ? [] : resultado.excursiones || []
-  const rawEmpresas: BusinessCardData[] = hayError ? [] : resultado.empresas || []
+  const rawPromociones = hayError ? [] : resultado.promociones
+  const rawExcursiones = hayError ? [] : resultado.excursiones
+  const rawEmpresas: BusinessCardData[] = hayError ? [] : (resultado.empresas ?? [])
 
   // Extraer categorías y empresas disponibles
   const categoriasSet = new Set<string>()
@@ -84,11 +84,11 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
   // Aplicar filtros a los resultados (excluyendo siempre excursiones atrasadas)
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
-  const esExcursionVigente = (e: any) =>
+  const esExcursionVigente = (e: BuscadorUnificadoResult['excursiones'][number]) =>
     !e.todasFechasPasadas &&
     (!e.proximasSalidas ||
       e.proximasSalidas.length === 0 ||
-      e.proximasSalidas.some((s: any) => !s.fechaPasada && new Date(s.fecha) >= hoy))
+      e.proximasSalidas.some((s) => !s.fechaPasada && new Date(s.fecha) >= hoy))
 
   let promociones = rawPromociones
   let excursiones = rawExcursiones.filter(esExcursionVigente)
@@ -109,14 +109,14 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
   if (params.fd) {
     const fdDate = new Date(params.fd)
     excursiones = excursiones.filter((e) =>
-      (e.proximasSalidas || []).some((s: any) => new Date(s.fecha) >= fdDate)
+      (e.proximasSalidas || []).some((s) => new Date(s.fecha) >= fdDate)
     )
   }
 
   if (params.fh) {
     const fhDate = new Date(params.fh)
     excursiones = excursiones.filter((e) =>
-      (e.proximasSalidas || []).some((s: any) => new Date(s.fecha) <= fhDate)
+      (e.proximasSalidas || []).some((s) => new Date(s.fecha) <= fhDate)
     )
   }
 
@@ -186,7 +186,7 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
           </aside>
 
           {/* Grid Resultados */}
-          <main className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
             <Suspense fallback={<ResultsSkeleton />}>
               <ResultsGrid 
                 empresas={empresas}
@@ -197,7 +197,7 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
                 currentParams={params}
               />
             </Suspense>
-          </main>
+          </div>
         </div>
       </div>
     </div>
@@ -208,8 +208,6 @@ function SearchForm({
   initialQuery, 
   initialCategoria, 
   initialEmpresa,
-  initialFechaDesde,
-  initialFechaHasta,
   initialSoloConStock,
   categorias = [],
   empresas = []
@@ -252,6 +250,7 @@ function SearchForm({
           {categorias.length > 0 && (
             <select
               name="cat"
+              aria-label="Filtrar por categoría"
               className="flex-1 sm:flex-initial h-10 rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               defaultValue={initialCategoria}
             >
@@ -264,6 +263,7 @@ function SearchForm({
           {empresas.length > 0 && (
             <select
               name="emp"
+              aria-label="Filtrar por empresa"
               className="flex-1 sm:flex-initial h-10 rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               defaultValue={initialEmpresa}
             >
@@ -298,11 +298,11 @@ function ResultsGrid({
   currentParams
 }: { 
   empresas: BusinessCardData[]
-  promociones: any[]
-  excursiones: any[]
+  promociones: BuscadorUnificadoResult['promociones']
+  excursiones: BuscadorUnificadoResult['excursiones']
   total: number
   guardadasIds: Set<string>
-  currentParams: any
+  currentParams: Record<string, string | undefined>
 }) {
   if (empresas.length === 0 && promociones.length === 0 && excursiones.length === 0) {
     return (
@@ -400,8 +400,8 @@ function ResultsGrid({
                 shareCount: p.shareCount || 0,
                 tags: p.tags || [],
                 isFeatured: p.isFeatured || false,
-                company: p.company,
-              }
+                createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+                company: p.company }
 
               return (
                 <div key={p.id} className="relative">

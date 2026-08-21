@@ -52,24 +52,24 @@ export function ReservaExcursionForm({
   portadaUrl,
   moneda,
   variantes,
-  horarios,
   precioDesde,
   isAuthenticated,
   isFollowing: initialFollowing,
   proximasSalidas,
   agotadaGlobal,
-  todasFechasPasadas,
-  capacidad,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
   const cart = useExcursionCart()
   const followedRef = useRef(initialFollowing)
-  const [isFollowing, setIsFollowing] = useState(initialFollowing)
+  const [, setIsFollowing] = useState(initialFollowing)
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
-  const [fecha, setFecha] = useState('')
-  const [hora, setHora] = useState('')
+  // Lo que el usuario ELIGIÓ; la fecha efectiva se deriva más abajo.
+  const [fechaElegida, setFechaElegida] = useState('')
+  // Lo que el usuario ELIGIÓ. La hora efectiva (`hora`) se deriva de esto más
+  // los horarios disponibles: ver abajo.
+  const [horaElegida, setHoraElegida] = useState('')
   const [adultos, setAdultos] = useState(1)
   const [ninos, setNinos] = useState(0)
   const [notas, setNotas] = useState('')
@@ -88,12 +88,16 @@ export function ReservaExcursionForm({
     return Array.from(fechas).sort()
   }, [salidasDisponibles])
 
-  // Auto-seleccionar primera fecha disponible al cargar
-  useEffect(() => {
-    if (!fecha && fechasDisponibles.length > 0) {
-      setFecha(fechasDisponibles[0])
-    }
-  }, [fecha, fechasDisponibles])
+  /**
+   * La fecha efectiva también se DERIVA, igual que la hora.
+   *
+   * El efecto anterior escribía `fecha` tras el primer render, así que había
+   * un instante con el formulario sin fecha y el resto de campos calculados
+   * sobre ese vacío. Derivarlo no deja ese hueco.
+   */
+  const fecha = fechaElegida && fechasDisponibles.includes(fechaElegida)
+    ? fechaElegida
+    : (fechasDisponibles[0] ?? '')
 
   // Horarios disponibles para la fecha seleccionada
   const horariosDisponibles = useMemo(() => {
@@ -103,15 +107,22 @@ export function ReservaExcursionForm({
       .sort((a, b) => a.horaSalida.localeCompare(b.horaSalida))
   }, [fecha, salidasDisponibles])
 
-  // Reset hora when fecha changes
-  useEffect(() => {
-    if (horariosDisponibles.length > 0) {
-      const primerDisponible = horariosDisponibles.find((h) => !h.agotada) || horariosDisponibles[0]
-      if (primerDisponible) {
-        setHora(primerDisponible.horaSalida)
-      }
-    }
-  }, [fecha, horariosDisponibles])
+  /**
+   * La hora efectiva se DERIVA, no se asigna desde un efecto.
+   *
+   * El efecto anterior escribía `hora` cada vez que cambiaba la fecha, y eso
+   * es un render de más en el que la pantalla enseña la hora de la fecha
+   * ANTERIOR: durante ese instante el formulario está describiendo una salida
+   * que no existe. Derivarlo cierra esa ventana — no hay estado intermedio que
+   * pueda quedar desfasado con la fecha.
+   *
+   * Si lo que el usuario eligió sigue estando disponible, manda su elección;
+   * si dejó de estarlo (cambió de fecha), cae al primer horario CON CUPO de la
+   * nueva — proponer uno agotado sería ofrecer lo que no se puede reservar.
+   */
+  const hora = horariosDisponibles.some((h) => h.horaSalida === horaElegida)
+    ? horaElegida
+    : ((horariosDisponibles.find((h) => !h.agotada) ?? horariosDisponibles[0])?.horaSalida ?? '')
 
   const varianteActual = variantes.find((v) => v.id === varianteId) ?? variantes[0]
   const precioAdulto = varianteActual?.precioAdulto ?? 0
@@ -147,8 +158,6 @@ export function ReservaExcursionForm({
     }
     // Already following — let the form action proceed
   }
-
-  const hoy = new Date().toISOString().split('T')[0]
 
   // Not authenticated — show CTA
   if (!isAuthenticated) {
@@ -230,8 +239,11 @@ export function ReservaExcursionForm({
         {/* Variante */}
         {variantes.length > 1 && (
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Tipo de experiencia</label>
+            <label htmlFor="reserva-variante" className="mb-1.5 block text-sm font-medium">
+              Tipo de experiencia
+            </label>
             <select
+              id="reserva-variante"
               name="varianteId"
               value={varianteId}
               onChange={(e) => setVarianteId(e.target.value)}
@@ -251,14 +263,15 @@ export function ReservaExcursionForm({
 
         {/* Fecha */}
         <div>
-          <label className="mb-1.5 block text-sm font-medium">
+          <label htmlFor="reserva-fecha" className="mb-1.5 block text-sm font-medium">
             <CalendarDays className="mr-1 inline h-4 w-4" />
             Fecha
           </label>
           <select
+            id="reserva-fecha"
             name="fecha"
             value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
+            onChange={(e) => setFechaElegida(e.target.value)}
             required
             disabled={fechasDisponibles.length === 0}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
@@ -308,7 +321,7 @@ export function ReservaExcursionForm({
                       name="hora_radio"
                       value={h.horaSalida}
                       checked={hora === h.horaSalida}
-                      onChange={() => setHora(h.horaSalida)}
+                      onChange={() => setHoraElegida(h.horaSalida)}
                       disabled={h.agotada}
                       className="sr-only"
                     />

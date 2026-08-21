@@ -180,6 +180,11 @@ export function AsistenteRegistro({
       const crudo = sessionStorage.getItem(claveBorrador)
       if (!crudo) return
       const borrador = JSON.parse(crudo) as { datos?: Partial<Datos> }
+      // La excepción es DELIBERADA y no es reestructurable: `sessionStorage`
+      // no existe durante el render en el servidor, así que restaurar el
+      // borrador solo puede ocurrir después de montar. Es el caso que la regla
+      // no cubre, no un descuido.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (borrador.datos) setDatos((d) => ({ ...d, ...borrador.datos }))
     } catch {
       // Borrador corrupto: se empieza de cero, sin romper nada.
