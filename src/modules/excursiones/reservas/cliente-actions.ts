@@ -258,3 +258,173 @@ export async function reservarExcursion(
     return { error: 'Error al crear la reserva. Intenta de nuevo.' }
   }
 }
+
+export interface ReservarCarritoState {
+  error?: string
+  success?: string
+  redirectUrl?: string
+}
+
+export async function reservarCarritoAction({
+  items,
+}: {
+  items: {
+    excursionId: string
+    varianteId: string
+    fecha: string
+    horaSalida: string
+    adultos: number
+    ninos: number
+    notas: string
+  }[]
+}): Promise<ReservarCarritoState> {
+  if (!items.length) return { error: 'El carrito está vacío.' }
+
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'unauthenticated' }
+
+    // Obtenemos todos los companyIds involucrados (el carrito asume que puede tener 1 o más)
+    // Para simplificar asumiremos que todas pertenecen a la misma empresa leyendo la 1ra
+    // En un carrito normal se pueden comprar de múltiples, pero el catálogo es por empresa
+    // Tomamos la primera para recuperar el cliente
+    const primeraExc = await prisma.excursion.findUnique({
+      where: { id: items[0].excursionId },
+      select: { companyId: true },
+    })
+    if (!primeraExc) return { error: 'Excursión no encontrada.' }
+    const companyId = primeraExc.companyId
+
+    const cliente = await prisma.cliente.findFirst({
+      where: { supabaseId: user.supabaseId, companyId },
+      select: { id: true },
+    })
+    if (!cliente) return { error: 'No se encontró tu perfil de cliente.' }
+
+    // Leer cookie de atribución de vendedor (server-side)
+    let vendedorId: string | null = null
+    try {
+      const store = await cookies()
+      const cookieSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase()
+      if (cookieSlug) {
+        const enlace = await resolverEnlace(cookieSlug)
+        if (enlace && enlace.companyId === companyId) {
+          vendedorId = enlace.vendedorId
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!vendedorId) {
+      vendedorId = await vendedorParaCliente(companyId, cliente.id)
+    }
+
+    // Transacción atómica
+    const nuevasReservas = []
+    
+    for (const item of items) {
+      const exc = await prisma.excursion.findFirst({
+        where: { id: item.excursionId, estado: 'ACTIVA' },
+        include: { variantes: { where: { id: item.varianteId, activa: true } } }
+      })
+      
+      if (!exc || exc.variantes.length === 0) continue
+      
+      const v = exc.variantes[0]
+      const totales = calcularTotales({
+        precioAdulto: v.precioAdulto.toNumber(),
+        precioNino: v.precioNino?.toNumber(),
+        impuestoPct: exc.impuestoPct?.toNumber() ?? 0,
+        adultos: item.adultos,
+        ninos: item.ninos,
+        descuentoFijo: 0,
+      })
+
+      const reserva = await conEmpresa(exc.companyId, async (tx) => {
+        let intento = 0
+        let creada = null
+        while (intento < 5) {
+          const prefijo = exc.nombre.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, 'E') || 'EXC'
+          const num = numeroReserva(prefijo, new Date())
+          try {
+            creada = await tx.reservaExc.create({
+              data: {
+                companyId: exc.companyId,
+                excursionId: exc.id,
+                varianteId: v.id,
+                clienteId: cliente.id,
+                vendedorId,
+                fecha: new Date(`${item.fecha}T12:00:00Z`),
+                horaSalida: item.horaSalida,
+                adultos: item.adultos,
+                ninos: item.ninos,
+                moneda: exc.moneda,
+                subtotal: totales.subtotal,
+                descuento: totales.descuento,
+                impuesto: totales.impuestos,
+                total: totales.total,
+                estado: 'CREADA',
+                origenVenta: 'ONLINE',
+                notas: item.notas,
+                pasajeros: {
+                  create: [
+                    ...Array.from({ length: item.adultos }).map(() => ({
+                      tipo: 'ADULTO', checkinToken: `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+                    })),
+                    ...Array.from({ length: item.ninos }).map(() => ({
+                      tipo: 'NINO', checkinToken: `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+                    }))
+                  ]
+                }
+              },
+              select: { id: true, numero: true }
+            })
+            break
+          } catch (e: any) {
+            if (e.message?.includes('numero')) {
+              intento++
+              continue
+            }
+            throw e
+          }
+        }
+        return creada
+      })
+
+      if (reserva && vendedorId) {
+        await conEmpresa(exc.companyId, (tx) =>
+          tx.vendedorAtribucion.create({
+            data: {
+              companyId: exc.companyId,
+              vendedorId: vendedorId!,
+              clienteId: cliente.id,
+              etapa: 'RESERVA',
+            }
+          })
+        ).catch(() => {})
+      }
+      
+      if (reserva) nuevasReservas.push(reserva)
+      await sincronizarEstadoAgotada(exc.companyId, exc.id)
+    }
+
+    revalidatePath('/cliente/mis-excursiones')
+    revalidatePath('/cliente/excursiones')
+
+    if (vendedorId) {
+      try {
+        const store = await cookies()
+        store.delete(VENDEDOR_COOKIE)
+      } catch {}
+    }
+
+    return { 
+      success: `Has reservado exitosamente ${nuevasReservas.length} ítems.`,
+      redirectUrl: '/cliente/mis-excursiones'
+    }
+  } catch (e) {
+    anotarFallo('excursiones:reservarCarrito')(e)
+    return { error: 'Error al procesar el carrito. Intenta de nuevo.' }
+  }
+}

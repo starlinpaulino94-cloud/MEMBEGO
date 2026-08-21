@@ -249,6 +249,8 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
               companyId={companyId}
               companySlug={companySlug}
               excursionId={exc.id}
+              nombreExcursion={exc.nombre}
+              portadaUrl={exc.portadaUrl}
               moneda={exc.moneda}
               variantes={exc.variantes.map((v) => ({
                 id: v.id,

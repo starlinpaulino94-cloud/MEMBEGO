@@ -9,6 +9,7 @@ import {
 import { getNavOcultoClienteCached } from '@/modules/cliente/navDisponible'
 import { BannerDemo } from '@/components/system/BannerDemo'
 import { nombreSiEsDemo } from '@/modules/demo'
+import { ExcursionCarritoWrapper } from '@/components/excursiones/ExcursionCarritoWrapper'
 
 export default async function ClienteLayout({
   children,
@@ -49,7 +50,9 @@ export default async function ClienteLayout({
           un teléfono de prueba para enseñar el recorrido, quien mire la
           pantalla ve que nada de eso es un cobro de verdad. */}
       {demo && <BannerDemo nombreEmpresa={demo} />}
-      {children}
+      <ExcursionCarritoWrapper>
+        {children}
+      </ExcursionCarritoWrapper>
     </AppShell>
   )
 }

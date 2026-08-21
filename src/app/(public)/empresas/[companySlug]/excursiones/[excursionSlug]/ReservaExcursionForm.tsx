@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X } from 'lucide-react'
+import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X, ShoppingCart } from 'lucide-react'
 import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-actions'
 import { toggleSeguirEmpresa } from '@/modules/social/actions'
 import { formatMoney } from '@/lib/format'
+import { useExcursionCart } from '@/components/excursiones/ExcursionCarritoContext'
 import type { ReservaClienteState } from '@/modules/excursiones/reservas/cliente-actions'
 import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
@@ -27,6 +28,8 @@ interface ReservaExcursionFormProps {
   companyId: string
   companySlug: string
   excursionId: string
+  nombreExcursion: string
+  portadaUrl?: string | null
   moneda: string
   variantes: Variante[]
   horarios: Horario[]
@@ -45,6 +48,8 @@ export function ReservaExcursionForm({
   companyId,
   companySlug,
   excursionId,
+  nombreExcursion,
+  portadaUrl,
   moneda,
   variantes,
   horarios,
@@ -58,6 +63,7 @@ export function ReservaExcursionForm({
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
+  const cart = useExcursionCart()
   const followedRef = useRef(initialFollowing)
   const [isFollowing, setIsFollowing] = useState(initialFollowing)
 
@@ -406,26 +412,55 @@ export function ReservaExcursionForm({
           <p className="text-sm text-destructive">{state.error}</p>
         )}
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={pending || followingPending || !fecha || !hora || horariosDisponibles.every((h) => h.agotada)}
-          className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {followingPending ? (
-            <span className="flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Preparando...
-            </span>
-          ) : pending ? (
-            <span className="flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Reservando...
-            </span>
+        {/* Acciones */}
+        <div className="flex flex-col gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (!fecha || !hora) return
+              cart.addItem({
+                excursionId,
+                companyId,
+                nombreExcursion,
+                portadaUrl: portadaUrl ?? null,
+                varianteId,
+                varianteNombre: varianteActual.nombre,
+                fecha,
+                hora,
+                adultos,
+                ninos,
+                precioAdulto,
+                precioNino,
+                moneda,
+              })
+            }}
+            disabled={pending || followingPending || !fecha || !hora || horariosDisponibles.every((h) => h.agotada)}
+            className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-primary bg-background py-3 text-sm font-semibold text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Agregar al carrito
+          </button>
+
+          <button
+            type="submit"
+            disabled={pending || followingPending || !fecha || !hora || horariosDisponibles.every((h) => h.agotada)}
+            className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {followingPending ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Preparando...
+              </span>
+            ) : pending ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Reservando...
+              </span>
           ) : (
             'Reservar ahora'
           )}
-        </button>
+          </button>
+        </div>
 
         <p className="text-center text-xs text-muted-foreground">
           Tu reserva quedará pendiente de pago. Puedes gestionarlo desde tu cuenta.
