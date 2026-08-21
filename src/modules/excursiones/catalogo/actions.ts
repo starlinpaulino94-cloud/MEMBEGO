@@ -20,6 +20,7 @@ import {
   validarExcursion,
   validarHorario,
   validarVariante,
+  calcularHoraRegreso,
   type EstadoExcursion,
 } from './nucleo'
 
@@ -84,6 +85,36 @@ export async function crearExcursion(
     })
     if (!variante.ok) return { error: variante.error }
 
+    // Procesar horarios de salida opcionales enviados desde el formulario
+    let horariosToCreate: { horaSalida: string; diasSemana: number[]; cupo: number | null }[] = []
+    const horariosRaw = String(formData.get('horariosData') ?? '')
+    if (horariosRaw) {
+      try {
+        const parsed = JSON.parse(horariosRaw)
+        if (Array.isArray(parsed)) {
+          horariosToCreate = parsed
+            .map((h: Record<string, unknown>) => ({
+              horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
+              diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
+              cupo: h.cupo ? Number(h.cupo) : null,
+            }))
+            .filter((h) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(h.horaSalida))
+        }
+      } catch {
+        /* ignore invalid json */
+      }
+    }
+
+    // Si hay horarios pero no se especificó horaSalida principal, usar la primera
+    if (horariosToCreate.length > 0 && !v.datos.horaSalida) {
+      v.datos.horaSalida = horariosToCreate[0].horaSalida
+    }
+
+    // Auto-calcular horaRegreso si tenemos horaSalida y duracionMin pero no horaRegreso
+    if (v.datos.horaSalida && v.datos.duracionMin && !v.datos.horaRegreso) {
+      v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
+    }
+
     // Slug único por empresa (sufijo numérico si el nombre se repite).
     const base = slugExcursion(v.datos.nombre)
     const excursion = await conEmpresa(companyId, async (tx) => {
@@ -101,6 +132,16 @@ export async function crearExcursion(
           variantes: {
             create: { companyId, ...variante.datos },
           },
+          ...(horariosToCreate.length > 0 && {
+            horarios: {
+              create: horariosToCreate.map((h) => ({
+                companyId,
+                horaSalida: h.horaSalida,
+                diasSemana: h.diasSemana,
+                cupo: h.cupo,
+              })),
+            },
+          }),
         },
         select: { id: true, nombre: true },
       })
@@ -146,9 +187,49 @@ export async function actualizarExcursion(
     const v = validarExcursion(deForm(formData, CAMPOS_EXCURSION))
     if (!v.ok) return { error: v.error }
 
-    await conEmpresa(companyId, async (tx) =>
-      tx.excursion.update({ where: { id: excursionId }, data: v.datos })
-    )
+    // Procesar horarios de salida opcionales enviados desde el formulario
+    let horariosToSync: { horaSalida: string; diasSemana: number[]; cupo: number | null }[] | null = null
+    const horariosRaw = String(formData.get('horariosData') ?? '')
+    if (horariosRaw) {
+      try {
+        const parsed = JSON.parse(horariosRaw)
+        if (Array.isArray(parsed)) {
+          horariosToSync = parsed
+            .map((h: Record<string, unknown>) => ({
+              horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
+              diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
+              cupo: h.cupo ? Number(h.cupo) : null,
+            }))
+            .filter((h) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(h.horaSalida))
+        }
+      } catch {
+        /* ignore invalid json */
+      }
+    }
+
+    if (horariosToSync && horariosToSync.length > 0 && !v.datos.horaSalida) {
+      v.datos.horaSalida = horariosToSync[0].horaSalida
+    }
+
+    if (v.datos.horaSalida && v.datos.duracionMin && !v.datos.horaRegreso) {
+      v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
+    }
+
+    await conEmpresa(companyId, async (tx) => {
+      await tx.excursion.update({ where: { id: excursionId }, data: v.datos })
+      if (horariosToSync && horariosToSync.length > 0) {
+        await tx.excursionHorario.deleteMany({ where: { excursionId, companyId } })
+        await tx.excursionHorario.createMany({
+          data: horariosToSync.map((h) => ({
+            companyId,
+            excursionId,
+            horaSalida: h.horaSalida,
+            diasSemana: h.diasSemana,
+            cupo: h.cupo,
+          })),
+        })
+      }
+    })
     await sincronizarEstadoAgotada(companyId, excursionId)
     await auditar(companyId, user.metadata.dbUserId ?? null, excursionId, {
       tipo: 'EXCURSION_ACTUALIZADA',
@@ -364,13 +445,37 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
   await conEmpresa(companyId, async (tx) => {
     const excursion = await tx.excursion.findFirst({
       where: { id: excursionId, companyId },
-      select: { id: true, capacidad: true, estado: true, horarios: { where: { activo: true }, select: { id: true, diasSemana: true, horaSalida: true, cupo: true } } },
+      select: {
+        id: true,
+        capacidad: true,
+        estado: true,
+        horaSalida: true,
+        horaRegreso: true,
+        horarios: {
+          where: { activo: true },
+          select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+        },
+      },
     })
     if (!excursion || excursion.estado === 'ARCHIVADA') return
 
+    const effectiveHorarios =
+      excursion.horarios && excursion.horarios.length > 0
+        ? excursion.horarios
+        : excursion.horaSalida
+          ? [
+              {
+                id: `default-${excursion.id}`,
+                diasSemana: [1, 2, 3, 4, 5, 6, 7],
+                horaSalida: excursion.horaSalida,
+                cupo: null,
+              },
+            ]
+          : []
+
     // Calcular disponibilidad real (próximos 90 días)
-    const capacidad = excursion.capacidad ?? 0
-    if (capacidad <= 0 || excursion.horarios.length === 0) {
+    const capacidad = excursion.capacidad && excursion.capacidad > 0 ? excursion.capacidad : 50
+    if (effectiveHorarios.length === 0) {
       if (excursion.estado !== 'AGOTADA') {
         await tx.excursion.update({ where: { id: excursionId }, data: { estado: 'AGOTADA' } })
       }
@@ -396,7 +501,8 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
     const reservasMap = new Map<string, number>()
     for (const r of reservas) {
       const fechaStr = r.fecha.toISOString().split('T')[0]
-      const key = `${fechaStr}|${r.hora || ''}`
+      const horaStr = (r.hora || '').trim().slice(0, 5)
+      const key = `${fechaStr}|${horaStr}`
       reservasMap.set(key, (reservasMap.get(key) || 0) + r.adultos + r.ninos)
     }
 
@@ -412,25 +518,30 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
       const diff = (targetDay - fecha.getDay() + 7) % 7
       fecha.setDate(fecha.getDate() + diff)
       for (let i = 0; i < limiteDias; i += 7) {
-        if (fecha > new Date()) fechas.push(fecha.toISOString().split('T')[0])
+        if (fecha >= hoy) fechas.push(fecha.toISOString().split('T')[0])
         fecha.setDate(fecha.getDate() + 7)
       }
       return fechas
     }
 
     let hayDisponibilidad = false
+    const ahoraTimestamp = Date.now()
 
-    for (const horario of excursion.horarios) {
-      const dias = (horario.diasSemana ?? []) as number[]
+    for (const horario of effectiveHorarios) {
+      const dias = Array.isArray(horario.diasSemana) ? (horario.diasSemana as number[]) : [1, 2, 3, 4, 5, 6, 7]
       for (const diaSemana of dias) {
         const fechas = generarFechasParaDia(diaSemana)
         for (const fecha of fechas) {
-          const key = `${fecha}|${horario.horaSalida}`
+          const horaSalida = (horario.horaSalida || '00:00').trim().slice(0, 5)
+          const key = `${fecha}|${horaSalida}`
           const reservados = reservasMap.get(key) || 0
-          const cupoEfectivo = excursion.capacidad ?? 0
+          const cupoEfectivo = horario.cupo && horario.cupo > 0 ? horario.cupo : capacidad
           const cupoDisponible = Math.max(0, cupoEfectivo - reservados)
-          const fechaObj = new Date(fecha)
-          const fechaPasada = fechaObj < new Date(new Date().setHours(0, 0, 0, 0))
+          
+          const [hStr, mStr] = horaSalida.split(':')
+          const [y, m, d] = fecha.split('-').map(Number)
+          const salidaDate = new Date(y, m - 1, d, Number(hStr || 0), Number(mStr || 0), 0, 0)
+          const fechaPasada = salidaDate.getTime() < ahoraTimestamp
           const agotada = cupoDisponible <= 0 || fechaPasada
           if (!agotada) {
             hayDisponibilidad = true
@@ -443,7 +554,7 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
     }
 
     const nuevoEstado = hayDisponibilidad ? 'ACTIVA' : 'AGOTADA'
-    if (excursion.estado !== nuevoEstado) {
+    if (excursion.estado !== nuevoEstado && excursion.estado !== 'ARCHIVADA') {
       await tx.excursion.update({ where: { id: excursionId }, data: { estado: nuevoEstado } })
     }
   })

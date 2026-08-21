@@ -95,6 +95,12 @@ export default async function ExcursionDetallePage({
             incluye: excursion.incluye,
             noIncluye: excursion.noIncluye,
             politicas: excursion.politicas,
+            horarios: excursion.horarios.map((h) => ({
+              id: h.id,
+              horaSalida: h.horaSalida,
+              diasSemana: h.diasSemana,
+              cupo: h.cupo,
+            })),
           }}
         />
       </section>

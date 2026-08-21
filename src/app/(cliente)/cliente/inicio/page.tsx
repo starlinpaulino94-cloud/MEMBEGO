@@ -18,7 +18,6 @@ import { getGamificacion, type GamificacionData } from '@/modules/engagement/gam
 import { getEngagementConfig } from '@/modules/engagement/config'
 import { normalizeEngagementConfig, type EngagementConfig } from '@/lib/engagementConfig'
 import { esMarcaUnica } from '@/modules/marketplace/marcaUnica'
-import { getCategoriesPublic } from '@/modules/marketplace/cached'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { PruebaSocial } from '@/components/engagement/PruebaSocial'
 import { PopupInteligente } from '@/components/engagement/PopupInteligente'
@@ -26,7 +25,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { CelebracionBienvenida } from '@/components/cliente/CelebracionBienvenida'
 import { DescubreMas } from '@/components/cliente/DescubreMas'
 import { OnboardingClienteFirstVisit } from '@/components/cliente/OnboardingClienteFirstVisit'
-import { BuscadorInicio } from '@/components/cliente/inicio/BuscadorInicio'
+import { BuscadorSimple } from '@/components/cliente/inicio/BuscadorSimple'
 import { OfertasParaTi } from '@/components/cliente/inicio/OfertasParaTi'
 import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -73,7 +72,6 @@ export default async function InicioCliente() {
     onboarding,
     promoFeed,
     marcaUnica,
-    categorias,
     ubicacion,
   ] = await Promise.all([
     // La PERSONA, no la ficha activa: un beneficio reclamado en otro negocio
@@ -110,7 +108,6 @@ export default async function InicioCliente() {
     // Marca única: con un solo negocio publicado no hay marketplace que
     // explorar. Ambas consultas van cacheadas (5 min y 1 h).
     esMarcaUnica().catch(() => true),
-    getCategoriesPublic().catch(() => []),
     // Ubicación de la vivienda, para el contexto del saludo.
     dbUserId ? LocationService.primaria(dbUserId).catch(() => null) : Promise.resolve(null),
   ])
@@ -205,9 +202,6 @@ export default async function InicioCliente() {
   // única `/cliente/explorar` redirige a planes y la búsqueda no llevaría a
   // ninguna respuesta.
   const mostrarDescubrimiento = !marcaUnica
-  // `getCategoriesPublic()` ya descarta las categorías sin empresas: aquí solo
-  // se recorta a las ocho primeras para que la fila quepa sin desbordarse.
-  const chips = categorias.slice(0, 8).map((c) => ({ slug: c.slug, nombre: c.name }))
 
   /**
    * ¿ESTA PERSONA TODAVÍA NO ES CLIENTE DE NINGÚN NEGOCIO?
@@ -342,8 +336,8 @@ export default async function InicioCliente() {
         </div>
       </header>
 
-      {/* ── Buscar y categorías (solo con marketplace) ─────────────────────── */}
-      {mostrarDescubrimiento && <BuscadorInicio categorias={chips} />}
+      {/* ── Buscar ofertas y excursiones ─── */}
+      <BuscadorSimple />
 
       {/* ── La acción principal: la elige el motor de experiencias (MEE) ───── */}
       {heroExp && <ExperienciaHero exp={heroExp} />}

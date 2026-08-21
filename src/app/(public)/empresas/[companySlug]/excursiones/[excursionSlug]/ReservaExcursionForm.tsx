@@ -59,7 +59,8 @@ export function ReservaExcursionForm({
   const [, setIsFollowing] = useState(initialFollowing)
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
-  const [fecha, setFecha] = useState('')
+  // Lo que el usuario ELIGIÓ; la fecha efectiva se deriva más abajo.
+  const [fechaElegida, setFechaElegida] = useState('')
   // Lo que el usuario ELIGIÓ. La hora efectiva (`hora`) se deriva de esto más
   // los horarios disponibles: ver abajo.
   const [horaElegida, setHoraElegida] = useState('')
@@ -81,6 +82,17 @@ export function ReservaExcursionForm({
     return Array.from(fechas).sort()
   }, [salidasDisponibles])
 
+  /**
+   * La fecha efectiva también se DERIVA, igual que la hora.
+   *
+   * El efecto anterior escribía `fecha` tras el primer render, así que había
+   * un instante con el formulario sin fecha y el resto de campos calculados
+   * sobre ese vacío. Derivarlo no deja ese hueco.
+   */
+  const fecha = fechaElegida && fechasDisponibles.includes(fechaElegida)
+    ? fechaElegida
+    : (fechasDisponibles[0] ?? '')
+
   // Horarios disponibles para la fecha seleccionada
   const horariosDisponibles = useMemo(() => {
     if (!fecha) return []
@@ -99,11 +111,12 @@ export function ReservaExcursionForm({
    * pueda quedar desfasado con la fecha.
    *
    * Si lo que el usuario eligió sigue estando disponible, manda su elección;
-   * si dejó de estarlo (cambió de fecha), cae al primer horario de la nueva.
+   * si dejó de estarlo (cambió de fecha), cae al primer horario CON CUPO de la
+   * nueva — proponer uno agotado sería ofrecer lo que no se puede reservar.
    */
   const hora = horariosDisponibles.some((h) => h.horaSalida === horaElegida)
     ? horaElegida
-    : (horariosDisponibles[0]?.horaSalida ?? '')
+    : ((horariosDisponibles.find((h) => !h.agotada) ?? horariosDisponibles[0])?.horaSalida ?? '')
 
   const varianteActual = variantes.find((v) => v.id === varianteId) ?? variantes[0]
   const precioAdulto = varianteActual?.precioAdulto ?? 0
@@ -113,7 +126,7 @@ export function ReservaExcursionForm({
   // Redirect on success — in useEffect to avoid setState-during-render
   useEffect(() => {
     if (state.success && state.reservaId) {
-      router.push(`/cliente/excursiones/${state.reservaId}`)
+      router.push(`/cliente/mis-excursiones/${state.reservaId}`)
     }
   }, [state.success, state.reservaId, router])
 
@@ -252,7 +265,7 @@ export function ReservaExcursionForm({
             id="reserva-fecha"
             name="fecha"
             value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
+            onChange={(e) => setFechaElegida(e.target.value)}
             required
             disabled={fechasDisponibles.length === 0}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
@@ -274,42 +287,51 @@ export function ReservaExcursionForm({
         </div>
 
         {/* Horario */}
+        <input type="hidden" name="hora" value={hora} />
         {horariosDisponibles.length > 0 && (
           <div>
             <label className="mb-1.5 block text-sm font-medium">Hora de salida</label>
             <div className="flex flex-wrap gap-2">
-              {horariosDisponibles.map((h) => (
-                <label
-                  key={h.id}
-                  className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition ${
-                    hora === h.horaSalida
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : h.agotada
-                      ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed'
-                      : 'bg-background hover:bg-muted'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="hora"
-                    value={h.horaSalida}
-                    checked={hora === h.horaSalida}
-                    onChange={() => setHoraElegida(h.horaSalida)}
-                    disabled={h.agotada}
-                    className="sr-only"
-                  />
-                  {h.horaSalida}
-                  {h.cupoDisponible > 0 && (
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      ({h.cupoDisponible})
-                    </span>
-                  )}
-                  {h.agotada && <X className="ml-1.5 h-3 w-3" />}
-                </label>
-              ))}
+              {horariosDisponibles.map((h) => {
+                const [hStr, mStr] = h.horaSalida.split(':')
+                const hNum = parseInt(hStr || '0', 10)
+                const ampm = hNum >= 12 ? 'PM' : 'AM'
+                const h12 = hNum % 12 || 12
+                const horaLabel = `${h12}:${mStr} ${ampm}`
+
+                return (
+                  <label
+                    key={h.id}
+                    className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                      hora === h.horaSalida
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : h.agotada
+                        ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="hora_radio"
+                      value={h.horaSalida}
+                      checked={hora === h.horaSalida}
+                      onChange={() => setHoraElegida(h.horaSalida)}
+                      disabled={h.agotada}
+                      className="sr-only"
+                    />
+                    {horaLabel}
+                    {h.cupoDisponible > 0 && (
+                      <span className="ml-1.5 text-xs opacity-80">
+                        ({h.cupoDisponible})
+                      </span>
+                    )}
+                    {h.agotada && <X className="ml-1.5 h-3 w-3 inline" />}
+                  </label>
+                )
+              })}
             </div>
             {horariosDisponibles.length > 0 && horariosDisponibles.every((h) => h.agotada) && (
-              <p className="mt-1 text-xs text-destructive">Todos los horarios están completos para esta fecha</p>
+              <p className="mt-1 text-xs text-destructive font-semibold">Todos los horarios están completos para esta fecha</p>
             )}
           </div>
         )}

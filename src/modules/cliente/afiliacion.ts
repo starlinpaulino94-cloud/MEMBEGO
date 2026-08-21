@@ -61,11 +61,14 @@ export interface ResultadoAfiliacion {
  * `nombre` y `telefono` se heredan de la ficha más antigua de la persona: quien
  * ya se registró una vez no debería volver a escribir su nombre para reclamar
  * algo. Si no hay ninguna previa se usa el nombre de la cuenta.
+ *
+ * Si se proporciona `enlaceSlug`, registra la atribución del vendedor (etapa REGISTRO).
  */
 export async function asegurarClienteEnEmpresa(
   supabaseId: string,
   email: string | null | undefined,
-  companyId: string
+  companyId: string,
+  enlaceSlug?: string | null
 ): Promise<ResultadoAfiliacion | { error: string }> {
   const [dbUser, existente] = await sinEmpresa(
     'afiliación: mi user y mi ficha en la empresa destino',
@@ -85,6 +88,12 @@ export async function asegurarClienteEnEmpresa(
   // pisar `esFavorita` si el usuario ya la había marcado.
   if (existente) {
     await seguirEmpresa(dbUser.id, companyId)
+    // Atribución de vendedor si vino por enlace/QR (etapa REGISTRO)
+    if (enlaceSlug) {
+      await capturarAtribucionVendedor(existente.id, companyId, { enlaceSlug }).catch((e) =>
+        console.error('[afiliación] atribución de vendedor (existente):', e)
+      )
+    }
     return { clienteId: existente.id, creado: false }
   }
 
@@ -130,9 +139,12 @@ export async function asegurarClienteEnEmpresa(
   await capturarCanalRegistro(cliente.id).catch((e) =>
     console.error('[afiliación] canal de registro:', e)
   )
-  await capturarAtribucionVendedor(cliente.id, companyId).catch((e) =>
-    console.error('[afiliación] atribución de vendedor:', e)
-  )
+  // Atribución de vendedor si vino por enlace/QR (etapa REGISTRO)
+  if (enlaceSlug) {
+    await capturarAtribucionVendedor(cliente.id, companyId, { enlaceSlug }).catch((e) =>
+      console.error('[afiliación] atribución de vendedor:', e)
+    )
+  }
   if (email) {
     await vincularRegalosPorContacto({ clienteId: cliente.id, companyId, email }).catch((e) =>
       console.error('[afiliación] regalos por contacto:', e)

@@ -206,7 +206,7 @@ test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {
 })
 
 test('un dominio de un solo módulo no se repite a sí mismo', () => {
-  // "Inicio / Resumen" está bien; "Inicio / Inicio" sería ruido.
+  // "Inicio / Inicio" sería ruido; el home del cliente es el inicio.
   const m = migasDeRuta(navForRole('CLIENTE'), '/cliente/inicio')
   assert.equal(m.dominio, null)
   assert.equal(m.seccion?.label, 'Inicio')

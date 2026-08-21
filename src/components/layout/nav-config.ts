@@ -249,9 +249,9 @@ const ADMIN_NAV: NavGroup[] = [
  *
  * Por eso los grupos son ahora:
  *
- *   DESCUBRIR    lo que puedes conseguir      (ofertas, planes, cerca de ti)
+ *   DESCUBRIR    lo que puedes conseguir      (ofertas, planes, excursiones, cerca de ti)
  *   MI MEMBEGO   lo que ya es tuyo            (beneficios, membresías, regalos)
- *   ACTIVIDAD    lo que ya hiciste            (citas, pagos, historial)
+ *   ACTIVIDAD    lo que ya hiciste            (citas, pagos, historial, excursiones)
  *   CUENTA       tú                           (perfil, empresas, vehículos)
  *
  * ────────────────────────────────────────────────────────────────────────────
@@ -266,8 +266,7 @@ const CLIENTE_NAV: NavGroup[] = [
   {
     id: 'inicio',
     label: 'Inicio',
-    // Enlace directo a la vista real (evita el salto de redirect por
-    // /cliente/dashboard -> /mis-membresias).
+    // Enlace directo a la vista real (el home del cliente).
     items: [{ href: '/cliente/inicio', label: 'Inicio', icon: LayoutDashboard }],
   },
   {
@@ -275,6 +274,7 @@ const CLIENTE_NAV: NavGroup[] = [
     label: 'Descubrir',
     items: [
       { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
+      { href: '/cliente/excursiones', label: 'Excursiones', icon: Compass },
       // Aquí, y no en «Mis beneficios»: un plan es lo que puedes contratar,
       // no lo que tienes contratado.
       { href: '/cliente/planes', label: 'Planes', icon: Package },
@@ -300,7 +300,7 @@ const CLIENTE_NAV: NavGroup[] = [
       { href: '/cliente/citas', label: 'Mis citas', icon: CalendarDays },
       { href: '/cliente/pagos', label: 'Mis pagos', icon: Wallet },
       { href: '/cliente/historial', label: 'Historial', icon: History },
-      { href: '/cliente/excursiones', label: 'Mis excursiones', icon: CalendarDays },
+      { href: '/cliente/mis-excursiones', label: 'Mis excursiones', icon: CalendarDays },
     ],
   },
   {

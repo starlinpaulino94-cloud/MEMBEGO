@@ -59,6 +59,7 @@ export const TIPOS_CALCULO = [
   'FIJO_ADULTO',
   'FIJO_NINO',
   'ESCALON',
+  'PAQUETE_REGALO',
 ] as const
 export type TipoCalculo = (typeof TIPOS_CALCULO)[number]
 
@@ -69,6 +70,7 @@ export const TIPO_CALCULO_LABEL: Record<TipoCalculo, string> = {
   FIJO_ADULTO: 'Monto fijo por adulto',
   FIJO_NINO: 'Monto fijo por niño',
   ESCALON: 'Por escalones de pasajeros',
+  PAQUETE_REGALO: 'Paquete de regalo cada N ventas',
 }
 
 // ── Estados ──────────────────────────────────────────────────────────────────
@@ -189,6 +191,14 @@ export interface ContextoVenta {
   adultos: number
   ninos: number
   fecha: Date
+  /** Nombre de la excursión vendida (para paquete de regalo equivalente). */
+  excursionNombre?: string | null
+  /** Precio base por adulto de la excursión vendida. */
+  excursionPrecio?: number | null
+  /** Número de ventas previas del vendedor para esta excursión específica. */
+  ventasPreviasExcursion?: number
+  /** Número de ventas previas del vendedor en general. */
+  ventasPreviasVendedor?: number
 }
 
 /** ¿Esta regla habla de esta venta? Un ámbito sin su id no aplica a nadie. */
@@ -302,6 +312,22 @@ export function calcularComision(
         monto = centavos(base * (escalon.pct / 100))
         const hasta = escalon.hasta === null ? 'o más' : `a ${escalon.hasta}`
         desglose = `${escalon.pct}% sobre ${base} (escalón de ${escalon.desde} ${hasta} pasajeros)`
+      }
+      break
+    }
+    case 'PAQUETE_REGALO': {
+      const cadaVentas = Math.max(1, Math.trunc(valor))
+      const ventasPrevias = Math.max(0, ctx.ventasPreviasExcursion ?? ctx.ventasPreviasVendedor ?? 0)
+      const conteoActual = (ventasPrevias % cadaVentas) + 1
+      const precioPaquete = ctx.excursionPrecio && ctx.excursionPrecio > 0 ? centavos(ctx.excursionPrecio) : base
+      const nombrePaquete = ctx.excursionNombre || 'Paquete de Excursión'
+
+      if (conteoActual === cadaVentas) {
+        monto = precioPaquete
+        desglose = `¡Meta cumplida! Paquete de regalo otorgado: ${nombrePaquete} (Venta ${conteoActual} de ${cadaVentas} completada de esta excursión)`
+      } else {
+        monto = 0
+        desglose = `Progreso: Venta ${conteoActual} de ${cadaVentas} de ${nombrePaquete} para ganar 1 paquete de regalo`
       }
       break
     }
@@ -421,6 +447,9 @@ export function validarRegla(
   }
   if (tipoCalculo === 'PORCENTAJE' && valor > 100) {
     return { ok: false, error: 'Un porcentaje de comisión no puede pasar de 100.' }
+  }
+  if (tipoCalculo === 'PAQUETE_REGALO' && valor < 1) {
+    return { ok: false, error: 'Indica cada cuántas ventas se regala el paquete (mínimo 1).' }
   }
 
   const escalones = tipoCalculo === 'ESCALON' ? normalizarEscalones(form.escalones) : null

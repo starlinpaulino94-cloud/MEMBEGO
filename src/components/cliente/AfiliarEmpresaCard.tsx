@@ -24,10 +24,12 @@ export function AfiliarEmpresaCard({
   companySlug,
   companyName,
   yaEsMiembro,
+  enlaceSlug,
 }: {
   companySlug: string
   companyName: string
   yaEsMiembro: boolean
+  enlaceSlug?: string | null
 }) {
   const [state, formAction, pending] = useActionState(afiliarmeAEmpresa, initial)
 
@@ -58,6 +60,7 @@ export function AfiliarEmpresaCard({
         )}
         <form action={formAction}>
           <input type="hidden" name="companySlug" value={companySlug} />
+          {enlaceSlug && <input type="hidden" name="enlaceSlug" value={enlaceSlug} />}
           <Button
             type="submit"
             disabled={pending}

@@ -6,8 +6,13 @@ import {
   VENDEDOR_COOKIE,
   VENTANA_ATRIBUCION_DIAS,
   sanitizarCanalAtribucion,
+  politicaValida,
+  resolverVendedorAtribuido,
   type CanalAtribucion,
 } from './nucleo'
+
+// Re-exportar para uso externo
+export { VENDEDOR_COOKIE } from './nucleo'
 
 /**
  * EXCURSIONES · Atribución — escritura de los hechos.
@@ -202,5 +207,32 @@ export async function capturarAtribucionVendedor(
     }
   } catch (e) {
     console.error('[excursiones] capturarAtribucionVendedor:', e)
+  }
+}
+
+/**
+ * Resuelve el vendedor atribuido a un cliente según la política de la empresa.
+ */
+export async function vendedorParaCliente(companyId: string, clienteId: string): Promise<string | null> {
+  try {
+    const config = await conEmpresa(companyId, (tx) =>
+      tx.excursionesConfig.findUnique({
+        where: { companyId },
+        select: { politicaAtribucion: true, ventanaAtribucionDias: true },
+      })
+    )
+    const hechos = await conEmpresa(companyId, (tx) =>
+      tx.vendedorAtribucion.findMany({
+        where: { companyId, clienteId },
+        select: { vendedorId: true, etapa: true, createdAt: true },
+      })
+    )
+    return resolverVendedorAtribuido(hechos, {
+      politica: politicaValida(config?.politicaAtribucion),
+      ventanaDias: config?.ventanaAtribucionDias ?? VENTANA_ATRIBUCION_DIAS,
+    })
+  } catch (e) {
+    console.error('[excursiones] vendedorParaCliente:', e)
+    return null
   }
 }
