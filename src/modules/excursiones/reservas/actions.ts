@@ -28,6 +28,7 @@ import {
   politicaValida,
   VENTANA_ATRIBUCION_DIAS,
 } from '@/modules/excursiones/atribucion/nucleo'
+import { procesarVentaYComisionInterna } from '../ventas/actions'
 import {
   ESTADOS_RESERVA,
   ESTADOS_CERRADOS,
@@ -342,6 +343,15 @@ export async function registrarPago(
     )
     const estado = await refrescarEstadoPorPagos(companyId, reserva.id)
 
+    // Si la reserva quedó saldada por completo, auto-confirmar la venta y generar la comisión del vendedor
+    if (estado === 'PAGADA') {
+      await procesarVentaYComisionInterna(
+        companyId,
+        reserva.id,
+        user.metadata.dbUserId ?? null
+      ).catch(anotarFallo('excursiones:reservas:autoVentaComision'))
+    }
+
     await auditar(companyId, user.metadata.dbUserId ?? null, reserva.id, {
       tipo: 'RESERVA_PAGO',
       monto: v.datos.monto,
@@ -350,6 +360,7 @@ export async function registrarPago(
     })
     revalidatePath(`/admin/excursiones/reservas/${reserva.id}`)
     revalidatePath('/admin/excursiones/reservas')
+    revalidatePath('/vendedor/comisiones')
     return { success: 'Pago registrado.' }
   } catch (e) {
     console.error('[excursiones] registrarPago:', e)

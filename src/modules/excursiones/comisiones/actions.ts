@@ -73,12 +73,32 @@ export async function crearRegla(
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
 
+    const rawExcursionIds = Array.from(
+      new Set(
+        formData
+          .getAll('excursionId')
+          .map((e) => String(e).trim())
+          .filter(Boolean)
+      )
+    )
+    const primerExcursion = rawExcursionIds[0] || String(formData.get('excursionId') ?? '').trim()
+
+    const rawVendedorIds = Array.from(
+      new Set(
+        formData
+          .getAll('vendedorId')
+          .map((v) => String(v).trim())
+          .filter(Boolean)
+      )
+    )
+    const primerVendedor = rawVendedorIds[0] || String(formData.get('vendedorId') ?? '').trim()
+
     const v = validarRegla({
       ambito: String(formData.get('ambito') ?? ''),
       tipoCalculo: String(formData.get('tipoCalculo') ?? ''),
       valor: String(formData.get('valor') ?? ''),
-      excursionId: String(formData.get('excursionId') ?? ''),
-      vendedorId: String(formData.get('vendedorId') ?? ''),
+      excursionId: primerExcursion,
+      vendedorId: primerVendedor,
       categoria: String(formData.get('categoria') ?? ''),
       vigenciaDesde: String(formData.get('vigenciaDesde') ?? ''),
       vigenciaHasta: String(formData.get('vigenciaHasta') ?? ''),
@@ -86,22 +106,86 @@ export async function crearRegla(
     })
     if (!v.ok) return { error: v.error }
 
-    // La excursión y el vendedor referidos tienen que ser de ESTA empresa.
-    if (v.datos.excursionId) {
-      const ok = await conEmpresa(companyId, (tx) =>
-        tx.excursion.findFirst({ where: { id: v.datos.excursionId!, companyId }, select: { id: true } })
-      )
-      if (!ok) return { error: 'Esa excursión no existe en tu empresa.' }
-    }
-    if (v.datos.vendedorId) {
-      const ok = await conEmpresa(companyId, (tx) =>
-        tx.vendedor.findFirst({ where: { id: v.datos.vendedorId!, companyId }, select: { id: true } })
-      )
-      if (!ok) return { error: 'Ese vendedor no existe en tu empresa.' }
+    const pideExcursion = v.datos.ambito === 'EXCURSION' || v.datos.ambito === 'VENDEDOR_EXCURSION'
+    const listaExcursiones = pideExcursion
+      ? rawExcursionIds.length > 0
+        ? rawExcursionIds
+        : primerExcursion
+          ? [primerExcursion]
+          : []
+      : []
+
+    if (pideExcursion && listaExcursiones.length === 0) {
+      return { error: 'Selecciona al menos una excursión.' }
     }
 
-    const regla = await conEmpresa(companyId, (tx) =>
-      tx.comisionRegla.create({
+    if (listaExcursiones.length > 0) {
+      const encontradas = await conEmpresa(companyId, (tx) =>
+        tx.excursion.count({ where: { id: { in: listaExcursiones }, companyId } })
+      )
+      if (encontradas !== listaExcursiones.length) {
+        return { error: 'Una o más excursiones seleccionadas no existen en tu empresa.' }
+      }
+    }
+
+    const pideVendedor = v.datos.ambito === 'VENDEDOR' || v.datos.ambito === 'VENDEDOR_EXCURSION'
+    const listaVendedores = pideVendedor
+      ? rawVendedorIds.length > 0
+        ? rawVendedorIds
+        : primerVendedor
+          ? [primerVendedor]
+          : []
+      : []
+
+    if (pideVendedor && listaVendedores.length === 0) {
+      return { error: 'Selecciona al menos un vendedor.' }
+    }
+
+    if (listaVendedores.length > 0) {
+      const encontrados = await conEmpresa(companyId, (tx) =>
+        tx.vendedor.count({ where: { id: { in: listaVendedores }, companyId } })
+      )
+      if (encontrados !== listaVendedores.length) {
+        return { error: 'Uno o más vendedores seleccionados no existen en tu empresa.' }
+      }
+    }
+
+    // Armar combinaciones para la creación de reglas
+    let combinaciones: { vendedorId: string | null; excursionId: string | null }[] = []
+    if (v.datos.ambito === 'VENDEDOR_EXCURSION') {
+      combinaciones = listaVendedores.flatMap((vid) =>
+        listaExcursiones.map((eid) => ({ vendedorId: vid, excursionId: eid }))
+      )
+    } else if (v.datos.ambito === 'EXCURSION') {
+      combinaciones = listaExcursiones.map((eid) => ({ vendedorId: null, excursionId: eid }))
+    } else if (v.datos.ambito === 'VENDEDOR') {
+      combinaciones = listaVendedores.map((vid) => ({ vendedorId: vid, excursionId: null }))
+    } else {
+      combinaciones = [{ vendedorId: null, excursionId: null }]
+    }
+
+    const resultado = await conEmpresa(companyId, async (tx) => {
+      if (combinaciones.length > 1) {
+        await tx.comisionRegla.createMany({
+          data: combinaciones.map((c) => ({
+            companyId,
+            ambito: v.datos.ambito,
+            tipoCalculo: v.datos.tipoCalculo,
+            valor: v.datos.valor,
+            escalones: v.datos.escalones
+              ? (v.datos.escalones as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+            excursionId: c.excursionId,
+            vendedorId: c.vendedorId,
+            categoria: v.datos.categoria,
+            vigenciaDesde: v.datos.vigenciaDesde,
+            vigenciaHasta: v.datos.vigenciaHasta,
+          })),
+        })
+        return { id: 'multiples', total: combinaciones.length }
+      }
+
+      const unica = await tx.comisionRegla.create({
         data: {
           companyId,
           ambito: v.datos.ambito,
@@ -110,24 +194,31 @@ export async function crearRegla(
           escalones: v.datos.escalones
             ? (v.datos.escalones as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
-          excursionId: v.datos.excursionId,
-          vendedorId: v.datos.vendedorId,
+          excursionId: combinaciones[0]?.excursionId || null,
+          vendedorId: combinaciones[0]?.vendedorId || null,
           categoria: v.datos.categoria,
           vigenciaDesde: v.datos.vigenciaDesde,
           vigenciaHasta: v.datos.vigenciaHasta,
         },
         select: { id: true },
       })
-    )
+      return { id: unica.id, total: 1 }
+    })
 
-    await auditar(companyId, user.metadata.dbUserId ?? null, 'ComisionRegla', regla.id, {
+    await auditar(companyId, user.metadata.dbUserId ?? null, 'ComisionRegla', resultado.id, {
       tipo: 'REGLA_CREADA',
       ambito: v.datos.ambito,
       tipoCalculo: v.datos.tipoCalculo,
       valor: v.datos.valor,
+      totalReglas: resultado.total,
     })
     revalidatePath('/admin/excursiones/comisiones/reglas')
-    return { success: 'Regla creada. Se aplicará a las ventas que se confirmen desde ahora.' }
+    return {
+      success:
+        resultado.total > 1
+          ? `Reglas creadas (${resultado.total} en total).`
+          : 'Regla creada. Se aplicará a las ventas que se confirmen desde ahora.',
+    }
   } catch (e) {
     console.error('[excursiones] crearRegla:', e)
     return { error: 'No se pudo crear la regla.' }

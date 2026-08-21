@@ -22,7 +22,7 @@ import {
   validarDisponibilidad,
 } from './nucleo'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
-import { resolverEnlace, VENDEDOR_COOKIE } from '../atribucion/registrar'
+import { resolverEnlace, vendedorParaCliente, VENDEDOR_COOKIE } from '../atribucion/registrar'
 
 export interface ReservaClienteState {
   error?: string
@@ -71,6 +71,11 @@ export async function reservarExcursion(
       /* ignore: sin cookie o error al resolver -> reserva sin vendedor */
     }
 
+    // Si no vino por cookie o se consumió en el registro, resolver desde los hechos del cliente
+    if (!vendedorId && cliente.id) {
+      vendedorId = await vendedorParaCliente(companyId, cliente.id)
+    }
+
     const v = validarReserva({
       fecha: String(formData.get('fecha') ?? ''),
       hora: String(formData.get('hora') ?? ''),
@@ -112,6 +117,7 @@ export async function reservarExcursion(
         select: {
           id: true,
           capacidad: true,
+          horaSalida: true,
           horarios: {
             where: { activo: true },
             select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
@@ -127,9 +133,10 @@ export async function reservarExcursion(
       v.datos.adultos + v.datos.ninos,
       {
         capacidad: excursionCompleta.capacidad,
+        horaSalida: excursionCompleta.horaSalida,
         horarios: excursionCompleta.horarios.map((h) => ({
           id: h.id,
-          diasSemana: h.diasSemana as number[],
+          diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
           horaSalida: h.horaSalida,
           cupo: h.cupo,
         })),
@@ -225,6 +232,7 @@ export async function reservarExcursion(
       ).catch(anotarFallo('excursiones:reservarExcursion:atribucion'))
     }
 
+    revalidatePath('/cliente/mis-excursiones')
     revalidatePath('/cliente/excursiones')
 
     // Sincronizar estado AGOTADA tras crear reserva
