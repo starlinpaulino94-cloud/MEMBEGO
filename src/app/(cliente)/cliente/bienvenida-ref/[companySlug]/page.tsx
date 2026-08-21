@@ -88,7 +88,7 @@ export default async function BienvenidaRefPage({ params }: BienvenidaRefPagePro
                       Vence: {m.fechaVencimiento ? formatDate(m.fechaVencimiento, { moneda: 'DOP' }) : 'Sin fecha'}
                     </p>
                   </div>
-                  <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                  <span className="rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
                     Activa
                   </span>
                 </div>

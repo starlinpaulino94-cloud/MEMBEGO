@@ -156,7 +156,7 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
                     <ul className="space-y-1.5 text-sm text-muted-foreground">
                       {exc.incluye.split('\n').map((line, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                           {line}
                         </li>
                       ))}
@@ -169,7 +169,7 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
                     <ul className="space-y-1.5 text-sm text-muted-foreground">
                       {exc.noIncluye.split('\n').map((line, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <XIcon className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                          <XIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                           {line}
                         </li>
                       ))}

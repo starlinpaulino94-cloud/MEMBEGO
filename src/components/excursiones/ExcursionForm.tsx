@@ -202,48 +202,62 @@ function DuracionInput({
   const [hRegreso, setHRegreso] = useState<string>(horaRegreso ?? '')
 
   // Refs para evitar bucles infinitos
-  const updatingDuracion = useRef(false)
-  const updatingHoraRegreso = useRef(false)
+  /**
+   * DURACIÓN Y HORAS: se sincronizan al ESCRIBIR, no con efectos.
+   *
+   * Antes eran dos `useEffect` que se escuchaban entre sí —duración escribía
+   * la hora de regreso, la hora de regreso escribía la duración— y cada uno
+   * llevaba un `useRef` de «me toca a mí saltarme este turno» para no
+   * rebotarse. Ese es el diseño que produjo el bucle infinito del último
+   * commit de esta rama; el ref lo tapa mientras el orden de los renders
+   * coopere, y deja de taparlo en cuanto no.
+   *
+   * Aquí el modelo es explícito: los tres campos son la misma información
+   * (salida + duración = regreso), así que EL QUE SE TOCA manda y los otros se
+   * recalculan en ese mismo momento. Sin efectos no hay ciclo posible, y el
+   * usuario puede seguir editando cualquiera de los tres.
+   */
+  const enMinutos = (hhmm: string): number | null => {
+    const [h, m] = hhmm.split(':').map(Number)
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
+  }
 
-  // Sincronizar duracion desde horas
-  useEffect(() => {
-    if (updatingDuracion.current) {
-      updatingDuracion.current = false
-      return
-    }
-    if (hSalida && hRegreso) {
-      const ini = hSalida.split(':').map(Number)
-      const fin = hRegreso.split(':').map(Number)
-      if (ini.length === 2 && fin.length === 2) {
-        let iniMin = ini[0] * 60 + ini[1]
-        let finMin = fin[0] * 60 + fin[1]
-        let diff = finMin - iniMin
-        if (diff < 0) diff += 24 * 60
-        updatingDuracion.current = true
-        setDuracion(diff)
-      }
-    }
-  }, [hSalida, hRegreso])
+  const aHora = (minutos: number): string => {
+    const total = ((minutos % (24 * 60)) + 24 * 60) % (24 * 60)
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  }
 
-  // Sincronizar horaRegreso desde duracion + horaSalida
-  useEffect(() => {
-    if (updatingHoraRegreso.current) {
-      updatingHoraRegreso.current = false
-      return
+  /** Minutos entre dos horas, cruzando la medianoche si hace falta. */
+  const diferencia = (desde: number, hasta: number): number => {
+    const diff = hasta - desde
+    return diff < 0 ? diff + 24 * 60 : diff
+  }
+
+  const alCambiarDuracion = (valor: number | null) => {
+    setDuracion(valor)
+    const ini = hSalida ? enMinutos(hSalida) : null
+    if (valor !== null && ini !== null) setHRegreso(aHora(ini + valor))
+  }
+
+  const alCambiarSalida = (valor: string) => {
+    setHSalida(valor)
+    const ini = enMinutos(valor)
+    if (ini === null) return
+    // Con una duración puesta, mover la salida mueve el regreso. Si no la hay
+    // pero sí un regreso, lo que queda determinado es la duración.
+    if (duracion !== null) setHRegreso(aHora(ini + duracion))
+    else if (hRegreso) {
+      const fin = enMinutos(hRegreso)
+      if (fin !== null) setDuracion(diferencia(ini, fin))
     }
-    if (duracion !== null && hSalida) {
-      const partes = hSalida.split(':').map(Number)
-      if (partes.length === 2) {
-        const [h, m] = partes
-        const iniMin = h * 60 + m
-        const finMin = iniMin + duracion
-        const hFin = Math.floor(finMin / 60) % 24
-        const mFin = finMin % 60
-        updatingHoraRegreso.current = true
-        setHRegreso(`${String(hFin).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`)
-      }
-    }
-  }, [duracion, hSalida])
+  }
+
+  const alCambiarRegreso = (valor: string) => {
+    setHRegreso(valor)
+    const ini = hSalida ? enMinutos(hSalida) : null
+    const fin = enMinutos(valor)
+    if (ini !== null && fin !== null) setDuracion(diferencia(ini, fin))
+  }
 
   const formatear = (min: number) => {
     const h = Math.floor(min / 60)
@@ -270,8 +284,7 @@ function DuracionInput({
             step="30"
             value={duracion ?? ''}
             onChange={(e) => {
-              const v = e.target.value ? Number(e.target.value) : null
-              setDuracion(v)
+              alCambiarDuracion(e.target.value ? Number(e.target.value) : null)
             }}
             placeholder="Ej: 120"
           />
@@ -289,7 +302,7 @@ function DuracionInput({
             name="horaSalida"
             type="time"
             value={hSalida}
-            onChange={(e) => setHSalida(e.target.value)}
+            onChange={(e) => alCambiarSalida(e.target.value)}
           />
         </div>
         <div>
@@ -299,7 +312,7 @@ function DuracionInput({
             name="horaRegreso"
             type="time"
             value={hRegreso}
-            onChange={(e) => setHRegreso(e.target.value)}
+            onChange={(e) => alCambiarRegreso(e.target.value)}
           />
         </div>
       </div>
