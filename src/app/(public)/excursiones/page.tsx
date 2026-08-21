@@ -151,14 +151,14 @@ function SearchForm({
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
         <div className="flex flex-wrap gap-2">
-          <select name="cat" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialCategoria}>
+          <select name="cat" aria-label="Filtrar por categoría" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialCategoria}>
             <option value="">Todas las categorías</option>
           </select>
-          <select name="emp" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialEmpresa}>
+          <select name="emp" aria-label="Filtrar por empresa" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialEmpresa}>
             <option value="">Todas las empresas</option>
           </select>
-          <input type="date" name="fd" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialFechaDesde} min={new Date().toISOString().split('T')[0]} />
-          <input type="date" name="fh" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialFechaHasta} min={initialFechaDesde || new Date().toISOString().split('T')[0]} />
+          <input type="date" name="fd" aria-label="Fecha desde" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialFechaDesde} min={new Date().toISOString().split('T')[0]} />
+          <input type="date" name="fh" aria-label="Fecha hasta" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialFechaHasta} min={initialFechaDesde || new Date().toISOString().split('T')[0]} />
           <label className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm cursor-pointer">
             <input type="checkbox" name="stock" defaultChecked={initialSoloConStock} className="rounded border-input" />
             Solo con cupos
@@ -244,7 +244,7 @@ function ResultsGrid({
               )}
               {exc.cupoDisponible && exc.cupoDisponible <= 5 && exc.cupoDisponible > 0 && !exc.agotadaGlobal && !exc.todasFechasPasadas && (
                 <div className="absolute right-3 bottom-3">
-                  <span className="rounded-full bg-warning/90 px-2 py-1 text-xs font-medium text-warning-foreground flex items-center gap-1">
+                  <span className="rounded-full bg-warning px-2 py-1 text-xs font-medium text-warning-foreground flex items-center gap-1">
                     <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M7 7l5 5" /></svg>
                     {exc.cupoDisponible} cupos
                   </span>
@@ -256,7 +256,7 @@ function ResultsGrid({
               <h3 className="font-semibold group-hover:text-primary line-clamp-1">{exc.nombre}</h3>
               <p className="mt-1 text-xs text-muted-foreground">{exc.empresa.name}</p>
               
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 {exc.duracionMin && (
                   <span className="flex items-center gap-1">
                     <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>

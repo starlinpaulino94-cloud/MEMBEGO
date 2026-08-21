@@ -146,6 +146,7 @@ export function SearchParams() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
+            aria-label="Buscar excursiones"
             placeholder="Buscar por nombre, destino, categoria..."
             value={filtros.query}
             onChange={(e) => handleChange('query', e.target.value)}
@@ -197,6 +198,7 @@ export function SearchParams() {
             <div>
               <label className="block text-sm font-medium mb-1">Fecha desde</label>
               <Input
+                aria-label="Fecha desde"
                 type="date"
                 value={filtros.fechaDesde}
                 onChange={(e) => handleChange('fechaDesde', e.target.value)}
@@ -206,6 +208,7 @@ export function SearchParams() {
             <div>
               <label className="block text-sm font-medium mb-1">Fecha hasta</label>
               <Input
+                aria-label="Fecha hasta"
                 type="date"
                 value={filtros.fechaHasta}
                 onChange={(e) => handleChange('fechaHasta', e.target.value)}

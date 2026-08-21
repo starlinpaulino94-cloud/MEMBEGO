@@ -104,7 +104,7 @@ export function ExcursionSearchCard({ excursion, variant = 'default' }: Excursio
             src={excursion.portadaUrl}
             alt={excursion.nombre}
             fill
-            className="object-cover transition duration-300 group-hover:scale-105"
+            className="object-cover transition group-hover:scale-105"
             sizes={variant === 'compact' ? '80px' : '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw'}
           />
         ) : (
@@ -140,7 +140,7 @@ export function ExcursionSearchCard({ excursion, variant = 'default' }: Excursio
             </p>
           )}
 
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {excursion.duracionMin && (
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />

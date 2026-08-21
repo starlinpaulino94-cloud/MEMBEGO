@@ -147,7 +147,7 @@ export function BuscadorUnificado() {
                               defecto. Antes leía `p.moneda`, que no existe. */}
                           {p.precio ? `Desde ${formatMoney(p.precio)}` : 'Ver detalle'}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary capitalize">{p.tipo}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary capitalize">{p.tipo}</span>
                       </div>
                     </div>
                   </Link>
@@ -212,7 +212,7 @@ export function BuscadorUnificado() {
                     <div className="p-3">
                       <h4 className="font-semibold line-clamp-1 group-hover:text-primary">{e.nombre}</h4>
                       <p className="mt-1 text-xs text-muted-foreground truncate">{e.empresa.name}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {e.duracionMin && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />

@@ -186,7 +186,7 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
           </aside>
 
           {/* Grid Resultados */}
-          <main className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
             <Suspense fallback={<ResultsSkeleton />}>
               <ResultsGrid 
                 empresas={empresas}
@@ -197,7 +197,7 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
                 currentParams={params}
               />
             </Suspense>
-          </main>
+          </div>
         </div>
       </div>
     </div>
@@ -250,6 +250,7 @@ function SearchForm({
           {categorias.length > 0 && (
             <select
               name="cat"
+              aria-label="Filtrar por categoría"
               className="flex-1 sm:flex-initial h-10 rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               defaultValue={initialCategoria}
             >
@@ -262,6 +263,7 @@ function SearchForm({
           {empresas.length > 0 && (
             <select
               name="emp"
+              aria-label="Filtrar por empresa"
               className="flex-1 sm:flex-initial h-10 rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               defaultValue={initialEmpresa}
             >

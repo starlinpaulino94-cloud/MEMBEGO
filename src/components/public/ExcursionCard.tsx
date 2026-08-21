@@ -78,7 +78,7 @@ export function ExcursionCard({
                 src={excursion.portadaUrl}
                 alt={excursion.nombre}
                 fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                className="object-cover transition-transform group-hover:scale-105"
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -116,7 +116,7 @@ export function ExcursionCard({
               src={excursion.portadaUrl}
               alt={excursion.nombre}
               fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className="object-cover transition-transform group-hover:scale-105"
             />
           ) : (
             <>

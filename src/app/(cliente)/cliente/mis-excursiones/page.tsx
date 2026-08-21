@@ -156,7 +156,7 @@ function ReservaCard({
             src={reserva.excursion.portadaUrl}
             alt={reserva.excursion.nombre}
             fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            className="object-cover transition-transform group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, 120px"
           />
         ) : (
@@ -183,7 +183,7 @@ function ReservaCard({
             <p className="text-xs text-muted-foreground mt-0.5">Reserva: <span className="font-mono font-semibold">{reserva.numero}</span></p>
           </div>
           <span
-            className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[11px] sm:text-xs font-bold ${TONO_CLASE[tono] ?? TONO_CLASE.neutral}`}
+            className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold ${TONO_CLASE[tono] ?? TONO_CLASE.neutral}`}
           >
             {ESTADO_RESERVA_LABEL[reserva.estado as keyof typeof ESTADO_RESERVA_LABEL] ?? reserva.estado}
           </span>
@@ -210,7 +210,7 @@ function ReservaCard({
         {/* Price and Action row */}
         <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between">
           <div>
-            <span className="text-[10px] uppercase font-bold text-muted-foreground block">Total pagado</span>
+            <span className="text-xs uppercase font-bold text-muted-foreground block">Total pagado</span>
             <p className="text-sm sm:text-base font-bold text-foreground tabular-nums">
               {formatMoney(reserva.total, { moneda: reserva.moneda })}
             </p>
