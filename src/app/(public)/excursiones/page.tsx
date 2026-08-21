@@ -1,9 +1,8 @@
 import { Metadata } from 'next'
-import { Search, Filter, X, Calendar, MapPin, Tag, Users, ArrowLeft, AlertCircle, Clock, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { buscarExcursionesPublicas } from '@/modules/excursiones/catalogo/search-queries'
-import { getCompanyPublic } from '@/modules/marketplace/cached'
+import { Search, Filter, X, Tag, Compass, ChevronRight, Clock, MapPin, AlertCircle, X as XIcon } from 'lucide-react'
+import { buscarUnificado } from '@/modules/cliente/actions'
 import { formatMoney } from '@/lib/format'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
@@ -36,6 +35,11 @@ export async function generateMetadata({ searchParams }: ExcursionesPageProps): 
   })
 }
 
+interface BuscadorUnificadoResult {
+  promociones: any[]
+  excursiones: any[]
+}
+
 export default async function ExcursionesPage({ searchParams }: ExcursionesPageProps) {
   const params = await searchParams
   
@@ -51,7 +55,7 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
     porPagina: 12,
   }
 
-  const resultado = await buscarExcursionesPublicas(filtros)
+  const resultado = await buscarUnificado(filtros.query) as { promociones: any[]; excursiones: any[] }
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +66,9 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
             href="/empresas"
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
             Empresas
           </Link>
         </div>
@@ -76,10 +82,7 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
               {params.q ? `Resultados para "${params.q}"` : 'Todas las excursiones'}
             </h1>
             <p className="mt-1 text-muted-foreground">
-              {params.q 
-                ? `${resultado.total} excursion${resultado.total !== 1 ? 'es' : ''} encontrada${resultado.total !== 1 ? 's' : ''}`
-                : 'Explora experiencias y tours de todas las empresas. Filtra por destino, fecha, categoría y disponibilidad.'
-              }
+              Explora experiencias y tours de todas las empresas. Filtra por destino, fecha, categoría y disponibilidad.
             </p>
           </div>
 
@@ -97,44 +100,26 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
 
       {/* Results */}
       <div className="mx-auto max-w-6xl px-4 py-8">
-        {/* Filtros activos + Sidebar filters */}
-        <div className="flex flex-col gap-6 lg:flex-row">
-          {/* Sidebar Filtros */}
-          <aside className="lg:w-64 flex-shrink-0">
-            <FiltersSidebar 
-              categorias={resultado.categorias}
-              empresas={resultado.empresas}
-              activeCategoria={params.cat ?? ''}
-              activeEmpresa={params.emp ?? ''}
-              activeFechaDesde={params.fd ?? ''}
-              activeFechaHasta={params.fh ?? ''}
-              activeSoloConStock={params.stock === '1'}
-              onChange={(key, value) => {
-                const url = new URL(window.location.href)
-                if (value) url.searchParams.set(key, value)
-                else url.searchParams.delete(key)
-                url.searchParams.delete('p')
-                window.location.href = url.toString()
-              }}
-            />
-          </aside>
-
-          {/* Grid Resultados */}
-          <main className="flex-1">
-            <Suspense fallback={<ResultsSkeleton />}>
-              <ResultsGrid 
-                excursiones={resultado.excursiones}
-                total={resultado.total}
-                pagina={resultado.pagina}
-                totalPaginas={resultado.totalPaginas}
-                currentParams={params}
-              />
-            </Suspense>
-          </main>
-        </div>
+        <Suspense fallback={<ResultsSkeleton />}>
+          <ResultsGrid 
+            excursiones={resultado?.excursiones || []}
+            total={resultado?.excursiones?.length || 0}
+            pagina={1}
+            totalPaginas={1}
+            currentParams={params}
+          />
+        </Suspense>
       </div>
     </div>
   )
+}
+
+async function buscarUnificado(query: string) {
+  const res = await fetch(`/api/cliente/buscar-unificado?q=${encodeURIComponent(query)}`)
+  if (res.ok) {
+    return res.json()
+  }
+  return { promociones: [], excursiones: [] }
 }
 
 function SearchForm({ 
@@ -156,7 +141,10 @@ function SearchForm({
     <form action="/excursiones" method="GET" className="space-y-4">
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
           <input
             name="q"
             placeholder="Buscar excursiones por nombre, destino, categoría..."
@@ -171,11 +159,12 @@ function SearchForm({
 
       {/* Quick filters row */}
       <div className="flex flex-wrap items-center gap-3">
-        <Filter className="h-4 w-4 text-muted-foreground" />
+        <svg className="h-4 w-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+        </svg>
         <div className="flex flex-wrap gap-2">
           <select name="cat" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialCategoria}>
             <option value="">Todas las categorías</option>
-            {/* Se llena desde el sidebar con JS */}
           </select>
           <select name="emp" className="rounded-xl border bg-background px-3 py-2 text-sm" defaultValue={initialEmpresa}>
             <option value="">Todas las empresas</option>
@@ -189,140 +178,6 @@ function SearchForm({
         </div>
       </div>
     </form>
-  )
-}
-
-function FiltersSidebar({ 
-  categorias, 
-  empresas, 
-  activeCategoria, 
-  activeEmpresa,
-  activeFechaDesde,
-  activeFechaHasta,
-  activeSoloConStock,
-  onChange
-}: { 
-  categorias: string[]
-  empresas: { id: string; slug: string; name: string; logoUrl: string | null }[]
-  activeCategoria: string
-  activeEmpresa: string
-  activeFechaDesde: string
-  activeFechaHasta: string
-  activeSoloConStock: boolean
-  onChange: (key: string, value: string) => void
-}) {
-  const hayFiltros = activeCategoria || activeEmpresa || activeFechaDesde || activeFechaHasta || activeSoloConStock
-
-  return (
-    <div className="sticky top-20 space-y-6 p-4 rounded-xl border bg-card">
-      {hayFiltros && (
-        <button
-          onClick={() => window.location.href = '/excursiones'}
-          className="w-full flex items-center justify-center gap-2 text-sm text-destructive hover:text-destructive/80"
-        >
-          <X className="h-4 w-4" /> Limpiar todos los filtros
-        </button>
-      )}
-
-      <fieldset>
-        <legend className="mb-3 text-sm font-semibold">Categoría</legend>
-        <div className="space-y-2 max-h-40 overflow-y-auto">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="cat"
-              value=""
-              checked={!activeCategoria}
-              onChange={() => onChange('cat', '')}
-              className="rounded border-input"
-            />
-            <span className="text-sm">Todas</span>
-          </label>
-          {categorias.map((cat) => (
-            <label key={cat} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="cat"
-                value={cat}
-                checked={activeCategoria === cat}
-                onChange={() => onChange('cat', cat)}
-                className="rounded border-input"
-              />
-              <span className="text-sm">{cat}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend className="mb-3 text-sm font-semibold">Empresa</legend>
-        <div className="space-y-2 max-h-40 overflow-y-auto">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="emp"
-              value=""
-              checked={!activeEmpresa}
-              onChange={() => onChange('emp', '')}
-              className="rounded border-input"
-            />
-            <span className="text-sm">Todas</span>
-          </label>
-          {empresas.map((emp) => (
-            <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="emp"
-                value={emp.id}
-                checked={activeEmpresa === emp.id}
-                onChange={() => onChange('emp', emp.id)}
-                className="rounded border-input"
-              />
-              <span className="text-sm truncate">{emp.name}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend className="mb-3 text-sm font-semibold">Fechas</legend>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Desde</label>
-            <input
-              type="date"
-              value={activeFechaDesde}
-              onChange={(e) => onChange('fd', e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
-              className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Hasta</label>
-            <input
-              type="date"
-              value={activeFechaHasta}
-              onChange={(e) => onChange('fh', e.target.value)}
-              min={activeFechaDesde || new Date().toISOString().split('T')[0]}
-              className="w-full rounded-xl border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend className="mb-3 text-sm font-semibold">Disponibilidad</legend>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={activeSoloConStock}
-            onChange={(e) => onChange('stock', e.target.checked ? '1' : '')}
-            className="rounded border-input"
-          />
-          <span className="text-sm">Solo excursiones con cupos disponibles</span>
-        </label>
-      </fieldset>
-    </div>
   )
 }
 
@@ -342,7 +197,7 @@ function ResultsGrid({
   if (excursiones.length === 0) {
     return (
       <EmptyState
-        icon={Search}
+        icon={<svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>}
         title={currentParams.q ? 'Sin resultados' : 'No hay excursiones disponibles'}
         description={currentParams.q 
           ? `No encontramos excursiones para "${currentParams.q}". Intenta con otros términos o amplía tus filtros.`
@@ -362,7 +217,91 @@ function ResultsGrid({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {excursiones.map((exc) => (
-          <ExcursionPublicCard key={exc.id} excursion={exc} />
+          <Link
+            key={exc.id}
+            href={`/empresas/${exc.company.slug}/excursiones/${exc.slug}`}
+            className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${exc.agotadaGlobal || exc.todasFechasPasadas ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            <div className="relative aspect-[16/10] bg-muted">
+              {exc.portadaUrl ? (
+                <img
+                  src={exc.portadaUrl}
+                  alt={exc.nombre}
+                  className="h-full w-full object-cover transition group-hover:scale-105"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <svg className="h-12 w-12 text-muted-foreground/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  </svg>
+                </div>
+              )}
+              {exc.categoria && (
+                <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
+                  {exc.categoria}
+                </span>
+              )}
+              {(exc.agotadaGlobal || exc.todasFechasPasadas) && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <span className="rounded-full bg-background/90 px-3 py-1 text-sm font-semibold text-destructive flex items-center gap-1.5">
+                    {exc.todasFechasPasadas ? (
+                      <> <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> Finalizada </> 
+                    ) : (
+                      <> <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg> Agotada </>
+                    )}
+                  </span>
+                </div>
+              )}
+              {e.cupoDisponible && e.cupoDisponible <= 5 && e.cupoDisponible > 0 && !e.agotadaGlobal && !e.todasFechasPasadas && (
+                <div className="absolute right-3 bottom-3">
+                  <span className="rounded-full bg-warning/90 px-2 py-1 text-xs font-medium text-warning-foreground flex items-center gap-1">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M7 7l5 5" /></svg>
+                    {e.cupoDisponible} cupos
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4">
+              <h3 className="font-semibold group-hover:text-primary line-clamp-1">{exc.nombre}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{exc.company.name}</p>
+              
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                {exc.duracionMin && (
+                  <span className="flex items-center gap-1">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+                    {exc.duracionMin} min
+                  </span>
+                )}
+                {exc.ubicacion && (
+                  <span className="flex items-center gap-1">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-20 13-7 0-13-6-13-13 0-7 9-13 13-13" /><path d="M12 2v20" /><path d="M12 2a10 10 0 0 1 0 20" /></svg>
+                    {exc.ubicacion}
+                  </span>
+                )}
+              </div>
+
+              {exc.precioDesde != null && (
+                <p className="mt-3 text-sm font-semibold text-primary">
+                  Desde {new Intl.NumberFormat('es-DO', { style: 'currency', currency: exc.moneda, minimumFractionDigits: 0 }).format(exc.precioDesde)}
+                </p>
+              )}
+
+              <div className="mt-2 flex items-center justify-between">
+                {exc.agotadaGlobal && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg> Agotada
+                  </span>
+                )}
+                {exc.todasFechasPasadas && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> Finalizada
+                  </span>
+                )}
+              </div>
+            </div>
+          </Link>
         ))}
       </div>
 
@@ -374,109 +313,6 @@ function ResultsGrid({
         />
       )}
     </div>
-  )
-}
-
-function ExcursionPublicCard({ excursion }: { excursion: any }) {
-  const proximaDisponible = excursion.proximasSalidas.find(
-    (s: any) => !s.agotada && !s.fechaPasada
-  )
-  const isFinalizada = excursion.todasFechasPasadas
-  const isAgotada = excursion.agotadaGlobal
-  const cupoDisponible = proximaDisponible?.cupoDisponible ?? 0
-  const tieneStock = !isFinalizada && !isAgotada && cupoDisponible > 0
-  const pocosCupos = tieneStock && cupoDisponible <= 5 && cupoDisponible > 0
-
-  return (
-    <Link
-      href={`/empresas/${excursion.company.slug}/excursiones/${excursion.slug}`}
-      className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
-    >
-      <div className="relative aspect-[16/10] bg-muted">
-        {excursion.portadaUrl ? (
-          <img
-            src={excursion.portadaUrl}
-            alt={excursion.nombre}
-            className="h-full w-full object-cover transition group-hover:scale-105"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <Tag className="h-12 w-12 text-muted-foreground/30" />
-          </div>
-        )}
-        {excursion.categoria && (
-          <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
-            {excursion.categoria}
-          </span>
-        )}
-        {(isAgotada || isFinalizada) && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <span className="rounded-full bg-background/90 px-3 py-1 text-sm font-semibold text-destructive flex items-center gap-1.5">
-              {isFinalizada ? (
-                <> <X className="h-4 w-4" /> Finalizada </> 
-              ) : (
-                <> <AlertCircle className="h-4 w-4" /> Agotada </>
-              )}
-            </span>
-          </div>
-        )}
-        {pocosCupos && !isFinalizada && !isAgotada && (
-          <div className="absolute right-3 bottom-3">
-            <span className="rounded-full bg-warning/90 px-2 py-1 text-xs font-medium text-warning flex items-center gap-1">
-              <Users className="h-3 w-3" /> {cupoDisponible} cupos
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="p-4">
-        <h3 className="font-semibold group-hover:text-primary line-clamp-1">{excursion.nombre}</h3>
-        <p className="mt-1 text-xs text-muted-foreground">{excursion.company.name}</p>
-        
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-          {excursion.duracionMin && (
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {excursion.duracionMin} min
-            </span>
-          )}
-          {excursion.ubicacion && (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {excursion.ubicacion}
-            </span>
-          )}
-        </div>
-
-        {excursion.precioDesde != null && (
-          <p className="mt-3 text-sm font-semibold text-primary">
-            Desde {formatMoney(excursion.precioDesde, { moneda: excursion.moneda })}
-          </p>
-        )}
-
-        <div className="mt-3 flex items-center justify-between">
-          {tieneStock && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-              pocosCupos ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'
-            }`}>
-              <CalendarDays className="h-3 w-3" />
-              {pocosCupos ? `Últimos ${cupoDisponible}` : 'Disponible'}
-            </span>
-          )}
-          {isFinalizada && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-              <X className="h-3 w-3" /> Finalizada
-            </span>
-          )}
-          {isAgotada && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-              <AlertCircle className="h-3 w-3" /> Agotada
-            </span>
-          )}
-        </div>
-      </div>
-    </Link>
   )
 }
 

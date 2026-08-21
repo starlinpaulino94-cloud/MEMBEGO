@@ -37,18 +37,22 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   return (
-    <div className={cn('mb-8', className)}>
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0 flex-1">
+    <div className={cn('mb-6 sm:mb-8', className)}>
+      <div className="flex flex-col gap-3.5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="w-full min-w-0 flex-1">
           {eyebrow && <div className="mb-1 text-overline">{eyebrow}</div>}
-          <h1 className="text-h1 text-balance text-foreground">{title}</h1>
+          <h1 className="text-h1 text-foreground font-extrabold tracking-tight">{title}</h1>
           {description && (
-            <p className="mt-1.5 max-w-prose text-small text-muted-foreground">{description}</p>
+            <p className="mt-1.5 w-full text-small text-muted-foreground leading-relaxed">{description}</p>
           )}
         </div>
-        {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
+        {action && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-1 sm:self-start">
+            {action}
+          </div>
+        )}
       </div>
-      {nav && <div className="mt-5">{nav}</div>}
+      {nav && <div className="mt-4 sm:mt-5">{nav}</div>}
     </div>
   )
 }

@@ -1,22 +1,23 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import Image from 'next/image'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, Clock, MapPin, Compass, AlertCircle, X } from 'lucide-react'
+import { ArrowLeft, Compass } from 'lucide-react'
 import {
   companyIdPorSlug,
   excursionesPublicas,
 } from '@/modules/excursiones/catalogo/public-queries'
 import { getCompanyPublic } from '@/modules/marketplace/cached'
-import { formatMoney } from '@/lib/format'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
+import { ExcursionCard, type ExcursionCardData } from '@/components/public/ExcursionCard'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface ExcursionesPageProps {
   params: Promise<{ companySlug: string }>
 }
 
-export const revalidate = 3600
+export const dynamic = 'force-dynamic'
+export const revalidate = 60
 
 export async function generateMetadata({
   params,
@@ -27,7 +28,7 @@ export async function generateMetadata({
 
   return shareMetadata({
     title: `Excursiones · ${company.name}`,
-    description: `Descubre las excursiones disponibles de ${company.name}. Reserva tu experiencia.`,
+    description: `Descubre las próximas excursiones y experiencias disponibles de ${company.name}. Reserva tu cupo fácilmente.`,
     url: `/empresas/${company.slug}/excursiones`,
   })
 }
@@ -41,16 +42,40 @@ export default async function ExcursionesPage({ params }: ExcursionesPageProps) 
   const companyId = await companyIdPorSlug(companySlug)
   if (!companyId) notFound()
 
-  const excursiones = await excursionesPublicas(companyId)
+  const excursionesRaw = await excursionesPublicas(companyId)
+
+  // Mapear a la forma requerida por ExcursionCardData
+  const excursiones: ExcursionCardData[] = excursionesRaw.map((exc) => ({
+    id: exc.id,
+    nombre: exc.nombre,
+    slug: exc.slug,
+    descripcion: exc.descripcion,
+    portadaUrl: exc.portadaUrl,
+    categoria: exc.categoria,
+    duracionMin: exc.duracionMin,
+    ubicacion: exc.ubicacion,
+    precioDesde: exc.variantes[0]?.precioAdulto ? Number(exc.variantes[0].precioAdulto) : null,
+    moneda: exc.moneda || 'DOP',
+    agotadaGlobal: exc.agotadaGlobal,
+    todasFechasPasadas: exc.todasFechasPasadas,
+    cupoDisponible: exc.proximasSalidas[0]?.cupoDisponible ?? null,
+    proximasSalidas: exc.proximasSalidas,
+    empresa: {
+      id: company.id,
+      slug: company.slug,
+      name: company.name,
+      logoUrl: company.logoUrl,
+    },
+  }))
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b bg-card">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 sm:px-6 py-3.5">
           <Link
             href={`/empresas/${companySlug}`}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             {company.name}
@@ -59,112 +84,50 @@ export default async function ExcursionesPage({ params }: ExcursionesPageProps) 
       </div>
 
       {/* Hero */}
-      <div className="border-b bg-card/50">
-        <div className="mx-auto max-w-5xl px-4 py-8 text-center">
-          <Compass className="mx-auto mb-3 h-10 w-10 text-primary" />
-          <h1 className="text-h2 font-bold tracking-tight">
-            Excursiones
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Explora y reserva las experiencias de {company.name}
-          </p>
+      <div className="border-b bg-card/60">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
+          <div className="w-full">
+            <span className="text-caption font-bold uppercase tracking-wider text-primary">Tours y Experiencias</span>
+            <h1 className="mt-1 text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-foreground w-full">
+              Próximas excursiones de {company.name}
+            </h1>
+            <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground w-full">
+              {excursiones.length > 0 
+                ? `Explora ${excursiones.length} experiencia${excursiones.length !== 1 ? 's' : ''} disponible${excursiones.length !== 1 ? 's' : ''} con salidas confirmadas y cupos abiertos.`
+                : 'Descubre y reserva las mejores aventuras.'
+              }
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Listado */}
-      <div className="mx-auto max-w-5xl px-4 py-8">
+      {/* Listado de Excursiones Próximas */}
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-10">
         {excursiones.length === 0 ? (
-          <div className="rounded-lg border bg-card p-12 text-center">
-            <Compass className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-            <h2 className="text-h3 font-semibold">Sin excursiones disponibles</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Pronto habrá nuevas experiencias para ti.
-            </p>
-          </div>
+          <EmptyState
+            variant="card"
+            icon={<Compass className="h-10 w-10 text-muted-foreground" aria-hidden />}
+            title="Sin excursiones próximas disponibles"
+            description={`Actualmente ${company.name} no tiene salidas programadas con cupos abiertos. Vuelve a consultar pronto.`}
+            action={
+              <Link
+                href={`/empresas/${companySlug}`}
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-xs sm:text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+              >
+                Volver al perfil de la empresa
+              </Link>
+            }
+          />
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {excursiones.map((exc) => {
-              const precioMinimo = exc.variantes[0]?.precioAdulto
-              const agotadaGlobal = exc.agotadaGlobal
-              const fechaPasada = exc.todasFechasPasadas
-              return (
-                <Link
-                  key={exc.id}
-                  href={`/empresas/${companySlug}/excursiones/${exc.slug}`}
-                  className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${agotadaGlobal ? 'opacity-50 pointer-events-none' : ''}`}
-                >
-                  {/* Portada */}
-                  <div className="relative aspect-[16/10] bg-muted">
-                    {exc.portadaUrl ? (
-                      <Image
-                        src={exc.portadaUrl}
-                        alt={exc.nombre}
-                        fill
-                        className="object-cover transition group-hover:scale-105"
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <Compass className="h-12 w-12 text-muted-foreground/30" />
-                      </div>
-                    )}
-                    {exc.categoria && (
-                      <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
-                        {exc.categoria}
-                      </span>
-                    )}
-                    {(agotadaGlobal || fechaPasada) && (
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <span className="rounded-full bg-background/90 px-3 py-1 text-sm font-semibold text-destructive flex items-center gap-1.5">
-                          {fechaPasada ? (
-                            <>
-                              <X className="h-4 w-4" />
-                              Finalizada
-                            </>
-                          ) : (
-                            <>
-                              <AlertCircle className="h-4 w-4" />
-                              Agotada
-                            </>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div className="p-4">
-                    <h2 className="font-semibold group-hover:text-primary">
-                      {exc.nombre}
-                    </h2>
-                    {exc.descripcion && (
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                        {exc.descripcion}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      {exc.duracionMin && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {exc.duracionMin} min
-                        </span>
-                      )}
-                      {exc.ubicacion && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {exc.ubicacion}
-                        </span>
-                      )}
-                    </div>
-                    {precioMinimo != null && (
-                      <p className="mt-3 text-sm font-semibold text-primary">
-                       Desde {formatMoney(Number(precioMinimo), { moneda: exc.moneda })}
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              )
-            })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {excursiones.map((exc) => (
+              <div key={exc.id} className="relative">
+                <ExcursionCard 
+                  excursion={exc} 
+                  hrefBase={`/empresas/${companySlug}/excursiones`}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>

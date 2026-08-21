@@ -131,7 +131,8 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
         exc.id,
         exc.capacidad,
         exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-        exc.horaRegreso
+        exc.horaRegreso,
+        exc.horaSalida
       )
       const company = companyMap.get(exc.companyId)
       const mapped = mapRow({
@@ -143,10 +144,15 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
     })
   )
 
-  // Filtrar por stock y finalizadas
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+
+  // Filtrar por stock y finalizadas / atrasadas
   let filtradas = excursionesConDisponibilidad
   if (excluirFinalizadas) {
-    filtradas = filtradas.filter((e) => !e.todasFechasPasadas)
+    filtradas = filtradas.filter(
+      (e) => !e.todasFechasPasadas && (e.proximasSalidas || []).some((s) => !s.fechaPasada && new Date(s.fecha) >= hoy)
+    )
   }
   if (soloConStock) {
     filtradas = filtradas.filter((e) => !e.agotadaGlobal)
@@ -280,7 +286,8 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
         exc.id,
         exc.capacidad,
         exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
-        exc.horaRegreso
+        exc.horaRegreso,
+        exc.horaSalida
       )
       const company = companyMap.get(exc.companyId)
       return mapRow({
