@@ -60,7 +60,7 @@ test('sin ventas el ticket promedio es null, no cero', () => {
 test('el progreso solo pinta las métricas que la meta define', () => {
   const lineas = progresoMeta(
     { metaVentas: 10, metaPasajeros: null, metaIngresos: 50000, metaRegistros: null, metaReservas: null },
-    { ventas: 4, pasajeros: 30, ingresos: 60000, registros: 12, reservas: 6 }
+    { ventas: 4, pasajeros: 30, ingresos: 60000, registros: 12, reservas: 6, moneda: 'DOP' }
   )
   assert.deepEqual(lineas.map((l) => l.clave), ['ventas', 'ingresos'])
   assert.equal(lineas[0].pct, 40)

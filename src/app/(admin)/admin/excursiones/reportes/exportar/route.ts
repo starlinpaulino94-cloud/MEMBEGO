@@ -33,6 +33,9 @@ export const dynamic = 'force-dynamic'
  * tuviera cargado. Y si no cabe, el aviso viaja dentro del archivo.
  */
 export async function GET(req: NextRequest) {
+  // requireSection además de la página: defense-in-depth. La page ya validó
+  // el rol, pero esta action ejecuta en un route handler separado que podría
+  // invocarse directamente (curl, job, etc.).
   const user = await requireSection('excursiones', 'reporte_exportar')
   if (!user) {
     return NextResponse.json({ error: 'No autorizado.' }, { status: 403 })

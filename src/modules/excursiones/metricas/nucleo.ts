@@ -136,6 +136,7 @@ export interface RealesMeta {
   ingresos: number
   registros: number
   reservas: number
+  moneda: string | null
 }
 
 export interface LineaProgreso {

@@ -111,7 +111,7 @@ export async function listadoComisiones(companyId: string, filtros?: { estado?: 
 export async function resumenComisiones(companyId: string) {
   const filas = await conEmpresa(companyId, (tx) =>
     tx.comisionEntrada.groupBy({
-      by: ['estado'],
+      by: ['estado', 'moneda'],
       where: { companyId },
       _sum: { monto: true },
       _count: { _all: true },
@@ -119,6 +119,7 @@ export async function resumenComisiones(companyId: string) {
   )
   return filas.map((f) => ({
     estado: f.estado,
+    moneda: f.moneda,
     total: Number(f._sum.monto ?? 0),
     cantidad: f._count._all,
   }))

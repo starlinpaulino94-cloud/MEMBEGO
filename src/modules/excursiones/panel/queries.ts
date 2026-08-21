@@ -178,7 +178,7 @@ export async function misComisiones(companyId: string, vendedorId: string) {
 
   return {
     lineas,
-    moneda: lineas[0]?.moneda ?? 'DOP',
+    moneda: lineas.find((l) => l.moneda)?.moneda ?? 'DOP',
     porCobrar: suma((l) => l.estado !== 'PAGADA'),
     cobrado: suma((l) => l.estado === 'PAGADA'),
   }

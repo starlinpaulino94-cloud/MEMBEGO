@@ -288,6 +288,13 @@ export async function cambiarEstadoLiquidacion(
     }
 
     await conEmpresa(companyId, async (tx) => {
+      const notasFinales = [
+        pago ? pago.notas : liquidacion.notas,
+        motivo ? `[${estado}] ${motivo}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
+
       await tx.liquidacion.update({
         where: { id: liquidacion.id },
         data: {
@@ -296,16 +303,11 @@ export async function cambiarEstadoLiquidacion(
             ? {
                 metodo: pago.metodo,
                 referencia: pago.referencia,
-                notas: pago.notas,
                 pagadaPorId: user.metadata.dbUserId ?? null,
                 pagadaAt: new Date(),
               }
             : {}),
-          ...(motivo
-            ? {
-                notas: `${liquidacion.notas ? `${liquidacion.notas}\n` : ''}[${estado}] ${motivo}`,
-              }
-            : {}),
+          ...(notasFinales !== liquidacion.notas ? { notas: notasFinales } : {}),
         },
       })
 

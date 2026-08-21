@@ -305,8 +305,8 @@ export async function registrarPago(
       })
     )
     if (!reserva) return { error: 'Reserva no encontrada.' }
-    if (reserva.estado === 'CANCELADA') {
-      return { error: 'Esta reserva está cancelada: no admite pagos.' }
+    if (ESTADOS_CERRADOS.includes(reserva.estado as EstadoReserva)) {
+      return { error: 'Esta reserva está cerrada: no admite pagos.' }
     }
 
     // El saldo se calcula AQUÍ, con los pagos vivos de la base. Lo que la
@@ -377,7 +377,7 @@ export async function anularPago(
     const pago = await conEmpresa(companyId, (tx) =>
       tx.reservaPago.findFirst({
         where: { id: pagoId, companyId },
-        select: { id: true, reservaId: true, monto: true, estado: true },
+        select: { id: true, reservaId: true, monto: true, estado: true, notas: true },
       })
     )
     if (!pago) return { error: 'Pago no encontrado.' }
@@ -386,7 +386,10 @@ export async function anularPago(
     await conEmpresa(companyId, (tx) =>
       tx.reservaPago.updateMany({
         where: { id: pago.id, companyId },
-        data: { estado: 'ANULADO', notas: `Anulado: ${motivo}` },
+        data: {
+          estado: 'ANULADO',
+          notas: [pago.notas, `Anulado: ${motivo}`].filter(Boolean).join('\n'),
+        },
       })
     )
     const estado = await refrescarEstadoPorPagos(companyId, pago.reservaId)

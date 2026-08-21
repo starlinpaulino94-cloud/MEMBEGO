@@ -12,15 +12,10 @@ import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/system/EmptyState'
+import { formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Catálogo de excursiones' }
-
-function fmtPrecio(moneda: string, monto: unknown) {
-  const n = Number(monto)
-  if (!Number.isFinite(n)) return '—'
-  return new Intl.NumberFormat('es-DO', { style: 'currency', currency: moneda, maximumFractionDigits: 2 }).format(n)
-}
 
 export default async function CatalogoPage() {
   const user = await requireRole(ADMIN_ROLES)
@@ -79,7 +74,7 @@ export default async function CatalogoPage() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{e.categoria ?? '—'}</td>
                   <td className="px-4 py-3 font-medium text-foreground">
-                    {e.variantes[0] ? fmtPrecio(e.moneda, e.variantes[0].precioAdulto) : '—'}
+                    {e.variantes[0] ? formatMoney(Number(e.variantes[0].precioAdulto), { moneda: e.moneda }, 2) : '—'}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{e._count.variantes}</td>
                   <td className="px-4 py-3 text-muted-foreground">{e._count.horarios}</td>

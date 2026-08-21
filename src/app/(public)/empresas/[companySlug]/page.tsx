@@ -10,6 +10,7 @@ import {
 } from '@/modules/marketplace/cached'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { getCompanyResenas } from '@/modules/resenas/queries'
+import { companyIdPorSlug, excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 
@@ -50,14 +51,29 @@ export default async function CompanyDetailPage({
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
 
-  const [stats, planes, promotions, posts, prefs, resenas] = await Promise.all([
+  const [stats, planes, promotions, posts, prefs, resenas, excursionesData] = await Promise.all([
     getCompanyStats(companySlug),
     getCompanyPlanesPublic(company.id),
     getPromotionsPublic({ company: companySlug, limit: 12 }),
     getCompanyPostsPublic(company.id),
     getRegionalPrefs(company.id),
     getCompanyResenas(company.id),
+    companyIdPorSlug(companySlug).then((cid) =>
+      cid ? excursionesPublicas(cid) : Promise.resolve([])
+    ),
   ])
+
+  const excursiones = excursionesData.map((exc) => ({
+    id: exc.id,
+    nombre: exc.nombre,
+    slug: exc.slug,
+    portadaUrl: exc.portadaUrl,
+    categoria: exc.categoria,
+    moneda: exc.moneda,
+    duracionMin: exc.duracionMin,
+    ubicacion: exc.ubicacion,
+    precioDesde: exc.variantes[0]?.precioAdulto ?? null,
+  }))
 
   return (
     <CompanyProfile
@@ -69,6 +85,7 @@ export default async function CompanyDetailPage({
       posts={posts}
       prefs={prefs}
       resenas={resenas}
+      excursiones={excursiones}
     />
   )
 }

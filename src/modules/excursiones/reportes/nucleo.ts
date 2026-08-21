@@ -108,6 +108,7 @@ export interface FilaComision {
   desglose: string
   base: number
   monto: number
+  ajustes: number
   neto: number
   moneda: string
   estado: string
@@ -128,7 +129,7 @@ export function filasDeComisiones(comisiones: FilaComision[]): unknown[][] {
     c.desglose,
     c.base.toFixed(2),
     c.monto.toFixed(2),
-    (c.neto - c.monto).toFixed(2),
+    c.ajustes.toFixed(2),
     c.neto.toFixed(2),
     c.moneda,
     c.estado,

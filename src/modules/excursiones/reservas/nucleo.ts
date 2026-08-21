@@ -241,6 +241,9 @@ export function validarPago(
     return { ok: false, error: `El pago excede el saldo pendiente (${centavos(saldo)}).` }
   }
   const metodo = texto(form.metodo, 40).toUpperCase() || 'EFECTIVO'
+  if (!(METODOS_PAGO as readonly string[]).includes(metodo)) {
+    return { ok: false, error: `Método de pago no válido: ${metodo}. Use: ${METODOS_PAGO.join(', ')}.` }
+  }
   return {
     ok: true,
     datos: {
@@ -250,4 +253,52 @@ export function validarPago(
       notas: texto(form.notas, 500) || null,
     },
   }
+}
+
+/** Mapeo ISO día semana (1=Lun...7=Dom) a JS Date (0=Dom...6=Sáb). */
+const DIA_ISO_A_JS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 0 }
+
+interface ExcursionParaDisponibilidad {
+  capacidad: number | null
+  horarios: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
+}
+
+/** Valida disponibilidad de cupo para una fecha/hora dada. */
+export function validarDisponibilidad(
+  fecha: Date,
+  hora: string | null,
+  pasajeros: number,
+  excursion: ExcursionParaDisponibilidad
+): { ok: true; cupoDisponible: number } | { ok: false; error: string } {
+  const capacidad = excursion.capacidad ?? 0
+  if (capacidad <= 0) return { ok: false, error: 'La excursión no tiene capacidad definida.' }
+
+  // 1. Fecha >= hoy
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
+  const fechaDate = new Date(fecha)
+  fechaDate.setHours(0, 0, 0, 0)
+  if (fechaDate < hoy) return { ok: false, error: 'La fecha no puede ser anterior a hoy.' }
+
+  // 2. Hora requerida
+  if (!hora) return { ok: false, error: 'Debes seleccionar una hora de salida.' }
+
+  // 3. Buscar horario que coincida con día de la semana y hora
+  const diaSemanaJS = fecha.getDay() // 0=Dom...6=Sáb
+  const diaISO = Object.entries(DIA_ISO_A_JS).find(([, v]) => v === diaSemanaJS)?.[0]
+  if (!diaISO) return { ok: false, error: 'Día de la semana inválido.' }
+
+  const horario = excursion.horarios.find(
+    (h) => h.diasSemana.includes(Number(diaISO)) && h.horaSalida === hora
+  )
+  if (!horario) return { ok: false, error: 'Esa hora no está disponible para la fecha seleccionada.' }
+
+  // 4. Cupo. OJO: esta función es PURA y no consulta la base, así que aquí
+  //    solo se comprueba que la capacidad declarada sea > 0. El cupo real
+  //    —capacidad menos reservas vivas, y el `cupo` propio del horario— lo
+  //    valida la acción del servidor, que sí puede contar. No se toca ese
+  //    reparto aquí: cambiarlo sería alterar una regla comercial.
+  if (capacidad < 1) return { ok: false, error: 'La excursión no tiene capacidad disponible.' }
+
+  return { ok: true, cupoDisponible: capacidad }
 }

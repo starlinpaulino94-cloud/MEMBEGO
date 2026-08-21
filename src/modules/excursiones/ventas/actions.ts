@@ -22,7 +22,11 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { calcularSaldo } from '@/modules/excursiones/reservas/nucleo'
+import {
+  calcularSaldo,
+  ESTADOS_CERRADOS,
+  type EstadoReserva,
+} from '@/modules/excursiones/reservas/nucleo'
 import {
   reglaAplicable,
   calcularComision,
@@ -99,8 +103,8 @@ export async function confirmarVenta(
       })
     )
     if (!reserva) return { error: 'Reserva no encontrada.' }
-    if (reserva.estado === 'CANCELADA') {
-      return { error: 'Esa reserva está cancelada: no genera venta.' }
+    if (ESTADOS_CERRADOS.includes(reserva.estado as EstadoReserva)) {
+      return { error: 'Esa reserva está cerrada (cancelada, completada o no-show): no genera venta.' }
     }
 
     const { saldo } = calcularSaldo(

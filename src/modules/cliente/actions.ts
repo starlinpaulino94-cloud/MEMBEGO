@@ -6,6 +6,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { companyIdPorSlug, excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
 
 export interface ClienteActionState {
   error?: string
@@ -99,15 +100,21 @@ export async function afiliarmeAEmpresa(
   _prev: AfiliacionState,
   formData: FormData
 ): Promise<AfiliacionState> {
-  const destino = '/cliente/planes'
+  // Determinar redirect: si la empresa tiene excursiones, ir allí; si no, a planes
+  let destino = '/cliente/planes'
+  const companySlug = String(formData.get('companySlug') ?? '').trim()
+  if (companySlug) {
+    const cid = await companyIdPorSlug(companySlug)
+    if (cid) {
+      const exc = await excursionesPublicas(cid)
+      if (exc.length > 0) destino = `/empresas/${companySlug}/excursiones`
+    }
+  }
   try {
     const user = await getUser()
     if (!user || user.metadata.role !== 'CLIENTE') {
       return { error: 'Inicia sesión con tu cuenta de cliente.' }
     }
-
-    const companySlug = String(formData.get('companySlug') ?? '').trim()
-    if (!companySlug) return { error: 'Empresa no especificada.' }
 
     const company = await sinEmpresa('cliente: buscar empresa por slug', (tx) =>
       tx.company.findUnique({

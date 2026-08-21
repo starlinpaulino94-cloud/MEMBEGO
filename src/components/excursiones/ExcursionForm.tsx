@@ -6,7 +6,7 @@
  * el editor de variantes. El servidor revalida todo (nucleo.validarExcursion).
  */
 
-import { useActionState, useEffect } from 'react'
+import { useActionState, useEffect, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { calcularDuracion, calcularHoraRegreso, formatearDuracion } from '@/modules/excursiones/catalogo/nucleo'
 
 const init: CatalogoActionState = {}
 
@@ -72,9 +73,12 @@ export function ExcursionForm({ excursion }: { excursion?: ExcursionEditable }) 
           <Label htmlFor="exc-categoria">Categoría</Label>
           <Input id="exc-categoria" name="categoria" defaultValue={excursion?.categoria ?? ''} placeholder="Playa, aventura…" />
         </div>
-        <div>
-          <Label htmlFor="exc-duracion">Duración (minutos)</Label>
-          <Input id="exc-duracion" name="duracionMin" type="number" min="1" defaultValue={excursion?.duracionMin ?? ''} />
+        <div className="sm:col-span-2">
+          <DuracionInput
+            duracionMin={excursion?.duracionMin ?? null}
+            horaSalida={excursion?.horaSalida ?? null}
+            horaRegreso={excursion?.horaRegreso ?? null}
+          />
         </div>
         <div>
           <Label htmlFor="exc-capacidad">Capacidad por salida</Label>
@@ -181,5 +185,118 @@ export function ExcursionForm({ excursion }: { excursion?: ExcursionEditable }) 
         {excursion ? 'Guardar cambios' : 'Crear excursión'}
       </Button>
     </form>
+  )
+}
+
+function DuracionInput({
+  duracionMin,
+  horaSalida,
+  horaRegreso,
+}: {
+  duracionMin: number | null
+  horaSalida: string | null
+  horaRegreso: string | null
+}) {
+  const [duracion, setDuracion] = useState<number | null>(duracionMin)
+  const [hSalida, setHSalida] = useState<string>(horaSalida ?? '')
+  const [hRegreso, setHRegreso] = useState<string>(horaRegreso ?? '')
+
+  // Refs para evitar bucles infinitos
+  /**
+   * DURACIÓN Y HORAS: se sincronizan al ESCRIBIR, no con efectos.
+   *
+   * Antes eran dos `useEffect` que se escuchaban entre sí —duración escribía
+   * la hora de regreso, la hora de regreso escribía la duración— y cada uno
+   * llevaba un `useRef` de «me toca a mí saltarme este turno» para no
+   * rebotarse. Ese es el diseño que produjo el bucle infinito del último
+   * commit de esta rama; el ref lo tapa mientras el orden de los renders
+   * coopere, y deja de taparlo en cuanto no.
+   *
+   * Aquí el modelo es explícito: los tres campos son la misma información
+   * (salida + duración = regreso), así que EL QUE SE TOCA manda y los otros se
+   * recalculan en ese mismo momento. Sin efectos no hay ciclo posible, y el
+   * usuario puede seguir editando cualquiera de los tres.
+   */
+  const alCambiarDuracion = (valor: number | null) => {
+    setDuracion(valor)
+    if (valor !== null && hSalida) {
+      const fin = calcularHoraRegreso(hSalida, valor)
+      if (fin) setHRegreso(fin)
+    }
+  }
+
+  const alCambiarSalida = (valor: string) => {
+    setHSalida(valor)
+    if (!valor) return
+    // Con una duración puesta, mover la salida mueve el regreso. Si no la hay
+    // pero sí un regreso, lo que queda determinado es la duración.
+    if (duracion !== null) {
+      const fin = calcularHoraRegreso(valor, duracion)
+      if (fin) setHRegreso(fin)
+    } else if (hRegreso) {
+      const d = calcularDuracion(valor, hRegreso)
+      if (d !== null) setDuracion(d)
+    }
+  }
+
+  const alCambiarRegreso = (valor: string) => {
+    setHRegreso(valor)
+    if (!hSalida || !valor) return
+    const d = calcularDuracion(hSalida, valor)
+    if (d !== null) setDuracion(d)
+  }
+
+
+  return (
+    <Fragment>
+      <div className="space-y-3">
+      <Label htmlFor="exc-duracion">Duración</Label>
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <Label htmlFor="exc-duracion" className="text-sm font-medium">
+            Duración ({duracion !== null ? formatearDuracion(duracion) : '—'})
+          </Label>
+          <Input
+            id="exc-duracion"
+            name="duracionMin"
+            type="number"
+            min="1"
+            step="30"
+            value={duracion ?? ''}
+            onChange={(e) => {
+              alCambiarDuracion(e.target.value ? Number(e.target.value) : null)
+            }}
+            placeholder="Ej: 120"
+          />
+        </div>
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {duracion !== null ? `≈ ${formatearDuracion(duracion)}` : ''}
+        </span>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="exc-hsalida">Hora de salida</Label>
+          <Input
+            id="exc-hsalida"
+            name="horaSalida"
+            type="time"
+            value={hSalida}
+            onChange={(e) => alCambiarSalida(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label htmlFor="exc-hregreso">Hora estimada de regreso</Label>
+          <Input
+            id="exc-hregreso"
+            name="horaRegreso"
+            type="time"
+            value={hRegreso}
+            onChange={(e) => alCambiarRegreso(e.target.value)}
+          />
+        </div>
+      </div>
+    </div>
+    </Fragment>
   )
 }

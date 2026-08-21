@@ -137,7 +137,9 @@ export function AsistenteRegistro({
   const glCode = searchParams.get('gl') ?? ''
   const nextRaw = searchParams.get('next') ?? ''
   const nextSeguro = nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : null
-  const destino = nextSeguro ?? '/cliente/celebracion'
+  // Si vino con código de referido, aterriza en la pantalla de bienvenida de
+  // la empresa referidora (muestra membresías activas + excursiones disponibles).
+  const destino = nextSeguro ?? (refCode ? `/cliente/bienvenida-ref/${companySlug}` : '/cliente/celebracion')
 
   const accion = modo === 'empresa' ? registrarCliente : registrarCuentaGeneral
   const [state, dispatch, pending] = useActionState(accion, initial)
@@ -178,6 +180,10 @@ export function AsistenteRegistro({
       const crudo = sessionStorage.getItem(claveBorrador)
       if (!crudo) return
       const borrador = JSON.parse(crudo) as { datos?: Partial<Datos> }
+      // La excepción es DELIBERADA y no es reestructurable: `sessionStorage`
+      // no existe durante el render en el servidor, así que restaurar el
+      // borrador solo puede ocurrir después de montar. Es el caso que la regla
+      // no cubre, no un descuido.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (borrador.datos) setDatos((d) => ({ ...d, ...borrador.datos }))
     } catch {
@@ -236,18 +242,18 @@ export function AsistenteRegistro({
   }, [state.success, state.pendingVerification, router, destino, claveBorrador])
 
   // ── Validación por paso (el servidor re-valida todo al final) ─────────────
-  function validarPaso(p: PasoId): string | null {
+  function validarPasoCon(p: PasoId, d: Datos): string | null {
     switch (p) {
       case 'nombre':
-        return datos.nombre.trim() ? null : 'Escribe tu nombre.'
+        return d.nombre.trim() ? null : 'Escribe tu nombre.'
       case 'email':
-        return /^\S+@\S+\.\S+$/.test(datos.email.trim())
+        return /^\S+@\S+\.\S+$/.test(d.email.trim())
           ? null
           : 'Escribe un correo válido, por ejemplo maria@correo.com.'
       case 'password':
         return password.length >= 6 ? null : 'La contraseña debe tener al menos 6 caracteres.'
       case 'telefono':
-        return (datos.telefono.match(/\d/g)?.length ?? 0) >= 7
+        return (d.telefono.match(/\d/g)?.length ?? 0) >= 7
           ? null
           : 'Escribe un teléfono válido, por ejemplo 809-555-0000.'
       case 'ubicacion':
@@ -256,31 +262,31 @@ export function AsistenteRegistro({
       case 'vehCategoria':
         // Sin categorías configuradas no se puede exigir una (la página ya
         // omite los pasos de vehículo en ese caso; esto es defensa extra).
-        return tiposVehiculo.length === 0 || datos.tipoVehiculoId
+        return tiposVehiculo.length === 0 || d.tipoVehiculoId
           ? null
           : 'Elige la categoría de tu vehículo.'
       case 'vehMarca':
-        return datos.marca.trim() ? null : 'Indica la marca (o escríbela si no aparece).'
+        return d.marca.trim() ? null : 'Indica la marca (o escríbela si no aparece).'
       case 'vehModelo':
-        return datos.modelo.trim() ? null : 'Indica el modelo de tu vehículo.'
+        return d.modelo.trim() ? null : 'Indica el modelo de tu vehículo.'
       case 'vehAnio': {
-        const r = validarAnio(datos.anio)
+        const r = validarAnio(d.anio)
         return r.ok ? null : r.error!
       }
       case 'vehColor':
-        return datos.color.trim() ? null : 'Indica el color de tu vehículo.'
+        return d.color.trim() ? null : 'Indica el color de tu vehículo.'
       case 'vehPlaca': {
-        const r = validarPlaca(datos.placa)
+        const r = validarPlaca(d.placa)
         return r.ok ? null : r.error!
       }
       case 'confirmar':
         return null
     }
   }
-
-  function avanzar(e?: React.FormEvent) {
+  function avanzar(e?: React.FormEvent, overrides?: Partial<Datos>) {
     e?.preventDefault()
-    const problema = validarPaso(paso)
+    const datosActuales = overrides ? { ...datos, ...overrides } : datos
+    const problema = validarPasoCon(paso, datosActuales)
     if (problema) {
       setError(problema)
       return
@@ -496,6 +502,7 @@ export function AsistenteRegistro({
                         onClick={() => {
                           setError(null)
                           setDatos((d) => ({ ...d, tipoVehiculoId: tv.id }))
+                          avanzar(undefined, { tipoVehiculoId: tv.id })
                         }}
                         className={`rounded-xl border p-4 text-left transition ${
                           activo
@@ -683,7 +690,7 @@ export function AsistenteRegistro({
                 )}
               </dl>
 
-              <ComoNosConociste />
+              {!refCode && <ComoNosConociste />}
 
               {modo === 'empresa' && (
                 <label className="flex items-start gap-2 text-small text-muted-foreground">

@@ -16,7 +16,7 @@ export default async function CheckinPage({
 }: {
   searchParams: Promise<{ dia?: string }>
 }) {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireRole([...ADMIN_ROLES, 'RECEPCION', 'EMPLEADO'])
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="el check-in de excursiones" />
 
