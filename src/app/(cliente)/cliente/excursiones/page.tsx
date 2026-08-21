@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { CalendarDays, Clock, Users, Ticket } from 'lucide-react'
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { reservasCliente } from '@/modules/excursiones/reservas/queries'
 import { formatMoney, formatDate } from '@/lib/format'
 import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
@@ -19,11 +19,19 @@ export default async function MisExcursionesPage() {
   const user = await getUser()
   if (!user) redirect('/login')
 
-  // Obtener TODAS las fichas de cliente del usuario (en todas las empresas)
-  const clienteIds = await prisma.cliente.findMany({
-    where: { supabaseId: user.supabaseId },
-    select: { id: true, companyId: true },
-  })
+  // Obtener TODAS las fichas de cliente del usuario (en todas las empresas).
+  //
+  // Va con `sinEmpresa` porque la pregunta ES cross-tenant: un cliente puede
+  // tener ficha en varias empresas y esta pantalla las reúne. El aislamiento
+  // no se pierde — lo impone el filtro por `supabaseId`, que es la identidad
+  // del usuario autenticado, y las lecturas de reservas van después empresa
+  // por empresa con `reservasCliente(companyId, clienteId)`.
+  const clienteIds = await sinEmpresa('cliente: mis fichas en todas las empresas', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId: user.supabaseId },
+      select: { id: true, companyId: true },
+    })
+  )
   if (clienteIds.length === 0) redirect('/cliente/explorar')
 
   // Consultar reservas en TODAS las empresas donde tiene ficha

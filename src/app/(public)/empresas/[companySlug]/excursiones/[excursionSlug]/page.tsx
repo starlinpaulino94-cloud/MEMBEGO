@@ -13,7 +13,7 @@ import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { DIAS_SEMANA } from '@/modules/excursiones/catalogo/nucleo'
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { ReservaExcursionForm } from './ReservaExcursionForm'
 import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
@@ -69,15 +69,23 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
   if (user) {
     const company = await getCompanyPublic(companySlug)
     if (company) {
-      const usuario = await prisma.user.findUnique({
-        where: { supabaseId: user.supabaseId },
-        select: { id: true },
-      })
-      if (usuario) {
-        const follow = await prisma.companyFollow.findUnique({
-          where: { userId_companyId: { userId: usuario.id, companyId: company.id } },
+      // `users` es una tabla del NÚCLEO, no de una empresa: la identidad del
+      // usuario autenticado existe antes que cualquier tenant y se resuelve
+      // por su `supabaseId`. Por eso va con `sinEmpresa` y su motivo escrito.
+      const usuario = await sinEmpresa('identidad del usuario autenticado (tabla del núcleo)', (tx) =>
+        tx.user.findUnique({
+          where: { supabaseId: user.supabaseId },
           select: { id: true },
         })
+      )
+      if (usuario) {
+        // El seguimiento sí pertenece a una empresa concreta: va acotado a ella.
+        const follow = await conEmpresa(company.id, (tx) =>
+          tx.companyFollow.findUnique({
+            where: { userId_companyId: { userId: usuario.id, companyId: company.id } },
+            select: { id: true },
+          })
+        )
         isFollowing = !!follow
       }
     }

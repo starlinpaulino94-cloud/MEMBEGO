@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowLeft, CalendarDays, Clock, MapPin, Users, CreditCard, Check, X, Shield } from 'lucide-react'
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import { reservaCliente } from '@/modules/excursiones/reservas/queries'
 import { formatMoney, formatDate } from '@/lib/format'
 import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
@@ -25,14 +25,31 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
   const user = await getUser()
   if (!user) redirect('/login')
 
-  // Resolver companyId del usuario
-  const cliente = await prisma.cliente.findFirst({
-    where: { supabaseId: user.supabaseId },
-    select: { id: true, companyId: true },
-  })
-  if (!cliente) redirect('/cliente/explorar')
+  // TODAS las fichas del usuario, no una cualquiera.
+  //
+  // Antes esto era un `findFirst`, que devuelve la ficha que la base tenga a
+  // mano. Con cuenta en más de una empresa, la reserva podía pertenecer a otra
+  // y el cliente quedaba sin poder abrir una reserva SUYA: la página lo
+  // rebotaba a explorar sin explicar nada. Se prueban sus fichas hasta dar con
+  // la dueña.
+  //
+  // El aislamiento se mantiene intacto: solo se recorren fichas de ESTE
+  // usuario (filtro por `supabaseId`) y cada lectura sigue yendo acotada a su
+  // empresa con `reservaCliente(companyId, clienteId, …)`. Una reserva ajena
+  // no aparece por ninguna de las dos vías.
+  const fichas = await sinEmpresa('cliente: mis fichas en todas las empresas', (tx) =>
+    tx.cliente.findMany({
+      where: { supabaseId: user.supabaseId },
+      select: { id: true, companyId: true },
+    })
+  )
+  if (fichas.length === 0) redirect('/cliente/explorar')
 
-  const data = await reservaCliente(cliente.companyId, cliente.id, reservaId)
+  let data: Awaited<ReturnType<typeof reservaCliente>> = null
+  for (const ficha of fichas) {
+    data = await reservaCliente(ficha.companyId, ficha.id, reservaId)
+    if (data) break
+  }
   if (!data) redirect('/cliente/explorar')
 
   const { reserva, excursion, saldo } = data

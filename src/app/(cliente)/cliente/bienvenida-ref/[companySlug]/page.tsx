@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { CalendarDays, Crown, ArrowRight, Sparkles } from 'lucide-react'
 import { getUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { conEmpresa } from '@/lib/tenant'
 import { formatMoney, formatDate } from '@/lib/format'
 import { excursionesPublicas, companyIdPorSlug } from '@/modules/excursiones/catalogo/public-queries'
 import { getCompanyPublic } from '@/modules/marketplace/cached'
@@ -20,25 +20,34 @@ export default async function BienvenidaRefPage({ params }: BienvenidaRefPagePro
   const company = await getCompanyPublic(companySlug)
   if (!company) redirect('/cliente/explorar')
 
-  // Verificar que el usuario esté afiliado a esta empresa
-  const cliente = await prisma.cliente.findFirst({
-    where: { supabaseId: user.supabaseId, companyId: company.id },
-    select: { id: true },
-  })
+  // Verificar que el usuario esté afiliado a esta empresa.
+  //
+  // Toda esta pantalla vive DENTRO de una empresa (la del enlace de referido),
+  // así que sus lecturas van con `conEmpresa`: el contexto de tenant no es
+  // decorativo, es lo que hace que RLS pueda hacer su trabajo si algún día se
+  // cuela un filtro de menos en el `where`.
+  const cliente = await conEmpresa(company.id, (tx) =>
+    tx.cliente.findFirst({
+      where: { supabaseId: user.supabaseId, companyId: company.id },
+      select: { id: true },
+    })
+  )
   if (!cliente) redirect('/cliente/explorar')
 
   // Cargar membresías activas y excursiones disponibles en paralelo
   const [membresias, excursionesData] = await Promise.all([
-    prisma.membership.findMany({
-      where: {
-        clienteId: cliente.id,
-        companyId: company.id,
-        estado: 'ACTIVA',
-        fechaVencimiento: { gte: new Date() },
-      },
-      include: { plan: { select: { nombre: true } } },
-      orderBy: { createdAt: 'desc' },
-    }),
+    conEmpresa(company.id, (tx) =>
+      tx.membership.findMany({
+        where: {
+          clienteId: cliente.id,
+          companyId: company.id,
+          estado: 'ACTIVA',
+          fechaVencimiento: { gte: new Date() },
+        },
+        include: { plan: { select: { nombre: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+    ),
     companyIdPorSlug(companySlug).then((cid) =>
       cid ? excursionesPublicas(cid) : Promise.resolve([])
     ),
