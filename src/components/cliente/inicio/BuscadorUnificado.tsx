@@ -1,35 +1,21 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Tag, Compass, ChevronRight, X, AlertCircle, Clock, MapPin } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import { formatMoney } from '@/lib/format'
-import { buscarUnificado } from '@/modules/cliente/actions'
+import type { BuscadorUnificadoResult } from '@/modules/cliente/actions'
+import { Search, Tag, Compass, ChevronRight, X, AlertCircle, Clock, MapPin } from 'lucide-react'
 
-interface SearchResultItem {
-  tipo: 'promocion' | 'excursion'
-  id: string
-  titulo: string
-  subtitulo: string
-  imagen: string | null
-  precio: string | null
-  empresa: string
-  href: string
-  badges: string[]
-}
 
 export function BuscadorUnificado() {
-  const router = useRouter()
   const [q, setQ] = useState('')
   const [resultados, setResultados] = useState<{
-    promociones: any[]
-    excursiones: any[]
+    promociones: BuscadorUnificadoResult['promociones']
+    excursiones: BuscadorUnificadoResult['excursiones']
   } | null>(null)
   const [cargando, setCargando] = useState(false)
-  const [isOpen, setIsOpen] = useState(false)
+  // Solo interesa ESCRIBIRlo: abre y cierra el panel desde los manejadores.
+  const [, setIsOpen] = useState(false)
   const [, startTransition] = useTransition()
 
   function buscar(e: React.FormEvent) {
@@ -70,15 +56,6 @@ export function BuscadorUnificado() {
 
   const hayResultados = resultados && (resultados.promociones.length > 0 || resultados.excursiones.length > 0)
 
-  const formatearPrecio = (precio: number | null, moneda: string) => {
-    if (precio === null || precio === undefined) return null
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: moneda,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(precio)
-  }
 
   return (
     <section className="space-y-3" aria-label="Buscar ofertas y excursiones">
@@ -132,7 +109,7 @@ export function BuscadorUnificado() {
                 </Link>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {resultados!.promociones.slice(0, 6).map((p: any) => (
+                {resultados!.promociones.slice(0, 6).map((p) => (
                   <Link
                     key={p.id}
                     href={`/cliente/promociones/${p.id}`}
@@ -140,6 +117,7 @@ export function BuscadorUnificado() {
                   >
                     <div className="relative aspect-[4/3] bg-muted overflow-hidden">
                       {p.imagenUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={p.imagenUrl}
                           alt={p.titulo}
@@ -161,10 +139,13 @@ export function BuscadorUnificado() {
                     </div>
                     <div className="p-3">
                       <h4 className="font-semibold line-clamp-1 group-hover:text-primary">{p.titulo}</h4>
-                      <p className="mt-1 text-xs text-muted-foreground truncate">{p.empresa.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground truncate">{p.company.name}</p>
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-sm font-semibold text-primary">
-                          {p.precio ? `Desde ${new Intl.NumberFormat('es-DO', { style: 'currency', currency: p.moneda, minimumFractionDigits: 0 }).format(p.precio)}` : 'Ver detalle'}
+                          {/* La promoción no lleva moneda propia: se usa el
+                              formateador de la plataforma, con su moneda por
+                              defecto. Antes leía `p.moneda`, que no existe. */}
+                          {p.precio ? `Desde ${formatMoney(p.precio)}` : 'Ver detalle'}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary capitalize">{p.tipo}</span>
                       </div>
@@ -191,7 +172,7 @@ export function BuscadorUnificado() {
                 </Link>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {resultados!.excursiones.slice(0, 6).map((e: any) => (
+                {resultados!.excursiones.slice(0, 6).map((e) => (
                   <Link
                     key={e.id}
                     href={`/empresas/${e.empresa.slug}/excursiones/${e.slug}`}
@@ -199,6 +180,7 @@ export function BuscadorUnificado() {
                   >
                     <div className="relative aspect-[16/10] bg-muted">
                       {e.portadaUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={e.portadaUrl}
                           alt={e.nombre}

@@ -185,7 +185,9 @@ export async function procesarVentaYComisionInterna(
           select: {
             nombre: true,
             categoria: true,
-            precioAdulto: true,
+            // El precio NO vive en la excursión: vive en sus variantes. Es el
+            // diseño del catálogo (una excursión puede tener varias tarifas),
+            // y por eso `Excursion.precioAdulto` no existe.
             variantes: { select: { precioAdulto: true }, take: 1 },
           },
         })
@@ -217,9 +219,10 @@ export async function procesarVentaYComisionInterna(
       ),
     ])
 
+    // Precio base del paquete: la primera variante si la hay; si no, se deduce
+    // del total de la reserva repartido entre sus pasajeros.
     const precioBasePaquete = Number(
-      excursion?.precioAdulto ??
-        excursion?.variantes?.[0]?.precioAdulto ??
+      excursion?.variantes?.[0]?.precioAdulto ??
         Number(reserva.total) / Math.max(1, reserva.adultos + reserva.ninos)
     )
 

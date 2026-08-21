@@ -1,9 +1,8 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { Search, Filter, X, Tag, Compass, ChevronRight, Clock, MapPin, AlertCircle, X as XIcon } from 'lucide-react'
-import { buscarUnificado } from '@/modules/cliente/actions'
-import { formatMoney } from '@/lib/format'
+import { Search } from 'lucide-react'
+import { buscarUnificado, type BuscadorUnificadoResult } from '@/modules/cliente/actions'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { EmptyState } from '@/components/system/EmptyState'
@@ -31,13 +30,7 @@ export async function generateMetadata({ searchParams }: ExcursionesPageProps): 
     description: query 
       ? `Resultados para "${query}". Encuentra tu próxima aventura filtrando por destino, fecha, categoría y más.`
       : 'Explora todas las excursiones disponibles en MembeGo. Filtra por destino, fecha, categoría, precio y disponibilidad.',
-    url: `/excursiones${query ? `?q=${encodeURIComponent(query)}` : ''}`,
-  })
-}
-
-interface BuscadorUnificadoResult {
-  promociones: any[]
-  excursiones: any[]
+    url: `/excursiones${query ? `?q=${encodeURIComponent(query)}` : ''}` })
 }
 
 export default async function ExcursionesPage({ searchParams }: ExcursionesPageProps) {
@@ -52,10 +45,13 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
     soloConStock: params.stock === '1',
     excluirFinalizadas: true,
     pagina: parseInt(params.p ?? '1', 10),
-    porPagina: 12,
-  }
+    porPagina: 12 }
 
-  const resultado = await buscarUnificado(filtros.query) as { promociones: any[]; excursiones: any[] }
+  const resultado = await buscarUnificado(filtros.query)
+  // `buscarUnificado` devuelve o los resultados o `{ error }`. Estrechar el
+  // tipo aquí es lo que permite leer `.excursiones` sin castear: si un día la
+  // búsqueda falla, la página enseña la lista vacía en vez de reventar.
+  const excursiones = 'error' in resultado ? [] : resultado.excursiones
 
   return (
     <div className="min-h-screen bg-background">
@@ -102,8 +98,8 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
       <div className="mx-auto max-w-6xl px-4 py-8">
         <Suspense fallback={<ResultsSkeleton />}>
           <ResultsGrid 
-            excursiones={resultado?.excursiones || []}
-            total={resultado?.excursiones?.length || 0}
+            excursiones={excursiones}
+            total={excursiones.length}
             pagina={1}
             totalPaginas={1}
             currentParams={params}
@@ -112,14 +108,6 @@ export default async function ExcursionesPage({ searchParams }: ExcursionesPageP
       </div>
     </div>
   )
-}
-
-async function buscarUnificado(query: string) {
-  const res = await fetch(`/api/cliente/buscar-unificado?q=${encodeURIComponent(query)}`)
-  if (res.ok) {
-    return res.json()
-  }
-  return { promociones: [], excursiones: [] }
 }
 
 function SearchForm({ 
@@ -188,16 +176,16 @@ function ResultsGrid({
   totalPaginas,
   currentParams
 }: { 
-  excursiones: any[]
+  excursiones: BuscadorUnificadoResult['excursiones']
   total: number
   pagina: number
   totalPaginas: number
-  currentParams: any
+  currentParams: Record<string, string | undefined>
 }) {
   if (excursiones.length === 0) {
     return (
       <EmptyState
-        icon={<svg className="h-12 w-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>}
+        icon={Search}
         title={currentParams.q ? 'Sin resultados' : 'No hay excursiones disponibles'}
         description={currentParams.q 
           ? `No encontramos excursiones para "${currentParams.q}". Intenta con otros términos o amplía tus filtros.`
@@ -219,11 +207,12 @@ function ResultsGrid({
         {excursiones.map((exc) => (
           <Link
             key={exc.id}
-            href={`/empresas/${exc.company.slug}/excursiones/${exc.slug}`}
+            href={`/empresas/${exc.empresa.slug}/excursiones/${exc.slug}`}
             className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${exc.agotadaGlobal || exc.todasFechasPasadas ? 'opacity-50 pointer-events-none' : ''}`}
           >
             <div className="relative aspect-[16/10] bg-muted">
               {exc.portadaUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={exc.portadaUrl}
                   alt={exc.nombre}
@@ -253,11 +242,11 @@ function ResultsGrid({
                   </span>
                 </div>
               )}
-              {e.cupoDisponible && e.cupoDisponible <= 5 && e.cupoDisponible > 0 && !e.agotadaGlobal && !e.todasFechasPasadas && (
+              {exc.cupoDisponible && exc.cupoDisponible <= 5 && exc.cupoDisponible > 0 && !exc.agotadaGlobal && !exc.todasFechasPasadas && (
                 <div className="absolute right-3 bottom-3">
                   <span className="rounded-full bg-warning/90 px-2 py-1 text-xs font-medium text-warning-foreground flex items-center gap-1">
                     <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M7 7l5 5" /></svg>
-                    {e.cupoDisponible} cupos
+                    {exc.cupoDisponible} cupos
                   </span>
                 </div>
               )}
@@ -265,7 +254,7 @@ function ResultsGrid({
 
             <div className="p-4">
               <h3 className="font-semibold group-hover:text-primary line-clamp-1">{exc.nombre}</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{exc.company.name}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{exc.empresa.name}</p>
               
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                 {exc.duracionMin && (
@@ -316,7 +305,15 @@ function ResultsGrid({
   )
 }
 
-function Pagination({ pagina, totalPaginas, currentParams }: { pagina: number; totalPaginas: number; currentParams: any }) {
+function Pagination({
+  pagina,
+  totalPaginas,
+  currentParams,
+}: {
+  pagina: number
+  totalPaginas: number
+  currentParams: Record<string, string | undefined>
+}) {
   const createUrl = (p: number) => {
     const params = new URLSearchParams()
     Object.entries(currentParams).forEach(([k, v]) => {

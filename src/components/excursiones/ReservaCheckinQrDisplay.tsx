@@ -16,9 +16,7 @@ interface ReservaCheckinQrDisplayProps {
 export function ReservaCheckinQrDisplay({
   checkinToken,
   checkinAt,
-  checkinPorId,
-  numero,
-}: ReservaCheckinQrDisplayProps) {
+  numero }: ReservaCheckinQrDisplayProps) {
   if (!checkinToken) return null
 
   return (
@@ -56,8 +54,7 @@ export function ReservaCheckinQrDisplay({
           <Shield className="h-4 w-4" />
           <span>
             Embarcado el {format(new Date(checkinAt), "dd 'de' MMMM 'de' yyyy 'a las' HH:mm", {
-              locale: es,
-            })}
+              locale: es })}
           </span>
         </div>
       )}

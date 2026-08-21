@@ -643,7 +643,6 @@ export function CompanyProfile({
                 .map((exc) => {
                   const isFinalizada = exc.todasFechasPasadas
                   const isAgotada = exc.agotadaGlobal
-                  const tieneStock = !isFinalizada && !isAgotada
                   return (
                     <Link
                       key={exc.id}

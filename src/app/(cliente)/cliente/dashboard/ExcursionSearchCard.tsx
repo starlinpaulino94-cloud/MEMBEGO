@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { Clock, MapPin, AlertCircle, X, Tag, Users, CalendarDays } from 'lucide-react'
 import { formatMoney } from '@/lib/format'
 
-interface ExcursionSearchCardProps {
-  excursion: {
+export interface ExcursionBuscada {
     id: string
     nombre: string
     slug: string
@@ -27,7 +26,10 @@ interface ExcursionSearchCardProps {
     }[]
     agotadaGlobal: boolean
     todasFechasPasadas: boolean
-  }
+}
+
+interface ExcursionSearchCardProps {
+  excursion: ExcursionBuscada
   variant?: 'default' | 'compact'
 }
 

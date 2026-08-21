@@ -59,7 +59,8 @@ export function ReservaExcursionForm({
   const [, setIsFollowing] = useState(initialFollowing)
 
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
-  const [fecha, setFecha] = useState('')
+  // Lo que el usuario ELIGIÓ; la fecha efectiva se deriva más abajo.
+  const [fechaElegida, setFechaElegida] = useState('')
   // Lo que el usuario ELIGIÓ. La hora efectiva (`hora`) se deriva de esto más
   // los horarios disponibles: ver abajo.
   const [horaElegida, setHoraElegida] = useState('')
@@ -81,12 +82,16 @@ export function ReservaExcursionForm({
     return Array.from(fechas).sort()
   }, [salidasDisponibles])
 
-  // Auto-seleccionar primera fecha disponible al cargar
-  useEffect(() => {
-    if (!fecha && fechasDisponibles.length > 0) {
-      setFecha(fechasDisponibles[0])
-    }
-  }, [fecha, fechasDisponibles])
+  /**
+   * La fecha efectiva también se DERIVA, igual que la hora.
+   *
+   * El efecto anterior escribía `fecha` tras el primer render, así que había
+   * un instante con el formulario sin fecha y el resto de campos calculados
+   * sobre ese vacío. Derivarlo no deja ese hueco.
+   */
+  const fecha = fechaElegida && fechasDisponibles.includes(fechaElegida)
+    ? fechaElegida
+    : (fechasDisponibles[0] ?? '')
 
   // Horarios disponibles para la fecha seleccionada
   const horariosDisponibles = useMemo(() => {
@@ -260,7 +265,7 @@ export function ReservaExcursionForm({
             id="reserva-fecha"
             name="fecha"
             value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
+            onChange={(e) => setFechaElegida(e.target.value)}
             required
             disabled={fechasDisponibles.length === 0}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Search, Filter, X, Calendar, MapPin, Tag, Truck } from 'lucide-react'
+import { Search, Filter, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -10,11 +10,10 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { ExcursionSearchCard } from './ExcursionSearchCard'
+  SelectValue } from '@/components/ui/select'
+import { ExcursionSearchCard, type ExcursionBuscada } from './ExcursionSearchCard'
 import { EmptyState } from '@/components/system/EmptyState'
-import { formatMoney } from '@/lib/format'
+import { } from '@/lib/format'
 
 interface FiltrosBusqueda {
   query: string
@@ -38,12 +37,11 @@ export function SearchParams() {
     fechaDesde: searchParams.get('fd') ?? '',
     fechaHasta: searchParams.get('fh') ?? '',
     soloConStock: searchParams.get('stock') === '1',
-    pagina: parseInt(searchParams.get('p') ?? '1', 10),
-  }
+    pagina: parseInt(searchParams.get('p') ?? '1', 10) }
 
   const [filtros, setFiltros] = useState<FiltrosBusqueda>(initialFiltros)
   const [resultados, setResultados] = useState<{
-    excursiones: any[]
+    excursiones: ExcursionBuscada[]
     total: number
     pagina: number
     totalPaginas: number
@@ -78,8 +76,15 @@ export function SearchParams() {
     }
   }, [filtros])
 
-  // Ejecutar búsqueda al montar o cambiar filtros
+  // Ejecutar búsqueda al montar o cambiar filtros.
+  //
+  // La excepción a la regla es deliberada: `buscar` es una petición al
+  // servidor, y su primer paso es encender el indicador de carga. Eso es un
+  // setState síncrono dentro del efecto por definición — no hay forma de
+  // pedir datos al montar sin él, y derivarlo no aplica porque el dato no
+  // existe hasta que la red conteste.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     buscar()
   }, [buscar])
 
@@ -97,7 +102,7 @@ export function SearchParams() {
   }
 
   // Handlers
-  const handleChange = (campo: keyof FiltrosBusqueda, valor: any) => {
+  const handleChange = (campo: keyof FiltrosBusqueda, valor: string | number | boolean) => {
     const nuevosFiltros = { ...filtros, [campo]: valor, pagina: 1 }
     setFiltros(nuevosFiltros)
     actualizarURL()
@@ -111,8 +116,7 @@ export function SearchParams() {
       fechaDesde: '',
       fechaHasta: '',
       soloConStock: false,
-      pagina: 1,
-    }
+      pagina: 1 }
     setFiltros(limpios)
     actualizarURL()
   }

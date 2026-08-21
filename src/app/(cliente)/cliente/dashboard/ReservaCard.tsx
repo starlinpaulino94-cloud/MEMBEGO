@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { CalendarDays, Clock, MapPin, Users, Ticket } from 'lucide-react'
+import { CalendarDays, Clock, Users } from 'lucide-react'
 import { formatMoney, formatDate } from '@/lib/format'
 import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
 
@@ -11,8 +11,7 @@ const TONO_CLASE: Record<string, string> = {
   warning: 'bg-warning/10 text-warning',
   info: 'bg-info/10 text-info',
   neutral: 'bg-muted text-muted-foreground',
-  danger: 'bg-destructive/10 text-destructive',
-}
+  danger: 'bg-destructive/10 text-destructive' }
 
 interface ReservaCardProps {
   reserva: {

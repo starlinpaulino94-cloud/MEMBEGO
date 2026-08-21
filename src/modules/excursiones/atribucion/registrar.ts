@@ -6,6 +6,8 @@ import {
   VENDEDOR_COOKIE,
   VENTANA_ATRIBUCION_DIAS,
   sanitizarCanalAtribucion,
+  politicaValida,
+  resolverVendedorAtribuido,
   type CanalAtribucion,
 } from './nucleo'
 

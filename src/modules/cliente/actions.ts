@@ -3,10 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { companyIdPorSlug, excursionesPublicas, calcularDisponibilidad } from '@/modules/excursiones/catalogo/public-queries'
+import {
+  companyIdPorSlug,
+  excursionesPublicas,
+  calcularDisponibilidad,
+  type SalidaDisponible,
+} from '@/modules/excursiones/catalogo/public-queries'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { cookies } from 'next/headers'
 import { VENDEDOR_COOKIE } from '@/modules/excursiones/atribucion/registrar'
@@ -209,30 +213,71 @@ export async function actualizarPerfil(
   }
 }
 
+/**
+ * Forma REAL de lo que devuelve `buscarUnificado`.
+ *
+ * Antes esta interfaz describía otra cosa —`moneda` y `empresa` en las
+ * promociones, y sin `empresas`— y las dos pantallas que la consumen la
+ * esquivaban con `as any[]`. Un tipo que nadie puede usar no protege nada:
+ * describe lo que se devuelve, para que el compilador vuelva a servir.
+ */
+export interface EmpresaResumen {
+  id: string
+  slug: string
+  name: string
+  logoUrl: string | null
+}
+
 export interface BuscadorUnificadoResult {
   promociones: Array<{
     id: string
     titulo: string
+    slug: string | null
+    descripcion: string
     precio: number | null
-    moneda: string
-    empresa: { id: string; slug: string; name: string; logoUrl: string | null }
     tipo: string
+    descuento: number | null
+    codigo: string | null
+    vigenciaDesde: Date
+    vigenciaHasta: Date | null
     imagenUrl: string | null
+    isFeatured: boolean
+    viewCount: number
+    shareCount: number
+    tags: string[]
+    createdAt: Date
+    company: EmpresaResumen
   }>
   excursiones: Array<{
     id: string
     nombre: string
     slug: string
+    descripcion: string | null
     portadaUrl: string | null
     categoria: string | null
     moneda: string
     duracionMin: number | null
     ubicacion: string | null
     precioDesde: number | null
-    empresa: { id: string; slug: string; name: string; logoUrl: string | null }
+    empresa: EmpresaResumen
     agotadaGlobal: boolean
     todasFechasPasadas: boolean
+    cupoDisponible: number | null
+    proximasSalidas: SalidaDisponible[]
   }>
+  /** Empresas que coinciden con el texto. Puede faltar en las salidas vacías. */
+  empresas?: Array<
+    EmpresaResumen & {
+      type: string
+      bannerUrl: string | null
+      ciudad: string | null
+      descripcion: string | null
+      totalMembersCount: number
+      activePromotionsCount: number
+      isFeatured: boolean
+      desdePlan: { nombre: string; precio: number } | null
+    }
+  >
 }
 
 /**
@@ -283,6 +328,7 @@ export async function buscarUnificado(
             isFeatured: true,
             viewCount: true,
             shareCount: true,
+            createdAt: true,
             tags: true,
             company: { select: { id: true, slug: true, name: true, logoUrl: true, moneda: true } },
           },
@@ -320,6 +366,7 @@ export async function buscarUnificado(
             isFeatured: true,
             viewCount: true,
             shareCount: true,
+            createdAt: true,
             tags: true,
             company: { select: { id: true, slug: true, name: true, logoUrl: true, moneda: true } },
           },
@@ -353,10 +400,13 @@ export async function buscarUnificado(
             totalMembersCount: true,
             activePromotionsCount: true,
             isFeatured: true,
+            // OJO: los campos de `Plan` están en español (nombre/precio/
+            // activo), no en inglés como los de `Company`. El esquema mezcla
+            // los dos idiomas según la época en que nació cada modelo.
             plans: {
-              where: { isActive: true },
-              orderBy: { price: 'asc' },
-              select: { name: true, price: true },
+              where: { activo: true },
+              orderBy: { precio: 'asc' },
+              select: { nombre: true, precio: true },
               take: 1,
             },
           },
@@ -377,7 +427,7 @@ export async function buscarUnificado(
       totalMembersCount: c.totalMembersCount,
       activePromotionsCount: c.activePromotionsCount,
       isFeatured: c.isFeatured,
-      desdePlan: c.plans[0] ? { nombre: c.plans[0].name, precio: Number(c.plans[0].price) } : null,
+      desdePlan: c.plans[0] ? { nombre: c.plans[0].nombre, precio: Number(c.plans[0].precio) } : null,
     }))
 
     // Combinar y deduplicar promociones
@@ -396,13 +446,32 @@ export async function buscarUnificado(
     )
     const companyIds = clienteIds.map((c) => c.companyId)
 
+    // Empresas que pueden salir en la parte PÚBLICA del buscador.
+    //
+    // Antes esto era `company: { isActive: true, isPublished: true }` dentro
+    // del `where` de la excursión, o sea una relación Prisma hacia el núcleo.
+    // El módulo no la tiene a propósito (ver la convención en
+    // prisma/schema/excursiones.prisma), así que la visibilidad se resuelve en
+    // una consulta aparte y viaja como lista de ids.
+    //
+    // Se añade `esDemo: false`, que faltaba: la empresa de demostración tiene
+    // excursiones sembradas y no puede aparecer en un buscador público.
+    const empresasVisiblesIds = (
+      await sinEmpresa('buscador: empresas visibles al público', (tx) =>
+        tx.company.findMany({
+          where: { isActive: true, isPublished: true, esDemo: false },
+          select: { id: true },
+        })
+      )
+    ).map((c) => c.id)
+
     // Buscar en excursiones (públicas + de las empresas donde el usuario es cliente)
     const [excursionesPublicas, excursionesMias] = await Promise.all([
       sinEmpresa('buscador: excursiones públicas', (tx) =>
         tx.excursion.findMany({
           where: {
             estado: 'ACTIVA',
-            company: { isActive: true, isPublished: true },
+            companyId: { in: empresasVisiblesIds },
             OR: [
               { nombre: { contains: q, mode: 'insensitive' } },
               { descripcion: { contains: q, mode: 'insensitive' } },
@@ -423,8 +492,10 @@ export async function buscarUnificado(
             capacidad: true,
             horaSalida: true,
             horaRegreso: true,
+            // Solo el id de la empresa. La ficha se resuelve APARTE, en bloque:
+            // hacia el núcleo el módulo guarda el id plano, sin @relation
+            // (convención escrita en prisma/schema/excursiones.prisma).
             companyId: true,
-            company: { select: { id: true, slug: true, name: true, logoUrl: true, moneda: true } },
             variantes: {
               where: { activa: true },
               orderBy: { orden: 'asc' },
@@ -466,8 +537,8 @@ export async function buscarUnificado(
                 capacidad: true,
                 horaSalida: true,
                 horaRegreso: true,
+                // Igual que arriba: id plano, la ficha se resuelve aparte.
                 companyId: true,
-                company: { select: { id: true, slug: true, name: true, logoUrl: true, moneda: true } },
                 variantes: {
                   where: { activa: true },
                   orderBy: { orden: 'asc' },
@@ -492,6 +563,18 @@ export async function buscarUnificado(
     }
     const rawExcursiones = Array.from(excursionesMap.values()).slice(0, 16)
 
+    // Fichas de empresa en BLOQUE, por id. Es el precedente del módulo
+    // (`catalogo/search-queries.ts` hace lo mismo): una consulta para todas en
+    // vez de un `include` por fila.
+    const idsDeEmpresa = [...new Set(rawExcursiones.map((e) => e.companyId))]
+    const fichasEmpresa = await sinEmpresa('buscador: fichas de empresa de las excursiones', (tx) =>
+      tx.company.findMany({
+        where: { id: { in: idsDeEmpresa } },
+        select: { id: true, slug: true, name: true, logoUrl: true, moneda: true },
+      })
+    )
+    const empresaPorId = new Map(fichasEmpresa.map((c) => [c.id, c]))
+
     // Calcular disponibilidad real y filtrar estrictamente las atrasadas/finalizadas
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
@@ -499,11 +582,19 @@ export async function buscarUnificado(
     const excursionesConInfo = (
       await Promise.all(
         rawExcursiones.map(async (exc) => {
+          const empresa = empresaPorId.get(exc.companyId)
+          // Sin ficha de empresa no hay tarjeta que pintar (nombre, logo, enlace).
+          // Se descarta aquí en vez de devolver un hueco que cada pantalla
+          // tendría que esquivar por su cuenta.
+          if (!empresa) return null
           const disponibilidad = await calcularDisponibilidad(
             exc.companyId,
             exc.id,
             exc.capacidad,
-            exc.horarios,
+            // `diasSemana` es JSON en el esquema (evoluciona sin migrar); el
+            // cálculo lo trata como number[]. Mismo casteo que los demás
+            // llamadores de `calcularDisponibilidad`.
+            exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
             exc.horaRegreso,
             exc.horaSalida
           )
@@ -532,12 +623,14 @@ export async function buscarUnificado(
             todasFechasPasadas: false,
             cupoDisponible: salidasFuturas[0]?.cupoDisponible ?? null,
             proximasSalidas: salidasFuturas,
-            moneda: exc.company.moneda,
+            // La moneda de la excursión manda; la de la empresa es el respaldo.
+            // La moneda de la excursión manda; la de la empresa es el respaldo.
+            moneda: exc.moneda ?? empresa.moneda ?? 'DOP',
             empresa: {
-              id: exc.company.id,
-              slug: exc.company.slug,
-              name: exc.company.name,
-              logoUrl: exc.company.logoUrl,
+              id: empresa.id,
+              slug: empresa.slug,
+              name: empresa.name,
+              logoUrl: empresa.logoUrl,
             },
           }
         })
@@ -563,6 +656,7 @@ export async function buscarUnificado(
         viewCount: p.viewCount,
         shareCount: p.shareCount,
         tags: p.tags,
+        createdAt: p.createdAt,
         company: {
           id: p.company.id,
           slug: p.company.slug,

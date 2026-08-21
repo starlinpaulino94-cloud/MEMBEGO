@@ -22,7 +22,6 @@
 model Excursion {
   id          String  @id @default(cuid())
   companyId   String
-  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nombre      String
   slug        String
   codigo      String?
