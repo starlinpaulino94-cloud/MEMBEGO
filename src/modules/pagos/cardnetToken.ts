@@ -12,6 +12,7 @@ import {
 } from '@/lib/payments/cardnet-tokens'
 import {
   MENSAJE_ACTIVACION_PENDIENTE,
+  mismoPerfilCardnet,
   perfilPendienteDeActivar,
 } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
@@ -417,22 +418,40 @@ export async function activarTarjetaPendiente(input: {
   }
 
   if (!activacion.ok) {
-    // El proveedor no aceptó. Sin contrato de error confirmado, la distinción
-    // fiable es re-consultar: si el perfil desapareció, fue el tercer intento.
+    // El proveedor no aceptó ESTA RESPUESTA. Sin contrato de error confirmado,
+    // la verdad la da re-consultar el perfil — pero hay que leer bien lo que
+    // dice, porque son TRES estados y no dos:
+    //
+    //   1. El perfil ya no está        → tercer fallo, CardNET la borró.
+    //   2. El perfil está, deshabilitado → el código no era correcto.
+    //   3. El perfil está, HABILITADO   → la activación SÍ funcionó, aunque la
+    //      respuesta no viniera limpia. Aquí se sigue al cobro.
+    //
+    // EL FALLO QUE ESTO ARREGLA: la comprobación era
+    // `some(p => !p.habilitado && p.paymentProfileId === …)`, que mezcla
+    // «existe» con «sigue deshabilitado». En el caso 3 daba `false` y se le
+    // decía al cliente que su tarjeta se había ELIMINADO — con la tarjeta viva
+    // y activada, y sin cobrarle. Se dispara con facilidad porque el parser
+    // trata un `Enabled` AUSENTE como habilitado (a propósito: un campo que no
+    // viene no debe bloquear un cobro que sí habría pasado), así que bastaba
+    // una respuesta sin ese campo para anunciar una tarjeta destruida.
     const despues = await consultarClienteCardnet(customerId)
-    const sigueAhi = despues.perfiles.some(
-      (p) => !p.habilitado && p.paymentProfileId === perfil.paymentProfileId
-    )
-    if (!sigueAhi) {
+    const mismo = despues.perfiles.find((p) => mismoPerfilCardnet(p, perfil))
+
+    if (!mismo) {
       return {
         estado: 'sin_perfil',
         motivo: 'La tarjeta se eliminó tras varios intentos fallidos (así opera el banco). Regístrala de nuevo para reintentar el pago.',
       }
     }
-    return {
-      estado: 'codigo_rechazado',
-      motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+    if (!mismo.habilitado) {
+      return {
+        estado: 'codigo_rechazado',
+        motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+      }
     }
+    // Caso 3: quedó habilitada. Se cae al cobro de abajo a propósito — el
+    // cliente puso su código bien y lo que espera es que se complete el pago.
   }
 
   // Activada → cobrar el pendiente por la tubería de siempre. `conteoAntes: 0`
