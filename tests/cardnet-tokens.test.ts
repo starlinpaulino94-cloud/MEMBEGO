@@ -10,6 +10,7 @@ import {
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
   perfilPendienteDeActivar,
+  mismoPerfilCardnet,
 } from '../src/lib/payments/cardnet-tokens-core'
 
 /**
@@ -765,4 +766,67 @@ test('mirar el Customer de OTRO queda restringido a SUPERADMIN', () => {
     /esSuperadmin/,
     'el override de customerId dejó de estar detrás de la guardia de superadmin'
   )
+})
+
+// ── Reconocer la tarjeta después de activarla ───────────────────────────────
+//
+// EL FALLO REAL (24-08-2026, en vivo con CardNET): tras poner un código
+// CORRECTO salía «La tarjeta se eliminó tras varios intentos fallidos».
+//
+// La comprobación era `!p.habilitado && p.paymentProfileId === …`, que mezcla
+// «el perfil existe» con «el perfil sigue deshabilitado». Cuando la activación
+// funcionaba, el perfil quedaba HABILITADO, la condición daba false y se
+// concluía que la tarjeta había desaparecido. Se dispara con facilidad porque
+// un `Enabled` AUSENTE se parsea como habilitado.
+
+test('mismoPerfilCardnet: reconoce por PaymentProfileId', () => {
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: 'pp-1', token: 'A' }, { paymentProfileId: 'pp-1', token: 'B' }),
+    true
+  )
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: 'pp-1', token: 'A' }, { paymentProfileId: 'pp-2', token: 'A' }),
+    false
+  )
+})
+
+test('mismoPerfilCardnet: cae al Token cuando falta el id', () => {
+  // El `PaymentProfileId` puede venir nulo. Antes, un nulo hacía que la
+  // tarjeta «dejara de ser ella misma» y se diera por eliminada.
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: null, token: 'CT__x' }, { paymentProfileId: 'pp-1', token: 'CT__x' }),
+    true
+  )
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: null, token: 'CT__x' }, { paymentProfileId: null, token: 'CT__y' }),
+    false
+  )
+})
+
+test('mismoPerfilCardnet: sin ninguna referencia común NO afirma que son el mismo', () => {
+  // Fallar cerrado: inventar una coincidencia sería peor que no encontrarla.
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: null, token: null }, { paymentProfileId: null, token: null }),
+    false
+  )
+})
+
+test('un Enabled AUSENTE se lee como habilitado (y por eso no puede significar «borrada»)', () => {
+  // Esta es la pieza que convertía «se activó» en «se eliminó».
+  const [p] = extraerPerfilesSync({
+    PaymentProfiles: [{ PaymentProfileId: 'pp-1', Token: 'CT__x', LastFour: '1111' }],
+  })
+  assert.equal(p.habilitado, true, 'sin Enabled explícito el perfil se considera habilitado')
+})
+
+test('la activación distingue los TRES estados, no dos', () => {
+  const src = readFileSync('src/modules/pagos/cardnetToken.ts', 'utf8')
+  // La condición vieja mezclaba existencia con estado. Si vuelve, la tarjeta
+  // activada se vuelve a anunciar como destruida.
+  assert.doesNotMatch(
+    src,
+    /some\(\s*\(p\) => !p\.habilitado && p\.paymentProfileId/,
+    'volvió la comprobación que confunde «habilitada» con «eliminada»'
+  )
+  assert.match(src, /mismoPerfilCardnet\(/)
 })

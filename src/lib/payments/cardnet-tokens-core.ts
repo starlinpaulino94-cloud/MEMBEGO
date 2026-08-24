@@ -648,6 +648,26 @@ export function perfilPendienteDeActivar(
   return pendientes.length > 0 ? pendientes[pendientes.length - 1] : null
 }
 
+/**
+ * ¿SON EL MISMO PERFIL DE PAGO? Se usa para reconocer una tarjeta después de
+ * una llamada que pudo haberla cambiado.
+ *
+ * Se compara por `PaymentProfileId` cuando los dos lo traen, y por `Token`
+ * cuando no. Antes se comparaba SOLO por `PaymentProfileId`, y ese campo puede
+ * venir nulo: cuando venía nulo en un lado, la tarjeta «dejaba de ser ella
+ * misma» y el código concluía que había desaparecido.
+ */
+export function mismoPerfilCardnet(
+  a: Pick<PerfilPagoCardnet, 'paymentProfileId' | 'token'>,
+  b: Pick<PerfilPagoCardnet, 'paymentProfileId' | 'token'>
+): boolean {
+  if (a.paymentProfileId && b.paymentProfileId) {
+    return a.paymentProfileId === b.paymentProfileId
+  }
+  if (a.token && b.token) return a.token === b.token
+  return false
+}
+
 export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardnet[] {
   const { datos } = desenvolverRespuesta(json)
   const crudos = datos.PaymentProfiles ?? datos.paymentProfiles ?? datos.Profiles
