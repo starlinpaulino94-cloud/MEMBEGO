@@ -9,6 +9,7 @@ import {
   desenvolverRespuesta,
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
+  perfilPendienteDeActivar,
 } from '../src/lib/payments/cardnet-tokens-core'
 
 /**
@@ -666,4 +667,52 @@ test('el limitador de sesión es más holgado que el de los cobros', () => {
     return Number(bloque[1])
   }
   assert.ok(leerTope('paymentSessionLimiter') > leerTope('paymentLimiter'))
+})
+
+// ── El perfil que espera su código ──────────────────────────────────────────
+//
+// El criterio vive en UNA función porque lo consultan tres sitios: la
+// activación real, el aviso de «tienes una tarjeta esperando» y la sonda de
+// diagnóstico. Si divergieran, el aviso enseñaría los últimos 4 dígitos de una
+// tarjeta y se activaría otra — y las dos pantallas se verían normales.
+
+const perfil = (
+  ultimos4: string,
+  habilitado: boolean
+): Parameters<typeof perfilPendienteDeActivar>[0][number] => ({
+  paymentProfileId: `pp-${ultimos4}`,
+  token: `CT__${ultimos4}`,
+  marca: 'VISA',
+  ultimos4,
+  habilitado,
+})
+
+test('perfilPendienteDeActivar: sin perfiles no hay nada que activar', () => {
+  assert.equal(perfilPendienteDeActivar([]), null)
+})
+
+test('perfilPendienteDeActivar: con todo habilitado devuelve null', () => {
+  assert.equal(perfilPendienteDeActivar([perfil('1111', true), perfil('2222', true)]), null)
+})
+
+test('perfilPendienteDeActivar: elige el MÁS RECIENTE de los deshabilitados', () => {
+  // Cada intento de registrar la tarjeta deja su perfil y CardNET no los
+  // limpia. El que le importa al cliente es el último: es el cargo de RD$1.00
+  // que tiene delante en la app del banco.
+  const elegido = perfilPendienteDeActivar([
+    perfil('1111', false),
+    perfil('2222', false),
+    perfil('3333', false),
+  ])
+  assert.equal(elegido?.ultimos4, '3333')
+})
+
+test('perfilPendienteDeActivar: ignora los habilitados aunque sean posteriores', () => {
+  // Una tarjeta ya activa NO es candidata a activarse, esté donde esté en la
+  // lista. Devolverla mandaría al cliente a teclear un código que no existe.
+  const elegido = perfilPendienteDeActivar([
+    perfil('1111', false),
+    perfil('9999', true),
+  ])
+  assert.equal(elegido?.ultimos4, '1111')
 })

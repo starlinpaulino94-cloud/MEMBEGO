@@ -10,7 +10,10 @@ import {
   consultarClienteCardnet,
   activarPerfilCardnet,
 } from '@/lib/payments/cardnet-tokens'
-import { MENSAJE_ACTIVACION_PENDIENTE } from '@/lib/payments/cardnet-tokens-core'
+import {
+  MENSAJE_ACTIVACION_PENDIENTE,
+  perfilPendienteDeActivar,
+} from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
 
@@ -380,8 +383,8 @@ export async function activarTarjetaPendiente(input: {
   // El perfil a activar: el MÁS RECIENTE deshabilitado (mismo criterio que el
   // cobro usa para "el recién agregado").
   const { perfiles } = consultaPrevia ?? (await consultarClienteCardnet(customerId))
-  const pendientes = perfiles.filter((p) => !p.habilitado)
-  if (pendientes.length === 0) {
+  const perfil = perfilPendienteDeActivar(perfiles)
+  if (!perfil) {
     // Nada deshabilitado: o ya se activó (otra pestaña) o CardNET la borró al
     // tercer intento fallido. El cobro normal decide cuál de los dos es.
     return {
@@ -389,7 +392,6 @@ export async function activarTarjetaPendiente(input: {
       motivo: 'No hay ninguna tarjeta pendiente de activar. Si el pago sigue pendiente, registra la tarjeta de nuevo.',
     }
   }
-  const perfil = pendientes[pendientes.length - 1]
 
   // El servicio identifica el perfil por su TOKEN, no por su PaymentProfileId
   // (manual §7.5: ambos campos del objeto CustomerActivation son mandatorios).
