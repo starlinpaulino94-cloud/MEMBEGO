@@ -101,10 +101,10 @@ export async function cobrarObjetivoConToken(input: {
     await confirmarIntento(intento.id, {
       aprobada: false,
       autorizacion: null,
-      motivo: 'No se pudo contactar la pasarela.',
+      motivo: 'No se pudo completar el pago. Intenta de nuevo.',
       crudo: null,
     })
-    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+    return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
   const res = await confirmarIntento(intento.id, {
@@ -414,7 +414,7 @@ export async function activarTarjetaPendiente(input: {
     })
   } catch (e) {
     logErrorBd('pagos:cardnet-token:activar', e, { clienteId: input.objetivo.clienteId })
-    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+    return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
   if (!activacion.ok) {
@@ -435,6 +435,17 @@ export async function activarTarjetaPendiente(input: {
     // trata un `Enabled` AUSENTE como habilitado (a propósito: un campo que no
     // viene no debe bloquear un cobro que sí habría pasado), así que bastaba
     // una respuesta sin ese campo para anunciar una tarjeta destruida.
+    // El expediente crudo del `activate` fallido SE GUARDA. Antes se descartaba,
+    // y sin él la única forma de saber qué respondió el proveedor era pedirle al
+    // cliente que repitiera el fallo con una sonda delante. `evidencia()` ya pasa
+    // por `sinSensibles`, y el código de activación no viaja en la respuesta.
+    logErrorBd('pagos:cardnet-token:activate-rechazado', new Error('activate no aceptado'), {
+      clienteId: input.objetivo.clienteId,
+      status: activacion.status,
+      errores: activacion.errores,
+      crudo: activacion.crudo,
+    })
+
     const despues = await consultarClienteCardnet(customerId)
     const mismo = despues.perfiles.find((p) => mismoPerfilCardnet(p, perfil))
 
@@ -444,14 +455,28 @@ export async function activarTarjetaPendiente(input: {
         motivo: 'La tarjeta se eliminó tras varios intentos fallidos (así opera el banco). Regístrala de nuevo para reintentar el pago.',
       }
     }
+
+    // SI EL PROVEEDOR DIJO QUÉ FALLÓ, MANDA ESO.
+    //
+    // Es más fiable que deducirlo del listado de perfiles, porque `Enabled`
+    // puede no venir y entonces el perfil se lee como habilitado. Sin esta
+    // rama, un código rechazado con el campo ausente terminaba pareciendo una
+    // activación correcta y se caía a cobrar.
+    if (activacion.errores.length > 0) {
+      return {
+        estado: 'codigo_rechazado',
+        motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
+      }
+    }
     if (!mismo.habilitado) {
       return {
         estado: 'codigo_rechazado',
-        motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+        motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
       }
     }
-    // Caso 3: quedó habilitada. Se cae al cobro de abajo a propósito — el
-    // cliente puso su código bien y lo que espera es que se complete el pago.
+    // Solo aquí: el proveedor no señaló ningún error Y el perfil aparece
+    // habilitado. Se cae al cobro a propósito — el cliente puso su código bien
+    // y lo que espera es que se complete el pago.
   }
 
   // Activada → cobrar el pendiente por la tubería de siempre. `conteoAntes: 0`
@@ -476,6 +501,31 @@ export async function activarTarjetaPendiente(input: {
   if (cobro.estado === 'sin_pendiente') {
     return { estado: 'activada_sin_cobro', motivo: 'Tu tarjeta quedó activa. No había ningún pago pendiente.' }
   }
+
+  /**
+   * EL COBRO DICE QUE LA TARJETA SIGUE SIN ACTIVAR (CS012).
+   *
+   * Este caso caía en el catch-all de abajo y salía como `activada_sin_cobro`,
+   * un estado cuyo nombre AFIRMA lo contrario de lo que acaba de pasar. Dos
+   * consecuencias, las dos malas:
+   *
+   *   · Al cliente se le devolvía «tu tarjeta quedó registrada pero falta
+   *     activarla» — la instrucción de hacer justo lo que acababa de hacer.
+   *   · La pantalla de activación se cerraba (el componente traduce
+   *     `activada_sin_cobro` a un error general), así que NO PODÍA REINTENTAR
+   *     con otro código sin volver a registrar la tarjeta entera.
+   *
+   * Si el Purchase responde CS012, la activación no surtió efecto: es un
+   * código no aceptado, y lo que corresponde es dejar al cliente en la
+   * pantalla para que lo intente de nuevo.
+   */
+  if (cobro.estado === 'pendiente_activacion') {
+    return {
+      estado: 'codigo_rechazado',
+      motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
+    }
+  }
+
   const motivo =
     'motivo' in cobro && cobro.motivo
       ? cobro.motivo

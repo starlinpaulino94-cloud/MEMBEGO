@@ -364,7 +364,7 @@ function motivoDelRechazo(input: {
  * cobrando con el perfil que se consulta después.
  */
 export const MENSAJE_ACTIVACION_PENDIENTE =
-  'Tu tarjeta quedó registrada pero falta activarla. Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo para completar el pago.'
+  'Tu tarjeta quedó registrada y falta un último paso para verificarla. Tu banco hizo un cargo de RD$1.00 y en la descripción de ese cargo aparece un código de 6 caracteres. Búscalo en tu app del banco e ingrésalo para completar el pago.'
 
 /**
  * NORMALIZA lo que el cliente teclea como código de activación (§4.1.2.3).
