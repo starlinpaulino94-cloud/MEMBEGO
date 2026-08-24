@@ -53,7 +53,8 @@ export interface ExcursionEditable {
   noIncluye: string | null
   politicas: string | null
   portadaUrl?: string | null
-  galeria?: any
+  /** URLs de la galería, tal como las guarda la columna JSON. */
+  galeria?: string[] | null
   horarios?: {
     id: string
     horaSalida: string

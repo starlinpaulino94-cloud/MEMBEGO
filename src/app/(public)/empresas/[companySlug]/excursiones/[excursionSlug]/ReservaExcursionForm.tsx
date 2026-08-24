@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X, ShoppingCart, CreditCard, Banknote, ShieldCheck, Sparkles } from 'lucide-react'
+import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X, ShoppingCart, CreditCard, Banknote } from 'lucide-react'
 import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-actions'
 import { toggleSeguirEmpresa } from '@/modules/social/actions'
 import { formatMoney } from '@/lib/format'
@@ -57,8 +57,7 @@ export function ReservaExcursionForm({
   isAuthenticated,
   isFollowing: initialFollowing,
   proximasSalidas,
-  agotadaGlobal,
-}: ReservaExcursionFormProps) {
+  agotadaGlobal }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
   const cart = useExcursionCart()
@@ -152,8 +151,10 @@ export function ReservaExcursionForm({
         ;(e.target as HTMLFormElement).requestSubmit()
         return
       }
+      // `followedRef` es lo único que se consulta (línea 145). El estado que
+      // acompañaba a esta llamada desapareció en una mezcla y nadie leía su
+      // valor: se quita la llamada en vez de resucitar un estado muerto.
       followedRef.current = true
-      setIsFollowing(true)
       // Now submit the form
       ;(e.target as HTMLFormElement).requestSubmit()
       return
@@ -412,10 +413,10 @@ export function ReservaExcursionForm({
               }`}
             >
               <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
-                <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <Banknote className="h-4 w-4 text-success dark:text-success" />
                 <span>Pagar el día del tour</span>
               </div>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+              <span className="text-xs text-muted-foreground leading-tight">
                 Pagas en el punto de encuentro al momento de abordar.
               </span>
             </button>
@@ -432,11 +433,11 @@ export function ReservaExcursionForm({
               <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
                 <CreditCard className="h-4 w-4 text-primary" />
                 <span>Pagar ahora en línea</span>
-                <span className="text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 rounded-full font-bold">
+                <span className="text-xs bg-warning/15 text-warning dark:text-warning px-1.5 py-0.2 rounded-full font-bold">
                   Prueba
                 </span>
               </div>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+              <span className="text-xs text-muted-foreground leading-tight">
                 Tarjeta crédito/débito • Acceso y boleto de inmediato.
               </span>
             </button>
@@ -492,8 +493,7 @@ export function ReservaExcursionForm({
                 ninos,
                 precioAdulto,
                 precioNino,
-                moneda,
-              })
+                moneda })
             }}
             disabled={pending || followingPending || !fecha || !hora || horariosDisponibles.every((h) => h.agotada)}
             className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-primary bg-background py-3 text-sm font-semibold text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -556,8 +556,7 @@ export function ReservaExcursionForm({
           {
             nombre: `${adultos} Adulto(s)${ninos > 0 ? ` + ${ninos} Niño(s)` : ''} (${varianteActual.nombre})`,
             cantidad: 1,
-            subtotal,
-          },
+            subtotal },
         ]}
       />
     </div>

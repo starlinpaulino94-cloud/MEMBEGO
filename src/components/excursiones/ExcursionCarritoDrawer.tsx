@@ -6,7 +6,7 @@ import { useTransition, useState } from 'react'
 import { formatMoney } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { X, Trash2, CalendarDays, Clock, Users, Loader2, ShoppingCart, CreditCard, Banknote } from 'lucide-react'
+import { Trash2, CalendarDays, Clock, Users, Loader2, ShoppingCart, CreditCard, Banknote } from 'lucide-react'
 import { reservarCarritoAction } from '@/modules/excursiones/reservas/cliente-actions'
 import { PasarelaSimuladaModal } from './PasarelaSimuladaModal'
 import { toast } from 'sonner'
@@ -28,8 +28,7 @@ export function ExcursionCarritoDrawer() {
         horaSalida: item.hora,
         adultos: item.adultos,
         ninos: item.ninos,
-        notas: '',
-      }))
+        notas: '' }))
 
       // Llama a la acción que reserva en lote
       const res = await reservarCarritoAction(payload, metodo)
@@ -133,7 +132,7 @@ export function ExcursionCarritoDrawer() {
         </div>
 
         {items.length > 0 && (
-          <div className="border-t bg-card p-6 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] space-y-4">
+          <div className="border-t bg-card p-6 shadow-lg space-y-4">
             {/* Selector de Modalidad de Pago */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-foreground">Modalidad de pago</label>
@@ -148,10 +147,10 @@ export function ExcursionCarritoDrawer() {
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
-                    <Banknote className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <Banknote className="h-3.5 w-3.5 text-success dark:text-success" />
                     <span>En destino</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">Pagas el día del tour</span>
+                  <span className="text-xs text-muted-foreground">Pagas el día del tour</span>
                 </button>
 
                 <button
@@ -166,11 +165,11 @@ export function ExcursionCarritoDrawer() {
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground">
                     <CreditCard className="h-3.5 w-3.5 text-primary" />
                     <span>En línea</span>
-                    <span className="text-[8px] bg-amber-500/15 text-amber-600 px-1 py-0.2 rounded font-bold">
+                    <span className="text-[8px] bg-warning/15 text-warning px-1 py-0.2 rounded font-bold">
                       Prueba
                     </span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">Tarjeta • QR al instante</span>
+                  <span className="text-xs text-muted-foreground">Tarjeta • QR al instante</span>
                 </button>
               </div>
             </div>
@@ -201,7 +200,7 @@ export function ExcursionCarritoDrawer() {
                 'Confirmar Reservas (Pagar en destino)'
               )}
             </Button>
-            <p className="text-[11px] text-center text-muted-foreground">
+            <p className="text-xs text-center text-muted-foreground">
               {metodoPago === 'ONLINE_SIMULADO'
                 ? 'Emisión inmediata de tus códigos QR de abordaje.'
                 : 'Pagarás cada excursión en su punto de encuentro el día asignado.'}
@@ -225,8 +224,7 @@ export function ExcursionCarritoDrawer() {
       detallesItems={items.map((item) => ({
         nombre: item.nombreExcursion,
         cantidad: item.adultos + item.ninos,
-        subtotal: item.adultos * item.precioAdulto + item.ninos * item.precioNino,
-      }))}
+        subtotal: item.adultos * item.precioAdulto + item.ninos * item.precioNino }))}
     />
     
     {/* Floating Cart Button */}

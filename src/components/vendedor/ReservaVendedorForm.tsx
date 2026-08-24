@@ -47,6 +47,8 @@ export function ReservaVendedorForm({
 
   useEffect(() => {
     if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
+      // La excepción es deliberada: reacciona al resultado async de la acción, no a un render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVarianteId(excursion.variantes[0]?.id ?? '')
     }
     if (excursion && !excursion.horarios?.find((h) => h.horaSalida === hora)) {
@@ -74,7 +76,7 @@ export function ReservaVendedorForm({
       impuestoPct: excursion.impuestoPct ?? 0,
       adultos: Number(adultos) || 0,
       ninos: Number(ninos) || 0,
-      descuentoFijo: 0,
+      descuento: 0,
     })
   }, [variante, excursion.impuestoPct, adultos, ninos])
 
@@ -97,7 +99,7 @@ export function ReservaVendedorForm({
       )}
 
       {state.success && (
-        <Alert className="bg-green-50 text-green-900 border-green-200">
+        <Alert className="bg-success/10 text-success border-success/25">
           <AlertDescription>{state.success}</AlertDescription>
         </Alert>
       )}
@@ -132,7 +134,7 @@ export function ReservaVendedorForm({
               name="excursionId"
               value={excursionId}
               onChange={(e) => setExcursionId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               required
             >
               {excursiones.map((e) => (
@@ -150,7 +152,7 @@ export function ReservaVendedorForm({
               name="varianteId"
               value={varianteId}
               onChange={(e) => setVarianteId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               required
             >
               {excursion.variantes.map((v) => (
@@ -178,7 +180,7 @@ export function ReservaVendedorForm({
               name="hora"
               value={hora}
               onChange={(e) => setHora(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               required
             >
               {excursion.horarios?.length > 0 ? (
