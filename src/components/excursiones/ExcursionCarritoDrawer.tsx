@@ -6,8 +6,9 @@ import { useTransition, useState } from 'react'
 import { formatMoney } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { X, Trash2, CalendarDays, Clock, Users, Loader2, ShoppingCart } from 'lucide-react'
+import { X, Trash2, CalendarDays, Clock, Users, Loader2, ShoppingCart, CreditCard, Banknote } from 'lucide-react'
 import { reservarCarritoAction } from '@/modules/excursiones/reservas/cliente-actions'
+import { PasarelaSimuladaModal } from './PasarelaSimuladaModal'
 import { toast } from 'sonner'
 import Image from 'next/image'
 
@@ -15,13 +16,10 @@ export function ExcursionCarritoDrawer() {
   const { items, isOpen, closeCart, openCart, removeItem, subtotal, clearCart } = useExcursionCart()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
+  const [isModalPagoOpen, setIsModalPagoOpen] = useState(false)
   
-  if (items.length === 0 && isOpen) {
-    // Si se queda vacío estando abierto, mejor cerrarlo (opcional, pero limpio)
-    // closeCart()
-  }
-
-  const handleCheckout = () => {
+  const doCheckout = (metodo: 'DESTINO' | 'ONLINE_SIMULADO') => {
     startTransition(async () => {
       const payload = items.map(item => ({
         excursionId: item.excursionId,
@@ -34,11 +32,10 @@ export function ExcursionCarritoDrawer() {
       }))
 
       // Llama a la acción que reserva en lote
-      const res = await reservarCarritoAction({ items: payload })
+      const res = await reservarCarritoAction(payload, metodo)
       
       if (res.error) {
-        if (res.error === 'unauthenticated') {
-          // Guardar intent y redirigir
+        if (res.error.includes('iniciar sesión') || res.error === 'unauthenticated') {
           toast.error('Debes iniciar sesión para confirmar las reservas.')
           const currentUrl = window.location.pathname + window.location.search
           router.push(`/login?next=${encodeURIComponent(currentUrl)}`)
@@ -59,6 +56,14 @@ export function ExcursionCarritoDrawer() {
         }
       }
     })
+  }
+
+  const handleCheckout = () => {
+    if (metodoPago === 'ONLINE_SIMULADO') {
+      setIsModalPagoOpen(true)
+    } else {
+      doCheckout('DESTINO')
+    }
   }
 
   return (
@@ -128,9 +133,50 @@ export function ExcursionCarritoDrawer() {
         </div>
 
         {items.length > 0 && (
-          <div className="border-t bg-card p-6 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
-            <div className="flex justify-between items-center mb-4">
-              <span className="font-medium text-muted-foreground">Total (impuestos incl.)</span>
+          <div className="border-t bg-card p-6 shadow-[0_-10px_20px_rgba(0,0,0,0.02)] space-y-4">
+            {/* Selector de Modalidad de Pago */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-foreground">Modalidad de pago</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMetodoPago('DESTINO')}
+                  className={`flex flex-col items-start gap-0.5 p-2.5 rounded-xl border text-left transition ${
+                    metodoPago === 'DESTINO'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border bg-muted/20 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                    <Banknote className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>En destino</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Pagas el día del tour</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMetodoPago('ONLINE_SIMULADO')}
+                  className={`flex flex-col items-start gap-0.5 p-2.5 rounded-xl border text-left transition ${
+                    metodoPago === 'ONLINE_SIMULADO'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border bg-muted/20 hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground">
+                    <CreditCard className="h-3.5 w-3.5 text-primary" />
+                    <span>En línea</span>
+                    <span className="text-[8px] bg-amber-500/15 text-amber-600 px-1 py-0.2 rounded font-bold">
+                      Prueba
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Tarjeta • QR al instante</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-1 border-t">
+              <span className="font-medium text-sm text-muted-foreground">Total a pagar</span>
               <span className="text-xl font-bold text-foreground">
                 {formatMoney(subtotal, { moneda: items[0]?.moneda || 'DOP' })}
               </span>
@@ -146,17 +192,42 @@ export function ExcursionCarritoDrawer() {
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Procesando...
                 </>
+              ) : metodoPago === 'ONLINE_SIMULADO' ? (
+                <span className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Pagar y Confirmar Todo
+                </span>
               ) : (
-                'Confirmar Reservas'
+                'Confirmar Reservas (Pagar en destino)'
               )}
             </Button>
-            <p className="text-xs text-center text-muted-foreground mt-3">
-              Recibirás confirmación inmediata de todas tus reservas.
+            <p className="text-[11px] text-center text-muted-foreground">
+              {metodoPago === 'ONLINE_SIMULADO'
+                ? 'Emisión inmediata de tus códigos QR de abordaje.'
+                : 'Pagarás cada excursión en su punto de encuentro el día asignado.'}
             </p>
           </div>
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Modal de Pago Online Simulado para el Carrito */}
+    <PasarelaSimuladaModal
+      isOpen={isModalPagoOpen}
+      onClose={() => setIsModalPagoOpen(false)}
+      onConfirmPayment={async () => {
+        setIsModalPagoOpen(false)
+        doCheckout('ONLINE_SIMULADO')
+      }}
+      montoTotal={subtotal}
+      moneda={items[0]?.moneda || 'DOP'}
+      tituloConcepto={`Carrito (${items.length} ${items.length === 1 ? 'excursión' : 'excursiones'})`}
+      detallesItems={items.map((item) => ({
+        nombre: item.nombreExcursion,
+        cantidad: item.adultos + item.ninos,
+        subtotal: item.adultos * item.precioAdulto + item.ninos * item.precioNino,
+      }))}
+    />
     
     {/* Floating Cart Button */}
     {items.length > 0 && !isOpen && (

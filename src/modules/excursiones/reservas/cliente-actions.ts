@@ -23,6 +23,7 @@ import {
 } from './nucleo'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { resolverEnlace, vendedorParaCliente, VENDEDOR_COOKIE } from '../atribucion/registrar'
+import { procesarVentaYComisionInterna } from '../ventas/actions'
 
 export interface ReservaClienteState {
   error?: string
@@ -154,6 +155,9 @@ export async function reservarExcursion(
     })
 
     const anio = v.datos.fecha.getUTCFullYear()
+    const metodoPago = String(formData.get('metodoPago') ?? 'DESTINO')
+    const esPagoOnline = metodoPago === 'ONLINE_SIMULADO'
+    const checkinToken = `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
 
     const creada = await conEmpresa(companyId, async (tx) => {
       const desde = new Date(Date.UTC(anio, 0, 1))
@@ -182,9 +186,10 @@ export async function reservarExcursion(
               impuestos: totales.impuestos,
               total: totales.total,
               moneda: excursion.moneda,
-              estado: 'PENDIENTE',
+              estado: esPagoOnline ? 'PAGADA' : 'PENDIENTE',
               canal: 'ONLINE',
               notas: v.datos.notas,
+              checkinToken: esPagoOnline ? checkinToken : null,
               pasajeros: {
                 createMany: {
                   data: [
@@ -217,6 +222,26 @@ export async function reservarExcursion(
       throw new Error('No se pudo generar el número de reserva tras varios intentos.')
     })
 
+    // Si pagó en línea simulado, registrar el cobro y procesar la venta/comisión
+    if (esPagoOnline) {
+      await conEmpresa(companyId, (tx) =>
+        tx.reservaPago.create({
+          data: {
+            companyId,
+            reservaId: creada.id,
+            monto: totales.total,
+            moneda: excursion.moneda,
+            metodo: 'TARJETA_SIMULADA',
+            referencia: `SIM-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+            estado: 'REGISTRADO',
+          },
+        })
+      )
+      await procesarVentaYComisionInterna(companyId, creada.id, user.metadata.dbUserId ?? null).catch(
+        anotarFallo('excursiones:reservarExcursion:procesarVenta')
+      )
+    }
+
     // Atribución de vendedor: etapa RESERVA (hecho inmutable para comisión)
     if (vendedorId && creada.vendedorId) {
       await conEmpresa(companyId, (tx) =>
@@ -225,7 +250,7 @@ export async function reservarExcursion(
             companyId,
             vendedorId: vendedorId,
             clienteId: cliente.id,
-            etapa: 'RESERVA',
+            etapa: esPagoOnline ? 'COMPRA' : 'RESERVA',
           },
         })
       ).catch(anotarFallo('excursiones:reservarExcursion:atribucion'))
@@ -248,7 +273,9 @@ export async function reservarExcursion(
     }
 
     return {
-      success: 'Reserva creada. Puedes gestionar tu pago desde tu cuenta.',
+      success: esPagoOnline
+        ? '¡Pago procesado con éxito! Tu reserva está confirmada con acceso y boleto listos.'
+        : 'Reserva agendada exitosamente. Recuerda realizar tu pago el día de la excursión.',
       reservaId: creada.id,
       numero: creada.numero,
     }
@@ -258,45 +285,36 @@ export async function reservarExcursion(
   }
 }
 
-export interface ReservarCarritoState {
-  error?: string
-  success?: string
-  redirectUrl?: string
+export interface CartItemPayload {
+  excursionId: string
+  varianteId: string
+  fecha: string
+  horaSalida: string
+  adultos: number
+  ninos: number
+  notas?: string
 }
 
-export async function reservarCarritoAction({
-  items,
-}: {
-  items: {
-    excursionId: string
-    varianteId: string
-    fecha: string
-    horaSalida: string
-    adultos: number
-    ninos: number
-    notas: string
-  }[]
-}): Promise<ReservarCarritoState> {
-  if (!items.length) return { error: 'El carrito está vacío.' }
-
+/** CLIENTE · Reservar todos los ítems del carrito en una sola operación */
+export async function reservarCarritoAction(
+  items: CartItemPayload[],
+  metodoPago?: 'DESTINO' | 'ONLINE_SIMULADO'
+) {
   try {
     const user = await getUser()
-    if (!user) return { error: 'unauthenticated' }
+    if (!user) return { error: 'Debes iniciar sesión para reservar.' }
+    if (!items || items.length === 0) return { error: 'El carrito está vacío.' }
 
-    // Obtenemos todos los companyIds involucrados (el carrito asume que puede tener 1 o más)
-    // Para simplificar asumiremos que todas pertenecen a la misma empresa leyendo la 1ra
-    // En un carrito normal se pueden comprar de múltiples, pero el catálogo es por empresa
-    // Tomamos la primera para recuperar el cliente
-    const primeraExc = await prisma.excursion.findUnique({
+    const primerItem = await prisma.excursion.findUnique({
       where: { id: items[0].excursionId },
-      select: { companyId: true },
+      select: { companyId: true }
     })
-    if (!primeraExc) return { error: 'Excursión no encontrada.' }
-    const companyId = primeraExc.companyId
-
+    if (!primerItem) return { error: 'Excursión no válida.' }
+    
+    const companyId = primerItem.companyId
     const cliente = await prisma.cliente.findFirst({
       where: { supabaseId: user.supabaseId, companyId },
-      select: { id: true },
+      select: { id: true }
     })
     if (!cliente) return { error: 'No se encontró tu perfil de cliente.' }
 
@@ -319,7 +337,7 @@ export async function reservarCarritoAction({
       vendedorId = await vendedorParaCliente(companyId, cliente.id)
     }
 
-    // Transacción atómica
+    const esPagoOnline = metodoPago === 'ONLINE_SIMULADO'
     const nuevasReservas = []
     
     for (const item of items) {
@@ -344,6 +362,7 @@ export async function reservarCarritoAction({
       const anio = isNaN(fechaObj.getTime()) ? new Date().getUTCFullYear() : fechaObj.getUTCFullYear()
       const fechaValida = isNaN(fechaObj.getTime()) ? new Date() : fechaObj
       const prefijo = exc.nombre.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, 'E') || 'EXC'
+      const checkinToken = `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
 
       const reserva = await conEmpresa(exc.companyId, async (tx) => {
         const desde = new Date(Date.UTC(anio, 0, 1))
@@ -372,9 +391,10 @@ export async function reservarCarritoAction({
                 descuento: totales.descuento,
                 impuestos: totales.impuestos,
                 total: totales.total,
-                estado: 'PENDIENTE',
+                estado: esPagoOnline ? 'PAGADA' : 'PENDIENTE',
                 canal: 'ONLINE',
                 notas: item.notas || null,
+                checkinToken: esPagoOnline ? checkinToken : null,
                 pasajeros: {
                   createMany: {
                     data: [
@@ -401,6 +421,25 @@ export async function reservarCarritoAction({
         throw new Error('No se pudo generar el número de reserva tras varios intentos.')
       })
 
+      if (reserva && esPagoOnline) {
+        await conEmpresa(exc.companyId, (tx) =>
+          tx.reservaPago.create({
+            data: {
+              companyId: exc.companyId,
+              reservaId: reserva.id,
+              monto: totales.total,
+              moneda: exc.moneda,
+              metodo: 'TARJETA_SIMULADA',
+              referencia: `SIM-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+              estado: 'REGISTRADO',
+            },
+          })
+        )
+        await procesarVentaYComisionInterna(exc.companyId, reserva.id, user.metadata.dbUserId ?? null).catch(
+          anotarFallo('excursiones:reservarCarrito:procesarVenta')
+        )
+      }
+
       if (reserva && vendedorId) {
         await conEmpresa(exc.companyId, (tx) =>
           tx.vendedorAtribucion.create({
@@ -408,7 +447,7 @@ export async function reservarCarritoAction({
               companyId: exc.companyId,
               vendedorId: vendedorId!,
               clienteId: cliente.id,
-              etapa: 'RESERVA',
+              etapa: esPagoOnline ? 'COMPRA' : 'RESERVA',
             }
           })
         ).catch(() => {})
@@ -429,7 +468,9 @@ export async function reservarCarritoAction({
     }
 
     return { 
-      success: `Has reservado exitosamente ${nuevasReservas.length} ítems.`,
+      success: esPagoOnline
+        ? `¡Pago procesado con éxito! Has reservado y pagado ${nuevasReservas.length} ${nuevasReservas.length === 1 ? 'excursión' : 'excursiones'}.`
+        : `Has reservado exitosamente ${nuevasReservas.length} ${nuevasReservas.length === 1 ? 'excursión' : 'excursiones'}. Recuerda pagar el día del tour.`,
       redirectUrl: '/cliente/mis-excursiones'
     }
   } catch (e) {

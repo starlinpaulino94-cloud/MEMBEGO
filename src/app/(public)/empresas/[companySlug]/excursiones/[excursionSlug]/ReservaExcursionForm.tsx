@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X, ShoppingCart } from 'lucide-react'
+import { CalendarDays, Users, Minus, Plus, Loader2, AlertCircle, X, ShoppingCart, CreditCard, Banknote, ShieldCheck, Sparkles } from 'lucide-react'
 import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-actions'
 import { toggleSeguirEmpresa } from '@/modules/social/actions'
 import { formatMoney } from '@/lib/format'
 import { useExcursionCart } from '@/components/excursiones/ExcursionCarritoContext'
+import { PasarelaSimuladaModal } from '@/components/excursiones/PasarelaSimuladaModal'
 import type { ReservaClienteState } from '@/modules/excursiones/reservas/cliente-actions'
 import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
@@ -62,9 +63,10 @@ export function ReservaExcursionForm({
   const [state, action, pending] = useActionState(reservarExcursion, initial)
   const cart = useExcursionCart()
   const followedRef = useRef(initialFollowing)
-  const [, setIsFollowing] = useState(initialFollowing)
-
+  const formRef = useRef<HTMLFormElement>(null)
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
+  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
+  const [isModalPagoOpen, setIsModalPagoOpen] = useState(false)
   // Lo que el usuario ELIGIÓ; la fecha efectiva se deriva más abajo.
   const [fechaElegida, setFechaElegida] = useState('')
   // Lo que el usuario ELIGIÓ. La hora efectiva (`hora`) se deriva de esto más
@@ -232,9 +234,10 @@ export function ReservaExcursionForm({
         </p>
       )}
 
-      <form action={action} onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} action={action} onSubmit={handleSubmit} className="space-y-4">
         <input type="hidden" name="companyId" value={companyId} />
         <input type="hidden" name="excursionId" value={excursionId} />
+        <input type="hidden" name="metodoPago" value={metodoPago} />
 
         {/* Variante */}
         {variantes.length > 1 && (
@@ -395,6 +398,51 @@ export function ReservaExcursionForm({
           </div>
         </div>
 
+        {/* Selector de Modalidad de Pago */}
+        <div className="space-y-2 pt-1">
+          <label className="block text-sm font-medium">¿Cómo deseas pagar?</label>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setMetodoPago('DESTINO')}
+              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition ${
+                metodoPago === 'DESTINO'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border bg-card hover:bg-muted/50'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
+                <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Pagar el día del tour</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground leading-tight">
+                Pagas en el punto de encuentro al momento de abordar.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMetodoPago('ONLINE_SIMULADO')}
+              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition relative ${
+                metodoPago === 'ONLINE_SIMULADO'
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border bg-card hover:bg-muted/50'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                <CreditCard className="h-4 w-4 text-primary" />
+                <span>Pagar ahora en línea</span>
+                <span className="text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 rounded-full font-bold">
+                  Prueba
+                </span>
+              </div>
+              <span className="text-[11px] text-muted-foreground leading-tight">
+                Tarjeta crédito/débito • Acceso y boleto de inmediato.
+              </span>
+            </button>
+          </div>
+        </div>
+
         {/* Notas */}
         <div>
           <label className="mb-1.5 block text-sm font-medium">Notas (opcional)</label>
@@ -455,7 +503,13 @@ export function ReservaExcursionForm({
           </button>
 
           <button
-            type="submit"
+            type={metodoPago === 'ONLINE_SIMULADO' ? 'button' : 'submit'}
+            onClick={() => {
+              if (metodoPago === 'ONLINE_SIMULADO') {
+                if (!fecha || !hora) return
+                setIsModalPagoOpen(true)
+              }
+            }}
             disabled={pending || followingPending || !fecha || !hora || horariosDisponibles.every((h) => h.agotada)}
             className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -469,16 +523,43 @@ export function ReservaExcursionForm({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Reservando...
               </span>
-          ) : (
-            'Reservar ahora'
-          )}
+            ) : metodoPago === 'ONLINE_SIMULADO' ? (
+              <span className="flex items-center justify-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Pagar y Reservar ahora
+              </span>
+            ) : (
+              'Reservar (Pagar en destino)'
+            )}
           </button>
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          Tu reserva quedará pendiente de pago. Puedes gestionarlo desde tu cuenta.
+          {metodoPago === 'ONLINE_SIMULADO'
+            ? 'Transacción simulada en entorno de pruebas. Emisión inmediata de QR.'
+            : 'Tu reserva quedará agendada para pago en persona el día del tour.'}
         </p>
       </form>
+
+      {/* Modal de Pago Online Simulado */}
+      <PasarelaSimuladaModal
+        isOpen={isModalPagoOpen}
+        onClose={() => setIsModalPagoOpen(false)}
+        onConfirmPayment={async () => {
+          setIsModalPagoOpen(false)
+          formRef.current?.requestSubmit()
+        }}
+        montoTotal={subtotal}
+        moneda={moneda}
+        tituloConcepto={nombreExcursion}
+        detallesItems={[
+          {
+            nombre: `${adultos} Adulto(s)${ninos > 0 ? ` + ${ninos} Niño(s)` : ''} (${varianteActual.nombre})`,
+            cantidad: 1,
+            subtotal,
+          },
+        ]}
+      />
     </div>
   )
 }
