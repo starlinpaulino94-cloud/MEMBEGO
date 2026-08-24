@@ -179,6 +179,11 @@ export interface ReservaDatos {
   descuento: number
   notas: string | null
   canal: string | null
+  voucherAgencia: string | null
+  hotelRecogida: string | null
+  lobbyRecogida: string | null
+  horaRecogida: string | null
+  habitacion: string | null
 }
 
 /**
@@ -200,6 +205,7 @@ export function validarReserva(
   }
 
   const horaS = texto(form.hora, 5)
+  const horaRecogidaS = texto(form.horaRecogida, 5)
   const descuento = Number(texto(form.descuento, 12) || '0')
 
   return {
@@ -212,6 +218,11 @@ export function validarReserva(
       descuento: Number.isFinite(descuento) && descuento > 0 ? centavos(descuento) : 0,
       notas: texto(form.notas, 1000) || null,
       canal: texto(form.canal, 40) || null,
+      voucherAgencia: texto(form.voucherAgencia, 60).toUpperCase() || null,
+      hotelRecogida: texto(form.hotelRecogida, 120) || null,
+      lobbyRecogida: texto(form.lobbyRecogida, 80) || null,
+      horaRecogida: HORA_RE.test(horaRecogidaS) ? horaRecogidaS : null,
+      habitacion: texto(form.habitacion, 30) || null,
     },
   }
 }

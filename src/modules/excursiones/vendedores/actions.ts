@@ -37,7 +37,24 @@ export interface VendedorActionState {
   acceso?: { correo: string; passwordTemporal: string }
 }
 
-const CAMPOS = ['nombre', 'apellido', 'telefono', 'whatsapp', 'email', 'documento', 'direccion', 'tipo', 'supervisorId']
+const CAMPOS = [
+  'nombre',
+  'apellido',
+  'telefono',
+  'whatsapp',
+  'email',
+  'documento',
+  'direccion',
+  'tipo',
+  'supervisorId',
+  'razonSocial',
+  'rnc',
+  'diasCredito',
+  'limiteCredito',
+  'emailFacturacion',
+  'prefijoVoucher',
+  'modeloComercial',
+]
 
 async function auditar(companyId: string, userId: string | null, entidadId: string, payload: Record<string, unknown>) {
   const meta = await getRequestMeta()

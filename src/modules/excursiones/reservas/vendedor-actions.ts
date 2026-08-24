@@ -46,7 +46,12 @@ export async function crearReservaVendedor(
       ninos: String(formData.get('ninos') ?? '0'),
       descuento: '0',
       notas: String(formData.get('notas') ?? ''),
-      canal: 'PRESENCIAL', // o 'VENDEDOR' si se prefiere
+      canal: 'VENDEDOR',
+      voucherAgencia: String(formData.get('voucherAgencia') ?? ''),
+      hotelRecogida: String(formData.get('hotelRecogida') ?? ''),
+      lobbyRecogida: String(formData.get('lobbyRecogida') ?? ''),
+      horaRecogida: String(formData.get('horaRecogida') ?? ''),
+      habitacion: String(formData.get('habitacion') ?? ''),
     })
     if (!v.ok) return { error: v.error }
 
@@ -210,12 +215,19 @@ export async function crearReservaVendedor(
               estado: 'PENDIENTE',
               canal: 'VENDEDOR',
               notas: v.datos.notas,
+              voucherAgencia: v.datos.voucherAgencia,
+              hotelRecogida: v.datos.hotelRecogida,
+              lobbyRecogida: v.datos.lobbyRecogida,
+              horaRecogida: v.datos.horaRecogida,
+              habitacion: v.datos.habitacion,
               creadaPorId: user.metadata.dbUserId ?? null,
               pasajeros: {
-                create: [
-                  ...Array.from({ length: v.datos.adultos }, () => ({ companyId, tipo: 'ADULTO' })),
-                  ...Array.from({ length: v.datos.ninos }, () => ({ companyId, tipo: 'NINO' })),
-                ],
+                createMany: {
+                  data: [
+                    ...Array.from({ length: v.datos.adultos }, () => ({ companyId, tipo: 'ADULTO' })),
+                    ...Array.from({ length: v.datos.ninos }, () => ({ companyId, tipo: 'NINO' })),
+                  ],
+                },
               },
             },
             select: { id: true, numero: true },

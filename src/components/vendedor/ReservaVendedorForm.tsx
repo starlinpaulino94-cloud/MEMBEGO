@@ -219,7 +219,68 @@ export function ReservaVendedorForm({
         </div>
       </div>
 
-      {/* SECCIÓN 4: EXTRAS */}
+      {/* SECCIÓN 4: LOGÍSTICA DE RECOGIDA Y VOUCHER DE AGENCIA */}
+      <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+          <span>Logística de Recogida & Voucher de Agencia</span>
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Indica el número de bono/voucher de tu agencia o turoperador y los datos del hotel para el manifiesto de transporte.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="voucherAgencia">Voucher / Localizador de Agencia</Label>
+            <Input
+              id="voucherAgencia"
+              name="voucherAgencia"
+              placeholder="Ej: NX-99824, TUI-0041"
+              className="bg-background uppercase"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hotelRecogida">Hotel / Resort de Hospedaje</Label>
+            <Input
+              id="hotelRecogida"
+              name="hotelRecogida"
+              placeholder="Ej: Hard Rock Hotel, Riu Palace..."
+              className="bg-background"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="lobbyRecogida">Lobby / Punto de Encuentro</Label>
+            <Input
+              id="lobbyRecogida"
+              name="lobbyRecogida"
+              placeholder="Ej: Lobby Principal, Lobby Boulevard"
+              className="bg-background"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="horaRecogida">Hora de Recogida (Pickup)</Label>
+            <Input
+              id="horaRecogida"
+              name="horaRecogida"
+              type="time"
+              className="bg-background"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="habitacion">Habitación (Opcional)</Label>
+            <Input
+              id="habitacion"
+              name="habitacion"
+              placeholder="Ej: 3204"
+              className="bg-background"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* SECCIÓN 5: EXTRAS */}
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="notas">Notas / Solicitudes especiales (opcional)</Label>

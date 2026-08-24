@@ -26,15 +26,16 @@ export const TONO_VENDEDOR: Record<EstadoVendedor, 'success' | 'warning' | 'neut
 
 /** Tipos sembrados; cada empresa puede añadir los suyos (§8). */
 export const TIPOS_VENDEDOR_SEMILLA = [
-  'Empleado',
-  'Vendedor externo',
-  'Promotor',
-  'Freelancer',
+  'Touroperador',
   'Agencia',
+  'Rep Hotel',
+  'Promotor',
   'Hotel',
+  'Empleado',
   'Taxi',
+  'Freelancer',
   'Referidor',
-  'Representante',
+  'Vendedor externo',
 ] as const
 
 // ── Código comercial ─────────────────────────────────────────────────────────
@@ -63,6 +64,17 @@ function texto(v: unknown, max: number): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : ''
 }
 
+function entero(v: unknown, min = 0, max = 365, porDefecto = 0): number {
+  const n = parseInt(String(v ?? ''), 10)
+  return isNaN(n) ? porDefecto : Math.max(min, Math.min(max, n))
+}
+
+function decimalOpcional(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = parseFloat(String(v))
+  return isNaN(n) ? null : Math.max(0, Math.round(n * 100) / 100)
+}
+
 export interface VendedorDatos {
   nombre: string
   apellido: string | null
@@ -73,6 +85,13 @@ export interface VendedorDatos {
   direccion: string | null
   tipo: string | null
   supervisorId: string | null
+  razonSocial: string | null
+  rnc: string | null
+  diasCredito: number
+  limiteCredito: number | null
+  emailFacturacion: string | null
+  prefijoVoucher: string | null
+  modeloComercial: string
 }
 
 export function validarVendedor(
@@ -84,8 +103,17 @@ export function validarVendedor(
   if (email && !/^\S+@\S+\.\S+$/.test(email)) {
     return { ok: false, error: 'El correo del vendedor no es válido.' }
   }
+  const emailFacturacion = texto(form.emailFacturacion, 160).toLowerCase()
+  if (emailFacturacion && !/^\S+@\S+\.\S+$/.test(emailFacturacion)) {
+    return { ok: false, error: 'El correo de facturación no es válido.' }
+  }
   const telefono = texto(form.telefono, 40)
   if (!telefono) return { ok: false, error: 'El teléfono es obligatorio: es como se le contacta y se detectan duplicados.' }
+  
+  const diasCredito = entero(form.diasCredito, 0, 180, 0)
+  const limiteCredito = decimalOpcional(form.limiteCredito)
+  const modeloComercial = String(form.modeloComercial ?? 'COMISION').toUpperCase() === 'TARIFA_NETA' ? 'TARIFA_NETA' : 'COMISION'
+
   return {
     ok: true,
     datos: {
@@ -98,6 +126,13 @@ export function validarVendedor(
       direccion: texto(form.direccion, 300) || null,
       tipo: texto(form.tipo, 60) || null,
       supervisorId: texto(form.supervisorId, 40) || null,
+      razonSocial: texto(form.razonSocial, 150) || null,
+      rnc: texto(form.rnc, 40) || null,
+      diasCredito,
+      limiteCredito,
+      emailFacturacion: emailFacturacion || null,
+      prefijoVoucher: texto(form.prefijoVoucher, 20).toUpperCase() || null,
+      modeloComercial,
     },
   }
 }
