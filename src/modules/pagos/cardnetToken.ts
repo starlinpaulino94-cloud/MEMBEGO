@@ -101,10 +101,10 @@ export async function cobrarObjetivoConToken(input: {
     await confirmarIntento(intento.id, {
       aprobada: false,
       autorizacion: null,
-      motivo: 'No se pudo contactar la pasarela.',
+      motivo: 'No se pudo completar el pago. Intenta de nuevo.',
       crudo: null,
     })
-    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+    return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
   const res = await confirmarIntento(intento.id, {
@@ -414,7 +414,7 @@ export async function activarTarjetaPendiente(input: {
     })
   } catch (e) {
     logErrorBd('pagos:cardnet-token:activar', e, { clienteId: input.objetivo.clienteId })
-    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+    return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
   if (!activacion.ok) {
@@ -465,13 +465,13 @@ export async function activarTarjetaPendiente(input: {
     if (activacion.errores.length > 0) {
       return {
         estado: 'codigo_rechazado',
-        motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+        motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
       }
     }
     if (!mismo.habilitado) {
       return {
         estado: 'codigo_rechazado',
-        motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+        motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
       }
     }
     // Solo aquí: el proveedor no señaló ningún error Y el perfil aparece
@@ -522,7 +522,7 @@ export async function activarTarjetaPendiente(input: {
   if (cobro.estado === 'pendiente_activacion') {
     return {
       estado: 'codigo_rechazado',
-      motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+      motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
     }
   }
 

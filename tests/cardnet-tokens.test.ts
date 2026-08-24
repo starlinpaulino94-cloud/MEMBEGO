@@ -296,8 +296,14 @@ test('«El token no está activo» se traduce a instrucciones, no se repite tal 
   })
   assert.equal(r.aprobada, false)
   assert.match(r.motivo ?? '', /RD\$1\.00/)
-  assert.match(r.motivo ?? '', /6 dígitos/)
+  // Se comprueba la INTENCIÓN (decirle que busque un código de 6), no la
+  // redacción exacta. Esta línea fijaba «6 dígitos», que además era falso: el
+  // código es alfanumérico —«Z2R78V» lleva letras— así que la prueba estaba
+  // clavando una imprecisión y se rompía al corregirla.
+  assert.match(r.motivo ?? '', /6 (dígitos|caracteres)/)
   assert.doesNotMatch(r.motivo ?? '', /^El token no está activo$/)
+  // Y no puede nombrar al procesador: para el cliente, todo lo hace MembeGo.
+  assert.doesNotMatch(r.motivo ?? '', /cardnet/i)
 })
 
 test('los demás errores del proveedor se muestran tal cual', () => {

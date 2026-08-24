@@ -51,8 +51,39 @@ export default function PrivacyPage() {
             </p>
           </div>
 
+          {/* DÓNDE VIVE EL NOMBRE DEL PROCESADOR.
+              En la pantalla de pago el cliente ve MembeGo y nada más: meterle
+              el nombre de un tercero en mitad de una compra no le aporta y le
+              distrae. Pero quién custodia los datos de su tarjeta es
+              exactamente el tipo de cosa que tiene derecho a saber, así que
+              está escrito aquí, completo y sin adornos. */}
           <div>
-            <h2 className="text-h2 text-foreground">5. Tus derechos</h2>
+            <h2 className="text-h2 text-foreground">5. Pagos con tarjeta</h2>
+            <p>
+              <strong className="font-semibold">MembeGo nunca ve, recibe ni almacena
+              el número de tu tarjeta, su fecha de vencimiento ni el código CVV.</strong>{' '}
+              Cuando pagas con tarjeta, esos datos se escriben directamente en una
+              ventana segura operada por{' '}
+              <strong className="font-semibold">CardNET</strong>, el procesador de pagos
+              autorizado que da servicio a la banca dominicana, y viajan cifrados a
+              sus servidores sin pasar por los nuestros.
+            </p>
+            <p className="mt-3">
+              Lo único que guardamos es una referencia cifrada —un «token»— que
+              permite cobrar el monto acordado sin conocer la tarjeta, junto con la
+              marca y los últimos cuatro dígitos para que puedas reconocerla. Con
+              esa referencia no se puede usar tu tarjeta fuera de MembeGo, y puedes
+              eliminarla cuando quieras desde tu perfil.
+            </p>
+            <p className="mt-3">
+              Al registrar una tarjeta, tu banco puede aplicar un cargo de
+              verificación de RD$1.00 para confirmar que es tuya. Es un paso de
+              seguridad del emisor, no un cobro de MembeGo.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-h2 text-foreground">6. Tus derechos</h2>
             <p>
               Puedes solicitar el acceso, rectificación o eliminación de tus datos
               personales escribiéndonos a{' '}

@@ -283,14 +283,14 @@ export function PagoTokenCardnet({
     const onLoad = () => {
       if (!enganchar() && !cancelado) {
         setEstado('error')
-        setMensaje('No se pudo cargar la pasarela de pago.')
+        setMensaje('No se pudo abrir el pago seguro. Recarga la página e intenta de nuevo.')
       }
     }
     script.addEventListener('load', onLoad)
     const onError = () => {
       if (!cancelado) {
         setEstado('error')
-        setMensaje('No se pudo cargar la pasarela de pago. Revisa tu conexión.')
+        setMensaje('No se pudo abrir el pago seguro. Revisa tu conexión e intenta de nuevo.')
       }
     }
     script.addEventListener('error', onError)
@@ -675,7 +675,7 @@ export function PagoTokenCardnet({
     const sdk = window.PWCheckout
     if (!sdk) {
       setEstado('error')
-      setMensaje('La pasarela no está lista. Recarga la página.')
+      setMensaje('El pago seguro todavía no está listo. Recarga la página e intenta de nuevo.')
       return
     }
     setEstado('capturando')
@@ -728,7 +728,7 @@ export function PagoTokenCardnet({
     if (abrir) abrir(url, sesion.uniqueId)
     else {
       setEstado('error')
-      setMensaje('La pasarela no expone el método de apertura esperado.')
+      setMensaje('No se pudo abrir la ventana de pago. Recarga la página e intenta de nuevo.')
     }
   }, [pedirSesion, companyName, logoUrl, montoTexto])
 
@@ -921,37 +921,65 @@ export function PagoTokenCardnet({
           prefijo, un espacio de más— es caro. Enseñarle exactamente qué
           buscar y exactamente qué se va a mandar convierte una apuesta en una
           comprobación. */}
+      {/* VERIFICACIÓN DE LA TARJETA.
+
+          Esta pantalla es la CONTINUACIÓN de la ventana donde el cliente acaba
+          de escribir su tarjeta, así que habla su mismo idioma visual: el logo
+          de la empresa arriba, el título en mayúsculas, el campo tipo píldora y
+          un botón de ancho completo. Si pareciera otra cosa, el cliente —que
+          está a mitad de una compra y acaba de ver un cargo en su banco— tiene
+          motivos para dudar de dónde está.
+
+          NO SE NOMBRA AL PROCESADOR. Para el cliente, todo lo hace MembeGo.
+          Quién custodia los datos de su tarjeta está escrito en la política de
+          privacidad, enlazada abajo: es información que merece encontrar
+          cuando la busque, no un nombre de tercero cruzándose en mitad de un
+          pago.
+
+          La única excepción es el ejemplo del cargo, y no es una excepción de
+          verdad: ese texto es lo que su BANCO le muestra, literal. Quitarlo
+          para no nombrar a nadie dejaría al cliente buscando a ciegas un
+          código que no sabría reconocer. */}
       {estado === 'activacion' && (
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-          <div className="flex items-start gap-3 border-b border-border bg-warning/5 px-5 py-4">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning/15">
-              <ShieldCheck className="h-5 w-5 text-warning" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-base font-semibold leading-tight text-foreground">
-                Verifica tu tarjeta
-              </p>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Último paso para completar el pago
-              </p>
-            </div>
+          <div className="flex flex-col items-center px-6 pb-2 pt-7 text-center">
+            {logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt={companyName ?? 'Logo'}
+                className="h-20 w-20 rounded-full object-cover"
+              />
+            ) : (
+              <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+                <ShieldCheck className="h-9 w-9 text-primary" aria-hidden />
+              </span>
+            )}
+            <h3 className="mt-4 text-lg font-bold uppercase tracking-wide text-primary">
+              Verifica tu tarjeta
+            </h3>
+            <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+              Último paso para completar tu pago
+            </p>
           </div>
 
-          <div className="space-y-4 px-5 py-5">
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Tu banco hizo un cargo de <strong className="font-semibold text-foreground">RD$1.00</strong>{' '}
-              para confirmar que la tarjeta es tuya. En la descripción de ese cargo viene un
-              código de <strong className="font-semibold text-foreground">6 caracteres</strong>.
+          <div className="space-y-5 px-6 pb-6 pt-4">
+            <p className="text-center text-sm leading-relaxed text-muted-foreground">
+              Tu banco hizo un cargo de{' '}
+              <strong className="font-semibold text-foreground">RD$1.00</strong> para
+              confirmar que la tarjeta es tuya. En la descripción de ese cargo
+              viene un código de{' '}
+              <strong className="font-semibold text-foreground">6 caracteres</strong>.
             </p>
 
-            {/* Cómo se ve el cargo en el estado de cuenta. Es un EJEMPLO
-                ilustrativo, rotulado como tal: quien nunca lo ha visto no sabe
-                qué está buscando, y «búscalo en tu banco» no se lo dice. */}
+            {/* Cómo se ve el cargo en el estado de cuenta. Es un EJEMPLO,
+                rotulado como tal: quien nunca lo ha visto no sabe qué está
+                buscando, y «búscalo en tu banco» no se lo dice. */}
             <div className="rounded-2xl border border-border bg-muted/40 p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Ejemplo · así aparece en tu app del banco
+              <p className="text-center text-xs uppercase tracking-wide text-muted-foreground">
+                Así aparece en tu app del banco
               </p>
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-background px-3 py-2.5">
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-full bg-background px-4 py-2.5">
                 <span className="truncate font-mono text-sm text-foreground">
                   CARDNET:<span className="rounded bg-warning/20 px-1 py-0.5 font-semibold text-foreground">Z2R78V</span>
                 </span>
@@ -960,8 +988,11 @@ export function PagoTokenCardnet({
             </div>
 
             <div>
-              <label htmlFor="codigo-activacion" className="mb-1.5 block text-sm font-medium text-foreground">
-                Tu código de verificación
+              <label
+                htmlFor="codigo-activacion"
+                className="mb-2 block text-xs font-bold uppercase tracking-wide text-foreground"
+              >
+                Código de verificación <span className="text-destructive">*</span>
               </label>
               <input
                 id="codigo-activacion"
@@ -982,13 +1013,13 @@ export function PagoTokenCardnet({
                 }}
                 placeholder="Z2R78V"
                 disabled={activando}
-                className="w-full rounded-2xl border-2 border-border bg-background px-4 py-3.5 text-center font-mono text-2xl font-semibold uppercase tracking-[0.35em] text-foreground transition-colors placeholder:text-lg placeholder:font-normal placeholder:tracking-[0.2em] placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none disabled:opacity-60"
+                className="w-full rounded-full border border-border bg-background px-5 py-3.5 text-center font-mono text-xl font-semibold uppercase tracking-[0.35em] text-foreground transition-colors placeholder:text-base placeholder:font-normal placeholder:tracking-[0.2em] placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none disabled:opacity-60"
               />
               {/* VISTA PREVIA de lo que realmente se va a enviar.
                   `normalizarCodigoActivacion` es la MISMA función pura que usa
                   el servidor, así que esto no es una aproximación: es el valor
-                  exacto. Puedes pegar «Cardnet:z2r78v» entero y ver que sale
-                  Z2R78V antes de gastar uno de los 3 intentos. */}
+                  exacto. Puedes pegar la línea entera del banco y ver qué sale
+                  antes de gastar uno de los 3 intentos. */}
               <p className="mt-2 min-h-[1.25rem] text-center text-xs" aria-live="polite">
                 {codigoActivacion.trim() === '' ? (
                   <span className="text-muted-foreground">
@@ -1021,11 +1052,11 @@ export function PagoTokenCardnet({
               variant="premium"
               onClick={() => void activarYCobrar()}
               disabled={activando || !codigoNormalizado}
-              className="w-full rounded-2xl py-6 text-base font-semibold"
+              className="w-full rounded-full py-6 text-base font-semibold uppercase tracking-wide"
             >
               {activando ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando y cobrando…
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando…
                 </>
               ) : (
                 <>
@@ -1038,9 +1069,17 @@ export function PagoTokenCardnet({
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               <span>
                 Tienes <strong className="font-semibold text-foreground">3 intentos</strong>. Al
-                tercero fallido el banco elimina la tarjeta y hay que registrarla de nuevo. El
+                tercero fallido tu banco elimina la tarjeta y hay que registrarla de nuevo. El
                 cargo de RD$1.00 es solo de verificación.
               </span>
+            </p>
+
+            {/* La respuesta a «¿y quién guarda mi tarjeta?», a un clic, para
+                quien se lo pregunte — sin ponérselo delante a quien no. */}
+            <p className="text-center text-xs text-muted-foreground">
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-foreground">
+                Cómo protegemos los datos de tu tarjeta
+              </a>
             </p>
           </div>
 
@@ -1048,14 +1087,14 @@ export function PagoTokenCardnet({
 
               «Lo haré después» es la que faltaba. El código vive en la
               descripción de un cargo, y ese cargo puede tardar en asentarse:
-              obligar a resolverlo en esta pantalla o perder la tarjeta es
-              pedirle al cliente que controle los tiempos de su banco. Sale sin
-              tocar nada — la tarjeta sigue registrada y esperando— y al volver
-              el aviso de arriba lo trae de vuelta aquí.
+              obligar a resolverlo aquí o perder la tarjeta es pedirle al
+              cliente que controle los tiempos de su banco. Sale sin tocar
+              nada —la tarjeta sigue registrada y esperando— y al volver el
+              aviso de arriba lo trae de vuelta.
 
               «Usar otra tarjeta» es lo contrario: la anterior no le sirve y
               va a registrar una nueva. */}
-          <div className="flex flex-col gap-2 border-t border-border px-5 py-3 sm:flex-row-reverse sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 border-t border-border px-6 py-3 sm:flex-row-reverse sm:items-center sm:justify-between">
             <button
               type="button"
               disabled={activando}
@@ -1064,7 +1103,6 @@ export function PagoTokenCardnet({
                 // se retira el atajo para volver a ella. El perfil sigue
                 // existiendo en la pasarela —no lo borramos— así que si
                 // recarga y sigue pendiente, la sonda lo encontrará otra vez.
-                // Eso es exacto: la tarjeta está pendiente de verdad.
                 setTarjetaPendiente(null)
                 setEstado('listo')
                 setMensaje(null)
