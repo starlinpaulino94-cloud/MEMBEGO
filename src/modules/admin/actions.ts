@@ -13,6 +13,7 @@ import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { INVITABLE_ROLES, type AppRole } from '@/types'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { validarCobroMembresia } from '@/modules/membresias/cobro'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -49,6 +50,13 @@ async function assertOwnership(
 export interface AdminActionState {
   error?: string
   success?: boolean
+  /**
+   * Id del asiento de auditoría que dejó la operación, cuando hay un
+   * comprobante que imprimir. Es lo que permite abrir el comprobante DESPUÉS
+   * de aplicar, leyendo lo que de verdad quedó guardado en el registro y no
+   * lo que el formulario creía.
+   */
+  registroId?: string
 }
 
 /**
@@ -618,6 +626,27 @@ export async function renovarMembresia(
   const membershipId = String(formData.get('membershipId') ?? '')
   const meta = await getRequestMeta()
 
+  /**
+   * EL COBRO SE DECLARA, NO SE DA POR HECHO.
+   *
+   * Renovar mueve dinero: pone `pagoConfirmado: true` y `montoPagado`, o sea
+   * que el importe entra en los ingresos del mes. Antes bastaba con pulsar un
+   * botón, así que un clic de más registraba un cobro que nadie había hecho.
+   *
+   * Ahora quien renueva declara explícitamente que YA recibió el pago y por
+   * qué vía. La referencia se exige en todo lo que no sea efectivo: una
+   * transferencia sin referencia no se puede conciliar contra el banco, y ese
+   * es justo el momento en que se descubre —semanas después— que faltaba.
+   */
+  const metodo = String(formData.get('metodo') ?? '').trim().toUpperCase()
+  const referencia = String(formData.get('referenciaPago') ?? '').trim()
+  const problema = validarCobroMembresia({
+    pagoRecibido: String(formData.get('pagoRecibido') ?? '') === 'on',
+    metodo,
+    referencia,
+  })
+  if (problema) return { error: problema }
+
   const membership = await assertOwnership(membershipId, user)
   if (!membership) return { error: 'Membresía no encontrada.' }
 
@@ -661,13 +690,16 @@ export async function renovarMembresia(
   const sigueVigente = membership.fechaVencimiento != null && membership.fechaVencimiento > now
   const arranque = sigueVigente ? membership.fechaVencimiento! : now
 
-  await conEmpresa(membership.cliente.companyId, async (tx) => {
+  const registroId = await conEmpresa(membership.cliente.companyId, async (tx) => {
     await tx.membership.update({
       where: { id: membership.id },
       data: {
         estado: 'ACTIVA',
         fechaInicio: arranque,
         fechaVencimiento: periodEnd(arranque, vigenciaDias),
+        // SOLO los del plan. `lavadosBonoRestantes` no se toca: un regalo que
+        // el cliente no alcanzó a usar sigue siendo suyo, y uno que ya usó no
+        // debe reaparecer porque empiece un período nuevo.
         lavadosRestantes: membership.plan.esIlimitado
           ? 0
           : membership.plan.lavadosIncluidos,
@@ -677,7 +709,8 @@ export async function renovarMembresia(
       },
     })
 
-    await tx.auditLog.create({
+    const asiento = await tx.auditLog.create({
+      select: { id: true },
       data: {
         companyId: membership.cliente.companyId,
         userId: user.metadata.dbUserId ?? null,
@@ -686,20 +719,34 @@ export async function renovarMembresia(
         entidadId: membership.id,
         payload: {
           monto,
+          // Cómo entró el dinero. Sin esto el registro dice que se cobró pero
+          // no contra qué conciliarlo.
+          metodo,
+          referencia: referencia || null,
           // Encadenada o desde hoy: es lo que explica la fecha resultante
           // cuando alguien la revise dentro de tres meses.
           desde: arranque.toISOString(),
+          hasta: periodEnd(arranque, vigenciaDias).toISOString(),
           encadenada: sigueVigente,
+          plan: membership.plan.nombre,
+          cliente: membership.cliente.nombre,
+          // Los dos contadores, para que el comprobante pueda decir la verdad:
+          // qué se repuso y qué se conservó.
+          lavadosPlan: membership.plan.esIlimitado ? null : membership.plan.lavadosIncluidos,
+          lavadosRegaloConservados: membership.lavadosBonoRestantes,
         },
         ...meta,
       },
     })
+    return asiento.id
   })
 
   revalidatePath(`/admin/clientes/${membership.clienteId}`)
   revalidatePath('/admin/clientes')
   revalidatePath('/superadmin/membresias')
-  return { success: true }
+  // El id del asiento viaja de vuelta para que la pantalla pueda ofrecer el
+  // comprobante leyendo lo que QUEDÓ GUARDADO, no lo que el formulario envió.
+  return { success: true, registroId }
   } catch (e) {
     console.error('[admin] renovarMembresia error:', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }

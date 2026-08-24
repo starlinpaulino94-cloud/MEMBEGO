@@ -39,6 +39,11 @@ export interface MembresiaFila {
   planNombre: string
   planPrecio: number
   planEsIlimitado: boolean
+  /** Lavados que el plan repone al renovar. `null` si es ilimitado. */
+  planLavadosIncluidos: number | null
+  planVigenciaDias: number
+  /** Regalos vivos: la renovación los conserva, no los repone. */
+  usosRegaloRestantes: number
 }
 
 export interface ResumenMembresias {
@@ -132,8 +137,19 @@ export async function listarMembresias(
               fechaInicio: true,
               fechaVencimiento: true,
               lavadosRestantes: true,
+              // Los de regalo viajan aparte: la pantalla de renovación tiene
+              // que poder decir cuáles se reponen y cuáles se conservan.
+              lavadosBonoRestantes: true,
               clienteId: true,
-              plan: { select: { nombre: true, precio: true, esIlimitado: true } },
+              plan: {
+                select: {
+                  nombre: true,
+                  precio: true,
+                  esIlimitado: true,
+                  lavadosIncluidos: true,
+                  vigenciaDias: true,
+                },
+              },
               cliente: {
                 select: {
                   nombre: true,
@@ -186,6 +202,9 @@ export async function listarMembresias(
         planNombre: m.plan.nombre,
         planPrecio: Number(m.plan.precio),
         planEsIlimitado: m.plan.esIlimitado,
+        planLavadosIncluidos: m.plan.esIlimitado ? null : m.plan.lavadosIncluidos,
+        planVigenciaDias: m.plan.vigenciaDias ?? 30,
+        usosRegaloRestantes: m.lavadosBonoRestantes,
       }))
 
       return {
