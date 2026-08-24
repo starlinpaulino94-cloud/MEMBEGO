@@ -32,11 +32,16 @@ function resumenRegla(r: {
   excursion: string | null
   vendedor: string | null
   categoria: string | null
+  tipoVendedor?: string | null
 }): string {
   const alcance =
     r.vendedor && r.excursion
       ? `${r.vendedor} en ${r.excursion}`
-      : r.vendedor ?? r.excursion ?? r.categoria ?? 'toda la empresa'
+      : r.vendedor ??
+        (r.tipoVendedor ? `Tipo: ${r.tipoVendedor}` : null) ??
+        r.excursion ??
+        r.categoria ??
+        'toda la empresa'
   if (r.tipoCalculo === 'ESCALON') {
     const escalones = normalizarEscalones(r.escalones)
     const tramos = escalones

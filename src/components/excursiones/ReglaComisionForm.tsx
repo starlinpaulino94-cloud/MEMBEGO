@@ -22,6 +22,7 @@ import {
   type AmbitoRegla,
   type TipoCalculo,
 } from '@/modules/excursiones/comisiones/nucleo'
+import { TIPOS_VENDEDOR_SEMILLA } from '@/modules/excursiones/vendedores/nucleo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,6 +45,7 @@ export function ReglaComisionForm({
 
   const [vendedoresSeleccionados, setVendedoresSeleccionados] = useState<string[]>([])
   const [excursionesSeleccionadas, setExcursionesSeleccionadas] = useState<string[]>([])
+  const [tiposVendedorSeleccionados, setTiposVendedorSeleccionados] = useState<string[]>([])
 
   useEffect(() => {
     if (state.success) {
@@ -55,6 +57,21 @@ export function ReglaComisionForm({
   const pideExcursion = ambito === 'EXCURSION' || ambito === 'VENDEDOR_EXCURSION'
   const pideVendedor = ambito === 'VENDEDOR' || ambito === 'VENDEDOR_EXCURSION'
   const pideCategoria = ambito === 'CATEGORIA'
+  const pideTipoVendedor = ambito === 'TIPO_VENDEDOR'
+
+  const toggleTipoVendedor = (tipo: string) => {
+    setTiposVendedorSeleccionados((prev) =>
+      prev.includes(tipo) ? prev.filter((x) => x !== tipo) : [...prev, tipo]
+    )
+  }
+
+  const seleccionarTodosTiposVendedor = () => {
+    setTiposVendedorSeleccionados([...TIPOS_VENDEDOR_SEMILLA])
+  }
+
+  const deseleccionarTodosTiposVendedor = () => {
+    setTiposVendedorSeleccionados([])
+  }
 
   const toggleVendedor = (id: string) => {
     setVendedoresSeleccionados((prev) =>
@@ -235,6 +252,66 @@ export function ReglaComisionForm({
           {vendedoresSeleccionados.length === 0 ? (
             <p className="text-caption text-warning">
               * Selecciona al menos un vendedor al que aplicará esta regla.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {pideTipoVendedor ? (
+        <div className="space-y-2 rounded-xl border border-border bg-muted/40 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label className="font-semibold text-foreground">
+              Tipos de Vendedor ({tiposVendedorSeleccionados.length} de {TIPOS_VENDEDOR_SEMILLA.length} seleccionados)
+            </Label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={seleccionarTodosTiposVendedor}
+                className="text-caption text-primary hover:underline"
+              >
+                Seleccionar todos
+              </button>
+              <span className="text-muted-foreground">·</span>
+              <button
+                type="button"
+                onClick={deseleccionarTodosTiposVendedor}
+                className="text-caption text-muted-foreground hover:underline"
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+            {TIPOS_VENDEDOR_SEMILLA.map((t) => {
+              const checked = tiposVendedorSeleccionados.includes(t)
+              return (
+                <label
+                  key={t}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors ${
+                    checked
+                      ? 'border-primary/40 bg-primary/5 text-foreground font-medium'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      name="tipoVendedor"
+                      value={t}
+                      checked={checked}
+                      onChange={() => toggleTipoVendedor(t)}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    <span>{t}</span>
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+          {tiposVendedorSeleccionados.length === 0 ? (
+            <p className="text-caption text-warning">
+              * Selecciona al menos un tipo de vendedor (ej: Touroperador, Hotel, Promotor...).
             </p>
           ) : null}
         </div>

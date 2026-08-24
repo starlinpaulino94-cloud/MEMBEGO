@@ -428,15 +428,16 @@ model ReembolsoExc {
 // ── Motor de comisiones y liquidaciones ──────────────────────────────────────
 
 /// REGLAS del Commission Engine (§22–23). La prioridad al resolver:
-/// VENDEDOR_EXCURSION > VENDEDOR > EXCURSION > CATEGORIA > GENERAL.
+/// VENDEDOR_EXCURSION > VENDEDOR > EXCURSION > CATEGORIA > TIPO_VENDEDOR > GENERAL.
 model ComisionRegla {
   id           String    @id @default(cuid())
   companyId    String
-  /// 'GENERAL' | 'CATEGORIA' | 'EXCURSION' | 'VENDEDOR' | 'VENDEDOR_EXCURSION'.
+  /// 'GENERAL' | 'TIPO_VENDEDOR' | 'CATEGORIA' | 'EXCURSION' | 'VENDEDOR' | 'VENDEDOR_EXCURSION'.
   ambito       String
   excursionId  String?
   vendedorId   String?
   categoria    String?
+  tipoVendedor String?
   /// 'PORCENTAJE' | 'FIJO_VENTA' | 'FIJO_PASAJERO' | 'FIJO_ADULTO' |
   /// 'FIJO_NINO' | 'ESCALON'.
   tipoCalculo  String
