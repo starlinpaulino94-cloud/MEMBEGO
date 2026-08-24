@@ -63,7 +63,7 @@ export async function GET(
   const isCliente = user && user.metadata.role === 'CLIENTE'
 
   // Si está logueado, llevarlo al catálogo directo. Si no, al registro con next.
-  let nextUrl = `/empresas/${enlace.companySlug}/excursiones`
+  const nextUrl = `/empresas/${enlace.companySlug}/excursiones`
   let destino: string
   
   if (isCliente) {

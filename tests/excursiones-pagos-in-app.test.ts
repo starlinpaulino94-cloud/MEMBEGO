@@ -4,7 +4,6 @@ import {
   calcularTotales,
   calcularSaldo,
   estadoPorPagos,
-  numeroReserva,
 } from '../src/modules/excursiones/reservas/nucleo'
 import {
   calcularComision,
@@ -58,9 +57,12 @@ test('Opción 2: Pagar online simulado registra pago completo, salda reserva y e
 })
 
 test('Pago online simulado con vendedor acreditado genera comisión calculada correctamente', () => {
+  // `ReglaComision` es la vista estructural que usa el núcleo puro, no la fila
+  // de Prisma: no lleva `companyId` porque el aislamiento por empresa se
+  // resuelve ANTES, al consultar las reglas. Meterlo aquí sugeriría que el
+  // cálculo filtra por empresa, y no lo hace.
   const regla: ReglaComision = {
     id: 'regla-1',
-    companyId: 'company-1',
     ambito: 'GENERAL',
     excursionId: null,
     vendedorId: null,
@@ -74,9 +76,14 @@ test('Pago online simulado con vendedor acreditado genera comisión calculada co
     createdAt: new Date(),
   }
 
-  // Base comisionable: subtotal sin impuestos (US$ 200)
+  // Base comisionable: subtotal sin impuestos (US$ 200). El total con 18% de
+  // ITBIS es US$ 236 y va aparte a propósito: sirve para el desglose, nunca
+  // para calcular (regla 3 del núcleo — no se comisiona el impuesto).
   const baseComisionable = 200
   const resultado = calcularComision(regla, {
+    vendedorId: 'vendedor-1',
+    excursionId: 'excursion-1',
+    total: 236,
     baseComisionable,
     adultos: 2,
     ninos: 0,

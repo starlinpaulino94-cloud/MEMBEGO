@@ -187,7 +187,10 @@ export async function excursionesReservables(companyId: string) {
       horarios: e.horarios.map((h) => ({
         id: h.id,
         horaSalida: h.horaSalida,
-        diasSemana: h.diasSemana,
+        // `diasSemana` es JSON en el esquema (evoluciona sin migrar). Se
+        // normaliza aquí, en el borde, para que el formulario reciba el
+        // number[] que declara y no un JsonValue que tendría que castear.
+        diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
       })),
     }))
 }

@@ -351,11 +351,11 @@ export async function reservarCarritoAction(
       const v = exc.variantes[0]
       const totales = calcularTotales({
         precioAdulto: v.precioAdulto.toNumber(),
-        precioNino: v.precioNino?.toNumber(),
+        precioNino: v.precioNino?.toNumber() ?? null,
         impuestoPct: exc.impuestoPct?.toNumber() ?? 0,
         adultos: item.adultos,
         ninos: item.ninos,
-        descuentoFijo: 0,
+        descuento: 0,
       })
 
       const fechaObj = new Date(`${item.fecha}T12:00:00.000Z`)
@@ -450,7 +450,12 @@ export async function reservarCarritoAction(
               etapa: esPagoOnline ? 'COMPRA' : 'RESERVA',
             }
           })
-        ).catch(() => {})
+        ).catch(
+          // La atribución JAMÁS rompe la reserva (regla del módulo), pero
+          // tragarse el error deja un vendedor sin su venta y sin forma de
+          // saber por qué. Se anota.
+          anotarFallo('excursiones:reservas:atribucionCliente')
+        )
       }
       
       if (reserva) nuevasReservas.push(reserva)

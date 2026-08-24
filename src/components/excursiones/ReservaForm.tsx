@@ -61,6 +61,8 @@ export function ReservaForm({
 
   useEffect(() => {
     if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
+      // La excepción es deliberada: reacciona al resultado async de la acción, no a un render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVarianteId(excursion.variantes[0]?.id ?? '')
     }
     if (excursion && !excursion.horarios?.find((h) => h.horaSalida === hora)) {
@@ -169,7 +171,7 @@ export function ReservaForm({
             name="hora"
             value={hora}
             onChange={(e) => setHora(e.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             {excursion?.horarios?.length > 0 ? (
               excursion.horarios.map((h) => (

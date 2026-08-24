@@ -57,8 +57,8 @@ export function PasarelaSimuladaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-card border shadow-2xl animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-card border shadow-2xl animate-in zoom-in-95">
         {/* Header con badge de simulación */}
         <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-5 border-b flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -68,7 +68,7 @@ export function PasarelaSimuladaModal({
             <div>
               <div className="flex items-center gap-1.5">
                 <h3 className="text-base font-bold text-foreground">Pasarela de Pago</h3>
-                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning dark:text-warning">
                   Modo Sandbox
                 </span>
               </div>
@@ -87,27 +87,27 @@ export function PasarelaSimuladaModal({
         {/* Contenido */}
         <div className="p-6 space-y-5">
           {/* Tarjeta Visual */}
-          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-950 p-5 text-white shadow-md border border-zinc-700/50">
+          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-card via-muted to-background p-5 text-white shadow-md border border-border/50">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold tracking-wider text-zinc-400">MEMBEGO PAY</span>
-              <div className="flex items-center gap-1 text-[10px] text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-full border border-zinc-700">
-                <Sparkles className="h-3 w-3 text-amber-400" />
+              <span className="text-xs font-semibold tracking-wider text-muted-foreground">MEMBEGO PAY</span>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded-full border border-border">
+                <Sparkles className="h-3 w-3 text-warning" />
                 Tarjeta de Prueba
               </div>
             </div>
 
-            <div className="my-4 font-mono text-lg font-medium tracking-widest text-zinc-100">
+            <div className="my-4 font-mono text-lg font-medium tracking-widest text-foreground">
               {numeroTarjeta}
             </div>
 
-            <div className="flex items-center justify-between text-xs text-zinc-400">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <div>
-                <span className="block text-[9px] uppercase tracking-wider text-zinc-500">Titular</span>
-                <span className="font-medium text-zinc-200">{titular}</span>
+                <span className="block text-xs uppercase tracking-wider text-muted-foreground">Titular</span>
+                <span className="font-medium text-foreground">{titular}</span>
               </div>
               <div className="text-right">
-                <span className="block text-[9px] uppercase tracking-wider text-zinc-500">Vence</span>
-                <span className="font-medium text-zinc-200">{expiracion}</span>
+                <span className="block text-xs uppercase tracking-wider text-muted-foreground">Vence</span>
+                <span className="font-medium text-foreground">{expiracion}</span>
               </div>
             </div>
           </div>
@@ -143,8 +143,8 @@ export function PasarelaSimuladaModal({
           </div>
 
           {/* Advertencia Sandbox */}
-          <div className="flex items-start gap-2.5 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 border border-amber-500/20">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+          <div className="flex items-start gap-2.5 rounded-lg bg-warning/10 p-3 text-xs text-warning dark:text-warning border border-warning/20">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warning" />
             <p>
               Esta es una <strong>transacción de prueba</strong>. No se realizará ningún cargo real en tu tarjeta. Al confirmar, tu reserva quedará marcada automáticamente como <strong>PAGADA</strong> con su código QR de embarque.
             </p>
@@ -164,7 +164,7 @@ export function PasarelaSimuladaModal({
                 Contactando pasarela bancaria...
               </span>
             ) : pagado ? (
-              <span className="flex items-center gap-2 text-emerald-100">
+              <span className="flex items-center gap-2 text-success">
                 <CheckCircle2 className="h-5 w-5" />
                 ¡Pago Simulado Exitoso!
               </span>
@@ -176,8 +176,8 @@ export function PasarelaSimuladaModal({
             )}
           </Button>
 
-          <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground mt-1">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground mt-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-success dark:text-success" />
             <span>Encriptación SSL de 256 bits • Sandbox Integrado</span>
           </div>
         </div>

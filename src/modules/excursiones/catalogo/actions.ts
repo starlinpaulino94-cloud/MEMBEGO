@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -129,6 +129,9 @@ export async function crearExcursion(
           companyId,
           slug,
           ...v.datos,
+          // `galeria` es una columna JSON: vaciarla exige `Prisma.JsonNull`.
+          // Un `null` de JavaScript no vale y Prisma lo rechaza en tipos.
+          galeria: v.datos.galeria ?? Prisma.JsonNull,
           variantes: {
             create: { companyId, ...variante.datos },
           },
@@ -216,7 +219,10 @@ export async function actualizarExcursion(
     }
 
     await conEmpresa(companyId, async (tx) => {
-      await tx.excursion.update({ where: { id: excursionId }, data: v.datos })
+      await tx.excursion.update({
+        where: { id: excursionId },
+        data: { ...v.datos, galeria: v.datos.galeria ?? Prisma.JsonNull },
+      })
       if (horariosToSync && horariosToSync.length > 0) {
         await tx.excursionHorario.deleteMany({ where: { excursionId, companyId } })
         await tx.excursionHorario.createMany({
