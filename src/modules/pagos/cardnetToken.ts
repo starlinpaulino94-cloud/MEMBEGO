@@ -501,6 +501,31 @@ export async function activarTarjetaPendiente(input: {
   if (cobro.estado === 'sin_pendiente') {
     return { estado: 'activada_sin_cobro', motivo: 'Tu tarjeta quedó activa. No había ningún pago pendiente.' }
   }
+
+  /**
+   * EL COBRO DICE QUE LA TARJETA SIGUE SIN ACTIVAR (CS012).
+   *
+   * Este caso caía en el catch-all de abajo y salía como `activada_sin_cobro`,
+   * un estado cuyo nombre AFIRMA lo contrario de lo que acaba de pasar. Dos
+   * consecuencias, las dos malas:
+   *
+   *   · Al cliente se le devolvía «tu tarjeta quedó registrada pero falta
+   *     activarla» — la instrucción de hacer justo lo que acababa de hacer.
+   *   · La pantalla de activación se cerraba (el componente traduce
+   *     `activada_sin_cobro` a un error general), así que NO PODÍA REINTENTAR
+   *     con otro código sin volver a registrar la tarjeta entera.
+   *
+   * Si el Purchase responde CS012, la activación no surtió efecto: es un
+   * código no aceptado, y lo que corresponde es dejar al cliente en la
+   * pantalla para que lo intente de nuevo.
+   */
+  if (cobro.estado === 'pendiente_activacion') {
+    return {
+      estado: 'codigo_rechazado',
+      motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+    }
+  }
+
   const motivo =
     'motivo' in cobro && cobro.motivo
       ? cobro.motivo

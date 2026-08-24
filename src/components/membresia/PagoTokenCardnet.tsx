@@ -204,6 +204,11 @@ export function PagoTokenCardnet({
           // activar. Este camino ANTES caía en el `else` de abajo y le decía
           // al cliente «no se pudo procesar el pago», con su código de
           // activación ya en la app del banco y ningún campo donde ponerlo.
+          // Se deja constancia de que hay una tarjeta esperando. Sin esto, el
+          // aviso de vuelta solo existía si la sonda del montaje la había
+          // encontrado: quien llegaba aquí desde un cobro y luego salía por
+          // cualquier motivo se quedaba sin camino de regreso.
+          setTarjetaPendiente((previo) => previo ?? { marca: null, ultimos4: null })
           setEstado('activacion')
           setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
         } else {
@@ -417,6 +422,7 @@ export function PagoTokenCardnet({
         // cliente ingrese el código que le cobró su banco (§4.1.2.3). Ya no es
         // un callejón: se abre la pantalla de activación, que activa y cobra
         // en el mismo movimiento.
+        setTarjetaPendiente((previo) => previo ?? { marca: null, ultimos4: null })
         setEstado('activacion')
         setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
         return true
@@ -783,7 +789,18 @@ export function PagoTokenCardnet({
       if (data.estado === 'codigo_rechazado') {
         // Se queda en la pantalla: el cliente corrige y reintenta. El motivo
         // ya le advierte que al tercer fallo el banco elimina la tarjeta.
+        //
+        // Y SE LIMPIA EL CAMPO. Dejar ahí el código rechazado obliga a
+        // borrarlo a mano antes de escribir el bueno, y con el botón activo
+        // —porque los 6 caracteres siguen siendo válidos de formato— un
+        // segundo clic vuelve a enviar EXACTAMENTE el mismo código y quema
+        // otro de los 3 intentos sin cambiar nada.
+        setCodigoActivacion('')
         setMensaje(data.motivo ?? 'El código no fue aceptado. Revísalo e intenta de nuevo.')
+        // El foco vuelve al campo para que se pueda teclear de inmediato.
+        requestAnimationFrame(() => {
+          document.getElementById('codigo-activacion')?.focus()
+        })
         return
       }
       if (data.estado === 'activada_sin_cobro') {
