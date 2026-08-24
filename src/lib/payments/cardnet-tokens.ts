@@ -609,13 +609,33 @@ export async function activarPerfilCardnet(input: {
   /** Token del perfil que se desea activar. Mandatorio (§7.5). */
   token: string
   codigo: string
-}): Promise<{ ok: boolean; status: number; crudo: Record<string, unknown> }> {
+}): Promise<{
+  ok: boolean
+  status: number
+  errores: { codigo: string; mensaje: string }[]
+  crudo: Record<string, unknown>
+}> {
   const { ok, status, json } = await llamarTokensConRuta(
     'POST',
     `/Customer/${encodeURIComponent(input.customerId)}/activate`,
     { Token: input.token, ActivationCode: input.codigo }
   )
-  return { ok, status, crudo: evidencia(status, json) }
+  /**
+   * UN 200 NO SIGNIFICA QUE ACTIVÓ.
+   *
+   * CardNET devuelve sus fallos DENTRO del cuerpo, en `Errors[]`, y puede
+   * hacerlo con un estado HTTP perfectamente correcto. El cobro ya se defendía
+   * de eso —«con errores del proveedor NUNCA se aprueba, diga lo que diga el
+   * resto»— pero esa defensa nunca se aplicó aquí.
+   *
+   * El resultado era el peor posible: un código rechazado se leía como
+   * activación exitosa, se pasaba a cobrar, el Purchase respondía CS012 y al
+   * cliente le salía «tu tarjeta quedó registrada pero falta activarla»
+   * —justo lo que acababa de intentar hacer— sin que nadie le dijera que su
+   * código no había sido aceptado.
+   */
+  const { errores } = desenvolverRespuesta(json)
+  return { ok: ok && errores.length === 0, status, errores, crudo: evidencia(status, json) }
 }
 
 /**

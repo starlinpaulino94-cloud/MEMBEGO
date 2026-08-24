@@ -830,3 +830,57 @@ test('la activación distingue los TRES estados, no dos', () => {
   )
   assert.match(src, /mismoPerfilCardnet\(/)
 })
+
+// ── Un 200 NO significa que activó ─────────────────────────────────────────
+//
+// SEGUNDO REPORTE EN VIVO (24-08-2026): con el código que dio el propio
+// CardNET salía «Tu tarjeta quedó registrada pero falta activarla» — o sea, el
+// mensaje que pide hacer justo lo que se acababa de hacer.
+//
+// `activarPerfilCardnet` decidía el éxito SOLO por el estado HTTP. CardNET
+// devuelve sus fallos dentro del cuerpo, en `Errors[]`, y puede hacerlo con un
+// 200. El cobro ya se defendía de eso; la activación no. Un código rechazado
+// se leía como activación exitosa → se pasaba a cobrar → CS012 → ese mensaje.
+
+test('el activate no puede decidir el éxito solo por el estado HTTP', () => {
+  const src = readFileSync('src/lib/payments/cardnet-tokens.ts', 'utf8')
+  const i = src.indexOf('export async function activarPerfilCardnet')
+  assert.ok(i > 0, 'no se encontró activarPerfilCardnet')
+  const cuerpo = src.slice(i, i + 2000)
+  // El cuerpo de la respuesta tiene que mirarse.
+  assert.match(cuerpo, /desenvolverRespuesta\(/, 'el activate dejó de leer el cuerpo de la respuesta')
+  // Y el `ok` que devuelve tiene que depender de que no haya errores.
+  assert.match(
+    cuerpo,
+    /ok:\s*ok && errores\.length === 0/,
+    'el activate volvió a dar por buena una respuesta con Errors dentro'
+  )
+})
+
+test('desenvolverRespuesta encuentra los Errors vengan donde vengan', () => {
+  // En la raíz…
+  const a = desenvolverRespuesta({ Errors: [{ ErrorCode: 'CS013', Message: 'Invalid code' }] })
+  assert.equal(a.errores.length, 1)
+  assert.equal(a.errores[0].codigo, 'CS013')
+  // …o dentro de Response, que es como los envuelve el servicio.
+  const b = desenvolverRespuesta({
+    Response: { Errors: [{ ErrorCode: 'CS013', Message: 'Invalid code' }] },
+  })
+  assert.equal(b.errores.length, 1)
+  // Y una respuesta limpia no inventa errores.
+  assert.equal(desenvolverRespuesta({ Response: { Enabled: true } }).errores.length, 0)
+})
+
+test('un activate con Errors y HTTP 200 NO puede terminar en cobro', () => {
+  const src = readFileSync('src/modules/pagos/cardnetToken.ts', 'utf8')
+  const i = src.indexOf('if (!activacion.ok)')
+  assert.ok(i > 0)
+  const bloque = src.slice(i, i + 3000)
+  // Si el proveedor señaló el fallo, eso manda sobre lo que parezca el listado
+  // de perfiles — donde un `Enabled` ausente se lee como habilitado.
+  assert.match(
+    bloque,
+    /activacion\.errores\.length > 0/,
+    'la clasificación dejó de mirar los errores que devuelve el proveedor'
+  )
+})
