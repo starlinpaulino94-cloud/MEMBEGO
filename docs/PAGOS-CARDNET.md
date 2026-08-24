@@ -143,6 +143,41 @@ Del ejemplo de `TokenRequest` del manual (§5, p. 18):
 | CVV | `123` |
 | Expiración | cualquier fecha futura |
 
+### QUÉ PANTALLA ES DE QUIÉN (y por qué se confunden)
+
+Hay **dos** momentos en los que el cliente teclea algo, y son de dueños
+distintos. Confundirlos lleva a conclusiones opuestas —«quitemos nuestra
+pantalla, eso lo hace CardNET» o «pidamos el OTP nosotros»— y las dos rompen
+algo, así que queda escrito:
+
+| Pantalla | De quién | Qué se teclea | Por qué |
+|---|---|---|---|
+| Ventana de captura | **CardNET** (iframe) | Número, CVV, expiración, y el **3DS** del emisor | Nunca vemos el PAN: es lo que nos mantiene en **SAQ A**. `cardnetToken.ts` lo dice: «no hay 3DS que orquestar (lo hace el iframe)» |
+| Código de activación | **NUESTRA** | Los 6 caracteres del cargo de RD$1.00 | CardNET **no hospeda ninguna** para esto: su API nos exige mandarle el `ActivationCode` (§7.5) |
+
+**La prueba de que la segunda es nuestra** está en el propio contrato: si
+CardNET la mostrara, `POST /Customer/{id}/activate` no nos pediría el
+`ActivationCode` — lo tendría él.
+
+**Y el código de activación NO es un OTP de 3DS.** Esa es la raíz de la
+confusión:
+
+| | OTP de 3DS | Código de activación |
+|---|---|---|
+| Cómo llega | SMS del emisor, en segundos | **Descripción de un cargo** de RD$1.00 en el estado de cuenta |
+| Dónde se teclea | Solo en la página del emisor | En nuestra pantalla |
+| Cuándo está disponible | Inmediato | Cuando el cargo **se asienta** — puede tardar |
+
+Los dos «los da el banco», y ahí acaba el parecido. Capturar un OTP de 3DS en
+un formulario propio sí estaría mal: tiene forma de phishing y rompe el
+traslado de responsabilidad al emisor. El código de activación no es eso — no
+es PAN, no es CVV, no es la clave del banco: es un reto de un solo uso que ya
+viajó por el estado de cuenta del propio cliente.
+
+Que el código tarde en aparecer es lo que obliga a que la pantalla se pueda
+**abandonar y retomar**: ver `GET /api/pagos/cardnet-token/pendiente` y el
+aviso «Tienes una tarjeta esperando su código».
+
 ### Los DOS juegos de llaves NO son intercambiables
 
 CardNET entrega dos pares, y cambian el flujo, no solo las credenciales:
