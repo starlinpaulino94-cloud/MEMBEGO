@@ -226,9 +226,8 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get('activar') === '1' && base.configurado) {
     const { consultarClienteCardnet, consultarClienteDiagnostico, activarPerfilCardnet } =
       await import('@/lib/payments/cardnet-tokens')
-    const { normalizarCodigoActivacion, leerCustomerIdDeCuenta } = await import(
-      '@/lib/payments/cardnet-tokens-core'
-    )
+    const { normalizarCodigoActivacion, leerCustomerIdDeCuenta, perfilPendienteDeActivar } =
+      await import('@/lib/payments/cardnet-tokens-core')
     const { prisma } = await import('@/lib/prisma')
 
     const clienteId = user.metadata.clienteId ?? null
@@ -259,8 +258,7 @@ export async function GET(req: NextRequest) {
       ultimos4: p.ultimos4,
       habilitado: p.habilitado,
     }))
-    const pendientes = consulta.perfiles.filter((p) => !p.habilitado)
-    const perfil = pendientes[pendientes.length - 1] ?? null
+    const perfil = perfilPendienteDeActivar(consulta.perfiles)
 
     const codigo = normalizarCodigoActivacion(req.nextUrl.searchParams.get('codigo') ?? '')
     if (!codigo) {

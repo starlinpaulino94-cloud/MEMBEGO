@@ -133,6 +133,19 @@ export function PagoTokenCardnet({
   // Pantalla de activación (llaves CON autenticación): el código del banco.
   const [codigoActivacion, setCodigoActivacion] = useState('')
   const [activando, setActivando] = useState(false)
+  /**
+   * La tarjeta que quedó registrada esperando su código, si la hay.
+   *
+   * No es lo mismo que `estado === 'activacion'`: eso es «estoy tecleando el
+   * código AHORA». Esto es «existe una tarjeta pendiente», que sobrevive a que
+   * el cliente salga de la pantalla de activación —porque el código todavía no
+   * aparece en su banco— y es lo que permite volver sin registrar la tarjeta
+   * otra vez ni provocar un segundo cargo de RD$1.00.
+   */
+  const [tarjetaPendiente, setTarjetaPendiente] = useState<{
+    marca: string | null
+    ultimos4: string | null
+  } | null>(null)
   const cobrandoRef = useRef(false)
   // Confirmación por servidor en curso (no solapar sondeos).
   const confirmandoRef = useRef(false)
@@ -515,6 +528,56 @@ export function PagoTokenCardnet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /**
+   * ¿QUEDÓ UNA TARJETA ESPERANDO SU CÓDIGO? Se pregunta UNA VEZ, al montar.
+   *
+   * Es la mitad que faltaba del flujo de activación. El código del banco no es
+   * un SMS que llega en segundos: es la descripción de un cargo, y aparece
+   * cuando el cargo se asienta. El cliente que sale de aquí porque todavía no
+   * lo ve necesita poder volver — y hasta ahora, al volver, no había nada que
+   * le dijera que su tarjeta seguía pendiente.
+   *
+   * Es un GET puro: no crea Customer, no invalida la ventana de captura y no
+   * gasta ninguno de los 3 intentos. Si falla o se limita, responde
+   * `pendiente: false` y esta pantalla se comporta como siempre: la consulta
+   * es un atajo, nunca un requisito.
+   *
+   * El `ref` es la lección del 429 que nos costó una tarde: la precarga de
+   * sesión se re-disparaba con `estado === 'error'` y renovaba el límite para
+   * siempre. Esta sonda corre exactamente una vez por montaje y no mira el
+   * estado.
+   */
+  const sondaPendienteRef = useRef(false)
+  useEffect(() => {
+    if (sondaPendienteRef.current) return
+    sondaPendienteRef.current = true
+    let vivo = true
+    void (async () => {
+      try {
+        const resp = await fetch('/api/pagos/cardnet-token/pendiente', {
+          signal: AbortSignal.timeout(30_000),
+        })
+        const data = (await resp.json().catch(() => ({}))) as {
+          pendiente?: boolean
+          marca?: string | null
+          ultimos4?: string | null
+        }
+        if (!vivo || data.pendiente !== true) return
+        setTarjetaPendiente({ marca: data.marca ?? null, ultimos4: data.ultimos4 ?? null })
+      } catch {
+        // Silencio a propósito: no hay nada que el cliente pueda hacer con
+        // «no pude comprobar si tenías una tarjeta pendiente», y alarmarlo en
+        // la pantalla de pago por una consulta opcional es peor que callar.
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+    // Solo al montar. Ver el comentario de arriba sobre el 429. (No lleva
+    // `eslint-disable`: este efecto no cierra sobre nada reactivo, así que la
+    // lista vacía es correcta y el linter no se queja.)
+  }, [])
+
   // CIERRE DE LA VENTANA: aquí (y solo aquí) se confirma contra el proveedor.
   // La ventana se cierra sola tras "Agregar", así que el cierre es la señal de
   // que probablemente hay una tarjeta nueva. El registro del proveedor puede
@@ -708,6 +771,9 @@ export function PagoTokenCardnet({
       const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
       rastro('[pago] resultado de la activación:', data.estado ?? resp.status)
       if (data.estado === 'aprobado') {
+        // Ya no hay nada pendiente: el aviso de «tarjeta esperando su código»
+        // desaparece con ella.
+        setTarjetaPendiente(null)
         setEstado('aprobado')
         toast.success('¡Tarjeta activada y pago aprobado! Tu membresía está activa.')
         if (urlExito) router.push(urlExito)
@@ -722,12 +788,18 @@ export function PagoTokenCardnet({
       }
       if (data.estado === 'activada_sin_cobro') {
         // La tarjeta quedó activa pero el cobro no cerró: volver al botón de
-        // pagar — ahora el cobro normal encontrará el perfil habilitado.
+        // pagar — ahora el cobro normal encontrará el perfil habilitado. Ya no
+        // está pendiente de activar, así que el aviso sobra.
+        setTarjetaPendiente(null)
         setEstado('error')
         setMensaje(data.motivo ?? 'Tu tarjeta quedó activa. Toca pagar para completar el cobro.')
         return
       }
-      // sin_perfil / error: se explica y se vuelve al inicio del flujo.
+      // sin_perfil / error: se explica y se vuelve al inicio del flujo. En
+      // `sin_perfil` la tarjeta ya no existe —el banco la borró al tercer
+      // fallo, o se activó por otra vía—, así que seguir ofreciendo «ya tengo
+      // mi código» mandaría al cliente a una pantalla sin tarjeta que activar.
+      if (data.estado === 'sin_perfil') setTarjetaPendiente(null)
       setEstado('error')
       setMensaje(data.motivo ?? 'No se pudo activar la tarjeta. Intenta de nuevo.')
     } catch (e) {
@@ -772,6 +844,53 @@ export function PagoTokenCardnet({
         <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
         </p>
+      )}
+
+      {/* LA PUERTA DE VUELTA.
+
+          Sin esto, el cliente que salió a buscar el código en su banco —y que
+          al volver se encuentra la pantalla de pago tal cual— no tiene forma
+          de saber que su tarjeta sigue registrada esperando. Volvía a empezar:
+          ventana de captura nueva, tarjeta nueva, otro cargo de RD$1.00, y el
+          perfil anterior huérfano.
+
+          Solo aparece cuando NO se está tecleando el código ya, y nunca
+          durante una operación en curso: interrumpir un cobro con un atajo a
+          otra pantalla es cómo se cobra dos veces. */}
+      {tarjetaPendiente && estado !== 'activacion' && !ocupado && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-warning/15">
+              <ShieldCheck className="h-4 w-4 text-warning" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                Tienes una tarjeta esperando su código
+                {tarjetaPendiente.ultimos4 ? (
+                  <span className="font-normal text-muted-foreground">
+                    {' '}· {tarjetaPendiente.marca ?? 'Tarjeta'} ····{tarjetaPendiente.ultimos4}
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                Ya está registrada. Cuando veas el cargo de RD$1.00 en tu banco,
+                entra el código y se completa el pago — no hace falta volver a
+                escribir la tarjeta.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setMensaje(null)
+              setEstado('activacion')
+            }}
+            className="shrink-0 rounded-xl"
+          >
+            Ya tengo mi código
+          </Button>
+        </div>
       )}
 
       {/* ACTIVACIÓN (llaves CON autenticación · §4.1.2.3): el banco cobró
@@ -908,18 +1027,50 @@ export function PagoTokenCardnet({
             </p>
           </div>
 
-          <div className="border-t border-border px-5 py-3">
+          {/* DOS SALIDAS, y no son la misma.
+
+              «Lo haré después» es la que faltaba. El código vive en la
+              descripción de un cargo, y ese cargo puede tardar en asentarse:
+              obligar a resolverlo en esta pantalla o perder la tarjeta es
+              pedirle al cliente que controle los tiempos de su banco. Sale sin
+              tocar nada — la tarjeta sigue registrada y esperando— y al volver
+              el aviso de arriba lo trae de vuelta aquí.
+
+              «Usar otra tarjeta» es lo contrario: la anterior no le sirve y
+              va a registrar una nueva. */}
+          <div className="flex flex-col gap-2 border-t border-border px-5 py-3 sm:flex-row-reverse sm:items-center sm:justify-between">
             <button
               type="button"
               disabled={activando}
               onClick={() => {
+                // El cliente dice que esta tarjeta no es la que quiere usar:
+                // se retira el atajo para volver a ella. El perfil sigue
+                // existiendo en la pasarela —no lo borramos— así que si
+                // recarga y sigue pendiente, la sonda lo encontrará otra vez.
+                // Eso es exacto: la tarjeta está pendiente de verdad.
+                setTarjetaPendiente(null)
                 setEstado('listo')
                 setMensaje(null)
                 setCodigoActivacion('')
               }}
-              className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:opacity-50"
+              className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:opacity-50"
             >
               Usar otra tarjeta
+            </button>
+            <button
+              type="button"
+              disabled={activando}
+              onClick={() => {
+                // A diferencia de «usar otra tarjeta», ESTA salida conserva
+                // `tarjetaPendiente`: es justo lo que hace que se pueda
+                // volver sin registrar la tarjeta de nuevo.
+                setEstado('listo')
+                setMensaje(null)
+                setCodigoActivacion('')
+              }}
+              className="text-xs font-semibold text-primary underline-offset-4 transition-colors hover:underline disabled:opacity-50"
+            >
+              Lo haré después — mi banco aún no muestra el cargo
             </button>
           </div>
         </div>
@@ -999,6 +1150,31 @@ export function PagoTokenCardnet({
         >
           ¿Cerraste la ventana de pago? Volver a intentar
         </button>
+      )}
+
+      {/* EL CARGO DE RD$1.00, DICHO ANTES DE QUE OCURRA.
+
+          Estaba explicado solo dentro de la pantalla de activación, o sea
+          DESPUÉS de que el banco ya lo había hecho. Al cliente le aparecía un
+          cobro que nadie le había anunciado — y un cargo inesperado en la
+          tarjeta es exactamente lo que hace que la gente llame al banco a
+          reclamar un fraude.
+
+          Se redacta en condicional a propósito, y no es una evasiva: la
+          verificación depende del juego de llaves con el que opera la empresa.
+          Con las llaves CON autenticación la tarjeta nace deshabilitada y hay
+          cargo; sin ellas no lo hay. Prometer un cargo que puede no ocurrir
+          sería tan inexacto como callarlo. */}
+      {(estado === 'listo' || estado === 'error') && !tarjetaPendiente && (
+        <p className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Si tu banco pide verificar la tarjeta, verás un cargo de{' '}
+            <strong className="font-semibold text-foreground">RD$1.00</strong> con un
+            código de 6 caracteres en su descripción. Sirve solo para confirmar que
+            la tarjeta es tuya, y te lo pediremos aquí para completar el pago.
+          </span>
+        </p>
       )}
 
       {/* Sellos de confianza: discretos, debajo del CTA. */}

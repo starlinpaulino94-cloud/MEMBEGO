@@ -624,6 +624,30 @@ export interface PerfilPagoCardnet {
 }
 
 /** Saca los perfiles de pago de la respuesta de `GET /Customer/{id}`. */
+/**
+ * EL PERFIL QUE ESTÁ ESPERANDO SU CÓDIGO DE ACTIVACIÓN, si hay alguno.
+ *
+ * Un Customer puede acumular varios perfiles deshabilitados: cada intento de
+ * registrar la tarjeta deja el suyo, y CardNET no los limpia. Hay que elegir
+ * uno, y el criterio es EL MÁS RECIENTE — el que el cliente acaba de meter,
+ * cuyo cargo de RD$1.00 es el que tiene delante en la app del banco.
+ *
+ * ESTA FUNCIÓN EXISTE PARA QUE EL CRITERIO SEA UNO SOLO. Vive en tres sitios:
+ * la activación real, el aviso de «tienes una tarjeta esperando» y la sonda de
+ * diagnóstico. Si cada uno eligiera por su cuenta y llegaran a divergir, el
+ * aviso enseñaría los últimos 4 dígitos de una tarjeta y la activación
+ * activaría otra — un fallo silencioso, porque las dos pantallas se verían
+ * perfectamente normales.
+ *
+ * @returns el perfil pendiente más reciente, o `null` si no hay ninguno.
+ */
+export function perfilPendienteDeActivar(
+  perfiles: PerfilPagoCardnet[]
+): PerfilPagoCardnet | null {
+  const pendientes = perfiles.filter((p) => !p.habilitado)
+  return pendientes.length > 0 ? pendientes[pendientes.length - 1] : null
+}
+
 export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardnet[] {
   const { datos } = desenvolverRespuesta(json)
   const crudos = datos.PaymentProfiles ?? datos.paymentProfiles ?? datos.Profiles
