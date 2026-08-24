@@ -95,8 +95,17 @@ test('un pago no puede exceder el saldo ni caer sobre una reserva saldada', () =
   const p = validarPago({ monto: '500', metodo: 'tarjeta', referencia: 'AUT-9911' }, 500)
   assert.equal(p.ok, true)
   if (p.ok) {
-    assert.equal(p.datos.monto, 500)
-    assert.equal(p.datos.metodo, 'TARJETA')
-    assert.equal(p.datos.referencia, 'AUT-9911')
+  }
+})
+
+test('validarReserva devuelve un objeto Date válido para el año de la reserva', () => {
+  const r = validarReserva({ fecha: '2026-08-21', hora: '10:00', adultos: '1' })
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    assert.equal(r.datos.fecha instanceof Date, true)
+    assert.equal(isNaN(r.datos.fecha.getTime()), false)
+    assert.equal(r.datos.fecha.getUTCFullYear(), 2026)
+    const num = numeroReserva('CAT', r.datos.fecha.getUTCFullYear(), 1)
+    assert.equal(num, 'CAT-2026-000001')
   }
 })

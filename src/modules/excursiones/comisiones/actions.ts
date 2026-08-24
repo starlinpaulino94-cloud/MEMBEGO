@@ -83,6 +83,16 @@ export async function crearRegla(
     )
     const primerExcursion = rawExcursionIds[0] || String(formData.get('excursionId') ?? '').trim()
 
+    const rawTiposVendedor = Array.from(
+      new Set(
+        formData
+          .getAll('tipoVendedor')
+          .map((t) => String(t).trim())
+          .filter(Boolean)
+      )
+    )
+    const primerTipoVendedor = rawTiposVendedor[0] || String(formData.get('tipoVendedor') ?? '').trim()
+
     const rawVendedorIds = Array.from(
       new Set(
         formData
@@ -100,6 +110,7 @@ export async function crearRegla(
       excursionId: primerExcursion,
       vendedorId: primerVendedor,
       categoria: String(formData.get('categoria') ?? ''),
+      tipoVendedor: primerTipoVendedor,
       vigenciaDesde: String(formData.get('vigenciaDesde') ?? ''),
       vigenciaHasta: String(formData.get('vigenciaHasta') ?? ''),
       escalones: escalonesDelFormulario(formData),
@@ -150,18 +161,37 @@ export async function crearRegla(
       }
     }
 
+    const pideTipoVendedor = v.datos.ambito === 'TIPO_VENDEDOR'
+    const listaTiposVendedor = pideTipoVendedor
+      ? rawTiposVendedor.length > 0
+        ? rawTiposVendedor
+        : primerTipoVendedor
+          ? [primerTipoVendedor]
+          : []
+      : []
+
+    if (pideTipoVendedor && listaTiposVendedor.length === 0) {
+      return { error: 'Selecciona al menos un tipo de vendedor.' }
+    }
+
     // Armar combinaciones para la creación de reglas
-    let combinaciones: { vendedorId: string | null; excursionId: string | null }[] = []
+    let combinaciones: {
+      vendedorId: string | null
+      excursionId: string | null
+      tipoVendedor: string | null
+    }[] = []
     if (v.datos.ambito === 'VENDEDOR_EXCURSION') {
       combinaciones = listaVendedores.flatMap((vid) =>
-        listaExcursiones.map((eid) => ({ vendedorId: vid, excursionId: eid }))
+        listaExcursiones.map((eid) => ({ vendedorId: vid, excursionId: eid, tipoVendedor: null }))
       )
     } else if (v.datos.ambito === 'EXCURSION') {
-      combinaciones = listaExcursiones.map((eid) => ({ vendedorId: null, excursionId: eid }))
+      combinaciones = listaExcursiones.map((eid) => ({ vendedorId: null, excursionId: eid, tipoVendedor: null }))
     } else if (v.datos.ambito === 'VENDEDOR') {
-      combinaciones = listaVendedores.map((vid) => ({ vendedorId: vid, excursionId: null }))
+      combinaciones = listaVendedores.map((vid) => ({ vendedorId: vid, excursionId: null, tipoVendedor: null }))
+    } else if (v.datos.ambito === 'TIPO_VENDEDOR') {
+      combinaciones = listaTiposVendedor.map((tid) => ({ vendedorId: null, excursionId: null, tipoVendedor: tid }))
     } else {
-      combinaciones = [{ vendedorId: null, excursionId: null }]
+      combinaciones = [{ vendedorId: null, excursionId: null, tipoVendedor: null }]
     }
 
     const resultado = await conEmpresa(companyId, async (tx) => {
@@ -178,6 +208,7 @@ export async function crearRegla(
             excursionId: c.excursionId,
             vendedorId: c.vendedorId,
             categoria: v.datos.categoria,
+            tipoVendedor: c.tipoVendedor,
             vigenciaDesde: v.datos.vigenciaDesde,
             vigenciaHasta: v.datos.vigenciaHasta,
           })),
@@ -197,6 +228,7 @@ export async function crearRegla(
           excursionId: combinaciones[0]?.excursionId || null,
           vendedorId: combinaciones[0]?.vendedorId || null,
           categoria: v.datos.categoria,
+          tipoVendedor: combinaciones[0]?.tipoVendedor || null,
           vigenciaDesde: v.datos.vigenciaDesde,
           vigenciaHasta: v.datos.vigenciaHasta,
         },

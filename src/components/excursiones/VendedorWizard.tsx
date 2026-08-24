@@ -137,14 +137,16 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
               </select>
             </div>
             <div>
-              <Label htmlFor="ven-supervisor">Supervisor</Label>
+              <Label htmlFor="ven-supervisor">
+                {datos.tipo === 'Rep Hotel' ? 'Touroperador Matriz (Supervisor)' : 'Supervisor / Agencia Matriz'}
+              </Label>
               <select
                 id="ven-supervisor"
                 value={datos.supervisorId ?? ''}
                 onChange={set('supervisorId')}
                 className="mt-1.5 block w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground"
               >
-                <option value="">Sin supervisor</option>
+                <option value="">Sin supervisor / Cuenta Independiente</option>
                 {supervisores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.nombre} {s.apellido ?? ''} ({s.codigo})
@@ -153,6 +155,73 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
               </select>
             </div>
           </div>
+
+          {/* Sección B2B / Touroperadores & Agencias */}
+          {['Touroperador', 'Agencia', 'Rep Hotel', 'Hotel'].includes(datos.tipo ?? '') && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-4">
+              <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                Datos Corporativos & Crédito B2B
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="ven-razonSocial">Razón Social</Label>
+                  <Input
+                    id="ven-razonSocial"
+                    value={datos.razonSocial ?? ''}
+                    onChange={set('razonSocial')}
+                    placeholder="Ej: Nexus Tours Dominicana SRL"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ven-rnc">RNC / Tax ID</Label>
+                  <Input
+                    id="ven-rnc"
+                    value={datos.rnc ?? ''}
+                    onChange={set('rnc')}
+                    placeholder="Ej: 1-30-12345-6"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="ven-diasCredito">Días de Crédito</Label>
+                  <select
+                    id="ven-diasCredito"
+                    value={datos.diasCredito ?? '0'}
+                    onChange={set('diasCredito')}
+                    className="mt-1.5 block w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  >
+                    <option value="0">0 días (Inmediato)</option>
+                    <option value="15">15 días</option>
+                    <option value="30">30 días</option>
+                    <option value="45">45 días</option>
+                    <option value="60">60 días</option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="ven-limiteCredito">Límite de Crédito</Label>
+                  <Input
+                    id="ven-limiteCredito"
+                    type="number"
+                    value={datos.limiteCredito ?? ''}
+                    onChange={set('limiteCredito')}
+                    placeholder="Monto max"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ven-prefijoVoucher">Prefijo de Voucher</Label>
+                  <Input
+                    id="ven-prefijoVoucher"
+                    value={datos.prefijoVoucher ?? ''}
+                    onChange={set('prefijoVoucher')}
+                    placeholder="Ej: NX-, TUI-"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="ven-direccion">Dirección</Label>
             <Input id="ven-direccion" value={datos.direccion ?? ''} onChange={set('direccion')} placeholder="Opcional" />

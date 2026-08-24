@@ -21,7 +21,7 @@ export default async function NuevaExcursionPage() {
         <ArrowLeft className="h-4 w-4" /> Catálogo
       </Link>
       <h2 className="text-h2 text-foreground">Nueva excursión</h2>
-      <ExcursionForm />
+      <ExcursionForm companyId={user.metadata.companyId} />
     </div>
   )
 }

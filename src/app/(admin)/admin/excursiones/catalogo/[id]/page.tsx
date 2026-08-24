@@ -79,10 +79,13 @@ export default async function ExcursionDetallePage({
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="mb-4 text-h3 text-foreground">Datos generales</h2>
         <ExcursionForm
+          companyId={companyId}
           excursion={{
             id: excursion.id,
             nombre: excursion.nombre,
             descripcion: excursion.descripcion,
+            portadaUrl: excursion.portadaUrl,
+            galeria: excursion.galeria,
             duracionMin: excursion.duracionMin,
             ubicacion: excursion.ubicacion,
             categoria: excursion.categoria,

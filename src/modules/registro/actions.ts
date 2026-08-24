@@ -379,6 +379,14 @@ export async function registrarCliente(
       // Ubicación + consentimientos geo (fail-open, nunca bloquea).
       await guardarUbicacionYConsentimientos(existingUser.id, formData, { ipAddress, userAgent })
 
+      // Iniciar sesión automáticamente en el servidor
+      try {
+        const { authService } = await import('@/lib/auth')
+        await authService.login({ email, password })
+      } catch (e) {
+        console.error('[registro] auto-login server error:', e)
+      }
+
       return {
         success: true,
         codigoInvitacion: await codigoInvitacionDe(cliente.id),
@@ -564,6 +572,15 @@ export async function registrarCliente(
       await sendVerificationEmail(admin, email, nombre)
       return { pendingVerification: true, codigoInvitacion }
     }
+
+    // Iniciar sesión automáticamente en el servidor
+    try {
+      const { authService } = await import('@/lib/auth')
+      await authService.login({ email, password })
+    } catch (e) {
+      console.error('[registro] auto-login server error:', e)
+    }
+
     return { success: true, codigoInvitacion, qrBienvenida }
   } catch (e) {
     // Roll back the Supabase user if DB write failed
@@ -757,6 +774,15 @@ export async function registrarCuentaGeneral(
         await sendVerificationEmail(admin, email, nombre)
         return { pendingVerification: true }
       }
+
+      // Iniciar sesión automáticamente en el servidor
+      try {
+        const { authService } = await import('@/lib/auth')
+        await authService.login({ email, password })
+      } catch (e) {
+        console.error('[registro] auto-login server error:', e)
+      }
+
       return { success: true }
     } catch (e) {
       await admin.auth.admin.deleteUser(supabaseId).catch((err) =>

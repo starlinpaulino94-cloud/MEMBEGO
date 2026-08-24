@@ -83,34 +83,19 @@ export function RegisterForm({
 
     if (state.success) {
       handledRef.current = true
-      const creds = credsRef.current
-      const loginConDestino = `/login?redirect=${encodeURIComponent(destino)}`
-      if (!creds) {
-        router.replace(loginConDestino)
-        return
-      }
-      // Auto-login: crea la sesión en el navegador y entra directo a la plataforma.
       setRedirecting(true)
-      const supabase = createClient()
-      supabase.auth
-        .signInWithPassword({ email: creds.email, password: creds.password })
-        .then(({ error }) => {
-          if (error) {
-            // Si por cualquier motivo no se pudo iniciar sesión, caemos al login
-            // conservando el destino (la promo/beneficio que venía a reclamar).
-            toast.success('Cuenta creada. Inicia sesión para continuar.')
-            router.replace(loginConDestino)
-            return
-          }
-          toast.success('¡Bienvenido! Tu cuenta está lista.')
-          // Lo primero que ve: el beneficio que venía a reclamar (next), la
-          // celebración de su invitación (gl) o su cuenta (por defecto).
-          router.replace(destino)
-          router.refresh()
-        })
-        .catch(() => {
-          router.replace(loginConDestino)
-        })
+      toast.success('¡Bienvenido! Tu cuenta está lista.')
+      const creds = credsRef.current
+      if (creds) {
+        const supabase = createClient()
+        supabase.auth
+          .signInWithPassword({ email: creds.email, password: creds.password })
+          .finally(() => {
+            window.location.href = destino
+          })
+      } else {
+        window.location.href = destino
+      }
     }
   }, [state.success, state.pendingVerification, router, glCode, destino])
 

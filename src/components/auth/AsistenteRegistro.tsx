@@ -217,27 +217,19 @@ export function AsistenteRegistro({
       try {
         sessionStorage.removeItem(claveBorrador)
       } catch {}
-      const creds = credsRef.current
-      const loginConDestino = `/login?redirect=${encodeURIComponent(destino)}`
-      if (!creds) {
-        router.replace(loginConDestino)
-        return
-      }
       setRedirecting(true)
-      const supabase = createClient()
-      supabase.auth
-        .signInWithPassword({ email: creds.email, password: creds.password })
-        .then(({ error }) => {
-          if (error) {
-            toast.success('Cuenta creada. Inicia sesión para continuar.')
-            router.replace(loginConDestino)
-            return
-          }
-          toast.success('¡Bienvenido! Tu cuenta está lista.')
-          router.replace(destino)
-          router.refresh()
-        })
-        .catch(() => router.replace(loginConDestino))
+      toast.success('¡Bienvenido! Tu cuenta está lista.')
+      const creds = credsRef.current
+      if (creds) {
+        const supabase = createClient()
+        supabase.auth
+          .signInWithPassword({ email: creds.email, password: creds.password })
+          .finally(() => {
+            window.location.href = destino
+          })
+      } else {
+        window.location.href = destino
+      }
     }
   }, [state.success, state.pendingVerification, router, destino, claveBorrador])
 

@@ -124,6 +124,16 @@ model Vendedor {
   supervisor   Vendedor?  @relation("VendedorSupervisor", fields: [supervisorId], references: [id])
   equipo       Vendedor[] @relation("VendedorSupervisor")
   fechaIngreso DateTime  @default(now())
+
+  /// Datos B2B / Corporativos (Touroperadores y Agencias):
+  razonSocial      String?
+  rnc              String?
+  diasCredito      Int?      @default(0)
+  limiteCredito    Decimal?  @db.Decimal(12, 2)
+  emailFacturacion String?
+  prefijoVoucher   String?
+  modeloComercial  String    @default("COMISION")
+
   /// 'ACTIVO' | 'SUSPENDIDO' | 'INACTIVO'. Nunca se borra: sus ventas,
   /// clientes y comisiones históricas permanecen (§99).
   estado       String    @default("ACTIVO")
@@ -290,6 +300,14 @@ model ReservaExc {
   notas       String?
   creadaPorId String?
 
+  /// Logística de Turoperador / Recogida en Hoteles:
+  voucherAgencia  String?
+  hotelRecogida   String?
+  lobbyRecogida   String?
+  horaRecogida    String?
+  habitacion      String?
+  tarifaNetaTotal Decimal?  @db.Decimal(12, 2)
+
   /// QR de CHECK-IN (§84): identifica esta reserva el día de la salida. Es
   /// TRANSACCIONAL —marca quién se subió— y no tiene nada que ver con el QR de
   /// adquisición del vendedor. Nace con la reserva y no se reutiliza jamás en
@@ -410,15 +428,16 @@ model ReembolsoExc {
 // ── Motor de comisiones y liquidaciones ──────────────────────────────────────
 
 /// REGLAS del Commission Engine (§22–23). La prioridad al resolver:
-/// VENDEDOR_EXCURSION > VENDEDOR > EXCURSION > CATEGORIA > GENERAL.
+/// VENDEDOR_EXCURSION > VENDEDOR > EXCURSION > CATEGORIA > TIPO_VENDEDOR > GENERAL.
 model ComisionRegla {
   id           String    @id @default(cuid())
   companyId    String
-  /// 'GENERAL' | 'CATEGORIA' | 'EXCURSION' | 'VENDEDOR' | 'VENDEDOR_EXCURSION'.
+  /// 'GENERAL' | 'TIPO_VENDEDOR' | 'CATEGORIA' | 'EXCURSION' | 'VENDEDOR' | 'VENDEDOR_EXCURSION'.
   ambito       String
   excursionId  String?
   vendedorId   String?
   categoria    String?
+  tipoVendedor String?
   /// 'PORCENTAJE' | 'FIJO_VENTA' | 'FIJO_PASAJERO' | 'FIJO_ADULTO' |
   /// 'FIJO_NINO' | 'ESCALON'.
   tipoCalculo  String

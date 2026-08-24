@@ -26,6 +26,7 @@
 
 export const AMBITOS_REGLA = [
   'GENERAL',
+  'TIPO_VENDEDOR',
   'CATEGORIA',
   'EXCURSION',
   'VENDEDOR',
@@ -35,6 +36,7 @@ export type AmbitoRegla = (typeof AMBITOS_REGLA)[number]
 
 export const AMBITO_REGLA_LABEL: Record<AmbitoRegla, string> = {
   GENERAL: 'Toda la empresa',
+  TIPO_VENDEDOR: 'Por tipo de vendedor',
   CATEGORIA: 'Una categoría',
   EXCURSION: 'Una excursión',
   VENDEDOR: 'Un vendedor',
@@ -44,10 +46,11 @@ export const AMBITO_REGLA_LABEL: Record<AmbitoRegla, string> = {
 /** Cuanto más alto, más manda. Es el corazón de la jerarquía (§25). */
 export const PESO_AMBITO: Record<AmbitoRegla, number> = {
   GENERAL: 1,
-  CATEGORIA: 2,
-  EXCURSION: 3,
-  VENDEDOR: 4,
-  VENDEDOR_EXCURSION: 5,
+  TIPO_VENDEDOR: 2,
+  CATEGORIA: 3,
+  EXCURSION: 4,
+  VENDEDOR: 5,
+  VENDEDOR_EXCURSION: 6,
 }
 
 // ── Tipos de cálculo ─────────────────────────────────────────────────────────
@@ -175,6 +178,7 @@ export interface ReglaComision {
   excursionId?: string | null
   vendedorId?: string | null
   categoria?: string | null
+  tipoVendedor?: string | null
   vigenciaDesde?: Date | null
   vigenciaHasta?: Date | null
   createdAt: Date
@@ -184,6 +188,7 @@ export interface ContextoVenta {
   vendedorId: string
   excursionId: string
   categoria?: string | null
+  tipoVendedor?: string | null
   /** Total cobrado, impuestos incluidos (solo informativo para el desglose). */
   total: number
   /** Lo que la empresa ingresa de verdad: sin impuestos. Es la base (§regla 3). */
@@ -206,6 +211,12 @@ function reglaCorresponde(regla: ReglaComision, ctx: ContextoVenta): boolean {
   switch (regla.ambito as AmbitoRegla) {
     case 'GENERAL':
       return true
+    case 'TIPO_VENDEDOR':
+      return (
+        !!regla.tipoVendedor &&
+        !!ctx.tipoVendedor &&
+        regla.tipoVendedor.toLowerCase().trim() === ctx.tipoVendedor.toLowerCase().trim()
+      )
     case 'CATEGORIA':
       return !!regla.categoria && regla.categoria === ctx.categoria
     case 'EXCURSION':
@@ -393,6 +404,7 @@ export interface ReglaDatos {
   excursionId: string | null
   vendedorId: string | null
   categoria: string | null
+  tipoVendedor: string | null
   vigenciaDesde: Date | null
   vigenciaHasta: Date | null
 }
@@ -429,6 +441,7 @@ export function validarRegla(
   const excursionId = texto(form.excursionId, 40) || null
   const vendedorId = texto(form.vendedorId, 40) || null
   const categoria = texto(form.categoria, 80) || null
+  const tipoVendedor = texto(form.tipoVendedor, 60) || null
 
   // Un ámbito sin su referencia no se aplicaría nunca: es una regla muerta.
   if ((ambito === 'EXCURSION' || ambito === 'VENDEDOR_EXCURSION') && !excursionId) {
@@ -439,6 +452,9 @@ export function validarRegla(
   }
   if (ambito === 'CATEGORIA' && !categoria) {
     return { ok: false, error: 'Escribe la categoría a la que se aplica la regla.' }
+  }
+  if (ambito === 'TIPO_VENDEDOR' && !tipoVendedor) {
+    return { ok: false, error: 'Elige el tipo de vendedor al que se aplica la regla.' }
   }
 
   const valor = centavos(Number(texto(form.valor, 12)))
@@ -473,6 +489,7 @@ export function validarRegla(
       excursionId: ambito === 'EXCURSION' || ambito === 'VENDEDOR_EXCURSION' ? excursionId : null,
       vendedorId: ambito === 'VENDEDOR' || ambito === 'VENDEDOR_EXCURSION' ? vendedorId : null,
       categoria: ambito === 'CATEGORIA' ? categoria : null,
+      tipoVendedor: ambito === 'TIPO_VENDEDOR' ? tipoVendedor : null,
       vigenciaDesde,
       vigenciaHasta,
     },

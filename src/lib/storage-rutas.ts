@@ -101,6 +101,19 @@ export function rutaEvidencia(
 }
 
 /**
+ * Imagen de una excursión: `<companyId>/excursiones/<excursionId|nueva>/<archivo>`.
+ */
+export function rutaExcursion(
+  companyId: string,
+  excursionId: string | null | undefined,
+  archivo: string
+): string {
+  const empresa = exigirSegmento(companyId, 'companyId')
+  const carpeta = excursionId ? exigirSegmento(excursionId, 'excursionId') : CARPETA_SIN_GUARDAR
+  return `${empresa}/excursiones/${carpeta}/${exigirSegmento(archivo, 'archivo')}`
+}
+
+/**
  * ¿Esta ruta lleva ya el prefijo de empresa?
  *
  * Sirve para el script de migración y para distinguir, al leer una URL vieja,

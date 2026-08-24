@@ -164,6 +164,9 @@ export async function excursionesReservables(companyId: string) {
           orderBy: { createdAt: 'asc' },
           select: { id: true, nombre: true, precioAdulto: true, precioNino: true },
         },
+        horarios: {
+          select: { id: true, horaSalida: true, diasSemana: true },
+        },
       },
     })
   )
@@ -180,6 +183,11 @@ export async function excursionesReservables(companyId: string) {
         nombre: v.nombre,
         precioAdulto: Number(v.precioAdulto),
         precioNino: v.precioNino != null ? Number(v.precioNino) : null,
+      })),
+      horarios: e.horarios.map((h) => ({
+        id: h.id,
+        horaSalida: h.horaSalida,
+        diasSemana: h.diasSemana,
       })),
     }))
 }

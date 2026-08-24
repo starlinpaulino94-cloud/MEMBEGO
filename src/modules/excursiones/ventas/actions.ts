@@ -175,7 +175,7 @@ export async function procesarVentaYComisionInterna(
       })
     ).catch(anotarFallo('excursiones:ventas:atribucion'))
 
-    const [reglas, excursion, config, ventasPreviasExcursion, ventasPreviasVendedor] = await Promise.all([
+    const [reglas, excursion, config, ventasPreviasExcursion, ventasPreviasVendedor, vendedor] = await Promise.all([
       conEmpresa(companyId, (tx) =>
         tx.comisionRegla.findMany({ where: { companyId, activa: true } })
       ),
@@ -217,6 +217,12 @@ export async function procesarVentaYComisionInterna(
           },
         })
       ),
+      conEmpresa(companyId, (tx) =>
+        tx.vendedor.findUnique({
+          where: { id: reserva.vendedorId! },
+          select: { tipo: true },
+        })
+      ),
     ])
 
     // Precio base del paquete: la primera variante si la hay; si no, se deduce
@@ -230,6 +236,7 @@ export async function procesarVentaYComisionInterna(
       vendedorId: reserva.vendedorId,
       excursionId: reserva.excursionId,
       categoria: excursion?.categoria ?? null,
+      tipoVendedor: vendedor?.tipo ?? null,
       total: Number(reserva.total),
       baseComisionable: baseComisionable(Number(reserva.total), Number(reserva.impuestos)),
       adultos: reserva.adultos,
@@ -253,6 +260,7 @@ export async function procesarVentaYComisionInterna(
           excursionId: r.excursionId,
           vendedorId: r.vendedorId,
           categoria: r.categoria,
+          tipoVendedor: r.tipoVendedor,
           vigenciaDesde: r.vigenciaDesde,
           vigenciaHasta: r.vigenciaHasta,
           createdAt: r.createdAt,

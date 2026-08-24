@@ -38,7 +38,7 @@ function deForm(formData: FormData, campos: string[]): Record<string, unknown> {
 const CAMPOS_EXCURSION = [
   'nombre', 'descripcion', 'duracionMin', 'ubicacion', 'categoria', 'moneda',
   'impuestoPct', 'capacidad', 'puntoSalida', 'horaSalida', 'horaRegreso',
-  'incluye', 'noIncluye', 'politicas',
+  'incluye', 'noIncluye', 'politicas', 'portadaUrl', 'galeriaJson'
 ]
 
 async function auditar(

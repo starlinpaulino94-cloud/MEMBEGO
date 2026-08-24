@@ -44,6 +44,7 @@ export async function listadoReglas(companyId: string) {
     escalones: r.escalones,
     activa: r.activa,
     categoria: r.categoria,
+    tipoVendedor: r.tipoVendedor ?? null,
     vigenciaDesde: r.vigenciaDesde,
     vigenciaHasta: r.vigenciaHasta,
     excursion: r.excursionId ? porExcursion.get(r.excursionId) ?? null : null,

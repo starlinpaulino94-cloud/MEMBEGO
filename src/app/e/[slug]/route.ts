@@ -36,15 +36,14 @@ export async function GET(
   const enlace = await resolverEnlace(slug.trim().toLowerCase())
   if (!enlace) return NextResponse.redirect(base)
 
-  const destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
-    enlace.codigoVendedor
-  )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(
-    `/empresas/${enlace.companySlug}/excursiones`
-  )}`
-
   // Los robots de vista previa (WhatsApp, Facebook…) abren el enlace antes que
   // la persona: si contaran, cada compartida sería una visita falsa.
   if (esBotDeVistaPrevia(req.headers.get('user-agent'))) {
+    const destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
+      enlace.codigoVendedor
+    )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(
+      `/empresas/${enlace.companySlug}/excursiones`
+    )}`
     return NextResponse.redirect(destino)
   }
 
@@ -58,19 +57,44 @@ export async function GET(
     landing: `/registro/${enlace.companySlug}`,
   })
 
-  const ventanaDias = await ventanaDeEmpresa(enlace.companyId)
+  // Obtener estado de sesión desde Auth
+  const { getUser } = await import('@/lib/auth')
+  const user = await getUser().catch(() => null)
+  const isCliente = user && user.metadata.role === 'CLIENTE'
+
+  // Si está logueado, llevarlo al catálogo directo. Si no, al registro con next.
+  let nextUrl = `/empresas/${enlace.companySlug}/excursiones`
+  let destino: string
+  
+  if (isCliente) {
+    destino = `${base}${nextUrl}?e=${encodeURIComponent(enlace.slug)}`
+  } else {
+    destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
+      enlace.codigoVendedor
+    )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(nextUrl)}`
+  }
+
   const res = NextResponse.redirect(destino)
-  res.cookies.set(VISITOR_COOKIE, visitorId, {
+  res.cookies.set({
+    name: VISITOR_COOKIE,
+    value: visitorId,
     maxAge: VISITOR_COOKIE_DIAS * 24 * 60 * 60,
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
   })
-  res.cookies.set(VENDEDOR_COOKIE, enlace.slug, {
+
+  const ventanaDias = await ventanaDeEmpresa(enlace.companyId)
+  res.cookies.set({
+    name: VENDEDOR_COOKIE,
+    value: enlace.slug,
     maxAge: ventanaDias * 24 * 60 * 60,
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
   })
+
   return res
 }
