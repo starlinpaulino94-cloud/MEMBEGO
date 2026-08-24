@@ -716,3 +716,53 @@ test('perfilPendienteDeActivar: ignora los habilitados aunque sean posteriores',
   ])
   assert.equal(elegido?.ultimos4, '1111')
 })
+
+// ── La sonda de diagnóstico no puede volver a abrirse ───────────────────────
+//
+// Esta ruta ejecutaba una activación REAL desde un GET, con el código en la
+// barra de direcciones y sin ningún límite. Tres formas de que eso vuelva:
+// alguien añade un atajo por GET «para probar rápido», alguien quita el
+// limitador porque estorba, o alguien devuelve el override de `customerId` a
+// todo el mundo. Las tres se ven aquí.
+
+test('la sonda de diagnóstico tiene límite en sus DOS verbos', () => {
+  const src = readFileSync(`${RUTAS}/estado/route.ts`, 'utf8')
+  // El GET solo lee: le basta el presupuesto de las lecturas.
+  assert.match(src, /await paymentSessionLimiter\(/)
+  // El POST puede BORRAR una tarjeta al tercer código fallido: va con el
+  // presupuesto estrecho de las rutas que mueven dinero.
+  assert.match(src, /await paymentLimiter\(/)
+})
+
+test('la sonda NO ejecuta la activación desde un GET', () => {
+  const src = readFileSync(`${RUTAS}/estado/route.ts`, 'utf8')
+  const get = src.slice(src.indexOf('export async function GET'), src.indexOf('export async function POST'))
+  assert.ok(get.length > 0, 'no se encontró el bloque del GET')
+  // Un GET debe poder repetirse sin consecuencias: una precarga del navegador
+  // o un volver-atrás no pueden quemar uno de los 3 intentos.
+  assert.doesNotMatch(
+    get,
+    /activarPerfilCardnet\(/,
+    'el GET volvió a ejecutar la activación: eso lo dispara una precarga'
+  )
+  // Y el código no puede volver a leerse de la URL, donde queda escrito en
+  // registros de acceso, historial y cabecera Referer.
+  assert.doesNotMatch(
+    get,
+    /searchParams\.get\('codigo'\)/,
+    'el código de activación volvió a la query string'
+  )
+})
+
+test('mirar el Customer de OTRO queda restringido a SUPERADMIN', () => {
+  const src = readFileSync(`${RUTAS}/estado/route.ts`, 'utf8')
+  const i = src.indexOf("searchParams.get('customerId')")
+  assert.ok(i > 0, 'desapareció el override de customerId; si fue a propósito, actualiza esta prueba')
+  // El parámetro solo puede leerse detrás de la comprobación de superadmin:
+  // sin ella, cualquiera con sesión leía el correo y las tarjetas de otro.
+  assert.match(
+    src.slice(Math.max(0, i - 200), i),
+    /esSuperadmin/,
+    'el override de customerId dejó de estar detrás de la guardia de superadmin'
+  )
+})
