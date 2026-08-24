@@ -7,7 +7,7 @@ import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { StatCard } from '@/components/ui/stat-card'
 import { Badge } from '@/components/ui/badge'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { MembershipAdminActions } from '@/components/admin/MembershipAdminActions'
@@ -293,6 +293,16 @@ export default async function SuperadminMembresiasPage({
                   <MembershipAdminActions
                     membershipId={m.id}
                     estado={m.estado as MembershipEstado}
+                    renovacion={{
+                      clienteId: m.clienteId,
+                      clienteNombre: m.clienteNombre,
+                      planNombre: m.planNombre,
+                      precioTexto: formatMoney(m.planPrecio, {}),
+                      lavadosPlan: m.planLavadosIncluidos,
+                      lavadosRegalo: m.usosRegaloRestantes,
+                      vigenciaDias: m.planVigenciaDias,
+                      vence: m.fechaVencimiento?.toISOString() ?? null,
+                    }}
                   />
                 </td>
               </tr>

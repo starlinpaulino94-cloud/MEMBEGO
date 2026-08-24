@@ -1,7 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { confirmarPago, renovarMembresia } from '@/modules/admin/actions'
+import { confirmarPago } from '@/modules/admin/actions'
+import { RenovarMembresiaDialog } from '@/components/admin/RenovarMembresiaDialog'
 import { cancelarMembresia, desactivarMembresia } from '@/modules/admin/planActions'
 import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { ConfirmarPagoButton, RechazarPagoButton } from '@/components/admin/ValidarPagoActions'
@@ -23,6 +24,21 @@ import type { MembershipEstado } from '@/types'
 interface Props {
   membershipId: string
   estado: MembershipEstado
+  /**
+   * Datos del cobro para la pantalla de renovación. Renovar escribe un
+   * ingreso, así que quien lo hace tiene que ver QUÉ va a cobrar y declararlo;
+   * un botón suelto no puede pedir eso.
+   */
+  renovacion?: {
+    clienteId: string
+    clienteNombre: string
+    planNombre: string
+    precioTexto: string
+    lavadosPlan: number | null
+    lavadosRegalo: number
+    vigenciaDias: number
+    vence: string | null
+  }
 }
 
 /**
@@ -36,7 +52,7 @@ interface Props {
  * ya es una región `aria-live`, así que el anuncio se conserva y el sitio pasa
  * a ser el mismo que en el resto del panel.
  */
-export function MembershipAdminActions({ membershipId, estado }: Props) {
+export function MembershipAdminActions({ membershipId, estado, renovacion }: Props) {
   const router = useRouter()
   // Cualquiera de las cuatro cambia la fila: hay que recargar los datos del
   // servidor para que la tabla deje de enseñar el estado anterior.
@@ -64,17 +80,8 @@ export function MembershipAdminActions({ membershipId, estado }: Props) {
         </>
       )}
 
-      {(estado === 'ACTIVA' || estado === 'VENCIDA') && (
-        <BotonConfirmado
-          accion={renovarMembresia}
-          estadoInicial={{}}
-          campos={{ membershipId }}
-          size="sm"
-          variant="outline"
-          alExito={refrescar}
-        >
-          Renovar
-        </BotonConfirmado>
+      {(estado === 'ACTIVA' || estado === 'VENCIDA') && renovacion && (
+        <RenovarMembresiaDialog membershipId={membershipId} {...renovacion} />
       )}
 
       {estado === 'ACTIVA' && (

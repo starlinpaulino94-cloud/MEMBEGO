@@ -189,9 +189,13 @@ async function aplicarEfecto(
 
     case 'LAVADOS_GRATIS': {
       // Compat E6: suma usos a la membresía ACTIVA; si no hay, queda PENDIENTE.
+      //
+      // Va al contador de REGALO, no al del plan. Sumarlos al mismo campo hacía
+      // que renovar —que asigna el del plan de forma absoluta— resucitara el
+      // regalo ya usado y borrara el que no se había usado.
       const upd = await tx.membership.updateMany({
         where: { clienteId, companyId: input.companyId, estado: 'ACTIVA' },
-        data: { lavadosRestantes: { increment: Math.round(valor) } },
+        data: { lavadosBonoRestantes: { increment: Math.round(valor) } },
       })
       return { estado: upd.count > 0 ? 'ENTREGADA' : 'PENDIENTE', productoCompraId: null }
     }
