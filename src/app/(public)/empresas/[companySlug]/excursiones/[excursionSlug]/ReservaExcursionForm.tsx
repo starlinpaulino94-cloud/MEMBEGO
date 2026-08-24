@@ -359,6 +359,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setAdultos(Math.max(1, adultos - 1))}
+                  aria-label="Quitar un adulto"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Minus className="h-4 w-4" />
@@ -367,6 +368,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setAdultos(adultos + 1)}
+                  aria-label="Añadir un adulto"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Plus className="h-4 w-4" />
@@ -381,6 +383,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setNinos(Math.max(0, ninos - 1))}
+                  aria-label="Quitar un niño"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Minus className="h-4 w-4" />
@@ -389,6 +392,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setNinos(ninos + 1)}
+                  aria-label="Añadir un niño"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Plus className="h-4 w-4" />
