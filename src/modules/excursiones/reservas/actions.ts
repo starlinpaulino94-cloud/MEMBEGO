@@ -23,6 +23,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { generarCodigo } from '@/lib/codes'
 import {
   resolverVendedorAtribuido,
   politicaValida,
@@ -205,6 +206,7 @@ export async function crearReserva(
               canal: v.datos.canal,
               notas: v.datos.notas,
               creadaPorId: user.metadata.dbUserId ?? null,
+              checkinToken: generarCodigo(24),
               pasajeros: {
                 create: [
                   ...Array.from({ length: v.datos.adultos }, () => ({ companyId, tipo: 'ADULTO' })),

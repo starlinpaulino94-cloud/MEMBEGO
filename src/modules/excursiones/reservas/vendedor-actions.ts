@@ -7,12 +7,19 @@ import { requireRole } from '@/lib/auth/guards'
 import { vendedorDeUsuario } from '@/modules/excursiones/panel/queries'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { calcularTotales, numeroReserva, validarReserva } from './nucleo'
+import {
+  calcularTotales,
+  numeroReserva,
+  validarReserva,
+  validarDisponibilidad,
+  validarDisponibilidadCombo,
+} from './nucleo'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
+import { generarCodigo } from '@/lib/codes'
 
 export interface ReservaVendedorState {
   error?: string
@@ -63,6 +70,29 @@ export async function crearReservaVendedor(
           nombre: true,
           moneda: true,
           impuestoPct: true,
+          tipoItem: true,
+          capacidad: true,
+          horaSalida: true,
+          horarios: {
+            where: { activo: true },
+            select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+          },
+          comboItems: {
+            include: {
+              actividad: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  capacidad: true,
+                  horaSalida: true,
+                  horarios: {
+                    where: { activo: true },
+                    select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+                  },
+                },
+              },
+            },
+          },
           variantes: {
             where: { id: varianteId, activa: true },
             select: { id: true, precioAdulto: true, precioNino: true },
@@ -74,14 +104,62 @@ export async function crearReservaVendedor(
       return { error: 'La excursión o la opción seleccionada no está disponible.' }
     }
 
+    if (excursion.tipoItem === 'COMBO' && excursion.comboItems.length > 0) {
+      const dispCombo = validarDisponibilidadCombo(
+        v.datos.fecha,
+        v.datos.hora,
+        v.datos.adultos + v.datos.ninos,
+        {
+          nombre: excursion.nombre,
+          capacidad: excursion.capacidad,
+          horaSalida: excursion.horaSalida,
+          horarios: excursion.horarios.map((h) => ({
+            id: h.id,
+            diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+            horaSalida: h.horaSalida,
+            cupo: h.cupo,
+          })),
+          actividades: excursion.comboItems.map((ci) => ({
+            nombre: ci.actividad.nombre,
+            capacidad: ci.actividad.capacidad,
+            horaSalida: ci.actividad.horaSalida,
+            horarios: ci.actividad.horarios.map((h) => ({
+              id: h.id,
+              diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+              horaSalida: h.horaSalida,
+              cupo: h.cupo,
+            })),
+          })),
+        }
+      )
+      if (!dispCombo.ok) return { error: dispCombo.error }
+    } else {
+      const disp = validarDisponibilidad(
+        v.datos.fecha,
+        v.datos.hora,
+        v.datos.adultos + v.datos.ninos,
+        {
+          capacidad: excursion.capacidad,
+          horaSalida: excursion.horaSalida,
+          horarios: excursion.horarios.map((h) => ({
+            id: h.id,
+            diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+            horaSalida: h.horaSalida,
+            cupo: h.cupo,
+          })),
+        }
+      )
+      if (!disp.ok) return { error: disp.error }
+    }
+
     const variante = excursion.variantes[0]
     const totales = calcularTotales({
       precioAdulto: variante.precioAdulto.toNumber(),
-      precioNino: variante.precioNino?.toNumber(),
+      precioNino: variante.precioNino ? variante.precioNino.toNumber() : null,
       impuestoPct: excursion.impuestoPct?.toNumber() ?? 0,
       adultos: v.datos.adultos,
       ninos: v.datos.ninos,
-      descuentoFijo: 0,
+      descuento: 0,
     })
 
     // Auto-provisión de cuenta
@@ -221,6 +299,7 @@ export async function crearReservaVendedor(
               horaRecogida: v.datos.horaRecogida,
               habitacion: v.datos.habitacion,
               creadaPorId: user.metadata.dbUserId ?? null,
+              checkinToken: generarCodigo(24),
               pasajeros: {
                 createMany: {
                   data: [

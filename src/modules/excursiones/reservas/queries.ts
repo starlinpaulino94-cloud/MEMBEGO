@@ -1,4 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
+import { generarCodigo } from '@/lib/codes'
+import { anotarFallo } from '@/lib/prisma-errors'
 import { calcularSaldo } from './nucleo'
 
 /**
@@ -157,8 +159,24 @@ export async function excursionesReservables(companyId: string) {
       select: {
         id: true,
         nombre: true,
+        portadaUrl: true,
+        duracionMin: true,
+        categoria: true,
+        tipoItem: true,
+        ubicacion: true,
         moneda: true,
         impuestoPct: true,
+        comboItems: {
+          orderBy: { orden: 'asc' },
+          select: {
+            actividad: {
+              select: {
+                nombre: true,
+                duracionMin: true,
+              },
+            },
+          },
+        },
         variantes: {
           where: { activa: true },
           orderBy: { createdAt: 'asc' },
@@ -176,8 +194,17 @@ export async function excursionesReservables(companyId: string) {
     .map((e) => ({
       id: e.id,
       nombre: e.nombre,
+      portadaUrl: e.portadaUrl,
+      duracionMin: e.duracionMin,
+      categoria: e.categoria,
+      tipoItem: e.tipoItem,
+      ubicacion: e.ubicacion,
       moneda: e.moneda,
       impuestoPct: e.impuestoPct != null ? Number(e.impuestoPct) : null,
+      comboItems: e.comboItems.map((ci) => ({
+        nombre: ci.actividad.nombre,
+        duracionMin: ci.actividad.duracionMin,
+      })),
       variantes: e.variantes.map((v) => ({
         id: v.id,
         nombre: v.nombre,
@@ -187,7 +214,7 @@ export async function excursionesReservables(companyId: string) {
       horarios: e.horarios.map((h) => ({
         id: h.id,
         horaSalida: h.horaSalida,
-        diasSemana: h.diasSemana,
+        diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
       })),
     }))
 }
@@ -199,7 +226,7 @@ export async function clientesParaReserva(companyId: string) {
       where: { companyId },
       orderBy: { createdAt: 'desc' },
       take: 200,
-      select: { id: true, nombre: true, telefono: true },
+      select: { id: true, nombre: true, email: true, telefono: true },
     })
   )
 }
@@ -217,7 +244,18 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
   )
   if (!reserva) return null
 
-  const { checkinToken, checkinAt, checkinPorId } = reserva
+  let checkinToken = reserva.checkinToken
+  if (!checkinToken) {
+    checkinToken = generarCodigo(24)
+    await conEmpresa(companyId, (tx) =>
+      tx.reservaExc.update({
+        where: { id: reserva.id },
+        data: { checkinToken },
+      })
+    ).catch(anotarFallo('excursiones:reservas:reservaCliente:autoToken'))
+  }
+
+  const { checkinAt, checkinPorId } = reserva
 
   const excursion = await conEmpresa(companyId, (tx) =>
     tx.excursion.findFirst({
@@ -239,6 +277,22 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
         incluye: true,
         noIncluye: true,
         politicas: true,
+        tipoItem: true,
+        comboItems: {
+          orderBy: { orden: 'asc' },
+          select: {
+            actividad: {
+              select: {
+                id: true,
+                nombre: true,
+                duracionMin: true,
+                horaSalida: true,
+                horaRegreso: true,
+                categoria: true,
+              },
+            },
+          },
+        },
       },
     })
   )
