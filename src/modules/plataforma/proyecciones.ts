@@ -112,6 +112,27 @@ export const PROYECCIONES: readonly ContratoProyeccion[] = [
       'Mostrar "cliente con membresía activa" en pantalla. NUNCA para autorizar un canje: eso es benefits.evaluate.',
   },
   {
+    entidad: 'Promotion',
+    autoridad: 'CORE',
+    refresco: 'EVENTO',
+    // Sin el motor de reglas (versiones, restricciones, auditoría): el vertical
+    // pinta la oferta; decidir si un cliente la puede canjear es benefits.evaluate.
+    campos: ['id', 'titulo', 'descripcion', 'imagenUrl', 'activo', 'vigenciaDesde', 'vigenciaHasta'],
+    eventos: ['promotion.created', 'promotion.updated', 'promotion.deleted'],
+    usoPermitido:
+      'Listar y mostrar las promociones de la empresa. NO para autorizar un canje: eso es benefits.evaluate.',
+  },
+  {
+    entidad: 'Appointment',
+    autoridad: 'CORE',
+    refresco: 'EVENTO',
+    // Sin notas internas ni del cliente: el vertical arma la agenda; la ficha
+    // del cliente la pide aparte.
+    campos: ['id', 'customerId', 'branchId', 'vehicleId', 'inicio', 'duracionMin', 'servicio', 'estado'],
+    eventos: ['appointment.created', 'appointment.updated', 'appointment.cancelled'],
+    usoPermitido: 'Poblar la agenda y las citas del día en el satélite.',
+  },
+  {
     entidad: 'BenefitEligibility',
     autoridad: 'CORE',
     // La única que NO se proyecta, y es la más importante de la lista.
