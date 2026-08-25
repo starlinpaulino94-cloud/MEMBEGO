@@ -42,6 +42,7 @@ export async function excursionDetalle(companyId: string, excursionId: string) {
                 id: true,
                 nombre: true,
                 slug: true,
+                tipoItem: true,
                 portadaUrl: true,
                 moneda: true,
                 duracionMin: true,
@@ -74,6 +75,7 @@ export async function actividadesParaCombo(companyId: string, excludeId?: string
       select: {
         id: true,
         nombre: true,
+        tipoItem: true,
         categoria: true,
         moneda: true,
         duracionMin: true,
@@ -98,6 +100,7 @@ export async function actividadesParaCombo(companyId: string, excludeId?: string
   return lista.map((item) => ({
     id: item.id,
     nombre: item.nombre,
+    tipoItem: item.tipoItem,
     categoria: item.categoria,
     moneda: item.moneda,
     duracionMin: item.duracionMin,

@@ -273,6 +273,14 @@ export async function registrarCheckin(
           checkinPorId: user.metadata.dbUserId ?? null,
         },
       })
+      // Sincronizar items individuales de combo
+      await tx.reservaItem.updateMany({
+        where: { reservaId: reserva.id, companyId },
+        data: {
+          estado: 'EMBARCADA',
+          checkinAt: ahora,
+        },
+      })
       if (idsQueSuben.length > 0) {
         await tx.reservaPasajero.updateMany({
           where: { id: { in: idsQueSuben }, companyId },

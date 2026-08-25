@@ -39,8 +39,11 @@ import {
   numeroReserva,
   validarReserva,
   validarPago,
+  calcularPrecioEfectivo,
   type EstadoReserva,
 } from './nucleo'
+import { verificarYBloquearCupoActividad } from './queries'
+import { sincronizarEstadoAgotada } from '../catalogo/actions'
 
 export interface ReservaActionState {
   error?: string
@@ -143,12 +146,30 @@ export async function crearReserva(
           id: true,
           nombre: true,
           moneda: true,
+          tipoItem: true,
+          capacidad: true,
+          horaSalida: true,
           impuestoPct: true,
           estado: true,
           variantes: {
             where: { activa: true },
-            select: { id: true, nombre: true, precioAdulto: true, precioNino: true },
+            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
             orderBy: { createdAt: 'asc' },
+          },
+          comboItems: {
+            include: {
+              actividad: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  tipoItem: true,
+                  capacidad: true,
+                  horaSalida: true,
+                  duracionMin: true,
+                  horaRegreso: true,
+                },
+              },
+            },
           },
         },
       })
@@ -161,21 +182,80 @@ export async function crearReserva(
       excursion.variantes.find((x) => x.id === varianteId) ?? excursion.variantes[0]
     if (!variante) return { error: 'Esa excursión no tiene variantes activas con precio.' }
 
+    // Calcular precio efectivo con reglas dinámicas
+    const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const baseAdulto = Number(variante.precioAdulto)
+    const baseNino = variante.precioNino != null ? Number(variante.precioNino) : null
+    const { precioAdulto, precioNino } = calcularPrecioEfectivo(v.datos.fecha, v.datos.hora, baseAdulto, baseNino, reglasDin)
+
     const totales = calcularTotales({
       adultos: v.datos.adultos,
       ninos: v.datos.ninos,
-      precioAdulto: Number(variante.precioAdulto),
-      precioNino: variante.precioNino != null ? Number(variante.precioNino) : null,
+      precioAdulto,
+      precioNino,
       descuento: v.datos.descuento,
       impuestoPct: excursion.impuestoPct != null ? Number(excursion.impuestoPct) : null,
     })
 
+    const comboItinerarioRaw = String(formData.get('comboItinerarioJson') ?? '')
+    let itemsComboAGuardar: { actividadId: string; fecha: Date; hora: string | null }[] = []
+    if (excursion.tipoItem === 'COMBO' && excursion.comboItems.length > 0) {
+      if (comboItinerarioRaw) {
+        try {
+          const parsed = JSON.parse(comboItinerarioRaw)
+          if (Array.isArray(parsed)) {
+            itemsComboAGuardar = parsed.map((it: any) => {
+              const [y, m, d] = String(it.fecha).split('-').map(Number)
+              return {
+                actividadId: it.actividadId,
+                fecha: new Date(Date.UTC(y, m - 1, d)),
+                hora: it.hora,
+              }
+            })
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (itemsComboAGuardar.length === 0) {
+        itemsComboAGuardar = excursion.comboItems.map((ci) => ({
+          actividadId: ci.actividad.id,
+          fecha: v.datos.fecha,
+          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.horaSalida || v.datos.hora,
+        }))
+      }
+    }
+
     const vendedorId = await vendedorParaCliente(companyId, clienteId)
     const anio = v.datos.fecha.getUTCFullYear()
+    const totalPasajeros = v.datos.adultos + v.datos.ninos
 
     // Correlativo por empresa y año con reintento ante la carrera: el índice
     // único companyId+numero es el árbitro.
     const creada = await conEmpresa(companyId, async (tx) => {
+      // Validar cupo real en BD
+      if (itemsComboAGuardar.length > 0) {
+        for (const it of itemsComboAGuardar) {
+          const cupoCheck = await verificarYBloquearCupoActividad(tx, {
+            companyId,
+            actividadId: it.actividadId,
+            fecha: it.fecha,
+            hora: it.hora,
+            pasajeros: totalPasajeros,
+          })
+          if (!cupoCheck.ok) throw new Error(cupoCheck.error)
+        }
+      } else {
+        const cupoCheck = await verificarYBloquearCupoActividad(tx, {
+          companyId,
+          actividadId: excursion.id,
+          fecha: v.datos.fecha,
+          hora: v.datos.hora,
+          pasajeros: totalPasajeros,
+        })
+        if (!cupoCheck.ok) throw new Error(cupoCheck.error)
+      }
+
       const desde = new Date(Date.UTC(anio, 0, 1))
       const hasta = new Date(Date.UTC(anio + 1, 0, 1))
       let intento =
@@ -213,6 +293,21 @@ export async function crearReserva(
                   ...Array.from({ length: v.datos.ninos }, () => ({ companyId, tipo: 'NINO' })),
                 ],
               },
+              ...(itemsComboAGuardar.length > 0
+                ? {
+                    items: {
+                      create: itemsComboAGuardar.map((it) => ({
+                        companyId,
+                        actividadId: it.actividadId,
+                        fecha: it.fecha,
+                        hora: it.hora,
+                        adultos: v.datos.adultos,
+                        ninos: v.datos.ninos,
+                        estado: 'PENDIENTE',
+                      })),
+                    },
+                  }
+                : {}),
             },
             select: { id: true, numero: true, total: true },
           })
@@ -242,14 +337,21 @@ export async function crearReserva(
       excursion: excursion.nombre,
       vendedorId,
     })
+
+    await sincronizarEstadoAgotada(companyId, excursionId)
+    for (const it of itemsComboAGuardar) {
+      await sincronizarEstadoAgotada(companyId, it.actividadId)
+    }
+
     revalidatePath('/admin/excursiones/reservas')
     return {
       success: `Reserva ${creada.numero} creada.`,
       creada: { reservaId: creada.id, numero: creada.numero, total: String(creada.total) },
     }
   } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : 'No se pudo crear la reserva. Intenta de nuevo.'
     console.error('[excursiones] crearReserva:', e)
-    return { error: 'No se pudo crear la reserva. Intenta de nuevo.' }
+    return { error: errorMsg }
   }
 }
 

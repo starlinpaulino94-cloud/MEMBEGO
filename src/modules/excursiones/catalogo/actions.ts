@@ -169,48 +169,64 @@ export async function crearExcursion(
     })
     if (!variante.ok) return { error: variante.error }
 
-    // Procesar horarios de salida opcionales enviados desde el formulario
+    // Procesar horarios de salida o días de operación para PASE_DIA
     let horariosToCreate: { horaSalida: string; diasSemana: number[]; cupo: number | null }[] = []
-    const horariosRaw = String(formData.get('horariosData') ?? '')
-    if (horariosRaw) {
-      try {
-        const parsed = JSON.parse(horariosRaw)
-        if (Array.isArray(parsed)) {
-          horariosToCreate = parsed
-            .map((h: Record<string, unknown>) => ({
-              horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
-              diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
-              cupo: h.cupo ? Number(h.cupo) : null,
-            }))
-            .filter((h) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(h.horaSalida))
+    
+    if (v.datos.tipoItem === 'PASE_DIA') {
+      const diasPaseRaw = formData.getAll('diasSemanaPaseDia').map(Number).filter((n) => n >= 1 && n <= 7)
+      const diasSemana = diasPaseRaw.length > 0 ? Array.from(new Set(diasPaseRaw)).sort((a, b) => a - b) : [1, 2, 3, 4, 5, 6, 7]
+      horariosToCreate = [
+        {
+          horaSalida: '00:00',
+          diasSemana,
+          cupo: v.datos.capacidad,
+        },
+      ]
+      v.datos.horaSalida = null
+      v.datos.horaRegreso = null
+      v.datos.duracionMin = null
+    } else {
+      const horariosRaw = String(formData.get('horariosData') ?? '')
+      if (horariosRaw) {
+        try {
+          const parsed = JSON.parse(horariosRaw)
+          if (Array.isArray(parsed)) {
+            horariosToCreate = parsed
+              .map((h: Record<string, unknown>) => ({
+                horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
+                diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
+                cupo: h.cupo ? Number(h.cupo) : null,
+              }))
+              .filter((h) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(h.horaSalida))
+          }
+        } catch {
+          /* ignore invalid json */
         }
-      } catch {
-        /* ignore invalid json */
       }
-    }
 
-    // Si es un combo y hay combinaciones válidas, asegurar que todos los horarios válidos se persisten
-    if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length >= 2 && actsDbParaCombo.length > 0) {
-      const combinaciones = generarCombinacionesCombo(actsDbParaCombo)
-      if (combinaciones.length > 0 && horariosToCreate.length <= 1) {
-        const diasComunes = diasComunesCombo(actsDbParaCombo)
-        const dias = diasComunes.length > 0 ? diasComunes : (horariosToCreate[0]?.diasSemana || [1, 2, 3, 4, 5, 6, 7])
-        horariosToCreate = Array.from(new Set(combinaciones.map((c) => c.horaInicio))).map((horaSalida) => ({
-          horaSalida,
-          diasSemana: dias,
-          cupo: null,
-        }))
+      // Si es un combo y hay combinaciones válidas, asegurar que todos los horarios válidos se persisten
+      if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length >= 2 && actsDbParaCombo.length > 0) {
+        const combinaciones = generarCombinacionesCombo(actsDbParaCombo)
+        if (combinaciones.length > 0 && horariosToCreate.length <= 1) {
+          const diasComunes = diasComunesCombo(actsDbParaCombo)
+          const dias = diasComunes.length > 0 ? diasComunes : (horariosToCreate[0]?.diasSemana || [1, 2, 3, 4, 5, 6, 7])
+          horariosToCreate = Array.from(new Set(combinaciones.map((c) => c.horaInicio))).map((horaSalida) => ({
+            horaSalida,
+            diasSemana: dias,
+            cupo: null,
+          }))
+        }
       }
-    }
 
-    // Si hay horarios pero no se especificó horaSalida principal, usar la primera
-    if (horariosToCreate.length > 0 && !v.datos.horaSalida) {
-      v.datos.horaSalida = horariosToCreate[0].horaSalida
-    }
+      // Si hay horarios pero no se especificó horaSalida principal, usar la primera
+      if (horariosToCreate.length > 0 && !v.datos.horaSalida) {
+        v.datos.horaSalida = horariosToCreate[0].horaSalida
+      }
 
-    // Auto-calcular horaRegreso si tenemos horaSalida y duracionMin pero no horaRegreso
-    if (v.datos.horaSalida && v.datos.duracionMin && !v.datos.horaRegreso) {
-      v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
+      // Auto-calcular horaRegreso si tenemos horaSalida y duracionMin pero no horaRegreso
+      if (v.datos.horaSalida && v.datos.duracionMin && !v.datos.horaRegreso) {
+        v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
+      }
     }
 
     // Slug único por empresa (sufijo numérico si el nombre se repite).
@@ -230,7 +246,16 @@ export async function crearExcursion(
           ...restoDatos,
           galeria: galeria ?? Prisma.JsonNull,
           variantes: {
-            create: { companyId, ...variante.datos },
+            create: {
+              companyId,
+              nombre: variante.datos.nombre,
+              precioAdulto: variante.datos.precioAdulto,
+              precioNino: variante.datos.precioNino,
+              precioResidente: variante.datos.precioResidente,
+              precioTurista: variante.datos.precioTurista,
+              capacidad: variante.datos.capacidad,
+              preciosDinamicos: (variante.datos.preciosDinamicos as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+            },
           },
           ...(horariosToCreate.length > 0 && {
             horarios: {
@@ -300,32 +325,48 @@ export async function actualizarExcursion(
     const v = validarExcursion(deForm(formData, CAMPOS_EXCURSION))
     if (!v.ok) return { error: v.error }
 
-    // Procesar horarios de salida opcionales enviados desde el formulario
+    // Procesar horarios de salida o días de operación para PASE_DIA
     let horariosToSync: { horaSalida: string; diasSemana: number[]; cupo: number | null }[] | null = null
-    const horariosRaw = String(formData.get('horariosData') ?? '')
-    if (horariosRaw) {
-      try {
-        const parsed = JSON.parse(horariosRaw)
-        if (Array.isArray(parsed)) {
-          horariosToSync = parsed
-            .map((h: Record<string, unknown>) => ({
-              horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
-              diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
-              cupo: h.cupo ? Number(h.cupo) : null,
-            }))
-            .filter((h) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(h.horaSalida))
+    
+    if (v.datos.tipoItem === 'PASE_DIA') {
+      const diasPaseRaw = formData.getAll('diasSemanaPaseDia').map(Number).filter((n) => n >= 1 && n <= 7)
+      const diasSemana = diasPaseRaw.length > 0 ? Array.from(new Set(diasPaseRaw)).sort((a, b) => a - b) : [1, 2, 3, 4, 5, 6, 7]
+      horariosToSync = [
+        {
+          horaSalida: '00:00',
+          diasSemana,
+          cupo: v.datos.capacidad,
+        },
+      ]
+      v.datos.horaSalida = null
+      v.datos.horaRegreso = null
+      v.datos.duracionMin = null
+    } else {
+      const horariosRaw = String(formData.get('horariosData') ?? '')
+      if (horariosRaw) {
+        try {
+          const parsed = JSON.parse(horariosRaw)
+          if (Array.isArray(parsed)) {
+            horariosToSync = parsed
+              .map((h: Record<string, unknown>) => ({
+                horaSalida: String(h.horaSalida || '').trim().slice(0, 5),
+                diasSemana: Array.isArray(h.diasSemana) && h.diasSemana.length > 0 ? h.diasSemana.map(Number) : [1, 2, 3, 4, 5, 6, 7],
+                cupo: h.cupo ? Number(h.cupo) : null,
+              }))
+              .filter((h) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(h.horaSalida))
+          }
+        } catch {
+          /* ignore invalid json */
         }
-      } catch {
-        /* ignore invalid json */
       }
-    }
 
-    if (horariosToSync && horariosToSync.length > 0 && !v.datos.horaSalida) {
-      v.datos.horaSalida = horariosToSync[0].horaSalida
-    }
+      if (horariosToSync && horariosToSync.length > 0 && !v.datos.horaSalida) {
+        v.datos.horaSalida = horariosToSync[0].horaSalida
+      }
 
-    if (v.datos.horaSalida && v.datos.duracionMin && !v.datos.horaRegreso) {
-      v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
+      if (v.datos.horaSalida && v.datos.duracionMin && !v.datos.horaRegreso) {
+        v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
+      }
     }
 
     const rawComboActividades = Array.from(
@@ -523,21 +564,29 @@ export async function guardarVariante(
     }
 
     const v = validarVariante(
-      deForm(formData, ['nombre', 'precioAdulto', 'precioNino', 'precioResidente', 'precioTurista', 'capacidad'])
+      deForm(formData, ['nombre', 'precioAdulto', 'precioNino', 'precioResidente', 'precioTurista', 'capacidad', 'preciosDinamicosJson'])
     )
     if (!v.ok) return { error: v.error }
 
     const varianteId = String(formData.get('varianteId') ?? '').trim()
+    const { preciosDinamicos, ...restoDatos } = v.datos
+    const dataToSave = {
+      ...restoDatos,
+      preciosDinamicos: preciosDinamicos
+        ? (preciosDinamicos as unknown as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+    }
+
     const resultado = await conEmpresa(companyId, async (tx) => {
       if (varianteId) {
         const result = await tx.excursionVariante.updateMany({
           where: { id: varianteId, excursionId, companyId },
-          data: v.datos,
+          data: dataToSave,
         })
         return result.count === 0 ? 'no_encontrada' : 'ok'
       }
       await tx.excursionVariante.create({
-        data: { excursionId, companyId, ...v.datos },
+        data: { excursionId, companyId, ...dataToSave },
       })
       return 'ok' as const
     })
@@ -716,18 +765,36 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
     const dentroDe90 = new Date(hoy)
     dentroDe90.setDate(dentroDe90.getDate() + 90)
 
-    const reservas = await tx.reservaExc.findMany({
-      where: {
-        companyId,
-        excursionId: excursion.id,
-        fecha: { gte: hoy, lte: dentroDe90 },
-        estado: { notIn: ['CANCELADA', 'NO_SHOW', 'COMPLETADA'] },
-      },
-      select: { fecha: true, hora: true, adultos: true, ninos: true },
-    })
+    const [reservasDirectas, reservasItems] = await Promise.all([
+      tx.reservaExc.findMany({
+        where: {
+          companyId,
+          excursionId: excursion.id,
+          fecha: { gte: hoy, lte: dentroDe90 },
+          estado: { notIn: ['CANCELADA', 'NO_SHOW', 'COMPLETADA'] },
+        },
+        select: { fecha: true, hora: true, adultos: true, ninos: true },
+      }),
+      tx.reservaItem.findMany({
+        where: {
+          companyId,
+          actividadId: excursion.id,
+          fecha: { gte: hoy, lte: dentroDe90 },
+          estado: { notIn: ['CANCELADA'] },
+          reserva: { estado: { notIn: ['CANCELADA', 'NO_SHOW', 'COMPLETADA'] } },
+        },
+        select: { fecha: true, hora: true, adultos: true, ninos: true },
+      }),
+    ])
 
     const reservasMap = new Map<string, number>()
-    for (const r of reservas) {
+    for (const r of reservasDirectas) {
+      const fechaStr = r.fecha.toISOString().split('T')[0]
+      const horaStr = (r.hora || '').trim().slice(0, 5)
+      const key = `${fechaStr}|${horaStr}`
+      reservasMap.set(key, (reservasMap.get(key) || 0) + r.adultos + r.ninos)
+    }
+    for (const r of reservasItems) {
       const fechaStr = r.fecha.toISOString().split('T')[0]
       const horaStr = (r.hora || '').trim().slice(0, 5)
       const key = `${fechaStr}|${horaStr}`

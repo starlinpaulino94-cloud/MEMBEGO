@@ -20,9 +20,12 @@ import {
   calcularTotales,
   numeroReserva,
   validarReserva,
+  calcularPrecioEfectivo,
   validarDisponibilidad,
   validarDisponibilidadCombo,
+  validarDisponibilidadComboMultiFecha,
 } from './nucleo'
+import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { resolverEnlace, vendedorParaCliente, VENDEDOR_COOKIE } from '../atribucion/registrar'
 import { procesarVentaYComisionInterna } from '../ventas/actions'
@@ -103,7 +106,7 @@ export async function reservarExcursion(
           impuestoPct: true,
           variantes: {
             where: { activa: true },
-            select: { id: true, nombre: true, precioAdulto: true, precioNino: true },
+            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
             orderBy: { orden: 'asc' },
           },
         },
@@ -114,6 +117,16 @@ export async function reservarExcursion(
     const variante =
       excursion.variantes.find((x) => x.id === varianteId) ?? excursion.variantes[0]
     if (!variante) return { error: 'Esa excursión no tiene variantes activas.' }
+
+    // Calcular precio efectivo
+    const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const { precioAdulto, precioNino } = calcularPrecioEfectivo(
+      v.datos.fecha,
+      v.datos.hora,
+      Number(variante.precioAdulto),
+      variante.precioNino != null ? Number(variante.precioNino) : null,
+      reglasDin
+    )
 
     // Validar disponibilidad: fecha, horario y cupo (y de sus actividades si es un combo)
     const excursionCompleta = await conEmpresa(companyId, (tx) =>
@@ -135,8 +148,11 @@ export async function reservarExcursion(
                 select: {
                   id: true,
                   nombre: true,
+                  tipoItem: true,
                   capacidad: true,
                   horaSalida: true,
+                  duracionMin: true,
+                  horaRegreso: true,
                   horarios: {
                     where: { activo: true },
                     select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
@@ -150,58 +166,104 @@ export async function reservarExcursion(
     )
     if (!excursionCompleta) return { error: 'Esa excursión no está disponible.' }
 
-    if (excursionCompleta.tipoItem === 'COMBO' && excursionCompleta.comboItems.length > 0) {
-      let itinerarioComboCustom: Record<string, string> = {}
-      const rawItinerarioCombo = String(formData.get('itinerarioComboJson') ?? '')
-      if (rawItinerarioCombo) {
-        try {
-          itinerarioComboCustom = JSON.parse(rawItinerarioCombo)
-        } catch {
-          /* ignore */
+    const comboItinerarioRaw =
+      String(formData.get('comboItinerarioJson') ?? '') ||
+      String(formData.get('itinerarioComboJson') ?? '')
+    let comboItinerarioParsed: { actividadId: string; fecha: string; hora: string | null }[] = []
+    if (comboItinerarioRaw) {
+      try {
+        const rawJson = JSON.parse(comboItinerarioRaw)
+        if (Array.isArray(rawJson)) {
+          comboItinerarioParsed = rawJson
+        } else if (typeof rawJson === 'object') {
+          comboItinerarioParsed = Object.entries(rawJson).map(([actId, h]) => ({
+            actividadId: actId,
+            fecha: v.datos.fecha.toISOString().split('T')[0],
+            hora: String(h),
+          }))
         }
+      } catch {
+        /* ignore */
       }
+    }
 
-      const dispCombo = validarDisponibilidadCombo(
-        v.datos.fecha,
-        v.datos.hora,
-        v.datos.adultos + v.datos.ninos,
-        {
-          nombre: excursionCompleta.nombre,
-          capacidad: excursionCompleta.capacidad,
-          horaSalida: excursionCompleta.horaSalida,
-          horarios: excursionCompleta.horarios.map((h) => ({
-            id: h.id,
-            diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
-            horaSalida: h.horaSalida,
-            cupo: h.cupo,
-          })),
-          actividades: excursionCompleta.comboItems.map((ci) => ({
-            nombre: ci.actividad.nombre,
-            capacidad: ci.actividad.capacidad,
-            horaSalida:
-              itinerarioComboCustom[ci.actividad.id] ||
-              ci.actividad.horaSalida ||
-              ci.actividad.horarios[0]?.horaSalida ||
-              '09:00',
-            horarios: ci.actividad.horarios.map((h) => ({
+    let itemsComboAGuardar: { actividadId: string; fecha: Date; hora: string | null }[] = []
+
+    if (excursionCompleta.tipoItem === 'COMBO' && excursionCompleta.comboItems.length > 0) {
+      if (comboItinerarioParsed.length > 0) {
+        const itemsParaValidar = comboItinerarioParsed.map((item) => {
+          const [y, m, d] = item.fecha.split('-').map(Number)
+          return {
+            actividadId: item.actividadId,
+            fecha: new Date(Date.UTC(y, m - 1, d)),
+            hora: item.hora,
+          }
+        })
+        itemsComboAGuardar = itemsParaValidar
+
+        const dispComboMulti = validarDisponibilidadComboMultiFecha(
+          v.datos.adultos + v.datos.ninos,
+          {
+            nombre: excursionCompleta.nombre,
+            capacidad: excursionCompleta.capacidad,
+            actividades: excursionCompleta.comboItems.map((ci) => ({
+              id: ci.actividad.id,
+              nombre: ci.actividad.nombre,
+              tipoItem: ci.actividad.tipoItem,
+              capacidad: ci.actividad.capacidad,
+              horaSalida: ci.actividad.horaSalida,
+              duracionMin: ci.actividad.duracionMin,
+              horaRegreso: ci.actividad.horaRegreso,
+              horarios: ci.actividad.horarios.map((h) => ({
+                id: h.id,
+                diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+                horaSalida: h.horaSalida,
+                cupo: h.cupo,
+              })),
+            })),
+          },
+          itemsParaValidar
+        )
+        if (!dispComboMulti.ok) return { error: dispComboMulti.error }
+      } else {
+        itemsComboAGuardar = excursionCompleta.comboItems.map((ci) => ({
+          actividadId: ci.actividad.id,
+          fecha: v.datos.fecha,
+          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.horaSalida || v.datos.hora,
+        }))
+
+        const dispCombo = validarDisponibilidadCombo(
+          v.datos.fecha,
+          v.datos.hora,
+          v.datos.adultos + v.datos.ninos,
+          {
+            nombre: excursionCompleta.nombre,
+            capacidad: excursionCompleta.capacidad,
+            horaSalida: excursionCompleta.horaSalida,
+            horarios: excursionCompleta.horarios.map((h) => ({
               id: h.id,
               diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
               horaSalida: h.horaSalida,
               cupo: h.cupo,
             })),
-          })),
-        }
-      )
-      if (!dispCombo.ok) return { error: dispCombo.error }
-
-      // Anotar el desglose de turnos en las notas de la reserva si hubo personalización
-      if (Object.keys(itinerarioComboCustom).length > 0) {
-        const resumenTurnos = dispCombo.itinerario
-          .map((b) => `${b.nombre}: ${b.inicio}→${b.fin}`)
-          .join(' | ')
-        v.datos.notas = v.datos.notas
-          ? `${v.datos.notas}\n[Itinerario: ${resumenTurnos}]`
-          : `[Itinerario: ${resumenTurnos}]`
+            actividades: excursionCompleta.comboItems.map((ci) => ({
+              id: ci.actividad.id,
+              nombre: ci.actividad.nombre,
+              tipoItem: ci.actividad.tipoItem,
+              capacidad: ci.actividad.capacidad,
+              horaSalida: ci.actividad.horaSalida,
+              duracionMin: ci.actividad.duracionMin,
+              horaRegreso: ci.actividad.horaRegreso,
+              horarios: ci.actividad.horarios.map((h) => ({
+                id: h.id,
+                diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+                horaSalida: h.horaSalida,
+                cupo: h.cupo,
+              })),
+            })),
+          }
+        )
+        if (!dispCombo.ok) return { error: dispCombo.error }
       }
     } else {
       const disp = validarDisponibilidad(
@@ -210,6 +272,7 @@ export async function reservarExcursion(
         v.datos.adultos + v.datos.ninos,
         {
           capacidad: excursionCompleta.capacidad,
+          tipoItem: excursionCompleta.tipoItem,
           horaSalida: excursionCompleta.horaSalida,
           horarios: excursionCompleta.horarios.map((h) => ({
             id: h.id,
@@ -225,8 +288,8 @@ export async function reservarExcursion(
     const totales = calcularTotales({
       adultos: v.datos.adultos,
       ninos: v.datos.ninos,
-      precioAdulto: Number(variante.precioAdulto),
-      precioNino: variante.precioNino != null ? Number(variante.precioNino) : null,
+      precioAdulto,
+      precioNino,
       descuento: 0,
       impuestoPct: excursion.impuestoPct != null ? Number(excursion.impuestoPct) : null,
     })
@@ -235,8 +298,36 @@ export async function reservarExcursion(
     const metodoPago = String(formData.get('metodoPago') ?? 'DESTINO')
     const esPagoOnline = metodoPago === 'ONLINE_SIMULADO'
     const checkinToken = generarCodigo(24)
+    const totalPasajeros = v.datos.adultos + v.datos.ninos
 
     const creada = await conEmpresa(companyId, async (tx) => {
+      // Validar cupo real en BD para todas las actividades
+      if (itemsComboAGuardar.length > 0) {
+        for (const item of itemsComboAGuardar) {
+          const cupoCheck = await verificarYBloquearCupoActividad(tx, {
+            companyId,
+            actividadId: item.actividadId,
+            fecha: item.fecha,
+            hora: item.hora,
+            pasajeros: totalPasajeros,
+          })
+          if (!cupoCheck.ok) {
+            throw new Error(cupoCheck.error)
+          }
+        }
+      } else {
+        const cupoCheck = await verificarYBloquearCupoActividad(tx, {
+          companyId,
+          actividadId: excursion.id,
+          fecha: v.datos.fecha,
+          hora: v.datos.hora,
+          pasajeros: totalPasajeros,
+        })
+        if (!cupoCheck.ok) {
+          throw new Error(cupoCheck.error)
+        }
+      }
+
       const desde = new Date(Date.UTC(anio, 0, 1))
       const hasta = new Date(Date.UTC(anio + 1, 0, 1))
       let intento =
@@ -281,6 +372,21 @@ export async function reservarExcursion(
                   ],
                 },
               },
+              ...(itemsComboAGuardar.length > 0
+                ? {
+                    items: {
+                      create: itemsComboAGuardar.map((it) => ({
+                        companyId,
+                        actividadId: it.actividadId,
+                        fecha: it.fecha,
+                        hora: it.hora,
+                        adultos: v.datos.adultos,
+                        ninos: v.datos.ninos,
+                        estado: 'PENDIENTE',
+                      })),
+                    },
+                  }
+                : {}),
             },
             select: { id: true, numero: true, vendedorId: true },
           })
@@ -338,6 +444,9 @@ export async function reservarExcursion(
 
     // Sincronizar estado AGOTADA tras crear reserva
     await sincronizarEstadoAgotada(companyId, excursionId)
+    for (const item of itemsComboAGuardar) {
+      await sincronizarEstadoAgotada(companyId, item.actividadId)
+    }
 
     // Consumir cookie de atribución (un solo uso)
     if (vendedorId) {
@@ -349,16 +458,11 @@ export async function reservarExcursion(
       }
     }
 
-    return {
-      success: esPagoOnline
-        ? '¡Pago procesado con éxito! Tu reserva está confirmada con acceso y boleto listos.'
-        : 'Reserva agendada exitosamente. Recuerda realizar tu pago el día de la excursión.',
-      reservaId: creada.id,
-      numero: creada.numero,
-    }
+    return { success: 'Reserva creada exitosamente.', reservaId: creada.id, numero: creada.numero }
   } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : 'Ocurrió un error inesperado al procesar la reserva.'
     anotarFallo('excursiones:reservarExcursion')(e)
-    return { error: 'Error al crear la reserva. Intenta de nuevo.' }
+    return { error: errorMsg }
   }
 }
 
@@ -487,12 +591,33 @@ export async function reservarCarritoAction(
           }
         )
         if (!dispCombo.ok) return { error: dispCombo.error }
+      } else {
+        const disp = validarDisponibilidad(
+          fechaValida,
+          item.horaSalida || null,
+          item.adultos + item.ninos,
+          {
+            capacidad: exc.capacidad,
+            tipoItem: exc.tipoItem,
+            horaSalida: exc.horaSalida,
+            horarios: exc.horarios.map((h) => ({
+              id: h.id,
+              diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+              horaSalida: h.horaSalida,
+              cupo: h.cupo,
+            })),
+          }
+        )
+        if (!disp.ok) return { error: disp.error }
       }
 
       const v = exc.variantes[0]
+      const reglasDin = v.preciosDinamicos ? (v.preciosDinamicos as any[]) : null
+      const { precioAdulto, precioNino } = calcularPrecioEfectivo(fechaValida, item.horaSalida || null, v.precioAdulto.toNumber(), v.precioNino ? v.precioNino.toNumber() : null, reglasDin)
+
       const totales = calcularTotales({
-        precioAdulto: v.precioAdulto.toNumber(),
-        precioNino: v.precioNino ? v.precioNino.toNumber() : null,
+        precioAdulto,
+        precioNino,
         impuestoPct: exc.impuestoPct?.toNumber() ?? 0,
         adultos: item.adultos,
         ninos: item.ninos,

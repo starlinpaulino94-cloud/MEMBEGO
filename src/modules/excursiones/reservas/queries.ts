@@ -171,8 +171,15 @@ export async function excursionesReservables(companyId: string) {
           select: {
             actividad: {
               select: {
+                id: true,
                 nombre: true,
+                tipoItem: true,
                 duracionMin: true,
+                horaSalida: true,
+                horarios: {
+                  where: { activo: true },
+                  select: { id: true, horaSalida: true, diasSemana: true },
+                },
               },
             },
           },
@@ -180,7 +187,7 @@ export async function excursionesReservables(companyId: string) {
         variantes: {
           where: { activa: true },
           orderBy: { createdAt: 'asc' },
-          select: { id: true, nombre: true, precioAdulto: true, precioNino: true },
+          select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
         },
         horarios: {
           select: { id: true, horaSalida: true, diasSemana: true },
@@ -202,14 +209,23 @@ export async function excursionesReservables(companyId: string) {
       moneda: e.moneda,
       impuestoPct: e.impuestoPct != null ? Number(e.impuestoPct) : null,
       comboItems: e.comboItems.map((ci) => ({
+        id: ci.actividad.id,
         nombre: ci.actividad.nombre,
+        tipoItem: ci.actividad.tipoItem,
         duracionMin: ci.actividad.duracionMin,
+        horaSalida: ci.actividad.horaSalida,
+        horarios: ci.actividad.horarios.map((h) => ({
+          id: h.id,
+          horaSalida: h.horaSalida,
+          diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+        })),
       })),
       variantes: e.variantes.map((v) => ({
         id: v.id,
         nombre: v.nombre,
         precioAdulto: Number(v.precioAdulto),
         precioNino: v.precioNino != null ? Number(v.precioNino) : null,
+        preciosDinamicos: v.preciosDinamicos as any[] | undefined,
       })),
       horarios: e.horarios.map((h) => ({
         id: h.id,
@@ -366,4 +382,105 @@ export async function reservasCliente(
         : { id: '', nombre: '—', slug: '', portadaUrl: null },
     }
   })
+}
+
+/**
+ * Valida la capacidad en tiempo real en la base de datos para una actividad, fecha y turno específico,
+ * considerando tanto reservas directas como reservas provenientes de combos (ReservaItem).
+ */
+export async function verificarYBloquearCupoActividad(
+  tx: any,
+  params: {
+    companyId: string
+    actividadId: string
+    fecha: Date
+    hora: string | null
+    pasajeros: number
+    nombreActividad?: string
+  }
+): Promise<{ ok: true; cupoRestante: number } | { ok: false; error: string }> {
+  const { companyId, actividadId, fecha, hora, pasajeros, nombreActividad } = params
+
+  const act = await tx.excursion.findFirst({
+    where: { id: actividadId, companyId },
+    select: {
+      id: true,
+      nombre: true,
+      tipoItem: true,
+      capacidad: true,
+      horaSalida: true,
+      horarios: {
+        where: { activo: true },
+        select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+      },
+    },
+  })
+
+  if (!act) {
+    return { ok: false, error: `La actividad no existe en el catálogo.` }
+  }
+
+  const nombre = nombreActividad || act.nombre
+  const esPaseDia = act.tipoItem === 'PASE_DIA'
+  const horaNorm = hora ? hora.trim().slice(0, 5) : null
+
+  // Cupo máximo declarado
+  let cupoMaximo = act.capacidad && act.capacidad > 0 ? act.capacidad : 50
+  if (!esPaseDia && horaNorm && act.horarios && act.horarios.length > 0) {
+    const hEncontrado = act.horarios.find(
+      (h: any) => (h.horaSalida || '').trim().slice(0, 5) === horaNorm
+    )
+    if (hEncontrado && hEncontrado.cupo && hEncontrado.cupo > 0) {
+      cupoMaximo = Math.min(cupoMaximo, hEncontrado.cupo)
+    }
+  }
+
+  // Rango del día para la fecha solicitada
+  const inicioDia = new Date(fecha)
+  inicioDia.setUTCHours(0, 0, 0, 0)
+  const finDia = new Date(fecha)
+  finDia.setUTCHours(23, 59, 59, 999)
+
+  // 1. Contar reservas directas activas
+  const directas = await tx.reservaExc.aggregate({
+    _sum: { adultos: true, ninos: true },
+    where: {
+      companyId,
+      excursionId: actividadId,
+      fecha: { gte: inicioDia, lte: finDia },
+      ...(esPaseDia || !horaNorm ? {} : { hora: horaNorm }),
+      estado: { notIn: ['CANCELADA', 'REEMBOLSADA', 'NO_SHOW'] },
+    },
+  })
+
+  // 2. Contar items de reservas de combos activas
+  const itemsCombos = await tx.reservaItem.aggregate({
+    _sum: { adultos: true, ninos: true },
+    where: {
+      companyId,
+      actividadId,
+      fecha: { gte: inicioDia, lte: finDia },
+      ...(esPaseDia || !horaNorm ? {} : { hora: horaNorm }),
+      estado: { notIn: ['CANCELADA'] },
+      reserva: {
+        estado: { notIn: ['CANCELADA', 'REEMBOLSADA', 'NO_SHOW'] },
+      },
+    },
+  })
+
+  const ocupadosDirectos = (directas._sum.adultos || 0) + (directas._sum.ninos || 0)
+  const ocupadosCombos = (itemsCombos._sum.adultos || 0) + (itemsCombos._sum.ninos || 0)
+  const totalOcupados = ocupadosDirectos + ocupadosCombos
+
+  const disponibles = Math.max(0, cupoMaximo - totalOcupados)
+  if (totalOcupados + pasajeros > cupoMaximo) {
+    const fechaStr = fecha.toISOString().split('T')[0]
+    const horaMsg = horaNorm ? ` a las ${horaNorm}` : ''
+    return {
+      ok: false,
+      error: `La actividad "${nombre}" no tiene cupo suficiente para el ${fechaStr}${horaMsg} (disponibles: ${disponibles}, solicitados: ${pasajeros}).`,
+    }
+  }
+
+  return { ok: true, cupoRestante: disponibles - pasajeros }
 }
