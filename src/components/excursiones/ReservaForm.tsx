@@ -15,7 +15,7 @@ import {
   crearReserva,
   type ReservaActionState,
 } from '@/modules/excursiones/reservas/actions'
-import { calcularTotales } from '@/modules/excursiones/reservas/nucleo'
+import { calcularTotales, calcularPrecioEfectivo } from '@/modules/excursiones/reservas/nucleo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,7 +35,8 @@ export interface ExcursionOpcion {
   nombre: string
   moneda: string
   impuestoPct: number | null
-  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null }[]
+  tipoItem?: string
+  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; preciosDinamicos?: any[] }[]
   horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
 }
 
@@ -51,6 +52,7 @@ export function ReservaForm({
   const [excursionId, setExcursionId] = useState(excursiones[0]?.id ?? '')
   const [varianteId, setVarianteId] = useState(excursiones[0]?.variantes[0]?.id ?? '')
   const [hora, setHora] = useState(excursiones[0]?.horarios?.[0]?.horaSalida ?? '')
+  const [fecha, setFecha] = useState('')
   const [adultos, setAdultos] = useState('2')
   const [ninos, setNinos] = useState('0')
   const [descuento, setDescuento] = useState('')
@@ -77,15 +79,19 @@ export function ReservaForm({
 
   const totales = useMemo(() => {
     if (!variante) return null
+    const fechaObj = fecha ? new Date(`${fecha}T12:00:00.000Z`) : new Date()
+    const reglas = variante.preciosDinamicos ?? null
+    const { precioAdulto, precioNino } = calcularPrecioEfectivo(fechaObj, hora, variante.precioAdulto, variante.precioNino, reglas)
+
     return calcularTotales({
       adultos: Number(adultos) || 0,
       ninos: Number(ninos) || 0,
-      precioAdulto: variante.precioAdulto,
-      precioNino: variante.precioNino,
+      precioAdulto,
+      precioNino,
       descuento: Number(descuento) || 0,
       impuestoPct: excursion?.impuestoPct ?? null,
     })
-  }, [variante, adultos, ninos, descuento, excursion])
+  }, [variante, adultos, ninos, descuento, excursion, fecha, hora])
 
   const moneda = excursion?.moneda ?? 'DOP'
 
@@ -165,6 +171,8 @@ export function ReservaForm({
             name="fecha"
             type="date"
             min={new Date().toISOString().split('T')[0]}
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
             required
           />
         </div>
@@ -177,14 +185,16 @@ export function ReservaForm({
             onChange={(e) => setHora(e.target.value)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            {excursion?.horarios?.length > 0 ? (
+            {excursion?.tipoItem === 'PASE_DIA' ? (
+              <option value="">Pase de Día — Todo el día / Acceso Libre</option>
+            ) : excursion?.horarios?.length > 0 ? (
               excursion.horarios.map((h) => (
                 <option key={h.id} value={h.horaSalida}>
                   {h.horaSalida}
                 </option>
               ))
             ) : (
-              <option value="">Sin horarios</option>
+              <option value="">Sin horarios (Todo el día)</option>
             )}
           </select>
         </div>

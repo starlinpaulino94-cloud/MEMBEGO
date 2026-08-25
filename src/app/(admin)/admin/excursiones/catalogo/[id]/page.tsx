@@ -12,7 +12,6 @@ import {
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ExcursionForm } from '@/components/excursiones/ExcursionForm'
 import { VariantesEditor } from '@/components/excursiones/VariantesEditor'
-import { HorariosEditor } from '@/components/excursiones/HorariosEditor'
 import { EstadoExcursionBotones } from '@/components/excursiones/EstadoExcursionBotones'
 import { StatusChip } from '@/components/ui/status-chip'
 
@@ -64,6 +63,7 @@ export default async function ExcursionDetallePage({
       <VariantesEditor
         excursionId={excursion.id}
         moneda={excursion.moneda}
+        horariosDisponibles={excursion.horarios.map((h) => h.horaSalida)}
         variantes={excursion.variantes.map((v) => ({
           id: v.id,
           nombre: v.nombre,
@@ -73,16 +73,7 @@ export default async function ExcursionDetallePage({
           precioTurista: v.precioTurista != null ? String(v.precioTurista) : null,
           capacidad: v.capacidad,
           activa: v.activa,
-        }))}
-      />
-
-      <HorariosEditor
-        excursionId={excursion.id}
-        horarios={excursion.horarios.map((h) => ({
-          id: h.id,
-          diasSemana: h.diasSemana,
-          horaSalida: h.horaSalida,
-          cupo: h.cupo,
+          preciosDinamicosJson: v.preciosDinamicos ? JSON.stringify(v.preciosDinamicos) : undefined,
         }))}
       />
 
