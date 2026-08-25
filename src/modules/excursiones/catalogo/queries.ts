@@ -67,7 +67,7 @@ export async function actividadesParaCombo(companyId: string, excludeId?: string
     tx.excursion.findMany({
       where: {
         companyId,
-        tipoItem: 'ACTIVIDAD',
+        tipoItem: { in: ['ACTIVIDAD', 'PASE_DIA'] },
         estado: { not: 'ARCHIVADA' },
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
