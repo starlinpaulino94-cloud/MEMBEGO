@@ -42,7 +42,7 @@ async function auditar(
   ).catch(anotarFallo('excursiones:metas:auditLog'))
 }
 
-/** ADMIN · Ponerle una meta a un vendedor. */
+/** ADMIN · Ponerle una meta a uno o varios vendedores, o por tipo de vendedor. */
 export async function crearMeta(
   _prev: MetaActionState,
   formData: FormData
@@ -53,8 +53,18 @@ export async function crearMeta(
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
 
+    const ambito = String(formData.get('ambito') ?? 'VENDEDOR')
+    const rawVendedorIds = Array.from(
+      new Set(formData.getAll('vendedorId').map(String).filter(Boolean))
+    )
+    const primerVendedor = rawVendedorIds[0] || String(formData.get('vendedorId') ?? '').trim()
+    const tipoVendedor = String(formData.get('tipoVendedor') ?? '').trim() || null
+    const excursionId = String(formData.get('excursionId') ?? '').trim() || null
+
     const v = validarMeta({
-      vendedorId: String(formData.get('vendedorId') ?? ''),
+      vendedorId: primerVendedor || null,
+      tipoVendedor: ambito === 'TIPO_VENDEDOR' ? tipoVendedor : null,
+      excursionId,
       periodo: String(formData.get('periodo') ?? ''),
       desde: String(formData.get('desde') ?? ''),
       hasta: String(formData.get('hasta') ?? ''),
@@ -66,28 +76,58 @@ export async function crearMeta(
     })
     if (!v.ok) return { error: v.error }
 
-    const vendedor = await conEmpresa(companyId, (tx) =>
-      tx.vendedor.findFirst({
-        where: { id: v.datos.vendedorId, companyId },
-        select: { id: true, codigo: true },
-      })
-    )
-    if (!vendedor) return { error: 'Ese vendedor no existe en tu empresa.' }
+    if (ambito === 'VENDEDOR' && rawVendedorIds.length === 0 && !primerVendedor) {
+      return { error: 'Selecciona al menos un vendedor.' }
+    }
 
-    const meta = await conEmpresa(companyId, (tx) =>
-      tx.vendedorMeta.create({
-        data: { companyId, ...v.datos },
-        select: { id: true },
-      })
-    )
+    if (ambito === 'TIPO_VENDEDOR' && !tipoVendedor) {
+      return { error: 'Selecciona un tipo de vendedor.' }
+    }
 
-    await auditar(companyId, user.metadata.dbUserId ?? null, meta.id, {
-      tipo: 'META_CREADA',
-      vendedor: vendedor.codigo,
-      periodo: v.datos.periodo,
-    })
+    if (ambito === 'VENDEDOR' && rawVendedorIds.length > 1) {
+      await conEmpresa(companyId, (tx) =>
+        tx.vendedorMeta.createMany({
+          data: rawVendedorIds.map((vid) => ({
+            companyId,
+            vendedorId: vid,
+            tipoVendedor: null,
+            excursionId: v.datos.excursionId,
+            periodo: v.datos.periodo,
+            desde: v.datos.desde,
+            hasta: v.datos.hasta,
+            metaVentas: v.datos.metaVentas,
+            metaPasajeros: v.datos.metaPasajeros,
+            metaIngresos: v.datos.metaIngresos,
+            metaRegistros: v.datos.metaRegistros,
+            metaReservas: v.datos.metaReservas,
+          })),
+        })
+      )
+    } else {
+      await conEmpresa(companyId, (tx) =>
+        tx.vendedorMeta.create({
+          data: {
+            companyId,
+            vendedorId: ambito === 'VENDEDOR' ? (rawVendedorIds[0] || primerVendedor || null) : null,
+            tipoVendedor: ambito === 'TIPO_VENDEDOR' ? tipoVendedor : null,
+            excursionId: v.datos.excursionId,
+            periodo: v.datos.periodo,
+            desde: v.datos.desde,
+            hasta: v.datos.hasta,
+            metaVentas: v.datos.metaVentas,
+            metaPasajeros: v.datos.metaPasajeros,
+            metaIngresos: v.datos.metaIngresos,
+            metaRegistros: v.datos.metaRegistros,
+            metaReservas: v.datos.metaReservas,
+          },
+        })
+      )
+    }
+
     revalidatePath('/admin/excursiones/metas')
-    return { success: 'Meta creada.' }
+    revalidatePath('/vendedor')
+    revalidatePath('/vendedor/metas')
+    return { success: 'Meta creada exitosamente.' }
   } catch (e) {
     console.error('[excursiones] crearMeta:', e)
     return { error: 'No se pudo crear la meta.' }

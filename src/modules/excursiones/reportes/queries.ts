@@ -55,19 +55,60 @@ async function nombres(
   }
 }
 
+export interface ReporteFiltros {
+  vendedorId?: string | null
+  tipoVendedor?: string | null
+  excursionId?: string | null
+  canal?: string | null
+  estado?: string | null
+}
+
 export async function ventasDelPeriodo(
   companyId: string,
   rango: Rango,
-  fecha: (d: Date | null) => string
+  fecha: (d: Date | null) => string,
+  filtros: ReporteFiltros = {}
 ): Promise<{ filas: FilaVenta[]; total: number }> {
+  let matchingVendedorIds: string[] | undefined = undefined
+  if (filtros.tipoVendedor && filtros.tipoVendedor !== 'TODOS') {
+    const vends = await conEmpresa(companyId, (tx) =>
+      tx.vendedor.findMany({
+        where: { companyId, tipo: filtros.tipoVendedor! },
+        select: { id: true },
+      })
+    )
+    matchingVendedorIds = vends.map((v) => v.id)
+  }
+
+  const effectiveVendedorCondition =
+    filtros.vendedorId && filtros.vendedorId !== 'TODOS'
+      ? { vendedorId: filtros.vendedorId }
+      : matchingVendedorIds
+        ? { vendedorId: { in: matchingVendedorIds } }
+        : {}
+
   const ventas = await conEmpresa(companyId, (tx) =>
     tx.ventaExc.findMany({
-      where: { companyId, confirmadaAt: { gte: rango.desde, lte: rango.hasta } },
+      where: {
+        companyId,
+        confirmadaAt: { gte: rango.desde, lte: rango.hasta },
+        ...effectiveVendedorCondition,
+        ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
+        ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+        ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : {}),
+      },
       orderBy: { confirmadaAt: 'asc' },
       take: LIMITE,
       select: {
-        numero: true, confirmadaAt: true, clienteId: true, excursionId: true,
-        vendedorId: true, pasajeros: true, total: true, moneda: true, estado: true,
+        numero: true,
+        confirmadaAt: true,
+        clienteId: true,
+        excursionId: true,
+        vendedorId: true,
+        pasajeros: true,
+        total: true,
+        moneda: true,
+        estado: true,
       },
     })
   )
@@ -99,16 +140,45 @@ export async function ventasDelPeriodo(
 export async function comisionesDelPeriodo(
   companyId: string,
   rango: Rango,
-  fecha: (d: Date | null) => string
+  fecha: (d: Date | null) => string,
+  filtros: ReporteFiltros = {}
 ): Promise<{ filas: FilaComision[]; total: number }> {
+  let matchingVendedorIds: string[] | undefined = undefined
+  if (filtros.tipoVendedor && filtros.tipoVendedor !== 'TODOS') {
+    const vends = await conEmpresa(companyId, (tx) =>
+      tx.vendedor.findMany({
+        where: { companyId, tipo: filtros.tipoVendedor! },
+        select: { id: true },
+      })
+    )
+    matchingVendedorIds = vends.map((v) => v.id)
+  }
+
+  const effectiveVendedorCondition =
+    filtros.vendedorId && filtros.vendedorId !== 'TODOS'
+      ? { vendedorId: filtros.vendedorId }
+      : matchingVendedorIds
+        ? { vendedorId: { in: matchingVendedorIds } }
+        : {}
+
   const comisiones = await conEmpresa(companyId, (tx) =>
     tx.comisionEntrada.findMany({
-      where: { companyId, createdAt: { gte: rango.desde, lte: rango.hasta } },
+      where: {
+        companyId,
+        createdAt: { gte: rango.desde, lte: rango.hasta },
+        ...effectiveVendedorCondition,
+        ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : {}),
+      },
       orderBy: { createdAt: 'asc' },
       take: LIMITE,
       select: {
-        createdAt: true, vendedorId: true, base: true, monto: true, moneda: true,
-        desglose: true, estado: true,
+        createdAt: true,
+        vendedorId: true,
+        base: true,
+        monto: true,
+        moneda: true,
+        desglose: true,
+        estado: true,
         ajustes: { select: { monto: true } },
         venta: { select: { numero: true } },
         liquidacion: { select: { numero: true } },
@@ -146,16 +216,47 @@ export async function comisionesDelPeriodo(
 export async function liquidacionesDelPeriodo(
   companyId: string,
   rango: Rango,
-  fecha: (d: Date | null) => string
+  fecha: (d: Date | null) => string,
+  filtros: ReporteFiltros = {}
 ): Promise<{ filas: FilaLiquidacion[]; total: number }> {
+  let matchingVendedorIds: string[] | undefined = undefined
+  if (filtros.tipoVendedor && filtros.tipoVendedor !== 'TODOS') {
+    const vends = await conEmpresa(companyId, (tx) =>
+      tx.vendedor.findMany({
+        where: { companyId, tipo: filtros.tipoVendedor! },
+        select: { id: true },
+      })
+    )
+    matchingVendedorIds = vends.map((v) => v.id)
+  }
+
+  const effectiveVendedorCondition =
+    filtros.vendedorId && filtros.vendedorId !== 'TODOS'
+      ? { vendedorId: filtros.vendedorId }
+      : matchingVendedorIds
+        ? { vendedorId: { in: matchingVendedorIds } }
+        : {}
+
   const liquidaciones = await conEmpresa(companyId, (tx) =>
     tx.liquidacion.findMany({
-      where: { companyId, createdAt: { gte: rango.desde, lte: rango.hasta } },
+      where: {
+        companyId,
+        createdAt: { gte: rango.desde, lte: rango.hasta },
+        ...effectiveVendedorCondition,
+        ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : {}),
+      },
       orderBy: { createdAt: 'asc' },
       take: LIMITE,
       select: {
-        numero: true, vendedorId: true, periodoDesde: true, periodoHasta: true,
-        total: true, moneda: true, estado: true, metodo: true, referencia: true,
+        numero: true,
+        vendedorId: true,
+        periodoDesde: true,
+        periodoHasta: true,
+        total: true,
+        moneda: true,
+        estado: true,
+        metodo: true,
+        referencia: true,
         pagadaAt: true,
         _count: { select: { comisiones: true } },
       },

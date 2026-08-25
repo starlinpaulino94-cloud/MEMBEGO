@@ -11,6 +11,7 @@ import {
   type PeriodoMeta,
 } from '@/modules/excursiones/metricas/nucleo'
 import { vendedoresParaSupervisor } from '@/modules/excursiones/vendedores/queries'
+import { listadoExcursiones } from '@/modules/excursiones/catalogo/queries'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { MetaForm } from '@/components/excursiones/MetaForm'
 import { MetaProgreso } from '@/components/excursiones/MetaProgreso'
@@ -25,9 +26,10 @@ export default async function MetasPage() {
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="las metas de excursiones" />
 
-  const [metas, vendedores] = await Promise.all([
+  const [metas, vendedores, excursiones] = await Promise.all([
     metasActivas(companyId),
     vendedoresParaSupervisor(companyId),
+    listadoExcursiones(companyId),
   ])
 
   // El progreso se calcula ahora, sobre el período que le toca a cada meta.
@@ -38,7 +40,9 @@ export default async function MetasPage() {
         desde: m.desde,
         hasta: m.hasta,
       })
-      const reales = await realesDeVendedor(companyId, m.vendedorId, rango)
+      const reales = m.vendedorId
+        ? await realesDeVendedor(companyId, m.vendedorId, rango, m.excursionId)
+        : { ventas: 0, pasajeros: 0, ingresos: 0, registros: 0, reservas: 0, moneda: 'DOP' }
       return { meta: m, rango, lineas: progresoMeta(m, reales), moneda: reales.moneda }
     })
   )
@@ -46,7 +50,7 @@ export default async function MetasPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <p className="text-sm text-muted-foreground">
-        Una meta dice qué se espera de cada vendedor en un período. El avance se calcula al
+        Una meta dice qué se espera de cada vendedor, tipo de vendedor o equipo en un período. El avance se calcula al
         abrir esta pantalla, sobre sus registros, reservas y ventas reales.
       </p>
 
@@ -55,6 +59,11 @@ export default async function MetasPage() {
           id: v.id,
           nombre: `${v.nombre} ${v.apellido ?? ''}`.trim(),
           codigo: v.codigo,
+        }))}
+        excursiones={excursiones.map((e) => ({
+          id: e.id,
+          nombre: e.nombre,
+          tipoItem: e.tipoItem,
         }))}
       />
 
@@ -65,14 +74,22 @@ export default async function MetasPage() {
             <article key={meta.id} className="rounded-2xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-foreground">
-                    {meta.vendedor}{' '}
-                    {meta.codigo ? (
-                      <span className="font-mono text-caption text-muted-foreground">
-                        {meta.codigo}
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-foreground">
+                      {meta.vendedor}{' '}
+                      {meta.codigo ? (
+                        <span className="font-mono text-caption text-muted-foreground">
+                          {meta.codigo}
+                        </span>
+                      ) : null}
+                    </p>
+                    {meta.excursionNombre ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-caption font-semibold text-primary">
+                        {meta.excursionTipoItem === 'COMBO' ? '📦 Combo: ' : '🎯 Actividad: '}
+                        {meta.excursionNombre}
                       </span>
                     ) : null}
-                  </p>
+                  </div>
                   <p className="text-caption text-muted-foreground">
                     {PERIODO_META_LABEL[meta.periodo as PeriodoMeta] ?? meta.periodo} ·{' '}
                     {formatDate(rango.desde)} → {formatDate(rango.hasta)}
