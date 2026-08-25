@@ -85,11 +85,14 @@ erDiagram
     Company ||--o| ExcursionesConfig : "configuracion"
 ```
 
-### 3.1 Catálogo, Variantes y Paquetes Combinados (`COMBO`)
-- **`Excursion`**: Nombre, slug único por empresa, portada, galería JSON, duración, punto de salida, horas de salida/regreso, políticas, estado (`ACTIVA`, `PAUSADA`, `AGOTADA`, `TEMPORAL`, `ARCHIVADA`), moneda (`DOP`, `USD`, `EUR`), impuesto porcentual (`impuestoPct`), capacidad y tipo de ítem (`tipoItem`: `'INDIVIDUAL'` o `'COMBO'`).
-- **`ExcursionVariante`**: Variantes de la excursión (ej. Estándar, VIP, Premium) con tarifas segmentadas (`precioAdulto`, `precioNino`, `precioResidente`, `precioTurista`) y capacidad particular.
+### 3.1 Catálogo, Variantes, Paquetes Combinados (`COMBO`) y Pases de Día (`PASE_DIA`)
+- **`Excursion`**: Nombre, slug único por empresa, portada, galería JSON, duración, punto de salida, horas de salida/regreso, políticas, estado (`ACTIVA`, `PAUSADA`, `AGOTADA`, `TEMPORAL`, `ARCHIVADA`), moneda (`DOP`, `USD`, `EUR`), impuesto porcentual (`impuestoPct`), capacidad y tipo de ítem (`tipoItem`: `'ACTIVIDAD'`, `'COMBO'` o `'PASE_DIA'`).
+  - **`ACTIVIDAD`**: Tour o excursión con turnos u horarios de salida específicos.
+  - **`PASE_DIA`**: Entrada o pase de día con acceso abierto para la fecha reservada, sin horarios rígidos de salida, con límite de cupos diarios acumulados por fecha. Elegible como componente independiente o dentro de paquetes `COMBO`.
+  - **`COMBO`**: Paquete de múltiples actividades coordinadas en itinerario optimizado o multi-fecha.
+- **`ExcursionVariante`**: Variantes de la excursión o pase (ej. Estándar, VIP, Premium) con tarifas segmentadas (`precioAdulto`, `precioNino`, `precioResidente`, `precioTurista`) y reglas dinámicas por día/hora (`preciosDinamicos`).
 - **`ExcursionHorario`**: Días de operación semanales (`diasSemana` en arreglo ISO `[1..7]`), hora de salida programada y cupo particular.
-- **`ComboItem`**: Elementos que componen un paquete o combo turístico, con referencia a la actividad del catálogo (`excursionHijaId`), orden de ejecución (`orden`), duración estimada y horarios sugeridos.
+- **`ComboItem`**: Elementos que componen un paquete o combo turístico, con referencia a la actividad o pase del catálogo (`excursionHijaId`), orden de ejecución (`orden`), duración estimada y horarios sugeridos.
 
 ### 3.2 Vendedores, Turoperadores y Atribución
 - **`Vendedor`**: Identidad comercial con `codigo` estable único (`RAF-00001`), `userId` opcional (solo si se le otorga acceso al panel web), teléfono (clave anti-duplicados), tipo (`TipoVendedor`: `PROMOTOR`, `REP_HOTEL`, `TOUROPERADOR`, `AGENCIA`), jerarquía (`supervisorId`) y estado (`ACTIVO`, `SUSPENDIDO`, `INACTIVO`).
@@ -98,8 +101,13 @@ erDiagram
 - **`VendedorMeta`**: Objetivos comerciales por período (`DIARIA`, `SEMANAL`, `MENSUAL`, `RANGO`) sobre ventas, pasajeros, ingresos, registros o reservas, aplicables a un vendedor individual o a todo un tipo de vendedor (`tipoVendedorId`).
 - **`VendedorBono`**: Incentivos extraordinarios independientes de la comisión (`PENDIENTE`, `OTORGADO`, `PAGADO`, `ANULADA`).
 
-### 3.3 Reservas, Logística B2B y Ventas
+### 3.3 Reservas, Desglose de Paquetes (`ReservaItem`), Logística B2B y Ventas
 - **`ReservaExc`**: Correlativo `numero` (`EXC-2026-000184`), `clienteId`, `vendedorId` atribuido, fecha, hora, conteo de adultos/niños, desglose económico (`subtotal`, `descuento`, `impuestos`, `total`), token de check-in (`checkinToken`), marca de embarque (`checkinAt`), notas, datos de logística de hotel (`voucherAgencia`, `hotelRecogida`, `lobbyRecogida`, `horaRecogida`, `habitacion`) y estado (`PENDIENTE`, `CONFIRMADA`, `PARCIALMENTE_PAGADA`, `PAGADA`, `COMPLETADA`, `CANCELADA`, `NO_SHOW`).
+- **`ReservaItem`**: Componentes individuales de una reserva de combo o paquete. Almacena:
+  - `actividadId`: Referencia directa a la excursión o pase de día hijo.
+  - `fecha` y `hora`: Fecha y turno programados para esa actividad particular (permite itinerarios en el mismo día o multi-fecha).
+  - `adultos` y `ninos`: Cantidad de pasajeros asignados.
+  - `estado` y `checkinAt`: Estado operativo independiente (`PENDIENTE`, `EMBARCADA`, `NO_SHOW`, `CANCELADA`) para permitir check-ins en días y estaciones separadas.
 - **`ReservaPasajero`**: Registro individual de cada pasajero con tipo (`ADULTO`, `NINO`), nombre opcional, estado de embarque (`presente`) y marca de tiempo (`checkinAt`).
 - **`ReservaPago`**: Historial de abonos con monto, moneda, método (`EFECTIVO`, `TARJETA`, `TRANSFERENCIA`, `DEPOSITO`, `LINK`), referencia externa, comprobante y estado (`REGISTRADO`, `ANULADO`).
 - **`VentaExc`**: Transacción de cierre financiero `numero` (`SAL-000184`) vinculada 1 a 1 a `reservaId`, congelando la atribución del vendedor y el número de pasajeros. Estados: `CONFIRMADA`, `COMPLETADA`, `CANCELADA`, `REEMBOLSADA`.
