@@ -59,9 +59,11 @@ export function precio(v: unknown): number | null {
   return Math.round(n * 100) / 100
 }
 
+export type TipoItemExcursion = 'ACTIVIDAD' | 'COMBO' | 'PASE_DIA'
+
 export interface ExcursionDatos {
   nombre: string
-  tipoItem: 'ACTIVIDAD' | 'COMBO'
+  tipoItem: TipoItemExcursion
   descripcion: string | null
   duracionMin: number | null
   ubicacion: string | null
@@ -122,7 +124,9 @@ export function validarExcursion(
     }
   }
 
-  const tipoItem = String(form.tipoItem ?? 'ACTIVIDAD').toUpperCase() === 'COMBO' ? 'COMBO' : 'ACTIVIDAD'
+  const tipoRaw = String(form.tipoItem ?? 'ACTIVIDAD').toUpperCase()
+  const tipoItem: TipoItemExcursion =
+    tipoRaw === 'COMBO' ? 'COMBO' : tipoRaw === 'PASE_DIA' ? 'PASE_DIA' : 'ACTIVIDAD'
 
   return {
     ok: true,
@@ -130,15 +134,15 @@ export function validarExcursion(
       nombre,
       tipoItem,
       descripcion: texto(form.descripcion, 2000) || null,
-      duracionMin: enteroOpcional(form.duracionMin, 10_000),
+      duracionMin: tipoItem === 'PASE_DIA' ? null : enteroOpcional(form.duracionMin, 10_000),
       ubicacion: texto(form.ubicacion, 200) || null,
       categoria: texto(form.categoria, 80) || null,
       moneda,
       impuestoPct: impuesto,
       capacidad: enteroOpcional(form.capacidad, 100_000),
       puntoSalida: texto(form.puntoSalida, 300) || null,
-      horaSalida: horaOpcional(form.horaSalida),
-      horaRegreso: horaOpcional(form.horaRegreso),
+      horaSalida: tipoItem === 'PASE_DIA' ? null : horaOpcional(form.horaSalida),
+      horaRegreso: tipoItem === 'PASE_DIA' ? null : horaOpcional(form.horaRegreso),
       incluye: texto(form.incluye, 2000) || null,
       noIncluye: texto(form.noIncluye, 2000) || null,
       politicas: texto(form.politicas, 2000) || null,
@@ -148,6 +152,13 @@ export function validarExcursion(
   }
 }
 
+export interface ReglaPrecioDinamico {
+  diasSemana: number[] // 1..7 (vacío = todos los días)
+  horasSalida: string[] // 'HH:MM' (vacío = cualquier hora)
+  precioAdulto: number
+  precioNino: number | null
+}
+
 export interface VarianteDatos {
   nombre: string
   precioAdulto: number
@@ -155,6 +166,7 @@ export interface VarianteDatos {
   precioResidente: number | null
   precioTurista: number | null
   capacidad: number | null
+  preciosDinamicos: ReglaPrecioDinamico[] | null
 }
 
 export function validarVariante(
@@ -167,6 +179,24 @@ export function validarVariante(
     return { ok: false, error: 'El precio por adulto es obligatorio y mayor que cero.' }
   }
   const cap = typeof form.capacidad === 'string' && form.capacidad.trim() ? Number(form.capacidad) : null
+
+  let preciosDinamicos: ReglaPrecioDinamico[] | null = null
+  if (typeof form.preciosDinamicosJson === 'string' && form.preciosDinamicosJson.trim()) {
+    try {
+      const parsed = JSON.parse(form.preciosDinamicosJson)
+      if (Array.isArray(parsed)) {
+        preciosDinamicos = parsed.map((r: any) => ({
+          diasSemana: Array.isArray(r.diasSemana) ? r.diasSemana.map(Number).filter((n: number) => n >= 1 && n <= 7) : [],
+          horasSalida: Array.isArray(r.horasSalida) ? r.horasSalida.map(String).filter((s: string) => HORA_RE.test(s)) : [],
+          precioAdulto: Number(r.precioAdulto) || precioAdulto, // Fallback al base
+          precioNino: r.precioNino ? Number(r.precioNino) : null
+        }))
+      }
+    } catch {
+      // Ignorar json inválido
+    }
+  }
+
   return {
     ok: true,
     datos: {
@@ -176,6 +206,7 @@ export function validarVariante(
       precioResidente: precio(form.precioResidente),
       precioTurista: precio(form.precioTurista),
       capacidad: cap !== null && Number.isInteger(cap) && cap > 0 ? cap : null,
+      preciosDinamicos,
     },
   }
 }

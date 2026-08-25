@@ -119,6 +119,50 @@ export function calcularTotales(params: {
   return { subtotal, descuento, impuestos, total: centavos(base + impuestos) }
 }
 
+export interface ReglaPrecioDinamico {
+  diasSemana?: number[]
+  horasSalida?: string[]
+  precioAdulto: number
+  precioNino: number | null
+}
+
+/**
+ * Resuelve el precio efectivo de una variante evaluando reglas dinámicas (ej. por día u hora).
+ * Retorna el precio base si ninguna regla coincide.
+ */
+export function calcularPrecioEfectivo(
+  fecha: Date,
+  hora: string | null,
+  baseAdulto: number,
+  baseNino: number | null,
+  reglas: ReglaPrecioDinamico[] | null
+): { precioAdulto: number; precioNino: number | null } {
+  if (!reglas || reglas.length === 0) {
+    return { precioAdulto: baseAdulto, precioNino: baseNino }
+  }
+
+  // Mapeo ISO día semana (1=Lun...7=Dom) a JS Date (0=Dom...6=Sáb)
+  const DIA_ISO_A_JS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 0 }
+  const diaSemanaJS = fecha.getUTCDay()
+  const diaISO = Object.entries(DIA_ISO_A_JS).find(([, v]) => v === diaSemanaJS)?.[0]
+  const diaISONum = diaISO ? Number(diaISO) : null
+  const horaNormalizada = hora ? hora.trim().slice(0, 5) : null
+
+  for (const regla of reglas) {
+    const cumpleDia = !regla.diasSemana || regla.diasSemana.length === 0 || (diaISONum !== null && regla.diasSemana.includes(diaISONum))
+    const cumpleHora = !regla.horasSalida || regla.horasSalida.length === 0 || (horaNormalizada && regla.horasSalida.includes(horaNormalizada))
+
+    if (cumpleDia && cumpleHora) {
+      return {
+        precioAdulto: regla.precioAdulto,
+        precioNino: regla.precioNino
+      }
+    }
+  }
+
+  return { precioAdulto: baseAdulto, precioNino: baseNino }
+}
+
 export interface PagoVivo {
   monto: number
   estado: string
@@ -271,6 +315,7 @@ const DIA_ISO_A_JS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 
 
 export interface ExcursionParaDisponibilidad {
   capacidad: number | null
+  tipoItem?: string | null
   horaSalida?: string | null
   horarios?: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
 }
@@ -303,6 +348,28 @@ export function validarDisponibilidad(
   fechaDate.setHours(0, 0, 0, 0)
   if (fechaDate < hoy) return { ok: false, error: 'La fecha no puede ser anterior a hoy.' }
 
+  const esPaseDia = excursion.tipoItem === 'PASE_DIA'
+
+  // Extraer día de la semana a partir de la fecha (usar getUTCDay() si fue parseada en UTC)
+  const diaSemanaJS = fecha.getUTCDay() // 0=Dom...6=Sáb
+  const diaISO = Object.entries(DIA_ISO_A_JS).find(([, v]) => v === diaSemanaJS)?.[0]
+  const diaISONum = diaISO ? Number(diaISO) : null
+
+  if (esPaseDia) {
+    // Para PASE_DIA: No requiere hora fija de salida
+    // Si tiene horarios configurados con días de operación, validar el día
+    if (excursion.horarios && excursion.horarios.length > 0) {
+      const operaEnDia = excursion.horarios.some((h) => {
+        const dias = Array.isArray(h.diasSemana) ? h.diasSemana.map(Number) : []
+        return dias.length === 0 || (diaISONum !== null && dias.includes(diaISONum))
+      })
+      if (!operaEnDia) {
+        return { ok: false, error: 'El pase de día no opera en el día seleccionado.' }
+      }
+    }
+    return { ok: true, cupoDisponible: capacidad }
+  }
+
   // 2. Hora requerida
   if (!hora) return { ok: false, error: 'Debes seleccionar una hora de salida.' }
 
@@ -324,11 +391,6 @@ export function validarDisponibilidad(
         : []
 
   // 3. Buscar horario que coincida con día de la semana y hora
-  // Extraer día de la semana a partir de la fecha (usar getUTCDay() si fue parseada en UTC)
-  const diaSemanaJS = fecha.getUTCDay() // 0=Dom...6=Sáb
-  const diaISO = Object.entries(DIA_ISO_A_JS).find(([, v]) => v === diaSemanaJS)?.[0]
-  const diaISONum = diaISO ? Number(diaISO) : null
-
   const horario = effectiveHorarios.find((h) => {
     const horaH = (h.horaSalida || '').trim().slice(0, 5)
     if (horaH !== horaNormalizada) return false
@@ -420,9 +482,11 @@ export function diasComunesCombo(
 export interface ActividadParaItinerario {
   id?: string
   nombre: string
+  tipoItem?: string | null
   horaSalida?: string | null
   duracionMin?: number | null
   horaRegreso?: string | null
+  horarios?: { id?: string; horaSalida: string; cupo?: number | null; diasSemana?: number[] }[]
 }
 
 export interface BloqueItinerario {
@@ -435,31 +499,47 @@ export interface BloqueItinerario {
 
 /**
  * Valida que las actividades del combo no se solapen en sus horas dentro del mismo día.
+ * Las actividades de tipo PASE_DIA (acceso libre) no generan conflicto de solapamiento.
  * Ordena cronológicamente las actividades y verifica que inicio(i+1) >= fin(i).
  */
 export function validarItinerarioCombo(
   actividades: ActividadParaItinerario[]
-): { ok: true; itinerario: BloqueItinerario[] } | { ok: false; error: string; itinerario: BloqueItinerario[] } {
-  if (!actividades || actividades.length <= 1) {
-    const items = (actividades || []).map((a) => {
-      const inicio = (a.horaSalida || '09:00').trim().slice(0, 5)
-      const duracion = a.duracionMin && a.duracionMin > 0 ? a.duracionMin : 120
-      const fin =
-        a.horaRegreso?.trim().slice(0, 5) ||
-        formatoMinutosAHora(minutosDesdeMedianoche(inicio) + duracion)
-      return {
-        id: a.id,
-        nombre: a.nombre,
-        inicio,
-        fin,
-        duracionMin: duracion,
-      }
-    })
-    return { ok: true, itinerario: items }
+): { ok: boolean; itinerario: BloqueItinerario[]; error?: string } {
+  if (actividades.length === 0) {
+    return { ok: true, itinerario: [] }
+  }
+
+  // Filtrar exclusivamente las actividades que tienen horario/turnos programados
+  const actividadesConHorario = actividades.filter((a) => a.tipoItem !== 'PASE_DIA')
+
+  // Si no hay actividades con horario, no hay solapamiento de horas
+  if (actividadesConHorario.length === 0) {
+    return { ok: true, itinerario: [] }
+  }
+
+  if (actividadesConHorario.length === 1) {
+    const a = actividadesConHorario[0]
+    const inicio = (a.horaSalida || '09:00').trim().slice(0, 5)
+    const duracion = a.duracionMin && a.duracionMin > 0 ? a.duracionMin : 120
+    const fin =
+      a.horaRegreso?.trim().slice(0, 5) ||
+      formatoMinutosAHora(minutosDesdeMedianoche(inicio) + duracion)
+    return {
+      ok: true,
+      itinerario: [
+        {
+          id: a.id,
+          nombre: a.nombre,
+          inicio,
+          fin,
+          duracionMin: duracion,
+        },
+      ],
+    }
   }
 
   // Mapear con horas y minutos normalizados (calculando el fin dinámicamente según inicio + duración)
-  const bloques: BloqueItinerario[] = actividades.map((a) => {
+  const bloques: BloqueItinerario[] = actividadesConHorario.map((a) => {
     const inicio = (a.horaSalida || '09:00').trim().slice(0, 5)
     const duracion = a.duracionMin && a.duracionMin > 0 ? a.duracionMin : 120
     const fin = formatoMinutosAHora(minutosDesdeMedianoche(inicio) + duracion)
@@ -494,15 +574,6 @@ export function validarItinerarioCombo(
   }
 
   return { ok: true, itinerario: bloques }
-}
-
-export interface ActividadParaItinerario {
-  id?: string
-  nombre: string
-  duracionMin?: number | null
-  horaSalida?: string | null
-  horaRegreso?: string | null
-  horarios?: { id?: string; horaSalida: string; cupo?: number | null; diasSemana?: number[] }[]
 }
 
 export interface AutoResolucionItinerarioResult {
@@ -585,6 +656,12 @@ export function autoResolverItinerarioCombo(
   for (let i = 0; i < actsOrdenadas.length; i++) {
     const act = actsOrdenadas[i]
     const actId = act.id || act.nombre
+
+    if (act.tipoItem === 'PASE_DIA') {
+      horariosAsignados[actId] = ''
+      continue
+    }
+
     const duracion = act.duracionMin && act.duracionMin > 0 ? act.duracionMin : 120
     const horaActual = horariosAsignados[actId] || '09:00'
     const inicioActualMin = minutosDesdeMedianoche(horaActual)
@@ -595,8 +672,8 @@ export function autoResolverItinerarioCombo(
         : [horaActual]
     ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
 
-    // Si es la primera actividad, respetamos su horario o el más temprano
-    if (i === 0) {
+    // Si es la primera actividad con horario, respetamos su horario o el más temprano
+    if (prevFinMin === 0) {
       prevFinMin = inicioActualMin + duracion
       prevNombre = act.nombre
       continue
@@ -800,14 +877,35 @@ function horaAmPm(h24: string): string {
 /**
  * Genera exhaustivamente TODAS las combinaciones válidas de horarios
  * sin solapamientos entre las actividades del combo.
+ * Las actividades de tipo PASE_DIA (acceso libre) no restringen los turnos horarios.
  */
 export function generarCombinacionesCombo(
   actividades: ActividadParaItinerario[]
 ): CombinacionItinerarioCombo[] {
   if (actividades.length === 0) return []
 
-  if (actividades.length === 1) {
-    const act = actividades[0]
+  const actividadesConHorario = actividades.filter((a) => a.tipoItem !== 'PASE_DIA')
+  const pasesDia = actividades.filter((a) => a.tipoItem === 'PASE_DIA')
+
+  // Si todas las actividades son pases de día, no existen turnos ni horarios restringidos
+  if (actividadesConHorario.length === 0) {
+    return [
+      {
+        id: 'acceso-libre',
+        nombre: 'Acceso Libre (Todo el día)',
+        horaInicio: '',
+        horaFin: '',
+        duracionTotalMin: 0,
+        horariosAsignados: {},
+        itinerario: [],
+        resumenTexto: 'Pase(s) con acceso libre para la fecha seleccionada',
+      },
+    ]
+  }
+
+  // Si solo hay una actividad con horario (+ posibles pases de día asociados)
+  if (actividadesConHorario.length === 1) {
+    const act = actividadesConHorario[0]
     const slots =
       act.horarios && act.horarios.length > 0
         ? Array.from(new Set(act.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort(
@@ -818,22 +916,28 @@ export function generarCombinacionesCombo(
     return slots.map((slot) => {
       const v = validarItinerarioCombo([{ ...act, horaSalida: slot }])
       const horaInicio = slot
-      const horaFin = v.itinerario[0]?.fin || slot
+      const bloqueHorario = v.itinerario.find((b) => b.id === act.id || b.nombre === act.nombre)
+      const horaFin = bloqueHorario?.fin || slot
       const dur = minutosDesdeMedianoche(horaFin) - minutosDesdeMedianoche(horaInicio)
+
+      const asignaciones: Record<string, string> = { [act.id || act.nombre]: slot }
+
+      const resumen = `${act.nombre} (${horaAmPm(horaInicio)} → ${horaAmPm(horaFin)})`
+
       return {
         id: slot,
         nombre: `Turno ${horaAmPm(slot)}`,
         horaInicio,
         horaFin,
         duracionTotalMin: dur,
-        horariosAsignados: { [act.id || act.nombre]: slot },
+        horariosAsignados: asignaciones,
         itinerario: v.itinerario,
-        resumenTexto: `${act.nombre} (${horaAmPm(horaInicio)} → ${horaAmPm(horaFin)})`,
+        resumenTexto: resumen,
       }
     })
   }
 
-  const slotsPorActividad = actividades.map((act) => {
+  const slotsPorActividad = actividadesConHorario.map((act) => {
     const id = act.id || act.nombre
     const slots =
       act.horarios && act.horarios.length > 0
@@ -849,18 +953,21 @@ export function generarCombinacionesCombo(
 
   function explorar(index: number, asignacionActual: Record<string, string>) {
     if (index >= slotsPorActividad.length) {
-      const actsConHorario = actividades.map((a) => ({
+      const actsConHorario = actividadesConHorario.map((a) => ({
         ...a,
         horaSalida: asignacionActual[a.id || a.nombre],
       }))
       const v = validarItinerarioCombo(actsConHorario)
       if (v.ok && v.itinerario.length > 0) {
-        const horaInicio = v.itinerario[0].inicio
-        const horaFin = v.itinerario[v.itinerario.length - 1].fin
+        // Encontrar bloques con horarios reales para calcular inicio y fin del tour
+        const horaInicio = v.itinerario[0]?.inicio || '09:00'
+        const horaFin = v.itinerario[v.itinerario.length - 1]?.fin || '18:00'
         const duracionTotalMin =
           minutosDesdeMedianoche(horaFin) - minutosDesdeMedianoche(horaInicio)
 
-        const key = Object.entries(asignacionActual)
+        const asignacionesCompletas: Record<string, string> = { ...asignacionActual }
+
+        const key = Object.entries(asignacionesCompletas)
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([k, val]) => `${k}:${val}`)
           .join('|')
@@ -869,7 +976,7 @@ export function generarCombinacionesCombo(
           vistas.add(key)
           const resumenTexto = v.itinerario
             .map((b) => `${horaAmPm(b.inicio)} ${b.nombre}`)
-            .join(' → ')
+            .join(' ➔ ')
 
           combinacionesValidas.push({
             id: key,
@@ -877,7 +984,7 @@ export function generarCombinacionesCombo(
             horaInicio,
             horaFin,
             duracionTotalMin,
-            horariosAsignados: { ...asignacionActual },
+            horariosAsignados: asignacionesCompletas,
             itinerario: v.itinerario,
             resumenTexto,
           })
@@ -912,6 +1019,7 @@ export function validarDisponibilidadCombo(
   combo: ExcursionParaDisponibilidad & {
     nombre?: string
     actividades: (ExcursionParaDisponibilidad & {
+      id?: string
       nombre: string
       duracionMin?: number | null
       horaRegreso?: string | null
@@ -981,4 +1089,91 @@ export function validarDisponibilidadCombo(
   }
 
   return { ok: true, cupoDisponible: menorCupo, itinerario: itinerarioRes.itinerario }
+}
+
+export interface ComboItemItinerarioDetalle {
+  actividadId: string
+  nombre: string
+  fecha: Date
+  hora: string | null
+  tipoItem?: string | null
+}
+
+/**
+ * Valida disponibilidad y consistencia para un combo reservado en múltiples fechas y/o turnos independientes.
+ */
+export function validarDisponibilidadComboMultiFecha(
+  pasajeros: number,
+  combo: ExcursionParaDisponibilidad & {
+    nombre?: string
+    actividades: (ExcursionParaDisponibilidad & {
+      id: string
+      nombre: string
+      duracionMin?: number | null
+      horaRegreso?: string | null
+    })[]
+  },
+  itemsItinerario: { actividadId: string; fecha: Date; hora: string | null }[]
+): { ok: true; cupoDisponible: number; itemsValidados: ComboItemItinerarioDetalle[] } | { ok: false; error: string } {
+  if (!itemsItinerario || itemsItinerario.length === 0) {
+    return { ok: false, error: 'Debes configurar las fechas y turnos de las actividades del combo.' }
+  }
+
+  // Agrupar actividades por fecha para validar solapamientos en un mismo día
+  const porFecha = new Map<string, ActividadParaItinerario[]>()
+  const itemsValidados: ComboItemItinerarioDetalle[] = []
+  let menorCupo = combo.capacidad && combo.capacidad > 0 ? combo.capacidad : CAPACIDAD_SIN_DECLARAR
+
+  for (const item of itemsItinerario) {
+    const act = combo.actividades.find((a) => a.id === item.actividadId)
+    if (!act) {
+      return { ok: false, error: `Actividad con ID ${item.actividadId} no pertenece al combo.` }
+    }
+
+    // Validar disponibilidad individual
+    const disp = validarDisponibilidad(item.fecha, item.hora, pasajeros, act)
+    if (!disp.ok) {
+      const fechaStr = item.fecha.toISOString().split('T')[0]
+      return {
+        ok: false,
+        error: `La actividad "${act.nombre}" no tiene disponibilidad para el ${fechaStr}: ${disp.error}`,
+      }
+    }
+
+    const capActGeneral = act.capacidad && act.capacidad > 0 ? act.capacidad : CAPACIDAD_SIN_DECLARAR
+    menorCupo = Math.min(menorCupo, capActGeneral)
+
+    const fechaKey = item.fecha.toISOString().split('T')[0]
+    const lista = porFecha.get(fechaKey) || []
+    lista.push({
+      id: act.id,
+      nombre: act.nombre,
+      tipoItem: act.tipoItem,
+      duracionMin: act.duracionMin,
+      horaSalida: item.hora,
+      horaRegreso: act.horaRegreso,
+      horarios: act.horarios,
+    })
+    porFecha.set(fechaKey, lista)
+
+    itemsValidados.push({
+      actividadId: act.id,
+      nombre: act.nombre,
+      fecha: item.fecha,
+      hora: item.hora,
+      tipoItem: act.tipoItem,
+    })
+  }
+
+  // Validar solapamiento para actividades programadas en la misma fecha
+  for (const [, actsDelDia] of porFecha.entries()) {
+    if (actsDelDia.length > 1) {
+      const val = validarItinerarioCombo(actsDelDia)
+      if (!val.ok) {
+        return { ok: false, error: val.error }
+      }
+    }
+  }
+
+  return { ok: true, cupoDisponible: menorCupo, itemsValidados }
 }
