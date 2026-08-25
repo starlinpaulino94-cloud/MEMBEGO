@@ -77,6 +77,26 @@ export interface ExcursionPublica {
   proximasSalidas: SalidaDisponible[]
   agotadaGlobal: boolean
   todasFechasPasadas: boolean
+  tipoItem?: string
+  comboItems?: {
+    horaSalida?: string | null
+    actividad: {
+      id: string
+      nombre: string
+      slug: string
+      portadaUrl: string | null
+      duracionMin: number | null
+      horaSalida: string | null
+      horaRegreso: string | null
+      categoria: string | null
+      horarios?: {
+        id: string
+        horaSalida: string
+        diasSemana: number[]
+        cupo: number | null
+      }[]
+    }
+  }[]
 }
 
 /** Días ISO (1 = lunes … 7 = domingo). */
@@ -332,6 +352,30 @@ export async function excursionPublica(
           orden: true,
         },
       },
+      tipoItem: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              slug: true,
+              portadaUrl: true,
+              duracionMin: true,
+              horaSalida: true,
+              horaRegreso: true,
+              categoria: true,
+              horarios: {
+                where: { activo: true },
+                orderBy: { horaSalida: 'asc' },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      },
       horarios: {
         where: { activo: true },
         orderBy: { horaSalida: 'asc' },
@@ -397,6 +441,29 @@ export async function excursionPorId(
           precioNino: true,
           capacidad: true,
           orden: true,
+        },
+      },
+      tipoItem: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              slug: true,
+              portadaUrl: true,
+              duracionMin: true,
+              horaSalida: true,
+              horaRegreso: true,
+              categoria: true,
+              horarios: {
+                where: { activo: true },
+                orderBy: { horaSalida: 'asc' },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
         },
       },
       horarios: {

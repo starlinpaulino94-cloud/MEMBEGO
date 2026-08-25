@@ -18,7 +18,9 @@ import {
   Sparkles,
   Info,
   DollarSign,
-  ImageIcon
+  ImageIcon,
+  AlertTriangle,
+  Wand2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -39,6 +41,8 @@ const init: CatalogoActionState = {}
 export interface ExcursionEditable {
   id: string
   nombre: string
+  tipoItem?: string
+  actividadesComboIds?: string[]
   descripcion: string | null
   duracionMin: number | null
   ubicacion: string | null
@@ -59,6 +63,16 @@ export interface ExcursionEditable {
     horaSalida: string
     diasSemana: unknown
     cupo?: number | null
+  }[]
+  comboItems?: {
+    actividadId?: string
+    horaSalida?: string | null
+    actividad?: {
+      id: string
+      horaSalida?: string | null
+      duracionMin?: number | null
+      horarios?: { id: string; horaSalida: string; diasSemana: unknown; cupo?: number | null }[]
+    }
   }[]
 }
 
@@ -86,16 +100,175 @@ const HORAS_PRESETS = [
   '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'
 ]
 
+import {
+  diasComunesCombo,
+  validarItinerarioCombo,
+  autoResolverItinerarioCombo,
+  optimizarItinerarioCombo,
+  generarCombinacionesCombo,
+  type CombinacionItinerarioCombo,
+  formatoMinutosAHora,
+  minutosDesdeMedianoche,
+} from '@/modules/excursiones/reservas/nucleo'
+
+export interface ActividadParaComboItem {
+  id: string
+  nombre: string
+  categoria: string | null
+  moneda?: string
+  duracionMin?: number | null
+  horaSalida?: string | null
+  horaRegreso?: string | null
+  capacidad?: number | null
+  precioAdulto?: number | null
+  precioNino?: number | null
+  horarios?: {
+    id: string
+    horaSalida: string
+    diasSemana: number[]
+    cupo?: number | null
+  }[]
+}
+
+const DIAS_NOMBRES: Record<number, string> = {
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
+  7: 'Dom',
+}
+
 export function ExcursionForm({ 
   companyId, 
-  excursion 
+  excursion,
+  actividadesDisponibles = [],
 }: { 
   companyId: string
   excursion?: ExcursionEditable 
+  actividadesDisponibles?: ActividadParaComboItem[]
 }) {
   const router = useRouter()
   const accion = excursion ? actualizarExcursion : crearExcursion
   const [state, formAction, pending] = useActionState(accion, init)
+
+  // Tipo de ítem: ACTIVIDAD o COMBO
+  const [tipoItem, setTipoItem] = useState<'ACTIVIDAD' | 'COMBO'>(() => {
+    return excursion?.tipoItem === 'COMBO' ? 'COMBO' : 'ACTIVIDAD'
+  })
+
+  // Actividades seleccionadas para el combo
+  const [actividadesComboSeleccionadas, setActividadesComboSeleccionadas] = useState<string[]>(() => {
+    if (excursion?.comboItems && excursion.comboItems.length > 0) {
+      return excursion.comboItems.map((ci) => ci.actividad?.id || ci.actividadId || '').filter(Boolean)
+    }
+    return excursion?.actividadesComboIds ?? []
+  })
+
+  // Mapeo interactivo de horario asignado por actividad (actividadId -> '09:00')
+  const [horariosPorActividad, setHorariosPorActividad] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {}
+    if (excursion?.comboItems && excursion.comboItems.length > 0) {
+      for (const ci of excursion.comboItems) {
+        const actId = ci.actividad?.id || ci.actividadId
+        if (actId) {
+          initial[actId] = (
+            ci.horaSalida ||
+            ci.actividad?.horaSalida ||
+            '09:00'
+          ).trim().slice(0, 5)
+        }
+      }
+    }
+    return initial
+  })
+
+  // Objetos de las actividades seleccionadas
+  const actividadesSeleccionadasObjs = useMemo(() => {
+    return actividadesDisponibles.filter((a) =>
+      actividadesComboSeleccionadas.includes(a.id)
+    )
+  }, [actividadesDisponibles, actividadesComboSeleccionadas])
+
+  // Actividades seleccionadas con sus horarios efectivos asignados
+  const actividadesConHorariosAsignados = useMemo(() => {
+    return actividadesSeleccionadasObjs.map((a) => ({
+      ...a,
+      horaSalida:
+        horariosPorActividad[a.id] ||
+        a.horaSalida ||
+        (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
+    }))
+  }, [actividadesSeleccionadasObjs, horariosPorActividad])
+
+  // Días comunes compatibles (intersección)
+  const diasComunes = useMemo(() => {
+    return diasComunesCombo(actividadesSeleccionadasObjs)
+  }, [actividadesSeleccionadasObjs])
+
+  // Validación de itinerario de horas (sin solapamiento)
+  const itinerarioResult = useMemo(() => {
+    return validarItinerarioCombo(actividadesConHorariosAsignados)
+  }, [actividadesConHorariosAsignados])
+
+  // Combinaciones válidas completas de horarios para el combo
+  const combinacionesDisponibles = useMemo(() => {
+    if (tipoItem !== 'COMBO' || actividadesSeleccionadasObjs.length < 2) return []
+    return generarCombinacionesCombo(actividadesSeleccionadasObjs)
+  }, [tipoItem, actividadesSeleccionadasObjs])
+
+  // Cambiar turno de una actividad con auto-resolución de solapamientos
+  const cambiarHorarioActividad = (actId: string, nuevaHora: string) => {
+    const updatedHorarios = { ...horariosPorActividad, [actId]: nuevaHora.trim().slice(0, 5) }
+    const actsConNuevaHora = actividadesSeleccionadasObjs.map((a) => ({
+      ...a,
+      horaSalida: updatedHorarios[a.id] || a.horaSalida || '09:00',
+    }))
+
+    const validacion = validarItinerarioCombo(actsConNuevaHora)
+    if (validacion.ok) {
+      setHorariosPorActividad(updatedHorarios)
+      toast.success('Horario actualizado.')
+    } else {
+      // Auto-resolver hacia el horario más cercano no solapado
+      const resolucion = autoResolverItinerarioCombo(actsConNuevaHora, actId)
+      if (resolucion.ok) {
+        setHorariosPorActividad(resolucion.horariosAsignados)
+        toast.info(
+          resolucion.ajustes.length > 0
+            ? `⚡ Sincronizado: ${resolucion.ajustes[0]}`
+            : 'Horario sincronizado sin solapamientos.'
+        )
+      } else {
+        setHorariosPorActividad(updatedHorarios)
+        toast.warning(`⚠️ Horarios solapados: ${validacion.error}`)
+      }
+    }
+  }
+
+  // Auto-sincronizar / optimizar combinación completa
+  const autoSincronizarCombo = () => {
+    const opt = optimizarItinerarioCombo(actividadesSeleccionadasObjs)
+    if (opt.ok) {
+      setHorariosPorActividad(opt.horariosAsignados)
+      toast.success('Itinerario optimizado automáticamente sin solapamiento.')
+    } else {
+      toast.error(opt.error || 'No se encontró combinación válida sin solapamiento.')
+    }
+  }
+
+  const toggleActividadCombo = (id: string) => {
+    setActividadesComboSeleccionadas((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      const nextObjs = actividadesDisponibles.filter((a) => next.includes(a.id))
+      const autoRes = autoResolverItinerarioCombo(nextObjs)
+      if (autoRes.ok) {
+        setHorariosPorActividad(autoRes.horariosAsignados)
+      }
+      return next
+    })
+  }
 
   // Duración en horas (por defecto 3 horas o convertido desde duracionMin)
   const [duracionHoras, setDuracionHoras] = useState<number>(() => {
@@ -106,33 +279,80 @@ export function ExcursionForm({
   // Lista de horas de salida configuradas
   const [horasSalida, setHorasSalida] = useState<string[]>(() => {
     if (excursion?.horarios && excursion.horarios.length > 0) {
-      const unique = Array.from(
-        new Set(excursion.horarios.map((h) => String(h.horaSalida || '').trim().slice(0, 5)).filter(Boolean))
-      ).sort()
-      if (unique.length > 0) return unique
+      return Array.from(new Set(excursion.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort()
     }
     if (excursion?.horaSalida) return [excursion.horaSalida.trim().slice(0, 5)]
-    return ['09:00', '11:00']
+    return ['09:00']
   })
 
-  const [nuevaHoraInput, setNuevaHoraInput] = useState('14:00')
-
-  // Días de operación (1=Lun ... 7=Dom)
+  // Días de la semana seleccionados (por defecto todos los días [1..7])
   const [diasSeleccionados, setDiasSeleccionados] = useState<number[]>(() => {
     if (excursion?.horarios && excursion.horarios.length > 0) {
-      const allDays = new Set<number>()
-      for (const h of excursion.horarios) {
+      const allDias = new Set<number>()
+      excursion.horarios.forEach((h) => {
         if (Array.isArray(h.diasSemana)) {
-          h.diasSemana.forEach((d) => {
-            const num = Number(d)
-            if (num >= 1 && num <= 7) allDays.add(num)
-          })
+          h.diasSemana.forEach((d) => allDias.add(Number(d)))
         }
-      }
-      if (allDays.size > 0) return Array.from(allDays).sort()
+      })
+      if (allDias.size > 0) return Array.from(allDias).sort()
     }
     return [1, 2, 3, 4, 5, 6, 7]
   })
+
+  // Sincronización automática de días y horas cuando es un COMBO
+  useEffect(() => {
+    if (tipoItem === 'COMBO' && actividadesSeleccionadasObjs.length > 0) {
+      if (diasComunes.length > 0) {
+        setDiasSeleccionados(diasComunes)
+      }
+      if (combinacionesDisponibles.length > 0) {
+        const todasHoras = Array.from(
+          new Set(combinacionesDisponibles.map((c) => c.horaInicio))
+        ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
+        setHorasSalida(todasHoras)
+        const maxDur = Math.max(...combinacionesDisponibles.map((c) => c.duracionTotalMin))
+        if (maxDur > 0) {
+          setDuracionHoras(Number((maxDur / 60).toFixed(1)))
+        }
+      } else if (itinerarioResult.itinerario.length > 0) {
+        const primeraHora = itinerarioResult.itinerario[0].inicio
+        setHorasSalida([primeraHora])
+        const ultimaHoraFin = itinerarioResult.itinerario[itinerarioResult.itinerario.length - 1].fin
+        const durTotalMin =
+          minutosDesdeMedianoche(ultimaHoraFin) - minutosDesdeMedianoche(primeraHora)
+        if (durTotalMin > 0) {
+          setDuracionHoras(Number((durTotalMin / 60).toFixed(1)))
+        }
+      }
+    }
+  }, [tipoItem, actividadesSeleccionadasObjs, diasComunes, combinacionesDisponibles, itinerarioResult])
+
+  const [nuevaHoraInput, setNuevaHoraInput] = useState('14:00')
+
+  // Estados de precios para cálculo interactivo
+  const [precioAdultoInput, setPrecioAdultoInput] = useState<string>('')
+  const [precioNinoInput, setPrecioNinoInput] = useState<string>('')
+
+  // Suma de precios individuales de las actividades del combo
+  const sumaPreciosActividades = useMemo(() => {
+    if (tipoItem !== 'COMBO' || actividadesSeleccionadasObjs.length === 0) return null
+    const adulto = actividadesSeleccionadasObjs.reduce((acc, a) => acc + (a.precioAdulto || 0), 0)
+    const nino = actividadesSeleccionadasObjs.reduce(
+      (acc, a) => acc + (a.precioNino != null ? a.precioNino : a.precioAdulto || 0),
+      0
+    )
+    return { adulto, nino }
+  }, [tipoItem, actividadesSeleccionadasObjs])
+
+  // Cálculo en tiempo real del ahorro del combo
+  const ahorroCombo = useMemo(() => {
+    if (!sumaPreciosActividades || !precioAdultoInput) return null
+    const precioCombo = parseFloat(precioAdultoInput) || 0
+    if (precioCombo <= 0 || sumaPreciosActividades.adulto <= 0) return null
+    const ahorro = sumaPreciosActividades.adulto - precioCombo
+    const pct = Math.round((ahorro / sumaPreciosActividades.adulto) * 100)
+    return { ahorro, pct }
+  }, [sumaPreciosActividades, precioAdultoInput])
 
   // Minutos calculados
   const duracionMin = useMemo(() => {
@@ -219,6 +439,11 @@ export function ExcursionForm({
       <input type="hidden" name="horaSalida" value={primeraHoraSalida} />
       <input type="hidden" name="horaRegreso" value={primeraHoraRegreso} />
       <input type="hidden" name="horariosData" value={horariosDataJson} />
+      <input
+        type="hidden"
+        name="comboActividadesHorarios"
+        value={JSON.stringify(horariosPorActividad)}
+      />
 
       {/* SECCIÓN 0: IMÁGENES Y MULTIMEDIA */}
       <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
@@ -236,11 +461,283 @@ export function ExcursionForm({
       </div>
 
       {/* SECCIÓN 1: DATOS PRINCIPALES */}
-      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
-        <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          Información general de la excursión
-        </h3>
+      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Información general
+          </h3>
+
+          {/* Selector de Tipo: ACTIVIDAD vs COMBO */}
+          <div className="flex items-center rounded-xl bg-muted/60 p-1 border border-border/60">
+            <button
+              type="button"
+              onClick={() => setTipoItem('ACTIVIDAD')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                tipoItem === 'ACTIVIDAD'
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Actividad Individual
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoItem('COMBO')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                tipoItem === 'COMBO'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Combo / Paquete
+            </button>
+          </div>
+        </div>
+
+        <input type="hidden" name="tipoItem" value={tipoItem} />
+
+        {tipoItem === 'COMBO' ? (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Configuración de Actividades del Combo
+                </p>
+                <p className="text-caption text-muted-foreground">
+                  Selecciona las 2 o más actividades que integran este combo. Al reservar este paquete, el sistema validará y descontará cupo en cada una de ellas automáticamente.
+                </p>
+              </div>
+            </div>
+
+            {actividadesDisponibles.length === 0 ? (
+              <p className="text-caption text-warning">
+                * No hay otras actividades individuales registradas para crear un combo. Crea primero las actividades individuales.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
+                {actividadesDisponibles.map((act) => {
+                  const checked = actividadesComboSeleccionadas.includes(act.id)
+                  return (
+                    <label
+                      key={act.id}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm cursor-pointer transition ${
+                        checked
+                          ? 'border-primary bg-card text-foreground font-medium shadow-xs'
+                          : 'border-border/70 bg-card/60 text-muted-foreground hover:bg-card'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          name="actividadesComboIds"
+                          value={act.id}
+                          checked={checked}
+                          onChange={() => toggleActividadCombo(act.id)}
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span>{act.nombre}</span>
+                      </div>
+                      {act.categoria ? (
+                        <span className="text-caption text-muted-foreground font-normal">
+                          {act.categoria}
+                        </span>
+                      ) : null}
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+
+            {actividadesComboSeleccionadas.length < 2 ? (
+              <p className="text-caption text-warning font-medium">
+                * Selecciona al menos 2 actividades para habilitar este combo ({actividadesComboSeleccionadas.length} seleccionadas).
+              </p>
+            ) : (
+              <div className="space-y-3 pt-2">
+                <p className="text-caption text-success font-medium flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Combo válido con {actividadesComboSeleccionadas.length} actividades vinculadas.
+                </p>
+
+                {/* Configuración de Turnos por Actividad */}
+                <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                        <Clock className="h-4 w-4 text-primary" />
+                        Turnos y Horarios de las Actividades
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Elige la hora de salida de cada actividad. El sistema auto-sincronizará los turnos para evitar solapamientos.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={autoSincronizarCombo}
+                      className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/20 transition shadow-2xs"
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      Auto-Sincronizar Turnos
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {actividadesSeleccionadasObjs.map((act) => {
+                      const horaAsignada =
+                        horariosPorActividad[act.id] ||
+                        act.horaSalida ||
+                        (act.horarios && act.horarios.length > 0 ? act.horarios[0].horaSalida : '09:00')
+
+                      const duracionActMin = act.duracionMin && act.duracionMin > 0 ? act.duracionMin : 120
+                      const horaFinAsignada = formatoMinutosAHora(minutosDesdeMedianoche(horaAsignada) + duracionActMin)
+
+                      const slots =
+                        act.horarios && act.horarios.length > 0
+                          ? Array.from(new Set(act.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort()
+                          : [horaAsignada]
+
+                      return (
+                        <div
+                          key={act.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 p-2.5 text-xs"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-foreground">{act.nombre}</span>
+                            <span className="font-mono text-[11px] text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-full">
+                              {formato12h(horaAsignada)} → {formato12h(horaFinAsignada)} ({(duracionActMin / 60).toFixed(1)}h)
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] text-muted-foreground font-medium mr-1">Turno:</span>
+                            {slots.map((s) => {
+                              const seleccionado = horaAsignada === s
+                              const finSlot = formatoMinutosAHora(minutosDesdeMedianoche(s) + duracionActMin)
+                              return (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  title={`${formato12h(s)} a ${formato12h(finSlot)}`}
+                                  onClick={() => cambiarHorarioActividad(act.id, s)}
+                                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                                    seleccionado
+                                      ? 'bg-primary text-primary-foreground shadow-xs'
+                                      : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                                  }`}
+                                >
+                                  {formato12h(s)}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Widget Interactivo de Itinerario */}
+                <div className="rounded-xl border border-border/80 bg-card p-3.5 space-y-2.5 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        Itinerario del Mismo Día (Sin Solapamiento)
+                      </h4>
+                    </div>
+                    <div className="text-caption font-medium">
+                      {diasComunes.length > 0 ? (
+                        <span className="text-muted-foreground">
+                          Días comunes: <span className="font-semibold text-foreground">{diasComunes.map((d) => DIAS_NOMBRES[d]).join(', ')}</span>
+                        </span>
+                      ) : (
+                        <span className="text-destructive font-semibold">
+                          ⚠️ No hay días de salida en común entre las actividades
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Estado de solapamiento */}
+                  {itinerarioResult.ok ? (
+                    <div className="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Secuencia coordinada sin cruces de horario ({duracionHoras}h en total en el día).</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold">{itinerarioResult.error}</p>
+                        <p className="text-[11px] opacity-90 mt-0.5">
+                          Haz clic en &quot;Auto-Sincronizar Turnos&quot; arriba o cambia los turnos para resolver el conflicto.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pasos del Itinerario */}
+                  <div className="space-y-1.5 pt-1">
+                    {itinerarioResult.itinerario.map((bloque, idx) => (
+                      <div
+                        key={bloque.id || idx}
+                        className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-[10px]">
+                            {idx + 1}
+                          </span>
+                          <span className="font-medium text-foreground">{bloque.nombre}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-[11px]">
+                          <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
+                          <span>→</span>
+                          <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
+                          <span>({(bloque.duracionMin / 60).toFixed(1)}h)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Listado de todas las combinaciones de turnos que el cliente podrá elegir */}
+                {combinacionesDisponibles.length > 0 && (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <span className="text-xs font-bold text-primary flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4" />
+                        Opciones de Turnos del Paquete ({combinacionesDisponibles.length} disponibles)
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Guardadas automáticamente en el catálogo
+                      </span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {combinacionesDisponibles.map((c, i) => (
+                        <div
+                          key={c.id || i}
+                          className="rounded-lg border border-border/80 bg-background/90 p-2.5 text-xs space-y-1 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between font-semibold">
+                            <span className="text-foreground">{c.nombre}</span>
+                            <span className="font-mono text-primary font-bold">
+                              {formato12h(c.horaInicio)} → {formato12h(c.horaFin)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground line-clamp-1">
+                            {c.resumenTexto}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div>
           <Label htmlFor="exc-nombre" className="text-xs sm:text-sm font-semibold">Nombre de la excursión *</Label>
@@ -532,6 +1029,60 @@ export function ExcursionForm({
             </p>
           </div>
 
+          {tipoItem === 'COMBO' && sumaPreciosActividades && sumaPreciosActividades.adulto > 0 ? (
+            <div className="rounded-xl border border-primary/20 bg-background/80 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Suma individual de actividades
+                  </p>
+                  <p className="text-sm font-bold text-foreground">
+                    ${sumaPreciosActividades.adulto.toFixed(2)} por adulto
+                    {sumaPreciosActividades.nino > 0
+                      ? ` • $${sumaPreciosActividades.nino.toFixed(2)} por niño`
+                      : ''}
+                  </p>
+                </div>
+
+                {ahorroCombo && ahorroCombo.ahorro > 0 ? (
+                  <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    🔥 Ahorro para el cliente: ${ahorroCombo.ahorro.toFixed(2)} ({ahorroCombo.pct}% descuento)
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Botones de sugerencia rápida */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-caption text-muted-foreground font-medium">Sugerencias:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrecioAdultoInput(sumaPreciosActividades.adulto.toFixed(2))
+                    if (sumaPreciosActividades.nino > 0) {
+                      setPrecioNinoInput(sumaPreciosActividades.nino.toFixed(2))
+                    }
+                  }}
+                  className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition"
+                >
+                  Copiar suma total (${sumaPreciosActividades.adulto.toFixed(2)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const desc15 = (sumaPreciosActividades.adulto * 0.85).toFixed(2)
+                    setPrecioAdultoInput(desc15)
+                    if (sumaPreciosActividades.nino > 0) {
+                      setPrecioNinoInput((sumaPreciosActividades.nino * 0.85).toFixed(2))
+                    }
+                  }}
+                  className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/20 transition"
+                >
+                  Aplicar 15% de descuento (${(sumaPreciosActividades.adulto * 0.85).toFixed(2)})
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="exc-precio-adulto" className="text-xs sm:text-sm font-semibold">Precio por adulto *</Label>
@@ -542,6 +1093,8 @@ export function ExcursionForm({
                 min="0.01" 
                 step="0.01" 
                 placeholder="80.00" 
+                value={precioAdultoInput}
+                onChange={(e) => setPrecioAdultoInput(e.target.value)}
                 className="mt-1 h-11 text-base font-bold"
                 required 
               />
@@ -555,6 +1108,8 @@ export function ExcursionForm({
                 min="0" 
                 step="0.01" 
                 placeholder="40.00" 
+                value={precioNinoInput}
+                onChange={(e) => setPrecioNinoInput(e.target.value)}
                 className="mt-1 h-11 text-sm font-medium"
               />
             </div>
@@ -690,10 +1245,29 @@ export function ExcursionForm({
         </Alert>
       ) : null}
 
+      {tipoItem === 'COMBO' && !itinerarioResult.ok ? (
+        <Alert variant="destructive">
+          <AlertDescription className="font-semibold">
+            ⚠️ No se puede guardar el combo: {itinerarioResult.error}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {tipoItem === 'COMBO' && actividadesComboSeleccionadas.length >= 2 && diasComunes.length === 0 ? (
+        <Alert variant="destructive">
+          <AlertDescription className="font-semibold">
+            ⚠️ No se puede guardar el combo: Las actividades seleccionadas no comparten ningún día operativo en común.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
         <Button 
           type="submit" 
-          disabled={pending} 
+          disabled={
+            pending || 
+            (tipoItem === 'COMBO' && (!itinerarioResult.ok || actividadesComboSeleccionadas.length < 2 || diasComunes.length === 0))
+          } 
           className="h-12 w-full sm:w-auto px-8 rounded-xl font-bold text-sm sm:text-base shadow-sm gap-2"
         >
           {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : null}

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { excursionDetalle } from '@/modules/excursiones/catalogo/queries'
+import { excursionDetalle, actividadesParaCombo } from '@/modules/excursiones/catalogo/queries'
 import {
   ESTADO_EXCURSION_LABEL,
   TONO_EXCURSION,
@@ -17,7 +17,7 @@ import { EstadoExcursionBotones } from '@/components/excursiones/EstadoExcursion
 import { StatusChip } from '@/components/ui/status-chip'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Excursión' }
+export const metadata = { title: 'Excursión o Combo' }
 
 export default async function ExcursionDetallePage({
   params,
@@ -29,7 +29,10 @@ export default async function ExcursionDetallePage({
   if (!companyId) return <SinEmpresaActiva seccion="el catálogo de excursiones" />
 
   const { id } = await params
-  const excursion = await excursionDetalle(companyId, id)
+  const [excursion, actividades] = await Promise.all([
+    excursionDetalle(companyId, id),
+    actividadesParaCombo(companyId, id),
+  ])
   if (!excursion) notFound()
 
   return (
@@ -42,7 +45,14 @@ export default async function ExcursionDetallePage({
           >
             <ArrowLeft className="h-4 w-4" /> Catálogo
           </Link>
-          <h2 className="mt-1 text-h2 text-foreground">{excursion.nombre}</h2>
+          <div className="mt-1 flex items-center gap-2">
+            <h2 className="text-h2 text-foreground">{excursion.nombre}</h2>
+            {excursion.tipoItem === 'COMBO' ? (
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                Combo / Paquete
+              </span>
+            ) : null}
+          </div>
         </div>
         <StatusChip tone={TONO_EXCURSION[excursion.estado as EstadoExcursion] ?? 'neutral'}>
           {ESTADO_EXCURSION_LABEL[excursion.estado as EstadoExcursion] ?? excursion.estado}
@@ -80,9 +90,12 @@ export default async function ExcursionDetallePage({
         <h2 className="mb-4 text-h3 text-foreground">Datos generales</h2>
         <ExcursionForm
           companyId={companyId}
+          actividadesDisponibles={actividades}
           excursion={{
             id: excursion.id,
             nombre: excursion.nombre,
+            tipoItem: excursion.tipoItem,
+            actividadesComboIds: excursion.comboItems?.map((ci) => ci.actividadId) ?? [],
             descripcion: excursion.descripcion,
             portadaUrl: excursion.portadaUrl,
             galeria: excursion.galeria,

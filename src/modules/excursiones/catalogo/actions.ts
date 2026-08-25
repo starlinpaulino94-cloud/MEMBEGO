@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -23,6 +23,11 @@ import {
   calcularHoraRegreso,
   type EstadoExcursion,
 } from './nucleo'
+import {
+  validarItinerarioCombo,
+  generarCombinacionesCombo,
+  diasComunesCombo,
+} from '@/modules/excursiones/reservas/nucleo'
 
 export interface CatalogoActionState {
   error?: string
@@ -36,7 +41,7 @@ function deForm(formData: FormData, campos: string[]): Record<string, unknown> {
 }
 
 const CAMPOS_EXCURSION = [
-  'nombre', 'descripcion', 'duracionMin', 'ubicacion', 'categoria', 'moneda',
+  'nombre', 'tipoItem', 'descripcion', 'duracionMin', 'ubicacion', 'categoria', 'moneda',
   'impuestoPct', 'capacidad', 'puntoSalida', 'horaSalida', 'horaRegreso',
   'incluye', 'noIncluye', 'politicas', 'portadaUrl', 'galeriaJson'
 ]
@@ -63,7 +68,7 @@ async function auditar(
   ).catch(anotarFallo('excursiones:auditLog'))
 }
 
-/** ADMIN · Crear excursión. Nace con su variante «Estándar» (precio base). */
+/** ADMIN · Crear excursión o combo. */
 export async function crearExcursion(
   _prev: CatalogoActionState,
   formData: FormData
@@ -76,7 +81,86 @@ export async function crearExcursion(
 
     const v = validarExcursion(deForm(formData, CAMPOS_EXCURSION))
     if (!v.ok) return { error: v.error }
-    // El precio base vive en la variante «Estándar»: así toda excursión tiene
+
+    // Actividades incluidas si es un combo
+    const rawComboActividades = Array.from(
+      new Set(
+        formData
+          .getAll('actividadesComboIds')
+          .map((id) => String(id).trim())
+          .filter(Boolean)
+      )
+    )
+
+    let actsDbParaCombo: {
+      id: string
+      nombre: string
+      duracionMin: number | null
+      horaSalida: string | null
+      horaRegreso: string | null
+      horarios: { horaSalida: string; diasSemana: number[] }[]
+    }[] = []
+    let horariosPorActividad: Record<string, string> = {}
+
+    if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length < 2) {
+      return { error: 'Un combo debe incluir al menos 2 actividades del catálogo.' }
+    }
+
+    // Validación estricta de itinerario sin solapamientos para combos
+    if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length >= 2) {
+      const comboHorariosRaw = String(formData.get('comboActividadesHorarios') ?? '')
+      if (comboHorariosRaw) {
+        try {
+          horariosPorActividad = JSON.parse(comboHorariosRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const actsRaw = await conEmpresa(companyId, (tx) =>
+        tx.excursion.findMany({
+          where: { id: { in: rawComboActividades }, companyId },
+          select: {
+            id: true,
+            nombre: true,
+            duracionMin: true,
+            horaSalida: true,
+            horaRegreso: true,
+            horarios: { where: { activo: true }, select: { horaSalida: true, diasSemana: true } },
+          },
+        })
+      )
+
+      actsDbParaCombo = actsRaw.map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        duracionMin: a.duracionMin,
+        horaSalida: a.horaSalida,
+        horaRegreso: a.horaRegreso,
+        horarios: a.horarios.map((h) => ({
+          horaSalida: h.horaSalida,
+          diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [1, 2, 3, 4, 5, 6, 7],
+        })),
+      }))
+
+      const actsConHorarios = actsDbParaCombo.map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        duracionMin: a.duracionMin,
+        horaSalida:
+          horariosPorActividad[a.id] ||
+          a.horaSalida ||
+          (a.horarios[0]?.horaSalida ? a.horarios[0].horaSalida : '09:00'),
+        horaRegreso: null,
+      }))
+
+      const valItinerario = validarItinerarioCombo(actsConHorarios)
+      if (!valItinerario.ok) {
+        return { error: `No se puede guardar el combo: ${valItinerario.error}` }
+      }
+    }
+
+    // El precio base vive en la variante «Estándar»: así toda excursión/combo tiene
     // desde el primer día la misma forma que una con variantes (§15).
     const variante = validarVariante({
       nombre: 'Estándar',
@@ -105,6 +189,20 @@ export async function crearExcursion(
       }
     }
 
+    // Si es un combo y hay combinaciones válidas, asegurar que todos los horarios válidos se persisten
+    if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length >= 2 && actsDbParaCombo.length > 0) {
+      const combinaciones = generarCombinacionesCombo(actsDbParaCombo)
+      if (combinaciones.length > 0 && horariosToCreate.length <= 1) {
+        const diasComunes = diasComunesCombo(actsDbParaCombo)
+        const dias = diasComunes.length > 0 ? diasComunes : (horariosToCreate[0]?.diasSemana || [1, 2, 3, 4, 5, 6, 7])
+        horariosToCreate = Array.from(new Set(combinaciones.map((c) => c.horaInicio))).map((horaSalida) => ({
+          horaSalida,
+          diasSemana: dias,
+          cupo: null,
+        }))
+      }
+    }
+
     // Si hay horarios pero no se especificó horaSalida principal, usar la primera
     if (horariosToCreate.length > 0 && !v.datos.horaSalida) {
       v.datos.horaSalida = horariosToCreate[0].horaSalida
@@ -124,11 +222,13 @@ export async function crearExcursion(
         n += 1
         slug = `${base}-${n}`
       }
+      const { galeria, ...restoDatos } = v.datos
       return tx.excursion.create({
         data: {
           companyId,
           slug,
-          ...v.datos,
+          ...restoDatos,
+          galeria: galeria ?? Prisma.JsonNull,
           variantes: {
             create: { companyId, ...variante.datos },
           },
@@ -139,6 +239,19 @@ export async function crearExcursion(
                 horaSalida: h.horaSalida,
                 diasSemana: h.diasSemana,
                 cupo: h.cupo,
+              })),
+            },
+          }),
+          ...(v.datos.tipoItem === 'COMBO' && rawComboActividades.length > 0 && {
+            comboItems: {
+              create: rawComboActividades.map((actividadId, idx) => ({
+                companyId,
+                actividadId,
+                orden: idx,
+                horaSalida:
+                  horariosPorActividad[actividadId] ||
+                  actsDbParaCombo.find((a) => a.id === actividadId)?.horaSalida ||
+                  '09:00',
               })),
             },
           }),
@@ -215,8 +328,103 @@ export async function actualizarExcursion(
       v.datos.horaRegreso = calcularHoraRegreso(v.datos.horaSalida, v.datos.duracionMin)
     }
 
+    const rawComboActividades = Array.from(
+      new Set(
+        formData
+          .getAll('actividadesComboIds')
+          .map((id) => String(id).trim())
+          .filter(Boolean)
+      )
+    )
+
+    let horariosPorActividad: Record<string, string> = {}
+    let actsDb: {
+      id: string
+      nombre: string
+      duracionMin: number | null
+      horaSalida: string | null
+      horaRegreso: string | null
+      horarios: { horaSalida: string; diasSemana: number[] }[]
+    }[] = []
+
+    if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length < 2) {
+      return { error: 'Un combo debe incluir al menos 2 actividades del catálogo.' }
+    }
+
+    // Validación estricta de itinerario sin solapamientos para combos
+    if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length >= 2) {
+      const comboHorariosRaw = String(formData.get('comboActividadesHorarios') ?? '')
+      if (comboHorariosRaw) {
+        try {
+          horariosPorActividad = JSON.parse(comboHorariosRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const actsRaw = await conEmpresa(companyId, (tx) =>
+        tx.excursion.findMany({
+          where: { id: { in: rawComboActividades }, companyId },
+          select: {
+            id: true,
+            nombre: true,
+            duracionMin: true,
+            horaSalida: true,
+            horaRegreso: true,
+            horarios: { where: { activo: true }, select: { horaSalida: true, diasSemana: true } },
+          },
+        })
+      )
+
+      actsDb = actsRaw.map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        duracionMin: a.duracionMin,
+        horaSalida: a.horaSalida,
+        horaRegreso: a.horaRegreso,
+        horarios: a.horarios.map((h) => ({
+          horaSalida: h.horaSalida,
+          diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [1, 2, 3, 4, 5, 6, 7],
+        })),
+      }))
+
+      const actsConHorarios = actsDb.map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        duracionMin: a.duracionMin,
+        horaSalida:
+          horariosPorActividad[a.id] ||
+          a.horaSalida ||
+          (a.horarios[0]?.horaSalida ? a.horarios[0].horaSalida : '09:00'),
+        horaRegreso: null,
+      }))
+
+      const valItinerario = validarItinerarioCombo(actsConHorarios)
+      if (!valItinerario.ok) {
+        return { error: `No se puede guardar el combo: ${valItinerario.error}` }
+      }
+
+      const combinaciones = generarCombinacionesCombo(actsDb)
+      if (combinaciones.length > 0 && (!horariosToSync || horariosToSync.length <= 1)) {
+        const diasComunes = diasComunesCombo(actsDb)
+        const dias = diasComunes.length > 0 ? diasComunes : (horariosToSync && horariosToSync[0]?.diasSemana ? horariosToSync[0].diasSemana : [1, 2, 3, 4, 5, 6, 7])
+        horariosToSync = Array.from(new Set(combinaciones.map((c) => c.horaInicio))).map((horaSalida) => ({
+          horaSalida,
+          diasSemana: dias,
+          cupo: null,
+        }))
+      }
+    }
+
     await conEmpresa(companyId, async (tx) => {
-      await tx.excursion.update({ where: { id: excursionId }, data: v.datos })
+      const { galeria, ...restoDatos } = v.datos
+      await tx.excursion.update({
+        where: { id: excursionId },
+        data: {
+          ...restoDatos,
+          galeria: galeria ?? Prisma.JsonNull,
+        },
+      })
       if (horariosToSync && horariosToSync.length > 0) {
         await tx.excursionHorario.deleteMany({ where: { excursionId, companyId } })
         await tx.excursionHorario.createMany({
@@ -228,6 +436,26 @@ export async function actualizarExcursion(
             cupo: h.cupo,
           })),
         })
+      }
+
+      if (v.datos.tipoItem === 'COMBO') {
+        await tx.excursionComboItem.deleteMany({ where: { comboId: excursionId, companyId } })
+        if (rawComboActividades.length > 0) {
+          await tx.excursionComboItem.createMany({
+            data: rawComboActividades.map((actividadId, idx) => ({
+              companyId,
+              comboId: excursionId,
+              actividadId,
+              orden: idx,
+              horaSalida:
+                horariosPorActividad[actividadId] ||
+                actsDb.find((a) => a.id === actividadId)?.horaSalida ||
+                '09:00',
+            })),
+          })
+        }
+      } else {
+        await tx.excursionComboItem.deleteMany({ where: { comboId: excursionId, companyId } })
       }
     })
     await sincronizarEstadoAgotada(companyId, excursionId)

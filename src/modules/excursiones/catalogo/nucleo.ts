@@ -61,6 +61,7 @@ export function precio(v: unknown): number | null {
 
 export interface ExcursionDatos {
   nombre: string
+  tipoItem: 'ACTIVIDAD' | 'COMBO'
   descripcion: string | null
   duracionMin: number | null
   ubicacion: string | null
@@ -121,10 +122,13 @@ export function validarExcursion(
     }
   }
 
+  const tipoItem = String(form.tipoItem ?? 'ACTIVIDAD').toUpperCase() === 'COMBO' ? 'COMBO' : 'ACTIVIDAD'
+
   return {
     ok: true,
     datos: {
       nombre,
+      tipoItem,
       descripcion: texto(form.descripcion, 2000) || null,
       duracionMin: enteroOpcional(form.duracionMin, 10_000),
       ubicacion: texto(form.ubicacion, 200) || null,

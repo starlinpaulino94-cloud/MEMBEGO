@@ -65,12 +65,19 @@ export default async function CatalogoPage() {
               {excursiones.map((e) => (
                 <tr key={e.id} className="border-b border-border last:border-0 hover:bg-muted/40">
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/excursiones/catalogo/${e.id}`}
-                      className="font-semibold text-foreground hover:text-primary hover:underline"
-                    >
-                      {e.nombre}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/admin/excursiones/catalogo/${e.id}`}
+                        className="font-semibold text-foreground hover:text-primary hover:underline"
+                      >
+                        {e.nombre}
+                      </Link>
+                      {e.tipoItem === 'COMBO' ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                          Combo ({e._count.comboItems})
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{e.categoria ?? '—'}</td>
                   <td className="px-4 py-3 font-medium text-foreground">

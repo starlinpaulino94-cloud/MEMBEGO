@@ -44,11 +44,15 @@ model Excursion {
   noIncluye   String?
   /// 'ACTIVA' | 'PAUSADA' | 'AGOTADA' | 'TEMPORAL' | 'ARCHIVADA'.
   estado      String  @default("ACTIVA")
+  /// 'ACTIVIDAD' | 'COMBO'
+  tipoItem    String  @default("ACTIVIDAD")
   /// Preparado para operadores terceros (Fase futura de proveedores).
   providerId  String?
 
-  variantes ExcursionVariante[]
-  horarios  ExcursionHorario[]
+  variantes        ExcursionVariante[]
+  horarios         ExcursionHorario[]
+  comboItems       ExcursionComboItem[] @relation("ComboPadre")
+  incluidoEnCombos ExcursionComboItem[] @relation("ActividadHija")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -56,6 +60,25 @@ model Excursion {
   @@unique([companyId, slug])
   @@index([companyId, estado])
   @@map("excursiones")
+}
+
+model ExcursionComboItem {
+  id          String    @id @default(cuid())
+  companyId   String
+  comboId     String
+  combo       Excursion @relation("ComboPadre", fields: [comboId], references: [id], onDelete: Cascade)
+  actividadId String
+  actividad   Excursion @relation("ActividadHija", fields: [actividadId], references: [id], onDelete: Cascade)
+  varianteId  String?
+  horaSalida  String?
+  orden       Int       @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([comboId, actividadId])
+  @@index([companyId, comboId])
+  @@index([actividadId])
+  @@map("excursion_combo_items")
 }
 
 model ExcursionVariante {
@@ -205,8 +228,13 @@ model VendedorAtribucion {
 model VendedorMeta {
   id            String    @id @default(cuid())
   companyId     String
-  vendedorId    String
-  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  vendedorId    String?
+  vendedor      Vendedor? @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  /// Si la meta es por tipo de vendedor (Touroperador, Hotel, etc.).
+  tipoVendedor  String?
+  /// Si la meta es sobre una actividad o combo específico.
+  excursionId   String?
+  categoria     String?
   /// 'DIARIA' | 'SEMANAL' | 'MENSUAL' | 'RANGO'.
   periodo       String
   desde         DateTime?
@@ -221,7 +249,9 @@ model VendedorMeta {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId, activa])
   @@index([vendedorId, activa])
+  @@index([tipoVendedor, activa])
   @@map("vendedor_metas")
 }
 
