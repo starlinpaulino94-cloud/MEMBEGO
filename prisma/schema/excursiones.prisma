@@ -44,7 +44,7 @@ model Excursion {
   noIncluye   String?
   /// 'ACTIVA' | 'PAUSADA' | 'AGOTADA' | 'TEMPORAL' | 'ARCHIVADA'.
   estado      String  @default("ACTIVA")
-  /// 'ACTIVIDAD' | 'COMBO'
+  /// 'ACTIVIDAD' | 'COMBO' | 'PASE_DIA'
   tipoItem    String  @default("ACTIVIDAD")
   /// Preparado para operadores terceros (Fase futura de proveedores).
   providerId  String?
@@ -53,6 +53,7 @@ model Excursion {
   horarios         ExcursionHorario[]
   comboItems       ExcursionComboItem[] @relation("ComboPadre")
   incluidoEnCombos ExcursionComboItem[] @relation("ActividadHija")
+  reservaItems     ReservaItem[]        @relation("ActividadReservaItem")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -94,6 +95,9 @@ model ExcursionVariante {
   capacidad       Int?
   activa          Boolean   @default(true)
   orden           Int       @default(0)
+
+  /// Reglas de precios por día/hora: [{ diasSemana: [6,7], horasSalida: ["09:00"], precioAdulto: 60, precioNino: 30 }]
+  preciosDinamicos Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -348,6 +352,7 @@ model ReservaExc {
   checkinPorId String?
 
   pasajeros ReservaPasajero[]
+  items     ReservaItem[]
   pagos     ReservaPago[]
   venta     VentaExc?
 
@@ -360,6 +365,33 @@ model ReservaExc {
   @@index([clienteId])
   @@index([excursionId])
   @@map("reservas_excursion")
+}
+
+/// ACTIVIDAD O DAYPASS DENTRO DE UNA RESERVA DE COMBO (§85):
+/// Cada actividad/daypass del paquete tiene su propia fecha, horario y estado
+/// de check-in independiente, permitiendo combos multi-día y descuento real de cupo.
+model ReservaItem {
+  id          String     @id @default(cuid())
+  companyId   String
+  reservaId   String
+  reserva     ReservaExc @relation(fields: [reservaId], references: [id], onDelete: Cascade)
+  actividadId String
+  actividad   Excursion  @relation("ActividadReservaItem", fields: [actividadId], references: [id], onDelete: Restrict)
+  varianteId  String?
+  fecha       DateTime
+  hora        String?
+  adultos     Int        @default(0)
+  ninos       Int        @default(0)
+  /// 'PENDIENTE' | 'CHECKIN_COMPLETADO' | 'CANCELADA'.
+  estado      String     @default("PENDIENTE")
+  checkinAt   DateTime?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([companyId, actividadId, fecha, hora])
+  @@index([reservaId])
+  @@map("reserva_items")
 }
 
 model ReservaPasajero {
