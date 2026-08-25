@@ -7,6 +7,8 @@ import {
   numeroReserva,
   validarReserva,
   validarPago,
+  validarDisponibilidad,
+  validarItinerarioCombo,
 } from '../src/modules/excursiones/reservas/nucleo'
 
 /**
@@ -107,5 +109,35 @@ test('validarReserva devuelve un objeto Date válido para el año de la reserva'
     assert.equal(r.datos.fecha.getUTCFullYear(), 2026)
     const num = numeroReserva('CAT', r.datos.fecha.getUTCFullYear(), 1)
     assert.equal(num, 'CAT-2026-000001')
+  }
+})
+
+test('validarDisponibilidad para PASE_DIA no exige hora de salida fija', () => {
+  const manana = new Date()
+  manana.setDate(manana.getDate() + 1)
+
+  const disp = validarDisponibilidad(manana, null, 4, {
+    capacidad: 50,
+    tipoItem: 'PASE_DIA',
+    horarios: [{ id: 'h1', diasSemana: [1, 2, 3, 4, 5, 6, 7], horaSalida: '00:00', cupo: 50 }],
+  })
+  assert.equal(disp.ok, true)
+  if (disp.ok) {
+    assert.equal(disp.cupoDisponible, 50)
+  }
+})
+
+test('validarItinerarioCombo procesa actividades con horario excluyendo Daypasses del cálculo de horas', () => {
+  const itinerario = validarItinerarioCombo([
+    { id: '1', nombre: 'Pase de Día Club de Playa', tipoItem: 'PASE_DIA' },
+    { id: '2', nombre: 'Tour en Catamarán', horaSalida: '14:00', duracionMin: 180 },
+  ])
+  assert.equal(itinerario.ok, true)
+  if (itinerario.ok) {
+    // Solo la actividad con horario forma parte del itinerario de horas
+    assert.equal(itinerario.itinerario.length, 1)
+    assert.equal(itinerario.itinerario[0].nombre, 'Tour en Catamarán')
+    assert.equal(itinerario.itinerario[0].inicio, '14:00')
+    assert.equal(itinerario.itinerario[0].fin, '17:00')
   }
 })

@@ -85,3 +85,21 @@ test('el slug sale del nombre pero sin acentos ni sorpresas', () => {
   assert.equal(slugExcursion('Isla Saona — Día Completo'), 'isla-saona-dia-completo')
   assert.equal(slugExcursion('¡¡¡'), 'excursion')
 })
+
+test('validarExcursion maneja PASE_DIA correctamente sin exigir horas fijas', () => {
+  const r = validarExcursion({
+    nombre: 'Day Pass Resort & Playa',
+    tipoItem: 'PASE_DIA',
+    descripcion: 'Pase de día con acceso a piscinas y playa.',
+    capacidad: '100',
+  })
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    assert.equal(r.datos.nombre, 'Day Pass Resort & Playa')
+    assert.equal(r.datos.tipoItem, 'PASE_DIA')
+    assert.equal(r.datos.capacidad, 100)
+    assert.equal(r.datos.horaSalida, null)
+    assert.equal(r.datos.horaRegreso, null)
+    assert.equal(r.datos.duracionMin, null)
+  }
+})
