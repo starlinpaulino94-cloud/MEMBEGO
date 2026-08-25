@@ -169,7 +169,7 @@ export const ROL_STAFF_LABEL: Record<string, string> = {
   RECEPCION: 'Recepción',
   MARKETING: 'Marketing',
   SUPERVISOR: 'Supervisor',
-  EMPLEADO: 'Empleado',
+  EMPLEADO: 'Staff / Empleado',
 }
 
 /**

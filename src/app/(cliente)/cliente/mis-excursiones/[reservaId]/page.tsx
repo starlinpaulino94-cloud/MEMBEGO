@@ -197,6 +197,53 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                 )}
               </div>
 
+              {/* Itinerario desglosado para Combos */}
+              {excursion.tipoItem === 'COMBO' && excursion.comboItems && excursion.comboItems.length > 0 && (
+                <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-foreground">
+                      <Clock className="h-4 w-4 text-primary" />
+                      Itinerario del Combo (Mismo Día)
+                    </h4>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+                      {excursion.comboItems.length} Actividades coordinadas
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 pt-0.5">
+                    {excursion.comboItems.map((item, idx) => {
+                      const act = item.actividad
+                      const inicio = act.horaSalida ? act.horaSalida.trim().slice(0, 5) : '—'
+                      const fin = act.horaRegreso ? act.horaRegreso.trim().slice(0, 5) : '—'
+                      const dur = act.duracionMin ? `${(act.duracionMin / 60).toFixed(1)}h` : null
+
+                      return (
+                        <div
+                          key={act.id}
+                          className="flex items-center justify-between rounded-lg border border-border/80 bg-card px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                              {idx + 1}
+                            </span>
+                            <span className="font-semibold text-foreground">{act.nombre}</span>
+                          </div>
+                          <div className="font-mono text-muted-foreground">
+                            {inicio !== '—' ? (
+                              <span>
+                                {inicio} {fin !== '—' ? `→ ${fin}` : ''} {dur ? `(${dur})` : ''}
+                              </span>
+                            ) : (
+                              <span>Horario coordinado</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Incluye / No incluye */}
               {(excursion.incluye || excursion.noIncluye) && (
                 <div className="grid gap-2.5 sm:grid-cols-2 pt-2">

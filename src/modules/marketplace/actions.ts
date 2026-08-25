@@ -11,15 +11,19 @@ export async function recordPromotionView(promotionId: string): Promise<boolean>
   if (!promotionId) return false
 
   try {
-    const cookieStore = await cookies()
-
-    // Simple client-side rate limiting via cookie
+    let viewCount = 0
     const viewsKey = `promo_views:${promotionId}`
-    const existingViews = cookieStore.get(viewsKey)
-    const viewCount = existingViews ? parseInt(existingViews.value) : 0
 
-    if (viewCount >= MAX_VIEWS_PER_WINDOW) {
-      return false
+    try {
+      const cookieStore = await cookies()
+      const existingViews = cookieStore.get(viewsKey)
+      viewCount = existingViews ? parseInt(existingViews.value, 10) : 0
+
+      if (viewCount >= MAX_VIEWS_PER_WINDOW) {
+        return false
+      }
+    } catch {
+      // Cookies not accessible or disabled
     }
 
     // Record the view
@@ -34,12 +38,18 @@ export async function recordPromotionView(promotionId: string): Promise<boolean>
       })
     )
 
-    // Update rate limit cookie (will be set by response)
-    ;(await cookies()).set(viewsKey, String(viewCount + 1), {
-      maxAge: RATE_LIMIT_WINDOW / 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-    })
+    // Update rate limit cookie if in an action/handler context
+    try {
+      const cookieStore = await cookies()
+      cookieStore.set(viewsKey, String(viewCount + 1), {
+        maxAge: RATE_LIMIT_WINDOW / 1000,
+        httpOnly: false,
+        sameSite: 'lax',
+      })
+    } catch {
+      // Cookies can only be modified in a Server Action or Route Handler.
+      // Silently ignore if invoked outside an action context.
+    }
 
     return true
   } catch (error) {
@@ -52,15 +62,19 @@ export async function recordPromotionShare(promotionId: string): Promise<boolean
   if (!promotionId) return false
 
   try {
-    const cookieStore = await cookies()
-
-    // Simple client-side rate limiting via cookie
+    let shareCount = 0
     const sharesKey = `promo_shares:${promotionId}`
-    const existingShares = cookieStore.get(sharesKey)
-    const shareCount = existingShares ? parseInt(existingShares.value) : 0
 
-    if (shareCount >= MAX_SHARES_PER_WINDOW) {
-      return false
+    try {
+      const cookieStore = await cookies()
+      const existingShares = cookieStore.get(sharesKey)
+      shareCount = existingShares ? parseInt(existingShares.value, 10) : 0
+
+      if (shareCount >= MAX_SHARES_PER_WINDOW) {
+        return false
+      }
+    } catch {
+      // Cookies not accessible or disabled
     }
 
     // Record the share
@@ -76,11 +90,16 @@ export async function recordPromotionShare(promotionId: string): Promise<boolean
     )
 
     // Update rate limit cookie
-    ;(await cookies()).set(sharesKey, String(shareCount + 1), {
-      maxAge: RATE_LIMIT_WINDOW / 1000,
-      httpOnly: false,
-      sameSite: 'lax',
-    })
+    try {
+      const cookieStore = await cookies()
+      cookieStore.set(sharesKey, String(shareCount + 1), {
+        maxAge: RATE_LIMIT_WINDOW / 1000,
+        httpOnly: false,
+        sameSite: 'lax',
+      })
+    } catch {
+      // Silently ignore if cookies cannot be modified
+    }
 
     return true
   } catch (error) {

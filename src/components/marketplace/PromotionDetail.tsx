@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
+import { PromotionViewTracker } from '@/components/marketplace/PromotionViewTracker'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
 
@@ -38,6 +39,7 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
 
   return (
     <div className={isApp ? 'bg-card' : 'min-h-screen bg-card'}>
+      <PromotionViewTracker promocionId={promotion.id} />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Back Link */}
         <Link href={backHref} className="text-primary hover:underline flex items-center gap-2">

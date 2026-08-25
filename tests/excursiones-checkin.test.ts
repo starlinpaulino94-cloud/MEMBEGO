@@ -102,3 +102,15 @@ test('el código dice qué es, y el lector físico puede ensuciarlo', () => {
   assert.equal(tokenDesdeCodigo('EXC:corto'), null) // demasiado corto para ser un token
   assert.equal(tokenDesdeCodigo('EXC:tiene espacios y símbolos!'), null)
 })
+
+test('soporte para búsqueda de reservas por número correlativo o token de 24 caracteres', () => {
+  const token24 = 'AB12CD34EF56GH78IJ90KL12'
+  const qrGenerado = codigoDeCheckin(token24)
+  assert.equal(qrGenerado, `EXC:${token24}`)
+  assert.equal(tokenDesdeCodigo(qrGenerado), token24)
+
+  // Un número de reserva como EXC-2026-0001
+  const numeroRes = 'EXC-2026-0001'
+  const tokenNum = tokenDesdeCodigo(numeroRes)
+  assert.equal(tokenNum, 'EXC-2026-0001')
+})

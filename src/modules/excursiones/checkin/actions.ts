@@ -71,7 +71,7 @@ async function auditar(
   ).catch(anotarFallo('excursiones:checkin:auditLog'))
 }
 
-/** ADMIN · Leer el QR de check-in y ver a quién corresponde. */
+/** ADMIN · Leer el QR de check-in o buscar por número de reserva, voucher o ID. */
 export async function buscarParaCheckin(codigo: string): Promise<CheckinBusqueda> {
   try {
     const user = await requireSection('excursiones', 'checkin_registrar')
@@ -79,26 +79,73 @@ export async function buscarParaCheckin(codigo: string): Promise<CheckinBusqueda
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Empresa requerida.' }
 
-    const token = tokenDesdeCodigo(codigo)
-    if (!token) return { error: 'Ese código no es un QR de reserva.' }
+    const limpio = (codigo ?? '').trim().replace(/\s+/g, '')
+    if (!limpio) return { error: 'Escribe o escanea un código de reserva.' }
 
-    // El token es único global, pero la reserva tiene que ser DE ESTA EMPRESA:
-    // sin eso, un código de otra empresa mostraría su cliente y su teléfono.
-    const reserva = await conEmpresa(companyId, (tx) =>
+    const token = tokenDesdeCodigo(limpio) ?? limpio
+
+    const condicionesOr: Prisma.ReservaExcWhereInput[] = [
+      { checkinToken: token },
+      { checkinToken: limpio },
+      { numero: { equals: limpio, mode: 'insensitive' } },
+      { voucherAgencia: { equals: limpio, mode: 'insensitive' } },
+    ]
+    if (limpio.length >= 20) {
+      condicionesOr.push({ id: limpio })
+    }
+
+    // El token/código busca la reserva dentro de ESTA empresa
+    let reserva = await conEmpresa(companyId, (tx) =>
       tx.reservaExc.findFirst({
-        where: { checkinToken: token, companyId },
+        where: {
+          companyId,
+          OR: condicionesOr,
+        },
         select: {
           id: true, numero: true, estado: true, fecha: true, hora: true,
           adultos: true, ninos: true, total: true, moneda: true,
-          checkinAt: true, clienteId: true, excursionId: true,
+          checkinAt: true, checkinToken: true, clienteId: true, excursionId: true,
           pagos: { select: { monto: true, estado: true } },
-          pasajeros: { select: { presente: true } },
+          pasajeros: { select: { id: true, presente: true } },
         },
       })
     )
-    if (!reserva) return { error: 'No encontramos ninguna reserva con ese código.' }
+    if (!reserva) return { error: 'No encontramos ninguna reserva con ese código o número.' }
 
-    const totalPasajeros = reserva.pasajeros.length
+    // Auto-generar token si no existía
+    if (!reserva.checkinToken) {
+      const nuevoToken = generarCodigo(24)
+      await conEmpresa(companyId, (tx) =>
+        tx.reservaExc.update({
+          where: { id: reserva.id },
+          data: { checkinToken: nuevoToken },
+        })
+      ).catch(anotarFallo('excursiones:checkin:autoToken'))
+      reserva.checkinToken = nuevoToken
+    }
+
+    // Auto-aprovisionar pasajeros si la reserva tenía conteo pero no registros físicos
+    if (reserva.pasajeros.length === 0 && (reserva.adultos + reserva.ninos > 0)) {
+      const nuevosPasajeros = [
+        ...Array.from({ length: reserva.adultos }, () => ({ companyId, tipo: 'ADULTO' })),
+        ...Array.from({ length: reserva.ninos }, () => ({ companyId, tipo: 'NINO' })),
+      ]
+      await conEmpresa(companyId, async (tx) => {
+        await tx.reservaPasajero.createMany({
+          data: nuevosPasajeros.map((p) => ({ ...p, reservaId: reserva.id })),
+        })
+      }).catch(anotarFallo('excursiones:checkin:autoPasajeros'))
+
+      const recargados = await conEmpresa(companyId, (tx) =>
+        tx.reservaPasajero.findMany({
+          where: { reservaId: reserva.id, companyId },
+          select: { id: true, presente: true },
+        })
+      )
+      reserva.pasajeros = recargados
+    }
+
+    const totalPasajeros = reserva.pasajeros.length || (reserva.adultos + reserva.ninos)
     const veredicto = evaluarCheckin(
       {
         estado: reserva.estado,
@@ -168,16 +215,39 @@ export async function registrarCheckin(
     if (!companyId) return { error: 'Empresa requerida.' }
     const reservaId = String(formData.get('reservaId') ?? '')
 
-    const reserva = await conEmpresa(companyId, (tx) =>
+    let reserva = await conEmpresa(companyId, (tx) =>
       tx.reservaExc.findFirst({
         where: { id: reservaId, companyId },
         select: {
           id: true, numero: true, estado: true, fecha: true, checkinAt: true,
+          adultos: true, ninos: true,
           pasajeros: { select: { id: true }, orderBy: { tipo: 'asc' } },
         },
       })
     )
     if (!reserva) return { error: 'Reserva no encontrada.' }
+
+    // Auto-aprovisionar pasajeros si no existían físicamente
+    if (reserva.pasajeros.length === 0 && (reserva.adultos + reserva.ninos > 0)) {
+      const nuevosPasajeros = [
+        ...Array.from({ length: reserva.adultos }, () => ({ companyId, tipo: 'ADULTO' })),
+        ...Array.from({ length: reserva.ninos }, () => ({ companyId, tipo: 'NINO' })),
+      ]
+      await conEmpresa(companyId, async (tx) => {
+        await tx.reservaPasajero.createMany({
+          data: nuevosPasajeros.map((p) => ({ ...p, reservaId: reserva.id })),
+        })
+      }).catch(anotarFallo('excursiones:checkin:registrarAutoPasajeros'))
+
+      const recargados = await conEmpresa(companyId, (tx) =>
+        tx.reservaPasajero.findMany({
+          where: { reservaId: reserva.id, companyId },
+          select: { id: true },
+          orderBy: { tipo: 'asc' },
+        })
+      )
+      reserva.pasajeros = recargados
+    }
 
     const veredicto = evaluarCheckin(
       {

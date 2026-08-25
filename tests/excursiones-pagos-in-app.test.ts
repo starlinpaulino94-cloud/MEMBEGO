@@ -60,10 +60,10 @@ test('Opción 2: Pagar online simulado registra pago completo, salda reserva y e
 test('Pago online simulado con vendedor acreditado genera comisión calculada correctamente', () => {
   const regla: ReglaComision = {
     id: 'regla-1',
-    companyId: 'company-1',
     ambito: 'GENERAL',
     excursionId: null,
     vendedorId: null,
+    tipoVendedor: null,
     categoria: null,
     tipoCalculo: 'PORCENTAJE',
     valor: 20, // 20%
@@ -77,6 +77,9 @@ test('Pago online simulado con vendedor acreditado genera comisión calculada co
   // Base comisionable: subtotal sin impuestos (US$ 200)
   const baseComisionable = 200
   const resultado = calcularComision(regla, {
+    vendedorId: 'v1',
+    excursionId: 'e1',
+    total: 200,
     baseComisionable,
     adultos: 2,
     ninos: 0,

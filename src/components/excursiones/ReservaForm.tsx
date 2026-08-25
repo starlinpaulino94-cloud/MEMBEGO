@@ -160,7 +160,13 @@ export function ReservaForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="res-fecha">Fecha *</Label>
-          <Input id="res-fecha" name="fecha" type="date" required />
+          <Input
+            id="res-fecha"
+            name="fecha"
+            type="date"
+            min={new Date().toISOString().split('T')[0]}
+            required
+          />
         </div>
         <div>
           <Label htmlFor="res-hora">Hora de salida</Label>

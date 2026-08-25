@@ -19,13 +19,14 @@ import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-que
 
 interface ExcursionDetailPageProps {
   params: Promise<{ companySlug: string; excursionSlug: string }>
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
 export const dynamic = 'force-dynamic'
-export const revalidate = 60
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: ExcursionDetailPageProps): Promise<Metadata> {
   const { companySlug, excursionSlug } = await params
   const company = await getCompanyPublic(companySlug)
@@ -37,10 +38,13 @@ export async function generateMetadata({
   const exc = await excursionPublica(companyId, excursionSlug)
   if (!exc) return { title: `Excursión · ${company.name}` }
 
+  const sp = searchParams ? await searchParams : {}
+  const eParam = typeof sp?.e === 'string' ? `?e=${encodeURIComponent(sp.e)}` : ''
+
   return shareMetadata({
     title: `${exc.nombre} · ${company.name}`,
     description: exc.descripcion ?? `Reserva ${exc.nombre} con ${company.name}.`,
-    url: `/empresas/${company.slug}/excursiones/${exc.slug}`,
+    url: `/empresas/${company.slug}/excursiones/${exc.slug}${eParam}`,
     image: exc.portadaUrl ?? undefined,
   })
 }
@@ -49,8 +53,10 @@ const DIAS_LABEL: Record<number, string> = Object.fromEntries(
   DIAS_SEMANA.map((d) => [d.n, d.label])
 )
 
-export default async function ExcursionDetailPage({ params }: ExcursionDetailPageProps) {
+export default async function ExcursionDetailPage({ params, searchParams }: ExcursionDetailPageProps) {
   const { companySlug, excursionSlug } = await params
+  const sp = searchParams ? await searchParams : {}
+  const enlaceVendedor = typeof sp?.e === 'string' ? sp.e : undefined
 
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
@@ -188,6 +194,62 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
               </div>
             )}
 
+            {/* Actividades e Itinerario del Combo */}
+            {exc.tipoItem === 'COMBO' && exc.comboItems && exc.comboItems.length > 0 && (
+              <div className="mt-8 rounded-2xl border border-primary/20 bg-primary/5 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-foreground flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-primary" />
+                    Itinerario del Combo (Mismo Día)
+                  </h3>
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
+                    {exc.comboItems.length} Actividades
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Todas las actividades se realizan de forma consecutiva y coordinada el mismo día de tu reserva.
+                </p>
+
+                <div className="space-y-2 pt-1">
+                  {exc.comboItems.map((item, idx) => {
+                    const act = item.actividad
+                    const inicio = act.horaSalida ? act.horaSalida.trim().slice(0, 5) : '—'
+                    const fin = act.horaRegreso ? act.horaRegreso.trim().slice(0, 5) : '—'
+                    const dur = act.duracionMin ? `${(act.duracionMin / 60).toFixed(1)}h` : null
+
+                    return (
+                      <div
+                        key={act.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5 shadow-xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                            {idx + 1}
+                          </span>
+                          <div>
+                            <p className="text-sm font-bold text-foreground">{act.nombre}</p>
+                            {act.categoria && (
+                              <p className="text-caption text-muted-foreground">{act.categoria}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 font-mono text-xs font-semibold text-foreground">
+                          {inicio !== '—' ? (
+                            <span>
+                              {inicio} {fin !== '—' ? `→ ${fin}` : ''} {dur ? `(${dur})` : ''}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">Horario según turno</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Horarios */}
             {exc.horarios.length > 0 && (
               <div className="mt-8">
@@ -278,6 +340,25 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
               agotadaGlobal={exc.agotadaGlobal}
               todasFechasPasadas={exc.todasFechasPasadas}
               capacidad={exc.capacidad}
+              tipoItem={exc.tipoItem}
+              comboItems={exc.comboItems?.map((ci) => ({
+                actividad: {
+                  id: ci.actividad.id,
+                  nombre: ci.actividad.nombre,
+                  slug: ci.actividad.slug,
+                  portadaUrl: ci.actividad.portadaUrl,
+                  duracionMin: ci.actividad.duracionMin,
+                  horaSalida: ci.actividad.horaSalida,
+                  horaRegreso: ci.actividad.horaRegreso,
+                  categoria: ci.actividad.categoria,
+                  horarios: ci.actividad.horarios?.map((h) => ({
+                    id: h.id,
+                    horaSalida: h.horaSalida,
+                    diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+                    cupo: h.cupo,
+                  })),
+                },
+              }))}
             />
           </div>
         </div>

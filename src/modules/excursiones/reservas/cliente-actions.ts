@@ -15,15 +15,18 @@ import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { cookies } from 'next/headers'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { generarCodigo } from '@/lib/codes'
 import {
   calcularTotales,
   numeroReserva,
   validarReserva,
   validarDisponibilidad,
+  validarDisponibilidadCombo,
 } from './nucleo'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { resolverEnlace, vendedorParaCliente, VENDEDOR_COOKIE } from '../atribucion/registrar'
 import { procesarVentaYComisionInterna } from '../ventas/actions'
+import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 
 export interface ReservaClienteState {
   error?: string
@@ -44,24 +47,13 @@ export async function reservarExcursion(
     const companyId = String(formData.get('companyId') ?? '')
     const excursionId = String(formData.get('excursionId') ?? '')
     const varianteId = String(formData.get('varianteId') ?? '')
-    if (!companyId || !excursionId) {
-      return { error: 'Faltan datos de la excursión.' }
-    }
-
-    // Resolver el clienteId del usuario autenticado.
-    const cliente = await prisma.cliente.findFirst({
-      where: { supabaseId: user.supabaseId, companyId },
-      select: { id: true, nombre: true },
-    })
-    if (!cliente) {
-      return { error: 'No se encontró tu perfil de cliente para esta empresa.' }
-    }
 
     // Leer cookie de atribución de vendedor (server-side)
     let vendedorId: string | null = null
+    let cookieSlug: string | null = null
     try {
       const store = await cookies()
-      const cookieSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase()
+      cookieSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase() || null
       if (cookieSlug) {
         const enlace = await resolverEnlace(cookieSlug)
         if (enlace && enlace.companyId === companyId) {
@@ -72,9 +64,21 @@ export async function reservarExcursion(
       /* ignore: sin cookie o error al resolver -> reserva sin vendedor */
     }
 
+    // Resolver o auto-afiliar el clienteId del usuario autenticado en esta empresa
+    const resCliente = await asegurarClienteEnEmpresa(
+      user.supabaseId,
+      user.email,
+      companyId,
+      cookieSlug
+    )
+    if ('error' in resCliente) {
+      return { error: resCliente.error }
+    }
+    const clienteId = resCliente.clienteId
+
     // Si no vino por cookie o se consumió en el registro, resolver desde los hechos del cliente
-    if (!vendedorId && cliente.id) {
-      vendedorId = await vendedorParaCliente(companyId, cliente.id)
+    if (!vendedorId && clienteId) {
+      vendedorId = await vendedorParaCliente(companyId, clienteId)
     }
 
     const v = validarReserva({
@@ -111,39 +115,112 @@ export async function reservarExcursion(
       excursion.variantes.find((x) => x.id === varianteId) ?? excursion.variantes[0]
     if (!variante) return { error: 'Esa excursión no tiene variantes activas.' }
 
-    // Validar disponibilidad: fecha, horario y cupo
+    // Validar disponibilidad: fecha, horario y cupo (y de sus actividades si es un combo)
     const excursionCompleta = await conEmpresa(companyId, (tx) =>
       tx.excursion.findFirst({
         where: { id: excursionId, companyId, estado: 'ACTIVA' },
         select: {
           id: true,
+          nombre: true,
+          tipoItem: true,
           capacidad: true,
           horaSalida: true,
           horarios: {
             where: { activo: true },
             select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
           },
+          comboItems: {
+            include: {
+              actividad: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  capacidad: true,
+                  horaSalida: true,
+                  horarios: {
+                    where: { activo: true },
+                    select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+                  },
+                },
+              },
+            },
+          },
         },
       })
     )
     if (!excursionCompleta) return { error: 'Esa excursión no está disponible.' }
 
-    const disp = validarDisponibilidad(
-      v.datos.fecha,
-      v.datos.hora,
-      v.datos.adultos + v.datos.ninos,
-      {
-        capacidad: excursionCompleta.capacidad,
-        horaSalida: excursionCompleta.horaSalida,
-        horarios: excursionCompleta.horarios.map((h) => ({
-          id: h.id,
-          diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
-          horaSalida: h.horaSalida,
-          cupo: h.cupo,
-        })),
+    if (excursionCompleta.tipoItem === 'COMBO' && excursionCompleta.comboItems.length > 0) {
+      let itinerarioComboCustom: Record<string, string> = {}
+      const rawItinerarioCombo = String(formData.get('itinerarioComboJson') ?? '')
+      if (rawItinerarioCombo) {
+        try {
+          itinerarioComboCustom = JSON.parse(rawItinerarioCombo)
+        } catch {
+          /* ignore */
+        }
       }
-    )
-    if (!disp.ok) return { error: disp.error }
+
+      const dispCombo = validarDisponibilidadCombo(
+        v.datos.fecha,
+        v.datos.hora,
+        v.datos.adultos + v.datos.ninos,
+        {
+          nombre: excursionCompleta.nombre,
+          capacidad: excursionCompleta.capacidad,
+          horaSalida: excursionCompleta.horaSalida,
+          horarios: excursionCompleta.horarios.map((h) => ({
+            id: h.id,
+            diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+            horaSalida: h.horaSalida,
+            cupo: h.cupo,
+          })),
+          actividades: excursionCompleta.comboItems.map((ci) => ({
+            nombre: ci.actividad.nombre,
+            capacidad: ci.actividad.capacidad,
+            horaSalida:
+              itinerarioComboCustom[ci.actividad.id] ||
+              ci.actividad.horaSalida ||
+              ci.actividad.horarios[0]?.horaSalida ||
+              '09:00',
+            horarios: ci.actividad.horarios.map((h) => ({
+              id: h.id,
+              diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+              horaSalida: h.horaSalida,
+              cupo: h.cupo,
+            })),
+          })),
+        }
+      )
+      if (!dispCombo.ok) return { error: dispCombo.error }
+
+      // Anotar el desglose de turnos en las notas de la reserva si hubo personalización
+      if (Object.keys(itinerarioComboCustom).length > 0) {
+        const resumenTurnos = dispCombo.itinerario
+          .map((b) => `${b.nombre}: ${b.inicio}→${b.fin}`)
+          .join(' | ')
+        v.datos.notas = v.datos.notas
+          ? `${v.datos.notas}\n[Itinerario: ${resumenTurnos}]`
+          : `[Itinerario: ${resumenTurnos}]`
+      }
+    } else {
+      const disp = validarDisponibilidad(
+        v.datos.fecha,
+        v.datos.hora,
+        v.datos.adultos + v.datos.ninos,
+        {
+          capacidad: excursionCompleta.capacidad,
+          horaSalida: excursionCompleta.horaSalida,
+          horarios: excursionCompleta.horarios.map((h) => ({
+            id: h.id,
+            diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+            horaSalida: h.horaSalida,
+            cupo: h.cupo,
+          })),
+        }
+      )
+      if (!disp.ok) return { error: disp.error }
+    }
 
     const totales = calcularTotales({
       adultos: v.datos.adultos,
@@ -157,7 +234,7 @@ export async function reservarExcursion(
     const anio = v.datos.fecha.getUTCFullYear()
     const metodoPago = String(formData.get('metodoPago') ?? 'DESTINO')
     const esPagoOnline = metodoPago === 'ONLINE_SIMULADO'
-    const checkinToken = `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+    const checkinToken = generarCodigo(24)
 
     const creada = await conEmpresa(companyId, async (tx) => {
       const desde = new Date(Date.UTC(anio, 0, 1))
@@ -173,7 +250,7 @@ export async function reservarExcursion(
             data: {
               companyId,
               numero: numeroReserva('EXC', anio, intento),
-              clienteId: cliente.id,
+              clienteId,
               vendedorId,
               excursionId: excursion.id,
               varianteId: variante.id,
@@ -189,7 +266,7 @@ export async function reservarExcursion(
               estado: esPagoOnline ? 'PAGADA' : 'PENDIENTE',
               canal: 'ONLINE',
               notas: v.datos.notas,
-              checkinToken: esPagoOnline ? checkinToken : null,
+              checkinToken,
               pasajeros: {
                 createMany: {
                   data: [
@@ -249,7 +326,7 @@ export async function reservarExcursion(
           data: {
             companyId,
             vendedorId: vendedorId,
-            clienteId: cliente.id,
+            clienteId,
             etapa: esPagoOnline ? 'COMPRA' : 'RESERVA',
           },
         })
@@ -307,22 +384,18 @@ export async function reservarCarritoAction(
 
     const primerItem = await prisma.excursion.findUnique({
       where: { id: items[0].excursionId },
-      select: { companyId: true }
+      select: { companyId: true },
     })
     if (!primerItem) return { error: 'Excursión no válida.' }
-    
+
     const companyId = primerItem.companyId
-    const cliente = await prisma.cliente.findFirst({
-      where: { supabaseId: user.supabaseId, companyId },
-      select: { id: true }
-    })
-    if (!cliente) return { error: 'No se encontró tu perfil de cliente.' }
 
     // Leer cookie de atribución de vendedor (server-side)
     let vendedorId: string | null = null
+    let cookieSlug: string | null = null
     try {
       const store = await cookies()
-      const cookieSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase()
+      cookieSlug = store.get(VENDEDOR_COOKIE)?.value?.trim().toLowerCase() || null
       if (cookieSlug) {
         const enlace = await resolverEnlace(cookieSlug)
         if (enlace && enlace.companyId === companyId) {
@@ -333,34 +406,102 @@ export async function reservarCarritoAction(
       // ignore
     }
 
+    // Resolver o auto-afiliar el clienteId del usuario autenticado en esta empresa
+    const resCliente = await asegurarClienteEnEmpresa(
+      user.supabaseId,
+      user.email,
+      companyId,
+      cookieSlug
+    )
+    if ('error' in resCliente) {
+      return { error: resCliente.error }
+    }
+    const clienteId = resCliente.clienteId
+
     if (!vendedorId) {
-      vendedorId = await vendedorParaCliente(companyId, cliente.id)
+      vendedorId = await vendedorParaCliente(companyId, clienteId)
     }
 
     const esPagoOnline = metodoPago === 'ONLINE_SIMULADO'
     const nuevasReservas = []
-    
+
     for (const item of items) {
       const exc = await prisma.excursion.findFirst({
         where: { id: item.excursionId, estado: 'ACTIVA' },
-        include: { variantes: { where: { id: item.varianteId, activa: true } } }
+        include: {
+          variantes: { where: { id: item.varianteId, activa: true } },
+          horarios: {
+            where: { activo: true },
+            select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+          },
+          comboItems: {
+            include: {
+              actividad: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  capacidad: true,
+                  horaSalida: true,
+                  horarios: {
+                    where: { activo: true },
+                    select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       })
-      
+
       if (!exc || exc.variantes.length === 0) continue
-      
+
+      const fechaObj = new Date(`${item.fecha}T12:00:00.000Z`)
+      const fechaValida = isNaN(fechaObj.getTime()) ? new Date() : fechaObj
+
+      if (exc.tipoItem === 'COMBO' && exc.comboItems.length > 0) {
+        const dispCombo = validarDisponibilidadCombo(
+          fechaValida,
+          item.horaSalida || null,
+          item.adultos + item.ninos,
+          {
+            nombre: exc.nombre,
+            capacidad: exc.capacidad,
+            horaSalida: exc.horaSalida,
+            horarios: exc.horarios.map((h) => ({
+              id: h.id,
+              diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+              horaSalida: h.horaSalida,
+              cupo: h.cupo,
+            })),
+            actividades: exc.comboItems.map((ci) => ({
+              nombre: ci.actividad.nombre,
+              capacidad: ci.actividad.capacidad,
+              horaSalida: ci.actividad.horaSalida,
+              horarios: ci.actividad.horarios.map((h) => ({
+                id: h.id,
+                diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+                horaSalida: h.horaSalida,
+                cupo: h.cupo,
+              })),
+            })),
+          }
+        )
+        if (!dispCombo.ok) return { error: dispCombo.error }
+      }
+
       const v = exc.variantes[0]
       const totales = calcularTotales({
         precioAdulto: v.precioAdulto.toNumber(),
-        precioNino: v.precioNino?.toNumber(),
+        precioNino: v.precioNino ? v.precioNino.toNumber() : null,
         impuestoPct: exc.impuestoPct?.toNumber() ?? 0,
         adultos: item.adultos,
         ninos: item.ninos,
-        descuentoFijo: 0,
+        descuento: 0,
       })
 
-      const fechaObj = new Date(`${item.fecha}T12:00:00.000Z`)
-      const anio = isNaN(fechaObj.getTime()) ? new Date().getUTCFullYear() : fechaObj.getUTCFullYear()
-      const fechaValida = isNaN(fechaObj.getTime()) ? new Date() : fechaObj
+      const anio = isNaN(fechaObj.getTime())
+        ? new Date().getUTCFullYear()
+        : fechaObj.getUTCFullYear()
       const prefijo = exc.nombre.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, 'E') || 'EXC'
       const checkinToken = `EXC:${Math.random().toString(36).substring(2, 10).toUpperCase()}`
 
@@ -380,7 +521,7 @@ export async function reservarCarritoAction(
                 numero: numeroReserva(prefijo, anio, intento),
                 excursionId: exc.id,
                 varianteId: v.id,
-                clienteId: cliente.id,
+                clienteId,
                 vendedorId,
                 fecha: fechaValida,
                 hora: item.horaSalida || null,
@@ -413,7 +554,8 @@ export async function reservarCarritoAction(
               select: { id: true, numero: true },
             })
           } catch (e: unknown) {
-            const esUnique = e instanceof Error && 'code' in e && (e as { code?: string }).code === 'P2002'
+            const esUnique =
+              e instanceof Error && 'code' in e && (e as { code?: string }).code === 'P2002'
             if (!esUnique || i === 4) throw e
             intento += 1
           }
@@ -425,7 +567,7 @@ export async function reservarCarritoAction(
         await conEmpresa(exc.companyId, (tx) =>
           tx.reservaPago.create({
             data: {
-              companyId: exc.companyId,
+              companyId,
               reservaId: reserva.id,
               monto: totales.total,
               moneda: exc.moneda,
@@ -435,9 +577,11 @@ export async function reservarCarritoAction(
             },
           })
         )
-        await procesarVentaYComisionInterna(exc.companyId, reserva.id, user.metadata.dbUserId ?? null).catch(
-          anotarFallo('excursiones:reservarCarrito:procesarVenta')
-        )
+        await procesarVentaYComisionInterna(
+          exc.companyId,
+          reserva.id,
+          user.metadata.dbUserId ?? null
+        ).catch(anotarFallo('excursiones:reservarCarrito:procesarVenta'))
       }
 
       if (reserva && vendedorId) {
@@ -446,13 +590,13 @@ export async function reservarCarritoAction(
             data: {
               companyId: exc.companyId,
               vendedorId: vendedorId!,
-              clienteId: cliente.id,
+              clienteId,
               etapa: esPagoOnline ? 'COMPRA' : 'RESERVA',
-            }
+            },
           })
         ).catch(() => {})
       }
-      
+
       if (reserva) nuevasReservas.push(reserva)
       await sincronizarEstadoAgotada(exc.companyId, exc.id)
     }
@@ -467,11 +611,11 @@ export async function reservarCarritoAction(
       } catch {}
     }
 
-    return { 
+    return {
       success: esPagoOnline
         ? `¡Pago procesado con éxito! Has reservado y pagado ${nuevasReservas.length} ${nuevasReservas.length === 1 ? 'excursión' : 'excursiones'}.`
         : `Has reservado exitosamente ${nuevasReservas.length} ${nuevasReservas.length === 1 ? 'excursión' : 'excursiones'}. Recuerda pagar el día del tour.`,
-      redirectUrl: '/cliente/mis-excursiones'
+      redirectUrl: '/cliente/mis-excursiones',
     }
   } catch (e) {
     anotarFallo('excursiones:reservarCarrito')(e)

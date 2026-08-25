@@ -501,7 +501,7 @@ export function roleLabel(role: AppRole): string {
     case 'SUPERADMIN':
       return 'Superadmin'
     case 'EMPLEADO':
-      return 'Empleado'
+      return 'Staff / Empleado'
     case 'RECEPCION':
       return 'Recepción'
     case 'GERENTE':
