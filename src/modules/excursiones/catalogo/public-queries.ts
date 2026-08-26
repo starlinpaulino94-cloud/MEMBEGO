@@ -84,6 +84,7 @@ export interface ExcursionPublica {
       id: string
       nombre: string
       slug: string
+      tipoItem?: string | null
       portadaUrl: string | null
       duracionMin: number | null
       horaSalida: string | null

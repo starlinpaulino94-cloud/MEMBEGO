@@ -12,6 +12,7 @@ import { formatMoney } from '@/lib/format'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { DIAS_SEMANA } from '@/modules/excursiones/catalogo/nucleo'
+import { formatoMinutosAHora, minutosDesdeMedianoche } from '@/modules/excursiones/reservas/nucleo'
 import { getUser } from '@/lib/auth'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { ReservaExcursionForm } from './ReservaExcursionForm'
@@ -208,14 +209,19 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
                     {exc.comboItems.length} Actividades
                   </span>
                 </div>
-                
+
                 <div className="space-y-2 pt-1">
                   {exc.comboItems.map((item, idx) => {
                     const act = item.actividad
                     const esPd = act.tipoItem === 'PASE_DIA'
                     const inicio = act.horaSalida ? act.horaSalida.trim().slice(0, 5) : '—'
-                    const fin = act.horaRegreso ? act.horaRegreso.trim().slice(0, 5) : '—'
-                    const dur = act.duracionMin ? `${(act.duracionMin / 60).toFixed(1)}h` : null
+                    const durMin = act.duracionMin ?? 0
+                    const fin = (!esPd && inicio !== '—' && durMin > 0)
+                      ? formatoMinutosAHora(minutosDesdeMedianoche(inicio) + durMin)
+                      : (act.horaRegreso ? act.horaRegreso.trim().slice(0, 5) : '—')
+                    const dur = durMin > 0
+                      ? (durMin >= 60 ? `${Math.floor(durMin / 60)}h ${durMin % 60 > 0 ? `${durMin % 60}m` : ''}`.trim() : `${durMin}m`)
+                      : null
 
                     return (
                       <div
@@ -370,6 +376,7 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
                   })),
                 },
               }))}
+              esEmpresaDemo={company.esDemo}
             />
           </div>
         </div>

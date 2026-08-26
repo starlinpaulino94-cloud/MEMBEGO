@@ -59,7 +59,7 @@ export interface ComboItemActividadPublica {
     id: string
     nombre: string
     slug: string
-    tipoItem?: string
+    tipoItem?: string | null
     portadaUrl: string | null
     duracionMin: number | null
     horaSalida: string | null
@@ -92,6 +92,7 @@ interface ReservaExcursionFormProps {
   capacidad: number | null
   tipoItem?: string
   comboItems?: ComboItemActividadPublica[]
+  esEmpresaDemo?: boolean
 }
 
 function getLocalDateString(d: Date = new Date()): string {
@@ -129,6 +130,7 @@ export function ReservaExcursionForm({
   agotadaGlobal,
   tipoItem,
   comboItems = [],
+  esEmpresaDemo,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
@@ -283,12 +285,12 @@ export function ReservaExcursionForm({
     if (fecha) {
       try {
         return parseISO(fecha)
-      } catch {}
+      } catch { }
     }
     if (fechasDisponibles[0]) {
       try {
         return parseISO(fechasDisponibles[0])
-      } catch {}
+      } catch { }
     }
     return new Date()
   })
@@ -299,7 +301,7 @@ export function ReservaExcursionForm({
       try {
         const d = parseISO(fecha)
         setMesActual((prev) => (isSameMonth(prev, d) ? prev : d))
-      } catch {}
+      } catch { }
     }
   }, [fecha])
 
@@ -483,12 +485,12 @@ export function ReservaExcursionForm({
       setFollowingPending(false)
       if (result.error) {
         // If follow fails, still try to reserve — the action handles missing profile
-        ;(e.target as HTMLFormElement).requestSubmit()
+        ; (e.target as HTMLFormElement).requestSubmit()
         return
       }
       followedRef.current = true
-      // Now submit the form
-      ;(e.target as HTMLFormElement).requestSubmit()
+        // Now submit the form
+        ; (e.target as HTMLFormElement).requestSubmit()
       return
     }
     // Already following — let the form action proceed
@@ -525,7 +527,7 @@ export function ReservaExcursionForm({
     )
   }
 
-// Agotada global — show out of stock
+  // Agotada global — show out of stock
   if (agotadaGlobal) {
     return (
       <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -555,8 +557,8 @@ export function ReservaExcursionForm({
           </p>
         </div>
       </div>
-)
-}
+    )
+  }
 
   return (
     <div className="rounded-xl border bg-card p-6 shadow-sm">
@@ -612,6 +614,10 @@ export function ReservaExcursionForm({
           </div>
 
           <input type="hidden" name="fecha" value={fecha} required />
+          <input type="hidden" name="hora" value={hora} />
+          {comboItinerarioJson && (
+            <input type="hidden" name="comboItinerarioJson" value={comboItinerarioJson} />
+          )}
 
           {fechasDisponibles.length === 0 ? (
             <p className="text-xs text-muted-foreground">No hay fechas con plazas disponibles</p>
@@ -624,11 +630,10 @@ export function ReservaExcursionForm({
                   <button
                     type="button"
                     onClick={() => setFechaElegida(hoyStr)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
-                      fecha === hoyStr
-                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                        : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${fecha === hoyStr
+                      ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                      : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
                   >
                     Hoy
                   </button>
@@ -637,11 +642,10 @@ export function ReservaExcursionForm({
                   <button
                     type="button"
                     onClick={() => setFechaElegida(addDaysToString(1))}
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
-                      fecha === addDaysToString(1)
-                        ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                        : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                    }`}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${fecha === addDaysToString(1)
+                      ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                      : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
                   >
                     Mañana
                   </button>
@@ -719,13 +723,12 @@ export function ReservaExcursionForm({
                       type="button"
                       disabled={!isAvailable}
                       onClick={() => isAvailable && setFechaElegida(dateStr)}
-                      className={`group relative flex h-8 sm:h-9 flex-col items-center justify-center rounded-xl text-xs font-semibold transition ${
-                        isSelected
-                          ? 'bg-primary text-primary-foreground font-bold shadow-xs scale-102 ring-2 ring-primary/40 cursor-pointer'
-                          : isAvailable
+                      className={`group relative flex h-8 sm:h-9 flex-col items-center justify-center rounded-xl text-xs font-semibold transition ${isSelected
+                        ? 'bg-primary text-primary-foreground font-bold shadow-xs scale-102 ring-2 ring-primary/40 cursor-pointer'
+                        : isAvailable
                           ? 'bg-primary/10 text-primary hover:bg-primary/20 hover:scale-102 active:scale-95 cursor-pointer font-bold border border-primary/20'
                           : 'text-muted-foreground/30 font-normal cursor-not-allowed bg-transparent'
-                      }`}
+                        }`}
                     >
                       <span>{diaNum}</span>
                       {isAvailable && !isSelected && turnosCount > 0 && (
@@ -785,22 +788,20 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setModoComboFechas('MISMO_DIA')}
-                  className={`rounded-md px-2.5 py-1 transition text-[11px] ${
-                    modoComboFechas === 'MISMO_DIA'
-                      ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={`rounded-md px-2.5 py-1 transition text-[11px] ${modoComboFechas === 'MISMO_DIA'
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Mismo Día
                 </button>
                 <button
                   type="button"
                   onClick={() => setModoComboFechas('DIAS_DIFERENTES')}
-                  className={`rounded-md px-2.5 py-1 transition text-[11px] ${
-                    modoComboFechas === 'DIAS_DIFERENTES'
-                      ? 'bg-primary text-primary-foreground font-bold shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={`rounded-md px-2.5 py-1 transition text-[11px] ${modoComboFechas === 'DIAS_DIFERENTES'
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Días Separados
                 </button>
@@ -815,11 +816,10 @@ export function ReservaExcursionForm({
                     <button
                       type="button"
                       onClick={() => setModoHorarioCombo('RECOMENDADOS')}
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
-                        modoHorarioCombo === 'RECOMENDADOS'
-                          ? 'bg-primary text-primary-foreground shadow-xs'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
+                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${modoHorarioCombo === 'RECOMENDADOS'
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
                     >
                       <Sparkles className="h-3.5 w-3.5" />
                       Turnos Recomendados ({combinacionesDisponibles.length})
@@ -827,11 +827,10 @@ export function ReservaExcursionForm({
                     <button
                       type="button"
                       onClick={() => setModoHorarioCombo('PERSONALIZADO')}
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
-                        modoHorarioCombo === 'PERSONALIZADO'
-                          ? 'bg-primary text-primary-foreground shadow-xs'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      }`}
+                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${modoHorarioCombo === 'PERSONALIZADO'
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
                     >
                       <Clock className="h-3.5 w-3.5" />
                       Personalizar por Actividad
@@ -852,30 +851,30 @@ export function ReservaExcursionForm({
                             key={idx}
                             type="button"
                             onClick={() => setComboHorarios(comb.horariosAsignados)}
-                            className={`w-full text-left rounded-xl border p-3 transition flex flex-col gap-1.5 cursor-pointer ${
-                              isSelected
-                                ? 'border-primary bg-primary/10 ring-2 ring-primary/60 shadow-xs'
-                                : 'border-border/80 bg-background/90 hover:bg-muted/60'
-                            }`}
+                            className={`w-full text-left rounded-xl border p-3 transition flex flex-col gap-1.5 cursor-pointer ${isSelected
+                              ? 'border-primary bg-primary/10 ring-2 ring-primary/60 shadow-xs'
+                              : 'border-border/80 bg-background/90 hover:bg-muted/60'
+                              }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-1.5">
                                 <span
-                                  className={`text-xs font-bold ${
-                                    isSelected ? 'text-primary font-extrabold' : 'text-foreground'
-                                  }`}
+                                  className={`text-xs font-bold ${isSelected ? 'text-primary font-extrabold' : 'text-foreground'
+                                    }`}
                                 >
-                                  {comb.etiqueta || `Opción ${idx + 1}`}
+                                  {comb.nombre || `Opción ${idx + 1}`}
                                 </span>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
                                 {idx === 0 && (
                                   <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
                                     Recomendado
                                   </span>
                                 )}
-                              </div>
-                              <div className="flex items-center gap-1 text-[11px] font-mono font-semibold text-primary">
-                                <Clock className="h-3 w-3" />
-                                {formato12h(comb.horaInicio)} → {formato12h(comb.horaFin)} ({(comb.duracionTotalMin / 60).toFixed(1)}h)
+                                <div className="flex items-center gap-1 text-[11px] font-mono font-semibold text-primary">
+                                  <Clock className="h-3 w-3" />
+                                  {formato12h(comb.horaInicio)} → {formato12h(comb.horaFin)} ({(comb.duracionTotalMin / 60).toFixed(1)}h)
+                                </div>
                               </div>
                             </div>
                             <p className="text-[11px] text-muted-foreground font-medium">
@@ -952,11 +951,10 @@ export function ReservaExcursionForm({
                                     key={slot}
                                     type="button"
                                     onClick={() => cambiarTurnoCombo(actId, slot)}
-                                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-primary text-primary-foreground shadow-xs'
-                                        : 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground'
-                                    }`}
+                                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition cursor-pointer ${isSelected
+                                      ? 'bg-primary text-primary-foreground shadow-xs'
+                                      : 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground'
+                                      }`}
                                   >
                                     {formato12h(slot)}
                                   </button>
@@ -1011,9 +1009,8 @@ export function ReservaExcursionForm({
                           </span>
                           <span className="text-xs font-bold text-foreground">{act.nombre}</span>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          esPd ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'
-                        }`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${esPd ? 'bg-emerald-500/10 text-emerald-600' : 'bg-primary/10 text-primary'
+                          }`}>
                           {esPd ? 'Daypass' : 'Actividad'}
                         </span>
                       </div>
@@ -1144,13 +1141,12 @@ export function ReservaExcursionForm({
                           }
                         }}
                         disabled={agotada && !!salida}
-                        className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
-                          esActiva
-                            ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                            : agotada && !!salida
+                        className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${esActiva
+                          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                          : agotada && !!salida
                             ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed border-border/40'
                             : 'bg-background hover:bg-muted border-border/80'
-                        }`}
+                          }`}
                       >
                         {formato12h(horaVal)}
                         {salida && !agotada && cupo > 0 && (
@@ -1269,11 +1265,10 @@ export function ReservaExcursionForm({
             <button
               type="button"
               onClick={() => setMetodoPago('DESTINO')}
-              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition ${
-                metodoPago === 'DESTINO'
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'border-border bg-card hover:bg-muted/50'
-              }`}
+              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition ${metodoPago === 'DESTINO'
+                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                : 'border-border bg-card hover:bg-muted/50'
+                }`}
             >
               <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
                 <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -1287,11 +1282,10 @@ export function ReservaExcursionForm({
             <button
               type="button"
               onClick={() => setMetodoPago('ONLINE_SIMULADO')}
-              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition relative ${
-                metodoPago === 'ONLINE_SIMULADO'
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                  : 'border-border bg-card hover:bg-muted/50'
-              }`}
+              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition relative ${metodoPago === 'ONLINE_SIMULADO'
+                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                : 'border-border bg-card hover:bg-muted/50'
+                }`}
             >
               <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
                 <CreditCard className="h-4 w-4 text-primary" />
@@ -1445,6 +1439,7 @@ export function ReservaExcursionForm({
         montoTotal={subtotal}
         moneda={moneda}
         tituloConcepto={nombreExcursion}
+        esEmpresaDemo={esEmpresaDemo}
         detallesItems={[
           {
             nombre: `${adultos} Adulto(s)${ninos > 0 ? ` + ${ninos} Niño(s)` : ''} (${varianteActual.nombre})`,

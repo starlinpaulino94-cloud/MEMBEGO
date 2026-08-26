@@ -24,6 +24,7 @@ import {
   validarDisponibilidad,
   validarDisponibilidadCombo,
   validarDisponibilidadComboMultiFecha,
+  normalizarHora,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
@@ -196,7 +197,7 @@ export async function reservarExcursion(
           return {
             actividadId: item.actividadId,
             fecha: new Date(Date.UTC(y, m - 1, d)),
-            hora: item.hora,
+            hora: item.hora ? normalizarHora(item.hora) : null,
           }
         })
         itemsComboAGuardar = itemsParaValidar
@@ -229,7 +230,7 @@ export async function reservarExcursion(
         itemsComboAGuardar = excursionCompleta.comboItems.map((ci) => ({
           actividadId: ci.actividad.id,
           fecha: v.datos.fecha,
-          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.horaSalida || v.datos.hora,
+          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.actividad.horaSalida || v.datos.hora,
         }))
 
         const dispCombo = validarDisponibilidadCombo(
