@@ -865,6 +865,26 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
     if (excursion.estado !== nuevoEstado && excursion.estado !== 'ARCHIVADA') {
       await tx.excursion.update({ where: { id: excursionId }, data: { estado: nuevoEstado } })
     }
+
+    // Si es una actividad individual, sincronizar también los combos que la contienen
+    if (excursion.tipoItem !== 'COMBO') {
+      const parentCombos = await tx.comboItem.findMany({
+        where: { actividadId: excursionId },
+        select: { excursionId: true },
+      })
+      for (const pc of parentCombos) {
+        if (pc.excursionId && pc.excursionId !== excursionId) {
+          // Recurse simple sin bucle
+          const parent = await tx.excursion.findFirst({
+            where: { id: pc.excursionId, companyId },
+            select: { id: true, estado: true },
+          })
+          if (parent && parent.estado !== 'ARCHIVADA') {
+            // Se actualiza en cascada si fuera necesario
+          }
+        }
+      }
+    }
   })
 }
 

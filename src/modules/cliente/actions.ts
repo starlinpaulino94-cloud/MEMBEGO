@@ -500,6 +500,27 @@ export async function buscarUnificado(
             // hacia el núcleo el módulo guarda el id plano, sin @relation
             // (convención escrita en prisma/schema/excursiones.prisma).
             companyId: true,
+            tipoItem: true,
+            comboItems: {
+              orderBy: { orden: 'asc' },
+              select: {
+                horaSalida: true,
+                actividad: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    tipoItem: true,
+                    capacidad: true,
+                    horaSalida: true,
+                    horaRegreso: true,
+                    horarios: {
+                      where: { activo: true },
+                      select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+                    },
+                  },
+                },
+              },
+            },
             variantes: {
               where: { activa: true },
               orderBy: { orden: 'asc' },
@@ -543,6 +564,27 @@ export async function buscarUnificado(
                 horaRegreso: true,
                 // Igual que arriba: id plano, la ficha se resuelve aparte.
                 companyId: true,
+                tipoItem: true,
+                comboItems: {
+                  orderBy: { orden: 'asc' },
+                  select: {
+                    horaSalida: true,
+                    actividad: {
+                      select: {
+                        id: true,
+                        nombre: true,
+                        tipoItem: true,
+                        capacidad: true,
+                        horaSalida: true,
+                        horaRegreso: true,
+                        horarios: {
+                          where: { activo: true },
+                          select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+                        },
+                      },
+                    },
+                  },
+                },
                 variantes: {
                   where: { activa: true },
                   orderBy: { orden: 'asc' },
@@ -600,7 +642,9 @@ export async function buscarUnificado(
             // llamadores de `calcularDisponibilidad`.
             exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
             exc.horaRegreso,
-            exc.horaSalida
+            exc.horaSalida,
+            exc.tipoItem,
+            exc.comboItems as any
           )
 
           // Salidas futuras válidas no pasadas

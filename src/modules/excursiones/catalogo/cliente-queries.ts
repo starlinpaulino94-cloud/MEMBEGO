@@ -13,6 +13,7 @@ const EXCURSION_SELECT = {
   id: true,
   nombre: true,
   slug: true,
+  tipoItem: true,
   descripcion: true,
   portadaUrl: true,
   duracionMin: true,
@@ -24,6 +25,26 @@ const EXCURSION_SELECT = {
   horaRegreso: true,
   companyId: true,
   createdAt: true,
+  comboItems: {
+    orderBy: { orden: 'asc' as const },
+    select: {
+      horaSalida: true,
+      actividad: {
+        select: {
+          id: true,
+          nombre: true,
+          tipoItem: true,
+          capacidad: true,
+          horaSalida: true,
+          horaRegreso: true,
+          horarios: {
+            where: { activo: true },
+            select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+          },
+        },
+      },
+    },
+  },
   variantes: {
     where: { activa: true },
     orderBy: { orden: 'asc' as const },
@@ -63,7 +84,9 @@ async function mapearExcursionesConDisponibilidad(
         exc.capacidad,
         exc.horarios,
         exc.horaRegreso,
-        exc.horaSalida
+        exc.horaSalida,
+        exc.tipoItem,
+        exc.comboItems
       )
       const company = companyMap.get(exc.companyId)
       const rowMapped = mapRow(exc)
