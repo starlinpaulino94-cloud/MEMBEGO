@@ -213,7 +213,14 @@ function entero(v: unknown, max: number): number {
 }
 
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/
-const HORA_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
+export function normalizarHora(v: unknown): string | null {
+  const s = texto(v, 8)
+  const m = s.match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
+  if (!m) return null
+  const hh = m[1].padStart(2, '0')
+  const mm = m[2]
+  return `${hh}:${mm}`
+}
 
 export interface ReservaDatos {
   fecha: Date
@@ -248,15 +255,13 @@ export function validarReserva(
     return { ok: false, error: 'Una reserva necesita al menos un pasajero.' }
   }
 
-  const horaS = texto(form.hora, 5)
-  const horaRecogidaS = texto(form.horaRecogida, 5)
   const descuento = Number(texto(form.descuento, 12) || '0')
 
   return {
     ok: true,
     datos: {
       fecha,
-      hora: HORA_RE.test(horaS) ? horaS : null,
+      hora: normalizarHora(form.hora),
       adultos,
       ninos,
       descuento: Number.isFinite(descuento) && descuento > 0 ? centavos(descuento) : 0,
@@ -265,7 +270,7 @@ export function validarReserva(
       voucherAgencia: texto(form.voucherAgencia, 60).toUpperCase() || null,
       hotelRecogida: texto(form.hotelRecogida, 120) || null,
       lobbyRecogida: texto(form.lobbyRecogida, 80) || null,
-      horaRecogida: HORA_RE.test(horaRecogidaS) ? horaRecogidaS : null,
+      horaRecogida: normalizarHora(form.horaRecogida),
       habitacion: texto(form.habitacion, 30) || null,
     },
   }
@@ -1029,7 +1034,7 @@ export function validarDisponibilidadCombo(
   // 1. Validar que no haya solapamiento de horas entre las actividades hijas del combo
   const itinerarioRes = validarItinerarioCombo(combo.actividades)
   if (!itinerarioRes.ok) {
-    return { ok: false, error: itinerarioRes.error }
+    return { ok: false, error: itinerarioRes.error || 'Conflicto de horario en actividades del combo.' }
   }
 
   // 2. Validar que el día de la semana sea un día común operativo para todas las actividades
@@ -1170,7 +1175,7 @@ export function validarDisponibilidadComboMultiFecha(
     if (actsDelDia.length > 1) {
       const val = validarItinerarioCombo(actsDelDia)
       if (!val.ok) {
-        return { ok: false, error: val.error }
+        return { ok: false, error: val.error || 'Conflicto de horario en actividades programadas para el mismo día.' }
       }
     }
   }
