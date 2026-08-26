@@ -30,18 +30,39 @@ export default async function MetasPage() {
     vendedoresParaSupervisor(companyId),
   ])
 
-  // El progreso se calcula ahora, sobre el período que le toca a cada meta.
+  /**
+   * EL PROGRESO SE CALCULA META A META, NO TODAS A LA VEZ.
+   *
+   * Esto era un `Promise.all` sobre las metas, y cada vuelta abre una
+   * transacción con contexto de empresa que retiene una conexión mientras
+   * dura. Con las metas pidiéndose en paralelo, un solo render lanzaba tantas
+   * transacciones simultáneas como metas hubiera.
+   *
+   * Es el incidente del 12-08 (ver `src/lib/tenant.ts`): las transacciones
+   * hacen cola por la conexión y la que no consigue empezar dentro de
+   * `maxWait` muere con `P2028`. En pantalla, «No se pudo cargar esta
+   * sección» — y encima de forma intermitente, porque depende de cuántas
+   * metas haya y de qué más esté corriendo en la misma instancia.
+   *
+   * En serie tarda un poco más y CARGA. Para una lista acotada a 100 metas
+   * que se mira de vez en cuando, esa es la compensación correcta: una
+   * pantalla lenta sirve, una que falla no.
+   */
   const ahora = new Date()
-  const conProgreso = await Promise.all(
-    metas.map(async (m) => {
-      const rango = rangoDePeriodo(m.periodo as PeriodoMeta, ahora, {
-        desde: m.desde,
-        hasta: m.hasta,
-      })
-      const reales = await realesDeVendedor(companyId, m.vendedorId, rango)
-      return { meta: m, rango, lineas: progresoMeta(m, reales), moneda: reales.moneda }
+  const conProgreso: {
+    meta: (typeof metas)[number]
+    rango: ReturnType<typeof rangoDePeriodo>
+    lineas: ReturnType<typeof progresoMeta>
+    moneda: string | null
+  }[] = []
+  for (const m of metas) {
+    const rango = rangoDePeriodo(m.periodo as PeriodoMeta, ahora, {
+      desde: m.desde,
+      hasta: m.hasta,
     })
-  )
+    const reales = await realesDeVendedor(companyId, m.vendedorId, rango)
+    conProgreso.push({ meta: m, rango, lineas: progresoMeta(m, reales), moneda: reales.moneda })
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
