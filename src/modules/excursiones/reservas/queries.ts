@@ -122,6 +122,26 @@ export async function reservaDetalle(companyId: string, reservaId: string) {
       include: {
         pagos: { orderBy: { createdAt: 'desc' } },
         pasajeros: { orderBy: { tipo: 'asc' } },
+        items: {
+          orderBy: { fecha: 'asc' },
+          include: {
+            actividad: {
+              select: {
+                id: true,
+                nombre: true,
+                slug: true,
+                tipoItem: true,
+                duracionMin: true,
+                portadaUrl: true,
+                ubicacion: true,
+                categoria: true,
+                puntoSalida: true,
+                horaSalida: true,
+                horaRegreso: true,
+              },
+            },
+          },
+        },
       },
     })
   )
@@ -254,6 +274,26 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
       where: { id: reservaId, companyId, clienteId },
       include: {
         pasajeros: { orderBy: { tipo: 'asc' } },
+        items: {
+          orderBy: { fecha: 'asc' },
+          include: {
+            actividad: {
+              select: {
+                id: true,
+                nombre: true,
+                slug: true,
+                tipoItem: true,
+                duracionMin: true,
+                portadaUrl: true,
+                ubicacion: true,
+                categoria: true,
+                puntoSalida: true,
+                horaSalida: true,
+                horaRegreso: true,
+              },
+            },
+          },
+        },
         pagos: { where: { estado: 'REGISTRADO' }, orderBy: { createdAt: 'desc' } },
       },
     })
