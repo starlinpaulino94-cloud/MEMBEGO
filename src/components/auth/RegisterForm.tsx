@@ -41,6 +41,8 @@ export function RegisterForm({
   const refCode = searchParams.get('ref') ?? ''
   // Growth Engine 3.0: código del enlace de invitación (landing) si vino de uno.
   const glCode = searchParams.get('gl') ?? ''
+  const enlaceSlug = searchParams.get('e') ?? ''
+  const vendedorCode = searchParams.get('v') ?? ''
   // Destino tras el registro (`?next=`): si el usuario llegó desde una promo,
   // plan o campaña compartida, lo PRIMERO que ve al entrar es la pantalla de
   // reclamar ese beneficio (no el home genérico). Solo rutas internas
@@ -48,10 +50,17 @@ export function RegisterForm({
   const nextRaw = searchParams.get('next') ?? ''
   const nextSeguro =
     nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : null
-  // Si vino con código de referido, aterriza en la pantalla de bienvenida de
-  // la empresa referidora (muestra membresías activas + excursiones disponibles).
-  // Si no, la celebración genérica (reclamar su regalo de bienvenida).
-  const destino = nextSeguro ?? (refCode ? `/cliente/bienvenida-ref/${companySlug}` : '/cliente/celebracion')
+
+  // Si vino por enlace/código de vendedor, aterriza directamente en el catálogo de excursiones del negocio
+  const destinoVendedor = (enlaceSlug || vendedorCode) && companySlug
+    ? `/empresas/${companySlug}/excursiones${enlaceSlug ? `?e=${encodeURIComponent(enlaceSlug)}` : ''}`
+    : null
+
+  // Prioridad: ?next= explícito > referido de vendedor (excursiones) > referido general de cliente > celebración
+  const destino =
+    nextSeguro ??
+    destinoVendedor ??
+    (refCode ? `/cliente/bienvenida-ref/${companySlug}` : '/cliente/celebracion')
   const [state, formAction, pending] = useActionState(registrarCliente, initial)
   // Al enviar guardamos las credenciales para iniciar sesión automáticamente
   // en cuanto el registro se complete (sin volver a la pantalla de login).

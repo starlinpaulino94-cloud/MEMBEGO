@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect } from 'next/navigation'
-import { recordPromotionView } from '@/modules/marketplace/actions'
 import { getPromotionDetail, getPromotionOg } from '@/modules/marketplace/cached'
 import { PromotionDetail } from '@/components/marketplace/PromotionDetail'
 import { SITE_NAME } from '@/lib/site'
@@ -63,9 +62,6 @@ export default async function PromotionDetailPage({
   if (promotion.slug && clave === promotion.id) {
     permanentRedirect(rutaPublicaPromo(promotion))
   }
-
-  // Record view (non-blocking)
-  recordPromotionView(promotion.id).catch(console.error)
 
   return <PromotionDetail mode="public" promotion={promotion} />
 }

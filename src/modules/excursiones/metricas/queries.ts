@@ -10,13 +10,44 @@ import { centavos, ticketPromedio, conversion, type Rango, type RealesMeta } fro
  * mentir. Las ventas CANCELADAS no suman en ningún sitio.
  */
 
-export async function resumenDelPeriodo(companyId: string, rango: Rango) {
+export interface ResumenFiltros {
+  vendedorId?: string | null
+  tipoVendedor?: string | null
+  excursionId?: string | null
+  canal?: string | null
+  estado?: string | null
+}
+
+export async function resumenDelPeriodo(
+  companyId: string,
+  rango: Rango,
+  filtros: ResumenFiltros = {}
+) {
+  let matchingVendedorIds: string[] | undefined = undefined
+  if (filtros.tipoVendedor && filtros.tipoVendedor !== 'TODOS') {
+    const vends = await conEmpresa(companyId, (tx) =>
+      tx.vendedor.findMany({
+        where: { companyId, tipo: filtros.tipoVendedor! },
+        select: { id: true },
+      })
+    )
+    matchingVendedorIds = vends.map((v) => v.id)
+  }
+
+  const effectiveVendedorCondition = filtros.vendedorId && filtros.vendedorId !== 'TODOS'
+    ? { vendedorId: filtros.vendedorId }
+    : matchingVendedorIds
+      ? { vendedorId: { in: matchingVendedorIds } }
+      : {}
+
   const [registros, reservas, ventas, comisiones] = await Promise.all([
     conEmpresa(companyId, (tx) =>
       tx.vendedorAtribucion.count({
         where: {
           companyId,
+          ...effectiveVendedorCondition,
           etapa: 'REGISTRO',
+          ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
       })
@@ -25,7 +56,10 @@ export async function resumenDelPeriodo(companyId: string, rango: Rango) {
       tx.reservaExc.findMany({
         where: {
           companyId,
-          estado: { not: 'CANCELADA' },
+          ...effectiveVendedorCondition,
+          ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
+          ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+          ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : { estado: { not: 'CANCELADA' } }),
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { adultos: true, ninos: true },
@@ -35,7 +69,10 @@ export async function resumenDelPeriodo(companyId: string, rango: Rango) {
       tx.ventaExc.findMany({
         where: {
           companyId,
-          estado: { not: 'CANCELADA' },
+          ...effectiveVendedorCondition,
+          ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
+          ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+          ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : { estado: { not: 'CANCELADA' } }),
           confirmadaAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { total: true, pasajeros: true, moneda: true },
@@ -45,6 +82,7 @@ export async function resumenDelPeriodo(companyId: string, rango: Rango) {
       tx.comisionEntrada.findMany({
         where: {
           companyId,
+          ...effectiveVendedorCondition,
           estado: { not: 'ANULADA' },
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
@@ -146,11 +184,12 @@ export async function rankingVendedores(companyId: string, rango: Rango) {
     .sort((a, b) => b.ingresos - a.ingresos || b.captados - a.captados)
 }
 
-/** Lo real de UN vendedor en un rango, con la forma que pide una meta. */
+/** Lo real de UN vendedor en un rango, con la forma que pide una meta y filtro de excursión opcional. */
 export async function realesDeVendedor(
   companyId: string,
   vendedorId: string,
-  rango: Rango
+  rango: Rango,
+  excursionId?: string | null
 ): Promise<RealesMeta> {
   const [registros, reservas, ventas] = await Promise.all([
     conEmpresa(companyId, (tx) =>
@@ -169,6 +208,7 @@ export async function realesDeVendedor(
           companyId,
           vendedorId,
           estado: { not: 'CANCELADA' },
+          ...(excursionId ? { excursionId } : {}),
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
       })
@@ -179,6 +219,7 @@ export async function realesDeVendedor(
           companyId,
           vendedorId,
           estado: { not: 'CANCELADA' },
+          ...(excursionId ? { excursionId } : {}),
           confirmadaAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { total: true, pasajeros: true, moneda: true },
@@ -207,20 +248,46 @@ export async function metasActivas(companyId: string) {
   )
   if (metas.length === 0) return []
 
-  const vendedores = await conEmpresa(companyId, (tx) =>
-    tx.vendedor.findMany({
-      where: { id: { in: [...new Set(metas.map((m) => m.vendedorId))] }, companyId },
-      select: { id: true, nombre: true, apellido: true, codigo: true },
-    })
-  )
-  const porId = new Map(vendedores.map((v) => [v.id, v]))
+  const vendedorIds = [...new Set(metas.map((m) => m.vendedorId).filter(Boolean))] as string[]
+  const excursionIds = [...new Set(metas.map((m) => m.excursionId).filter(Boolean))] as string[]
+
+  const [vendedores, excursiones] = await Promise.all([
+    vendedorIds.length > 0
+      ? conEmpresa(companyId, (tx) =>
+          tx.vendedor.findMany({
+            where: { id: { in: vendedorIds }, companyId },
+            select: { id: true, nombre: true, apellido: true, codigo: true },
+          })
+        )
+      : [],
+    excursionIds.length > 0
+      ? conEmpresa(companyId, (tx) =>
+          tx.excursion.findMany({
+            where: { id: { in: excursionIds }, companyId },
+            select: { id: true, nombre: true, tipoItem: true },
+          })
+        )
+      : [],
+  ])
+
+  const porVendedorId = new Map(vendedores.map((v) => [v.id, v]))
+  const porExcursionId = new Map(excursiones.map((e) => [e.id, e]))
 
   return metas.map((m) => {
-    const v = porId.get(m.vendedorId)
+    const v = m.vendedorId ? porVendedorId.get(m.vendedorId) : null
+    const e = m.excursionId ? porExcursionId.get(m.excursionId) : null
     return {
       id: m.id,
       vendedorId: m.vendedorId,
-      vendedor: v ? `${v.nombre} ${v.apellido ?? ''}`.trim() : 'Vendedor',
+      tipoVendedor: m.tipoVendedor,
+      excursionId: m.excursionId,
+      excursionNombre: e?.nombre ?? null,
+      excursionTipoItem: e?.tipoItem ?? null,
+      vendedor: v
+        ? `${v.nombre} ${v.apellido ?? ''}`.trim()
+        : m.tipoVendedor
+          ? `Tipo: ${m.tipoVendedor}`
+          : 'Toda la empresa',
       codigo: v?.codigo ?? null,
       periodo: m.periodo,
       desde: m.desde,
@@ -236,22 +303,57 @@ export async function metasActivas(companyId: string) {
 
 /** Metas activas de UN vendedor (para su propio panel). */
 export async function metasDeVendedor(companyId: string, vendedorId: string) {
+  const vendedor = await conEmpresa(companyId, (tx) =>
+    tx.vendedor.findFirst({
+      where: { id: vendedorId, companyId },
+      select: { tipo: true },
+    })
+  )
+
   const metas = await conEmpresa(companyId, (tx) =>
     tx.vendedorMeta.findMany({
-      where: { companyId, vendedorId, activa: true },
+      where: {
+        companyId,
+        activa: true,
+        OR: [
+          { vendedorId },
+          ...(vendedor?.tipo ? [{ tipoVendedor: vendedor.tipo, vendedorId: null }] : []),
+          { vendedorId: null, tipoVendedor: null },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       take: 10,
     })
   )
-  return metas.map((m) => ({
-    id: m.id,
-    periodo: m.periodo,
-    desde: m.desde,
-    hasta: m.hasta,
-    metaVentas: m.metaVentas,
-    metaPasajeros: m.metaPasajeros,
-    metaIngresos: m.metaIngresos != null ? Number(m.metaIngresos) : null,
-    metaRegistros: m.metaRegistros,
-    metaReservas: m.metaReservas,
-  }))
+
+  const excursionIds = [...new Set(metas.map((m) => m.excursionId).filter(Boolean))] as string[]
+  const excursiones =
+    excursionIds.length > 0
+      ? await conEmpresa(companyId, (tx) =>
+          tx.excursion.findMany({
+            where: { id: { in: excursionIds }, companyId },
+            select: { id: true, nombre: true, tipoItem: true },
+          })
+        )
+      : []
+
+  const porExcursionId = new Map(excursiones.map((e) => [e.id, e]))
+
+  return metas.map((m) => {
+    const e = m.excursionId ? porExcursionId.get(m.excursionId) : null
+    return {
+      id: m.id,
+      periodo: m.periodo,
+      desde: m.desde,
+      hasta: m.hasta,
+      excursionId: m.excursionId,
+      excursionNombre: e?.nombre ?? null,
+      excursionTipoItem: e?.tipoItem ?? null,
+      metaVentas: m.metaVentas,
+      metaPasajeros: m.metaPasajeros,
+      metaIngresos: m.metaIngresos != null ? Number(m.metaIngresos) : null,
+      metaRegistros: m.metaRegistros,
+      metaReservas: m.metaReservas,
+    }
+  })
 }

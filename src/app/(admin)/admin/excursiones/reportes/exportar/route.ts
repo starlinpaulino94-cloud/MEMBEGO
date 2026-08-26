@@ -54,11 +54,19 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const rango = rangoDeParametros(sp.get('desde'), sp.get('hasta'), new Date())
 
+  const filtros = {
+    vendedorId: sp.get('vendedorId') || null,
+    tipoVendedor: sp.get('tipoVendedor') || null,
+    excursionId: sp.get('excursionId') || null,
+    canal: sp.get('canal') || null,
+    estado: sp.get('estado') || null,
+  }
+
   const [resumen, ventas, comisiones, liquidaciones] = await Promise.all([
-    resumenDelPeriodo(companyId, rango),
-    ventasDelPeriodo(companyId, rango, dia),
-    comisionesDelPeriodo(companyId, rango, dia),
-    liquidacionesDelPeriodo(companyId, rango, dia),
+    resumenDelPeriodo(companyId, rango, filtros),
+    ventasDelPeriodo(companyId, rango, dia, filtros),
+    comisionesDelPeriodo(companyId, rango, dia, filtros),
+    liquidacionesDelPeriodo(companyId, rango, dia, filtros),
   ])
 
   const csv = armarCsvBloques([

@@ -62,8 +62,8 @@ test('Jerarquía de Reglas: Regla TIPO_VENDEDOR prevalece sobre regla GENERAL', 
     id: 'regla-hotel',
     ambito: 'TIPO_VENDEDOR',
     tipoVendedor: 'Hotel',
-    tipoCalculo: 'FIJO_PASAJERO',
-    valor: 15, // US$ 15 por pasajero para Hoteles
+    tipoCalculo: 'PORCENTAJE',
+    valor: 15, // 15% para Hoteles
     activa: true,
     createdAt: new Date('2026-01-02'),
   }
@@ -102,7 +102,7 @@ test('Jerarquía de Reglas: Regla TIPO_VENDEDOR prevalece sobre regla GENERAL', 
   const aplicableHotel = reglaAplicable(reglas, ctxHotel)
   assert.equal(aplicableHotel?.id, 'regla-hotel')
   const comisionHotel = calcularComision(aplicableHotel!, ctxHotel)
-  assert.equal(comisionHotel.monto, 45) // US$ 15 x 3 pax = 45
+  assert.equal(comisionHotel.monto, 30) // 15% de 200 = 30
 
   // Venta hecha por un Empleado (sin regla de tipo de vendedor, cae a GENERAL)
   const ctxEmpleado: ContextoVenta = {

@@ -118,7 +118,33 @@ export default async function CheckinPage({
                         {f.presentes}/{f.totalPasajeros}
                       </td>
                       <td className="py-2">
-                        {f.checkinAt ? (
+                        {f.esCombo && f.totalItems > 0 ? (
+                          f.itemsCompletados === 0 ? (
+                            <StatusChip tone="neutral">Sin embarcar (0/{f.totalItems})</StatusChip>
+                          ) : f.itemsCompletados < f.totalItems ? (
+                            <div>
+                              <StatusChip tone="warning">
+                                Parcial ({f.itemsCompletados}/{f.totalItems} acts)
+                              </StatusChip>
+                              {f.checkinAt && (
+                                <span className="block text-caption text-muted-foreground">
+                                  {formatDateTime(f.checkinAt)}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <StatusChip tone="success">
+                                Completo ({f.itemsCompletados}/{f.totalItems} acts)
+                              </StatusChip>
+                              {f.checkinAt && (
+                                <span className="block text-caption text-muted-foreground">
+                                  {formatDateTime(f.checkinAt)}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        ) : f.checkinAt ? (
                           <div>
                             <StatusChip tone={f.presentes === f.totalPasajeros ? 'success' : 'warning'}>
                               {f.presentes === f.totalPasajeros ? 'Completo' : 'Parcial'}

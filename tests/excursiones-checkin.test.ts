@@ -33,6 +33,12 @@ test('una reserva cancelada no embarca, y punto', () => {
   if (!r.ok) assert.match(r.error, /cancelada/i)
 })
 
+test('una reserva con saldo pendiente no embarca si no se registra el pago', () => {
+  const r = evaluarCheckin(reserva({ saldo: 1500 }), AHORA)
+  assert.equal(r.ok, false)
+  if (!r.ok) assert.match(r.error, /saldo pendiente/i)
+})
+
 test('una reserva sin pasajeros tampoco', () => {
   assert.equal(evaluarCheckin(reserva({ totalPasajeros: 0 }), AHORA).ok, false)
 })
@@ -101,4 +107,16 @@ test('el código dice qué es, y el lector físico puede ensuciarlo', () => {
   assert.equal(tokenDesdeCodigo(''), null)
   assert.equal(tokenDesdeCodigo('EXC:corto'), null) // demasiado corto para ser un token
   assert.equal(tokenDesdeCodigo('EXC:tiene espacios y símbolos!'), null)
+})
+
+test('soporte para búsqueda de reservas por número correlativo o token de 24 caracteres', () => {
+  const token24 = 'AB12CD34EF56GH78IJ90KL12'
+  const qrGenerado = codigoDeCheckin(token24)
+  assert.equal(qrGenerado, `EXC:${token24}`)
+  assert.equal(tokenDesdeCodigo(qrGenerado), token24)
+
+  // Un número de reserva como EXC-2026-0001
+  const numeroRes = 'EXC-2026-0001'
+  const tokenNum = tokenDesdeCodigo(numeroRes)
+  assert.equal(tokenNum, 'EXC-2026-0001')
 })

@@ -19,6 +19,8 @@ export function ReservaCheckinQrDisplay({
   numero }: ReservaCheckinQrDisplayProps) {
   if (!checkinToken) return null
 
+  const tokenLimpio = checkinToken.startsWith('EXC:') ? checkinToken.slice(4) : checkinToken
+
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
       <div className="flex items-center justify-between gap-4">
@@ -42,7 +44,7 @@ export function ReservaCheckinQrDisplay({
       </div>
 
       <div className="mt-4 flex justify-center">
-        <QRDisplay token={codigoDeCheckin(checkinToken)} size={200} />
+        <QRDisplay token={codigoDeCheckin(tokenLimpio)} size={200} />
       </div>
 
       <p className="mt-2 font-mono text-sm font-semibold text-center text-foreground">

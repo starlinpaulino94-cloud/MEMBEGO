@@ -107,15 +107,19 @@ export async function afiliarmeAEmpresa(
   _prev: AfiliacionState,
   formData: FormData
 ): Promise<AfiliacionState> {
-  // Determinar redirect: si la empresa tiene excursiones, ir allí; si no, a planes
+  // Determinar redirect: si vino por enlace de vendedor o la empresa tiene excursiones, ir allí; si no, a planes
   let destino = '/cliente/planes'
   const companySlug = String(formData.get('companySlug') ?? '').trim()
   const enlaceSlug = String(formData.get('enlaceSlug') ?? '').trim() || null
   if (companySlug) {
-    const cid = await companyIdPorSlug(companySlug)
-    if (cid) {
-      const exc = await excursionesPublicas(cid)
-      if (exc.length > 0) destino = `/empresas/${companySlug}/excursiones`
+    if (enlaceSlug) {
+      destino = `/empresas/${companySlug}/excursiones?e=${encodeURIComponent(enlaceSlug)}`
+    } else {
+      const cid = await companyIdPorSlug(companySlug)
+      if (cid) {
+        const exc = await excursionesPublicas(cid)
+        if (exc.length > 0) destino = `/empresas/${companySlug}/excursiones`
+      }
     }
   }
   try {

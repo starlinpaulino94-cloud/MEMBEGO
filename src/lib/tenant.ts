@@ -60,7 +60,7 @@ export type Tx = Prisma.TransactionClient
  * cortos, el ajuste que falta es `connection_limit` en DATABASE_URL
  * (ver la guardia en src/lib/prisma.ts).
  */
-const OPCIONES_TX = { maxWait: 10_000, timeout: 15_000 } as const
+const OPCIONES_TX = { maxWait: 20_000, timeout: 45_000 } as const
 
 /**
  * `cuid()` o `cuid2`, que es lo que genera el esquema. Se comprueba antes de

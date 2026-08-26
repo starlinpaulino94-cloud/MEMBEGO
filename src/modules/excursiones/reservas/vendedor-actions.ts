@@ -7,13 +7,24 @@ import { requireRole } from '@/lib/auth/guards'
 import { vendedorDeUsuario } from '@/modules/excursiones/panel/queries'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { calcularTotales, numeroReserva, validarReserva } from './nucleo'
+import {
+  calcularTotales,
+  numeroReserva,
+  validarReserva,
+  validarDisponibilidad,
+  validarDisponibilidadCombo,
+  validarDisponibilidadComboMultiFecha,
+  calcularPrecioEfectivo,
+  normalizarHora,
+} from './nucleo'
+import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { correoBienvenidaClienteVendedor } from '@/lib/email/plantillas-excursiones'
 import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
+import { generarCodigo } from '@/lib/codes'
 
 export interface ReservaVendedorState {
   error?: string
@@ -27,8 +38,12 @@ export async function crearReservaVendedor(
 ): Promise<ReservaVendedorState> {
   try {
     const user = await requireRole(['VENDEDOR'])
-    const vendedor = user.metadata.dbUserId ? await vendedorDeUsuario(user.metadata.dbUserId) : null
-    if (!vendedor) return { error: 'No autorizado.' }
+    if (!user || !user.metadata.dbUserId) return { error: 'No autorizado.' }
+
+    const vendedor = await vendedorDeUsuario(user.metadata.dbUserId)
+    if (!vendedor) {
+      return { error: 'Tu perfil de vendedor no está disponible.' }
+    }
 
     const companyId = vendedor.companyId
     const excursionId = String(formData.get('excursionId') ?? '')
@@ -36,18 +51,20 @@ export async function crearReservaVendedor(
     const clienteNombre = String(formData.get('clienteNombre') ?? '').trim()
     const clienteEmail = String(formData.get('clienteEmail') ?? '').trim().toLowerCase()
 
-    if (!clienteNombre || !clienteEmail || !excursionId || !varianteId) {
-      return { error: 'Faltan datos requeridos.' }
+    if (!excursionId || !varianteId) {
+      return { error: 'Selecciona una excursión y una opción de tarifa.' }
+    }
+
+    if (!clienteNombre || !clienteEmail) {
+      return { error: 'El nombre y el correo del cliente son requeridos.' }
     }
 
     const v = validarReserva({
       fecha: String(formData.get('fecha') ?? ''),
       hora: String(formData.get('hora') ?? ''),
-      adultos: String(formData.get('adultos') ?? '0'),
+      adultos: String(formData.get('adultos') ?? '1'),
       ninos: String(formData.get('ninos') ?? '0'),
-      descuento: '0',
       notas: String(formData.get('notas') ?? ''),
-      canal: 'VENDEDOR',
       voucherAgencia: String(formData.get('voucherAgencia') ?? ''),
       hotelRecogida: String(formData.get('hotelRecogida') ?? ''),
       lobbyRecogida: String(formData.get('lobbyRecogida') ?? ''),
@@ -58,15 +75,41 @@ export async function crearReservaVendedor(
 
     const excursion = await conEmpresa(companyId, (tx) =>
       tx.excursion.findFirst({
-        where: { id: excursionId, companyId },
+        where: { id: excursionId, companyId, estado: { not: 'ARCHIVADA' } },
         select: {
           id: true,
           nombre: true,
           moneda: true,
           impuestoPct: true,
+          capacidad: true,
+          tipoItem: true,
+          horaSalida: true,
+          horarios: {
+            where: { activo: true },
+            select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+          },
+          comboItems: {
+            include: {
+              actividad: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  tipoItem: true,
+                  capacidad: true,
+                  horaSalida: true,
+                  duracionMin: true,
+                  horaRegreso: true,
+                  horarios: {
+                    where: { activo: true },
+                    select: { id: true, diasSemana: true, horaSalida: true, cupo: true },
+                  },
+                },
+              },
+            },
+          },
           variantes: {
             where: { id: varianteId, activa: true },
-            select: { id: true, precioAdulto: true, precioNino: true },
+            select: { id: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
           },
         },
       })
@@ -75,10 +118,127 @@ export async function crearReservaVendedor(
       return { error: 'La excursión o la opción seleccionada no está disponible.' }
     }
 
+    const comboItinerarioRaw = String(formData.get('comboItinerarioJson') ?? '')
+    let comboItinerarioParsed: { actividadId: string; fecha: string; hora: string | null }[] = []
+    if (comboItinerarioRaw) {
+      try {
+        comboItinerarioParsed = JSON.parse(comboItinerarioRaw)
+      } catch {
+        /* ignore */
+      }
+    }
+
+    let itemsComboAGuardar: { actividadId: string; fecha: Date; hora: string | null }[] = []
+
+    if (excursion.tipoItem === 'COMBO' && excursion.comboItems.length > 0) {
+      if (comboItinerarioParsed.length > 0) {
+        const itemsParaValidar = comboItinerarioParsed.map((item) => {
+          const [y, m, d] = item.fecha.split('-').map(Number)
+          return {
+            actividadId: item.actividadId,
+            fecha: new Date(Date.UTC(y, m - 1, d)),
+            hora: item.hora ? normalizarHora(item.hora) : null,
+          }
+        })
+        itemsComboAGuardar = itemsParaValidar
+
+        const dispComboMulti = validarDisponibilidadComboMultiFecha(
+          v.datos.adultos + v.datos.ninos,
+          {
+            nombre: excursion.nombre,
+            capacidad: excursion.capacidad,
+            actividades: excursion.comboItems.map((ci) => ({
+              id: ci.actividad.id,
+              nombre: ci.actividad.nombre,
+              tipoItem: ci.actividad.tipoItem,
+              capacidad: ci.actividad.capacidad,
+              horaSalida: ci.actividad.horaSalida,
+              duracionMin: ci.actividad.duracionMin,
+              horaRegreso: ci.actividad.horaRegreso,
+              horarios: ci.actividad.horarios.map((h) => ({
+                id: h.id,
+                diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+                horaSalida: h.horaSalida,
+                cupo: h.cupo,
+              })),
+            })),
+          },
+          itemsParaValidar
+        )
+        if (!dispComboMulti.ok) return { error: dispComboMulti.error }
+      } else {
+        itemsComboAGuardar = excursion.comboItems.map((ci) => ({
+          actividadId: ci.actividad.id,
+          fecha: v.datos.fecha,
+          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.actividad.horaSalida || v.datos.hora,
+        }))
+
+        const dispCombo = validarDisponibilidadCombo(
+          v.datos.fecha,
+          v.datos.hora,
+          v.datos.adultos + v.datos.ninos,
+          {
+            nombre: excursion.nombre,
+            capacidad: excursion.capacidad,
+            horaSalida: excursion.horaSalida,
+            horarios: excursion.horarios.map((h) => ({
+              id: h.id,
+              diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+              horaSalida: h.horaSalida,
+              cupo: h.cupo,
+            })),
+            actividades: excursion.comboItems.map((ci) => ({
+              id: ci.actividad.id,
+              nombre: ci.actividad.nombre,
+              tipoItem: ci.actividad.tipoItem,
+              capacidad: ci.actividad.capacidad,
+              horaSalida: ci.actividad.horaSalida,
+              duracionMin: ci.actividad.duracionMin,
+              horaRegreso: ci.actividad.horaRegreso,
+              horarios: ci.actividad.horarios.map((h) => ({
+                id: h.id,
+                diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+                horaSalida: h.horaSalida,
+                cupo: h.cupo,
+              })),
+            })),
+          }
+        )
+        if (!dispCombo.ok) return { error: dispCombo.error }
+      }
+    } else {
+      const disp = validarDisponibilidad(
+        v.datos.fecha,
+        v.datos.hora,
+        v.datos.adultos + v.datos.ninos,
+        {
+          capacidad: excursion.capacidad,
+          tipoItem: excursion.tipoItem,
+          horaSalida: excursion.horaSalida,
+          horarios: excursion.horarios.map((h) => ({
+            id: h.id,
+            diasSemana: Array.isArray(h.diasSemana) ? (h.diasSemana as number[]) : [],
+            horaSalida: h.horaSalida,
+            cupo: h.cupo,
+          })),
+        }
+      )
+      if (!disp.ok) return { error: disp.error }
+    }
+
     const variante = excursion.variantes[0]
+    const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const { precioAdulto, precioNino } = calcularPrecioEfectivo(
+      v.datos.fecha,
+      v.datos.hora,
+      variante.precioAdulto.toNumber(),
+      variante.precioNino ? variante.precioNino.toNumber() : null,
+      reglasDin
+    )
+
     const totales = calcularTotales({
-      precioAdulto: variante.precioAdulto.toNumber(),
-      precioNino: variante.precioNino?.toNumber() ?? null,
+      precioAdulto,
+      precioNino,
       impuestoPct: excursion.impuestoPct?.toNumber() ?? 0,
       adultos: v.datos.adultos,
       ninos: v.datos.ninos,
@@ -167,11 +327,39 @@ export async function crearReservaVendedor(
       })
     }
 
-    // 4. Crear Reserva
+    // 4. Validar cupo real en BD y Crear Reserva
     const anio = v.datos.fecha.getUTCFullYear()
     const prefijo = excursion.nombre.substring(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, 'E') || 'EXC'
+    const totalPasajeros = v.datos.adultos + v.datos.ninos
 
     const reserva = await conEmpresa(companyId, async (tx) => {
+      // Validar cupo real en BD para todas las actividades involucradas
+      if (itemsComboAGuardar.length > 0) {
+        for (const item of itemsComboAGuardar) {
+          const cupoCheck = await verificarYBloquearCupoActividad(tx, {
+            companyId,
+            actividadId: item.actividadId,
+            fecha: item.fecha,
+            hora: item.hora,
+            pasajeros: totalPasajeros,
+          })
+          if (!cupoCheck.ok) {
+            throw new Error(cupoCheck.error)
+          }
+        }
+      } else {
+        const cupoCheck = await verificarYBloquearCupoActividad(tx, {
+          companyId,
+          actividadId: excursion.id,
+          fecha: v.datos.fecha,
+          hora: v.datos.hora,
+          pasajeros: totalPasajeros,
+        })
+        if (!cupoCheck.ok) {
+          throw new Error(cupoCheck.error)
+        }
+      }
+
       const desde = new Date(Date.UTC(anio, 0, 1))
       const hasta = new Date(Date.UTC(anio + 1, 0, 1))
       let intento =
@@ -207,6 +395,7 @@ export async function crearReservaVendedor(
               horaRecogida: v.datos.horaRecogida,
               habitacion: v.datos.habitacion,
               creadaPorId: user.metadata.dbUserId ?? null,
+              checkinToken: generarCodigo(24),
               pasajeros: {
                 createMany: {
                   data: [
@@ -215,6 +404,21 @@ export async function crearReservaVendedor(
                   ],
                 },
               },
+              ...(itemsComboAGuardar.length > 0
+                ? {
+                    items: {
+                      create: itemsComboAGuardar.map((it) => ({
+                        companyId,
+                        actividadId: it.actividadId,
+                        fecha: it.fecha,
+                        hora: it.hora,
+                        adultos: v.datos.adultos,
+                        ninos: v.datos.ninos,
+                        estado: 'PENDIENTE',
+                      })),
+                    },
+                  }
+                : {}),
             },
             select: { id: true, numero: true },
           })
@@ -256,11 +460,16 @@ export async function crearReservaVendedor(
     ).catch(anotarFallo('excursiones:crearReservaVendedor:auditLog'))
 
     await sincronizarEstadoAgotada(companyId, excursionId)
+    for (const item of itemsComboAGuardar) {
+      await sincronizarEstadoAgotada(companyId, item.actividadId)
+    }
+
     revalidatePath('/vendedor/reservas')
 
     return { success: `Reserva ${reserva.numero} creada exitosamente.`, reservaId: reserva.id }
   } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : 'Ocurrió un error inesperado al procesar la reserva.'
     anotarFallo('excursiones:crearReservaVendedor')(e)
-    return { error: 'Ocurrió un error inesperado al procesar la reserva.' }
+    return { error: errorMsg }
   }
 }

@@ -29,7 +29,7 @@ const TIPOS = [
   { value: 'restaurante', label: 'Restaurante' },
   { value: 'gimnasio', label: 'Gimnasio' },
   { value: 'salon', label: 'Salón de belleza' },
-  { value: 'excursiones', label: 'Excursiones / Tours' },
+  { value: 'excursiones', label: 'Parques y Tours' },
   { value: 'otro', label: 'Otro' },
 ]
 

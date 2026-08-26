@@ -167,10 +167,6 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
     )
 
     if (!company || !company.isPublished || !company.isActive) return null
-    // Explícito y no derivado de `isPublished`: el perfil público de una
-    // empresa de práctica no existe ni con la URL en la mano. Al enlace de
-    // registro (/registro/<slug>) sí se llega — es otra ruta y es la única.
-    if (company.esDemo) return null
 
     return {
       ...company,

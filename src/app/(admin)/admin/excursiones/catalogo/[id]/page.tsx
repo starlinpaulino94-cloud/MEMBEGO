@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { excursionDetalle } from '@/modules/excursiones/catalogo/queries'
+import { excursionDetalle, actividadesParaCombo } from '@/modules/excursiones/catalogo/queries'
 import {
   ESTADO_EXCURSION_LABEL,
   TONO_EXCURSION,
@@ -12,12 +12,11 @@ import {
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ExcursionForm } from '@/components/excursiones/ExcursionForm'
 import { VariantesEditor } from '@/components/excursiones/VariantesEditor'
-import { HorariosEditor } from '@/components/excursiones/HorariosEditor'
 import { EstadoExcursionBotones } from '@/components/excursiones/EstadoExcursionBotones'
 import { StatusChip } from '@/components/ui/status-chip'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Excursión' }
+export const metadata = { title: 'Excursión o Combo' }
 
 export default async function ExcursionDetallePage({
   params,
@@ -29,7 +28,10 @@ export default async function ExcursionDetallePage({
   if (!companyId) return <SinEmpresaActiva seccion="el catálogo de excursiones" />
 
   const { id } = await params
-  const excursion = await excursionDetalle(companyId, id)
+  const [excursion, actividades] = await Promise.all([
+    excursionDetalle(companyId, id),
+    actividadesParaCombo(companyId, id),
+  ])
   if (!excursion) notFound()
 
   return (
@@ -42,7 +44,14 @@ export default async function ExcursionDetallePage({
           >
             <ArrowLeft className="h-4 w-4" /> Catálogo
           </Link>
-          <h2 className="mt-1 text-h2 text-foreground">{excursion.nombre}</h2>
+          <div className="mt-1 flex items-center gap-2">
+            <h2 className="text-h2 text-foreground">{excursion.nombre}</h2>
+            {excursion.tipoItem === 'COMBO' ? (
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                Combo / Paquete
+              </span>
+            ) : null}
+          </div>
         </div>
         <StatusChip tone={TONO_EXCURSION[excursion.estado as EstadoExcursion] ?? 'neutral'}>
           {ESTADO_EXCURSION_LABEL[excursion.estado as EstadoExcursion] ?? excursion.estado}
@@ -54,25 +63,18 @@ export default async function ExcursionDetallePage({
       <VariantesEditor
         excursionId={excursion.id}
         moneda={excursion.moneda}
+        horariosDisponibles={excursion.horarios.map((h) => h.horaSalida)}
         variantes={excursion.variantes.map((v) => ({
           id: v.id,
           nombre: v.nombre,
           precioAdulto: String(v.precioAdulto),
           precioNino: v.precioNino != null ? String(v.precioNino) : null,
           precioResidente: v.precioResidente != null ? String(v.precioResidente) : null,
+          precioNinoResidente: (v as any).precioNinoResidente != null ? String((v as any).precioNinoResidente) : null,
           precioTurista: v.precioTurista != null ? String(v.precioTurista) : null,
           capacidad: v.capacidad,
           activa: v.activa,
-        }))}
-      />
-
-      <HorariosEditor
-        excursionId={excursion.id}
-        horarios={excursion.horarios.map((h) => ({
-          id: h.id,
-          diasSemana: h.diasSemana,
-          horaSalida: h.horaSalida,
-          cupo: h.cupo,
+          preciosDinamicosJson: v.preciosDinamicos ? JSON.stringify(v.preciosDinamicos) : undefined,
         }))}
       />
 
@@ -80,9 +82,12 @@ export default async function ExcursionDetallePage({
         <h2 className="mb-4 text-h3 text-foreground">Datos generales</h2>
         <ExcursionForm
           companyId={companyId}
+          actividadesDisponibles={actividades}
           excursion={{
             id: excursion.id,
             nombre: excursion.nombre,
+            tipoItem: excursion.tipoItem,
+            actividadesComboIds: excursion.comboItems?.map((ci) => ci.actividadId) ?? [],
             descripcion: excursion.descripcion,
             portadaUrl: excursion.portadaUrl,
             // `galeria` es JSON en el esquema: se normaliza aquí, en el

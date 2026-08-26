@@ -198,7 +198,10 @@ function enteroOpcional(v: unknown): number | null {
 }
 
 export interface MetaDatos extends MetaValores {
-  vendedorId: string
+  vendedorId: string | null
+  tipoVendedor: string | null
+  excursionId: string | null
+  categoria: string | null
   periodo: PeriodoMeta
   desde: Date | null
   hasta: Date | null
@@ -207,8 +210,15 @@ export interface MetaDatos extends MetaValores {
 export function validarMeta(
   form: Record<string, unknown>
 ): { ok: true; datos: MetaDatos } | { ok: false; error: string } {
-  const vendedorId = texto(form.vendedorId, 40)
-  if (!vendedorId) return { ok: false, error: 'Elige a qué vendedor le pones la meta.' }
+  const vendedorId = texto(form.vendedorId, 40) || null
+  const tipoVendedor = texto(form.tipoVendedor, 60) || null
+  const excursionId = texto(form.excursionId, 40) || null
+  const categoria = texto(form.categoria, 80) || null
+  const ambito = texto(form.ambito, 30)
+
+  if (!vendedorId && !tipoVendedor && ambito !== 'GENERAL') {
+    return { ok: false, error: 'Elige a qué vendedor o categoría le pones la meta.' }
+  }
 
   const periodoCrudo = texto(form.periodo, 20).toUpperCase()
   const periodo = (PERIODOS_META as readonly string[]).includes(periodoCrudo)
@@ -236,6 +246,9 @@ export function validarMeta(
 
   const datos: MetaDatos = {
     vendedorId,
+    tipoVendedor,
+    excursionId,
+    categoria,
     periodo,
     desde,
     hasta,

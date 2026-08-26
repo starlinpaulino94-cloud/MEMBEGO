@@ -22,8 +22,8 @@ export async function listadoVendedores(companyId: string) {
 
 /** Perfil completo: datos + enlace + embudo real por etapa. */
 export async function vendedorDetalle(companyId: string, vendedorId: string) {
-  const vendedor = await conEmpresa(companyId, (tx) =>
-    tx.vendedor.findFirst({
+  return conEmpresa(companyId, async (tx) => {
+    const vendedor = await tx.vendedor.findFirst({
       where: { id: vendedorId, companyId },
       include: {
         // Sin filtrar por activo: el perfil enseña el enlace aunque esté
@@ -32,37 +32,35 @@ export async function vendedorDetalle(companyId: string, vendedorId: string) {
         supervisor: { select: { id: true, nombre: true, apellido: true } },
       },
     })
-  )
-  if (!vendedor) return null
+    if (!vendedor) return null
 
-  // Correo de la cuenta con la que entra a su panel, si tiene acceso.
-  const cuenta = vendedor.userId
-    ? await conEmpresa(companyId, (tx) =>
-        tx.user.findFirst({
-          where: { id: vendedor.userId!, companyId },
-          select: { email: true },
-        })
-      )
-    : null
+    // Correo de la cuenta y embudo en paralelo dentro de la misma transacción
+    const [cuenta, embudo] = await Promise.all([
+      vendedor.userId
+        ? tx.user.findFirst({
+            where: { id: vendedor.userId, companyId },
+            select: { email: true },
+          })
+        : Promise.resolve(null),
+      tx.vendedorAtribucion.groupBy({
+        by: ['etapa'],
+        where: { companyId, vendedorId },
+        _count: { _all: true },
+      }),
+    ])
 
-  const embudo = await conEmpresa(companyId, (tx) =>
-    tx.vendedorAtribucion.groupBy({
-      by: ['etapa'],
-      where: { companyId, vendedorId },
-      _count: { _all: true },
-    })
-  )
-  const porEtapa = new Map(embudo.map((e) => [e.etapa, e._count._all]))
-  return {
-    vendedor,
-    correoAcceso: cuenta?.email ?? null,
-    embudo: {
-      visitas: porEtapa.get('VISITA') ?? 0,
-      registros: porEtapa.get('REGISTRO') ?? 0,
-      reservas: porEtapa.get('RESERVA') ?? 0,
-      compras: porEtapa.get('COMPRA') ?? 0,
-    },
-  }
+    const porEtapa = new Map(embudo.map((e) => [e.etapa, e._count._all]))
+    return {
+      vendedor,
+      correoAcceso: cuenta?.email ?? null,
+      embudo: {
+        visitas: porEtapa.get('VISITA') ?? 0,
+        registros: porEtapa.get('REGISTRO') ?? 0,
+        reservas: porEtapa.get('RESERVA') ?? 0,
+        compras: porEtapa.get('COMPRA') ?? 0,
+      },
+    }
+  })
 }
 
 /** Vendedores activos, para el selector de supervisor. */
@@ -76,35 +74,127 @@ export async function vendedoresParaSupervisor(companyId: string) {
   )
 }
 
+export interface ClientesCaptadosFiltros {
+  q?: string
+  etapa?: string
+  canal?: string
+  desde?: string
+  hasta?: string
+  page?: number
+  limit?: number
+}
+
+export interface ClientesCaptadosResultado {
+  items: {
+    id: string
+    etapa: string
+    canal: string | null
+    createdAt: Date
+    nombre: string
+    telefono: string | null
+    email?: string | null
+  }[]
+  total: number
+  totalPages: number
+  currentPage: number
+}
+
 /**
  * Últimos clientes captados por el vendedor: quién entró por su enlace, en qué
- * etapa y cuándo. Es el detalle del embudo — el nombre detrás del número.
+ * etapa y cuándo con soporte para filtros multicriterio y paginación.
  */
-export async function clientesCaptados(companyId: string, vendedorId: string, limite = 15) {
-  const filas = await conEmpresa(companyId, (tx) =>
-    tx.vendedorAtribucion.findMany({
-      where: { companyId, vendedorId, clienteId: { not: null } },
-      orderBy: { createdAt: 'desc' },
-      take: limite,
-      select: { id: true, clienteId: true, etapa: true, canal: true, createdAt: true },
-    })
-  )
-  if (filas.length === 0) return []
+export async function clientesCaptados(
+  companyId: string,
+  vendedorId: string,
+  filtros: ClientesCaptadosFiltros = {}
+): Promise<ClientesCaptadosResultado> {
+  const page = Math.max(1, Number(filtros.page) || 1)
+  const limit = Math.max(1, Math.min(100, Number(filtros.limit) || 15))
+  const skip = (page - 1) * limit
 
-  const ids = [...new Set(filas.map((f) => f.clienteId!))]
-  const clientes = await conEmpresa(companyId, (tx) =>
-    tx.cliente.findMany({
+  return conEmpresa(companyId, async (tx) => {
+    let clienteIdsFiltrados: string[] | undefined = undefined
+
+    // Si hay búsqueda por texto (nombre, teléfono o email)
+    if (filtros.q && filtros.q.trim()) {
+      const qClean = filtros.q.trim()
+      const clientesCoincidentes = await tx.cliente.findMany({
+        where: {
+          companyId,
+          OR: [
+            { nombre: { contains: qClean, mode: 'insensitive' } },
+            { telefono: { contains: qClean } },
+            { email: { contains: qClean, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+      })
+      clienteIdsFiltrados = clientesCoincidentes.map((c) => c.id)
+      if (clienteIdsFiltrados.length === 0) {
+        return { items: [], total: 0, totalPages: 1, currentPage: page }
+      }
+    }
+
+    // Armar condiciones de fecha
+    const dateFilter: { gte?: Date; lte?: Date } = {}
+    if (filtros.desde) {
+      const d = new Date(filtros.desde)
+      if (!isNaN(d.getTime())) dateFilter.gte = d
+    }
+    if (filtros.hasta) {
+      const h = new Date(filtros.hasta)
+      if (!isNaN(h.getTime())) {
+        h.setHours(23, 59, 59, 999)
+        dateFilter.lte = h
+      }
+    }
+
+    const whereClause = {
+      companyId,
+      vendedorId,
+      clienteId: clienteIdsFiltrados ? { in: clienteIdsFiltrados } : { not: null },
+      ...(filtros.etapa && filtros.etapa !== 'TODAS' ? { etapa: filtros.etapa } : {}),
+      ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+      ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+    }
+
+    const [total, filas] = await Promise.all([
+      tx.vendedorAtribucion.count({ where: whereClause }),
+      tx.vendedorAtribucion.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: { id: true, clienteId: true, etapa: true, canal: true, createdAt: true },
+      }),
+    ])
+
+    if (filas.length === 0) {
+      return { items: [], total, totalPages: Math.max(1, Math.ceil(total / limit)), currentPage: page }
+    }
+
+    const ids = [...new Set(filas.map((f) => f.clienteId!))]
+    const clientes = await tx.cliente.findMany({
       where: { id: { in: ids }, companyId },
-      select: { id: true, nombre: true, telefono: true },
+      select: { id: true, nombre: true, telefono: true, email: true },
     })
-  )
-  const porId = new Map(clientes.map((c) => [c.id, c]))
-  return filas.map((f) => ({
-    id: f.id,
-    etapa: f.etapa,
-    canal: f.canal,
-    createdAt: f.createdAt,
-    nombre: porId.get(f.clienteId!)?.nombre ?? 'Cliente',
-    telefono: porId.get(f.clienteId!)?.telefono ?? null,
-  }))
+    const porId = new Map(clientes.map((c) => [c.id, c]))
+
+    const items = filas.map((f) => ({
+      id: f.id,
+      etapa: f.etapa,
+      canal: f.canal,
+      createdAt: f.createdAt,
+      nombre: porId.get(f.clienteId!)?.nombre ?? 'Cliente',
+      telefono: porId.get(f.clienteId!)?.telefono ?? null,
+      email: porId.get(f.clienteId!)?.email ?? null,
+    }))
+
+    return {
+      items,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      currentPage: page,
+    }
+  })
 }

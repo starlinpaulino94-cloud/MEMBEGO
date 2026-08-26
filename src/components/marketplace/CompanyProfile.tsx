@@ -164,7 +164,7 @@ export function CompanyProfile({
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
     posts.eventos.length > 0 && { id: 'eventos', label: 'Eventos' },
     posts.noticias.length > 0 && { id: 'noticias', label: 'Noticias' },
-    excursiones.length > 0 && { id: 'excursiones', label: 'Excursiones' },
+    excursiones.length > 0 && { id: 'excursiones', label: 'Actividades' },
     company.galleryImages.length > 0 && { id: 'galeria', label: 'Galería' },
     hayResenas && { id: 'resenas', label: 'Reseñas' },
     { id: 'informacion', label: 'Información' },
@@ -628,14 +628,14 @@ export function CompanyProfile({
           </section>
         )}
 
-        {/* Excursiones */}
+        {/* Actividades */}
         {excursiones.length > 0 && (
           <section id="excursiones" className="mt-14 scroll-mt-32">
             <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              Excursiones
+              Actividades
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Experiencias y tours disponibles.
+              Experiencias, parques y tours disponibles.
             </p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {excursiones

@@ -431,7 +431,11 @@ export function ReglaComisionForm({
                   : '250.00'
             }
           />
-          {tipoCalculo === 'PAQUETE_REGALO' ? (
+          {tipoCalculo === 'PORCENTAJE' ? (
+            <p className="mt-1.5 text-caption text-muted-foreground">
+              El porcentaje se aplica proporcionalmente sobre la tarifa de cada pasajero (adaptándose automáticamente a las diferencias entre adultos y niños, turistas y residentes).
+            </p>
+          ) : tipoCalculo === 'PAQUETE_REGALO' ? (
             <p className="mt-1.5 text-caption text-muted-foreground">
               El vendedor ganará 1 paquete de excursión de regalo (equivalente a las vendidas) cada vez que complete este número de ventas.
             </p>

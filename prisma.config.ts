@@ -5,7 +5,9 @@ import { defineConfig } from 'prisma/config'
 // Sin esta línea, `npx prisma migrate deploy` en local fallaría con
 // "Environment variable not found: DATABASE_URL" aunque el `.env` esté ahí.
 // En CI las variables vienen del entorno y esto no hace nada.
-import 'dotenv/config'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
+dotenv.config({ path: '.env' })
 
 /**
  * CONFIGURACIÓN DE PRISMA

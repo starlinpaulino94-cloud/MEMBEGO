@@ -32,10 +32,10 @@ const ROL_LABEL: Record<string, string> = {
   ADMINISTRADOR: 'Administrador (acceso total al panel)',
   GERENTE: 'Gerente (acceso total al panel)',
   CAJERO: 'Cajero (acceso total al panel)',
-  RECEPCION: 'Recepción (solo escáner)',
+  SUPERVISOR: 'Supervisor (operación y monitoreo)',
   MARKETING: 'Marketing (difusión)',
-  SUPERVISOR: 'Supervisor (operación)',
-  EMPLEADO: 'Empleado (solo escáner)',
+  RECEPCION: 'Recepción (mostrador y escáner)',
+  EMPLEADO: 'Staff / Empleado (escáner de check-in y operaciones de campo)',
 }
 
 export function NuevoEmpleadoForm() {
