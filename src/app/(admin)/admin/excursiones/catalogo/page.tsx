@@ -3,16 +3,10 @@ import { Plus, Map } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { listadoExcursiones } from '@/modules/excursiones/catalogo/queries'
-import {
-  ESTADO_EXCURSION_LABEL,
-  TONO_EXCURSION,
-  type EstadoExcursion,
-} from '@/modules/excursiones/catalogo/nucleo'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
-import { StatusChip } from '@/components/ui/status-chip'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/system/EmptyState'
-import { formatMoney } from '@/lib/format'
+import { CatalogoLista } from '@/components/excursiones/CatalogoLista'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Catálogo de excursiones' }
@@ -22,7 +16,12 @@ export default async function CatalogoPage() {
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="el catálogo de excursiones" />
 
-  const excursiones = await listadoExcursiones(companyId)
+  const excursionesRaw = await listadoExcursiones(companyId)
+  const excursiones = excursionesRaw.map((e) => ({
+    ...e,
+    createdAt: e.createdAt.toISOString(),
+    variantes: e.variantes.map((v) => ({ ...v, precioAdulto: Number(v.precioAdulto) })),
+  }))
 
   return (
     <div className="space-y-4">
@@ -49,52 +48,7 @@ export default async function CatalogoPage() {
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-left text-caption uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3">Excursión</th>
-                <th className="px-4 py-3">Categoría</th>
-                <th className="px-4 py-3">Desde</th>
-                <th className="px-4 py-3">Variantes</th>
-                <th className="px-4 py-3">Horarios</th>
-                <th className="px-4 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {excursiones.map((e) => (
-                <tr key={e.id} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/admin/excursiones/catalogo/${e.id}`}
-                        className="font-semibold text-foreground hover:text-primary hover:underline"
-                      >
-                        {e.nombre}
-                      </Link>
-                      {e.tipoItem === 'COMBO' ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                          Combo ({e._count.comboItems})
-                        </span>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{e.categoria ?? '—'}</td>
-                  <td className="px-4 py-3 font-medium text-foreground">
-                    {e.variantes[0] ? formatMoney(Number(e.variantes[0].precioAdulto), { moneda: e.moneda }, 2) : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{e._count.variantes}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{e._count.horarios}</td>
-                  <td className="px-4 py-3">
-                    <StatusChip tone={TONO_EXCURSION[e.estado as EstadoExcursion] ?? 'neutral'}>
-                      {ESTADO_EXCURSION_LABEL[e.estado as EstadoExcursion] ?? e.estado}
-                    </StatusChip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CatalogoLista excursiones={excursiones} />
       )}
     </div>
   )
