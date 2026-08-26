@@ -135,11 +135,21 @@ export function AsistenteRegistro({
   const searchParams = useSearchParams()
   const refCode = searchParams.get('ref') ?? ''
   const glCode = searchParams.get('gl') ?? ''
+  const enlaceSlug = searchParams.get('e') ?? ''
+  const vendedorCode = searchParams.get('v') ?? ''
   const nextRaw = searchParams.get('next') ?? ''
   const nextSeguro = nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : null
-  // Si vino con código de referido, aterriza en la pantalla de bienvenida de
-  // la empresa referidora (muestra membresías activas + excursiones disponibles).
-  const destino = nextSeguro ?? (refCode ? `/cliente/bienvenida-ref/${companySlug}` : '/cliente/celebracion')
+
+  // Si vino por enlace/código de vendedor, aterriza directamente en el catálogo de excursiones del negocio
+  const destinoVendedor = (enlaceSlug || vendedorCode) && companySlug
+    ? `/empresas/${companySlug}/excursiones${enlaceSlug ? `?e=${encodeURIComponent(enlaceSlug)}` : ''}`
+    : null
+
+  // Prioridad: ?next= explícito > referido de vendedor (excursiones) > referido general de cliente > celebración
+  const destino =
+    nextSeguro ??
+    destinoVendedor ??
+    (refCode ? `/cliente/bienvenida-ref/${companySlug}` : '/cliente/celebracion')
 
   const accion = modo === 'empresa' ? registrarCliente : registrarCuentaGeneral
   const [state, dispatch, pending] = useActionState(accion, initial)
