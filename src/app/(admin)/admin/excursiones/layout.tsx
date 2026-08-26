@@ -16,7 +16,7 @@ export default async function ExcursionesLayout({ children }: { children: React.
     <div className="space-y-5">
       <div>
         <h1 className="flex items-center gap-2 text-h1 text-foreground">
-          <Compass className="h-7 w-7 text-primary" /> Excursiones
+          <Compass className="h-7 w-7 text-primary" /> Parques y Tours
         </h1>
         <ExcursionesTabs />
       </div>

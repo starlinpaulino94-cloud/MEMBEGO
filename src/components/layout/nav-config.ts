@@ -139,12 +139,12 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    // Módulo de EXCURSIONES: UNA sola entrada en el sidebar (decisión §4 del
+    // Módulo de PARQUES Y TOURS: UNA sola entrada en el sidebar (decisión §4 del
     // programa); la navegación interna del módulo es secundaria (tabs).
     // Detrás de la capacidad EXCURSIONES — requireSection la niega sin ella.
     id: 'excursiones',
-    label: 'Excursiones',
-    items: [{ href: '/admin/excursiones', label: 'Excursiones', icon: Compass }],
+    label: 'Parques y Tours',
+    items: [{ href: '/admin/excursiones', label: 'Parques y Tours', icon: Compass }],
   },
   {
     id: 'beneficios',
@@ -274,7 +274,7 @@ const CLIENTE_NAV: NavGroup[] = [
     label: 'Descubrir',
     items: [
       { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },
-      { href: '/cliente/excursiones', label: 'Excursiones', icon: Compass },
+      { href: '/cliente/excursiones', label: 'Actividades', icon: Compass },
       // Aquí, y no en «Mis beneficios»: un plan es lo que puedes contratar,
       // no lo que tienes contratado.
       { href: '/cliente/planes', label: 'Planes', icon: Package },

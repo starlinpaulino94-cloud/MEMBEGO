@@ -36,7 +36,7 @@ export function CatalogoLista({ excursiones }: { excursiones: ExcursionRow[] }) 
 
   return (
     <ListaToolbar
-      placeholder="Buscar excursión…"
+      placeholder="Buscar actividad…"
       mostrarArchivados={mostrarArchivados}
       onToggleArchivados={() => setMostrarArchivados((a) => !a)}
     >
@@ -52,7 +52,7 @@ export function CatalogoLista({ excursiones }: { excursiones: ExcursionRow[] }) 
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-left text-caption uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3">Excursión</th>
+                  <th className="px-4 py-3">Actividad</th>
                   <th className="px-4 py-3">Categoría</th>
                   <th className="px-4 py-3">Desde</th>
                   <th className="px-4 py-3">Variantes</th>
@@ -64,7 +64,7 @@ export function CatalogoLista({ excursiones }: { excursiones: ExcursionRow[] }) 
                 {visibles.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                      {busqueda ? 'Ninguna excursión coincide con la búsqueda.' : 'Sin resultados.'}
+                      {busqueda ? 'Ninguna actividad coincide con la búsqueda.' : 'Sin resultados.'}
                     </td>
                   </tr>
                 ) : (

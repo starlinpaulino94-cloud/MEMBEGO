@@ -156,13 +156,13 @@ export function BuscadorUnificado() {
             </section>
           )}
 
-          {/* Excursiones */}
+          {/* Actividades */}
           {resultados!.excursiones.length > 0 && (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   <Compass className="h-4 w-4 text-primary" aria-hidden />
-                  Excursiones ({resultados!.excursiones.length})
+                  Actividades ({resultados!.excursiones.length})
                 </h3>
                 <Link
                   href={`/excursiones?q=${encodeURIComponent(q)}`}
