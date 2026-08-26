@@ -720,7 +720,12 @@ export async function reservarCarritoAction(
               etapa: esPagoOnline ? 'COMPRA' : 'RESERVA',
             },
           })
-        ).catch(() => {})
+        ).catch(
+          // La atribución JAMÁS rompe la reserva (regla del módulo), pero
+          // tragarse el error deja un vendedor sin su venta y sin forma de
+          // saber por qué. Se anota.
+          anotarFallo('excursiones:reservas:atribucionCliente')
+        )
       }
 
       if (reserva) nuevasReservas.push(reserva)

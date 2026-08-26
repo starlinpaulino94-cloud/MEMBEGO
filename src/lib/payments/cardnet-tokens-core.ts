@@ -364,7 +364,7 @@ function motivoDelRechazo(input: {
  * cobrando con el perfil que se consulta después.
  */
 export const MENSAJE_ACTIVACION_PENDIENTE =
-  'Tu tarjeta quedó registrada pero falta activarla. Tu banco te cobró RD$1.00 y en ese cargo aparece un código de 6 dígitos (algo como «Cardnet:Z2R78V»). Búscalo en tu app del banco e ingrésalo para completar el pago.'
+  'Tu tarjeta quedó registrada y falta un último paso para verificarla. Tu banco hizo un cargo de RD$1.00 y en la descripción de ese cargo aparece un código de 6 caracteres. Búscalo en tu app del banco e ingrésalo para completar el pago.'
 
 /**
  * NORMALIZA lo que el cliente teclea como código de activación (§4.1.2.3).
@@ -624,6 +624,71 @@ export interface PerfilPagoCardnet {
 }
 
 /** Saca los perfiles de pago de la respuesta de `GET /Customer/{id}`. */
+/**
+ * EL PERFIL QUE ESTÁ ESPERANDO SU CÓDIGO DE ACTIVACIÓN, si hay alguno.
+ *
+ * SOLO PUEDE SER EL ÚLTIMO DE LA LISTA. Ningún otro.
+ *
+ * Un Customer acumula un perfil por cada vez que se registró la tarjeta, y
+ * CardNET no los limpia: un cliente de pruebas llega a tener once. El que le
+ * importa al cliente es SIEMPRE el que acaba de meter —el último—, porque el
+ * cargo de RD$1.00 que tiene delante en la app del banco es el de ESE perfil y
+ * el código sirve solo para él.
+ *
+ * ESTA FUNCIÓN ELEGÍA MAL, y así se vio en producción (Customer 112001):
+ *
+ *     …  121136  Enabled: false   ← se intentaba activar ESTE
+ *        121299  Enabled: true    ← el que el cliente acababa de registrar
+ *
+ * Filtraba primero los deshabilitados y tomaba el último de ESOS, así que
+ * cuando el perfil nuevo ya estaba habilitado se iba a por uno viejo y
+ * abandonado. El cliente tecleaba el código correcto de su tarjeta nueva y
+ * CardNET lo rechazaba —con razón: era el código de otro perfil—. Mientras
+ * tanto el cobro, que sí usa «el último de la lista», cobraba bien. De ahí el
+ * cuadro entero: espera larga, errores incomprensibles y el pago aplicándose
+ * igual.
+ *
+ * Si el último está habilitado, NO hay nada que activar y esta función lo dice
+ * devolviendo `null`. Quien llama debe entenderlo como «la tarjeta ya está
+ * lista», no como «no hay tarjeta».
+ *
+ * El criterio vive aquí y en un solo sitio a propósito: lo consultan la
+ * activación, el aviso de «tienes una tarjeta esperando» y la sonda de
+ * diagnóstico. Si cada uno eligiera por su cuenta, el aviso enseñaría los
+ * últimos 4 de una tarjeta y se activaría otra — sin que ninguna pantalla lo
+ * delatara.
+ *
+ * @returns el último perfil si está deshabilitado; `null` si no hay perfiles o
+ *   si el último ya está habilitado.
+ */
+export function perfilPendienteDeActivar(
+  perfiles: PerfilPagoCardnet[]
+): PerfilPagoCardnet | null {
+  const ultimo = perfiles[perfiles.length - 1]
+  if (!ultimo) return null
+  return ultimo.habilitado ? null : ultimo
+}
+
+/**
+ * ¿SON EL MISMO PERFIL DE PAGO? Se usa para reconocer una tarjeta después de
+ * una llamada que pudo haberla cambiado.
+ *
+ * Se compara por `PaymentProfileId` cuando los dos lo traen, y por `Token`
+ * cuando no. Antes se comparaba SOLO por `PaymentProfileId`, y ese campo puede
+ * venir nulo: cuando venía nulo en un lado, la tarjeta «dejaba de ser ella
+ * misma» y el código concluía que había desaparecido.
+ */
+export function mismoPerfilCardnet(
+  a: Pick<PerfilPagoCardnet, 'paymentProfileId' | 'token'>,
+  b: Pick<PerfilPagoCardnet, 'paymentProfileId' | 'token'>
+): boolean {
+  if (a.paymentProfileId && b.paymentProfileId) {
+    return a.paymentProfileId === b.paymentProfileId
+  }
+  if (a.token && b.token) return a.token === b.token
+  return false
+}
+
 export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardnet[] {
   const { datos } = desenvolverRespuesta(json)
   const crudos = datos.PaymentProfiles ?? datos.paymentProfiles ?? datos.Profiles

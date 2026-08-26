@@ -10,7 +10,12 @@ import {
   consultarClienteCardnet,
   activarPerfilCardnet,
 } from '@/lib/payments/cardnet-tokens'
-import { MENSAJE_ACTIVACION_PENDIENTE } from '@/lib/payments/cardnet-tokens-core'
+import {
+  MENSAJE_ACTIVACION_PENDIENTE,
+  mismoPerfilCardnet,
+  perfilPendienteDeActivar,
+  type PerfilPagoCardnet,
+} from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
 
@@ -97,10 +102,10 @@ export async function cobrarObjetivoConToken(input: {
     await confirmarIntento(intento.id, {
       aprobada: false,
       autorizacion: null,
-      motivo: 'No se pudo contactar la pasarela.',
+      motivo: 'No se pudo completar el pago. Intenta de nuevo.',
       crudo: null,
     })
-    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+    return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
   const res = await confirmarIntento(intento.id, {
@@ -193,6 +198,20 @@ export async function cobrarPendienteConPerfil(input: {
    * confía a ciegas: el Email del Customer debe coincidir con el del usuario.
    */
   customerId?: string | null
+  /**
+   * CONSULTA YA HECHA del Customer, para no repetirla.
+   *
+   * Una activación encadenaba CINCO llamadas a CardNET —de 20s de límite cada
+   * una— y TRES eran el mismo `GET /Customer` del mismo cliente en la misma
+   * petición. Eso era la espera larga que veía el cliente, y con el tope de
+   * tiempo de la función también la causa de que a veces se cortara a media
+   * secuencia.
+   *
+   * Quien ya consultó pasa el resultado aquí. La comprobación de pertenencia
+   * por email NO se salta: se hace igual sobre estos datos, solo que sin
+   * volver a pedirlos por la red.
+   */
+  consultaPrevia?: { email: string | null; perfiles: PerfilPagoCardnet[] } | null
 }): Promise<ConfirmacionPerfilResultado> {
   if (!(await puedeCobrarToken(input.objetivo.companyId))) {
     return { estado: 'error', motivo: 'El pago con tarjeta no está disponible.' }
@@ -226,7 +245,9 @@ export async function cobrarPendienteConPerfil(input: {
   let customerId = input.customerId?.trim() || null
   let perfiles: Awaited<ReturnType<typeof consultarClienteCardnet>>['perfiles']
   if (customerId) {
-    const consulta = await consultarClienteCardnet(customerId)
+    // El `??` es la economía: si quien llama ya tiene la consulta fresca, no se
+    // vuelve a pedir. La verificación de abajo corre igual.
+    const consulta = input.consultaPrevia ?? (await consultarClienteCardnet(customerId))
     const emailCoincide =
       !!consulta.email &&
       consulta.email.trim().toLowerCase() === input.emailCliente.trim().toLowerCase()
@@ -379,17 +400,59 @@ export async function activarTarjetaPendiente(input: {
 
   // El perfil a activar: el MÁS RECIENTE deshabilitado (mismo criterio que el
   // cobro usa para "el recién agregado").
-  const { perfiles } = consultaPrevia ?? (await consultarClienteCardnet(customerId))
-  const pendientes = perfiles.filter((p) => !p.habilitado)
-  if (pendientes.length === 0) {
-    // Nada deshabilitado: o ya se activó (otra pestaña) o CardNET la borró al
-    // tercer intento fallido. El cobro normal decide cuál de los dos es.
+  // Se GUARDA la consulta, venga de donde venga. Cuando el `customerId` sale
+  // de la base (y no del navegador) esta llamada se hacía igual y su resultado
+  // se tiraba, así que más abajo había que volver a pedir lo mismo.
+  const consultaAntes = consultaPrevia ?? (await consultarClienteCardnet(customerId))
+  const { perfiles } = consultaAntes
+  const perfil = perfilPendienteDeActivar(perfiles)
+  if (!perfil) {
+    /**
+     * NO HAY NADA QUE ACTIVAR. Eso NO es un error, y tratarlo como tal era
+     * parte del problema.
+     *
+     * Si el Customer no tiene ningún perfil, sí falta la tarjeta. Pero si el
+     * último perfil ya está HABILITADO, la tarjeta está lista —se activó en
+     * otra pestaña, en un intento anterior, o nació así— y lo único que falta
+     * es cobrar. Devolver «no hay ninguna tarjeta pendiente» dejaba al cliente
+     * plantado delante de una tarjeta perfectamente utilizable.
+     */
+    const ultimo = perfiles[perfiles.length - 1]
+    if (!ultimo) {
+      return {
+        estado: 'sin_perfil',
+        motivo: 'No se encontró la tarjeta a activar. Regístrala de nuevo.',
+      }
+    }
+
+    const cobroDirecto = await cobrarPendienteConPerfil({
+      objetivo: input.objetivo,
+      emailCliente: input.emailCliente,
+      clienteIp: input.clienteIp,
+      userAgent: input.userAgent,
+      conteoAntes: 0,
+      customerId,
+      consultaPrevia: consultaAntes,
+    })
+    if (cobroDirecto.estado === 'aprobado') {
+      return {
+        estado: 'aprobado',
+        compraId: cobroDirecto.compraId,
+        membershipId: cobroDirecto.membershipId,
+        perfil: cobroDirecto.perfil,
+      }
+    }
+    if (cobroDirecto.estado === 'sin_pendiente') {
+      return { estado: 'activada_sin_cobro', motivo: 'Tu tarjeta ya estaba lista. No había ningún pago pendiente.' }
+    }
     return {
-      estado: 'sin_perfil',
-      motivo: 'No hay ninguna tarjeta pendiente de activar. Si el pago sigue pendiente, registra la tarjeta de nuevo.',
+      estado: 'activada_sin_cobro',
+      motivo:
+        'motivo' in cobroDirecto && cobroDirecto.motivo
+          ? cobroDirecto.motivo
+          : 'Tu tarjeta ya estaba lista, pero el cobro no se completó. Intenta pagar de nuevo.',
     }
   }
-  const perfil = pendientes[pendientes.length - 1]
 
   // El servicio identifica el perfil por su TOKEN, no por su PaymentProfileId
   // (manual §7.5: ambos campos del objeto CustomerActivation son mandatorios).
@@ -411,31 +474,103 @@ export async function activarTarjetaPendiente(input: {
     })
   } catch (e) {
     logErrorBd('pagos:cardnet-token:activar', e, { clienteId: input.objetivo.clienteId })
-    return { estado: 'error', motivo: 'No se pudo contactar la pasarela. Intenta de nuevo.' }
+    return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
+  /**
+   * La consulta POSTERIOR a la activación, si llegó a hacerse. Se guarda para
+   * dársela al cobro y ahorrarle repetirla: es el mismo dato, en la misma
+   * petición, y cada `GET /Customer` cuesta hasta 20 segundos de espera al
+   * cliente.
+   */
+  let reconsulta: Awaited<ReturnType<typeof consultarClienteCardnet>> | null = null
+
   if (!activacion.ok) {
-    // El proveedor no aceptó. Sin contrato de error confirmado, la distinción
-    // fiable es re-consultar: si el perfil desapareció, fue el tercer intento.
-    const despues = await consultarClienteCardnet(customerId)
-    const sigueAhi = despues.perfiles.some(
-      (p) => !p.habilitado && p.paymentProfileId === perfil.paymentProfileId
-    )
-    if (!sigueAhi) {
+    // El proveedor no aceptó ESTA RESPUESTA. Sin contrato de error confirmado,
+    // la verdad la da re-consultar el perfil — pero hay que leer bien lo que
+    // dice, porque son TRES estados y no dos:
+    //
+    //   1. El perfil ya no está        → tercer fallo, CardNET la borró.
+    //   2. El perfil está, deshabilitado → el código no era correcto.
+    //   3. El perfil está, HABILITADO   → la activación SÍ funcionó, aunque la
+    //      respuesta no viniera limpia. Aquí se sigue al cobro.
+    //
+    // EL FALLO QUE ESTO ARREGLA: la comprobación era
+    // `some(p => !p.habilitado && p.paymentProfileId === …)`, que mezcla
+    // «existe» con «sigue deshabilitado». En el caso 3 daba `false` y se le
+    // decía al cliente que su tarjeta se había ELIMINADO — con la tarjeta viva
+    // y activada, y sin cobrarle. Se dispara con facilidad porque el parser
+    // trata un `Enabled` AUSENTE como habilitado (a propósito: un campo que no
+    // viene no debe bloquear un cobro que sí habría pasado), así que bastaba
+    // una respuesta sin ese campo para anunciar una tarjeta destruida.
+    // El expediente crudo del `activate` fallido SE GUARDA. Antes se descartaba,
+    // y sin él la única forma de saber qué respondió el proveedor era pedirle al
+    // cliente que repitiera el fallo con una sonda delante. `evidencia()` ya pasa
+    // por `sinSensibles`, y el código de activación no viaja en la respuesta.
+    logErrorBd('pagos:cardnet-token:activate-rechazado', new Error('activate no aceptado'), {
+      clienteId: input.objetivo.clienteId,
+      status: activacion.status,
+      errores: activacion.errores,
+      crudo: activacion.crudo,
+    })
+
+    reconsulta = await consultarClienteCardnet(customerId)
+    const mismo = reconsulta.perfiles.find((p) => mismoPerfilCardnet(p, perfil))
+
+    if (!mismo) {
       return {
         estado: 'sin_perfil',
         motivo: 'La tarjeta se eliminó tras varios intentos fallidos (así opera el banco). Regístrala de nuevo para reintentar el pago.',
       }
     }
-    return {
-      estado: 'codigo_rechazado',
-      motivo: 'El código no fue aceptado. Revísalo en el cargo de RD$1.00 de tu banco (formato «Cardnet:XXXXXX»). Cuidado: al tercer intento fallido el banco elimina la tarjeta.',
+
+    // SI EL PROVEEDOR DIJO QUÉ FALLÓ, MANDA ESO.
+    //
+    // Es más fiable que deducirlo del listado de perfiles, porque `Enabled`
+    // puede no venir y entonces el perfil se lee como habilitado. Sin esta
+    // rama, un código rechazado con el campo ausente terminaba pareciendo una
+    // activación correcta y se caía a cobrar.
+    if (activacion.errores.length > 0) {
+      return {
+        estado: 'codigo_rechazado',
+        motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
+      }
     }
+    if (!mismo.habilitado) {
+      return {
+        estado: 'codigo_rechazado',
+        motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
+      }
+    }
+    // Solo aquí: el proveedor no señaló ningún error Y el perfil aparece
+    // habilitado. Se cae al cobro a propósito — el cliente puso su código bien
+    // y lo que espera es que se complete el pago.
   }
 
   // Activada → cobrar el pendiente por la tubería de siempre. `conteoAntes: 0`
   // a propósito: la tarjeta ya existe y está habilitada; la guarda de "solo
   // cobrar perfiles nuevos" aplicaba a la ventana de captura, no aquí.
+  /**
+   * QUÉ CONSULTA SE LE PASA AL COBRO — y por qué no vale cualquiera.
+   *
+   * Si hubo reconsulta (el `activate` no vino limpio), esa es la fresca y la
+   * que manda. Si el `activate` SÍ vino limpio no hay reconsulta, y la única
+   * que tenemos es la de ANTES de activar, donde el perfil figura
+   * deshabilitado: pasarla tal cual haría que el cobro concluyera «falta
+   * activar» justo después de activar. Se corrige el único campo que la
+   * activación acaba de cambiar, que es exactamente lo que el proveedor
+   * confirmó al aceptar.
+   *
+   * Con esto la secuencia baja de CINCO llamadas encadenadas a TRES en el
+   * camino bueno: consultar, activar, cobrar.
+   */
+  const consultaParaCobro = reconsulta ?? {
+    email: consultaAntes.email,
+    perfiles: consultaAntes.perfiles.map((p) =>
+      mismoPerfilCardnet(p, perfil) ? { ...p, habilitado: true } : p
+    ),
+  }
+
   const cobro = await cobrarPendienteConPerfil({
     objetivo: input.objetivo,
     emailCliente: input.emailCliente,
@@ -443,6 +578,7 @@ export async function activarTarjetaPendiente(input: {
     userAgent: input.userAgent,
     conteoAntes: 0,
     customerId,
+    consultaPrevia: consultaParaCobro,
   })
   if (cobro.estado === 'aprobado') {
     return {
@@ -455,6 +591,31 @@ export async function activarTarjetaPendiente(input: {
   if (cobro.estado === 'sin_pendiente') {
     return { estado: 'activada_sin_cobro', motivo: 'Tu tarjeta quedó activa. No había ningún pago pendiente.' }
   }
+
+  /**
+   * EL COBRO DICE QUE LA TARJETA SIGUE SIN ACTIVAR (CS012).
+   *
+   * Este caso caía en el catch-all de abajo y salía como `activada_sin_cobro`,
+   * un estado cuyo nombre AFIRMA lo contrario de lo que acaba de pasar. Dos
+   * consecuencias, las dos malas:
+   *
+   *   · Al cliente se le devolvía «tu tarjeta quedó registrada pero falta
+   *     activarla» — la instrucción de hacer justo lo que acababa de hacer.
+   *   · La pantalla de activación se cerraba (el componente traduce
+   *     `activada_sin_cobro` a un error general), así que NO PODÍA REINTENTAR
+   *     con otro código sin volver a registrar la tarjeta entera.
+   *
+   * Si el Purchase responde CS012, la activación no surtió efecto: es un
+   * código no aceptado, y lo que corresponde es dejar al cliente en la
+   * pantalla para que lo intente de nuevo.
+   */
+  if (cobro.estado === 'pendiente_activacion') {
+    return {
+      estado: 'codigo_rechazado',
+      motivo: 'El código no fue aceptado. Búscalo en la descripción del cargo de RD$1.00 en tu banco: son los 6 caracteres del final. Cuidado: al tercer intento fallido tu banco elimina la tarjeta.',
+    }
+  }
+
   const motivo =
     'motivo' in cobro && cobro.motivo
       ? cobro.motivo

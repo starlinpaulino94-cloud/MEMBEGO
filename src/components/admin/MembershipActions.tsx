@@ -6,7 +6,6 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   confirmarPago,
-  renovarMembresia,
   cancelarMembresia,
   crearMembresia,
   type AdminActionState,
@@ -78,74 +77,14 @@ export function ConfirmPaymentForm({
   )
 }
 
-export function RenewForm({
-  membershipId,
-  precio,
-}: {
-  membershipId: string
-  precio: string
-}) {
-  const router = useRouter()
-  const [state, action, pending] = useActionState(renovarMembresia, initial)
-  const [open, setOpen] = useState(false)
-
-  // Cerrar el diálogo y refrescar cuando la action tenga éxito.
-  // El setState en effect aquí es intencional: reacciona al resultado async
-  // de useActionState y no causa cascadas (solo corre una vez por éxito).
-  useEffect(() => {
-    if (state.success) {
-      toast.success('Membresía renovada por 30 días.')
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpen(false)
-      router.refresh()
-    }
-  }, [state.success, router])
-
-  // EL DIÁLOGO VIVE EN UN PORTAL, FUERA DEL <form> EN EL DOM. Un botón con
-  // type="submit" ahí dentro no envía nada: el diálogo se cerraba y no pasaba
-  // NADA, sin error — así se reportó («no hace nada»). El atributo form=
-  // re-asocia el botón con el formulario por id, que es exactamente el caso
-  // para el que existe en HTML.
-  const formId = `renovar-membresia-${membershipId}`
-
-  return (
-    <form id={formId} action={action} className="space-y-3">
-      <input type="hidden" name="membershipId" value={membershipId} />
-      {state.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      )}
-      <div className="space-y-2">
-        <Label htmlFor="monto-r">Monto pagado (RD$)</Label>
-        <Input id="monto-r" name="monto" type="number" step="0.01" defaultValue={precio} />
-      </div>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogTrigger asChild>
-          <Button type="button" disabled={pending} className="w-full">
-            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Renovar 30 días
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Renovar membresía?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se reiniciará el periodo por 30 días y se restablecerán los usos
-              incluidos en el plan.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction type="submit" form={formId}>
-              Confirmar renovación
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </form>
-  )
-}
+/**
+ * `RenewForm` se eliminó. Renovar dejó de ser un botón con confirmación
+ * genérica: ahora es `RenovarMembresiaDialog`, que exige declarar el cobro
+ * (método y referencia) antes de aplicar, porque la operación escribe un
+ * ingreso. Dejar aquí el formulario viejo habría sido peor que borrarlo: su
+ * envío ya no pasa la validación del servidor y habría fallado en silencio
+ * desde la pantalla que siguiera usándolo.
+ */
 
 export function CancelForm({ membershipId }: { membershipId: string }) {
   const router = useRouter()

@@ -203,6 +203,11 @@ export function ReservaForm({
         setHora(combinacionesCombo[0].horaInicio)
       }
     }
+    if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
+      // La excepción es deliberada: reacciona al resultado async de la acción, no a un render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVarianteId(excursion.variantes[0]?.id ?? '')
+    }
   }, [esCombo, combinacionesCombo, comboTurnoSeleccionado])
 
   // Inicializar estado de itinerario multi-fecha

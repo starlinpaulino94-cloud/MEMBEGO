@@ -39,6 +39,22 @@ export interface MembresiaFila {
   planNombre: string
   planPrecio: number
   planEsIlimitado: boolean
+  /** Lavados que el plan repone al renovar. `null` si es ilimitado. */
+  planLavadosIncluidos: number | null
+  planVigenciaDias: number
+  /** Regalos vivos: la renovación los conserva, no los repone. */
+  usosRegaloRestantes: number
+  /**
+   * HISTORIAL, para saber si esta membresía se puede BORRAR.
+   *
+   * Se traen los tres conteos con la lista y no al pulsar el botón: la
+   * decisión de si el borrado se OFRECE se toma al pintar, y consultarlos
+   * después obligaría a un viaje extra por fila para responder algo que ya se
+   * podía saber. `_count` lo resuelve en la misma consulta.
+   */
+  visitas: number
+  comprobantes: number
+  pagosConfirmados: number
 }
 
 export interface ResumenMembresias {
@@ -132,8 +148,19 @@ export async function listarMembresias(
               fechaInicio: true,
               fechaVencimiento: true,
               lavadosRestantes: true,
+              // Los de regalo viajan aparte: la pantalla de renovación tiene
+              // que poder decir cuáles se reponen y cuáles se conservan.
+              lavadosBonoRestantes: true,
               clienteId: true,
-              plan: { select: { nombre: true, precio: true, esIlimitado: true } },
+              plan: {
+                select: {
+                  nombre: true,
+                  precio: true,
+                  esIlimitado: true,
+                  lavadosIncluidos: true,
+                  vigenciaDias: true,
+                },
+              },
               cliente: {
                 select: {
                   nombre: true,
@@ -141,6 +168,11 @@ export async function listarMembresias(
                   company: { select: { name: true, esDemo: true } },
                 },
               },
+              _count: { select: { visits: true, comprobantes: true } },
+              // Solo los pagos APROBADOS. Un intento fallido no es historia
+              // financiera —es el ruido que dejan las pruebas— y contarlo
+              // bloquearía el borrado justo en el caso para el que existe.
+              pagoIntentos: { where: { estado: 'APROBADO' }, select: { id: true } },
             },
             orderBy: { createdAt: 'desc' },
             ...(opciones.todo ? {} : { skip: paginacion.saltar, take: paginacion.tomar }),
@@ -186,6 +218,12 @@ export async function listarMembresias(
         planNombre: m.plan.nombre,
         planPrecio: Number(m.plan.precio),
         planEsIlimitado: m.plan.esIlimitado,
+        planLavadosIncluidos: m.plan.esIlimitado ? null : m.plan.lavadosIncluidos,
+        planVigenciaDias: m.plan.vigenciaDias ?? 30,
+        usosRegaloRestantes: m.lavadosBonoRestantes,
+        visitas: m._count.visits,
+        comprobantes: m._count.comprobantes,
+        pagosConfirmados: m.pagoIntentos.length,
       }))
 
       return {

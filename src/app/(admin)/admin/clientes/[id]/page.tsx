@@ -6,12 +6,12 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
+import { RenovarMembresiaDialog } from '@/components/admin/RenovarMembresiaDialog'
 import { formatMoney, formatDate, formatDateTime } from '@/lib/format'
 import { QRDisplay } from '@/components/qr/QRDisplay'
 import { EstadoBadge } from '@/components/EstadoBadge'
 import {
   ConfirmPaymentForm,
-  RenewForm,
   CancelForm,
   NewMembershipForm,
 } from '@/components/admin/MembershipActions'
@@ -334,9 +334,18 @@ export default async function ClienteDetailPage({
                   {(membership.estado === 'ACTIVA' ||
                     membership.estado === 'VENCIDA' ||
                     membership.estado === 'CANCELADA') && (
-                    <RenewForm
+                    <RenovarMembresiaDialog
                       membershipId={membership.id}
-                      precio={String(Number(membership.plan.precio))}
+                      clienteId={cliente.id}
+                      clienteNombre={cliente.nombre}
+                      planNombre={membership.plan.nombre}
+                      precioTexto={formatMoney(Number(membership.plan.precio), prefs)}
+                      lavadosPlan={
+                        membership.plan.esIlimitado ? null : membership.plan.lavadosIncluidos
+                      }
+                      lavadosRegalo={membership.lavadosBonoRestantes}
+                      vigenciaDias={membership.plan.vigenciaDias ?? 30}
+                      vence={membership.fechaVencimiento?.toISOString() ?? null}
                     />
                   )}
                   {membership.estado === 'ACTIVA' && (

@@ -21,6 +21,7 @@ import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { correoBienvenidaClienteVendedor } from '@/lib/email/plantillas-excursiones'
 import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
@@ -247,15 +248,13 @@ export async function crearReservaVendedor(
     // Auto-provisión de cuenta
     const supabaseAdmin = createAdminClient()
     let targetClienteId: string
-    let targetUserId: string
 
     // 1. Verificar si el usuario ya existe por email
-    let userRow = await prisma.user.findUnique({ where: { email: clienteEmail } })
+    const userRow = await prisma.user.findUnique({ where: { email: clienteEmail } })
     
     if (userRow) {
-      targetUserId = userRow.id
       // Verificar si ya tiene perfil de cliente en esta empresa
-      let clienteRow = await prisma.cliente.findUnique({
+      const clienteRow = await prisma.cliente.findUnique({
         where: { supabaseId_companyId: { supabaseId: userRow.supabaseId, companyId } }
       })
       
@@ -300,7 +299,6 @@ export async function crearReservaVendedor(
           name: clienteNombre,
         }
       })
-      targetUserId = createdUser.id
 
       const nuevoCliente = await conEmpresa(companyId, tx => 
         tx.cliente.create({
@@ -320,24 +318,12 @@ export async function crearReservaVendedor(
         to: clienteEmail,
         subject: '¡Tu cuenta en MembeGo está lista!',
         companyId,
-        html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>¡Hola ${clienteNombre}!</h2>
-            <p>Se ha creado tu cuenta para que puedas gestionar tus reservas.</p>
-            <div style="background-color: #f4f4f5; padding: 16px; border-radius: 8px; margin: 24px 0;">
-              <p style="margin: 0 0 8px 0;"><strong>Usuario:</strong> ${clienteEmail}</p>
-              <p style="margin: 0;"><strong>Contraseña:</strong> ${password}</p>
-            </div>
-            <p>
-              <a href="${siteUrl}/login" style="display: inline-block; background-color: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                Iniciar Sesión
-              </a>
-            </p>
-            <p style="color: #666; font-size: 14px; margin-top: 24px;">
-              Te recomendamos cambiar tu contraseña una vez hayas iniciado sesión por primera vez.
-            </p>
-          </div>
-        `
+        html: correoBienvenidaClienteVendedor({
+          nombre: clienteNombre,
+          email: clienteEmail,
+          password,
+          urlLogin: `${siteUrl}/login`,
+        }),
       })
     }
 

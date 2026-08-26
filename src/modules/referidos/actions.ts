@@ -292,7 +292,9 @@ export async function evaluarRecompensas(referenteClienteId: string, companyId: 
       await conEmpresa(companyId, (tx) =>
         tx.membership.updateMany({
           where: { clienteId: referenteClienteId, companyId, estado: 'ACTIVA' },
-          data: { lavadosRestantes: { increment: valor } },
+          // Contador de REGALO: sobrevive a la renovación, a diferencia de
+          // los lavados del plan (ver el campo en el esquema).
+          data: { lavadosBonoRestantes: { increment: valor } },
         })
       )
     }

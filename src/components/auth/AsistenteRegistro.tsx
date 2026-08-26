@@ -227,6 +227,8 @@ export function AsistenteRegistro({
       try {
         sessionStorage.removeItem(claveBorrador)
       } catch {}
+      // La excepción es deliberada: reacciona al RESULTADO async de useActionState (el registro terminó), no a un render. `handledRef` garantiza que corre una sola vez.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRedirecting(true)
       toast.success('¡Bienvenido! Tu cuenta está lista.')
       const creds = credsRef.current
@@ -391,7 +393,7 @@ export function AsistenteRegistro({
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-primary transition-all duration-300"
+            className="h-full rounded-full bg-primary transition-all"
             style={{ width: `${pct}%`, ...(colorPrimario ? { backgroundColor: colorPrimario } : {}) }}
           />
         </div>

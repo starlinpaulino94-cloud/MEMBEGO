@@ -233,12 +233,31 @@ test('se puede abrir la ficha del cliente desde la fila', () => {
 
 test('el componente de acciones no recibe props que no usa', () => {
   const codigo = sinComentarios(BOTONES)
-  for (const muerta of ['clienteId', 'planLavados', 'planEsIlimitado', 'planPrecio']) {
+  // `clienteId` volvió a la lista de props USADAS: la pantalla de renovación
+  // lo necesita para enlazar el comprobante del cobro
+  // (/admin/clientes/[id]/renovacion/[registroId]). No es una prop muerta —
+  // se lee y viaja a `RenovarMembresiaDialog`.
+  for (const muerta of ['planLavados', 'planEsIlimitado', 'planPrecio']) {
     assert.ok(
       !codigo.includes(muerta),
       `${muerta} ya no se usa: una prop muerta hace pensar que el dato importa`
     )
   }
+})
+
+test('renovar desde el panel exige declarar el cobro', () => {
+  // El botón directo se cambió por el diálogo: renovar escribe un ingreso, y
+  // un clic suelto no puede afirmar que el dinero se recibió. Si alguien
+  // vuelve a poner `renovarMembresia` aquí, esta prueba lo caza.
+  const codigo = sinComentarios(BOTONES)
+  assert.ok(
+    codigo.includes('RenovarMembresiaDialog'),
+    'la renovación debe pasar por el diálogo que pide método y referencia'
+  )
+  assert.ok(
+    !codigo.includes('renovarMembresia'),
+    'no se debe llamar a la acción directamente desde un botón sin declaración de cobro'
+  )
 })
 
 test('la columna se llama «Usos», no «Lavados»', () => {
@@ -276,6 +295,14 @@ const FILA: MembresiaFila = {
   planNombre: 'Silver',
   planPrecio: 1200,
   planEsIlimitado: false,
+  planLavadosIncluidos: 4,
+  planVigenciaDias: 30,
+  usosRegaloRestantes: 0,
+  // Historial: decide si la membresía se puede borrar. Esta de ejemplo SÍ se
+  // usó —tiene una visita— así que no sería borrable, que es el caso normal.
+  visitas: 1,
+  comprobantes: 0,
+  pagosConfirmados: 1,
 }
 
 test('el CSV separa el estado guardado de si vale hoy', () => {

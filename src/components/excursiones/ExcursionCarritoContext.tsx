@@ -39,6 +39,8 @@ export function ExcursionCarritoProvider({ children }: { children: ReactNode }) 
   const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
+    // La excepción es deliberada: `localStorage` no existe en el servidor, así que el carrito guardado solo puede leerse DESPUÉS de montar. Hacerlo en el inicializador de useState rompería la hidratación.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsClient(true)
     try {
       const saved = localStorage.getItem('mg_exc_cart')

@@ -13,8 +13,14 @@ import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import { sufijoPeriodo, textoVigencia } from '@/modules/planes/periodo'
 import { plural } from '@/lib/plural'
 
-export default async function SuperadminPlanesPage() {
+export default async function SuperadminPlanesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pausados?: string }>
+}) {
   await requireRole('SUPERADMIN')
+  // Los pausados se OCULTAN por defecto. Ver `verPausados` más abajo.
+  const verPausados = (await searchParams).pausados === '1'
 
   let planes: {
     id: string; nombre: string; precio: unknown; esIlimitado: boolean;
@@ -61,9 +67,25 @@ export default async function SuperadminPlanesPage() {
     console.error('[superadmin-planes]', e)
   }
 
+  /**
+   * LOS PLANES PAUSADOS SE APARTAN, NO SE BORRAN.
+   *
+   * Un plan que ya se vendió NO se puede eliminar, y está bien que no se pueda:
+   * borrarlo dejaría a sus clientes colgando de un plan inexistente. Pero eso
+   * significa que un plan retirado se queda en esta pantalla PARA SIEMPRE,
+   * ocupando sitio junto a los que sí se ofrecen hoy.
+   *
+   * Pausar ya lo retira de la venta. Lo que faltaba era que también dejara de
+   * estorbar aquí. Se ocultan por defecto —es lo que se quiere ver el 99% de
+   * las veces— y se recuperan con un clic que dice cuántos hay: esconder algo
+   * sin decir que existe es peor que no esconderlo.
+   */
+  const pausados = planes.filter((p) => !p.activo).length
+  const visibles = verPausados ? planes : planes.filter((p) => p.activo)
+
   const byCompany = companies.map((c) => ({
     ...c,
-    planes: planes.filter((p) => p.companyId === c.id),
+    planes: visibles.filter((p) => p.companyId === c.id),
   }))
 
   /**
@@ -92,6 +114,31 @@ export default async function SuperadminPlanesPage() {
           </Link>
         </Button>
       </div>
+
+      {/* El interruptor solo aparece si hay algo que enseñar u ocultar: un
+          control que no hace nada es ruido. */}
+      {pausados > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {verPausados ? (
+            <>
+              Mostrando también {plural(pausados, 'plan pausado', 'planes pausados')}.{' '}
+              <Link href="/superadmin/planes" className="font-medium text-primary hover:underline">
+                Ocultarlos
+              </Link>
+            </>
+          ) : (
+            <>
+              Hay {plural(pausados, 'plan pausado', 'planes pausados')} fuera de esta lista.{' '}
+              <Link
+                href="/superadmin/planes?pausados=1"
+                className="font-medium text-primary hover:underline"
+              >
+                Mostrarlos
+              </Link>
+            </>
+          )}
+        </p>
+      )}
 
       {conPlanes.map((company) => {
         // Cada empresa formatea su dinero con SU moneda. Esta pantalla es la

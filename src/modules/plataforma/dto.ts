@@ -1,8 +1,10 @@
 import type {
+  AppointmentDTO,
   BranchDTO,
   CompanyDTO,
   CustomerDTO,
   MembershipSummaryDTO,
+  PromotionDTO,
 } from '@membego/contracts'
 import { camposPermitidos } from '@/modules/plataforma/proyecciones'
 
@@ -39,7 +41,7 @@ import { camposPermitidos } from '@/modules/plataforma/proyecciones'
  * los MAPEADORES se quedan aquí, porque traducen filas de Prisma y eso es
  * asunto del Core. El paquete no debe saber que existe una columna `name`.
  */
-export type { CompanyDTO, BranchDTO, CustomerDTO, MembershipSummaryDTO }
+export type { CompanyDTO, BranchDTO, CustomerDTO, MembershipSummaryDTO, PromotionDTO, AppointmentDTO }
 
 
 // ── Company ─────────────────────────────────────────────────────────────────
@@ -134,6 +136,64 @@ export function membershipSummaryDTO(m: {
   }
 }
 
+// ── Promotion ───────────────────────────────────────────────────────────────
+
+
+/**
+ * Sin el motor de reglas ni la contabilidad de canjes: el satélite pinta la
+ * oferta —título, vigencia, si sigue activa—; si un cliente la puede canjear lo
+ * decide `benefits.evaluate`, no esta proyección.
+ */
+export function promotionDTO(p: {
+  id: string
+  titulo: string
+  descripcion: string
+  imagenUrl: string | null
+  activo: boolean
+  vigenciaDesde: Date
+  vigenciaHasta: Date | null
+}): PromotionDTO {
+  return {
+    id: p.id,
+    titulo: p.titulo,
+    descripcion: p.descripcion,
+    imagenUrl: p.imagenUrl,
+    activo: p.activo,
+    vigenciaDesde: p.vigenciaDesde.toISOString(),
+    vigenciaHasta: p.vigenciaHasta?.toISOString() ?? null,
+  }
+}
+
+// ── Appointment ─────────────────────────────────────────────────────────────
+
+
+/**
+ * Sin `notaCliente`, `notaInterna` ni `atendidaPor`: el satélite arma la agenda
+ * con la hora, la duración, el cliente, la sucursal y el vehículo. Lo demás es
+ * de MembeGo (§69).
+ */
+export function appointmentDTO(c: {
+  id: string
+  clienteId: string
+  sucursalId: string | null
+  vehiculoId: string | null
+  inicio: Date
+  duracionMin: number
+  servicio: string | null
+  estado: string
+}): AppointmentDTO {
+  return {
+    id: c.id,
+    customerId: c.clienteId,
+    branchId: c.sucursalId,
+    vehicleId: c.vehiculoId,
+    inicio: c.inicio.toISOString(),
+    duracionMin: c.duracionMin,
+    servicio: c.servicio,
+    estado: c.estado,
+  }
+}
+
 // ── Comprobación de coherencia con el contrato ──────────────────────────────
 
 /**
@@ -146,6 +206,8 @@ export const CAMPOS_DTO = {
   Branch: ['id', 'companyId', 'nombre', 'direccion', 'activa'],
   Customer: ['id', 'nombre', 'email', 'telefono'],
   MembershipSummary: ['id', 'customerId', 'companyId', 'planNombre', 'estado', 'vigenteHasta'],
+  Promotion: ['id', 'titulo', 'descripcion', 'imagenUrl', 'activo', 'vigenciaDesde', 'vigenciaHasta'],
+  Appointment: ['id', 'customerId', 'branchId', 'vehicleId', 'inicio', 'duracionMin', 'servicio', 'estado'],
 } as const satisfies Record<string, readonly string[]>
 
 /** Entidades cuyo DTO debe coincidir con el contrato de proyección. */

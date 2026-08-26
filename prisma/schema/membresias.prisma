@@ -141,6 +141,17 @@ model Membership {
   fechaInicio      DateTime?
   fechaVencimiento DateTime?
   lavadosRestantes Int       @default(0)
+  /// Lavados de REGALO (referidos, bienvenida, reglas de crecimiento).
+  ///
+  /// Van aparte de `lavadosRestantes` a propósito. Antes se sumaban ahí, y
+  /// como renovar asigna ese campo de forma ABSOLUTA al número del plan, el
+  /// regalo ya usado reaparecía cada mes y el regalo sin usar se borraba.
+  /// Ninguno de los dos errores se veía desde el mostrador.
+  ///
+  /// Se consumen DESPUÉS de los del plan: los del plan se pierden al renovar y
+  /// estos no, así que gastar primero lo que caduca es lo que no desperdicia
+  /// nada del cliente.
+  lavadosBonoRestantes Int   @default(0)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

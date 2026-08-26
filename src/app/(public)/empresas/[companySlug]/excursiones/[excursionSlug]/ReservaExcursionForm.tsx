@@ -488,9 +488,12 @@ export function ReservaExcursionForm({
         ; (e.target as HTMLFormElement).requestSubmit()
         return
       }
+      // `followedRef` es lo único que se consulta (línea 145). El estado que
+      // acompañaba a esta llamada desapareció en una mezcla y nadie leía su
+      // valor: se quita la llamada en vez de resucitar un estado muerto.
       followedRef.current = true
-        // Now submit the form
-        ; (e.target as HTMLFormElement).requestSubmit()
+      // Now submit the form
+      ;(e.target as HTMLFormElement).requestSubmit()
       return
     }
     // Already following — let the form action proceed
@@ -1218,6 +1221,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setAdultos(Math.max(1, adultos - 1))}
+                  aria-label="Quitar un adulto"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Minus className="h-4 w-4" />
@@ -1226,6 +1230,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setAdultos(adultos + 1)}
+                  aria-label="Añadir un adulto"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Plus className="h-4 w-4" />
@@ -1240,6 +1245,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setNinos(Math.max(0, ninos - 1))}
+                  aria-label="Quitar un niño"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Minus className="h-4 w-4" />
@@ -1248,6 +1254,7 @@ export function ReservaExcursionForm({
                 <button
                   type="button"
                   onClick={() => setNinos(ninos + 1)}
+                  aria-label="Añadir un niño"
                   className="flex h-8 w-8 items-center justify-center rounded-full border bg-background hover:bg-muted"
                 >
                   <Plus className="h-4 w-4" />
@@ -1271,10 +1278,10 @@ export function ReservaExcursionForm({
                 }`}
             >
               <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
-                <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <Banknote className="h-4 w-4 text-success dark:text-success" />
                 <span>Pagar el día del tour</span>
               </div>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+              <span className="text-xs text-muted-foreground leading-tight">
                 Pagas en el punto de encuentro al momento de abordar.
               </span>
             </button>
@@ -1290,11 +1297,11 @@ export function ReservaExcursionForm({
               <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
                 <CreditCard className="h-4 w-4 text-primary" />
                 <span>Pagar ahora en línea</span>
-                <span className="text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 rounded-full font-bold">
+                <span className="text-xs bg-warning/15 text-warning dark:text-warning px-1.5 py-0.2 rounded-full font-bold">
                   Prueba
                 </span>
               </div>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+              <span className="text-xs text-muted-foreground leading-tight">
                 Tarjeta crédito/débito • Acceso y boleto de inmediato.
               </span>
             </button>
@@ -1379,8 +1386,7 @@ export function ReservaExcursionForm({
                 ninos,
                 precioAdulto,
                 precioNino,
-                moneda,
-              })
+                moneda })
             }}
             disabled={pending || followingPending || !fecha || !hora || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-primary bg-background py-3 text-sm font-semibold text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -1444,8 +1450,7 @@ export function ReservaExcursionForm({
           {
             nombre: `${adultos} Adulto(s)${ninos > 0 ? ` + ${ninos} Niño(s)` : ''} (${varianteActual.nombre})`,
             cantidad: 1,
-            subtotal,
-          },
+            subtotal },
         ]}
       />
     </div>

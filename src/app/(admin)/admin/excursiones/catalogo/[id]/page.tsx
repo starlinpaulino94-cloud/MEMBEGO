@@ -90,7 +90,11 @@ export default async function ExcursionDetallePage({
             actividadesComboIds: excursion.comboItems?.map((ci) => ci.actividadId) ?? [],
             descripcion: excursion.descripcion,
             portadaUrl: excursion.portadaUrl,
-            galeria: excursion.galeria,
+            // `galeria` es JSON en el esquema: se normaliza aquí, en el
+            // borde, para que el formulario reciba el string[] que declara.
+            galeria: Array.isArray(excursion.galeria)
+              ? (excursion.galeria as string[])
+              : null,
             duracionMin: excursion.duracionMin,
             ubicacion: excursion.ubicacion,
             categoria: excursion.categoria,

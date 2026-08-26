@@ -4,12 +4,11 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Building2, Briefcase, CreditCard } from 'lucide-react'
+import { Loader2, Building2, Briefcase } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   actualizarVendedor,
-  type VendedorActionState,
-} from '@/modules/excursiones/vendedores/actions'
+  type VendedorActionState } from '@/modules/excursiones/vendedores/actions'
 import { TIPOS_VENDEDOR_SEMILLA } from '@/modules/excursiones/vendedores/nucleo'
 import type { SupervisorOpcion } from '@/components/excursiones/VendedorWizard'
 import { Button } from '@/components/ui/button'
@@ -21,8 +20,7 @@ const init: VendedorActionState = {}
 
 export function VendedorForm({
   vendedor,
-  supervisores,
-}: {
+  supervisores }: {
   vendedor: {
     id: string
     nombre: string

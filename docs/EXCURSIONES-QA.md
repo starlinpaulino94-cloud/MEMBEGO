@@ -42,18 +42,30 @@ que el cajero entienda la pantalla.
 9. Intenta pagar **más que el saldo**. Debe rechazarlo diciendo la cifra exacta.
 10. **Anula** ese abono con un motivo. Vuelve a **Pendiente** y el pago queda
     tachado a la vista, no borrado.
-11. Cobra el total. El estado pasa a **Pagada**.
+11. Cobra el total. El estado pasa a **Pagada** y —desde el rediseño del
+    catálogo— **la venta y la comisión se generan solas** en ese momento.
 
 ### Venta y comisión
-12. Con la reserva saldada aparece **Confirmar venta**. Confírmala.
-13. Debe crearse la venta (`SAL-…`) y la **comisión con su desglose**
+
+> **Ojo, esto cambió.** La venta ya NO se confirma a mano: `registrarPago`
+> llama a `procesarVentaYComisionInterna` en cuanto la reserva queda
+> `PAGADA`. Y esa llamada va con `.catch(anotarFallo(...))`, o sea que **si
+> falla, el pago se registra igual y el fallo solo queda en el log**. Por eso
+> el paso 12 es ahora una COMPROBACIÓN, no una acción: si la comisión no
+> apareció, el cobro no te lo va a avisar.
+
+12. Sin tocar nada más, entra en la reserva. Debe existir ya la venta
+    (`SAL-…`). Si no está, hay un fallo silencioso que hay que mirar en el log.
+13. Debe existir también la **comisión con su desglose**
     («10% sobre X (venta sin impuestos)»).
 14. La comisión NO debe calcularse sobre el impuesto.
 15. Crea ahora una regla **específica para ese vendedor** (por ejemplo 20%).
     La comisión ya generada **no debe cambiar**: nació con su regla dentro.
 16. Haz otra venta: esa sí debe usar la regla nueva.
-17. Intenta confirmar la misma reserva dos veces. Debe decir que ya tiene venta,
-    **sin duplicar** la comisión.
+17. Registra otro pago sobre una reserva ya saldada (o reintenta el cobro).
+    **No debe duplicarse** ni la venta ni la comisión: la generación
+    automática tiene que ser idempotente, y ahora se dispara en cada pago que
+    deje la reserva en `PAGADA`.
 
 ### Liquidación
 18. **Comisiones**: aprueba la comisión.

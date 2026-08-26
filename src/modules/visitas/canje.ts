@@ -233,7 +233,9 @@ export async function ejecutarCanje(
     }
 
     const ilimitado = membership.plan.esIlimitado
-    if (!ilimitado && membership.lavadosRestantes <= 0) {
+    // El saldo es la suma de los dos contadores: los del plan y los de regalo.
+    const saldoTotal = membership.lavadosRestantes + membership.lavadosBonoRestantes
+    if (!ilimitado && saldoTotal <= 0) {
       return no('SIN_USOS', 'No quedan usos disponibles en este período.')
     }
 
@@ -283,7 +285,16 @@ export async function ejecutarCanje(
         estado: 'ACTIVA' as const,
         OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: now } }],
       }
-      const upd = descontado
+      // ORDEN DE CONSUMO: primero los del PLAN, después los de REGALO.
+      //
+      // Los del plan se pierden al renovar y los de regalo no. Gastar primero
+      // lo que caduca es lo único que no desperdicia nada del cliente; al
+      // revés, el regalo se comería el saldo del período y los lavados
+      // pagados morirían sin usarse.
+      //
+      // Los dos van con su guardia en el `where`, así que la condición se
+      // comprueba en el commit y no en la lectura previa (TOCTOU).
+      let upd = descontado
         ? await tx.membership.updateMany({
             where: { ...guardVigente, lavadosRestantes: { gt: 0 } },
             data: { lavadosRestantes: { decrement: 1 } },
@@ -294,6 +305,16 @@ export async function ejecutarCanje(
             where: guardVigente,
             data: { updatedAt: now },
           })
+      // Sin saldo en el plan: se intenta el de regalo. Este segundo intento es
+      // el que hace que un regalo sirva cuando los del plan ya se acabaron.
+      let usoDeRegalo = false
+      if (descontado && upd.count === 0) {
+        upd = await tx.membership.updateMany({
+          where: { ...guardVigente, lavadosBonoRestantes: { gt: 0 } },
+          data: { lavadosBonoRestantes: { decrement: 1 } },
+        })
+        usoDeRegalo = upd.count > 0
+      }
       if (upd.count === 0) {
         throw new RechazoTx(
           'CONFLICTO',
@@ -304,14 +325,18 @@ export async function ejecutarCanje(
       }
 
       // Saldo real tras el decremento (no el valor leído, que sería stale
-      // frente a escaneos concurrentes).
-      let restantes = membership.lavadosRestantes
+      // frente a escaneos concurrentes). Se suman los DOS contadores: lo que
+      // el cliente quiere saber es cuántos lavados le quedan, no de qué bolsa
+      // salieron.
+      let restantes = membership.lavadosRestantes + membership.lavadosBonoRestantes
       if (descontado) {
         const fresco = await tx.membership.findUnique({
           where: { id: membership.id },
-          select: { lavadosRestantes: true },
+          select: { lavadosRestantes: true, lavadosBonoRestantes: true },
         })
-        restantes = fresco?.lavadosRestantes ?? Math.max(0, restantes - 1)
+        restantes = fresco
+          ? fresco.lavadosRestantes + fresco.lavadosBonoRestantes
+          : Math.max(0, restantes - 1)
       }
 
       const visit = await tx.visit.create({
@@ -357,6 +382,10 @@ export async function ejecutarCanje(
             membershipId: membership.id,
             servicio,
             descontado,
+            // De qué bolsa salió el uso. Sin esto, un lavado de regalo y uno
+            // del plan son indistinguibles en la auditoría, y el negocio no
+            // puede saber cuánto está regalando de verdad.
+            usoDeRegalo,
             restantes,
             sucursalId,
             // Rastro del origen: sin esto, una visita creada por un satélite y

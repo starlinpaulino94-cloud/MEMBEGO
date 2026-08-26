@@ -9,6 +9,8 @@ import {
   desenvolverRespuesta,
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
+  perfilPendienteDeActivar,
+  mismoPerfilCardnet,
 } from '../src/lib/payments/cardnet-tokens-core'
 
 /**
@@ -294,8 +296,14 @@ test('«El token no está activo» se traduce a instrucciones, no se repite tal 
   })
   assert.equal(r.aprobada, false)
   assert.match(r.motivo ?? '', /RD\$1\.00/)
-  assert.match(r.motivo ?? '', /6 dígitos/)
+  // Se comprueba la INTENCIÓN (decirle que busque un código de 6), no la
+  // redacción exacta. Esta línea fijaba «6 dígitos», que además era falso: el
+  // código es alfanumérico —«Z2R78V» lleva letras— así que la prueba estaba
+  // clavando una imprecisión y se rompía al corregirla.
+  assert.match(r.motivo ?? '', /6 (dígitos|caracteres)/)
   assert.doesNotMatch(r.motivo ?? '', /^El token no está activo$/)
+  // Y no puede nombrar al procesador: para el cliente, todo lo hace MembeGo.
+  assert.doesNotMatch(r.motivo ?? '', /cardnet/i)
 })
 
 test('los demás errores del proveedor se muestran tal cual', () => {
@@ -666,4 +674,257 @@ test('el limitador de sesión es más holgado que el de los cobros', () => {
     return Number(bloque[1])
   }
   assert.ok(leerTope('paymentSessionLimiter') > leerTope('paymentLimiter'))
+})
+
+// ── El perfil que espera su código ──────────────────────────────────────────
+//
+// El criterio vive en UNA función porque lo consultan tres sitios: la
+// activación real, el aviso de «tienes una tarjeta esperando» y la sonda de
+// diagnóstico. Si divergieran, el aviso enseñaría los últimos 4 dígitos de una
+// tarjeta y se activaría otra — y las dos pantallas se verían normales.
+
+const perfil = (
+  ultimos4: string,
+  habilitado: boolean
+): Parameters<typeof perfilPendienteDeActivar>[0][number] => ({
+  paymentProfileId: `pp-${ultimos4}`,
+  token: `CT__${ultimos4}`,
+  marca: 'VISA',
+  ultimos4,
+  habilitado,
+})
+
+test('perfilPendienteDeActivar: sin perfiles no hay nada que activar', () => {
+  assert.equal(perfilPendienteDeActivar([]), null)
+})
+
+test('perfilPendienteDeActivar: con todo habilitado devuelve null', () => {
+  assert.equal(perfilPendienteDeActivar([perfil('1111', true), perfil('2222', true)]), null)
+})
+
+test('perfilPendienteDeActivar: es el ÚLTIMO, cuando está deshabilitado', () => {
+  // Cada intento de registrar la tarjeta deja su perfil y CardNET no los
+  // limpia. El que le importa al cliente es el último: es el cargo de RD$1.00
+  // que tiene delante en la app del banco.
+  const elegido = perfilPendienteDeActivar([
+    perfil('1111', false),
+    perfil('2222', false),
+    perfil('3333', false),
+  ])
+  assert.equal(elegido?.ultimos4, '3333')
+})
+
+test('perfilPendienteDeActivar: si el ÚLTIMO ya está habilitado, no hay nada que activar', () => {
+  // ESTA PRUEBA FIJABA LO CONTRARIO, y por eso el fallo llegó a producción.
+  // Decía «ignora los habilitados aunque sean posteriores» y exigía que se
+  // eligiera el viejo deshabilitado. Eso manda a activar un perfil abandonado
+  // con el código de otro: rechazo garantizado.
+  //
+  // Una tarjeta recién registrada y ya habilitada no espera ningún código.
+  assert.equal(
+    perfilPendienteDeActivar([perfil('1111', false), perfil('9999', true)]),
+    null
+  )
+})
+
+test('perfilPendienteDeActivar: el caso REAL del Customer 112001', () => {
+  // Capturado en producción de pruebas (24-08-2026). Once perfiles acumulados
+  // de tanto registrar la misma tarjeta; el último ya venía habilitado.
+  //
+  // Con la regla vieja se elegía el 121136 —viejo, deshabilitado, abandonado—
+  // y se le pedía al cliente el código de ESE perfil, mientras él tecleaba el
+  // de su tarjeta nueva. Rechazo tras rechazo. Y el cobro, que sí usa «el
+  // último de la lista», cobraba bien: de ahí que el pago se aplicara igual.
+  const reales: [string, boolean][] = [
+    ['119872', false],
+    ['120868', true],
+    ['120869', true],
+    ['120870', false],
+    ['121130', true],
+    ['121131', true],
+    ['121133', false],
+    ['121134', false],
+    ['121135', false],
+    ['121136', false],
+    ['121299', true],
+  ]
+  const perfiles = reales.map(([id, habilitado]) => ({
+    paymentProfileId: id,
+    token: `CT__${id}`,
+    marca: 'VISA',
+    ultimos4: '0050',
+    habilitado,
+  }))
+  assert.equal(
+    perfilPendienteDeActivar(perfiles),
+    null,
+    'el último (121299) está habilitado: no se debe mandar a activar el 121136'
+  )
+})
+
+// ── La sonda de diagnóstico no puede volver a abrirse ───────────────────────
+//
+// Esta ruta ejecutaba una activación REAL desde un GET, con el código en la
+// barra de direcciones y sin ningún límite. Tres formas de que eso vuelva:
+// alguien añade un atajo por GET «para probar rápido», alguien quita el
+// limitador porque estorba, o alguien devuelve el override de `customerId` a
+// todo el mundo. Las tres se ven aquí.
+
+test('la sonda de diagnóstico tiene límite en sus DOS verbos', () => {
+  const src = readFileSync(`${RUTAS}/estado/route.ts`, 'utf8')
+  // El GET solo lee: le basta el presupuesto de las lecturas.
+  assert.match(src, /await paymentSessionLimiter\(/)
+  // El POST puede BORRAR una tarjeta al tercer código fallido: va con el
+  // presupuesto estrecho de las rutas que mueven dinero.
+  assert.match(src, /await paymentLimiter\(/)
+})
+
+test('la sonda NO ejecuta la activación desde un GET', () => {
+  const src = readFileSync(`${RUTAS}/estado/route.ts`, 'utf8')
+  const get = src.slice(src.indexOf('export async function GET'), src.indexOf('export async function POST'))
+  assert.ok(get.length > 0, 'no se encontró el bloque del GET')
+  // Un GET debe poder repetirse sin consecuencias: una precarga del navegador
+  // o un volver-atrás no pueden quemar uno de los 3 intentos.
+  assert.doesNotMatch(
+    get,
+    /activarPerfilCardnet\(/,
+    'el GET volvió a ejecutar la activación: eso lo dispara una precarga'
+  )
+  // Y el código no puede volver a leerse de la URL, donde queda escrito en
+  // registros de acceso, historial y cabecera Referer.
+  assert.doesNotMatch(
+    get,
+    /searchParams\.get\('codigo'\)/,
+    'el código de activación volvió a la query string'
+  )
+})
+
+test('mirar el Customer de OTRO queda restringido a SUPERADMIN', () => {
+  const src = readFileSync(`${RUTAS}/estado/route.ts`, 'utf8')
+  const i = src.indexOf("searchParams.get('customerId')")
+  assert.ok(i > 0, 'desapareció el override de customerId; si fue a propósito, actualiza esta prueba')
+  // El parámetro solo puede leerse detrás de la comprobación de superadmin:
+  // sin ella, cualquiera con sesión leía el correo y las tarjetas de otro.
+  assert.match(
+    src.slice(Math.max(0, i - 200), i),
+    /esSuperadmin/,
+    'el override de customerId dejó de estar detrás de la guardia de superadmin'
+  )
+})
+
+// ── Reconocer la tarjeta después de activarla ───────────────────────────────
+//
+// EL FALLO REAL (24-08-2026, en vivo con CardNET): tras poner un código
+// CORRECTO salía «La tarjeta se eliminó tras varios intentos fallidos».
+//
+// La comprobación era `!p.habilitado && p.paymentProfileId === …`, que mezcla
+// «el perfil existe» con «el perfil sigue deshabilitado». Cuando la activación
+// funcionaba, el perfil quedaba HABILITADO, la condición daba false y se
+// concluía que la tarjeta había desaparecido. Se dispara con facilidad porque
+// un `Enabled` AUSENTE se parsea como habilitado.
+
+test('mismoPerfilCardnet: reconoce por PaymentProfileId', () => {
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: 'pp-1', token: 'A' }, { paymentProfileId: 'pp-1', token: 'B' }),
+    true
+  )
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: 'pp-1', token: 'A' }, { paymentProfileId: 'pp-2', token: 'A' }),
+    false
+  )
+})
+
+test('mismoPerfilCardnet: cae al Token cuando falta el id', () => {
+  // El `PaymentProfileId` puede venir nulo. Antes, un nulo hacía que la
+  // tarjeta «dejara de ser ella misma» y se diera por eliminada.
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: null, token: 'CT__x' }, { paymentProfileId: 'pp-1', token: 'CT__x' }),
+    true
+  )
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: null, token: 'CT__x' }, { paymentProfileId: null, token: 'CT__y' }),
+    false
+  )
+})
+
+test('mismoPerfilCardnet: sin ninguna referencia común NO afirma que son el mismo', () => {
+  // Fallar cerrado: inventar una coincidencia sería peor que no encontrarla.
+  assert.equal(
+    mismoPerfilCardnet({ paymentProfileId: null, token: null }, { paymentProfileId: null, token: null }),
+    false
+  )
+})
+
+test('un Enabled AUSENTE se lee como habilitado (y por eso no puede significar «borrada»)', () => {
+  // Esta es la pieza que convertía «se activó» en «se eliminó».
+  const [p] = extraerPerfilesSync({
+    PaymentProfiles: [{ PaymentProfileId: 'pp-1', Token: 'CT__x', LastFour: '1111' }],
+  })
+  assert.equal(p.habilitado, true, 'sin Enabled explícito el perfil se considera habilitado')
+})
+
+test('la activación distingue los TRES estados, no dos', () => {
+  const src = readFileSync('src/modules/pagos/cardnetToken.ts', 'utf8')
+  // La condición vieja mezclaba existencia con estado. Si vuelve, la tarjeta
+  // activada se vuelve a anunciar como destruida.
+  assert.doesNotMatch(
+    src,
+    /some\(\s*\(p\) => !p\.habilitado && p\.paymentProfileId/,
+    'volvió la comprobación que confunde «habilitada» con «eliminada»'
+  )
+  assert.match(src, /mismoPerfilCardnet\(/)
+})
+
+// ── Un 200 NO significa que activó ─────────────────────────────────────────
+//
+// SEGUNDO REPORTE EN VIVO (24-08-2026): con el código que dio el propio
+// CardNET salía «Tu tarjeta quedó registrada pero falta activarla» — o sea, el
+// mensaje que pide hacer justo lo que se acababa de hacer.
+//
+// `activarPerfilCardnet` decidía el éxito SOLO por el estado HTTP. CardNET
+// devuelve sus fallos dentro del cuerpo, en `Errors[]`, y puede hacerlo con un
+// 200. El cobro ya se defendía de eso; la activación no. Un código rechazado
+// se leía como activación exitosa → se pasaba a cobrar → CS012 → ese mensaje.
+
+test('el activate no puede decidir el éxito solo por el estado HTTP', () => {
+  const src = readFileSync('src/lib/payments/cardnet-tokens.ts', 'utf8')
+  const i = src.indexOf('export async function activarPerfilCardnet')
+  assert.ok(i > 0, 'no se encontró activarPerfilCardnet')
+  const cuerpo = src.slice(i, i + 2000)
+  // El cuerpo de la respuesta tiene que mirarse.
+  assert.match(cuerpo, /desenvolverRespuesta\(/, 'el activate dejó de leer el cuerpo de la respuesta')
+  // Y el `ok` que devuelve tiene que depender de que no haya errores.
+  assert.match(
+    cuerpo,
+    /ok:\s*ok && errores\.length === 0/,
+    'el activate volvió a dar por buena una respuesta con Errors dentro'
+  )
+})
+
+test('desenvolverRespuesta encuentra los Errors vengan donde vengan', () => {
+  // En la raíz…
+  const a = desenvolverRespuesta({ Errors: [{ ErrorCode: 'CS013', Message: 'Invalid code' }] })
+  assert.equal(a.errores.length, 1)
+  assert.equal(a.errores[0].codigo, 'CS013')
+  // …o dentro de Response, que es como los envuelve el servicio.
+  const b = desenvolverRespuesta({
+    Response: { Errors: [{ ErrorCode: 'CS013', Message: 'Invalid code' }] },
+  })
+  assert.equal(b.errores.length, 1)
+  // Y una respuesta limpia no inventa errores.
+  assert.equal(desenvolverRespuesta({ Response: { Enabled: true } }).errores.length, 0)
+})
+
+test('un activate con Errors y HTTP 200 NO puede terminar en cobro', () => {
+  const src = readFileSync('src/modules/pagos/cardnetToken.ts', 'utf8')
+  const i = src.indexOf('if (!activacion.ok)')
+  assert.ok(i > 0)
+  const bloque = src.slice(i, i + 3000)
+  // Si el proveedor señaló el fallo, eso manda sobre lo que parezca el listado
+  // de perfiles — donde un `Enabled` ausente se lee como habilitado.
+  assert.match(
+    bloque,
+    /activacion\.errores\.length > 0/,
+    'la clasificación dejó de mirar los errores que devuelve el proveedor'
+  )
 })

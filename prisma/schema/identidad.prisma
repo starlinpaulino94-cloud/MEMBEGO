@@ -61,6 +61,11 @@ enum AuditAccion {
   /// Compartían etiqueta y la bitácora llamaba «cancelada» a las dos.
   MEMBRESIA_DESACTIVADA
   MEMBRESIA_RENOVADA
+  /// Una membresía SIN historial se borró de verdad (no se canceló). Solo
+  /// puede pasar cuando no tenía visitas, comprobantes ni pagos confirmados
+  /// —o sea, cuando nunca llegó a usarse—, así que este asiento es el único
+  /// rastro que queda de que existió.
+  MEMBRESIA_ELIMINADA
   QR_GENERADO
   QR_USADO
   QR_COMPARTIDO

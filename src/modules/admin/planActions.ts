@@ -7,6 +7,7 @@ import { resolveCompanyId } from '@/lib/auth/company-context'
 import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { plural } from '@/lib/plural'
+import { explicarNoBorrable } from '@/modules/membresias/borrable'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -101,12 +102,21 @@ function parsePlan(formData: FormData): { error: string } | {
 async function auditarPlan(
   companyId: string,
   userId: string | null,
-  accion: 'PLAN_CREADO' | 'PLAN_ACTUALIZADO' | 'PLAN_PAUSADO' | 'PLAN_REANUDADO' | 'PLAN_ELIMINADO',
+  accion:
+    | 'PLAN_CREADO'
+    | 'PLAN_ACTUALIZADO'
+    | 'PLAN_PAUSADO'
+    | 'PLAN_REANUDADO'
+    | 'PLAN_ELIMINADO'
+    | 'MEMBRESIA_ELIMINADA',
   planId: string,
   // `Prisma.InputJsonObject` y no `Record<string, unknown>`: la columna es JSON
   // y el tipo laxo dejaría colar un `Date` o un `undefined` que revientan al
   // serializar, justo en el camino que no puede fallar.
-  payload: Prisma.InputJsonObject
+  payload: Prisma.InputJsonObject,
+  // El borrado de membresías reutiliza esta misma función: lo único que cambia
+  // es a qué entidad apunta el asiento.
+  entidadTipo: 'Plan' | 'Membership' = 'Plan'
 ) {
   try {
     await conEmpresa(companyId, (tx) =>
@@ -115,7 +125,7 @@ async function auditarPlan(
           companyId,
           userId,
           accion,
-          entidadTipo: 'Plan',
+          entidadTipo,
           entidadId: planId,
           payload,
         },
@@ -374,6 +384,84 @@ export async function eliminarPlan(
     return { success: true }
   } catch (e) {
     console.error('[plan]', e)
+    return { error: 'Ocurrió un error. Intenta de nuevo.' }
+  }
+}
+
+/**
+ * BORRA una membresía que nunca llegó a usarse.
+ *
+ * NO es cancelar. Cancelar da de baja y CONSERVA el registro con su historia;
+ * esto lo hace desaparecer, y por eso solo se permite cuando no hay historia
+ * que perder: sin visitas, sin comprobantes y sin pagos confirmados. La regla
+ * vive en `puedeBorrarseMembresia` y se comprueba AQUÍ, en el servidor, no en
+ * el botón — el botón solo decide si se ofrece.
+ *
+ * Lo que se lleva por delante cuando sí procede: los QR y los vehículos
+ * asociados, que caen en cascada por el esquema. Ninguno de los dos es un
+ * registro financiero, y sin su membresía no significan nada.
+ *
+ * Queda un `MEMBRESIA_ELIMINADA` en la bitácora: cuando la fila desaparece,
+ * ese asiento es el único rastro de que existió.
+ */
+export async function eliminarMembresia(
+  _prev: PlanActionState,
+  formData: FormData
+): Promise<PlanActionState> {
+  const user = await requireAdminUser()
+  if (!user) return { error: 'No autorizado.' }
+
+  const membershipId = String(formData.get('membershipId') ?? '').trim()
+  if (!membershipId) return { error: 'Membresía no especificada.' }
+
+  try {
+    const m = await sinEmpresa('membresía por id para comprobar pertenencia', (tx) =>
+      tx.membership.findUnique({
+        where: { id: membershipId },
+        select: {
+          id: true,
+          companyId: true,
+          plan: { select: { nombre: true } },
+          cliente: { select: { nombre: true } },
+        },
+      })
+    )
+    if (!m) return { error: 'Membresía no encontrada.' }
+    // Un admin solo toca su empresa. El superadmin, cualquiera.
+    if (user.metadata.role !== 'SUPERADMIN' && m.companyId !== user.metadata.companyId) {
+      return { error: 'Membresía no encontrada.' }
+    }
+
+    const historial = await conEmpresa(m.companyId, async (tx) => {
+      const [visitas, comprobantes, pagosConfirmados] = await Promise.all([
+        tx.visit.count({ where: { membershipId } }),
+        tx.comprobante.count({ where: { membershipId } }),
+        // Solo los APROBADOS. Un intento fallido no es historia financiera: es
+        // justo el ruido que dejan las pruebas, y bloquear por él haría que
+        // esta función no sirviera para lo único que existe para hacer.
+        tx.pagoIntento.count({ where: { membershipId, estado: 'APROBADO' } }),
+      ])
+      return { visitas, comprobantes, pagosConfirmados }
+    })
+
+    const impedimento = explicarNoBorrable(historial)
+    if (impedimento) return { error: impedimento }
+
+    await conEmpresa(m.companyId, (tx) => tx.membership.delete({ where: { id: membershipId } }))
+
+    await auditarPlan(
+      m.companyId,
+      user.metadata.dbUserId ?? null,
+      'MEMBRESIA_ELIMINADA',
+      membershipId,
+      { plan: m.plan?.nombre ?? null, cliente: m.cliente?.nombre ?? null },
+      'Membership'
+    )
+
+    revalidatePlanes()
+    return { success: true }
+  } catch (e) {
+    console.error('[membresia] eliminar', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }
   }
 }
