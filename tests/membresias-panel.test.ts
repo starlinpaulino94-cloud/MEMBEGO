@@ -298,6 +298,11 @@ const FILA: MembresiaFila = {
   planLavadosIncluidos: 4,
   planVigenciaDias: 30,
   usosRegaloRestantes: 0,
+  // Historial: decide si la membresía se puede borrar. Esta de ejemplo SÍ se
+  // usó —tiene una visita— así que no sería borrable, que es el caso normal.
+  visitas: 1,
+  comprobantes: 0,
+  pagosConfirmados: 1,
 }
 
 test('el CSV separa el estado guardado de si vale hoy', () => {

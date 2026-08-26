@@ -62,6 +62,7 @@ export const ACCION_LABEL: Record<string, string> = {
   MEMBRESIA_CANCELADA: 'Membresía cancelada',
   MEMBRESIA_DESACTIVADA: 'Membresía desactivada',
   MEMBRESIA_RENOVADA: 'Membresía renovada',
+  MEMBRESIA_ELIMINADA: 'Membresía eliminada',
   QR_GENERADO: 'QR generado',
   QR_USADO: 'QR usado',
   QR_COMPARTIDO: 'QR compartido',
