@@ -3,14 +3,11 @@
 import { useRef, useState } from 'react'
 import { ImageIcon, Loader2, UploadCloud, X, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase/client'
-import { uniqueFileName } from '@/lib/storage'
-import { rutaExcursion } from '@/lib/storage-rutas'
+import { subirImagenExcursion } from '@/modules/excursiones/catalogo/imageActions'
 import { Button } from '@/components/ui/button'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_MB = 5
-const BUCKET = 'promociones' // We can use the 'promociones' public bucket to store public images easily
 
 export function ExcursionImagenUpload({
   companyId,
@@ -52,19 +49,13 @@ export function ExcursionImagenUpload({
     setUploading(true)
     
     try {
-      const supabase = createClient()
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const path = rutaExcursion(companyId, excursionId, uniqueFileName(ext))
-      const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true })
-      
-      if (error) throw error
-      
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+      const result = await subirImagenExcursion(companyId, excursionId, file)
+      if ('error' in result) throw new Error(result.error)
       
       if (tipo === 'portada') {
-        setPortadaUrl(data.publicUrl)
+        setPortadaUrl(result.url)
       } else {
-        setGaleriaUrls(prev => [...prev, data.publicUrl])
+        setGaleriaUrls(prev => [...prev, result.url])
       }
       toast.success('Imagen subida correctamente.')
     } catch (e) {

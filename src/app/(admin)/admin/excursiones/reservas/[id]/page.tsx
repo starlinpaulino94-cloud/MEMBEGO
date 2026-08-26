@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Clock, MapPin } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { reservaDetalle } from '@/modules/excursiones/reservas/queries'
@@ -9,12 +9,15 @@ import {
   ESTADO_RESERVA_LABEL,
   TONO_RESERVA,
   type EstadoReserva,
+  formatoMinutosAHora,
+  minutosDesdeMedianoche,
 } from '@/modules/excursiones/reservas/nucleo'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ReservaPagos } from '@/components/excursiones/ReservaPagos'
 import { ReservaEstadoBotones } from '@/components/excursiones/ReservaEstadoBotones'
 import { VentaAcciones } from '@/components/excursiones/VentaAcciones'
 import { ReservaCheckinQr } from '@/components/excursiones/ReservaCheckinQr'
+import { CheckinItemToggle } from '@/components/excursiones/CheckinItemToggle'
 import { StatusChip } from '@/components/ui/status-chip'
 import { formatDate, formatMoney } from '@/lib/format'
 
@@ -130,6 +133,111 @@ export default async function ReservaDetallePage({
           </p>
         ) : null}
       </section>
+
+      {/* Itinerario de actividades (para combos o paquetes multi-fecha/multi-turno) */}
+      {reserva.items && reserva.items.length > 0 && (
+        <section className="rounded-2xl border border-primary/20 bg-primary/5 p-5 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="font-bold text-foreground text-sm sm:text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              Itinerario y Turnos Asignados
+            </h3>
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
+              {reserva.items.length} Actividades
+            </span>
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            {reserva.items.map((item, idx) => {
+              const act = item.actividad
+              const esPd = act.tipoItem === 'PASE_DIA'
+              const inicio = item.hora?.trim().slice(0, 5) || reserva.hora?.trim().slice(0, 5) || act.horaSalida?.trim().slice(0, 5) || '—'
+              const durMin = act.duracionMin ?? 0
+              const fin = (!esPd && inicio !== '—' && durMin > 0)
+                ? formatoMinutosAHora(minutosDesdeMedianoche(inicio) + durMin)
+                : (act.horaRegreso?.trim().slice(0, 5) || '—')
+              const durTexto = durMin > 0
+                ? (durMin >= 60 ? `${Math.floor(durMin / 60)}h ${durMin % 60 > 0 ? `${durMin % 60}m` : ''}`.trim() : `${durMin}m`)
+                : null
+              const fechaDistinta = formatDate(item.fecha) !== formatDate(reserva.fecha)
+
+              return (
+                <div
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-xs"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
+                        esPd
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-primary text-primary-foreground'
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs sm:text-sm font-bold text-foreground truncate">{act.nombre}</p>
+                        {esPd && (
+                          <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                            Daypass
+                          </span>
+                        )}
+                        {item.checkinAt && (
+                          <span className="text-[10px] font-bold bg-success/15 text-success px-2 py-0.5 rounded-full shrink-0">
+                            ✓ Embarcado
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                        {fechaDistinta && (
+                          <span className="font-bold text-primary">{formatDate(item.fecha)}</span>
+                        )}
+                        {act.ubicacion && (
+                          <span className="truncate max-w-[200px] flex items-center gap-0.5">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {act.ubicacion}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="font-mono text-xs font-semibold text-foreground text-right">
+                      {esPd ? (
+                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">Acceso libre</span>
+                      ) : inicio !== '—' ? (
+                        <div className="space-y-0.5">
+                          <div className="text-foreground">
+                            {inicio} {fin !== '—' ? `→ ${fin}` : ''}
+                          </div>
+                          {durTexto && (
+                            <div className="text-[11px] font-normal text-muted-foreground">
+                              Duración: {durTexto}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Horario según turno</span>
+                      )}
+                    </div>
+
+                    <CheckinItemToggle
+                      reservaId={reserva.id}
+                      itemId={item.id}
+                      actividadNombre={act.nombre}
+                      checkinAt={item.checkinAt}
+                      estado={item.estado}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <ReservaPagos
         reservaId={reserva.id}

@@ -42,7 +42,7 @@ export async function GET(
     const destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
       enlace.codigoVendedor
     )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(
-      `/empresas/${enlace.companySlug}/excursiones`
+      `/empresas/${enlace.companySlug}/excursiones?e=${encodeURIComponent(enlace.slug)}`
     )}`
     return NextResponse.redirect(destino)
   }
@@ -63,11 +63,11 @@ export async function GET(
   const isCliente = user && user.metadata.role === 'CLIENTE'
 
   // Si está logueado, llevarlo al catálogo directo. Si no, al registro con next.
-  const nextUrl = `/empresas/${enlace.companySlug}/excursiones`
+  const nextUrl = `/empresas/${enlace.companySlug}/excursiones?e=${encodeURIComponent(enlace.slug)}`
   let destino: string
   
   if (isCliente) {
-    destino = `${base}${nextUrl}?e=${encodeURIComponent(enlace.slug)}`
+    destino = `${base}${nextUrl}`
   } else {
     destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
       enlace.codigoVendedor

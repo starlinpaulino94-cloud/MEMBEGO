@@ -48,6 +48,7 @@ export interface ReservaParaCheckin {
   fecha: Date
   checkinAt: Date | null
   totalPasajeros: number
+  saldo?: number
 }
 
 /**
@@ -55,6 +56,7 @@ export interface ReservaParaCheckin {
  *
  * - Cancelada: NO. Es lo único que se rechaza de plano; subir a alguien cuya
  *   reserva se anuló es el error que después nadie sabe explicar.
+ * - Con falta de pago: NO. Debe saldarse antes de autorizar el embarque.
  * - Ya embarcada: sí, pero avisando. Repetir el escaneo no es un error —el
  *   operador escanea dos veces por costumbre— y no debe duplicar nada.
  * - Fuera de la ventana: sí, con aviso. La decisión es del operador.
@@ -65,6 +67,12 @@ export function evaluarCheckin(
 ): ResultadoCheckin {
   if (reserva.estado === 'CANCELADA') {
     return { ok: false, error: 'Esta reserva está cancelada. No debe embarcar.' }
+  }
+  if (reserva.saldo !== undefined && reserva.saldo > 0.01) {
+    return {
+      ok: false,
+      error: `Esta reserva tiene un saldo pendiente de ${reserva.saldo.toLocaleString('es-DO', { minimumFractionDigits: 2 })}. Debe pagarse antes de autorizar el embarque.`,
+    }
   }
   if (reserva.totalPasajeros <= 0) {
     return { ok: false, error: 'Esta reserva no tiene pasajeros registrados.' }

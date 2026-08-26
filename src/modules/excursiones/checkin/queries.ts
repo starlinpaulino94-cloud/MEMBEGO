@@ -23,6 +23,9 @@ export async function manifiestoDelDia(companyId: string, dia: string) {
         id: true, numero: true, hora: true, adultos: true, ninos: true,
         estado: true, checkinAt: true, clienteId: true, excursionId: true,
         pasajeros: { select: { presente: true } },
+        items: {
+          select: { id: true, estado: true, checkinAt: true },
+        },
       },
     })
   )
@@ -40,22 +43,32 @@ export async function manifiestoDelDia(companyId: string, dia: string) {
     conEmpresa(companyId, (tx) =>
       tx.excursion.findMany({
         where: { id: { in: [...new Set(reservas.map((r) => r.excursionId))] }, companyId },
-        select: { id: true, nombre: true },
+        select: { id: true, nombre: true, tipoItem: true },
       })
     ),
   ])
   const porCliente = new Map(clientes.map((c) => [c.id, c]))
-  const porExcursion = new Map(excursiones.map((e) => [e.id, e.nombre]))
+  const porExcursion = new Map(excursiones.map((e) => [e.id, e]))
 
   const filas = reservas.map((r) => {
     const cliente = porCliente.get(r.clienteId)
+    const exc = porExcursion.get(r.excursionId)
+    const esCombo = exc?.tipoItem === 'COMBO' || r.items.length > 0
+    const totalItems = r.items.length
+    const itemsCompletados = r.items.filter(
+      (it) => it.checkinAt !== null || it.estado === 'CHECKIN_COMPLETADO' || it.estado === 'EMBARCADA'
+    ).length
+
     return {
       id: r.id,
       numero: r.numero,
       hora: r.hora,
       cliente: cliente?.nombre ?? 'Cliente',
       telefono: cliente?.telefono ?? null,
-      excursion: porExcursion.get(r.excursionId) ?? '—',
+      excursion: exc?.nombre ?? '—',
+      esCombo,
+      totalItems,
+      itemsCompletados,
       totalPasajeros: r.pasajeros.length,
       presentes: r.pasajeros.filter((p) => p.presente).length,
       checkinAt: r.checkinAt,

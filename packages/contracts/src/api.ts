@@ -71,6 +71,38 @@ export interface MembershipSummaryDTO {
   vigenteHasta: string | null
 }
 
+/**
+ * Una promoción de la empresa, para que el satélite la LISTE y la muestre.
+ *
+ * Sin las tripas del motor de reglas (`PromotionRule`, versiones, auditoría):
+ * un satélite pinta el título, la vigencia y si sigue activa; decidir si un
+ * cliente concreto puede canjearla es de `benefits.evaluate`, no de esta lista.
+ */
+export interface PromotionDTO {
+  id: string
+  titulo: string
+  descripcion: string
+  imagenUrl: string | null
+  activo: boolean
+  vigenciaDesde: string
+  vigenciaHasta: string | null
+}
+
+/**
+ * Una cita/reservación de la empresa. Sin notas internas ni datos del cliente
+ * más allá de su id: el satélite pinta la agenda; la ficha la pide aparte.
+ */
+export interface AppointmentDTO {
+  id: string
+  customerId: string
+  branchId: string | null
+  vehicleId: string | null
+  inicio: string
+  duracionMin: number
+  servicio: string | null
+  estado: string
+}
+
 // ── Respuestas ──────────────────────────────────────────────────────────────
 
 export interface TokenResponse {
@@ -107,6 +139,18 @@ export interface MembershipsActiveResponse {
   memberships: MembershipSummaryDTO[]
   /** Siempre `false`. Está aquí para que quien lea el JSON tenga el aviso. */
   autoriza: false
+}
+
+export interface MembershipsResponse {
+  memberships: MembershipSummaryDTO[]
+}
+
+export interface PromotionsResponse {
+  promotions: PromotionDTO[]
+}
+
+export interface AppointmentsResponse {
+  appointments: AppointmentDTO[]
 }
 
 export type TipoBeneficio = 'MEMBERSHIP' | 'PROMOTION'

@@ -25,6 +25,7 @@ import { VendedorEstadoBotones } from '@/components/excursiones/VendedorEstadoBo
 import { VendedorQrCard } from '@/components/excursiones/VendedorQrCard'
 import { VendedorForm } from '@/components/excursiones/VendedorForm'
 import { VendedorAcceso } from '@/components/excursiones/VendedorAcceso'
+import { ClientesCaptadosTabla } from '@/components/excursiones/ClientesCaptadosTabla'
 import { StatusChip } from '@/components/ui/status-chip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -41,22 +42,41 @@ const EMBUDO_ETAPAS = [
 
 export default async function VendedorDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{
+    q?: string
+    etapa?: string
+    canal?: string
+    desde?: string
+    hasta?: string
+    page?: string
+  }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="los vendedores de excursiones" />
 
   const { id } = await params
+  const sp = await searchParams
+
   const detalle = await vendedorDetalle(companyId, id)
   if (!detalle) notFound()
   const { vendedor, embudo, correoAcceso } = detalle
 
   const enlace = vendedor.enlaces[0] ?? null
-  const [supervisoresTodos, captados] = await Promise.all([
+  const [supervisoresTodos, captadosResultado] = await Promise.all([
     vendedoresParaSupervisor(companyId),
-    clientesCaptados(companyId, vendedor.id),
+    clientesCaptados(companyId, vendedor.id, {
+      q: sp.q,
+      etapa: sp.etapa,
+      canal: sp.canal,
+      desde: sp.desde,
+      hasta: sp.hasta,
+      page: sp.page ? Number(sp.page) : 1,
+      limit: 15,
+    }),
   ])
   const supervisores = supervisoresTodos.filter((s) => s.id !== vendedor.id)
 
@@ -119,37 +139,13 @@ export default async function VendedorDetallePage({
         </>
       ) : null}
 
-      {/* El nombre detrás del número: quién entró por su enlace y cuándo. */}
-      {captados.length > 0 ? (
-        <section className="rounded-2xl border border-border bg-card p-5">
-          <h2 className="text-h3 text-foreground">Últimos clientes captados</h2>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-3">Cliente</th>
-                  <th className="py-2 pr-3">Teléfono</th>
-                  <th className="py-2 pr-3">Etapa</th>
-                  <th className="py-2">Cuándo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {captados.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3 font-medium text-foreground">{c.nombre}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">{c.telefono ?? '—'}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">
-                      {ETAPA_ATRIBUCION_LABEL[c.etapa as EtapaAtribucion] ?? c.etapa}
-                      {c.canal === 'QR' ? ' · QR' : ''}
-                    </td>
-                    <td className="py-2 text-muted-foreground">{formatDateTime(c.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
+      {/* Detalle y auditoría de clientes captados con filtros y paginación */}
+      <ClientesCaptadosTabla
+        items={captadosResultado.items}
+        total={captadosResultado.total}
+        totalPages={captadosResultado.totalPages}
+        currentPage={captadosResultado.currentPage}
+      />
 
       <VendedorAcceso
         vendedorId={vendedor.id}

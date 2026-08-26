@@ -189,26 +189,19 @@ export async function proxy(request: NextRequest) {
     const localSession = await verifyLocalSession(request.cookies.getAll())
 
     let user: { id: string; email?: string; app_metadata?: unknown } | null = null
-    let expiraEn = 0
     if (localSession) {
       user = {
         id: localSession.user.id,
         email: localSession.user.email,
         app_metadata: localSession.user.appMetadata,
       }
-      expiraEn = localSession.expiresAt
+      const tokenFresco = localSession.expiresAt * 1000 > Date.now() + REFRESH_MARGIN_S * 1000
+      if (!tokenFresco) {
+        const { data: { user: validado } } = await supabase.auth.getUser()
+        user = validado
+      }
     } else {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      user = session?.user ?? null
-      expiraEn = session?.expires_at ?? 0
-    }
-    const tokenFresco = expiraEn * 1000 > Date.now() + REFRESH_MARGIN_S * 1000
-    if (!user || !tokenFresco) {
-      const {
-        data: { user: validado },
-      } = await supabase.auth.getUser()
+      const { data: { user: validado } } = await supabase.auth.getUser()
       user = validado
     }
 
@@ -249,13 +242,18 @@ export async function proxy(request: NextRequest) {
       }
     }
 
-    // Redirect logged-in users away from the login pages
+    // Redirect logged-in users away from the login pages (sin entrar en bucle si vienen de un redirect)
     if (isLoginPage && user) {
+      const redirectTo = request.nextUrl.searchParams.get('redirect')
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
-      const url = request.nextUrl.clone()
-      url.pathname = ROLE_HOME[role]
-      return redirectWithCookies(url, response)
+      const roleHome = ROLE_HOME[role]
+      if (!redirectTo || !redirectTo.startsWith(roleHome)) {
+        const url = request.nextUrl.clone()
+        url.pathname = roleHome
+        url.searchParams.delete('redirect')
+        return redirectWithCookies(url, response)
+      }
     }
   } catch (err) {
     // Fail-closed: si la verificación de auth falla (Supabase caído, env

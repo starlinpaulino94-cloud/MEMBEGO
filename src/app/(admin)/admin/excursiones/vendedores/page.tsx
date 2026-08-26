@@ -3,15 +3,10 @@ import { Plus, Users } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { listadoVendedores } from '@/modules/excursiones/vendedores/queries'
-import {
-  ESTADO_VENDEDOR_LABEL,
-  TONO_VENDEDOR,
-  type EstadoVendedor,
-} from '@/modules/excursiones/vendedores/nucleo'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
-import { StatusChip } from '@/components/ui/status-chip'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/system/EmptyState'
+import { VendedoresLista } from '@/components/excursiones/VendedoresLista'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Vendedores' }
@@ -49,43 +44,7 @@ export default async function VendedoresPage() {
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-left text-caption uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3">Vendedor</th>
-                <th className="px-4 py-3">Código</th>
-                <th className="px-4 py-3">Tipo</th>
-                <th className="px-4 py-3">Teléfono</th>
-                <th className="px-4 py-3">Captados</th>
-                <th className="px-4 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendedores.map((v) => (
-                <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/excursiones/vendedores/${v.id}`}
-                      className="font-semibold text-foreground hover:text-primary hover:underline"
-                    >
-                      {v.nombre} {v.apellido ?? ''}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-foreground">{v.codigo}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{v.tipo ?? '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{v.telefono ?? '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{v._count.atribuciones}</td>
-                  <td className="px-4 py-3">
-                    <StatusChip tone={TONO_VENDEDOR[v.estado as EstadoVendedor] ?? 'neutral'}>
-                      {ESTADO_VENDEDOR_LABEL[v.estado as EstadoVendedor] ?? v.estado}
-                    </StatusChip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <VendedoresLista vendedores={vendedores} />
       )}
     </div>
   )

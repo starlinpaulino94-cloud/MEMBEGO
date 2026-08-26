@@ -4,13 +4,16 @@ import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ExcursionForm } from '@/components/excursiones/ExcursionForm'
+import { actividadesParaCombo } from '@/modules/excursiones/catalogo/queries'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Nueva excursión' }
+export const metadata = { title: 'Nueva excursión o combo' }
 
 export default async function NuevaExcursionPage() {
   const user = await requireRole(ADMIN_ROLES)
   if (!user.metadata.companyId) return <SinEmpresaActiva seccion="el catálogo de excursiones" />
+
+  const actividades = await actividadesParaCombo(user.metadata.companyId)
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -20,8 +23,8 @@ export default async function NuevaExcursionPage() {
       >
         <ArrowLeft className="h-4 w-4" /> Catálogo
       </Link>
-      <h2 className="text-h2 text-foreground">Nueva excursión</h2>
-      <ExcursionForm companyId={user.metadata.companyId} />
+      <h2 className="text-h2 text-foreground">Nueva actividad o combo</h2>
+      <ExcursionForm companyId={user.metadata.companyId} actividadesDisponibles={actividades} />
     </div>
   )
 }

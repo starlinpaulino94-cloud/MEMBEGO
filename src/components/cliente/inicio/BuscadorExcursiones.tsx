@@ -23,7 +23,7 @@ export function BuscadorExcursiones() {
   }
 
   return (
-    <section className="space-y-3" aria-label="Buscar excursiones">
+    <section className="space-y-3" aria-label="Buscar actividades">
       <form onSubmit={buscar} role="search">
         <div className="relative">
           <Search
@@ -34,8 +34,8 @@ export function BuscadorExcursiones() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar excursiones por nombre, destino, categoría…"
-            aria-label="Buscar excursiones"
+            placeholder="Buscar actividades por nombre, destino, categoría…"
+            aria-label="Buscar actividades"
             className="h-12 rounded-xl pl-11 text-base"
           />
         </div>
@@ -47,7 +47,7 @@ export function BuscadorExcursiones() {
           className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-4 text-small font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
         >
           <Compass className="mr-2 h-4 w-4" />
-          Ver todas las excursiones
+          Ver todas las actividades
         </Link>
       </div>
     </section>

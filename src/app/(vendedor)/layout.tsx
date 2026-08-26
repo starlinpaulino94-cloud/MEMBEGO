@@ -25,33 +25,38 @@ export default async function VendedorLayout({ children }: { children: React.Rea
   if (!vendedor) redirect('/login')
 
   return (
-    <div className="min-h-dvh bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-3">
-          <div className="min-w-0">
-            <Link href="/vendedor" className="block truncate font-semibold text-foreground">
-              {vendedor.nombre}
-            </Link>
-            <p className="truncate text-caption text-muted-foreground">
-              <span className="font-mono">{vendedor.codigo}</span> · {vendedor.empresa}
-            </p>
+    <div className="min-h-dvh bg-background flex flex-col w-full">
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur-md w-full">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-sm">
+              {vendedor.nombre.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <Link href="/vendedor" className="block truncate text-sm font-bold text-foreground hover:text-primary transition-colors">
+                {vendedor.nombre}
+              </Link>
+              <p className="truncate text-xs text-muted-foreground">
+                <span className="font-mono font-semibold text-foreground/80">{vendedor.codigo}</span> · {vendedor.empresa}
+              </p>
+            </div>
           </div>
           <form action={logout}>
             <button
               type="submit"
               title="Cerrar sesión"
               aria-label="Cerrar sesión"
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95 shrink-0"
             >
-              <LogOut className="h-[18px] w-[18px]" />
+              <LogOut className="h-4 w-4" />
             </button>
           </form>
         </div>
-        <div className="mx-auto max-w-2xl px-4 pb-2">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pb-1">
           <VendedorTabs />
         </div>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-5">{children}</main>
+      <main className="mx-auto w-full max-w-5xl flex-1 min-w-0 px-4 sm:px-6 lg:px-8 py-5 sm:py-7">{children}</main>
     </div>
   )
 }

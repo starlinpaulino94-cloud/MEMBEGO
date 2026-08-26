@@ -49,7 +49,7 @@ const PERFIL: BottomNavItem = {
 }
 /** Candidatos para los 2 slots flexibles, en orden de prioridad. */
 const FLEX_CANDIDATOS: BottomNavItem[] = [
-  { href: '/cliente/mis-excursiones', label: 'Excursiones', icon: CalendarDays, match: ['/cliente/excursiones'] },
+  { href: '/cliente/mis-excursiones', label: 'Actividades', icon: CalendarDays, match: ['/cliente/excursiones'] },
   { href: '/mis-membresias', label: 'Membresías', icon: WalletCards },
   { href: '/cliente/cerca', label: 'Cerca', icon: Compass },
   { href: '/cliente/promociones', label: 'Ofertas', icon: Megaphone },

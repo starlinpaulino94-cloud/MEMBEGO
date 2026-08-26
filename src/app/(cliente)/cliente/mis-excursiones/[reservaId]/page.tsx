@@ -6,7 +6,12 @@ import { getUser } from '@/lib/auth'
 import { sinEmpresa } from '@/lib/tenant'
 import { reservaCliente } from '@/modules/excursiones/reservas/queries'
 import { formatMoney, formatDate } from '@/lib/format'
-import { ESTADO_RESERVA_LABEL, TONO_RESERVA } from '@/modules/excursiones/reservas/nucleo'
+import {
+  ESTADO_RESERVA_LABEL,
+  TONO_RESERVA,
+  formatoMinutosAHora,
+  minutosDesdeMedianoche,
+} from '@/modules/excursiones/reservas/nucleo'
 import { ReservaCheckinQrDisplay } from '@/components/excursiones/ReservaCheckinQrDisplay'
 
 export const dynamic = 'force-dynamic'
@@ -157,7 +162,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                 </div>
               )}
 
-              {/* Punto de salida y horarios */}
+              {/* Punto de salida y horarios seleccionados */}
               <div className="grid gap-2.5 sm:grid-cols-2 pt-2">
                 {excursion.puntoSalida && (
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
@@ -168,34 +173,208 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                     </div>
                   </div>
                 )}
-                {excursion.horaSalida && (
+                {reserva.hora || excursion.horaSalida ? (
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
                     <Clock className="h-5 w-5 text-primary flex-shrink-0" />
                     <div>
-                      <p className="text-xs uppercase font-bold text-muted-foreground">Hora de salida</p>
-                      <p className="font-semibold text-xs sm:text-sm text-foreground">{excursion.horaSalida}</p>
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Turno / Hora de salida</p>
+                      <p className="font-semibold text-xs sm:text-sm text-foreground font-mono">
+                        {reserva.hora?.trim().slice(0, 5) || excursion.horaSalida?.trim().slice(0, 5)}
+                      </p>
                     </div>
                   </div>
-                )}
-                {excursion.horaRegreso && (
-                  <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
-                    <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <p className="text-xs uppercase font-bold text-muted-foreground">Regreso estimado</p>
-                      <p className="font-semibold text-xs sm:text-sm text-foreground">{excursion.horaRegreso}</p>
+                ) : null}
+                {(() => {
+                  const hInicio = reserva.hora?.trim().slice(0, 5) || excursion.horaSalida?.trim().slice(0, 5)
+                  const durMin = excursion.duracionMin
+                  const hFin = hInicio && durMin && durMin > 0
+                    ? formatoMinutosAHora(minutosDesdeMedianoche(hInicio) + durMin)
+                    : (excursion.horaRegreso?.trim().slice(0, 5) || null)
+                  return hFin ? (
+                    <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
+                      <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      <div>
+                        <p className="text-xs uppercase font-bold text-muted-foreground">Regreso estimado</p>
+                        <p className="font-semibold text-xs sm:text-sm text-foreground font-mono">{hFin}</p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : null
+                })()}
                 {excursion.duracionMin && (
                   <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 p-3">
                     <CalendarDays className="h-5 w-5 text-primary flex-shrink-0" />
                     <div>
-                      <p className="text-xs uppercase font-bold text-muted-foreground">Duración</p>
-                      <p className="font-semibold text-xs sm:text-sm text-foreground">{excursion.duracionMin} min</p>
+                      <p className="text-xs uppercase font-bold text-muted-foreground">Duración total</p>
+                      <p className="font-semibold text-xs sm:text-sm text-foreground">
+                        {excursion.duracionMin >= 60
+                          ? `${Math.floor(excursion.duracionMin / 60)}h ${excursion.duracionMin % 60 > 0 ? `${excursion.duracionMin % 60}m` : ''}`.trim()
+                          : `${excursion.duracionMin} min`}
+                      </p>
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* Itinerario desglosado para Combos con turnos reales */}
+              {excursion.tipoItem === 'COMBO' && (
+                <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-foreground">
+                      <Clock className="h-4 w-4 text-primary" />
+                      Itinerario y Horarios del Combo
+                    </h4>
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+                      {reserva.items && reserva.items.length > 0 ? reserva.items.length : excursion.comboItems?.length ?? 0} Actividades coordinadas
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 pt-0.5">
+                    {reserva.items && reserva.items.length > 0 ? (
+                      reserva.items.map((item, idx) => {
+                        const act = item.actividad
+                        const esPd = act.tipoItem === 'PASE_DIA'
+                        const inicio = item.hora?.trim().slice(0, 5) || reserva.hora?.trim().slice(0, 5) || act.horaSalida?.trim().slice(0, 5) || '—'
+                        const durMin = act.duracionMin ?? 0
+                        const fin = (!esPd && inicio !== '—' && durMin > 0)
+                          ? formatoMinutosAHora(minutosDesdeMedianoche(inicio) + durMin)
+                          : (act.horaRegreso?.trim().slice(0, 5) || '—')
+                        const durTexto = durMin > 0
+                          ? (durMin >= 60 ? `${Math.floor(durMin / 60)}h ${durMin % 60 > 0 ? `${durMin % 60}m` : ''}`.trim() : `${durMin}m`)
+                          : null
+                        const fechaDistinta = formatDate(item.fecha) !== formatDate(reserva.fecha)
+
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card p-3 shadow-xs"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
+                                  esPd
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                                    : 'bg-primary text-primary-foreground'
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-xs sm:text-sm font-bold text-foreground truncate">{act.nombre}</p>
+                                  {esPd && (
+                                    <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                                      Daypass
+                                    </span>
+                                  )}
+                                  {item.checkinAt && (
+                                    <span className="text-[10px] font-bold bg-success/15 text-success px-2 py-0.5 rounded-full shrink-0">
+                                      ✓ Embarcado
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                                  {fechaDistinta && (
+                                    <span className="font-bold text-primary">{formatDate(item.fecha)}</span>
+                                  )}
+                                  {act.ubicacion && (
+                                    <span className="truncate max-w-[200px] flex items-center gap-0.5">
+                                      <MapPin className="h-3 w-3 shrink-0" />
+                                      {act.ubicacion}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="font-mono text-xs font-semibold text-foreground shrink-0 text-right">
+                              {esPd ? (
+                                <span className="text-emerald-700 dark:text-emerald-400 font-medium">Acceso libre (Todo el día)</span>
+                              ) : inicio !== '—' ? (
+                                <div className="space-y-0.5">
+                                  <div className="text-foreground">
+                                    {inicio} {fin !== '—' ? `→ ${fin}` : ''}
+                                  </div>
+                                  {durTexto && (
+                                    <div className="text-[11px] font-normal text-muted-foreground">
+                                      Duración: {durTexto}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Horario según turno</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : excursion.comboItems && excursion.comboItems.length > 0 ? (
+                      excursion.comboItems.map((item, idx) => {
+                        const act = item.actividad
+                        const esPd = act.tipoItem === 'PASE_DIA'
+                        const inicio = act.horaSalida?.trim().slice(0, 5) || '—'
+                        const durMin = act.duracionMin ?? 0
+                        const fin = (!esPd && inicio !== '—' && durMin > 0)
+                          ? formatoMinutosAHora(minutosDesdeMedianoche(inicio) + durMin)
+                          : (act.horaRegreso?.trim().slice(0, 5) || '—')
+                        const durTexto = durMin > 0
+                          ? (durMin >= 60 ? `${Math.floor(durMin / 60)}h ${durMin % 60 > 0 ? `${durMin % 60}m` : ''}`.trim() : `${durMin}m`)
+                          : null
+
+                        return (
+                          <div
+                            key={act.id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card p-3 shadow-xs"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
+                                  esPd
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                                    : 'bg-primary text-primary-foreground'
+                                }`}
+                              >
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-xs sm:text-sm font-bold text-foreground truncate">{act.nombre}</p>
+                                  {esPd && (
+                                    <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                                      Daypass
+                                    </span>
+                                  )}
+                                </div>
+                                {act.categoria && (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">{act.categoria}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="font-mono text-xs font-semibold text-foreground shrink-0 text-right">
+                              {esPd ? (
+                                <span className="text-emerald-700 dark:text-emerald-400 font-medium">Acceso libre</span>
+                              ) : inicio !== '—' ? (
+                                <div className="space-y-0.5">
+                                  <div className="text-foreground">
+                                    {inicio} {fin !== '—' ? `→ ${fin}` : ''}
+                                  </div>
+                                  {durTexto && (
+                                    <div className="text-[11px] font-normal text-muted-foreground">
+                                      Duración: {durTexto}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Horario según turno</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : null}
+                  </div>
+                </div>
+              )}
 
               {/* Incluye / No incluye */}
               {(excursion.incluye || excursion.noIncluye) && (

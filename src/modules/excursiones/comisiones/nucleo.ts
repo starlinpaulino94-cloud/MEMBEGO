@@ -58,7 +58,6 @@ export const PESO_AMBITO: Record<AmbitoRegla, number> = {
 export const TIPOS_CALCULO = [
   'PORCENTAJE',
   'FIJO_VENTA',
-  'FIJO_PASAJERO',
   'FIJO_ADULTO',
   'FIJO_NINO',
   'ESCALON',
@@ -67,12 +66,11 @@ export const TIPOS_CALCULO = [
 export type TipoCalculo = (typeof TIPOS_CALCULO)[number]
 
 export const TIPO_CALCULO_LABEL: Record<TipoCalculo, string> = {
-  PORCENTAJE: 'Porcentaje de la venta',
+  PORCENTAJE: 'Porcentaje sobre tarifa por pasajero / venta (%)',
   FIJO_VENTA: 'Monto fijo por venta',
-  FIJO_PASAJERO: 'Monto fijo por pasajero',
   FIJO_ADULTO: 'Monto fijo por adulto',
   FIJO_NINO: 'Monto fijo por niño',
-  ESCALON: 'Por escalones de pasajeros',
+  ESCALON: 'Por escalones de volumen de pasajeros',
   PAQUETE_REGALO: 'Paquete de regalo cada N ventas',
 }
 

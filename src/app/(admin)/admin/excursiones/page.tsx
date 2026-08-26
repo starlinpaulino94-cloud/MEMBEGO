@@ -8,7 +8,7 @@ import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Excursiones' }
+export const metadata = { title: 'Parques y Tours' }
 
 /**
  * Panel del vertical: primero las cifras del período, después las puertas.
@@ -22,7 +22,7 @@ const DISPONIBLES = [
     href: '/admin/excursiones/catalogo',
     icon: Map,
     titulo: 'Catálogo',
-    detalle: 'Excursiones, variantes y horarios de salida.',
+    detalle: 'Actividades, variantes y horarios de salida.',
   },
   {
     href: '/admin/excursiones/vendedores',

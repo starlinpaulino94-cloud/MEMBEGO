@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
-import { recordPromotionView } from '@/modules/marketplace/actions'
 import { getPromotionDetail } from '@/modules/marketplace/cached'
 import { estadoLimiteCliente } from '@/modules/promociones/compra'
 import { fichaEnEmpresa } from '@/modules/cliente/afiliacion'
@@ -43,9 +42,6 @@ export default async function ClientePromocionPage({
 
   const promotion = await getPromotionDetail(id)
   if (!promotion) notFound()
-
-  // Registrar vista (no bloqueante)
-  recordPromotionView(id).catch(console.error)
 
   const esMiEmpresa = promotion.company.id === user.metadata.companyId
 

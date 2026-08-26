@@ -112,10 +112,10 @@ const nextConfig: NextConfig = {
               // CSP cae a script-src (que no lleva blob:) y lo bloquea.
               "worker-src 'self' blob:",
               "style-src 'self' 'unsafe-inline' https://*.gtp-seglan.com",
-              "img-src 'self' data: https: blob:",
+              `img-src 'self' data: https: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}`,
               "font-src 'self' data: https://*.gtp-seglan.com",
               // api.github.com se eliminó: no se usa en la app.
-              "connect-src 'self' https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://*.cardnet.com.do https://*.gtp-seglan.com",
+              `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''} https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://*.cardnet.com.do https://*.gtp-seglan.com`,
               // cardnet.com.do: el reto 3DS del banco se pinta en un iframe y el
               // formulario que lo abre hace POST a la pasarela. Sin estas dos
               // reglas, el navegador bloquea la pantalla del banco. Solo afecta a

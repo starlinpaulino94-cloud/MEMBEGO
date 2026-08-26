@@ -66,6 +66,7 @@ test('Pago online simulado con vendedor acreditado genera comisión calculada co
     ambito: 'GENERAL',
     excursionId: null,
     vendedorId: null,
+    tipoVendedor: null,
     categoria: null,
     tipoCalculo: 'PORCENTAJE',
     valor: 20, // 20%

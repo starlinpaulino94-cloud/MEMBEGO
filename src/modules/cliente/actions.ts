@@ -107,15 +107,19 @@ export async function afiliarmeAEmpresa(
   _prev: AfiliacionState,
   formData: FormData
 ): Promise<AfiliacionState> {
-  // Determinar redirect: si la empresa tiene excursiones, ir allí; si no, a planes
+  // Determinar redirect: si vino por enlace de vendedor o la empresa tiene excursiones, ir allí; si no, a planes
   let destino = '/cliente/planes'
   const companySlug = String(formData.get('companySlug') ?? '').trim()
   const enlaceSlug = String(formData.get('enlaceSlug') ?? '').trim() || null
   if (companySlug) {
-    const cid = await companyIdPorSlug(companySlug)
-    if (cid) {
-      const exc = await excursionesPublicas(cid)
-      if (exc.length > 0) destino = `/empresas/${companySlug}/excursiones`
+    if (enlaceSlug) {
+      destino = `/empresas/${companySlug}/excursiones?e=${encodeURIComponent(enlaceSlug)}`
+    } else {
+      const cid = await companyIdPorSlug(companySlug)
+      if (cid) {
+        const exc = await excursionesPublicas(cid)
+        if (exc.length > 0) destino = `/empresas/${companySlug}/excursiones`
+      }
     }
   }
   try {
@@ -496,6 +500,27 @@ export async function buscarUnificado(
             // hacia el núcleo el módulo guarda el id plano, sin @relation
             // (convención escrita en prisma/schema/excursiones.prisma).
             companyId: true,
+            tipoItem: true,
+            comboItems: {
+              orderBy: { orden: 'asc' },
+              select: {
+                horaSalida: true,
+                actividad: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    tipoItem: true,
+                    capacidad: true,
+                    horaSalida: true,
+                    horaRegreso: true,
+                    horarios: {
+                      where: { activo: true },
+                      select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+                    },
+                  },
+                },
+              },
+            },
             variantes: {
               where: { activa: true },
               orderBy: { orden: 'asc' },
@@ -539,6 +564,27 @@ export async function buscarUnificado(
                 horaRegreso: true,
                 // Igual que arriba: id plano, la ficha se resuelve aparte.
                 companyId: true,
+                tipoItem: true,
+                comboItems: {
+                  orderBy: { orden: 'asc' },
+                  select: {
+                    horaSalida: true,
+                    actividad: {
+                      select: {
+                        id: true,
+                        nombre: true,
+                        tipoItem: true,
+                        capacidad: true,
+                        horaSalida: true,
+                        horaRegreso: true,
+                        horarios: {
+                          where: { activo: true },
+                          select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+                        },
+                      },
+                    },
+                  },
+                },
                 variantes: {
                   where: { activa: true },
                   orderBy: { orden: 'asc' },
@@ -596,7 +642,9 @@ export async function buscarUnificado(
             // llamadores de `calcularDisponibilidad`.
             exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
             exc.horaRegreso,
-            exc.horaSalida
+            exc.horaSalida,
+            exc.tipoItem,
+            exc.comboItems as any
           )
 
           // Salidas futuras válidas no pasadas

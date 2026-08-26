@@ -73,7 +73,7 @@ export function ExcursionCarritoDrawer() {
           <SheetHeader className="mb-6 text-left">
             <SheetTitle className="flex items-center gap-2 text-xl">
               <ShoppingCart className="h-5 w-5" />
-              Tu Carrito de Excursiones
+              Tu Carrito de Actividades
             </SheetTitle>
             <SheetDescription>
               Tienes {items.length} {items.length === 1 ? 'reserva' : 'reservas'} pendientes.
@@ -84,7 +84,7 @@ export function ExcursionCarritoDrawer() {
             <div className="flex flex-col items-center justify-center h-48 text-center text-muted-foreground space-y-3">
               <ShoppingCart className="h-10 w-10 opacity-20" />
               <p>Tu carrito está vacío.</p>
-              <Button variant="outline" onClick={closeCart}>Explorar Excursiones</Button>
+              <Button variant="outline" onClick={closeCart}>Explorar Actividades</Button>
             </div>
           ) : (
             <div className="space-y-4">

@@ -77,6 +77,27 @@ export interface ExcursionPublica {
   proximasSalidas: SalidaDisponible[]
   agotadaGlobal: boolean
   todasFechasPasadas: boolean
+  tipoItem?: string
+  comboItems?: {
+    horaSalida?: string | null
+    actividad: {
+      id: string
+      nombre: string
+      slug: string
+      tipoItem?: string | null
+      portadaUrl: string | null
+      duracionMin: number | null
+      horaSalida: string | null
+      horaRegreso: string | null
+      categoria: string | null
+      horarios?: {
+        id: string
+        horaSalida: string
+        diasSemana: number[]
+        cupo: number | null
+      }[]
+    }
+  }[]
 }
 
 /** Días ISO (1 = lunes … 7 = domingo). */
@@ -110,28 +131,54 @@ function generarFechasParaDia(diaSemana: number, limiteDias = 90): string[] {
   return fechas
 }
 
-/** Calcula disponibilidad para una excursión. */
+export interface ChildActividadParaCombo {
+  horaSalida?: string | null
+  actividad: {
+    id: string
+    nombre: string
+    tipoItem?: string | null
+    capacidad: number | null
+    horaSalida?: string | null
+    horaRegreso?: string | null
+    horarios?: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[]
+  }
+}
+
+/** Calcula disponibilidad para una excursión o combo considerando reservas directas e indirectas. */
 async function calcularDisponibilidad(
   companyId: string,
   excursionId: string,
   capacidad: number | null,
   horarios: { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
   horaRegreso: string | null,
-  horaSalidaFallback?: string | null
+  horaSalidaFallback?: string | null,
+  tipoItem?: string | null,
+  comboItems?: ChildActividadParaCombo[] | null
 ): Promise<{ proximasSalidas: SalidaDisponible[]; agotadaGlobal: boolean; todasFechasPasadas: boolean }> {
+  const esPaseDia = tipoItem === 'PASE_DIA'
+  const esCombo = tipoItem === 'COMBO'
   const effectiveHorarios =
     horarios && horarios.length > 0
       ? horarios
-      : horaSalidaFallback
+      : esPaseDia
         ? [
             {
               id: `default-${excursionId}`,
               diasSemana: [1, 2, 3, 4, 5, 6, 7],
-              horaSalida: horaSalidaFallback,
+              horaSalida: '00:00',
               cupo: null,
             },
           ]
-        : []
+        : horaSalidaFallback
+          ? [
+              {
+                id: `default-${excursionId}`,
+                diasSemana: [1, 2, 3, 4, 5, 6, 7],
+                horaSalida: horaSalidaFallback,
+                cupo: null,
+              },
+            ]
+          : []
 
   if (effectiveHorarios.length === 0) {
     return { proximasSalidas: [], agotadaGlobal: true, todasFechasPasadas: true }
@@ -143,23 +190,121 @@ async function calcularDisponibilidad(
   const dentroDe90 = new Date(hoy)
   dentroDe90.setDate(dentroDe90.getDate() + 90)
 
-  const reservas = await prisma.reservaExc.findMany({
-    where: {
-      companyId,
-      excursionId,
-      fecha: { gte: hoy, lte: dentroDe90 },
-      estado: { notIn: ['CANCELADA', 'NO_SHOW', 'COMPLETADA'] },
-    },
-    select: { fecha: true, hora: true, adultos: true, ninos: true },
-  })
+  // 1. Reservas directas de la actividad o combo
+  // 2. Reservas donde esta actividad fue reservada como ítem de un combo (ReservaItem)
+  const [reservasDirectas, reservasItems] = await Promise.all([
+    prisma.reservaExc.findMany({
+      where: {
+        companyId,
+        excursionId,
+        fecha: { gte: hoy, lte: dentroDe90 },
+        estado: { notIn: ['CANCELADA', 'NO_SHOW', 'REEMBOLSADA'] },
+      },
+      select: { fecha: true, hora: true, adultos: true, ninos: true },
+    }),
+    prisma.reservaItem.findMany({
+      where: {
+        companyId,
+        actividadId: excursionId,
+        fecha: { gte: hoy, lte: dentroDe90 },
+        estado: { notIn: ['CANCELADA'] },
+        reserva: {
+          estado: { notIn: ['CANCELADA', 'NO_SHOW', 'REEMBOLSADA'] },
+        },
+      },
+      select: { fecha: true, hora: true, adultos: true, ninos: true },
+    }),
+  ])
 
-  // Mapa de reservas por fecha+hora: { '2026-01-15|10:00': totalPasajeros }
+  // Mapa de reservas unificado por fecha+hora o solo fecha si es pase de día
   const reservasMap = new Map<string, number>()
-  for (const r of reservas) {
+  for (const r of reservasDirectas) {
     const fechaStr = r.fecha.toISOString().split('T')[0]
     const horaStr = (r.hora || '').trim().slice(0, 5)
-    const key = `${fechaStr}|${horaStr}`
+    const key = esPaseDia ? fechaStr : `${fechaStr}|${horaStr}`
     reservasMap.set(key, (reservasMap.get(key) || 0) + r.adultos + r.ninos)
+  }
+  for (const r of reservasItems) {
+    const fechaStr = r.fecha.toISOString().split('T')[0]
+    const horaStr = (r.hora || '').trim().slice(0, 5)
+    const key = esPaseDia ? fechaStr : `${fechaStr}|${horaStr}`
+    reservasMap.set(key, (reservasMap.get(key) || 0) + r.adultos + r.ninos)
+  }
+
+  // 3. Si es un COMBO, obtener también la ocupación de todas sus actividades hijas
+  const childReservasMap = new Map<string, number>()
+  let childActividades: ChildActividadParaCombo[] = []
+
+  if (esCombo) {
+    if (comboItems && comboItems.length > 0) {
+      childActividades = comboItems
+    } else {
+      const dbComboItems = await prisma.comboItem.findMany({
+        where: { excursionId },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              tipoItem: true,
+              capacidad: true,
+              horaSalida: true,
+              horaRegreso: true,
+              horarios: {
+                where: { activo: true },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      })
+      childActividades = dbComboItems as unknown as ChildActividadParaCombo[]
+    }
+
+    const childIds = childActividades.map((ci) => ci.actividad?.id).filter(Boolean)
+    if (childIds.length > 0) {
+      const [childDirectas, childCombos] = await Promise.all([
+        prisma.reservaExc.findMany({
+          where: {
+            companyId,
+            excursionId: { in: childIds },
+            fecha: { gte: hoy, lte: dentroDe90 },
+            estado: { notIn: ['CANCELADA', 'NO_SHOW', 'REEMBOLSADA'] },
+          },
+          select: { excursionId: true, fecha: true, hora: true, adultos: true, ninos: true },
+        }),
+        prisma.reservaItem.findMany({
+          where: {
+            companyId,
+            actividadId: { in: childIds },
+            fecha: { gte: hoy, lte: dentroDe90 },
+            estado: { notIn: ['CANCELADA'] },
+            reserva: {
+              estado: { notIn: ['CANCELADA', 'NO_SHOW', 'REEMBOLSADA'] },
+            },
+          },
+          select: { actividadId: true, fecha: true, hora: true, adultos: true, ninos: true },
+        }),
+      ])
+
+      for (const r of childDirectas) {
+        const fechaStr = r.fecha.toISOString().split('T')[0]
+        const horaStr = (r.hora || '').trim().slice(0, 5)
+        const key = `${r.excursionId}|${fechaStr}|${horaStr}`
+        const keyDia = `${r.excursionId}|${fechaStr}`
+        childReservasMap.set(key, (childReservasMap.get(key) || 0) + r.adultos + r.ninos)
+        childReservasMap.set(keyDia, (childReservasMap.get(keyDia) || 0) + r.adultos + r.ninos)
+      }
+      for (const r of childCombos) {
+        const fechaStr = r.fecha.toISOString().split('T')[0]
+        const horaStr = (r.hora || '').trim().slice(0, 5)
+        const key = `${r.actividadId}|${fechaStr}|${horaStr}`
+        const keyDia = `${r.actividadId}|${fechaStr}`
+        childReservasMap.set(key, (childReservasMap.get(key) || 0) + r.adultos + r.ninos)
+        childReservasMap.set(keyDia, (childReservasMap.get(keyDia) || 0) + r.adultos + r.ninos)
+      }
+    }
   }
 
   const capacidadTotal = capacidad && capacidad > 0 ? capacidad : 50
@@ -171,16 +316,69 @@ async function calcularDisponibilidad(
     for (const diaSemana of dias) {
       const fechas = generarFechasParaDia(diaSemana)
       for (const fecha of fechas) {
-        const horaSalida = (horario.horaSalida || '00:00').trim().slice(0, 5)
-        const key = `${fecha}|${horaSalida}`
+        const horaSalida = esPaseDia ? '' : (horario.horaSalida || '00:00').trim().slice(0, 5)
+        const key = esPaseDia ? fecha : `${fecha}|${horaSalida}`
         const reservados = reservasMap.get(key) || 0
         const cupoEfectivo = horario.cupo && horario.cupo > 0 ? horario.cupo : capacidadTotal
-        const cupoDisponible = Math.max(0, cupoEfectivo - reservados)
+        let cupoDisponible = Math.max(0, cupoEfectivo - reservados)
+
+        // Si es un combo, acotar el cupo disponible por la menor disponibilidad entre sus actividades hijas
+        if (esCombo && childActividades.length > 0) {
+          const [y, m, d] = fecha.split('-').map(Number)
+          const fechaObj = new Date(Date.UTC(y, m - 1, d))
+          const diaSemanaJS = fechaObj.getUTCDay()
+          const diaSemanaISO = diaSemanaJS === 0 ? 7 : diaSemanaJS
+
+          for (const ci of childActividades) {
+            const act = ci.actividad
+            if (!act) continue
+            const childEsPaseDia = act.tipoItem === 'PASE_DIA'
+            const childHora = childEsPaseDia
+              ? ''
+              : (ci.horaSalida || act.horaSalida || horario.horaSalida || '00:00').trim().slice(0, 5)
+
+            // Verificar si la actividad hija opera este día de la semana
+            let operaDia = true
+            if (act.horarios && act.horarios.length > 0) {
+              operaDia = act.horarios.some((h) =>
+                Array.isArray(h.diasSemana) ? h.diasSemana.includes(diaSemanaISO) : true
+              )
+            }
+            if (!operaDia) {
+              cupoDisponible = 0
+              break
+            }
+
+            const childKey = childEsPaseDia
+              ? `${act.id}|${fecha}`
+              : `${act.id}|${fecha}|${childHora}`
+
+            const childCapBase = act.capacidad && act.capacidad > 0 ? act.capacidad : 50
+            let childCupoTurno = childCapBase
+            if (!childEsPaseDia && act.horarios && act.horarios.length > 0) {
+              const hMatch = act.horarios.find(
+                (h) => (h.horaSalida || '').trim().slice(0, 5) === childHora
+              )
+              if (hMatch?.cupo && hMatch.cupo > 0) {
+                childCupoTurno = Math.min(childCupoTurno, hMatch.cupo)
+              }
+            }
+
+            const childReservados = childReservasMap.get(childKey) || 0
+            const childDisp = Math.max(0, childCupoTurno - childReservados)
+            cupoDisponible = Math.min(cupoDisponible, childDisp)
+          }
+        }
 
         // Calcular timestamp exacto de la salida
-        const [hStr, mStr] = horaSalida.split(':')
         const [y, m, d] = fecha.split('-').map(Number)
-        const salidaDate = new Date(y, m - 1, d, Number(hStr || 0), Number(mStr || 0), 0, 0)
+        let salidaDate: Date
+        if (esPaseDia) {
+          salidaDate = new Date(y, m - 1, d, 23, 59, 59, 999)
+        } else {
+          const [hStr, mStr] = horaSalida.split(':')
+          salidaDate = new Date(y, m - 1, d, Number(hStr || 0), Number(mStr || 0), 0, 0)
+        }
         const fechaPasada = salidaDate.getTime() < ahoraTimestamp
         const agotada = cupoDisponible <= 0 || fechaPasada
 
@@ -188,7 +386,7 @@ async function calcularDisponibilidad(
           id: `${horario.id}-${fecha}`,
           fecha,
           horaSalida,
-          horaRegreso: horaRegreso || null,
+          horaRegreso: esPaseDia ? null : horaRegreso || null,
           cupoDisponible,
           agotada,
           fechaPasada,
@@ -220,6 +418,7 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
       id: true,
       nombre: true,
       slug: true,
+      tipoItem: true,
       descripcion: true,
       portadaUrl: true,
       galeria: true,
@@ -235,6 +434,26 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
       incluye: true,
       noIncluye: true,
       politicas: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              tipoItem: true,
+              capacidad: true,
+              horaSalida: true,
+              horaRegreso: true,
+              horarios: {
+                where: { activo: true },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      },
       variantes: {
         where: { activa: true },
         orderBy: { orden: 'asc' },
@@ -269,7 +488,9 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
         exc.capacidad,
         exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
         exc.horaRegreso,
-        exc.horaSalida
+        exc.horaSalida,
+        exc.tipoItem,
+        exc.comboItems as unknown as ChildActividadParaCombo[]
       )
       const mapped = mapRow({
         ...exc,
@@ -332,6 +553,31 @@ export async function excursionPublica(
           orden: true,
         },
       },
+      tipoItem: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              tipoItem: true,
+              slug: true,
+              portadaUrl: true,
+              duracionMin: true,
+              horaSalida: true,
+              horaRegreso: true,
+              categoria: true,
+              horarios: {
+                where: { activo: true },
+                orderBy: { horaSalida: 'asc' },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      },
       horarios: {
         where: { activo: true },
         orderBy: { horaSalida: 'asc' },
@@ -352,7 +598,9 @@ export async function excursionPublica(
     row.capacidad,
     row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
     row.horaRegreso,
-    row.horaSalida
+    row.horaSalida,
+    row.tipoItem,
+    row.comboItems as unknown as ChildActividadParaCombo[]
   )
 
   return mapRow({
@@ -399,6 +647,31 @@ export async function excursionPorId(
           orden: true,
         },
       },
+      tipoItem: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              tipoItem: true,
+              slug: true,
+              portadaUrl: true,
+              duracionMin: true,
+              horaSalida: true,
+              horaRegreso: true,
+              categoria: true,
+              horarios: {
+                where: { activo: true },
+                orderBy: { horaSalida: 'asc' },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      },
       horarios: {
         where: { activo: true },
         orderBy: { horaSalida: 'asc' },
@@ -419,7 +692,9 @@ export async function excursionPorId(
     row.capacidad,
     row.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
     row.horaRegreso,
-    row.horaSalida
+    row.horaSalida,
+    row.tipoItem,
+    row.comboItems as unknown as ChildActividadParaCombo[]
   )
 
   return mapRow({

@@ -45,65 +45,115 @@ export default async function VendedorInicioPage() {
   const misMetas = await Promise.all(
     metas.map(async (m) => {
       const rango = rangoDePeriodo(m.periodo as PeriodoMeta, ahora, { desde: m.desde, hasta: m.hasta })
-      const reales = await realesDeVendedor(vendedor.companyId, vendedor.id, rango)
-      return { id: m.id, periodo: m.periodo, lineas: progresoMeta(m, reales) }
+      const reales = await realesDeVendedor(vendedor.companyId, vendedor.id, rango, m.excursionId)
+      return {
+        id: m.id,
+        periodo: m.periodo,
+        excursionNombre: m.excursionNombre,
+        excursionTipoItem: m.excursionTipoItem,
+        lineas: progresoMeta(m, reales),
+      }
     })
   )
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-border bg-card p-4 text-center">
-        <p className="text-caption text-muted-foreground">Por cobrar</p>
-        <p className="text-h1 text-foreground">
-          {formatMoney(comisiones.porCobrar, { moneda: comisiones.moneda }, 2)}
-        </p>
-        <p className="text-caption text-muted-foreground">
-          Ya cobrado: {formatMoney(comisiones.cobrado, { moneda: comisiones.moneda }, 2)}
-        </p>
-      </section>
-
-      {vendedor.slug ? (
-        <VendedorQrCard
-          codigo={vendedor.codigo}
-          enlaceUrl={urlDeEnlace(vendedor.slug)}
-          qrUrl={urlDeQr(vendedor.slug)}
-          nombre={vendedor.primerNombre}
-        />
-      ) : null}
-
-      {misMetas.length > 0 ? (
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-h3 text-foreground">Tus metas</h2>
-          <div className="mt-3 space-y-4">
-            {misMetas.map((m) => (
-              <div key={m.id}>
-                <p className="text-caption font-semibold uppercase tracking-wide text-muted-foreground">
-                  {PERIODO_META_LABEL[m.periodo as PeriodoMeta] ?? m.periodo}
-                </p>
-                <div className="mt-2">
-                  <MetaProgreso lineas={m.lineas} moneda={comisiones.moneda} />
-                </div>
-              </div>
-            ))}
+    <div className="space-y-6">
+      {/* ── SECCIÓN SUPERIOR: BALANCE & MÉTRICAS PRINCIPALES ── */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">Comisión por cobrar</span>
+            <p className="mt-1 font-mono text-3xl sm:text-4xl font-extrabold text-foreground">
+              {formatMoney(comisiones.porCobrar, { moneda: comisiones.moneda }, 2)}
+            </p>
           </div>
-        </section>
-      ) : null}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Disponible para tu próxima liquidación de comisiones.
+          </p>
+        </div>
 
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-h3 text-foreground">Tus clientes</h2>
-        <p className="mt-1 text-caption text-muted-foreground">
-          Todo el que entra por tu QR queda contado aquí.
-        </p>
-        <dl className="mt-3 grid grid-cols-2 gap-3">
-          {ETAPAS.map((e) => (
-            <div key={e.clave} className="rounded-xl bg-muted/50 p-3 text-center">
-              <dd className="text-h2 font-bold text-foreground">{embudo[e.clave]}</dd>
-              <dt className="text-sm font-medium text-foreground">{e.label}</dt>
-              <p className="text-caption text-muted-foreground">{e.detalle}</p>
+        <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total ya cobrado</span>
+            <p className="mt-1 font-mono text-3xl sm:text-4xl font-bold text-foreground/90">
+              {formatMoney(comisiones.cobrado, { moneda: comisiones.moneda }, 2)}
+            </p>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Acumulado histórico pagado por la empresa.
+          </p>
+        </div>
+      </div>
+
+      {/* ── GRID PRINCIPAL RESPONSIVO: QR A LA IZQ / EMBUDO Y METAS A LA DER ── */}
+      <div className="grid gap-6 lg:grid-cols-12 items-start">
+        {/* Columna Izquierda: Tarjeta QR y Enlaces */}
+        <div className="space-y-6 lg:col-span-6">
+          {vendedor.slug ? (
+            <VendedorQrCard
+              codigo={vendedor.codigo}
+              enlaceUrl={urlDeEnlace(vendedor.slug)}
+              qrUrl={urlDeQr(vendedor.slug)}
+              nombre={vendedor.primerNombre}
+            />
+          ) : null}
+        </div>
+
+        {/* Columna Derecha: Embudo de Clientes y Metas */}
+        <div className="space-y-6 lg:col-span-6">
+          {/* Embudo de Clientes */}
+          <section aria-labelledby="embudo-heading" className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4">
+            <div>
+              <h2 id="embudo-heading" className="text-base sm:text-lg font-bold text-foreground">
+                Embudo de Clientes & Conversión
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Seguimiento en tiempo real de quienes escanean tu código QR.
+              </p>
             </div>
-          ))}
-        </dl>
-      </section>
+
+            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {ETAPAS.map((e) => (
+                <div key={e.clave} className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center transition-all hover:bg-muted/50">
+                  <dd className="font-mono text-2xl sm:text-3xl font-extrabold text-foreground">{embudo[e.clave]}</dd>
+                  <dt className="text-xs font-bold text-foreground mt-0.5">{e.label}</dt>
+                  <p className="text-[10px] text-muted-foreground">{e.detalle}</p>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          {/* Metas Activas si existen */}
+          {misMetas.length > 0 ? (
+            <section aria-labelledby="metas-heading" className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <h2 id="metas-heading" className="text-base font-bold text-foreground">
+                  Tus Metas Activas
+                </h2>
+              </div>
+              <div className="space-y-3">
+                {misMetas.map((m) => (
+                  <div key={m.id} className="rounded-xl border border-border/70 p-3.5 bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        {PERIODO_META_LABEL[m.periodo as PeriodoMeta] ?? m.periodo}
+                      </p>
+                      {m.excursionNombre ? (
+                        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary truncate max-w-[200px]">
+                          {m.excursionTipoItem === 'COMBO' ? '📦 ' : '🎯 '} {m.excursionNombre}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div>
+                      <MetaProgreso lineas={m.lineas} moneda={comisiones.moneda} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }
