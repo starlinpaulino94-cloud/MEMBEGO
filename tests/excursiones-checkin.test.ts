@@ -33,6 +33,12 @@ test('una reserva cancelada no embarca, y punto', () => {
   if (!r.ok) assert.match(r.error, /cancelada/i)
 })
 
+test('una reserva con saldo pendiente no embarca si no se registra el pago', () => {
+  const r = evaluarCheckin(reserva({ saldo: 1500 }), AHORA)
+  assert.equal(r.ok, false)
+  if (!r.ok) assert.match(r.error, /saldo pendiente/i)
+})
+
 test('una reserva sin pasajeros tampoco', () => {
   assert.equal(evaluarCheckin(reserva({ totalPasajeros: 0 }), AHORA).ok, false)
 })

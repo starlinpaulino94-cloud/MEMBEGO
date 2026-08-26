@@ -97,9 +97,9 @@ test('validarItinerarioCombo: detecta y rechaza solapamiento de horas en el mism
   const res = validarItinerarioCombo(actividadesConConflicto)
   assert.equal(res.ok, false)
   if (!res.ok) {
-    assert.match(res.error, /Conflicto de horario/i)
-    assert.match(res.error, /Catamarán Saona.*13:00/i)
-    assert.match(res.error, /Buggies 4x4.*12:30/i)
+    assert.match(res.error ?? '', /Conflicto de horario/i)
+    assert.match(res.error ?? '', /Catamarán Saona.*13:00/i)
+    assert.match(res.error ?? '', /Buggies 4x4.*12:30/i)
   }
 })
 
