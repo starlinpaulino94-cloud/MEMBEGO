@@ -14,6 +14,7 @@ import {
   MENSAJE_ACTIVACION_PENDIENTE,
   mismoPerfilCardnet,
   perfilPendienteDeActivar,
+  type PerfilPagoCardnet,
 } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
@@ -197,6 +198,20 @@ export async function cobrarPendienteConPerfil(input: {
    * confía a ciegas: el Email del Customer debe coincidir con el del usuario.
    */
   customerId?: string | null
+  /**
+   * CONSULTA YA HECHA del Customer, para no repetirla.
+   *
+   * Una activación encadenaba CINCO llamadas a CardNET —de 20s de límite cada
+   * una— y TRES eran el mismo `GET /Customer` del mismo cliente en la misma
+   * petición. Eso era la espera larga que veía el cliente, y con el tope de
+   * tiempo de la función también la causa de que a veces se cortara a media
+   * secuencia.
+   *
+   * Quien ya consultó pasa el resultado aquí. La comprobación de pertenencia
+   * por email NO se salta: se hace igual sobre estos datos, solo que sin
+   * volver a pedirlos por la red.
+   */
+  consultaPrevia?: { email: string | null; perfiles: PerfilPagoCardnet[] } | null
 }): Promise<ConfirmacionPerfilResultado> {
   if (!(await puedeCobrarToken(input.objetivo.companyId))) {
     return { estado: 'error', motivo: 'El pago con tarjeta no está disponible.' }
@@ -230,7 +245,9 @@ export async function cobrarPendienteConPerfil(input: {
   let customerId = input.customerId?.trim() || null
   let perfiles: Awaited<ReturnType<typeof consultarClienteCardnet>>['perfiles']
   if (customerId) {
-    const consulta = await consultarClienteCardnet(customerId)
+    // El `??` es la economía: si quien llama ya tiene la consulta fresca, no se
+    // vuelve a pedir. La verificación de abajo corre igual.
+    const consulta = input.consultaPrevia ?? (await consultarClienteCardnet(customerId))
     const emailCoincide =
       !!consulta.email &&
       consulta.email.trim().toLowerCase() === input.emailCliente.trim().toLowerCase()
@@ -383,7 +400,11 @@ export async function activarTarjetaPendiente(input: {
 
   // El perfil a activar: el MÁS RECIENTE deshabilitado (mismo criterio que el
   // cobro usa para "el recién agregado").
-  const { perfiles } = consultaPrevia ?? (await consultarClienteCardnet(customerId))
+  // Se GUARDA la consulta, venga de donde venga. Cuando el `customerId` sale
+  // de la base (y no del navegador) esta llamada se hacía igual y su resultado
+  // se tiraba, así que más abajo había que volver a pedir lo mismo.
+  const consultaAntes = consultaPrevia ?? (await consultarClienteCardnet(customerId))
+  const { perfiles } = consultaAntes
   const perfil = perfilPendienteDeActivar(perfiles)
   if (!perfil) {
     // Nada deshabilitado: o ya se activó (otra pestaña) o CardNET la borró al
@@ -417,6 +438,14 @@ export async function activarTarjetaPendiente(input: {
     return { estado: 'error', motivo: 'No se pudo completar el pago. Intenta de nuevo.' }
   }
 
+  /**
+   * La consulta POSTERIOR a la activación, si llegó a hacerse. Se guarda para
+   * dársela al cobro y ahorrarle repetirla: es el mismo dato, en la misma
+   * petición, y cada `GET /Customer` cuesta hasta 20 segundos de espera al
+   * cliente.
+   */
+  let reconsulta: Awaited<ReturnType<typeof consultarClienteCardnet>> | null = null
+
   if (!activacion.ok) {
     // El proveedor no aceptó ESTA RESPUESTA. Sin contrato de error confirmado,
     // la verdad la da re-consultar el perfil — pero hay que leer bien lo que
@@ -446,8 +475,8 @@ export async function activarTarjetaPendiente(input: {
       crudo: activacion.crudo,
     })
 
-    const despues = await consultarClienteCardnet(customerId)
-    const mismo = despues.perfiles.find((p) => mismoPerfilCardnet(p, perfil))
+    reconsulta = await consultarClienteCardnet(customerId)
+    const mismo = reconsulta.perfiles.find((p) => mismoPerfilCardnet(p, perfil))
 
     if (!mismo) {
       return {
@@ -482,6 +511,27 @@ export async function activarTarjetaPendiente(input: {
   // Activada → cobrar el pendiente por la tubería de siempre. `conteoAntes: 0`
   // a propósito: la tarjeta ya existe y está habilitada; la guarda de "solo
   // cobrar perfiles nuevos" aplicaba a la ventana de captura, no aquí.
+  /**
+   * QUÉ CONSULTA SE LE PASA AL COBRO — y por qué no vale cualquiera.
+   *
+   * Si hubo reconsulta (el `activate` no vino limpio), esa es la fresca y la
+   * que manda. Si el `activate` SÍ vino limpio no hay reconsulta, y la única
+   * que tenemos es la de ANTES de activar, donde el perfil figura
+   * deshabilitado: pasarla tal cual haría que el cobro concluyera «falta
+   * activar» justo después de activar. Se corrige el único campo que la
+   * activación acaba de cambiar, que es exactamente lo que el proveedor
+   * confirmó al aceptar.
+   *
+   * Con esto la secuencia baja de CINCO llamadas encadenadas a TRES en el
+   * camino bueno: consultar, activar, cobrar.
+   */
+  const consultaParaCobro = reconsulta ?? {
+    email: consultaAntes.email,
+    perfiles: consultaAntes.perfiles.map((p) =>
+      mismoPerfilCardnet(p, perfil) ? { ...p, habilitado: true } : p
+    ),
+  }
+
   const cobro = await cobrarPendienteConPerfil({
     objetivo: input.objetivo,
     emailCliente: input.emailCliente,
@@ -489,6 +539,7 @@ export async function activarTarjetaPendiente(input: {
     userAgent: input.userAgent,
     conteoAntes: 0,
     customerId,
+    consultaPrevia: consultaParaCobro,
   })
   if (cobro.estado === 'aprobado') {
     return {

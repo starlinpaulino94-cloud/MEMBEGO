@@ -134,6 +134,24 @@ export function PagoTokenCardnet({
   const [codigoActivacion, setCodigoActivacion] = useState('')
   const [activando, setActivando] = useState(false)
   /**
+   * Segundos que lleva la verificación en curso.
+   *
+   * Verificar y cobrar son TRES llamadas encadenadas al proveedor, y aunque
+   * ya no son cinco, siguen pudiendo tardar. Un botón que solo gira no dice si
+   * avanza o si se colgó — y en esa duda es donde el cliente cierra la pestaña
+   * a mitad de un cobro, que es la peor forma de terminar.
+   */
+  const [segundosEsperando, setSegundosEsperando] = useState(0)
+  // El contador se pone a cero al ARRANCAR la operación, no aquí: escribir
+  // estado de forma síncrona dentro de un efecto es justo lo que el linter
+  // señala, y en este caso no hacía falta — el momento de reiniciar un reloj
+  // es cuando empieza lo que mide.
+  useEffect(() => {
+    if (!activando) return
+    const id = setInterval(() => setSegundosEsperando((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [activando])
+  /**
    * La tarjeta que quedó registrada esperando su código, si la hay.
    *
    * No es lo mismo que `estado === 'activacion'`: eso es «estoy tecleando el
@@ -751,6 +769,7 @@ export function PagoTokenCardnet({
     // quedan 6 caracteres, no se llama a CardNET. Un intento vale demasiado
     // (3 y el banco borra la tarjeta) como para gastarlo en un formato malo.
     if (activando || !codigoNormalizado) return
+    setSegundosEsperando(0)
     setActivando(true)
     setMensaje(null)
     try {
@@ -1064,6 +1083,25 @@ export function PagoTokenCardnet({
                 </>
               )}
             </Button>
+
+            {/* Mientras espera: primero se dice qué está pasando, y pasados
+                unos segundos —cuando la duda aparece— se dice explícitamente
+                que no cierre. Es la instrucción que evita el peor final. */}
+            {activando ? (
+              <p className="text-center text-xs leading-relaxed text-muted-foreground" aria-live="polite">
+                {segundosEsperando < 6 ? (
+                  'Verificando tu código y procesando el pago…'
+                ) : (
+                  <>
+                    Esto puede tardar unos segundos más.{' '}
+                    <strong className="font-semibold text-foreground">
+                      No cierres esta ventana
+                    </strong>{' '}
+                    ni vuelvas atrás: el cobro está en curso.
+                  </>
+                )}
+              </p>
+            ) : null}
 
             <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
