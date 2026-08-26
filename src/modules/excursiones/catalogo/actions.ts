@@ -166,6 +166,9 @@ export async function crearExcursion(
       nombre: 'Estándar',
       precioAdulto: String(formData.get('precioAdulto') ?? ''),
       precioNino: String(formData.get('precioNino') ?? ''),
+      precioResidente: String(formData.get('precioResidente') ?? ''),
+      precioNinoResidente: String(formData.get('precioNinoResidente') ?? ''),
+      precioTurista: String(formData.get('precioTurista') ?? ''),
     })
     if (!variante.ok) return { error: variante.error }
 
@@ -252,6 +255,7 @@ export async function crearExcursion(
               precioAdulto: variante.datos.precioAdulto,
               precioNino: variante.datos.precioNino,
               precioResidente: variante.datos.precioResidente,
+              precioNinoResidente: variante.datos.precioNinoResidente,
               precioTurista: variante.datos.precioTurista,
               capacidad: variante.datos.capacidad,
               preciosDinamicos: (variante.datos.preciosDinamicos as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull,
@@ -564,7 +568,16 @@ export async function guardarVariante(
     }
 
     const v = validarVariante(
-      deForm(formData, ['nombre', 'precioAdulto', 'precioNino', 'precioResidente', 'precioTurista', 'capacidad', 'preciosDinamicosJson'])
+      deForm(formData, [
+        'nombre',
+        'precioAdulto',
+        'precioNino',
+        'precioResidente',
+        'precioNinoResidente',
+        'precioTurista',
+        'capacidad',
+        'preciosDinamicosJson',
+      ])
     )
     if (!v.ok) return { error: v.error }
 
