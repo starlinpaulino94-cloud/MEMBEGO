@@ -70,6 +70,7 @@ export default async function ExcursionDetallePage({
           precioAdulto: String(v.precioAdulto),
           precioNino: v.precioNino != null ? String(v.precioNino) : null,
           precioResidente: v.precioResidente != null ? String(v.precioResidente) : null,
+          precioNinoResidente: (v as any).precioNinoResidente != null ? String((v as any).precioNinoResidente) : null,
           precioTurista: v.precioTurista != null ? String(v.precioTurista) : null,
           capacidad: v.capacidad,
           activa: v.activa,

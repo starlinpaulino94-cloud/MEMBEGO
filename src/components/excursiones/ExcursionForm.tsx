@@ -351,6 +351,8 @@ export function ExcursionForm({
   // Estados de precios para cálculo interactivo
   const [precioAdultoInput, setPrecioAdultoInput] = useState<string>('')
   const [precioNinoInput, setPrecioNinoInput] = useState<string>('')
+  const [precioResidenteInput, setPrecioResidenteInput] = useState<string>('')
+  const [precioNinoResidenteInput, setPrecioNinoResidenteInput] = useState<string>('')
 
   // Suma de precios individuales de las actividades del combo
   const sumaPreciosActividades = useMemo(() => {
@@ -1178,48 +1180,153 @@ export function ExcursionForm({
             </div>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <Label htmlFor="exc-precio-adulto" className="text-xs sm:text-sm font-semibold">Precio por adulto *</Label>
-              <Input
-                id="exc-precio-adulto"
-                name="precioAdulto"
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="80.00"
-                value={precioAdultoInput}
-                onChange={(e) => setPrecioAdultoInput(e.target.value)}
-                className="mt-1 h-11 text-base font-bold"
-                required
-              />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Configuración de Tarifas y Moneda
+              </span>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="exc-moneda" className="text-xs font-semibold text-muted-foreground">
+                  Moneda:
+                </Label>
+                <select
+                  id="exc-moneda"
+                  name="moneda"
+                  defaultValue="DOP"
+                  className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-bold text-foreground outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {MONEDAS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="exc-precio-nino" className="text-xs sm:text-sm font-semibold">Precio por niño (opcional)</Label>
-              <Input
-                id="exc-precio-nino"
-                name="precioNino"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="40.00"
-                value={precioNinoInput}
-                onChange={(e) => setPrecioNinoInput(e.target.value)}
-                className="mt-1 h-11 text-sm font-medium"
-              />
-            </div>
-            <div>
-              <Label htmlFor="exc-moneda" className="text-xs sm:text-sm font-semibold">Moneda</Label>
-              <select
-                id="exc-moneda"
-                name="moneda"
-                defaultValue="DOP"
-                className="mt-1 block h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-bold text-foreground outline-none focus:ring-2 focus:ring-primary"
-              >
-                {MONEDAS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Tarifa Turistas / General */}
+              <div className="rounded-xl border border-border/80 bg-background/90 p-4 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🌍</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">
+                        Tarifa Turistas / General
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Boleto estándar internacional
+                      </p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                    Principal
+                  </span>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label
+                      htmlFor="exc-precio-adulto"
+                      className="text-xs font-semibold text-foreground"
+                    >
+                      Adulto Turista *
+                    </Label>
+                    <Input
+                      id="exc-precio-adulto"
+                      name="precioAdulto"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="80.00"
+                      value={precioAdultoInput}
+                      onChange={(e) => setPrecioAdultoInput(e.target.value)}
+                      className="mt-1 h-10 text-sm font-bold"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label
+                      htmlFor="exc-precio-nino"
+                      className="text-xs font-semibold text-foreground"
+                    >
+                      Niño Turista
+                    </Label>
+                    <Input
+                      id="exc-precio-nino"
+                      name="precioNino"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="40.00"
+                      value={precioNinoInput}
+                      onChange={(e) => setPrecioNinoInput(e.target.value)}
+                      className="mt-1 h-10 text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarifa Residentes / Locales */}
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🇩🇴</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">
+                        Tarifa Residentes / Locales
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Precio especial para locales
+                      </p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                    Opcional
+                  </span>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label
+                      htmlFor="exc-precio-residente"
+                      className="text-xs font-semibold text-foreground"
+                    >
+                      Adulto Residente
+                    </Label>
+                    <Input
+                      id="exc-precio-residente"
+                      name="precioResidente"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="50.00"
+                      value={precioResidenteInput}
+                      onChange={(e) => setPrecioResidenteInput(e.target.value)}
+                      className="mt-1 h-10 text-sm font-bold"
+                    />
+                  </div>
+                  <div>
+                    <Label
+                      htmlFor="exc-precio-nino-residente"
+                      className="text-xs font-semibold text-foreground"
+                    >
+                      Niño Residente
+                    </Label>
+                    <Input
+                      id="exc-precio-nino-residente"
+                      name="precioNinoResidente"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="25.00"
+                      value={precioNinoResidenteInput}
+                      onChange={(e) => setPrecioNinoResidenteInput(e.target.value)}
+                      className="mt-1 h-10 text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
