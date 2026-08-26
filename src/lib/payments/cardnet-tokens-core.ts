@@ -627,25 +627,46 @@ export interface PerfilPagoCardnet {
 /**
  * EL PERFIL QUE ESTÁ ESPERANDO SU CÓDIGO DE ACTIVACIÓN, si hay alguno.
  *
- * Un Customer puede acumular varios perfiles deshabilitados: cada intento de
- * registrar la tarjeta deja el suyo, y CardNET no los limpia. Hay que elegir
- * uno, y el criterio es EL MÁS RECIENTE — el que el cliente acaba de meter,
- * cuyo cargo de RD$1.00 es el que tiene delante en la app del banco.
+ * SOLO PUEDE SER EL ÚLTIMO DE LA LISTA. Ningún otro.
  *
- * ESTA FUNCIÓN EXISTE PARA QUE EL CRITERIO SEA UNO SOLO. Vive en tres sitios:
- * la activación real, el aviso de «tienes una tarjeta esperando» y la sonda de
- * diagnóstico. Si cada uno eligiera por su cuenta y llegaran a divergir, el
- * aviso enseñaría los últimos 4 dígitos de una tarjeta y la activación
- * activaría otra — un fallo silencioso, porque las dos pantallas se verían
- * perfectamente normales.
+ * Un Customer acumula un perfil por cada vez que se registró la tarjeta, y
+ * CardNET no los limpia: un cliente de pruebas llega a tener once. El que le
+ * importa al cliente es SIEMPRE el que acaba de meter —el último—, porque el
+ * cargo de RD$1.00 que tiene delante en la app del banco es el de ESE perfil y
+ * el código sirve solo para él.
  *
- * @returns el perfil pendiente más reciente, o `null` si no hay ninguno.
+ * ESTA FUNCIÓN ELEGÍA MAL, y así se vio en producción (Customer 112001):
+ *
+ *     …  121136  Enabled: false   ← se intentaba activar ESTE
+ *        121299  Enabled: true    ← el que el cliente acababa de registrar
+ *
+ * Filtraba primero los deshabilitados y tomaba el último de ESOS, así que
+ * cuando el perfil nuevo ya estaba habilitado se iba a por uno viejo y
+ * abandonado. El cliente tecleaba el código correcto de su tarjeta nueva y
+ * CardNET lo rechazaba —con razón: era el código de otro perfil—. Mientras
+ * tanto el cobro, que sí usa «el último de la lista», cobraba bien. De ahí el
+ * cuadro entero: espera larga, errores incomprensibles y el pago aplicándose
+ * igual.
+ *
+ * Si el último está habilitado, NO hay nada que activar y esta función lo dice
+ * devolviendo `null`. Quien llama debe entenderlo como «la tarjeta ya está
+ * lista», no como «no hay tarjeta».
+ *
+ * El criterio vive aquí y en un solo sitio a propósito: lo consultan la
+ * activación, el aviso de «tienes una tarjeta esperando» y la sonda de
+ * diagnóstico. Si cada uno eligiera por su cuenta, el aviso enseñaría los
+ * últimos 4 de una tarjeta y se activaría otra — sin que ninguna pantalla lo
+ * delatara.
+ *
+ * @returns el último perfil si está deshabilitado; `null` si no hay perfiles o
+ *   si el último ya está habilitado.
  */
 export function perfilPendienteDeActivar(
   perfiles: PerfilPagoCardnet[]
 ): PerfilPagoCardnet | null {
-  const pendientes = perfiles.filter((p) => !p.habilitado)
-  return pendientes.length > 0 ? pendientes[pendientes.length - 1] : null
+  const ultimo = perfiles[perfiles.length - 1]
+  if (!ultimo) return null
+  return ultimo.habilitado ? null : ultimo
 }
 
 /**

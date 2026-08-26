@@ -702,7 +702,7 @@ test('perfilPendienteDeActivar: con todo habilitado devuelve null', () => {
   assert.equal(perfilPendienteDeActivar([perfil('1111', true), perfil('2222', true)]), null)
 })
 
-test('perfilPendienteDeActivar: elige el MÁS RECIENTE de los deshabilitados', () => {
+test('perfilPendienteDeActivar: es el ÚLTIMO, cuando está deshabilitado', () => {
   // Cada intento de registrar la tarjeta deja su perfil y CardNET no los
   // limpia. El que le importa al cliente es el último: es el cargo de RD$1.00
   // que tiene delante en la app del banco.
@@ -714,14 +714,52 @@ test('perfilPendienteDeActivar: elige el MÁS RECIENTE de los deshabilitados', (
   assert.equal(elegido?.ultimos4, '3333')
 })
 
-test('perfilPendienteDeActivar: ignora los habilitados aunque sean posteriores', () => {
-  // Una tarjeta ya activa NO es candidata a activarse, esté donde esté en la
-  // lista. Devolverla mandaría al cliente a teclear un código que no existe.
-  const elegido = perfilPendienteDeActivar([
-    perfil('1111', false),
-    perfil('9999', true),
-  ])
-  assert.equal(elegido?.ultimos4, '1111')
+test('perfilPendienteDeActivar: si el ÚLTIMO ya está habilitado, no hay nada que activar', () => {
+  // ESTA PRUEBA FIJABA LO CONTRARIO, y por eso el fallo llegó a producción.
+  // Decía «ignora los habilitados aunque sean posteriores» y exigía que se
+  // eligiera el viejo deshabilitado. Eso manda a activar un perfil abandonado
+  // con el código de otro: rechazo garantizado.
+  //
+  // Una tarjeta recién registrada y ya habilitada no espera ningún código.
+  assert.equal(
+    perfilPendienteDeActivar([perfil('1111', false), perfil('9999', true)]),
+    null
+  )
+})
+
+test('perfilPendienteDeActivar: el caso REAL del Customer 112001', () => {
+  // Capturado en producción de pruebas (24-08-2026). Once perfiles acumulados
+  // de tanto registrar la misma tarjeta; el último ya venía habilitado.
+  //
+  // Con la regla vieja se elegía el 121136 —viejo, deshabilitado, abandonado—
+  // y se le pedía al cliente el código de ESE perfil, mientras él tecleaba el
+  // de su tarjeta nueva. Rechazo tras rechazo. Y el cobro, que sí usa «el
+  // último de la lista», cobraba bien: de ahí que el pago se aplicara igual.
+  const reales: [string, boolean][] = [
+    ['119872', false],
+    ['120868', true],
+    ['120869', true],
+    ['120870', false],
+    ['121130', true],
+    ['121131', true],
+    ['121133', false],
+    ['121134', false],
+    ['121135', false],
+    ['121136', false],
+    ['121299', true],
+  ]
+  const perfiles = reales.map(([id, habilitado]) => ({
+    paymentProfileId: id,
+    token: `CT__${id}`,
+    marca: 'VISA',
+    ultimos4: '0050',
+    habilitado,
+  }))
+  assert.equal(
+    perfilPendienteDeActivar(perfiles),
+    null,
+    'el último (121299) está habilitado: no se debe mandar a activar el 121136'
+  )
 })
 
 // ── La sonda de diagnóstico no puede volver a abrirse ───────────────────────

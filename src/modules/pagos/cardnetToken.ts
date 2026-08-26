@@ -407,11 +407,50 @@ export async function activarTarjetaPendiente(input: {
   const { perfiles } = consultaAntes
   const perfil = perfilPendienteDeActivar(perfiles)
   if (!perfil) {
-    // Nada deshabilitado: o ya se activó (otra pestaña) o CardNET la borró al
-    // tercer intento fallido. El cobro normal decide cuál de los dos es.
+    /**
+     * NO HAY NADA QUE ACTIVAR. Eso NO es un error, y tratarlo como tal era
+     * parte del problema.
+     *
+     * Si el Customer no tiene ningún perfil, sí falta la tarjeta. Pero si el
+     * último perfil ya está HABILITADO, la tarjeta está lista —se activó en
+     * otra pestaña, en un intento anterior, o nació así— y lo único que falta
+     * es cobrar. Devolver «no hay ninguna tarjeta pendiente» dejaba al cliente
+     * plantado delante de una tarjeta perfectamente utilizable.
+     */
+    const ultimo = perfiles[perfiles.length - 1]
+    if (!ultimo) {
+      return {
+        estado: 'sin_perfil',
+        motivo: 'No se encontró la tarjeta a activar. Regístrala de nuevo.',
+      }
+    }
+
+    const cobroDirecto = await cobrarPendienteConPerfil({
+      objetivo: input.objetivo,
+      emailCliente: input.emailCliente,
+      clienteIp: input.clienteIp,
+      userAgent: input.userAgent,
+      conteoAntes: 0,
+      customerId,
+      consultaPrevia: consultaAntes,
+    })
+    if (cobroDirecto.estado === 'aprobado') {
+      return {
+        estado: 'aprobado',
+        compraId: cobroDirecto.compraId,
+        membershipId: cobroDirecto.membershipId,
+        perfil: cobroDirecto.perfil,
+      }
+    }
+    if (cobroDirecto.estado === 'sin_pendiente') {
+      return { estado: 'activada_sin_cobro', motivo: 'Tu tarjeta ya estaba lista. No había ningún pago pendiente.' }
+    }
     return {
-      estado: 'sin_perfil',
-      motivo: 'No hay ninguna tarjeta pendiente de activar. Si el pago sigue pendiente, registra la tarjeta de nuevo.',
+      estado: 'activada_sin_cobro',
+      motivo:
+        'motivo' in cobroDirecto && cobroDirecto.motivo
+          ? cobroDirecto.motivo
+          : 'Tu tarjeta ya estaba lista, pero el cobro no se completó. Intenta pagar de nuevo.',
     }
   }
 
