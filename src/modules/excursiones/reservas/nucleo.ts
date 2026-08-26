@@ -1145,8 +1145,20 @@ export function validarDisponibilidadComboMultiFecha(
       }
     }
 
+    const horarioItem = act.horarios?.find(
+      (h) => (h.horaSalida || '').trim().slice(0, 5) === (item.hora || '').trim().slice(0, 5)
+    )
     const capActGeneral = act.capacidad && act.capacidad > 0 ? act.capacidad : CAPACIDAD_SIN_DECLARAR
-    menorCupo = Math.min(menorCupo, capActGeneral)
+    const capHorario = horarioItem?.cupo && horarioItem.cupo > 0 ? horarioItem.cupo : capActGeneral
+    const capEfectiva = Math.min(capActGeneral, capHorario)
+    menorCupo = Math.min(menorCupo, capEfectiva)
+
+    if (pasajeros > capEfectiva) {
+      return {
+        ok: false,
+        error: `La actividad "${act.nombre}" excede el cupo disponible (${capEfectiva} cupos).`,
+      }
+    }
 
     const fechaKey = item.fecha.toISOString().split('T')[0]
     const lista = porFecha.get(fechaKey) || []
