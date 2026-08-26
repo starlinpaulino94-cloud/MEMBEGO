@@ -11,6 +11,7 @@ import { formatDate, formatMoney } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { MembershipAdminActions } from '@/components/admin/MembershipAdminActions'
+import { DeleteMembresiaButton } from '@/components/admin/DeleteMembresiaButton'
 import { AjustarLavados } from '@/components/superadmin/AjustarLavados'
 import { listarMembresias, type MembresiaFila } from '@/modules/membresias/lista'
 import {
@@ -304,6 +305,19 @@ export default async function SuperadminMembresiasPage({
                       vence: m.fechaVencimiento?.toISOString() ?? null,
                     }}
                   />
+                  {/* Borrar solo aparece habilitado para las membresías que
+                      nunca llegaron a usarse. Se pinta siempre —y no solo
+                      cuando procede— para que el motivo de por qué NO se puede
+                      esté a la vista en vez de ser un botón ausente que nadie
+                      sabe que existió. */}
+                  <div className="mt-2">
+                    <DeleteMembresiaButton
+                      membershipId={m.id}
+                      visitas={m.visitas}
+                      comprobantes={m.comprobantes}
+                      pagosConfirmados={m.pagosConfirmados}
+                    />
+                  </div>
                 </td>
               </tr>
             ))}
