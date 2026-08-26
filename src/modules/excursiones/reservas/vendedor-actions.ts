@@ -15,6 +15,7 @@ import {
   validarDisponibilidadCombo,
   validarDisponibilidadComboMultiFecha,
   calcularPrecioEfectivo,
+  normalizarHora,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
@@ -36,11 +37,11 @@ export async function crearReservaVendedor(
 ): Promise<ReservaVendedorState> {
   try {
     const user = await requireRole(['VENDEDOR'])
-    if (!user) return { error: 'No autorizado.' }
+    if (!user || !user.metadata.dbUserId) return { error: 'No autorizado.' }
 
-    const vendedor = await vendedorDeUsuario(user.id)
-    if (!vendedor || vendedor.estado !== 'ACTIVO') {
-      return { error: 'Tu perfil de vendedor no está activo.' }
+    const vendedor = await vendedorDeUsuario(user.metadata.dbUserId)
+    if (!vendedor) {
+      return { error: 'Tu perfil de vendedor no está disponible.' }
     }
 
     const companyId = vendedor.companyId
@@ -135,7 +136,7 @@ export async function crearReservaVendedor(
           return {
             actividadId: item.actividadId,
             fecha: new Date(Date.UTC(y, m - 1, d)),
-            hora: item.hora,
+            hora: item.hora ? normalizarHora(item.hora) : null,
           }
         })
         itemsComboAGuardar = itemsParaValidar
@@ -168,7 +169,7 @@ export async function crearReservaVendedor(
         itemsComboAGuardar = excursion.comboItems.map((ci) => ({
           actividadId: ci.actividad.id,
           fecha: v.datos.fecha,
-          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.horaSalida || v.datos.hora,
+          hora: ci.actividad.tipoItem === 'PASE_DIA' ? null : ci.actividad.horaSalida || v.datos.hora,
         }))
 
         const dispCombo = validarDisponibilidadCombo(

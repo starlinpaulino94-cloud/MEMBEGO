@@ -77,9 +77,14 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
 
   return (
     <form
-      action={(fd) => {
-        for (const [k, v] of Object.entries(datos)) fd.set(k, v)
-        formAction(fd)
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (paso === 1) {
+          if ((datos.nombre ?? '').trim() && (datos.telefono ?? '').trim()) {
+            setErrorLocal(null)
+            setPaso(2)
+          }
+        }
       }}
       className="space-y-4"
     >
@@ -262,7 +267,16 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
             Siguiente <ArrowRight className="h-4 w-4" />
           </Button>
         ) : (
-          <Button type="submit" disabled={pending} className="gap-2">
+          <Button
+            type="button"
+            disabled={pending}
+            className="gap-2"
+            onClick={() => {
+              const fd = new FormData()
+              for (const [k, v] of Object.entries(datos)) fd.set(k, v)
+              formAction(fd)
+            }}
+          >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Crear vendedor
           </Button>
