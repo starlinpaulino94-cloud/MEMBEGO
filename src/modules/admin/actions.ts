@@ -12,6 +12,7 @@ import { paymentLimiter } from '@/lib/rate-limit'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { INVITABLE_ROLES, type AppRole } from '@/types'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { validarCobroMembresia } from '@/modules/membresias/cobro'
 
@@ -709,6 +710,70 @@ export async function renovarMembresia(
       },
     })
 
+    /**
+     * EL QR TIENE QUE VOLVER A EXISTIR.
+     *
+     * Al agotarse los lavados, el canje DEJA DE EMITIR uno nuevo a propósito
+     * —lo dice su propio comentario: «la membresía queda 'Sin usos
+     * disponibles' hasta la renovación»—. O sea que delega en este punto la
+     * emisión del siguiente. Y aquí no se emitía ninguno.
+     *
+     * El resultado era una membresía renovada, pagada y con sus lavados
+     * repuestos… que el cliente no podía usar, porque no tenía QR que
+     * enseñar en el mostrador. El panel decía «4 usos» y la app del cliente,
+     * nada.
+     *
+     * Dos casos, y los dos se resuelven aquí:
+     *
+     *   · No hay QR vivo (lo normal tras agotar los lavados) → se emite uno.
+     *   · Sí lo hay (renovó antes de gastarlos) → se le ESTIRA la caducidad
+     *     al período nuevo. Si no, el QR moriría a mitad de un período que el
+     *     cliente ya pagó, y el fallo aparecería días después sin que nadie
+     *     lo relacione con la renovación.
+     *
+     * Los ilimitados también necesitan QR: su saldo no baja, pero el código
+     * es igualmente cómo se identifican en el mostrador.
+     */
+    const qrVivo = await tx.qrToken.findFirst({
+      where: { membresiaId: membership.id, activo: true },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    })
+
+    let qrEmitidoId: string | null = null
+    if (qrVivo) {
+      await tx.qrToken.update({
+        where: { id: qrVivo.id },
+        data: { expiraAt: vencimientoQr() },
+      })
+    } else {
+      const nuevoQr = await tx.qrToken.create({
+        data: {
+          clienteId: membership.clienteId,
+          membresiaId: membership.id,
+          token: nuevoTokenQr(),
+          expiraAt: vencimientoQr(),
+        },
+        select: { id: true },
+      })
+      qrEmitidoId = nuevoQr.id
+      await tx.auditLog.create({
+        data: {
+          companyId: membership.cliente.companyId,
+          userId: user.metadata.dbUserId ?? null,
+          accion: 'QR_GENERADO',
+          entidadTipo: 'QrToken',
+          entidadId: nuevoQr.id,
+          payload: {
+            clienteId: membership.clienteId,
+            membresiaId: membership.id,
+            motivo: 'renovacion_membresia',
+          },
+          ...meta,
+        },
+      })
+    }
+
     const asiento = await tx.auditLog.create({
       select: { id: true },
       data: {
@@ -734,6 +799,11 @@ export async function renovarMembresia(
           // qué se repuso y qué se conservó.
           lavadosPlan: membership.plan.esIlimitado ? null : membership.plan.lavadosIncluidos,
           lavadosRegaloConservados: membership.lavadosBonoRestantes,
+          // Qué pasó con el código del cliente: se emitió uno nuevo o se le
+          // estiró la vigencia al que ya tenía. Sin esto, «renové y el cliente
+          // dice que no puede usarlo» no se puede investigar.
+          qrEmitido: qrEmitidoId,
+          qrRenovado: qrVivo?.id ?? null,
         },
         ...meta,
       },
