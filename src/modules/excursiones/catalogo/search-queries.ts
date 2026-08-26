@@ -125,7 +125,27 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
       incluye: true,
       noIncluye: true,
       politicas: true,
-      companyId: true,
+      tipoItem: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              tipoItem: true,
+              capacidad: true,
+              horaSalida: true,
+              horaRegreso: true,
+              horarios: {
+                where: { activo: true },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      },
       variantes: {
         where: { activa: true },
         orderBy: { orden: 'asc' },
@@ -157,7 +177,9 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
         exc.capacidad,
         exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
         exc.horaRegreso,
-        exc.horaSalida
+        exc.horaSalida,
+        exc.tipoItem,
+        exc.comboItems as any
       )
       const company = companyMap.get(exc.companyId)
       const mapped = mapRow({
@@ -298,8 +320,27 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
       horaRegreso: true,
       incluye: true,
       noIncluye: true,
-      politicas: true,
-      companyId: true,
+      tipoItem: true,
+      comboItems: {
+        orderBy: { orden: 'asc' },
+        select: {
+          horaSalida: true,
+          actividad: {
+            select: {
+              id: true,
+              nombre: true,
+              tipoItem: true,
+              capacidad: true,
+              horaSalida: true,
+              horaRegreso: true,
+              horarios: {
+                where: { activo: true },
+                select: { id: true, horaSalida: true, diasSemana: true, cupo: true },
+              },
+            },
+          },
+        },
+      },
       variantes: {
         where: { activa: true },
         orderBy: { orden: 'asc' },
@@ -329,7 +370,9 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
         exc.capacidad,
         exc.horarios as { id: string; diasSemana: number[]; horaSalida: string; cupo: number | null }[],
         exc.horaRegreso,
-        exc.horaSalida
+        exc.horaSalida,
+        exc.tipoItem,
+        exc.comboItems as any
       )
       const company = companyMap.get(exc.companyId)
       return mapRow({
