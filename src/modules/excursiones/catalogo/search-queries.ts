@@ -108,6 +108,11 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
     take,
     select: {
       id: true,
+      // Se lee después para agrupar por empresa y pintar su logo. Faltaba en
+      // el select y el código lo pedía igual: en ejecución habría salido
+      // `undefined`, y el mapa de empresas se habría quedado vacío — o sea,
+      // resultados de búsqueda sin marca y sin enlace a la empresa.
+      companyId: true,
       nombre: true,
       slug: true,
       descripcion: true,
@@ -304,6 +309,11 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
     take: limite,
     select: {
       id: true,
+      // Se lee después para agrupar por empresa y pintar su logo. Faltaba en
+      // el select y el código lo pedía igual: en ejecución habría salido
+      // `undefined`, y el mapa de empresas se habría quedado vacío — o sea,
+      // resultados de búsqueda sin marca y sin enlace a la empresa.
+      companyId: true,
       nombre: true,
       slug: true,
       descripcion: true,
