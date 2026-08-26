@@ -88,13 +88,14 @@ model ExcursionVariante {
   excursion       Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
   companyId       String
   nombre          String
-  precioAdulto    Decimal   @db.Decimal(12, 2)
-  precioNino      Decimal?  @db.Decimal(12, 2)
-  precioResidente Decimal?  @db.Decimal(12, 2)
-  precioTurista   Decimal?  @db.Decimal(12, 2)
-  capacidad       Int?
-  activa          Boolean   @default(true)
-  orden           Int       @default(0)
+  precioAdulto        Decimal   @db.Decimal(12, 2)
+  precioNino          Decimal?  @db.Decimal(12, 2)
+  precioResidente     Decimal?  @db.Decimal(12, 2)
+  precioNinoResidente Decimal?  @db.Decimal(12, 2)
+  precioTurista       Decimal?  @db.Decimal(12, 2)
+  capacidad           Int?
+  activa              Boolean   @default(true)
+  orden               Int       @default(0)
 
   /// Reglas de precios por día/hora: [{ diasSemana: [6,7], horasSalida: ["09:00"], precioAdulto: 60, precioNino: 30 }]
   preciosDinamicos Json?

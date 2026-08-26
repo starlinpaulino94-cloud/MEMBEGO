@@ -164,6 +164,7 @@ export interface VarianteDatos {
   precioAdulto: number
   precioNino: number | null
   precioResidente: number | null
+  precioNinoResidente: number | null
   precioTurista: number | null
   capacidad: number | null
   preciosDinamicos: ReglaPrecioDinamico[] | null
@@ -204,6 +205,7 @@ export function validarVariante(
       precioAdulto,
       precioNino: precio(form.precioNino),
       precioResidente: precio(form.precioResidente),
+      precioNinoResidente: precio(form.precioNinoResidente),
       precioTurista: precio(form.precioTurista),
       capacidad: cap !== null && Number.isInteger(cap) && cap > 0 ? cap : null,
       preciosDinamicos,
