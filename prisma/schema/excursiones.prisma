@@ -335,6 +335,9 @@ model ReservaExc {
   estado      String    @default("PENDIENTE")
   canal       String?
   notas       String?
+  /// true = el cliente es residente local (mismo país que la empresa).
+  /// Se pregunta en el formulario de reserva y se usa para aplicar tarifa diferenciada.
+  esResidente Boolean   @default(false)
   creadaPorId String?
 
   /// Logística de Turoperador / Recogida en Hoteles:

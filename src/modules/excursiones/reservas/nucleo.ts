@@ -124,10 +124,14 @@ export interface ReglaPrecioDinamico {
   horasSalida?: string[]
   precioAdulto: number
   precioNino: number | null
+  precioResidente: number | null
+  precioNinoResidente: number | null
 }
 
 /**
  * Resuelve el precio efectivo de una variante evaluando reglas dinámicas (ej. por día u hora).
+ * Si esResidente es true, usa precios de residente cuando la regla los define;
+ * si están vacíos (null), usa el precio base de la variante.
  * Retorna el precio base si ninguna regla coincide.
  */
 export function calcularPrecioEfectivo(
@@ -135,9 +139,15 @@ export function calcularPrecioEfectivo(
   hora: string | null,
   baseAdulto: number,
   baseNino: number | null,
-  reglas: ReglaPrecioDinamico[] | null
+  reglas: ReglaPrecioDinamico[] | null,
+  esResidente: boolean = false,
+  baseResidente: number | null = null,
+  baseNinoResidente: number | null = null
 ): { precioAdulto: number; precioNino: number | null } {
   if (!reglas || reglas.length === 0) {
+    if (esResidente && baseResidente != null) {
+      return { precioAdulto: baseResidente, precioNino: baseNinoResidente }
+    }
     return { precioAdulto: baseAdulto, precioNino: baseNino }
   }
 
@@ -153,13 +163,22 @@ export function calcularPrecioEfectivo(
     const cumpleHora = !regla.horasSalida || regla.horasSalida.length === 0 || (horaNormalizada && regla.horasSalida.includes(horaNormalizada))
 
     if (cumpleDia && cumpleHora) {
+      if (esResidente) {
+        return {
+          precioAdulto: regla.precioResidente ?? baseResidente ?? baseAdulto,
+          precioNino: regla.precioNinoResidente ?? baseNinoResidente ?? baseNino,
+        }
+      }
       return {
         precioAdulto: regla.precioAdulto,
-        precioNino: regla.precioNino
+        precioNino: regla.precioNino,
       }
     }
   }
 
+  if (esResidente && baseResidente != null) {
+    return { precioAdulto: baseResidente, precioNino: baseNinoResidente }
+  }
   return { precioAdulto: baseAdulto, precioNino: baseNino }
 }
 
@@ -235,6 +254,7 @@ export interface ReservaDatos {
   lobbyRecogida: string | null
   horaRecogida: string | null
   habitacion: string | null
+  esResidente: boolean
 }
 
 /**
@@ -272,6 +292,7 @@ export function validarReserva(
       lobbyRecogida: texto(form.lobbyRecogida, 80) || null,
       horaRecogida: normalizarHora(form.horaRecogida),
       habitacion: texto(form.habitacion, 30) || null,
+      esResidente: form.esResidente === 'true' || form.esResidente === true,
     },
   }
 }

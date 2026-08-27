@@ -107,7 +107,7 @@ export async function reservarExcursion(
           impuestoPct: true,
           variantes: {
             where: { activa: true },
-            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
+            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, precioResidente: true, precioNinoResidente: true, preciosDinamicos: true },
             orderBy: { orden: 'asc' },
           },
         },
@@ -121,12 +121,17 @@ export async function reservarExcursion(
 
     // Calcular precio efectivo
     const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const baseResidente = (variante as any).precioResidente != null ? Number((variante as any).precioResidente) : null
+    const baseNinoResidente = (variante as any).precioNinoResidente != null ? Number((variante as any).precioNinoResidente) : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
       Number(variante.precioAdulto),
       variante.precioNino != null ? Number(variante.precioNino) : null,
-      reglasDin
+      reglasDin,
+      v.datos.esResidente,
+      baseResidente,
+      baseNinoResidente
     )
 
     // Validar disponibilidad: fecha, horario y cupo (y de sus actividades si es un combo)
@@ -360,6 +365,7 @@ export async function reservarExcursion(
               estado: esPagoOnline ? 'PAGADA' : 'PENDIENTE',
               canal: 'ONLINE',
               notas: v.datos.notas,
+              esResidente: v.datos.esResidente,
               checkinToken,
               pasajeros: {
                 createMany: {
@@ -617,7 +623,18 @@ export async function reservarCarritoAction(
 
       const v = exc.variantes[0]
       const reglasDin = v.preciosDinamicos ? (v.preciosDinamicos as any[]) : null
-      const { precioAdulto, precioNino } = calcularPrecioEfectivo(fechaValida, item.horaSalida || null, v.precioAdulto.toNumber(), v.precioNino ? v.precioNino.toNumber() : null, reglasDin)
+      const baseResidenteCombo = (v as any).precioResidente != null ? (v as any).precioResidente.toNumber() : null
+      const baseNinoResidenteCombo = (v as any).precioNinoResidente != null ? (v as any).precioNinoResidente.toNumber() : null
+      const { precioAdulto, precioNino } = calcularPrecioEfectivo(
+        fechaValida,
+        item.horaSalida || null,
+        v.precioAdulto.toNumber(),
+        v.precioNino ? v.precioNino.toNumber() : null,
+        reglasDin,
+        false,
+        baseResidenteCombo,
+        baseNinoResidenteCombo
+      )
 
       const totales = calcularTotales({
         precioAdulto,

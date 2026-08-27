@@ -302,7 +302,7 @@ export async function crearReserva(
           },
           variantes: {
             where: { id: varianteId, activa: true },
-            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
+            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, precioResidente: true, precioNinoResidente: true, preciosDinamicos: true },
           },
           comboItems: {
             include: {
@@ -337,12 +337,17 @@ export async function crearReserva(
     const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
     const baseAdulto = Number(variante.precioAdulto)
     const baseNino = variante.precioNino != null ? Number(variante.precioNino) : null
+    const baseResidente = (variante as any).precioResidente != null ? Number((variante as any).precioResidente) : null
+    const baseNinoResidente = (variante as any).precioNinoResidente != null ? Number((variante as any).precioNinoResidente) : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
       baseAdulto,
       baseNino,
-      reglasDin
+      reglasDin,
+      v.datos.esResidente,
+      baseResidente,
+      baseNinoResidente
     )
 
     const totales = calcularTotales({
@@ -536,6 +541,7 @@ export async function crearReserva(
               estado: 'PENDIENTE',
               canal: v.datos.canal,
               notas: v.datos.notas,
+              esResidente: v.datos.esResidente,
               voucherAgencia: v.datos.voucherAgencia || null,
               hotelRecogida: v.datos.hotelRecogida || null,
               lobbyRecogida: v.datos.lobbyRecogida || null,

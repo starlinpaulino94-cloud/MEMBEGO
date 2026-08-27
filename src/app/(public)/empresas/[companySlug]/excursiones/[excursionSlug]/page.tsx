@@ -70,6 +70,11 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
 
   const precioDesde = exc.variantes[0]?.precioAdulto
 
+  // Normalizar galería: JSON crudo → string[]
+  const galeria: string[] = Array.isArray(exc.galeria)
+    ? (exc.galeria as string[]).filter((u) => typeof u === 'string' && u.trim())
+    : []
+
   // Auth + follow check for the booking form
   const user = await getUser()
   const isAuthenticated = !!user
@@ -129,6 +134,26 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
                   sizes="(max-width: 1024px) 100vw, 60vw"
                   priority
                 />
+              </div>
+            )}
+
+            {/* Galería de fotos */}
+            {galeria.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                {galeria.map((url, i) => (
+                  <div
+                    key={i}
+                    className="relative h-24 w-24 sm:h-28 sm:w-28 shrink-0 overflow-hidden rounded-xl bg-muted shadow-xs"
+                  >
+                    <Image
+                      src={url}
+                      alt={`${exc.nombre} — foto ${i + 1}`}
+                      fill
+                      className="object-cover"
+                      sizes="112px"
+                    />
+                  </div>
+                ))}
               </div>
             )}
 

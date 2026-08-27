@@ -109,7 +109,7 @@ export async function crearReservaVendedor(
           },
           variantes: {
             where: { id: varianteId, activa: true },
-            select: { id: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
+            select: { id: true, precioAdulto: true, precioNino: true, precioResidente: true, precioNinoResidente: true, preciosDinamicos: true },
           },
         },
       })
@@ -230,12 +230,17 @@ export async function crearReservaVendedor(
 
     const variante = excursion.variantes[0]
     const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const baseResidente = (variante as any).precioResidente != null ? (variante as any).precioResidente.toNumber() : null
+    const baseNinoResidente = (variante as any).precioNinoResidente != null ? (variante as any).precioNinoResidente.toNumber() : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
       variante.precioAdulto.toNumber(),
       variante.precioNino ? variante.precioNino.toNumber() : null,
-      reglasDin
+      reglasDin,
+      v.datos.esResidente,
+      baseResidente,
+      baseNinoResidente
     )
 
     const totales = calcularTotales({
@@ -391,6 +396,7 @@ export async function crearReservaVendedor(
               estado: 'PENDIENTE',
               canal: 'VENDEDOR',
               notas: v.datos.notas,
+              esResidente: v.datos.esResidente,
               voucherAgencia: v.datos.voucherAgencia,
               hotelRecogida: v.datos.hotelRecogida,
               lobbyRecogida: v.datos.lobbyRecogida,

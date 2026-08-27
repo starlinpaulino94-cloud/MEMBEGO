@@ -61,7 +61,7 @@ export interface ExcursionOpcion {
     horarioFijo?: unknown
     horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
   }[]
-  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; preciosDinamicos?: any[] }[]
+  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; precioResidente?: number | null; precioNinoResidente?: number | null; preciosDinamicos?: any[] }[]
   horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
 }
 
@@ -109,6 +109,7 @@ export function ReservaVendedorForm({
   const [fecha, setFecha] = useState(getTodayString())
   const [adultos, setAdultos] = useState(2)
   const [ninos, setNinos] = useState(0)
+  const [esResidente, setEsResidente] = useState(false)
 
   // Configuración específica de combos
   const [modoComboFechas, setModoComboFechas] = useState<'MISMO_DIA' | 'DIAS_DIFERENTES'>('MISMO_DIA')
@@ -244,7 +245,16 @@ export function ReservaVendedorForm({
     if (!variante || !excursion) return null
     const fechaObj = fecha ? new Date(`${fecha}T12:00:00.000Z`) : new Date()
     const reglas = variante.preciosDinamicos ?? null
-    const { precioAdulto, precioNino } = calcularPrecioEfectivo(fechaObj, hora, variante.precioAdulto, variante.precioNino, reglas)
+    const { precioAdulto, precioNino } = calcularPrecioEfectivo(
+      fechaObj,
+      hora,
+      variante.precioAdulto,
+      variante.precioNino,
+      reglas,
+      esResidente,
+      variante.precioResidente ?? null,
+      variante.precioNinoResidente ?? null
+    )
 
     return calcularTotales({
       precioAdulto,
@@ -254,7 +264,7 @@ export function ReservaVendedorForm({
       ninos: ninos || 0,
       descuento: 0,
     })
-  }, [variante, excursion, adultos, ninos, fecha, hora])
+  }, [variante, excursion, adultos, ninos, fecha, hora, esResidente])
 
   // Handler para seleccionar cliente existente
   const handleSeleccionarClienteExistente = (clienteId: string) => {
@@ -295,6 +305,7 @@ export function ReservaVendedorForm({
       <input type="hidden" name="horaRecogida" value={horaRecogida} />
       <input type="hidden" name="habitacion" value={habitacion} />
       <input type="hidden" name="notas" value={notas} />
+      <input type="hidden" name="esResidente" value={String(esResidente)} />
 
       <div className="grid gap-6 lg:grid-cols-12 items-start w-full min-w-0 max-w-full">
         {/* ── COLUMNA PRINCIPAL (PASOS DEL FORMULARIO) ── */}
@@ -848,7 +859,31 @@ export function ReservaVendedorForm({
                         +
                       </button>
                     </div>
+                </div>
+
+                {/* Toggle Residente */}
+                <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 sm:px-4 min-h-[56px] w-full min-w-0">
+                  <div className="min-w-0 flex-1 pr-2">
+                    <span className="text-sm font-bold text-foreground block truncate">¿Residente local?</span>
+                    <span className="block text-[11px] text-muted-foreground truncate">
+                      Tarifa preferencial para residentes
+                    </span>
                   </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={esResidente}
+                    onClick={() => setEsResidente(!esResidente)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                      esResidente ? 'bg-emerald-500' : 'bg-muted'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        esResidente ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
             </div>
