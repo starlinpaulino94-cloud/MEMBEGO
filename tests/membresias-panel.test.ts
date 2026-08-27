@@ -61,6 +61,52 @@ test('el monto de una renovación se calcula en el servidor', () => {
   assert.match(bloque, /const monto = Number\(membership\.plan\.precio\)/)
 })
 
+/**
+ * RENOVAR TIENE QUE DEVOLVERLE EL CÓDIGO AL CLIENTE.
+ *
+ * El canje deja de emitir QR cuando se agotan los lavados —lo dice su propio
+ * comentario: «la membresía queda 'Sin usos disponibles' hasta la renovación»—
+ * así que delega en la renovación la emisión del siguiente. Y la renovación no
+ * emitía ninguno.
+ *
+ * El resultado era una membresía renovada, pagada y con sus lavados repuestos
+ * que el cliente NO PODÍA USAR: el panel decía «4 usos» y su app, nada.
+ */
+test('renovar emite el QR cuando el cliente se quedó sin ninguno', () => {
+  const bloque = ACCIONES.slice(
+    ACCIONES.indexOf('export async function renovarMembresia'),
+    ACCIONES.indexOf('export async function crearEmpleado')
+  )
+  assert.ok(bloque.length > 0, 'no se encontró renovarMembresia')
+  // Se mira si hay uno vivo…
+  assert.match(bloque, /qrToken\.findFirst/)
+  // …y si no lo hay, se emite.
+  assert.match(bloque, /qrToken\.create/)
+})
+
+test('y si el cliente SÍ tenía QR, se le estira la vigencia', () => {
+  // Renovar antes de gastar los lavados no debe dejar un código que caduque a
+  // mitad de un período ya pagado: el fallo aparecería días después sin que
+  // nadie lo relacione con la renovación.
+  const bloque = ACCIONES.slice(
+    ACCIONES.indexOf('export async function renovarMembresia'),
+    ACCIONES.indexOf('export async function crearEmpleado')
+  )
+  assert.match(bloque, /qrToken\.update/)
+  assert.match(bloque, /expiraAt: vencimientoQr\(\)/)
+})
+
+test('y queda en el registro qué pasó con el código', () => {
+  // Sin esto, «renové y el cliente dice que no puede usarlo» no se puede
+  // investigar: no habría forma de saber si se emitió, se renovó o no se tocó.
+  const bloque = ACCIONES.slice(
+    ACCIONES.indexOf('export async function renovarMembresia'),
+    ACCIONES.indexOf('export async function crearEmpleado')
+  )
+  assert.match(bloque, /qrEmitido/)
+  assert.match(bloque, /qrRenovado/)
+})
+
 test('y la pantalla ya no manda ese campo oculto', () => {
   assert.ok(
     !/name="monto"/.test(sinComentarios(BOTONES)),
