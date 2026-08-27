@@ -161,6 +161,7 @@ export async function crearReservaVendedor(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           },
           itemsParaValidar
@@ -201,6 +202,7 @@ export async function crearReservaVendedor(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )

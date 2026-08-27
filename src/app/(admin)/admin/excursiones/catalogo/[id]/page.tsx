@@ -88,6 +88,20 @@ export default async function ExcursionDetallePage({
             nombre: excursion.nombre,
             tipoItem: excursion.tipoItem,
             actividadesComboIds: excursion.comboItems?.map((ci) => ci.actividadId) ?? [],
+            comboItems: excursion.comboItems?.map((ci) => ({
+              actividadId: ci.actividadId,
+              horaSalida: ci.horaSalida,
+              permitirSolapamiento: ci.permitirSolapamiento,
+              horarioFijo: Array.isArray(ci.horarioFijo) ? ci.horarioFijo : null,
+              actividad: ci.actividad ? {
+                id: ci.actividad.id,
+                nombre: ci.actividad.nombre,
+                tipoItem: ci.actividad.tipoItem,
+                horaSalida: ci.actividad.horaSalida,
+                duracionMin: ci.actividad.duracionMin,
+                horarios: ci.actividad.horarios,
+              } : undefined,
+            })) ?? [],
             descripcion: excursion.descripcion,
             portadaUrl: excursion.portadaUrl,
             // `galeria` es JSON en el esquema: se normaliza aquí, en el

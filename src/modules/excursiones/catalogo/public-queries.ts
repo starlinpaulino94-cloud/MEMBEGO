@@ -80,6 +80,8 @@ export interface ExcursionPublica {
   tipoItem?: string
   comboItems?: {
     horaSalida?: string | null
+    permitirSolapamiento?: boolean
+    horarioFijo?: unknown
     actividad: {
       id: string
       nombre: string
@@ -133,6 +135,8 @@ function generarFechasParaDia(diaSemana: number, limiteDias = 90): string[] {
 
 export interface ChildActividadParaCombo {
   horaSalida?: string | null
+  permitirSolapamiento?: boolean
+  horarioFijo?: string | null
   actividad: {
     id: string
     nombre: string
@@ -438,6 +442,8 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
         orderBy: { orden: 'asc' },
         select: {
           horaSalida: true,
+          permitirSolapamiento: true,
+          horarioFijo: true,
           actividad: {
             select: {
               id: true,
@@ -558,6 +564,8 @@ export async function excursionPublica(
         orderBy: { orden: 'asc' },
         select: {
           horaSalida: true,
+          permitirSolapamiento: true,
+          horarioFijo: true,
           actividad: {
             select: {
               id: true,
@@ -652,6 +660,8 @@ export async function excursionPorId(
         orderBy: { orden: 'asc' },
         select: {
           horaSalida: true,
+          permitirSolapamiento: true,
+          horarioFijo: true,
           actividad: {
             select: {
               id: true,

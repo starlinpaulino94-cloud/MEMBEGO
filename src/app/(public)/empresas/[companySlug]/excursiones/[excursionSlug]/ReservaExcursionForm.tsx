@@ -55,6 +55,8 @@ interface Horario {
 
 export interface ComboItemActividadPublica {
   horaSalida?: string | null
+  permitirSolapamiento?: boolean
+  horarioFijo?: unknown
   actividad: {
     id: string
     nombre: string
@@ -154,8 +156,6 @@ export function ReservaExcursionForm({
 
   // Modo de programación de combo: Mismo Día o Días Separados
   const [modoComboFechas, setModoComboFechas] = useState<'MISMO_DIA' | 'DIAS_DIFERENTES'>('MISMO_DIA')
-  // Modo de selección de turnos en combo: Recomendados o Personalizado por actividad
-  const [modoHorarioCombo, setModoHorarioCombo] = useState<'RECOMENDADOS' | 'PERSONALIZADO'>('RECOMENDADOS')
   const [itinerarioMultiFecha, setItinerarioMultiFecha] = useState<Record<string, { fecha: string; hora: string }>>({})
 
   // Daypasses y actividades con horario dentro del combo
@@ -180,6 +180,8 @@ export function ReservaExcursionForm({
       horaSalida: ci.horaSalida || ci.actividad.horaSalida || '09:00',
       horaRegreso: ci.actividad.horaRegreso,
       horarios: ci.actividad.horarios || [],
+      permitirSolapamiento: !!ci.permitirSolapamiento,
+      horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
     }))
     return generarCombinacionesCombo(acts)
   }, [tipoItem, comboItems])
@@ -207,6 +209,8 @@ export function ReservaExcursionForm({
         horaSalida: init[ci.actividad.id] || '09:00',
         horaRegreso: ci.actividad.horaRegreso,
         horarios: ci.actividad.horarios || [],
+        permitirSolapamiento: !!ci.permitirSolapamiento,
+        horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
       }))
       const v = validarItinerarioCombo(actsConInit)
       if (v.ok) {
@@ -222,15 +226,17 @@ export function ReservaExcursionForm({
     return init
   })
 
-  // Índice de la combinación recomendada actualmente seleccionada
-  const combinacionSeleccionadaIdx = useMemo(() => {
-    if (combinacionesDisponibles.length === 0) return -1
-    return combinacionesDisponibles.findIndex((comb) => {
-      return Object.entries(comb.horariosAsignados).every(([actId, h]) => {
-        return comboHorarios[actId] === h
-      })
-    })
-  }, [combinacionesDisponibles, comboHorarios])
+  // Horarios válidos por actividad:哪些 horas forman parte de al menos 1 combinación válida
+  const horariosValidosPorActividad = useMemo(() => {
+    const map: Record<string, Set<string>> = {}
+    for (const comb of combinacionesDisponibles) {
+      for (const [actId, hora] of Object.entries(comb.horariosAsignados)) {
+        if (!map[actId]) map[actId] = new Set()
+        map[actId].add(hora)
+      }
+    }
+    return map
+  }, [combinacionesDisponibles])
 
   // Actividades del combo con sus horarios elegidos
   const comboActividadesConHorario = useMemo(() => {
@@ -249,6 +255,8 @@ export function ReservaExcursionForm({
           : '09:00'),
       horaRegreso: ci.actividad.horaRegreso,
       horarios: ci.actividad.horarios || [],
+      permitirSolapamiento: !!ci.permitirSolapamiento,
+      horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
     }))
   }, [tipoItem, comboItems, comboHorarios])
 
@@ -813,107 +821,32 @@ export function ReservaExcursionForm({
 
             {modoComboFechas === 'MISMO_DIA' ? (
               <div className="space-y-3">
-                {/* Pestañas de modo de selección de horario */}
-                {combinacionesDisponibles.length > 0 && actividadesConHorarioEnCombo.length > 0 && (
-                  <div className="flex items-center gap-1.5 border-b border-primary/15 pb-2">
-                    <button
-                      type="button"
-                      onClick={() => setModoHorarioCombo('RECOMENDADOS')}
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${modoHorarioCombo === 'RECOMENDADOS'
-                        ? 'bg-primary text-primary-foreground shadow-xs'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Turnos Recomendados ({combinacionesDisponibles.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModoHorarioCombo('PERSONALIZADO')}
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${modoHorarioCombo === 'PERSONALIZADO'
-                        ? 'bg-primary text-primary-foreground shadow-xs'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`}
-                    >
-                      <Clock className="h-3.5 w-3.5" />
-                      Personalizar por Actividad
-                    </button>
-                  </div>
-                )}
-
-                {modoHorarioCombo === 'RECOMENDADOS' && combinacionesDisponibles.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-muted-foreground">
-                      Selecciona una combinación de turnos coordinados para tu paquete:
-                    </p>
-                    <div className="space-y-2">
-                      {combinacionesDisponibles.map((comb, idx) => {
-                        const isSelected = idx === combinacionSeleccionadaIdx
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => setComboHorarios(comb.horariosAsignados)}
-                            className={`w-full text-left rounded-xl border p-3 transition flex flex-col gap-1.5 cursor-pointer ${isSelected
-                              ? 'border-primary bg-primary/10 ring-2 ring-primary/60 shadow-xs'
-                              : 'border-border/80 bg-background/90 hover:bg-muted/60'
-                              }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={`text-xs font-bold ${isSelected ? 'text-primary font-extrabold' : 'text-foreground'
-                                    }`}
-                                >
-                                  {comb.nombre || `Opción ${idx + 1}`}
-                                </span>
-                              </div>
-                              <div className="flex flex-col items-end gap-2">
-                                {idx === 0 && (
-                                  <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
-                                    Recomendado
-                                  </span>
-                                )}
-                                <div className="flex items-center gap-1 text-[11px] font-mono font-semibold text-primary">
-                                  <Clock className="h-3 w-3" />
-                                  {formato12h(comb.horaInicio)} → {formato12h(comb.horaFin)} ({(comb.duracionTotalMin / 60).toFixed(1)}h)
-                                </div>
-                              </div>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground font-medium">
-                              {comb.resumenTexto}
-                            </p>
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    {pasesDiaEnCombo.length > 0 && (
-                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs text-emerald-800 flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
-                        <span>
-                          Incluye acceso libre todo el día para:{' '}
-                          <strong>{pasesDiaEnCombo.map((p) => p.actividad.nombre).join(', ')}</strong>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
+                {/* Botones de horarios por actividad — solo si hay más de 1 combinación */}
+                {combinacionesDisponibles.length > 1 && actividadesConHorarioEnCombo.length > 0 && (
                   <div className="space-y-2.5">
-                    {/* Selector por actividad en el mismo día */}
+                    <p className="text-[11px] text-muted-foreground">
+                      Selecciona los turnos de cada actividad:
+                    </p>
                     {comboItems.map((ci, actIdx) => {
                       const act = ci.actividad
                       const actId = act.id
                       const esPd = act.tipoItem === 'PASE_DIA'
-                      const horariosAct = act.horarios || []
+                      const esHorarioFijo = Array.isArray(ci.horarioFijo) && ci.horarioFijo.length > 0
+                      if (esPd) return null
 
-                      const slotsUnicos = Array.from(
-                        new Set(horariosAct.map((h) => h.horaSalida.trim().slice(0, 5)))
-                      ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
+                      const horariosAct = act.horarios || []
+                      const slotsUnicos = esHorarioFijo
+                        ? (ci.horarioFijo as string[]).map((h) => h.trim().slice(0, 5))
+                        : Array.from(
+                            new Set(horariosAct.map((h) => h.horaSalida.trim().slice(0, 5)))
+                          ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
 
                       const slots = slotsUnicos.length > 0
                         ? slotsUnicos
                         : [act.horaSalida || '09:00']
+
+                      const validSet = horariosValidosPorActividad[actId]
+                      const tieneOpciones = slots.length > 1 && !esHorarioFijo
 
                       return (
                         <div
@@ -928,35 +861,31 @@ export function ReservaExcursionForm({
                               <span className="text-xs font-bold text-foreground">{act.nombre}</span>
                             </div>
                             <span className="font-mono text-[11px] font-semibold text-primary">
-                              {esPd ? (
-                                <span className="text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                  Pase de Día (Acceso Libre)
+                              {formato12h(comboHorarios[actId] || act.horaSalida || '09:00')}
+                              {act.duracionMin && (
+                                <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                                  ({act.duracionMin}min)
                                 </span>
-                              ) : (
-                                <>
-                                  {formato12h(comboHorarios[actId] || act.horaSalida || '09:00')}
-                                  {act.duracionMin && (
-                                    <span className="text-[10px] font-normal text-muted-foreground ml-1">
-                                      ({act.duracionMin}min)
-                                    </span>
-                                  )}
-                                </>
                               )}
                             </span>
                           </div>
 
-                          {!esPd && slots.length > 1 && (
+                          {tieneOpciones && (
                             <div className="flex flex-wrap gap-1.5 pl-7">
                               {slots.map((slot) => {
                                 const isSelected = comboHorarios[actId] === slot
+                                const esValido = !validSet || validSet.has(slot)
                                 return (
                                   <button
                                     key={slot}
                                     type="button"
-                                    onClick={() => cambiarTurnoCombo(actId, slot)}
-                                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition cursor-pointer ${isSelected
-                                      ? 'bg-primary text-primary-foreground shadow-xs'
-                                      : 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground'
+                                    disabled={!esValido}
+                                    onClick={() => esValido && cambiarTurnoCombo(actId, slot)}
+                                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${isSelected
+                                      ? 'bg-primary text-primary-foreground shadow-xs cursor-pointer'
+                                      : esValido
+                                        ? 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground cursor-pointer'
+                                        : 'border border-border/40 bg-muted/10 text-muted-foreground/40 cursor-not-allowed line-through'
                                       }`}
                                   >
                                     {formato12h(slot)}
@@ -969,7 +898,17 @@ export function ReservaExcursionForm({
                       )
                     })}
 
-                    {/* Acciones rápidas de itinerario */}
+                    {pasesDiaEnCombo.length > 0 && (
+                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs text-emerald-800 flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
+                        <span>
+                          Incluye acceso libre todo el día para:{' '}
+                          <strong>{pasesDiaEnCombo.map((p) => p.actividad.nombre).join(', ')}</strong>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Acciones rápidas */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       <button
                         type="button"
@@ -980,6 +919,56 @@ export function ReservaExcursionForm({
                         Horario Óptimo
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Sin combinaciones o solo 1: mostrar info del turno único */}
+                {combinacionesDisponibles.length <= 1 && actividadesConHorarioEnCombo.length > 0 && (
+                  <div className="space-y-2.5">
+                    {combinacionesDisponibles.length === 1 && (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-xs text-primary flex items-center gap-2">
+                        <Clock className="h-4 w-4 shrink-0" />
+                        <span>
+                          Turno único: <strong>{combinacionesDisponibles[0].resumenTexto}</strong>
+                          {' '}({formato12h(combinacionesDisponibles[0].horaInicio)} → {formato12h(combinacionesDisponibles[0].horaFin)})
+                        </span>
+                      </div>
+                    )}
+                    {combinacionesDisponibles.length === 0 && (
+                      <div className="space-y-2.5">
+                        {comboItems.map((ci, actIdx) => {
+                          const act = ci.actividad
+                          const actId = act.id
+                          const esPd = act.tipoItem === 'PASE_DIA'
+                          const esHorarioFijo = Array.isArray(ci.horarioFijo) && ci.horarioFijo.length > 0
+                          if (esPd) return null
+
+                          return (
+                            <div
+                              key={actId}
+                              className="rounded-lg border border-border/70 bg-background/80 p-2.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                                    {actIdx + 1}
+                                  </span>
+                                  <span className="text-xs font-bold text-foreground">{act.nombre}</span>
+                                </div>
+                                <span className="font-mono text-[11px] font-semibold text-primary">
+                                  {formato12h(comboHorarios[actId] || act.horaSalida || '09:00')}
+                                  {act.duracionMin && (
+                                    <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                                      ({act.duracionMin}min)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

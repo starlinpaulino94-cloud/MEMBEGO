@@ -68,6 +68,8 @@ export interface ExcursionEditable {
   comboItems?: {
     actividadId?: string
     horaSalida?: string | null
+    permitirSolapamiento?: boolean
+    horarioFijo?: unknown
     actividad?: {
       id: string
       nombre?: string
@@ -210,6 +212,21 @@ export function ExcursionForm({
     setPermitirSolapamiento((prev) => ({ ...prev, [actId]: !prev[actId] }))
   }
 
+  // Mapeo de horarios fijos por actividad (actividadId -> string[])
+  const [horarioFijo, setHorarioFijo] = useState<Record<string, string[]>>(() => {
+    const initial: Record<string, string[]> = {}
+    if (excursion?.comboItems && excursion.comboItems.length > 0) {
+      for (const ci of excursion.comboItems) {
+        const actId = ci.actividad?.id || ci.actividadId
+        if (actId && ci.horarioFijo) {
+          const raw = ci.horarioFijo
+          initial[actId] = Array.isArray(raw) ? (raw as string[]) : typeof raw === 'string' ? [raw] : []
+        }
+      }
+    }
+    return initial
+  })
+
   // Objetos de las actividades seleccionadas
   const actividadesSeleccionadasObjs = useMemo(() => {
     return actividadesDisponibles.filter((a) =>
@@ -229,15 +246,21 @@ export function ExcursionForm({
 
   // Actividades con horario seleccionadas con sus horas asignadas
   const actividadesConHorariosAsignados = useMemo(() => {
-    return actividadesConHorario.map((a) => ({
-      ...a,
-      horaSalida:
-        horariosPorActividad[a.id] ||
-        a.horaSalida ||
-        (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
-      permitirSolapamiento: !!permitirSolapamiento[a.id],
-    }))
-  }, [actividadesConHorario, horariosPorActividad, permitirSolapamiento])
+    return actividadesConHorario.map((a) => {
+      // Si hay horarios fijos seleccionados, usar el primero como default
+      const fijos = horarioFijo[a.id]
+      const horaFromFijos = fijos && fijos.length > 0 ? fijos[0] : null
+      return {
+        ...a,
+        horaSalida:
+          horaFromFijos ||
+          horariosPorActividad[a.id] ||
+          a.horaSalida ||
+          (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
+        permitirSolapamiento: !!permitirSolapamiento[a.id],
+      }
+    })
+  }, [actividadesConHorario, horariosPorActividad, permitirSolapamiento, horarioFijo])
 
   // Días comunes compatibles (intersección)
   const diasComunes = useMemo(() => {
@@ -252,8 +275,15 @@ export function ExcursionForm({
   // Combinaciones válidas completas de horarios para el combo
   const combinacionesDisponibles = useMemo(() => {
     if (tipoItem !== 'COMBO' || actividadesSeleccionadasObjs.length < 2) return []
-    return generarCombinacionesCombo(actividadesSeleccionadasObjs)
-  }, [tipoItem, actividadesSeleccionadasObjs])
+    const acts = actividadesSeleccionadasObjs.map((a) => {
+      const fijos = horarioFijo[a.id]
+      return {
+        ...a,
+        horarioFijo: fijos && fijos.length > 0 ? fijos : null,
+      }
+    })
+    return generarCombinacionesCombo(acts)
+  }, [tipoItem, actividadesSeleccionadasObjs, horarioFijo])
 
   // Cambiar turno de una actividad con auto-resolución de solapamientos
   const cambiarHorarioActividad = (actId: string, nuevaHora: string) => {
@@ -344,27 +374,42 @@ export function ExcursionForm({
       if (diasComunes.length > 0) {
         setDiasSeleccionados(diasComunes)
       }
-      if (combinacionesDisponibles.length > 0) {
-        const todasHoras = Array.from(
-          new Set(combinacionesDisponibles.map((c) => c.horaInicio))
-        ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
-        setHorasSalida(todasHoras)
-        const maxDur = Math.max(...combinacionesDisponibles.map((c) => c.duracionTotalMin))
-        if (maxDur > 0) {
-          setDuracionHoras(Number((maxDur / 60).toFixed(1)))
+      // Calcular duración como la hora de regreso más tardía de todas las actividades
+      if (actividadesSeleccionadasObjs.length > 0) {
+        let minInicio = Infinity
+        let maxFin = 0
+        for (const act of actividadesSeleccionadasObjs) {
+          const fijos = horarioFijo[act.id]
+          const horaBase = fijos && fijos.length > 0
+            ? fijos[0]
+            : act.horaSalida || (act.horarios && act.horarios.length > 0 ? act.horarios[0].horaSalida : '09:00')
+          const inicio = minutosDesdeMedianoche(horaBase.trim().slice(0, 5))
+          if (inicio < minInicio) minInicio = inicio
+          // Calcular fin: horaRegreso si existe, sino horaSalida + duracionMin
+          let fin: number
+          if (act.horaRegreso) {
+            fin = minutosDesdeMedianoche(act.horaRegreso.trim().slice(0, 5))
+          } else {
+            const dur = act.duracionMin && act.duracionMin > 0 ? act.duracionMin : 120
+            fin = inicio + dur
+          }
+          if (fin > maxFin) maxFin = fin
         }
-      } else if (itinerarioResult.itinerario.length > 0) {
-        const primeraHora = itinerarioResult.itinerario[0].inicio
-        setHorasSalida([primeraHora])
-        const ultimaHoraFin = itinerarioResult.itinerario[itinerarioResult.itinerario.length - 1].fin
-        const durTotalMin =
-          minutosDesdeMedianoche(ultimaHoraFin) - minutosDesdeMedianoche(primeraHora)
-        if (durTotalMin > 0) {
-          setDuracionHoras(Number((durTotalMin / 60).toFixed(1)))
+        if (minInicio < Infinity && maxFin > 0) {
+          const durTotalMin = maxFin - minInicio
+          if (durTotalMin > 0) {
+            setDuracionHoras(Number((durTotalMin / 60).toFixed(1)))
+          }
+          // Usar la primera hora de salida de la primera actividad
+          const primeraAct = actividadesSeleccionadasObjs[0]
+          const primeraHora = horarioFijo[primeraAct.id]?.[0] ||
+            primeraAct.horaSalida ||
+            (primeraAct.horarios && primeraAct.horarios.length > 0 ? primeraAct.horarios[0].horaSalida : '09:00')
+          setHorasSalida([primeraHora.trim().slice(0, 5)])
         }
       }
     }
-  }, [tipoItem, actividadesSeleccionadasObjs, diasComunes, combinacionesDisponibles, itinerarioResult])
+  }, [tipoItem, actividadesSeleccionadasObjs, diasComunes, horarioFijo])
 
   const [nuevaHoraInput, setNuevaHoraInput] = useState('14:00')
 
@@ -492,6 +537,11 @@ export function ExcursionForm({
         type="hidden"
         name="comboPermitirSolapamiento"
         value={JSON.stringify(permitirSolapamiento)}
+      />
+      <input
+        type="hidden"
+        name="comboHorarioFijo"
+        value={JSON.stringify(horarioFijo)}
       />
 
       {/* SECCIÓN 0: IMÁGENES Y MULTIMEDIA */}
@@ -669,31 +719,40 @@ export function ExcursionForm({
                           >
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-foreground">{act.nombre}</span>
-                              <span className="font-mono text-[11px] text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-full">
-                                {formato12h(horaAsignada)} → {formato12h(horaFinAsignada)} ({(duracionActMin / 60).toFixed(1)}h)
-                              </span>
                             </div>
 
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[11px] text-muted-foreground font-medium mr-1">Turno:</span>
-                              {slots.map((s) => {
-                                const seleccionado = horaAsignada === s
-                                const finSlot = formatoMinutosAHora(minutosDesdeMedianoche(s) + duracionActMin)
+                              {act.horarios?.map((h) => {
+                                const val = h.horaSalida.trim().slice(0, 5)
+                                const seleccionado = horarioFijo[act.id]?.includes(val) ?? false
+                                const finSlot = formatoMinutosAHora(minutosDesdeMedianoche(val) + duracionActMin)
                                 return (
                                   <button
-                                    key={s}
+                                    key={h.id}
                                     type="button"
-                                    title={`${formato12h(s)} a ${formato12h(finSlot)}`}
-                                    onClick={() => cambiarHorarioActividad(act.id, s)}
-                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${seleccionado
+                                    title={`${formato12h(val)} → ${formato12h(finSlot)}`}
+                                    onClick={() =>
+                                      setHorarioFijo((prev) => {
+                                        const actual = prev[act.id] || []
+                                        const nuevo = seleccionado
+                                          ? actual.filter((v) => v !== val)
+                                          : [...actual, val]
+                                        return { ...prev, [act.id]: nuevo }
+                                      })
+                                    }
+                                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition cursor-pointer ${seleccionado
                                       ? 'bg-primary text-primary-foreground shadow-xs'
                                       : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
                                       }`}
                                   >
-                                    {formato12h(s)}
+                                    {formato12h(val)}
                                   </button>
                                 )
                               })}
+                              {(!act.horarios || act.horarios.length === 0) && (
+                                <span className="text-[11px] text-muted-foreground italic">Sin horarios</span>
+                              )}
                               <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-[11px] text-muted-foreground font-medium select-none" title="Permitir que esta actividad se solape con otras en el mismo turno">
                                 <input
                                   type="checkbox"
@@ -1312,7 +1371,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-adulto"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Adulto Turista *
+                      Adulto *
                     </Label>
                     <Input
                       id="exc-precio-adulto"
@@ -1332,7 +1391,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-nino"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Niño Turista
+                      Niño
                     </Label>
                     <Input
                       id="exc-precio-nino"
@@ -1374,7 +1433,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-residente"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Adulto Residente
+                      Adulto
                     </Label>
                     <Input
                       id="exc-precio-residente"
@@ -1393,7 +1452,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-nino-residente"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Niño Residente
+                      Niño
                     </Label>
                     <Input
                       id="exc-precio-nino-residente"

@@ -40,8 +40,8 @@ export async function resumenDelPeriodo(
       ? { vendedorId: { in: matchingVendedorIds } }
       : {}
 
-  const [registros, reservas, ventas, comisiones] = await Promise.all([
-    conEmpresa(companyId, (tx) =>
+  const [registros, reservas, ventas, comisiones] = await conEmpresa(companyId, async (tx) => {
+    const [reg, res, ven, com] = await Promise.all([
       tx.vendedorAtribucion.count({
         where: {
           companyId,
@@ -50,9 +50,7 @@ export async function resumenDelPeriodo(
           ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.reservaExc.findMany({
         where: {
           companyId,
@@ -63,9 +61,7 @@ export async function resumenDelPeriodo(
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { adultos: true, ninos: true },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.ventaExc.findMany({
         where: {
           companyId,
@@ -76,9 +72,7 @@ export async function resumenDelPeriodo(
           confirmadaAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { total: true, pasajeros: true, moneda: true },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.comisionEntrada.findMany({
         where: {
           companyId,
@@ -87,9 +81,10 @@ export async function resumenDelPeriodo(
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { monto: true, ajustes: { select: { monto: true } } },
-      })
-    ),
-  ])
+      }),
+    ])
+    return [reg, res, ven, com] as const
+  })
 
   const ingresos = centavos(ventas.reduce((t, v) => t + Number(v.total), 0))
   const comisionado = centavos(
@@ -121,14 +116,12 @@ export async function resumenDelPeriodo(
  * un mal puesto en una lista.
  */
 export async function rankingVendedores(companyId: string, rango: Rango) {
-  const [vendedores, atribuciones, ventas] = await Promise.all([
-    conEmpresa(companyId, (tx) =>
+  const [vendedores, atribuciones, ventas] = await conEmpresa(companyId, async (tx) => {
+    const [v, a, ve] = await Promise.all([
       tx.vendedor.findMany({
         where: { companyId, estado: 'ACTIVO' },
         select: { id: true, nombre: true, apellido: true, codigo: true },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.vendedorAtribucion.groupBy({
         by: ['vendedorId'],
         where: {
@@ -137,9 +130,7 @@ export async function rankingVendedores(companyId: string, rango: Rango) {
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
         _count: { _all: true },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.ventaExc.findMany({
         where: {
           companyId,
@@ -148,9 +139,10 @@ export async function rankingVendedores(companyId: string, rango: Rango) {
           confirmadaAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { vendedorId: true, total: true, pasajeros: true, moneda: true },
-      })
-    ),
-  ])
+      }),
+    ])
+    return [v, a, ve] as const
+  })
 
   const captados = new Map(atribuciones.map((a) => [a.vendedorId, a._count._all]))
   const porVendedor = new Map<string, { ingresos: number; ventas: number; pasajeros: number }>()
@@ -191,8 +183,8 @@ export async function realesDeVendedor(
   rango: Rango,
   excursionId?: string | null
 ): Promise<RealesMeta> {
-  const [registros, reservas, ventas] = await Promise.all([
-    conEmpresa(companyId, (tx) =>
+  const [registros, reservas, ventas] = await conEmpresa(companyId, async (tx) => {
+    const [reg, res, ven] = await Promise.all([
       tx.vendedorAtribucion.count({
         where: {
           companyId,
@@ -200,9 +192,7 @@ export async function realesDeVendedor(
           etapa: 'REGISTRO',
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.reservaExc.count({
         where: {
           companyId,
@@ -211,9 +201,7 @@ export async function realesDeVendedor(
           ...(excursionId ? { excursionId } : {}),
           createdAt: { gte: rango.desde, lte: rango.hasta },
         },
-      })
-    ),
-    conEmpresa(companyId, (tx) =>
+      }),
       tx.ventaExc.findMany({
         where: {
           companyId,
@@ -223,9 +211,10 @@ export async function realesDeVendedor(
           confirmadaAt: { gte: rango.desde, lte: rango.hasta },
         },
         select: { total: true, pasajeros: true, moneda: true },
-      })
-    ),
-  ])
+      }),
+    ])
+    return [reg, res, ven] as const
+  })
 
   return {
     registros,
@@ -251,24 +240,23 @@ export async function metasActivas(companyId: string) {
   const vendedorIds = [...new Set(metas.map((m) => m.vendedorId).filter(Boolean))] as string[]
   const excursionIds = [...new Set(metas.map((m) => m.excursionId).filter(Boolean))] as string[]
 
-  const [vendedores, excursiones] = await Promise.all([
-    vendedorIds.length > 0
-      ? conEmpresa(companyId, (tx) =>
-          tx.vendedor.findMany({
+  const [vendedores, excursiones] = await conEmpresa(companyId, async (tx) => {
+    const [v, e] = await Promise.all([
+      vendedorIds.length > 0
+        ? tx.vendedor.findMany({
             where: { id: { in: vendedorIds }, companyId },
             select: { id: true, nombre: true, apellido: true, codigo: true },
           })
-        )
-      : [],
-    excursionIds.length > 0
-      ? conEmpresa(companyId, (tx) =>
-          tx.excursion.findMany({
+        : [],
+      excursionIds.length > 0
+        ? tx.excursion.findMany({
             where: { id: { in: excursionIds }, companyId },
             select: { id: true, nombre: true, tipoItem: true },
           })
-        )
-      : [],
-  ])
+        : [],
+    ])
+    return [v, e] as const
+  })
 
   const porVendedorId = new Map(vendedores.map((v) => [v.id, v]))
   const porExcursionId = new Map(excursiones.map((e) => [e.id, e]))

@@ -221,6 +221,7 @@ export async function reservarExcursion(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           },
           itemsParaValidar
@@ -261,6 +262,7 @@ export async function reservarExcursion(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )
@@ -588,6 +590,7 @@ export async function reservarCarritoAction(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )

@@ -102,6 +102,7 @@ export async function crearExcursion(
     }[] = []
     let horariosPorActividad: Record<string, string> = {}
     let permitirSolapamientoMap: Record<string, boolean> = {}
+    let horarioFijoMap: Record<string, string[]> = {}
 
     if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length < 2) {
       return { error: 'Un combo debe incluir al menos 2 actividades del catálogo.' }
@@ -122,6 +123,15 @@ export async function crearExcursion(
       if (comboSolapamientoRaw) {
         try {
           permitirSolapamientoMap = JSON.parse(comboSolapamientoRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboHorarioFijoRaw = String(formData.get('comboHorarioFijo') ?? '')
+      if (comboHorarioFijoRaw) {
+        try {
+          horarioFijoMap = JSON.parse(comboHorarioFijoRaw)
         } catch {
           /* ignore */
         }
@@ -293,7 +303,8 @@ export async function crearExcursion(
                   actsDbParaCombo.find((a) => a.id === actividadId)?.horaSalida ||
                   '09:00',
                 permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
-              })),
+                horarioFijo: horarioFijoMap[actividadId]?.length ? horarioFijoMap[actividadId] : null,
+              })) as any,
             },
           }),
         },
@@ -396,6 +407,7 @@ export async function actualizarExcursion(
 
     let horariosPorActividad: Record<string, string> = {}
     let permitirSolapamientoMap: Record<string, boolean> = {}
+    let horarioFijoMap: Record<string, string[]> = {}
     let actsDb: {
       id: string
       nombre: string
@@ -424,6 +436,15 @@ export async function actualizarExcursion(
       if (comboSolapamientoRaw) {
         try {
           permitirSolapamientoMap = JSON.parse(comboSolapamientoRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboHorarioFijoRaw = String(formData.get('comboHorarioFijo') ?? '')
+      if (comboHorarioFijoRaw) {
+        try {
+          horarioFijoMap = JSON.parse(comboHorarioFijoRaw)
         } catch {
           /* ignore */
         }
@@ -520,6 +541,7 @@ export async function actualizarExcursion(
                 actsDb.find((a) => a.id === actividadId)?.horaSalida ||
                 '09:00',
               permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
+              horarioFijo: horarioFijoMap[actividadId] || null,
             })),
           })
         }

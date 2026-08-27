@@ -375,6 +375,9 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
                     cupo: h.cupo,
                   })),
                 },
+                horaSalida: ci.horaSalida,
+                permitirSolapamiento: ci.permitirSolapamiento,
+                horarioFijo: ci.horarioFijo,
               }))}
               esEmpresaDemo={company.esDemo}
             />

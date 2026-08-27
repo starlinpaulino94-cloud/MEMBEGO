@@ -75,6 +75,8 @@ export interface ExcursionOpcion {
     tipoItem?: string
     duracionMin: number | null
     horaSalida?: string | null
+    permitirSolapamiento?: boolean
+    horarioFijo?: unknown
     horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
   }[]
   variantes: {
@@ -191,6 +193,8 @@ export function ReservaForm({
         duracionMin: ci.duracionMin,
         horaSalida: ci.horaSalida,
         horarios: ci.horarios || [],
+        permitirSolapamiento: ci.permitirSolapamiento,
+        horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
       }))
     )
   }, [esCombo, excursion])

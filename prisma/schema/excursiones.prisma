@@ -74,6 +74,7 @@ model ExcursionComboItem {
   horaSalida            String?
   orden                 Int       @default(0)
   permitirSolapamiento  Boolean   @default(false)
+  horarioFijo           Json?
 
   createdAt DateTime @default(now())
 

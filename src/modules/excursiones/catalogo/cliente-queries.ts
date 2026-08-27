@@ -29,6 +29,8 @@ const EXCURSION_SELECT = {
     orderBy: { orden: 'asc' as const },
     select: {
       horaSalida: true,
+      permitirSolapamiento: true,
+      horarioFijo: true,
       actividad: {
         select: {
           id: true,

@@ -130,6 +130,8 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
         orderBy: { orden: 'asc' },
         select: {
           horaSalida: true,
+          permitirSolapamiento: true,
+          horarioFijo: true,
           actividad: {
             select: {
               id: true,
@@ -325,6 +327,8 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
         orderBy: { orden: 'asc' },
         select: {
           horaSalida: true,
+          permitirSolapamiento: true,
+          horarioFijo: true,
           actividad: {
             select: {
               id: true,

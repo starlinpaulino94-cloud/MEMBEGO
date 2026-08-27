@@ -151,9 +151,8 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                         key={d.iso}
                         type="button"
                         onClick={() => toggleDia(idx, d.iso)}
-                        className={`h-6 w-6 rounded text-[10px] font-bold transition ${
-                          sel ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
+                        className={`h-6 w-6 rounded text-[10px] font-bold transition ${sel ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          }`}
                       >
                         {d.label}
                       </button>
@@ -173,9 +172,8 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                           key={h}
                           type="button"
                           onClick={() => toggleHora(idx, h)}
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition ${
-                            sel ? 'bg-primary/20 text-primary border border-primary/40' : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-transparent'
-                          }`}
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition ${sel ? 'bg-primary/20 text-primary border border-primary/40' : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-transparent'
+                            }`}
                         >
                           {h}
                         </button>
@@ -245,7 +243,7 @@ function FormVariante({
     <form action={formAction} className="space-y-4 rounded-xl border border-dashed border-primary/40 bg-muted/40 p-4">
       <input type="hidden" name="excursionId" value={excursionId} />
       {variante ? <input type="hidden" name="varianteId" value={variante.id} /> : null}
-      
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor={`var-nombre-${variante?.id ?? 'nueva'}`}>Nombre de la variante *</Label>
@@ -283,7 +281,7 @@ function FormVariante({
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <Label htmlFor={`var-pa-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto Turista *</Label>
+              <Label htmlFor={`var-pa-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto *</Label>
               <Input
                 id={`var-pa-${variante?.id ?? 'nueva'}`}
                 name="precioAdulto"
@@ -297,7 +295,7 @@ function FormVariante({
               />
             </div>
             <div>
-              <Label htmlFor={`var-pn-${variante?.id ?? 'nueva'}`} className="text-xs">Niño Turista</Label>
+              <Label htmlFor={`var-pn-${variante?.id ?? 'nueva'}`} className="text-xs">Niño</Label>
               <Input
                 id={`var-pn-${variante?.id ?? 'nueva'}`}
                 name="precioNino"
@@ -322,7 +320,7 @@ function FormVariante({
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <Label htmlFor={`var-pr-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto Residente</Label>
+              <Label htmlFor={`var-pr-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto</Label>
               <Input
                 id={`var-pr-${variante?.id ?? 'nueva'}`}
                 name="precioResidente"
@@ -335,7 +333,7 @@ function FormVariante({
               />
             </div>
             <div>
-              <Label htmlFor={`var-pnr-${variante?.id ?? 'nueva'}`} className="text-xs">Niño Residente</Label>
+              <Label htmlFor={`var-pnr-${variante?.id ?? 'nueva'}`} className="text-xs">Niño</Label>
               <Input
                 id={`var-pnr-${variante?.id ?? 'nueva'}`}
                 name="precioNinoResidente"
