@@ -344,6 +344,12 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
               select: {
                 id: true,
                 nombre: true,
+                // La pantalla del cliente lo lee para saber si la actividad es
+                // un PASE_DIA (que no tiene hora de fin). Los otros dos
+                // `select` de comboItems de este archivo sí lo pedían: este se
+                // quedó atrás, y el campo llegaba `undefined` — o sea, ningún
+                // pase de día se reconocía como tal.
+                tipoItem: true,
                 duracionMin: true,
                 horaSalida: true,
                 horaRegreso: true,

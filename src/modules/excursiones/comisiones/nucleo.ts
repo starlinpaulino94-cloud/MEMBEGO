@@ -289,7 +289,22 @@ export function calcularComision(
   let monto = 0
   let desglose = ''
 
-  switch (regla.tipoCalculo as TipoCalculo) {
+  /**
+   * `FIJO_PASAJERO` se RETIRÓ del catálogo de tipos, pero su cálculo sigue.
+   *
+   * El tipo salió de `TIPOS_CALCULO` —ya no se puede elegir al crear una regla
+   * nueva— y su `case` se quedó aquí sin compilar. La tentación era borrarlo,
+   * y habría sido un error: una regla GUARDADA con ese tipo caería en el
+   * `default`, que paga CERO. Es decir, un vendedor con una regla antigua
+   * dejaría de cobrar de un despliegue para otro, en silencio y sin que nada
+   * lo señale.
+   *
+   * Regla 2 del núcleo: una comisión nace con su regla dentro. Cambiar hoy lo
+   * que vale una regla de ayer es reescribir la historia. Se conserva el
+   * cálculo para lo que ya existe; que no se pueda crear más es otra cosa y
+   * ya está resuelta arriba.
+   */
+  switch (regla.tipoCalculo as TipoCalculo | 'FIJO_PASAJERO') {
     case 'PORCENTAJE':
       monto = centavos(base * (valor / 100))
       desglose = `${valor}% sobre ${base} (venta sin impuestos)`
@@ -298,6 +313,7 @@ export function calcularComision(
       monto = valor
       desglose = `${valor} fijo por venta`
       break
+    // Retirado del catálogo; se mantiene para las reglas ya guardadas.
     case 'FIJO_PASAJERO':
       monto = centavos(valor * pasajeros)
       desglose = `${valor} × ${pasajeros} pasajero${pasajeros === 1 ? '' : 's'}`
