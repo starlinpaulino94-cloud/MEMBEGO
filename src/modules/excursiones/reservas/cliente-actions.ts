@@ -483,6 +483,7 @@ export interface CartItemPayload {
   adultos: number
   ninos: number
   notas?: string
+  esResidente?: boolean
 }
 
 /** CLIENTE · Reservar todos los ítems del carrito en una sola operación */
@@ -631,7 +632,7 @@ export async function reservarCarritoAction(
         v.precioAdulto.toNumber(),
         v.precioNino ? v.precioNino.toNumber() : null,
         reglasDin,
-        false,
+        item.esResidente ?? false,
         baseResidenteCombo,
         baseNinoResidenteCombo
       )
@@ -682,6 +683,7 @@ export async function reservarCarritoAction(
                 canal: 'ONLINE',
                 notas: item.notas || null,
                 checkinToken: esPagoOnline ? checkinToken : null,
+                esResidente: item.esResidente ?? false,
                 pasajeros: {
                   createMany: {
                     data: [
