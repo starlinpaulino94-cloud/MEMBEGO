@@ -2,6 +2,17 @@ import { sinEmpresa } from '@/lib/tenant'
 import type { ExcursionCardData } from '@/components/public/ExcursionCard'
 import { calcularDisponibilidad, mapRow } from './public-queries'
 
+/** Empresas no demo y activas — las que pueden aparecer en la vitrina del cliente. */
+async function empresasVisibles(): Promise<string[]> {
+  const rows = await sinEmpresa('excursiones: catálogo del cliente (empresas visibles)', (tx) =>
+    tx.company.findMany({
+      where: { isActive: true, esDemo: false },
+      select: { id: true },
+    })
+  )
+  return rows.map((r) => r.id)
+}
+
 export interface ExcursionFeed {
   misEmpresas: ExcursionCardData[]
   destacadas: ExcursionCardData[]
@@ -129,9 +140,10 @@ async function mapearExcursionesConDisponibilidad(
  * Obtiene todas las categorías únicas disponibles en excursiones activas.
  */
 export async function getCategoriasExcursiones(): Promise<{ slug: string; name: string }[]> {
+  const visibles = await empresasVisibles()
   const rows = await sinEmpresa('excursiones: catálogo del cliente', (tx) =>
       tx.excursion.findMany({
-    where: { estado: 'ACTIVA' },
+    where: { estado: 'ACTIVA', companyId: { in: visibles } },
     select: { categoria: true },
     distinct: ['categoria'],
   })
@@ -155,9 +167,12 @@ export async function buscarExcursionesCliente(filtros: {
 }): Promise<ExcursionCardData[]> {
   const { texto, categoria, empresaId, soloConStock } = filtros
 
+  const visibles = await empresasVisibles()
+
   const whereBase: Record<string, unknown> = {
     estado: 'ACTIVA',
-    ...(empresaId ? { companyId: empresaId } : {}),
+    companyId: { in: visibles },
+    ...(empresaId && visibles.includes(empresaId) ? { companyId: empresaId } : {}),
     ...(categoria ? { categoria: { equals: categoria, mode: 'insensitive' } } : {}),
   }
 
@@ -238,13 +253,17 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
     companyIdsCliente = [...new Set([...fichas.map((f) => f.companyId), ...follows.map((f) => f.companyId)])]
   }
 
-  // 2. Traer excursiones en paralelo
+  // 2. Filtrar empresas de demo
+  const visibles = await empresasVisibles()
+  const companyIdsClienteVisibles = companyIdsCliente.filter((id) => visibles.includes(id))
+
+  // 3. Traer excursiones en paralelo
   const [rowsMisEmpresas, rowsDestacadas, rowsNuevas] = await Promise.all([
-    companyIdsCliente.length > 0
+    companyIdsClienteVisibles.length > 0
       ? sinEmpresa('excursiones: catálogo del cliente', (tx) =>
       tx.excursion.findMany({
           where: {
-            companyId: { in: companyIdsCliente },
+            companyId: { in: companyIdsClienteVisibles },
             estado: 'ACTIVA',
           },
           orderBy: { createdAt: 'desc' },
@@ -255,7 +274,7 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
       : Promise.resolve([]),
     sinEmpresa('excursiones: catálogo del cliente', (tx) =>
       tx.excursion.findMany({
-      where: { estado: 'ACTIVA' },
+      where: { estado: 'ACTIVA', companyId: { in: visibles } },
       orderBy: { createdAt: 'desc' },
       take: 16,
       select: EXCURSION_SELECT,
@@ -265,6 +284,7 @@ export async function getExcursionFeed(dbUserId: string): Promise<ExcursionFeed>
       tx.excursion.findMany({
       where: {
         estado: 'ACTIVA',
+        companyId: { in: visibles },
         createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
       },
       orderBy: { createdAt: 'desc' },
