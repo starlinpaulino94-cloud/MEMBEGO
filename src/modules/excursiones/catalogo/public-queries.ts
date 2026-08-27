@@ -244,7 +244,9 @@ async function calcularDisponibilidad(
       childActividades = comboItems
     } else {
       const dbComboItems = await prisma.excursionComboItem.findMany({
-        where: { excursionId },
+        // `comboId` es el combo PADRE; `actividadId`, la actividad hija. Aquí
+        // se piden las hijas de este combo, así que el filtro va por el padre.
+        where: { comboId: excursionId },
         select: {
           horaSalida: true,
           actividad: {

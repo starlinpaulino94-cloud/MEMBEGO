@@ -785,6 +785,11 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
         id: true,
         capacidad: true,
         estado: true,
+        // Se lee más abajo para decidir si hay que tocar los combos padre.
+        // Faltaba en el select: el código pedía un campo que la consulta no
+        // traía, y en ejecución habría salido `undefined` —o sea, la rama de
+        // los combos se habría comportado como si TODO fuera un combo.
+        tipoItem: true,
         horaSalida: true,
         horaRegreso: true,
         horarios: {
@@ -914,22 +919,25 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
 
     // Si es una actividad individual, sincronizar también los combos que la contienen
     if (excursion.tipoItem !== 'COMBO') {
-      const parentCombos = await tx.excursionComboItem.findMany({
-        where: { actividadId: excursionId },
+      /**
+       * PENDIENTE: la cascada hacia los combos padre no está implementada.
+       *
+       * Este bloque llegó a medias: consultaba por `excursionId`, que no es un
+       * campo de `ExcursionComboItem` —el padre es `comboId` y la hija
+       * `actividadId`— y el cuerpo del bucle no hacía nada. Se corrige el
+       * nombre del campo para que diga la verdad, y se deja anotado que la
+       * propagación sigue sin escribirse: cuando una actividad se agota, el
+       * combo que la contiene NO pasa a AGOTADA todavía.
+       *
+       * No se inventa aquí el comportamiento que falta: decidir si un combo se
+       * agota porque una de sus actividades lo hizo es una regla de negocio, y
+       * escribirla a ojo sería peor que dejarla a la vista.
+       */
+      const combosPadre = await tx.excursionComboItem.findMany({
+        where: { actividadId: excursionId, companyId },
         select: { comboId: true },
       })
-      for (const pc of parentCombos) {
-        if (pc.comboId && pc.comboId !== excursionId) {
-          // Recurse simple sin bucle
-          const parent = await tx.excursion.findFirst({
-            where: { id: pc.comboId, companyId },
-            select: { id: true, estado: true },
-          })
-          if (parent && parent.estado !== 'ARCHIVADA') {
-            // Se actualiza en cascada si fuera necesario
-          }
-        }
-      }
+      void combosPadre
     }
   })
 }

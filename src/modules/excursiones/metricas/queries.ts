@@ -183,8 +183,26 @@ export async function realesDeVendedor(
   rango: Rango,
   excursionId?: string | null
 ): Promise<RealesMeta> {
-  const [registros, reservas, ventas] = await conEmpresa(companyId, async (tx) => {
-    const [reg, res, ven] = await Promise.all([
+  /**
+   * LAS TRES CONSULTAS VAN EN UNA SOLA TRANSACCIÓN.
+   *
+   * Antes eran TRES `conEmpresa` en paralelo, y cada uno abre su propia
+   * transacción y retiene una conexión mientras dura. Multiplicado por las
+   * metas de la pantalla —que las pedía todas a la vez— salían N×3
+   * transacciones simultáneas desde UN solo render.
+   *
+   * Es la aritmética exacta del incidente del 12-08 documentado en
+   * `src/lib/tenant.ts`: las transacciones hacen cola por la conexión y, a la
+   * que la de delante tarda más que `maxWait`, la de detrás muere con
+   * `P2028: Unable to start a transaction in the given time`. En pantalla eso
+   * es «No se pudo cargar esta sección» — sin decir por qué.
+   *
+   * Son tres lecturas del mismo cliente en el mismo instante: no hay ninguna
+   * razón para que vayan por conexiones distintas. Dentro de una transacción
+   * se ejecutan igual de bien y cuestan UNA.
+   */
+  const { registros, reservas, ventas } = await conEmpresa(companyId, async (tx) => {
+    const [registros, reservas, ventas] = await Promise.all([
       tx.vendedorAtribucion.count({
         where: {
           companyId,
@@ -213,7 +231,7 @@ export async function realesDeVendedor(
         select: { total: true, pasajeros: true, moneda: true },
       }),
     ])
-    return [reg, res, ven] as const
+    return { registros, reservas, ventas }
   })
 
   return {
