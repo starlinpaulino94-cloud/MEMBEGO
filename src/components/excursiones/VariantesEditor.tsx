@@ -94,7 +94,6 @@ function reglasAJson(reglas: ReglaUI[]): string {
     precioNino: r.gratisNino ? 0 : (r.precioNino ? Number(r.precioNino) : null),
     precioResidente: r.gratisResidente ? 0 : (r.precioResidente ? Number(r.precioResidente) : null),
     precioNinoResidente: r.gratisNinoResidente ? 0 : (r.precioNinoResidente ? Number(r.precioNinoResidente) : null),
-    precioNinoResidente: r.precioNinoResidente ? Number(r.precioNinoResidente) : null,
   }))
   return JSON.stringify(salida)
 }
@@ -123,8 +122,8 @@ function EditorPreciosDinamicos({
 
   const eliminar = (idx: number) => setReglas((prev) => prev.filter((_, i) => i !== idx))
 
-  const agregarDesdeSugerencia = (regla: ReglaUI) =>
-    setReglas((prev) => [...prev, regla])
+  const agregarDesdeSugerencia = (regla: { diasSemana: number[]; horas: string[]; precioAdulto: string; precioNino: string; precioResidente: string; precioNinoResidente: string }) =>
+    setReglas((prev) => [...prev, { ...regla, gratisAdulto: false, gratisNino: false, gratisResidente: false, gratisNinoResidente: false }])
 
   const actualizar = (idx: number, cambios: Partial<ReglaUI>) =>
     setReglas((prev) => prev.map((r, i) => (i === idx ? { ...r, ...cambios } : r)))
