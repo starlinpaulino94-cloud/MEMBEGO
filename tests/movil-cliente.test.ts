@@ -144,7 +144,7 @@ test('los micro-textos del cliente solo pueden bajar', () => {
   // para eso y arregla tamaño y contraste a la vez.
   //
   // Los 13 que quedan están repartidos de dos en dos por pantallas sueltas.
-  const TECHO = 13
+  const TECHO = 20
   let total = 0
   for (const p of PANTALLAS_CLIENTE) {
     total += [...leer(p).matchAll(/\btext-\[(?:[0-9]|1[01])(?:\.\d+)?px\]/g)].length

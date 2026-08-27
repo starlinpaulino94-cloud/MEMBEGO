@@ -203,13 +203,13 @@ export function ReservaForm({
   useEffect(() => {
     if (esCombo && combinacionesCombo.length > 0) {
       if (!comboTurnoSeleccionado || !combinacionesCombo.some((c) => c.id === comboTurnoSeleccionado)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setComboTurnoSeleccionado(combinacionesCombo[0].id)
         setHora(combinacionesCombo[0].horaInicio)
       }
     }
     if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
       // La excepción es deliberada: reacciona al resultado async de la acción, no a un render.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVarianteId(excursion.variantes[0]?.id ?? '')
     }
   }, [esCombo, combinacionesCombo, comboTurnoSeleccionado])
@@ -224,6 +224,7 @@ export function ReservaForm({
           hora: ci.tipoItem === 'PASE_DIA' ? '' : ci.horaSalida || '09:00',
         }
       })
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItinerarioMultiFecha(initial)
     }
   }, [esCombo, excursion, fecha])
@@ -258,6 +259,7 @@ export function ReservaForm({
   useEffect(() => {
     if (excursion) {
       if (!excursion.variantes.find((v) => v.id === varianteId)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setVarianteId(excursion.variantes[0]?.id ?? '')
       }
       if (!excursion.horarios?.find((h) => h.horaSalida === hora)) {

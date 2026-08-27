@@ -84,7 +84,6 @@ export function SearchParams() {
   // pedir datos al montar sin él, y derivarlo no aplica porque el dato no
   // existe hasta que la red conteste.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     buscar()
   }, [buscar])
 

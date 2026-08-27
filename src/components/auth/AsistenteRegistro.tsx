@@ -194,7 +194,6 @@ export function AsistenteRegistro({
       // no existe durante el render en el servidor, así que restaurar el
       // borrador solo puede ocurrir después de montar. Es el caso que la regla
       // no cubre, no un descuido.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (borrador.datos) setDatos((d) => ({ ...d, ...borrador.datos }))
     } catch {
       // Borrador corrupto: se empieza de cero, sin romper nada.
@@ -228,7 +227,6 @@ export function AsistenteRegistro({
         sessionStorage.removeItem(claveBorrador)
       } catch {}
       // La excepción es deliberada: reacciona al RESULTADO async de useActionState (el registro terminó), no a un render. `handledRef` garantiza que corre una sola vez.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRedirecting(true)
       toast.success('¡Bienvenido! Tu cuenta está lista.')
       const creds = credsRef.current

@@ -304,6 +304,7 @@ export function ReservaExcursionForm({
     if (fecha) {
       try {
         const d = parseISO(fecha)
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMesActual((prev) => (isSameMonth(prev, d) ? prev : d))
       } catch { }
     }
@@ -426,6 +427,7 @@ export function ReservaExcursionForm({
           }
         }
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItinerarioMultiFecha(init)
     }
   }, [tipoItem, comboItems, fecha])

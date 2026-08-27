@@ -162,6 +162,7 @@ export function ReservaVendedorForm({
   useEffect(() => {
     if (combinacionesCombo.length > 0) {
       if (!combinacionesCombo.some((c) => c.id === comboTurnoSeleccionado)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setComboTurnoSeleccionado(combinacionesCombo[0].id)
         setHora(combinacionesCombo[0].horaInicio)
       }
@@ -178,6 +179,7 @@ export function ReservaVendedorForm({
           hora: ci.tipoItem === 'PASE_DIA' ? '' : itinerarioMultiFecha[ci.id]?.hora || ci.horaSalida || ci.horarios?.[0]?.horaSalida || '09:00',
         }
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItinerarioMultiFecha(inicial)
     }
   }, [esCombo, excursion, fecha])
@@ -209,6 +211,7 @@ export function ReservaVendedorForm({
   useEffect(() => {
     if (excursion) {
       if (!excursion.variantes.find((v) => v.id === varianteId)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setVarianteId(excursion.variantes[0]?.id ?? '')
       }
       if (!excursion.horarios?.find((h) => h.horaSalida === hora)) {

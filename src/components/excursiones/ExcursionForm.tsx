@@ -372,6 +372,7 @@ export function ExcursionForm({
   useEffect(() => {
     if (tipoItem === 'COMBO' && actividadesSeleccionadasObjs.length > 0) {
       if (diasComunes.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setDiasSeleccionados(diasComunes)
       }
       // Calcular duración como la hora de regreso más tardía de todas las actividades

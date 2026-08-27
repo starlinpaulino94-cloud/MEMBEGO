@@ -151,7 +151,6 @@ export function CampanaLanding({ campana, refCode, invitanteNombre }: Props) {
   // muestra la celebración aquí mismo como respaldo.
   useEffect(() => {
     if (state.pendingVerification) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRegistrado(true)
       toast.success('Te enviamos un correo de confirmación.')
       return
