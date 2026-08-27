@@ -239,7 +239,7 @@ async function calcularDisponibilidad(
     if (comboItems && comboItems.length > 0) {
       childActividades = comboItems
     } else {
-      const dbComboItems = await prisma.comboItem.findMany({
+      const dbComboItems = await prisma.excursionComboItem.findMany({
         where: { excursionId },
         select: {
           horaSalida: true,

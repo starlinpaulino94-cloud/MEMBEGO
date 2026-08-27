@@ -868,15 +868,15 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
 
     // Si es una actividad individual, sincronizar también los combos que la contienen
     if (excursion.tipoItem !== 'COMBO') {
-      const parentCombos = await tx.comboItem.findMany({
+      const parentCombos = await tx.excursionComboItem.findMany({
         where: { actividadId: excursionId },
-        select: { excursionId: true },
+        select: { comboId: true },
       })
       for (const pc of parentCombos) {
-        if (pc.excursionId && pc.excursionId !== excursionId) {
+        if (pc.comboId && pc.comboId !== excursionId) {
           // Recurse simple sin bucle
           const parent = await tx.excursion.findFirst({
-            where: { id: pc.excursionId, companyId },
+            where: { id: pc.comboId, companyId },
             select: { id: true, estado: true },
           })
           if (parent && parent.estado !== 'ARCHIVADA') {

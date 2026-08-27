@@ -31,11 +31,29 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
+    // En desarrollo local, Supabase Storage corre en 127.0.0.1 que es IP
+    // privada; Next.js Image Optimization rechaza fetchear IPs privadas.
+    // Desactivamos la optimización solo en dev para que <Image> funcione.
+    unoptimized: process.env.NODE_ENV === 'development',
     remotePatterns: [
       {
         // Supabase Storage — all projects
         protocol: 'https',
         hostname: '*.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
+      {
+        // Local Supabase Storage (127.0.0.1)
+        protocol: 'http',
+        hostname: '127.0.0.1',
+        port: '54321',
+        pathname: '/storage/v1/object/public/**',
+      },
+      {
+        // Local Supabase Storage (localhost)
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '54321',
         pathname: '/storage/v1/object/public/**',
       },
     ],
