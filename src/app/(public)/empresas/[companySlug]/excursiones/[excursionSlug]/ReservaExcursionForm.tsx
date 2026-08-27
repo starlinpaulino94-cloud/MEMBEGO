@@ -80,6 +80,7 @@ interface ReservaExcursionFormProps {
   companyId: string
   companySlug: string
   excursionId: string
+  excursionSlug: string
   nombreExcursion: string
   portadaUrl?: string | null
   moneda: string
@@ -120,6 +121,7 @@ export function ReservaExcursionForm({
   companyId,
   companySlug,
   excursionId,
+  excursionSlug,
   nombreExcursion,
   portadaUrl,
   moneda,
@@ -522,13 +524,13 @@ export function ReservaExcursionForm({
         </p>
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <Link
-            href={`/login?redirect=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionId}`)}`}
+            href={`/login?redirect=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionSlug}`)}`}
             className="flex-1 rounded-lg border bg-card py-3 text-center text-sm font-semibold transition hover:bg-muted"
           >
             Iniciar sesión
           </Link>
           <Link
-            href={`/registro/${companySlug}?next=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionId}`)}`}
+            href={`/registro/${companySlug}?next=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionSlug}`)}`}
             className="flex-1 rounded-lg bg-primary py-3 text-center text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
           >
             Crear cuenta

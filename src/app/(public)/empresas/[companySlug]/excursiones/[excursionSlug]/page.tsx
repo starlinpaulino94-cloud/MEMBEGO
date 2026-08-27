@@ -335,6 +335,7 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
               companyId={companyId}
               companySlug={companySlug}
               excursionId={exc.id}
+              excursionSlug={excursionSlug}
               nombreExcursion={exc.nombre}
               portadaUrl={exc.portadaUrl}
               moneda={exc.moneda}
