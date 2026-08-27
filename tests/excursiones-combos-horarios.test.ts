@@ -365,3 +365,159 @@ test('persistencia de horarios en items de combo: valida asignación de 09:00 y 
     assert.equal(resolved.horariosAsignados['buggies'], '13:00')
   }
 })
+
+// ─── Tests: Permitir Solapamiento ────────────────────────────────────────────
+
+test('validarItinerarioCombo: permite solapamiento cuando la actividad contenedora tiene permitirSolapamiento', () => {
+  const actividades = [
+    {
+      id: 'viaje-saona',
+      nombre: 'Viaje a Isla Saona',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '08:00',
+      duracionMin: 600, // 08:00 → 18:00
+      permitirSolapamiento: true,
+    },
+    {
+      id: 'buceo',
+      nombre: 'Buceo Acuático',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '11:00',
+      duracionMin: 90, // 11:00 → 12:30 (solapado dentro de Saona)
+      permitirSolapamiento: false,
+    },
+  ]
+
+  const res = validarItinerarioCombo(actividades)
+  assert.equal(res.ok, true)
+  if (res.ok) {
+    assert.equal(res.itinerario.length, 2)
+    assert.equal(res.itinerario[0].nombre, 'Viaje a Isla Saona')
+    assert.equal(res.itinerario[1].nombre, 'Buceo Acuático')
+  }
+})
+
+test('validarItinerarioCombo: rechaza solapamiento cuando ninguna actividad tiene permitirSolapamiento', () => {
+  const actividades = [
+    {
+      id: 'catamaran',
+      nombre: 'Catamarán',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '09:00',
+      duracionMin: 240,
+      permitirSolapamiento: false,
+    },
+    {
+      id: 'buggies',
+      nombre: 'Buggies',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '12:00',
+      duracionMin: 120,
+      permitirSolapamiento: false,
+    },
+  ]
+
+  const res = validarItinerarioCombo(actividades)
+  assert.equal(res.ok, false)
+})
+
+test('autoResolverItinerarioCombo: no mueve actividades con permitirSolapamiento', () => {
+  const actividades = [
+    {
+      id: 'viaje-saona',
+      nombre: 'Viaje a Isla Saona',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '08:00',
+      duracionMin: 600,
+      horarios: [{ horaSalida: '08:00' }],
+      permitirSolapamiento: true,
+    },
+    {
+      id: 'buceo',
+      nombre: 'Buceo Acuático',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '11:00',
+      duracionMin: 90,
+      horarios: [{ horaSalida: '11:00' }],
+      permitirSolapamiento: false,
+    },
+  ]
+
+  const res = autoResolverItinerarioCombo(actividades)
+  assert.equal(res.ok, true)
+  if (res.ok) {
+    // La actividad solapada no se movió
+    assert.equal(res.horariosAsignados['viaje-saona'], '08:00')
+  }
+})
+
+test('optimizarItinerarioCombo: excluye actividades con permitirSolapamiento del combinador', () => {
+  const actividades = [
+    {
+      id: 'viaje',
+      nombre: 'Viaje a Isla Saona',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '08:00',
+      duracionMin: 600,
+      horarios: [{ horaSalida: '08:00' }],
+      permitirSolapamiento: true,
+    },
+    {
+      id: 'catamaran',
+      nombre: 'Catamarán',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '09:00',
+      duracionMin: 180,
+      horarios: [{ horaSalida: '09:00' }, { horaSalida: '14:00' }],
+      permitirSolapamiento: false,
+    },
+    {
+      id: 'buggies',
+      nombre: 'Buggies',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '13:00',
+      duracionMin: 120,
+      horarios: [{ horaSalida: '09:00' }, { horaSalida: '13:00' }],
+      permitirSolapamiento: false,
+    },
+  ]
+
+  const res = optimizarItinerarioCombo(actividades)
+  assert.equal(res.ok, true)
+  if (res.ok) {
+    // La actividad con solapamiento se mantiene en 08:00
+    assert.equal(res.horariosAsignados['viaje'], '08:00')
+    // Las otras dos actividades se optimizan sin solaparse entre sí
+    assert.ok(res.itinerario.length >= 2)
+  }
+})
+
+test('generarCombinacionesCombo: incluye actividades con permitirSolapamiento en las combinaciones', () => {
+  const actividades = [
+    {
+      id: 'viaje',
+      nombre: 'Viaje a Isla Saona',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '08:00',
+      duracionMin: 600,
+      horarios: [{ horaSalida: '08:00' }],
+      permitirSolapamiento: true,
+    },
+    {
+      id: 'buceo',
+      nombre: 'Buceo Acuático',
+      tipoItem: 'ACTIVIDAD',
+      horaSalida: '11:00',
+      duracionMin: 90,
+      horarios: [{ horaSalida: '11:00' }, { horaSalida: '14:00' }],
+      permitirSolapamiento: false,
+    },
+  ]
+
+  const combos = generarCombinacionesCombo(actividades)
+  assert.ok(combos.length > 0)
+  // Todas las combinaciones deben incluir la actividad solapada con su hora fija
+  for (const combo of combos) {
+    assert.equal(combo.horariosAsignados['viaje'], '08:00')
+  }
+})

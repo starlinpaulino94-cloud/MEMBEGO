@@ -101,6 +101,7 @@ export async function crearExcursion(
       horarios: { horaSalida: string; diasSemana: number[] }[]
     }[] = []
     let horariosPorActividad: Record<string, string> = {}
+    let permitirSolapamientoMap: Record<string, boolean> = {}
 
     if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length < 2) {
       return { error: 'Un combo debe incluir al menos 2 actividades del catálogo.' }
@@ -112,6 +113,15 @@ export async function crearExcursion(
       if (comboHorariosRaw) {
         try {
           horariosPorActividad = JSON.parse(comboHorariosRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboSolapamientoRaw = String(formData.get('comboPermitirSolapamiento') ?? '')
+      if (comboSolapamientoRaw) {
+        try {
+          permitirSolapamientoMap = JSON.parse(comboSolapamientoRaw)
         } catch {
           /* ignore */
         }
@@ -152,6 +162,7 @@ export async function crearExcursion(
           a.horaSalida ||
           (a.horarios[0]?.horaSalida ? a.horarios[0].horaSalida : '09:00'),
         horaRegreso: null,
+        permitirSolapamiento: permitirSolapamientoMap[a.id] || false,
       }))
 
       const valItinerario = validarItinerarioCombo(actsConHorarios)
@@ -281,6 +292,7 @@ export async function crearExcursion(
                   horariosPorActividad[actividadId] ||
                   actsDbParaCombo.find((a) => a.id === actividadId)?.horaSalida ||
                   '09:00',
+                permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
               })),
             },
           }),
@@ -383,6 +395,7 @@ export async function actualizarExcursion(
     )
 
     let horariosPorActividad: Record<string, string> = {}
+    let permitirSolapamientoMap: Record<string, boolean> = {}
     let actsDb: {
       id: string
       nombre: string
@@ -402,6 +415,15 @@ export async function actualizarExcursion(
       if (comboHorariosRaw) {
         try {
           horariosPorActividad = JSON.parse(comboHorariosRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboSolapamientoRaw = String(formData.get('comboPermitirSolapamiento') ?? '')
+      if (comboSolapamientoRaw) {
+        try {
+          permitirSolapamientoMap = JSON.parse(comboSolapamientoRaw)
         } catch {
           /* ignore */
         }
@@ -442,6 +464,7 @@ export async function actualizarExcursion(
           a.horaSalida ||
           (a.horarios[0]?.horaSalida ? a.horarios[0].horaSalida : '09:00'),
         horaRegreso: null,
+        permitirSolapamiento: permitirSolapamientoMap[a.id] || false,
       }))
 
       const valItinerario = validarItinerarioCombo(actsConHorarios)
@@ -496,6 +519,7 @@ export async function actualizarExcursion(
                 horariosPorActividad[actividadId] ||
                 actsDb.find((a) => a.id === actividadId)?.horaSalida ||
                 '09:00',
+              permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
             })),
           })
         }

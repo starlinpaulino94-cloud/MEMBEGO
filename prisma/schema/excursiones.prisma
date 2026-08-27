@@ -71,8 +71,9 @@ model ExcursionComboItem {
   actividadId String
   actividad   Excursion @relation("ActividadHija", fields: [actividadId], references: [id], onDelete: Cascade)
   varianteId  String?
-  horaSalida  String?
-  orden       Int       @default(0)
+  horaSalida            String?
+  orden                 Int       @default(0)
+  permitirSolapamiento  Boolean   @default(false)
 
   createdAt DateTime @default(now())
 

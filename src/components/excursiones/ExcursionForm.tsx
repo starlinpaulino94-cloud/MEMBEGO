@@ -192,6 +192,24 @@ export function ExcursionForm({
     return initial
   })
 
+  // Mapeo de permitirSolapamiento por actividad (actividadId -> boolean)
+  const [permitirSolapamiento, setPermitirSolapamiento] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    if (excursion?.comboItems && excursion.comboItems.length > 0) {
+      for (const ci of excursion.comboItems) {
+        const actId = ci.actividad?.id || ci.actividadId
+        if (actId && (ci as Record<string, unknown>).permitirSolapamiento) {
+          initial[actId] = true
+        }
+      }
+    }
+    return initial
+  })
+
+  const togglePermitirSolapamiento = (actId: string) => {
+    setPermitirSolapamiento((prev) => ({ ...prev, [actId]: !prev[actId] }))
+  }
+
   // Objetos de las actividades seleccionadas
   const actividadesSeleccionadasObjs = useMemo(() => {
     return actividadesDisponibles.filter((a) =>
@@ -217,8 +235,9 @@ export function ExcursionForm({
         horariosPorActividad[a.id] ||
         a.horaSalida ||
         (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
+      permitirSolapamiento: !!permitirSolapamiento[a.id],
     }))
-  }, [actividadesConHorario, horariosPorActividad])
+  }, [actividadesConHorario, horariosPorActividad, permitirSolapamiento])
 
   // Días comunes compatibles (intersección)
   const diasComunes = useMemo(() => {
@@ -469,6 +488,11 @@ export function ExcursionForm({
         name="comboActividadesHorarios"
         value={JSON.stringify(horariosPorActividad)}
       />
+      <input
+        type="hidden"
+        name="comboPermitirSolapamiento"
+        value={JSON.stringify(permitirSolapamiento)}
+      />
 
       {/* SECCIÓN 0: IMÁGENES Y MULTIMEDIA */}
       <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
@@ -670,6 +694,15 @@ export function ExcursionForm({
                                   </button>
                                 )
                               })}
+                              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-[11px] text-muted-foreground font-medium select-none" title="Permitir que esta actividad se solape con otras en el mismo turno">
+                                <input
+                                  type="checkbox"
+                                  checked={!!permitirSolapamiento[act.id]}
+                                  onChange={() => togglePermitirSolapamiento(act.id)}
+                                  className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                                />
+                                Solapar
+                              </label>
                             </div>
                           </div>
                         )
@@ -711,7 +744,7 @@ export function ExcursionForm({
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-primary" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                        Itinerario del Mismo Día (Sin Solapamiento)
+                        Itinerario del Mismo Día
                       </h4>
                     </div>
                     <div className="text-caption font-medium">
@@ -749,34 +782,82 @@ export function ExcursionForm({
                     </div>
                   )}
 
-                  {/* Pasos del Itinerario */}
-                  {itinerarioResult.itinerario.length > 0 ? (
-                    <div className="space-y-1.5 pt-1">
-                      {itinerarioResult.itinerario.map((bloque, idx) => (
-                        <div
-                          key={bloque.id || idx}
-                          className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-[10px]">
-                              {idx + 1}
-                            </span>
-                            <span className="font-medium text-foreground">{bloque.nombre}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-[11px]">
-                            <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
-                            <span>→</span>
-                            <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
-                            <span>({(bloque.duracionMin / 60).toFixed(1)}h)</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : pasesDiaSeleccionados.length > 0 ? (
+                  {/* Pasos del Itinerario — Gantt Anidado */}
+                  {itinerarioResult.itinerario.length > 0 && (() => {
+                    const bloques = itinerarioResult.itinerario
+                    // Construir mapa de hijos: actividad anidada -> actividad contenedora
+                    const hijosMap = new Map<string, typeof bloques[0]>()
+                    for (const b of bloques) {
+                      if (!b.permitirSolapamiento) continue
+                      const bInicio = minutosDesdeMedianoche(b.inicio)
+                      const bFin = minutosDesdeMedianoche(b.fin)
+                      for (const c of bloques) {
+                        if (c.id === b.id || c.permitirSolapamiento) continue
+                        const cInicio = minutosDesdeMedianoche(c.inicio)
+                        const cFin = minutosDesdeMedianoche(c.fin)
+                        if (cInicio >= bInicio && cFin <= bFin) {
+                          hijosMap.set(c.id!, b)
+                        }
+                      }
+                    }
+
+                    // Bloques raíz (no son hijos de nadie)
+                    const raiz = bloques.filter((b) => !hijosMap.has(b.id!))
+
+                    return (
+                      <div className="space-y-1.5 pt-1">
+                        {raiz.map((bloque, idx) => {
+                          const hijos = bloques.filter((b) => hijosMap.get(b.id!)?.id === bloque.id)
+                          const esContenedor = hijos.length > 0
+                          return (
+                            <div key={bloque.id || idx} className={`rounded-lg border px-3 py-2 text-xs ${esContenedor ? 'border-primary/30 bg-primary/5 space-y-1.5' : 'border-border/60 bg-muted/40'}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-[10px]">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="font-medium text-foreground">{bloque.nombre}</span>
+                                  {esContenedor && (
+                                    <span className="text-[10px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Contenedor</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-[11px]">
+                                  <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
+                                  <span>→</span>
+                                  <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
+                                  <span>({(bloque.duracionMin / 60).toFixed(1)}h)</span>
+                                </div>
+                              </div>
+                              {hijos.length > 0 && (
+                                <div className="ml-7 space-y-1 border-l-2 border-primary/20 pl-2.5">
+                                  {hijos.map((hijo, hIdx) => (
+                                    <div key={hijo.id || hIdx} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] font-bold text-amber-600">↳</span>
+                                        <span className="font-medium text-foreground">{hijo.nombre}</span>
+                                        <span className="text-[10px] font-bold bg-amber-500/10 text-amber-700 px-1.5 py-0.5 rounded-full">Anidada</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-[10px]">
+                                        <span className="font-semibold text-foreground">{formato12h(hijo.inicio)}</span>
+                                        <span>→</span>
+                                        <span className="font-semibold text-foreground">{formato12h(hijo.fin)}</span>
+                                        <span>({(hijo.duracionMin / 60).toFixed(1)}h)</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                  {itinerarioResult.itinerario.length === 0 && pasesDiaSeleccionados.length > 0 && (
                     <div className="rounded-lg border border-dashed border-emerald-500/30 bg-emerald-500/5 p-2.5 text-xs text-emerald-800 font-medium text-center">
                       Acceso libre durante todo el día para la fecha reservada
                     </div>
-                  ) : null}
+                  )}
                 </div>
 
                 {/* Listado de todas las combinaciones de turnos que el cliente podrá elegir */}
