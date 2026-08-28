@@ -124,8 +124,10 @@ export async function reservarExcursion(
     const reglasDin = variante.preciosDinamicos
       ? (variante.preciosDinamicos as unknown as ReglaPrecioDinamico[])
       : null
-    const baseResidente = (variante as any).precioResidente != null ? Number((variante as any).precioResidente) : null
-    const baseNinoResidente = (variante as any).precioNinoResidente != null ? Number((variante as any).precioNinoResidente) : null
+    // Sin `as any`: los dos campos están en el `select` de esta consulta.
+    const baseResidente = variante.precioResidente != null ? Number(variante.precioResidente) : null
+    const baseNinoResidente =
+      variante.precioNinoResidente != null ? Number(variante.precioNinoResidente) : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
@@ -629,8 +631,9 @@ export async function reservarCarritoAction(
       const reglasDin = v.preciosDinamicos
         ? (v.preciosDinamicos as unknown as ReglaPrecioDinamico[])
         : null
-      const baseResidenteCombo = (v as any).precioResidente != null ? (v as any).precioResidente.toNumber() : null
-      const baseNinoResidenteCombo = (v as any).precioNinoResidente != null ? (v as any).precioNinoResidente.toNumber() : null
+      const baseResidenteCombo = v.precioResidente != null ? v.precioResidente.toNumber() : null
+      const baseNinoResidenteCombo =
+        v.precioNinoResidente != null ? v.precioNinoResidente.toNumber() : null
       const { precioAdulto, precioNino } = calcularPrecioEfectivo(
         fechaValida,
         item.horaSalida || null,

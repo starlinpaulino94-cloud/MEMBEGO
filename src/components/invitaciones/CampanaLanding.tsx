@@ -149,9 +149,9 @@ export function CampanaLanding({ campana, refCode, invitanteNombre }: Props) {
   // Tras registrarse: auto-login e ir a la app (celebración por encima del
   // Home). Si no se puede iniciar sesión (correo por verificar o error), se
   // muestra la celebración aquí mismo como respaldo.
-   
   useEffect(() => {
     if (state.pendingVerification) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRegistrado(true)
       toast.success('Te enviamos un correo de confirmación.')
       return

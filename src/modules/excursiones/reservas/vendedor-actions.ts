@@ -233,8 +233,10 @@ export async function crearReservaVendedor(
     const reglasDin = variante.preciosDinamicos
       ? (variante.preciosDinamicos as unknown as ReglaPrecioDinamico[])
       : null
-    const baseResidente = (variante as any).precioResidente != null ? (variante as any).precioResidente.toNumber() : null
-    const baseNinoResidente = (variante as any).precioNinoResidente != null ? (variante as any).precioNinoResidente.toNumber() : null
+    // Sin `as any`: los dos campos están en el `select` de esta consulta.
+    const baseResidente = variante.precioResidente != null ? variante.precioResidente.toNumber() : null
+    const baseNinoResidente =
+      variante.precioNinoResidente != null ? variante.precioNinoResidente.toNumber() : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,

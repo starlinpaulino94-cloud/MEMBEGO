@@ -10,11 +10,9 @@ import { PasarelaSimuladaModal } from '@/components/excursiones/PasarelaSimulada
 import { formatMoney } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
-  ShoppingCart,
   Trash2,
   CalendarDays,
   Clock,
-  Users,
   CreditCard,
   Banknote,
   Check,
@@ -318,7 +316,7 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
                 <div className="flex items-center gap-2 font-semibold text-foreground">
                   <CreditCard className="h-5 w-5 text-primary" />
                   Pagar en Línea
-                  <span className="text-[9px] bg-warning/15 text-warning px-1.5 py-0.5 rounded font-bold">
+                  <span className="text-xs bg-warning/15 text-warning px-1.5 py-0.5 rounded font-bold">
                     Prueba
                   </span>
                 </div>
@@ -399,8 +397,8 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
 
             {/* Auth gate */}
             {!isAuthenticated && (
-              <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-4 space-y-3">
-                <p className="text-sm font-semibold text-amber-200">
+              <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 space-y-3">
+                <p className="text-sm font-semibold text-warning">
                   Necesitas iniciar sesión para confirmar tu reserva.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2">

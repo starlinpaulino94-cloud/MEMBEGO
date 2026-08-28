@@ -39,13 +39,13 @@ const MEDIDAS = MEDIDAS_SIN_TIPAR as Record<string, { que: string; porque: strin
  * Bajar uno: cámbialo aquí en el mismo commit que lo baja. Subir uno: no.
  */
 const TECHOS: Record<string, number> = {
-  hexEnInterfaz: 153,
-  colorCrudo: 210,
-  radiosFuera: 5,
-  microTextos: 30,
+  hexEnInterfaz: 121,
+  colorCrudo: 170,
+  radiosFuera: 0,
+  microTextos: 0,
   sombrasArbitrarias: 0,
-  duracionesSueltas: 3,
-  zIndexSueltos: 13,
+  duracionesSueltas: 0,
+  zIndexSueltos: 5,
 }
 
 test('ninguna deuda de diseño crece', () => {

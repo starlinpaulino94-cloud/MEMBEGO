@@ -27,7 +27,7 @@ import { camposSinNombre } from '../scripts/campos-sin-etiqueta.mjs'
  */
 
 /** Techo del panel interno. Bajarlo conforme se salde; nunca subirlo. */
-const TECHO = 129
+const TECHO = 94
 
 /** Áreas donde interactúa alguien que no es personal de oficina. */
 const CARA_AL_USUARIO = /(?:components\/(?:cliente|auth|public|scanner|caja|geo|marketplace|membresia)|app\/\((?:cliente|public|empleado|auth)\))/

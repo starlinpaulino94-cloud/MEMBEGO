@@ -946,7 +946,6 @@ export function generarCombinacionesCombo(
   const actividadesSolapadas = actividades.filter(
     (a) => a.tipoItem !== 'PASE_DIA' && a.permitirSolapamiento
   )
-  const pasesDia = actividades.filter((a) => a.tipoItem === 'PASE_DIA')
 
   // Si todas las actividades son pases de día o solapadas, no existen turnos restringidos
   if (actividadesConHorario.length === 0) {

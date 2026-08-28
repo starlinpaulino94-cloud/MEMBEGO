@@ -253,7 +253,7 @@ function EditorPreciosDinamicos({
                             precioAdulto: nuevoGratis ? '0' : '',
                           })
                         }}
-                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition ${r.gratisAdulto ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisAdulto ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
                       >
                         {r.gratisAdulto ? '✓ Gratis' : 'Gratis'}
                       </button>
@@ -281,7 +281,7 @@ function EditorPreciosDinamicos({
                             precioNino: nuevoGratis ? '0' : '',
                           })
                         }}
-                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition ${r.gratisNino ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisNino ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
                       >
                         {r.gratisNino ? '✓ Gratis' : 'Gratis'}
                       </button>
@@ -311,7 +311,7 @@ function EditorPreciosDinamicos({
                             precioResidente: nuevoGratis ? '0' : '',
                           })
                         }}
-                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition ${r.gratisResidente ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisResidente ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
                       >
                         {r.gratisResidente ? '✓ Gratis' : 'Gratis'}
                       </button>
@@ -321,7 +321,7 @@ function EditorPreciosDinamicos({
                       min="0"
                       step="0.01"
                       placeholder="Opcional"
-                      className="h-8 text-xs border-emerald-500/30"
+                      className="h-8 text-xs border-success/30"
                       value={r.precioResidente}
                       disabled={r.gratisResidente}
                       onChange={(e) => actualizar(idx, { precioResidente: e.target.value })}
@@ -339,7 +339,7 @@ function EditorPreciosDinamicos({
                             precioNinoResidente: nuevoGratis ? '0' : '',
                           })
                         }}
-                        className={`text-[9px] font-semibold px-1.5 py-0.5 rounded transition ${r.gratisNinoResidente ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisNinoResidente ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
                       >
                         {r.gratisNinoResidente ? '✓ Gratis' : 'Gratis'}
                       </button>
@@ -349,14 +349,14 @@ function EditorPreciosDinamicos({
                       min="0"
                       step="0.01"
                       placeholder="Opcional"
-                      className="h-8 text-xs border-emerald-500/30"
+                      className="h-8 text-xs border-success/30"
                       value={r.precioNinoResidente}
                       disabled={r.gratisNinoResidente}
                       onChange={(e) => actualizar(idx, { precioNinoResidente: e.target.value })}
                     />
                   </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground italic">
+                <p className="text-xs text-muted-foreground italic">
                   Si los campos de residente se dejan vacíos, se usan los precios base de la variante.
                 </p>
               </div>

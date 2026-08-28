@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { formatMoney } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { Trash2, CalendarDays, Clock, Users, ShoppingCart, ArrowRight, Minus, Plus, Banknote, CreditCard } from 'lucide-react'
+import { Trash2, CalendarDays, Clock, ShoppingCart, ArrowRight, Minus, Plus, Banknote, CreditCard } from 'lucide-react'
 import Image from 'next/image'
 
 export function ExcursionCarritoDrawer() {

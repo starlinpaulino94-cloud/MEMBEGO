@@ -142,7 +142,7 @@ export function CalendarioPreviewPrecios({
 
       <div className="grid grid-cols-7 gap-px text-center">
         {DIAS_CORTOS.map((d) => (
-          <div key={d} className="text-[9px] font-semibold text-muted-foreground py-0.5">
+          <div key={d} className="text-xs font-semibold text-muted-foreground py-0.5">
             {d}
           </div>
         ))}
@@ -158,7 +158,7 @@ export function CalendarioPreviewPrecios({
           return (
             <div
               key={i}
-              className={`relative aspect-square flex flex-col items-center justify-center rounded text-[10px] transition
+              className={`relative aspect-square flex flex-col items-center justify-center rounded text-xs transition
                 ${!esMesActual ? 'text-muted-foreground/30' : ''}
                 ${esMesActual && tieneRegla ? 'bg-primary/15 text-primary font-semibold' : ''}
                 ${esMesActual && !tieneRegla ? 'text-foreground' : ''}
@@ -169,7 +169,7 @@ export function CalendarioPreviewPrecios({
             >
               <span>{d.diaMes}</span>
               {esMesActual && tieneRegla && (
-                <span className="text-[7px] leading-none text-primary/70">
+                <span className="text-xs leading-none text-primary/70">
                   {formatearMoneda(regla.precioAdulto)}
                 </span>
               )}
@@ -179,7 +179,7 @@ export function CalendarioPreviewPrecios({
       </div>
 
       {datosHover && (
-        <div className="rounded-md border border-border bg-muted/50 p-2 text-[10px] space-y-1">
+        <div className="rounded-lg border border-border bg-muted/50 p-2 text-xs space-y-1">
           <p className="font-semibold text-foreground">
             {datosHover.fecha.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
@@ -227,7 +227,7 @@ export function CalendarioPreviewPrecios({
         </div>
       )}
 
-      <div className="flex items-center gap-3 text-[9px] text-muted-foreground pt-1">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded bg-primary/15" /> Con regla
         </span>

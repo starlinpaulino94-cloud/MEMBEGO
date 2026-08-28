@@ -303,8 +303,14 @@ export async function crearExcursion(
                   actsDbParaCombo.find((a) => a.id === actividadId)?.horaSalida ||
                   '09:00',
                 permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
-                horarioFijo: horarioFijoMap[actividadId]?.length ? horarioFijoMap[actividadId] : null,
-              })) as any,
+                // `horarioFijo` es una columna Json opcional y Prisma NO acepta
+                // `null` a secas ahí: quiere `Prisma.DbNull`. Escribirlo bien es
+                // lo que permite quitar el `as any` que había sobre TODO el
+                // objeto y apagaba de paso la comprobación de los otros campos.
+                horarioFijo: horarioFijoMap[actividadId]?.length
+                  ? horarioFijoMap[actividadId]
+                  : Prisma.DbNull,
+              })),
             },
           }),
         },

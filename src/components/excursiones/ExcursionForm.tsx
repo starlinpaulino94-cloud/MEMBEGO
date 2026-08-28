@@ -211,7 +211,7 @@ export function ExcursionForm({
   }
 
   // Mapeo de horarios fijos por actividad (actividadId -> string[])
-  const [horarioFijo, setHorarioFijo] = useState<Record<string, string[]>>(() => {
+  const [horarioFijo, _setHorarioFijo] = useState<Record<string, string[]>>(() => {
     const initial: Record<string, string[]> = {}
     if (excursion?.comboItems && excursion.comboItems.length > 0) {
       for (const ci of excursion.comboItems) {
@@ -393,7 +393,6 @@ export function ExcursionForm({
     setComboDerivadoDe(claveCombo)
     {
       if (diasComunes.length > 0) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setDiasSeleccionados(diasComunes)
       }
       // Calcular duración como la hora de regreso más tardía de todas las actividades
@@ -767,9 +766,9 @@ export function ExcursionForm({
                                 )
                               })}
                               {(!act.horarios || act.horarios.length === 0) && (
-                                <span className="text-[11px] text-muted-foreground italic">Sin horarios</span>
+                                <span className="text-xs text-muted-foreground italic">Sin horarios</span>
                               )}
-                              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-[11px] text-muted-foreground font-medium select-none" title="Permitir que esta actividad se solape con otras en el mismo turno">
+                              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-xs text-muted-foreground font-medium select-none" title="Permitir que esta actividad se solape con otras en el mismo turno">
                                 <input
                                   type="checkbox"
                                   checked={!!permitirSolapamiento[act.id]}
@@ -906,11 +905,11 @@ export function ExcursionForm({
                               {hijos.length > 0 && (
                                 <div className="ml-7 space-y-1 border-l-2 border-primary/20 pl-2.5">
                                   {hijos.map((hijo, hIdx) => (
-                                    <div key={hijo.id || hIdx} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5">
+                                    <div key={hijo.id || hIdx} className="flex items-center justify-between rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-xs font-bold text-amber-600">↳</span>
+                                        <span className="text-xs font-bold text-warning">↳</span>
                                         <span className="font-medium text-foreground">{hijo.nombre}</span>
-                                        <span className="text-xs font-bold bg-amber-500/10 text-amber-700 px-1.5 py-0.5 rounded-full">Anidada</span>
+                                        <span className="text-xs font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded-full">Anidada</span>
                                       </div>
                                       <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
                                         <span className="font-semibold text-foreground">{formato12h(hijo.inicio)}</span>
@@ -1084,6 +1083,7 @@ export function ExcursionForm({
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative w-36">
                   <Input
+                    aria-label="Duración en horas"
                     type="number"
                     min="0.5"
                     max="24"
@@ -1168,6 +1168,7 @@ export function ExcursionForm({
               {/* Agregar nueva hora */}
               <div className="flex flex-wrap items-center gap-2 pt-2">
                 <Input
+                  aria-label="Nueva hora de salida"
                   type="time"
                   value={nuevaHoraInput}
                   onChange={(e) => setNuevaHoraInput(e.target.value)}

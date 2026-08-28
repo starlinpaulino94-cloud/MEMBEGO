@@ -115,9 +115,10 @@ const initial: ReservaClienteState = {}
 
 export function ReservaExcursionForm({
   companyId,
-  companySlug,
+  // `companySlug`, `excursionSlug` y `esEmpresaDemo` siguen en las props porque
+  // quien monta el formulario los pasa; este componente ya no los usa desde que
+  // la elección de pago se mudó a /checkout, así que no se desestructuran.
   excursionId,
-  excursionSlug,
   nombreExcursion,
   portadaUrl,
   moneda,
@@ -130,7 +131,6 @@ export function ReservaExcursionForm({
   agotadaGlobal,
   tipoItem,
   comboItems = [],
-  esEmpresaDemo,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
@@ -319,7 +319,6 @@ export function ReservaExcursionForm({
     if (fecha) {
       try {
         const d = parseISO(fecha)
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMesActual((prev) => (isSameMonth(prev, d) ? prev : d))
       } catch { }
     }
@@ -901,7 +900,7 @@ export function ReservaExcursionForm({
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Selecciona los turnos de cada actividad:
                     </p>
                     {comboItems.map((ci, actIdx) => {
@@ -966,7 +965,7 @@ export function ReservaExcursionForm({
                                     type="button"
                                     disabled={!esValido}
                                     onClick={() => esValido && cambiarTurnoCombo(actId, slot)}
-                                    className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${isSelected
+                                    className={`rounded-lg px-2 py-1 text-xs font-semibold transition ${isSelected
                                       ? 'bg-primary text-primary-foreground shadow-xs cursor-pointer'
                                       : esValido
                                         ? 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground cursor-pointer'
@@ -984,8 +983,8 @@ export function ReservaExcursionForm({
                     })}
 
                     {pasesDiaEnCombo.length > 0 && (
-                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-xs text-emerald-800 flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div className="rounded-lg border border-success/20 bg-success/5 p-2.5 text-xs text-success flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-success shrink-0" />
                         <span>
                           Incluye acceso libre todo el día para:{' '}
                           <strong>{pasesDiaEnCombo.map((p) => p.actividad.nombre).join(', ')}</strong>
@@ -1025,7 +1024,6 @@ export function ReservaExcursionForm({
                           const act = ci.actividad
                           const actId = act.id
                           const esPd = act.tipoItem === 'PASE_DIA'
-                          const esHorarioFijo = Array.isArray(ci.horarioFijo) && ci.horarioFijo.length > 0
                           if (esPd) return null
 
                           return (
@@ -1035,15 +1033,15 @@ export function ReservaExcursionForm({
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                                     {actIdx + 1}
                                   </span>
                                   <span className="text-xs font-bold text-foreground">{act.nombre}</span>
                                 </div>
-                                <span className="font-mono text-[11px] font-semibold text-primary">
+                                <span className="font-mono text-xs font-semibold text-primary">
                                   {formato12h(comboHorarios[actId] || act.horaSalida || '09:00')}
                                   {act.duracionMin && (
-                                    <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                                    <span className="text-xs font-normal text-muted-foreground ml-1">
                                       ({act.duracionMin}min)
                                     </span>
                                   )}

@@ -858,10 +858,10 @@ export function ReservaVendedorForm({
                   </div>
 
                   {/* Toggle Residente */}
-                  <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 sm:px-4 min-h-[56px] w-full min-w-0">
+                  <div className="flex items-center justify-between rounded-xl border border-success/30 bg-success/5 p-3 sm:px-4 min-h-[56px] w-full min-w-0">
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">¿Residente local?</span>
-                      <span className="block text-[11px] text-muted-foreground truncate">
+                      <span className="block text-xs text-muted-foreground truncate">
                         Tarifa preferencial para residentes
                       </span>
                     </div>
@@ -870,11 +870,11 @@ export function ReservaVendedorForm({
                       role="switch"
                       aria-checked={esResidente}
                       onClick={() => setEsResidente(!esResidente)}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${esResidente ? 'bg-emerald-500' : 'bg-muted'
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-base ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${esResidente ? 'bg-success' : 'bg-muted'
                         }`}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${esResidente ? 'translate-x-5' : 'translate-x-0'
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-base ease-in-out ${esResidente ? 'translate-x-5' : 'translate-x-0'
                           }`}
                       />
                     </button>

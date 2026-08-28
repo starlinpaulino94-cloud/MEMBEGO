@@ -31,7 +31,7 @@ const SUGERENCIAS: SugerenciaRegla[] = [
     nombre: 'Finde más caro',
     descripcion: 'Sábados y domingos +20% sobre la tarifa base',
     icono: <TrendingUp className="h-4 w-4" />,
-    color: 'text-orange-600 dark:text-orange-400',
+    color: 'text-warning',
     diasSemana: [6, 7],
     horas: [],
     calcularPrecios: (base) => ({
@@ -46,7 +46,7 @@ const SUGERENCIAS: SugerenciaRegla[] = [
     nombre: 'Happy Hour',
     descripcion: 'Turnos de 10:00-12:00 con -15% de descuento',
     icono: <TrendingDown className="h-4 w-4" />,
-    color: 'text-blue-600 dark:text-blue-400',
+    color: 'text-info',
     diasSemana: [],
     horas: ['10:00', '11:00'],
     calcularPrecios: (base) => ({
@@ -61,7 +61,7 @@ const SUGERENCIAS: SugerenciaRegla[] = [
     nombre: 'Temporada alta',
     descripcion: 'Lunes a viernes +30% sobre la tarifa base',
     icono: <Calendar className="h-4 w-4" />,
-    color: 'text-purple-600 dark:text-purple-400',
+    color: 'text-accent-foreground',
     diasSemana: [1, 2, 3, 4, 5],
     horas: [],
     calcularPrecios: (base) => ({
@@ -137,14 +137,14 @@ export function SugerenciasReglas({
               key={s.id}
               type="button"
               onClick={() => handleAplicar(s)}
-              className="flex w-full items-center gap-2 rounded-md border border-border bg-card p-2 text-left transition hover:border-primary/40 hover:bg-muted/50"
+              className="flex w-full items-center gap-2 rounded-lg border border-border bg-card p-2 text-left transition hover:border-primary/40 hover:bg-muted/50"
             >
               <span className={s.color}>{s.icono}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold text-foreground">{s.nombre}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{s.descripcion}</p>
+                <p className="text-xs font-semibold text-foreground">{s.nombre}</p>
+                <p className="text-xs text-muted-foreground truncate">{s.descripcion}</p>
               </div>
-              <Button type="button" size="sm" variant="ghost" className="h-6 text-[10px] text-primary">
+              <Button type="button" size="sm" variant="ghost" className="h-6 text-xs text-primary">
                 Aplicar
               </Button>
             </button>

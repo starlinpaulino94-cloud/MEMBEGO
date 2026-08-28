@@ -340,8 +340,10 @@ export async function crearReserva(
       : null
     const baseAdulto = Number(variante.precioAdulto)
     const baseNino = variante.precioNino != null ? Number(variante.precioNino) : null
-    const baseResidente = (variante as any).precioResidente != null ? Number((variante as any).precioResidente) : null
-    const baseNinoResidente = (variante as any).precioNinoResidente != null ? Number((variante as any).precioNinoResidente) : null
+    // Sin `as any`: los dos campos están en el `select` de esta consulta.
+    const baseResidente = variante.precioResidente != null ? Number(variante.precioResidente) : null
+    const baseNinoResidente =
+      variante.precioNinoResidente != null ? Number(variante.precioNinoResidente) : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,

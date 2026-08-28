@@ -85,6 +85,7 @@ export function SearchParams() {
   // existe hasta que la red conteste.
    
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     buscar()
   }, [buscar])
 
