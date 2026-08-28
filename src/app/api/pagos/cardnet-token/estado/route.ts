@@ -427,7 +427,37 @@ export async function GET(req: NextRequest) {
   }
 
   if (req.nextUrl.searchParams.get('probar') !== '1' || !config.configurado) {
-    return NextResponse.json(base)
+    /**
+     * EL DIAGNÓSTICO DICE QUÉ MÁS PUEDE HACER.
+     *
+     * Sin esto, abrir esta ruta devuelve cuatro booleanos y ninguna pista de
+     * que existen otros cuatro modos detrás de un parámetro. Pasó de verdad
+     * mientras se depuraba un 401 de producción: se pidió el modo `?probar=1`
+     * —el único que trae las cabeceras de quien contestó y la IP de salida— y
+     * volvió esta misma respuesta, porque el parámetro se había quedado por el
+     * camino. No hay forma de distinguir «lo corriste sin el modo» de «el modo
+     * no devolvió nada» mirando el resultado, y esa duda costó una vuelta
+     * entera.
+     *
+     * Solo se enseña a quien administra: para un cliente esto es ruido y una
+     * lista de sondas que no le tocan.
+     */
+    return NextResponse.json(
+      esAdminDespliegue
+        ? {
+            ...base,
+            comoDiagnosticar: {
+              nota: 'Añade uno de estos parámetros a esta misma URL.',
+              '?probar=1':
+                'Llama al proveedor con cada URL y cada formato de autenticación, y devuelve el estado, las cabeceras de quien contestó y la IP desde la que salimos. Es el que distingue «las llaves están mal» de «hay un filtro que no nos deja pasar».',
+              '?sesion=1':
+                'Repite paso por paso lo que hace la ventana de pago y enseña la respuesta cruda del proveedor en cada uno.',
+              '?perfiles=1': 'Consulta las tarjetas registradas del usuario actual.',
+              '?correo=1': 'Envía un correo de prueba al buzón del usuario actual.',
+            },
+          }
+        : base
+    )
   }
   // Crea una sesión de captura real contra el proveedor: mismo riesgo que
   // `?sesion=1` sobre una ventana de pago abierta.

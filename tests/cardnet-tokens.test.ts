@@ -1078,3 +1078,21 @@ test('el diagnóstico distingue los DOS productos de CardNET', () => {
     )
   }
 })
+
+test('el diagnóstico dice qué otros modos tiene', () => {
+  // La respuesta sin parámetros y la de un modo que no devolvió nada se ven
+  // IGUAL, y esa duda costó una vuelta entera depurando un 401 de producción.
+  const ruta = readFileSync('src/app/api/pagos/cardnet-token/estado/route.ts', 'utf8')
+  assert.match(ruta, /comoDiagnosticar/, 'la respuesta base no dice qué más se puede pedir')
+  for (const modo of ['?probar=1', '?sesion=1', '?perfiles=1', '?correo=1']) {
+    assert.ok(ruta.includes(modo), `falta anunciar el modo ${modo}`)
+  }
+  // Y solo a quien administra: para un cliente es ruido y una lista de sondas
+  // que no le tocan.
+  const i = ruta.indexOf('comoDiagnosticar')
+  assert.match(
+    ruta.slice(Math.max(0, i - 400), i),
+    /esAdminDespliegue/,
+    'la lista de sondas no puede salir a un cliente cualquiera'
+  )
+})
