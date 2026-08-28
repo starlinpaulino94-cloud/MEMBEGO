@@ -103,6 +103,46 @@ export async function GET(req: NextRequest) {
     ambienteVariable: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
     ambiente: ambienteConfigurado().ambiente,
     ambienteReconocido: ambienteConfigurado().reconocido,
+    /**
+     * QUÉ PRODUCTO DE CARDNET ESTÁ CONFIGURADO — y cuál usa de verdad la
+     * pantalla de pago.
+     *
+     * En el proyecto conviven DOS integraciones distintas de CardNET, con
+     * credenciales que no se parecen y que no se sustituyen entre sí:
+     *
+     *   · TOKENIZACIÓN (`CARDNET_TOKENS_*`): un par de llaves pública/privada.
+     *     La tarjeta se digita en la ventana hospedada de CardNET y nunca pasa
+     *     por nuestro servidor. Es la que usa la pantalla de membresías.
+     *   · MODELO DIRECTO 3DS (`CARDNET_MERCHANT_ID`, `CARDNET_TERMINAL_ID`,
+     *     `CARDNET_INTEGRATOR_CODE`, `CARDNET_API_KEY`): comercio, terminal,
+     *     integrador y una llave de API. Ahí el número de tarjeta SÍ pasa por
+     *     nuestro servidor.
+     *
+     * Se enseñan las dos porque confundirlas es fácil y caro: si CardNET
+     * entrega las credenciales del modelo directo y se ponen en Vercel, la
+     * tokenización sigue rechazando con 401 y todo «parece» configurado. Este
+     * bloque lo hace visible de un vistazo, sin enseñar ningún secreto.
+     */
+    productos: {
+      tokenizacion: {
+        laQueUsaLaPantallaDePago: true,
+        completo: cardnetTokensConfigurado(),
+      },
+      modeloDirecto3ds: {
+        laQueUsaLaPantallaDePago: false,
+        completo: Boolean(
+          process.env.CARDNET_MERCHANT_ID?.trim() &&
+            process.env.CARDNET_TERMINAL_ID?.trim() &&
+            process.env.CARDNET_INTEGRATOR_CODE?.trim() &&
+            process.env.CARDNET_API_KEY?.trim()
+        ),
+        merchantIdPresente: Boolean(process.env.CARDNET_MERCHANT_ID?.trim()),
+        terminalIdPresente: Boolean(process.env.CARDNET_TERMINAL_ID?.trim()),
+        integratorCodePresente: Boolean(process.env.CARDNET_INTEGRATOR_CODE?.trim()),
+        apiKeyPresente: Boolean(process.env.CARDNET_API_KEY?.trim()),
+        ambiente: process.env.CARDNET_AMBIENTE ?? '(sin definir)',
+      },
+    },
     correo: {
       resendKeyPresente: Boolean(process.env.RESEND_API_KEY?.trim()),
       emailFromPresente: Boolean(process.env.EMAIL_FROM?.trim()),
@@ -387,7 +427,37 @@ export async function GET(req: NextRequest) {
   }
 
   if (req.nextUrl.searchParams.get('probar') !== '1' || !config.configurado) {
-    return NextResponse.json(base)
+    /**
+     * EL DIAGNÓSTICO DICE QUÉ MÁS PUEDE HACER.
+     *
+     * Sin esto, abrir esta ruta devuelve cuatro booleanos y ninguna pista de
+     * que existen otros cuatro modos detrás de un parámetro. Pasó de verdad
+     * mientras se depuraba un 401 de producción: se pidió el modo `?probar=1`
+     * —el único que trae las cabeceras de quien contestó y la IP de salida— y
+     * volvió esta misma respuesta, porque el parámetro se había quedado por el
+     * camino. No hay forma de distinguir «lo corriste sin el modo» de «el modo
+     * no devolvió nada» mirando el resultado, y esa duda costó una vuelta
+     * entera.
+     *
+     * Solo se enseña a quien administra: para un cliente esto es ruido y una
+     * lista de sondas que no le tocan.
+     */
+    return NextResponse.json(
+      esAdminDespliegue
+        ? {
+            ...base,
+            comoDiagnosticar: {
+              nota: 'Añade uno de estos parámetros a esta misma URL.',
+              '?probar=1':
+                'Llama al proveedor con cada URL y cada formato de autenticación, y devuelve el estado, las cabeceras de quien contestó y la IP desde la que salimos. Es el que distingue «las llaves están mal» de «hay un filtro que no nos deja pasar».',
+              '?sesion=1':
+                'Repite paso por paso lo que hace la ventana de pago y enseña la respuesta cruda del proveedor en cada uno.',
+              '?perfiles=1': 'Consulta las tarjetas registradas del usuario actual.',
+              '?correo=1': 'Envía un correo de prueba al buzón del usuario actual.',
+            },
+          }
+        : base
+    )
   }
   // Crea una sesión de captura real contra el proveedor: mismo riesgo que
   // `?sesion=1` sobre una ventana de pago abierta.
