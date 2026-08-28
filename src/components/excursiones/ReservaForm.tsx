@@ -251,7 +251,6 @@ export function ReservaForm({
     })
     setItinerarioMultiFecha(initial)
   }
->>>>>>> origin/main
 
   // Serializar itinerario combo para FormData
   const comboItinerarioJson = useMemo(() => {

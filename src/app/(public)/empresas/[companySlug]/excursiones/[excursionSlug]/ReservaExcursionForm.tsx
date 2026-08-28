@@ -13,12 +13,8 @@ import {
   AlertCircle,
   X,
   ShoppingCart,
-<<<<<<< HEAD
-  ShieldCheck,
-=======
   CreditCard,
   Banknote,
->>>>>>> origin/main
   Sparkles,
   Wand2,
   Clock,
@@ -157,6 +153,9 @@ export function ReservaExcursionForm({
   // Modo de programación de combo: Mismo Día o Días Separados
   const [modoComboFechas, setModoComboFechas] = useState<'MISMO_DIA' | 'DIAS_DIFERENTES'>('MISMO_DIA')
   const [itinerarioMultiFecha, setItinerarioMultiFecha] = useState<Record<string, { fecha: string; hora: string }>>({})
+
+  const [modoHorarioCombo, setModoHorarioCombo] = useState<'RECOMENDADOS' | 'PERSONALIZADO'>('RECOMENDADOS')
+  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
 
   // Daypasses y actividades con horario dentro del combo
   const pasesDiaEnCombo = useMemo(() => {
@@ -320,12 +319,8 @@ export function ReservaExcursionForm({
     if (fecha) {
       try {
         const d = parseISO(fecha)
-<<<<<<< HEAD
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setMesActual((prev) => (isSameMonth(prev, d) ? prev : d))
-=======
-        if (!isSameMonth(mesActual, d)) setMesActual(d)
->>>>>>> origin/main
       } catch { }
     }
   }
@@ -460,11 +455,6 @@ export function ReservaExcursionForm({
           hora: item.actividad.tipoItem === 'PASE_DIA' ? '' : comboHorarios[item.actividad.id] || item.horaSalida || item.actividad.horaSalida || '09:00',
         }
       }
-<<<<<<< HEAD
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setItinerarioMultiFecha(init)
-=======
->>>>>>> origin/main
     }
     setItinerarioMultiFecha(init)
   }
@@ -824,10 +814,6 @@ export function ReservaExcursionForm({
 
             {modoComboFechas === 'MISMO_DIA' ? (
               <div className="space-y-3">
-<<<<<<< HEAD
-                {/* Botones de horarios por actividad — solo si hay más de 1 combinación */}
-                {combinacionesDisponibles.length > 1 && actividadesConHorarioEnCombo.length > 0 && (
-=======
                 {/* Pestañas de modo de selección de horario */}
                 {combinacionesDisponibles.length > 0 && actividadesConHorarioEnCombo.length > 0 && (
                   <div className="flex items-center gap-1.5 border-b border-primary/15 pb-2">
@@ -914,7 +900,6 @@ export function ReservaExcursionForm({
                     )}
                   </div>
                 ) : (
->>>>>>> origin/main
                   <div className="space-y-2.5">
                     <p className="text-[11px] text-muted-foreground">
                       Selecciona los turnos de cada actividad:
@@ -952,14 +937,6 @@ export function ReservaExcursionForm({
                               </span>
                               <span className="text-xs font-bold text-foreground">{act.nombre}</span>
                             </div>
-<<<<<<< HEAD
-                            <span className="font-mono text-[11px] font-semibold text-primary">
-                              {formato12h(comboHorarios[actId] || act.horaSalida || '09:00')}
-                              {act.duracionMin && (
-                                <span className="text-[10px] font-normal text-muted-foreground ml-1">
-                                  ({act.duracionMin}min)
-                                </span>
-=======
                             <span className="font-mono text-xs font-semibold text-primary">
                               {esPd ? (
                                 <span className="text-success bg-success/10 px-2 py-0.5 rounded-full text-xs font-bold">
@@ -974,7 +951,6 @@ export function ReservaExcursionForm({
                                     </span>
                                   )}
                                 </>
->>>>>>> origin/main
                               )}
                             </span>
                           </div>
@@ -988,7 +964,6 @@ export function ReservaExcursionForm({
                                   <button
                                     key={slot}
                                     type="button"
-<<<<<<< HEAD
                                     disabled={!esValido}
                                     onClick={() => esValido && cambiarTurnoCombo(actId, slot)}
                                     className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${isSelected
@@ -996,12 +971,6 @@ export function ReservaExcursionForm({
                                       : esValido
                                         ? 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground cursor-pointer'
                                         : 'border border-border/40 bg-muted/10 text-muted-foreground/40 cursor-not-allowed line-through'
-=======
-                                    onClick={() => cambiarTurnoCombo(actId, slot)}
-                                    className={`rounded-lg px-2 py-1 text-xs font-semibold transition cursor-pointer ${isSelected
-                                      ? 'bg-primary text-primary-foreground shadow-xs'
-                                      : 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground'
->>>>>>> origin/main
                                       }`}
                                   >
                                     {formato12h(slot)}
@@ -1377,8 +1346,6 @@ export function ReservaExcursionForm({
           </div>
         </div>
 
-<<<<<<< HEAD
-=======
         {/* Selector de Modalidad de Pago */}
         <div className="space-y-2 pt-1">
           <label className="block text-sm font-medium">¿Cómo deseas pagar?</label>
@@ -1422,7 +1389,7 @@ export function ReservaExcursionForm({
           </div>
         </div>
 
->>>>>>> origin/main
+
         {/* Notas */}
         <div>
           <label className="mb-1.5 block text-sm font-medium">Notas (opcional)</label>
@@ -1470,13 +1437,8 @@ export function ReservaExcursionForm({
               <span className="text-h2 font-black text-primary font-mono">
                 {formatMoney(subtotal, { moneda })}
               </span>
-<<<<<<< HEAD
-              <p className="text-[10px] text-muted-foreground">
-                Elige tu método de pago en el checkout
-=======
               <p className="text-xs text-muted-foreground">
                 {metodoPago === 'ONLINE_SIMULADO' ? 'Pago inmediato online' : 'Pago presencial al abordar'}
->>>>>>> origin/main
               </p>
             </div>
           </div>
