@@ -81,6 +81,14 @@ interface Props {
   logoUrl?: string | null
   /** A dónde ir cuando el pago aprueba. */
   urlExito?: string
+  /**
+   * Cambiar a otra forma de pago.
+   *
+   * La decide quien monta el componente porque es quien tiene la lista de
+   * métodos. Sin esto, cuando la pasarela no está disponible lo único que se
+   * podía ofrecer era un botón que no lleva a ninguna parte.
+   */
+  onElegirOtroMetodo?: () => void
 }
 
 interface SesionCaptura {
@@ -138,6 +146,7 @@ export function PagoTokenCardnet({
   companyName,
   logoUrl,
   urlExito,
+  onElegirOtroMetodo,
 }: Props) {
   const router = useRouter()
   /**
@@ -206,6 +215,15 @@ export function PagoTokenCardnet({
    * pantalla de pago.
    */
   const [tipoError, setTipoError] = useState<'rechazo' | 'otro'>('otro')
+  /**
+   * El proveedor nos denegó el paso, así que la tarjeta NO va a funcionar hoy.
+   *
+   * Es distinto de cualquier otro error de esta pantalla: no se arregla
+   * reintentando. Mientras esté puesto, no se ofrece «reintentar» —sería
+   * mandar a alguien a repetir algo que no puede salir bien— sino las otras
+   * formas de pago, que sí funcionan.
+   */
+  const [pasarelaNoDisponible, setPasarelaNoDisponible] = useState(false)
   const cobrandoRef = useRef(false)
   // Confirmación por servidor en curso (no solapar sondeos).
   const confirmandoRef = useRef(false)
@@ -423,6 +441,7 @@ export function PagoTokenCardnet({
         publicKey?: string
         conteoPerfiles?: number
         customerId?: string | null
+        motivo?: string
       }
       // 429 del limitador de pagos: NO es un fallo de la pasarela. Se anota
       // para que el prefetch de fondo deje de pedir —cada intento extra
@@ -436,9 +455,13 @@ export function PagoTokenCardnet({
       }
       if (!data.ok || !data.captureUrl || !data.uniqueId) {
         motivoSesionRef.current = data.error || null
+        // El servidor distingue «no nos dejan pasar» de «se cayó un momento».
+        // Solo lo primero apaga la tarjeta para esta sesión.
+        if (data.motivo === 'proveedor_no_disponible') setPasarelaNoDisponible(true)
         return null
       }
       motivoSesionRef.current = null
+      setPasarelaNoDisponible(false)
       return {
         captureUrl: data.captureUrl,
         scriptUrl: data.scriptUrl || scriptUrlProp,
@@ -1059,7 +1082,7 @@ export function PagoTokenCardnet({
           El botón de reintentar NO está aquí: es el mismo de abajo, que ya
           dice «Reintentar pago» en este estado. Duplicarlo daría dos botones
           que hacen lo mismo a un metro de distancia. */}
-      {estado === 'error' && mensaje && (
+      {estado === 'error' && mensaje && !pasarelaNoDisponible && (
         <div className="animate-fade-in overflow-hidden rounded-2xl border border-destructive/25 bg-card shadow-sm">
           <div className="flex flex-col items-center border-b border-border/60 bg-destructive/5 px-6 pb-5 pt-7 text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
@@ -1383,7 +1406,52 @@ export function PagoTokenCardnet({
           de pago. No se añade ni un dato nuevo — el resumen del cobro y el
           total ya los enseña la página, y repetirlos aquí sería dar dos
           versiones del mismo número en la misma pantalla. */}
-      {estado !== 'activacion' && (
+      {/* LA PASARELA NO ESTÁ DISPONIBLE.
+
+          No es un error de la tarjeta de nadie ni algo que se arregle
+          reintentando: el proveedor nos denegó el paso (401/403), y eso sigue
+          igual en el clic siguiente. Lo honesto es decirlo, no ofrecer un
+          botón de reintentar que no puede funcionar, y llevar a las formas de
+          pago que SÍ funcionan.
+
+          Se enseña en lugar de todo el bloque de pago, no encima: dejar el
+          botón debajo de un aviso que dice «no disponible» invita a probarlo. */}
+      {pasarelaNoDisponible && estado !== 'activacion' && (
+        <div className="overflow-hidden rounded-2xl border border-warning/30 bg-card shadow-sm">
+          <div className="flex flex-col items-center border-b border-border/60 bg-warning/5 px-6 pb-5 pt-7 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-warning/10">
+              <AlertCircle className="h-7 w-7 text-warning" aria-hidden />
+            </span>
+            <h3 className="mt-3 text-base font-bold uppercase tracking-wide text-warning">
+              El pago con tarjeta no está disponible
+            </h3>
+          </div>
+          <div className="space-y-4 px-6 py-5">
+            <p className="text-center text-sm leading-relaxed text-foreground">
+              No es tu tarjeta: es nuestra conexión con el banco, y no se
+              arregla reintentando. Ya estamos en ello.
+            </p>
+            <p className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-xs leading-relaxed text-muted-foreground">
+              <strong className="font-semibold text-foreground">
+                No se te ha cobrado nada.
+              </strong>{' '}
+              Puedes completar tu membresía con otra forma de pago ahora mismo.
+            </p>
+            {onElegirOtroMetodo ? (
+              <Button
+                type="button"
+                variant="premium"
+                onClick={onElegirOtroMetodo}
+                className="w-full rounded-full py-6 text-base font-semibold"
+              >
+                Elegir otra forma de pago
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {!pasarelaNoDisponible && estado !== 'activacion' && (
         <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
         {/* Fase 2: renovación automática, con interruptor. Solo antes de pagar. */}
         {(estado === 'listo' || estado === 'error') && (

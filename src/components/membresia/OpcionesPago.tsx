@@ -188,6 +188,14 @@ export function OpcionesPago({
           scriptUrl={tokensConfig.scriptUrl}
           companyName={companyName}
           logoUrl={logoUrl}
+          /* Cuando la pasarela no está disponible, el componente de tarjeta
+             necesita poder mandar al cliente a otra forma de pago. La lista de
+             métodos vive aquí, así que la decisión también. Se elige la
+             primera que no sea tarjeta; «en la sucursal» siempre existe. */
+          onElegirOtroMetodo={() => {
+            const otra = opciones.find((o) => o.key !== 'tarjeta')
+            if (otra) setOpcion(otra.key)
+          }}
         />
       ) : opcion === 'transferencia' ? (
         <div className="space-y-5">

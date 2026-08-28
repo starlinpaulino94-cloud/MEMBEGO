@@ -13,6 +13,8 @@ import {
   leerCustomerIdDeCuenta,
   variantesDeRuta,
   normalizarAmbiente,
+  clasificarFalloProveedor,
+  type FalloProveedor,
   reintentarConOtraGrafia,
   referenciaCobro,
   MONEDA_DOP_TOKENS,
@@ -422,8 +424,10 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
    */
   captureUrl: string | null
   uniqueId: string | null
+  /** true = el proveedor NO nos dejó pasar (401/403), no es un fallo pasajero. */
+  denegado: boolean
 }> {
-  const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null }
+  const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null, denegado: false }
   if (!customerId) return vacio
   const { ok, status, json } = await llamarTokensConRuta(
     'GET',
@@ -432,7 +436,7 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
   )
   if (!ok) {
     anotarFalloProveedor('consultarCliente', status, json)
-    return vacio
+    return { ...vacio, denegado: clasificarFalloProveedor(status) === 'denegado' }
   }
   const { datos } = desenvolverRespuesta(json)
   const s = (...ks: string[]) => {
@@ -444,6 +448,7 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
   }
   const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
   return {
+    denegado: false,
     email: s('Email', 'email'),
     perfiles: extraerPerfiles(json),
     // El formato documentado lleva barra final; la respuesta a veces no la trae.
@@ -466,9 +471,9 @@ export async function obtenerCustomerId(input: {
   email: string
   guardado: string | null
   guardar: (valorAGuardar: string) => Promise<void>
-}): Promise<string | null> {
+}): Promise<ResultadoCustomer> {
   const cfg = getTokensConfig()
-  if (!cfg) return null
+  if (!cfg) return { ok: false, motivo: 'transitorio' }
 
   // El id guardado solo sirve para LA MISMA cuenta de CardNET que lo emitió.
   // Al cambiar de juego de llaves se cambia de cuenta, y un CustomerId de la
@@ -476,17 +481,17 @@ export async function obtenerCustomerId(input: {
   // INTERNAL_SERVER_ERROR, sin ninguna pista de que la causa es un dato viejo.
   // Por eso se guarda etiquetado con la cuenta y se descarta si no coincide.
   const yaLoTengo = leerCustomerIdDeCuenta(input.guardado, cfg.publicKey, cfg.privateKey)
-  if (yaLoTengo) return yaLoTengo
+  if (yaLoTengo) return { ok: true, customerId: yaLoTengo }
 
   const cliente = await crearClienteCardnet({ email: input.email })
-  if (!cliente?.customerId) return null
+  if (!cliente.ok) return cliente
   // Best-effort: si la escritura falla, el cobro sigue — solo se pagará un
   // POST de más la próxima vez. Pero queda anotado: si falla siempre, el
   // síntoma vuelve a ser una ventana que muere sin explicación.
   await input
     .guardar(marcarCustomerIdConCuenta(cliente.customerId, cfg.publicKey, cfg.privateKey))
     .catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
-  return cliente.customerId
+  return cliente
 }
 
 /**
@@ -585,11 +590,20 @@ function anotarFalloProveedor(paso: string, status: number, json: Record<string,
   })
 }
 
+/**
+ * Resultado de resolver el Customer. Cuando no se pudo, dice si el proveedor
+ * NOS DENEGÓ el paso o si fue algo pasajero: es lo que decide si tiene sentido
+ * invitar a reintentar. Ver `FalloProveedor`.
+ */
+export type ResultadoCustomer =
+  | { ok: true; customerId: string }
+  | { ok: false; motivo: FalloProveedor }
+
 export async function crearClienteCardnet(input: {
   email: string
   nombre?: string
   apellido?: string
-}): Promise<{ customerId: string } | null> {
+}): Promise<ResultadoCustomer> {
   const { ok, status, json } = await llamarTokensConRuta('POST', '/Customer', {
     Email: input.email,
     ...(input.nombre ? { FirstName: input.nombre } : {}),
@@ -603,14 +617,16 @@ export async function crearClienteCardnet(input: {
     // recién cambiadas, ese mensaje puede significar cinco cosas distintas y
     // no había forma de saber cuál sin repetir el fallo a mano.
     anotarFalloProveedor('crearCliente', status, json)
-    return null
+    return { ok: false, motivo: clasificarFalloProveedor(status) }
   }
   const { datos } = desenvolverRespuesta(json)
   const id = (datos.CustomerId ?? datos.customerId ?? datos.Id ?? datos.id ?? '') as
     | string
     | number
   const customerId = String(id).trim()
-  return customerId ? { customerId } : null
+  // Respuesta 2xx pero sin id: el proveedor contestó, así que no nos denegó
+  // nada — es un final raro y pasajero.
+  return customerId ? { ok: true, customerId } : { ok: false, motivo: 'transitorio' }
 }
 
 /**

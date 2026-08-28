@@ -56,9 +56,23 @@ export async function POST(req: NextRequest) {
 
   try {
     if (!customerId) {
-      const cliente = await crearClienteCardnet({ email: user.email || `${user.metadata.clienteId}@membego.local` })
-      if (!cliente) {
-        return NextResponse.json({ ok: false, error: 'No se pudo registrar la tarjeta.' }, { status: 502 })
+      const cliente = await crearClienteCardnet({
+        email: user.email || `${user.metadata.clienteId}@membego.local`,
+      })
+      if (!cliente.ok) {
+        // `denegado` = el proveedor no nos deja pasar. No es un tropiezo del
+        // momento y reintentar no lo arregla, así que no se invita a hacerlo.
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              cliente.motivo === 'denegado'
+                ? 'El pago con tarjeta no está disponible en este momento.'
+                : 'No se pudo registrar la tarjeta. Intenta de nuevo.',
+            motivo: cliente.motivo,
+          },
+          { status: cliente.motivo === 'denegado' ? 503 : 502 }
+        )
       }
       customerId = cliente.customerId
     }
