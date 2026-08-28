@@ -13,6 +13,46 @@
 export type AmbienteTokens = 'pruebas' | 'produccion'
 
 /**
+ * QUÉ AMBIENTE PIDE LA VARIABLE — y por qué esto no era una comparación simple.
+ *
+ * Antes era `env === 'produccion' ? 'produccion' : 'pruebas'`. Cualquier otro
+ * valor caía en pruebas EN SILENCIO: `production` en inglés, `Producción` con
+ * tilde, `PRODUCCION` en mayúsculas, un espacio de más. Y el síntoma de caer en
+ * pruebas con llaves de producción no dice nada de la causa — la API de
+ * laboratorio responde 401 a esas llaves, el registro del Customer falla y la
+ * pantalla enseña «No se pudo iniciar la ventana de pago».
+ *
+ * Un despliegue de producción que se comporta como uno de prueba por una tilde
+ * es un fallo que puede durar días. Se aceptan las grafías que una persona
+ * escribe de verdad, y `reconocido` deja constancia de si el valor se entendió:
+ * quien lo escribió mal merece saberlo, no que se le adivine mal en silencio.
+ *
+ * Deliberadamente NO se acepta cualquier cosa que empiece por «prod»: entre
+ * ignorar un valor raro y mandar cobros de verdad a producción por un valor que
+ * nadie escribió, se falla del lado de pruebas.
+ */
+const AMBIENTES_PRODUCCION = new Set(['produccion', 'production', 'prod'])
+
+export function normalizarAmbiente(valor: string | undefined | null): {
+  ambiente: AmbienteTokens
+  /** false = había un valor y no se entendió (se cayó a pruebas). */
+  reconocido: boolean
+} {
+  const limpio = (valor ?? '')
+    .trim()
+    .toLowerCase()
+    // Quita las tildes: «producción» y «produccion» son la misma palabra.
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (!limpio) return { ambiente: 'pruebas', reconocido: true }
+  if (AMBIENTES_PRODUCCION.has(limpio)) return { ambiente: 'produccion', reconocido: true }
+  if (limpio === 'pruebas' || limpio === 'lab' || limpio === 'test' || limpio === 'sandbox') {
+    return { ambiente: 'pruebas', reconocido: true }
+  }
+  return { ambiente: 'pruebas', reconocido: false }
+}
+
+/**
  * URLs del servicio de tokens por ambiente — MANUAL TÉCNICO v1.7 §11.
  *
  *   · Pruebas:    https://lab.cardnet.com.do/servicios/tokens/v1

@@ -7,6 +7,7 @@ import {
   cardnetTokensConfigurado,
   consultarClienteCardnet,
   obtenerCustomerId,
+  ambienteConfigurado,
 } from '@/lib/payments/cardnet-tokens'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { logErrorBd } from '@/lib/prisma-errors'
@@ -132,6 +133,35 @@ export async function POST(req: NextRequest) {
     }
 
     if (!customerId || !consulta) {
+      /**
+       * ESTE ERA EL FALLO MUDO.
+       *
+       * Este `return` es el que pinta «No se pudo iniciar la ventana de pago»
+       * en la pantalla del cliente, y hasta ahora no escribía NADA en ningún
+       * sitio. Cuando pasó en producción con llaves recién cambiadas, no había
+       * forma de saber si el proveedor había dicho 401, 404 o nada — había que
+       * ir a repetir el fallo a mano con una sonda de administrador.
+       *
+       * Ahora queda anotado, y con lo que de verdad hace falta para
+       * distinguir las causas: si se llegó a tener un Customer, si la consulta
+       * volvió vacía, y a qué ambiente se estaba llamando. Las llamadas al
+       * proveedor dejan además su propia línea con el estado que devolvieron.
+       */
+      const { ambiente, reconocido, valor } = ambienteConfigurado()
+      logErrorBd(
+        'pagos:cardnet-token:sesion-sin-ventana',
+        new Error('El proveedor no devolvió una ventana de captura'),
+        {
+          clienteId,
+          companyId,
+          huboCustomerId: Boolean(customerId),
+          huboConsulta: Boolean(consulta),
+          teniaGuardado: teniamosGuardado,
+          ambiente,
+          ambienteVariable: valor ?? '(sin definir)',
+          ambienteReconocido: reconocido,
+        }
+      )
       return NextResponse.json(
         { ok: false, error: 'No se pudo iniciar la ventana de pago. Intenta de nuevo.' },
         { status: 502 }
