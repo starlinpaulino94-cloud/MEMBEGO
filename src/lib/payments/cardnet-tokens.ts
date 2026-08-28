@@ -234,7 +234,13 @@ async function llamadaBase(
   path: string,
   cuerpo: Record<string, unknown> | null,
   authValor: string
-): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+): Promise<{
+  ok: boolean
+  status: number
+  json: Record<string, unknown>
+  /** Cabeceras que identifican QUIÉN respondió. Ver `CABECERAS_DE_INTERES`. */
+  cabeceras: Record<string, string>
+}> {
   try {
     const resp = await fetch(`${base}${path}`, {
       method: metodo,
@@ -255,10 +261,49 @@ async function llamadaBase(
       // para diagnóstico — sin ella, un fallo del proveedor es invisible.
       json = texto ? { _texto: texto.slice(0, 500) } : {}
     }
-    return { ok: resp.ok, status: resp.status, json }
+    return { ok: resp.ok, status: resp.status, json, cabeceras: cabecerasDeInteres(resp.headers) }
   } catch (e) {
-    return { ok: false, status: 0, json: { _error: e instanceof Error ? e.message : 'fetch' } }
+    return {
+      ok: false,
+      status: 0,
+      json: { _error: e instanceof Error ? e.message : 'fetch' },
+      cabeceras: {},
+    }
   }
+}
+
+/**
+ * QUIÉN CONTESTÓ, cuando lo que contestó no fue la API.
+ *
+ * Un 401 con el cuerpo `{"status":401,"error":"Acceso denegado"}` —en español,
+ * y con una forma que la API de tokens no usa— no lo escribe la API: lo escribe
+ * algo delante de ella. Un cortafuegos, un balanceador, una pasarela que filtra
+ * por IP de origen. Y saber cuál de las dos cosas está pasando cambia por
+ * completo a quién hay que llamar: si es la API, el problema son las llaves; si
+ * es el filtro, las llaves pueden estar perfectas y lo que falta es que
+ * autoricen desde dónde llamamos.
+ *
+ * Estas cabeceras lo delatan y ninguna lleva nada nuestro dentro.
+ */
+const CABECERAS_DE_INTERES = [
+  'server',
+  'via',
+  'www-authenticate',
+  'content-type',
+  'x-cache',
+  'cf-ray',
+  'x-amz-cf-id',
+  'x-request-id',
+  'x-powered-by',
+]
+
+function cabecerasDeInteres(headers: Headers): Record<string, string> {
+  const salida: Record<string, string> = {}
+  for (const nombre of CABECERAS_DE_INTERES) {
+    const valor = headers.get(nombre)
+    if (valor) salida[nombre] = valor.slice(0, 200)
+  }
+  return salida
 }
 
 // Base y formato de auth que ya funcionaron en esta instancia: las llamadas
@@ -451,7 +496,14 @@ export async function obtenerCustomerId(input: {
  * cuenta y hay que reclamarla a CardNET.
  */
 export async function probarSesionTokens(): Promise<
-  { url: string; formato: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+  {
+    url: string
+    formato: string
+    ok: boolean
+    status: number
+    respuesta: Record<string, unknown>
+    cabeceras: Record<string, string>
+  }[]
 > {
   const cfg = getTokensConfig()
   if (!cfg) return []
@@ -471,6 +523,9 @@ export async function probarSesionTokens(): Promise<
         ok: r.ok,
         status: r.status,
         respuesta: sinSensibles(r.json),
+        // Quién contestó. Un 401 de la API y un 401 de un filtro delante de la
+        // API se parecen en el cuerpo y no se parecen en nada en la solución.
+        cabeceras: r.cabeceras,
       })
       // Host muerto/ruta inexistente: pasar al siguiente host.
       if (r.status === 0 || r.status === 404) break
@@ -567,14 +622,38 @@ export async function crearClienteCardnet(input: {
  * ventana de pago») que obligaba a adivinar. Con esto, el fallo se lee.
  */
 export async function registrarClienteDiagnostico(email: string): Promise<
-  { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+  {
+    ruta: string
+    /** La URL COMPLETA contra la que se llamó. */
+    url: string
+    ok: boolean
+    status: number
+    respuesta: Record<string, unknown>
+  }[]
 > {
   const cfg = getTokensConfig()
   if (!cfg) return []
-  const salida: { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[] = []
+  // Antes esto decía solo `/Customer`, y esa mitad del dato no sirve para
+  // preguntarle nada a nadie: la pregunta que hay que poder hacerle al
+  // proveedor es «¿es ESTA la URL de producción?», y para eso hace falta el
+  // host entero.
+  const base = apiCandidatos(cfg.ambiente)[0] ?? '(sin base)'
+  const salida: {
+    ruta: string
+    url: string
+    ok: boolean
+    status: number
+    respuesta: Record<string, unknown>
+  }[] = []
   for (const ruta of variantesDeRuta('/Customer')) {
     const r = await llamarTokens('POST', ruta, { Email: email, Enable: 'true' })
-    salida.push({ ruta, ok: r.ok, status: r.status, respuesta: sinSensibles(r.json) })
+    salida.push({
+      ruta,
+      url: `${base}${ruta}`,
+      ok: r.ok,
+      status: r.status,
+      respuesta: sinSensibles(r.json),
+    })
     if (r.ok) break
   }
   return salida
