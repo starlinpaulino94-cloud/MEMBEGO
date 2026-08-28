@@ -291,6 +291,22 @@ export function PagoTokenCardnet({
 
     const src = `${scriptUrl}?key=${encodeURIComponent(publicKey)}`
     let script = document.querySelector<HTMLScriptElement>(`script[data-pwcheckout="1"]`)
+    /**
+     * SI EL `src` CAMBIÓ, EL SCRIPT VIEJO NO SIRVE.
+     *
+     * Se reutilizaba la etiqueta existente sin mirar a dónde apuntaba. La
+     * llave y el ambiente viajan EN LA URL (`?key=…`, y el host cambia entre
+     * pruebas y producción), así que al cambiar de juego de llaves seguía
+     * cargado el widget de la cuenta anterior — y el síntoma es justamente
+     * «el pago seguro todavía no está listo», sin nada que apunte a la causa.
+     *
+     * Se sustituye por uno nuevo. `PWCheckout` lo define el script al
+     * evaluarse, así que basta con volver a cargarlo.
+     */
+    if (script && script.src !== src) {
+      script.remove()
+      script = null
+    }
     if (!script) {
       script = document.createElement('script')
       script.src = src
@@ -693,7 +709,11 @@ export function PagoTokenCardnet({
     const sdk = window.PWCheckout
     if (!sdk) {
       setEstado('error')
-      setMensaje('El pago seguro todavía no está listo. Recarga la página e intenta de nuevo.')
+      // No se manda a recargar a ciegas: recargar no arregla un ambiente mal
+      // puesto, y el cliente lo intentaría tres veces antes de rendirse.
+      setMensaje(
+        'No se pudo cargar el pago seguro. Si acabas de entrar, recarga la página; si sigue igual, avísanos.'
+      )
       return
     }
     setEstado('capturando')
