@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "excursiones_reservas" ADD COLUMN "esResidente" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "reservas_excursion" ADD COLUMN "esResidente" BOOLEAN NOT NULL DEFAULT false;
