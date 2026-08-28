@@ -638,7 +638,7 @@ export async function reservarCarritoAction(
         fechaValida,
         item.horaSalida || null,
         v.precioAdulto.toNumber(),
-        v.precioNino ? v.precioNino.toNumber() : null,
+        v.precioNino != null ? v.precioNino.toNumber() : null,
         reglasDin,
         item.esResidente ?? false,
         baseResidenteCombo,

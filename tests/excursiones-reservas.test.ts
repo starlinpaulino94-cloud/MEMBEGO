@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   calcularTotales,
+  calcularPrecioEfectivo,
   calcularSaldo,
   estadoPorPagos,
   numeroReserva,
@@ -141,3 +142,94 @@ test('validarItinerarioCombo procesa actividades con horario excluyendo Daypasse
     assert.equal(itinerario.itinerario[0].fin, '17:00')
   }
 })
+
+test('calcularPrecioEfectivo aplica niños gratis (0) los martes y cae a base los miércoles', () => {
+  const reglas = [
+    {
+      diasSemana: [2], // 2 = Martes en ISO
+      horasSalida: [],
+      precioAdulto: 100,
+      precioNino: 0, // Niños gratis
+      precioResidente: null,
+      precioNinoResidente: null,
+    },
+  ]
+
+  // 2026-09-01 es un Martes (UTCDay = 2)
+  const fechaMartes = new Date('2026-09-01T12:00:00.000Z')
+  assert.equal(fechaMartes.getUTCDay(), 2)
+
+  const precioMartes = calcularPrecioEfectivo(fechaMartes, '09:00', 100, 50, reglas)
+  assert.equal(precioMartes.precioAdulto, 100)
+  assert.equal(precioMartes.precioNino, 0) // ¡Niños gratis!
+
+  const totalesMartes = calcularTotales({
+    adultos: 2,
+    ninos: 2,
+    precioAdulto: precioMartes.precioAdulto,
+    precioNino: precioMartes.precioNino,
+  })
+  assert.equal(totalesMartes.subtotal, 200) // 2x100 + 2x0 = 200
+  assert.equal(totalesMartes.total, 200)
+
+  // 2026-09-02 es un Miércoles (UTCDay = 3)
+  const fechaMiercoles = new Date('2026-09-02T12:00:00.000Z')
+  assert.equal(fechaMiercoles.getUTCDay(), 3)
+
+  const precioMiercoles = calcularPrecioEfectivo(fechaMiercoles, '09:00', 100, 50, reglas)
+  assert.equal(precioMiercoles.precioAdulto, 100)
+  assert.equal(precioMiercoles.precioNino, 50) // Tarifa base regular
+
+  const totalesMiercoles = calcularTotales({
+    adultos: 2,
+    ninos: 2,
+    precioAdulto: precioMiercoles.precioAdulto,
+    precioNino: precioMiercoles.precioNino,
+  })
+  assert.equal(totalesMiercoles.subtotal, 300) // 2x100 + 2x50 = 300
+  assert.equal(totalesMiercoles.total, 300)
+})
+
+test('calcularPrecioEfectivo respeta tarifa de residente niño gratis (0)', () => {
+  const reglas = [
+    {
+      diasSemana: [4], // Jueves
+      horasSalida: [],
+      precioAdulto: 120,
+      precioNino: 60,
+      precioResidente: 80,
+      precioNinoResidente: 0, // Niños residentes gratis
+    },
+  ]
+
+  // 2026-09-03 es un Jueves (UTCDay = 4)
+  const fechaJueves = new Date('2026-09-03T12:00:00.000Z')
+  assert.equal(fechaJueves.getUTCDay(), 4)
+
+  const precioResidente = calcularPrecioEfectivo(
+    fechaJueves,
+    '10:00',
+    120,
+    60,
+    reglas,
+    true, // esResidente
+    90,
+    45
+  )
+  assert.equal(precioResidente.precioAdulto, 80)
+  assert.equal(precioResidente.precioNino, 0) // Gratis para residentes
+
+  const precioTurista = calcularPrecioEfectivo(
+    fechaJueves,
+    '10:00',
+    120,
+    60,
+    reglas,
+    false, // Turista normal
+    90,
+    45
+  )
+  assert.equal(precioTurista.precioAdulto, 120)
+  assert.equal(precioTurista.precioNino, 60)
+})
+

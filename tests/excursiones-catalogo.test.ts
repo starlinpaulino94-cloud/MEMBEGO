@@ -112,3 +112,48 @@ test('validarExcursion maneja PASE_DIA correctamente sin exigir horas fijas', ()
     assert.equal(r.datos.duracionMin, null)
   }
 })
+
+test('validarVariante procesa reglas dinámicas preservando precios en 0 (gratis)', () => {
+  const reglasJson = JSON.stringify([
+    {
+      diasSemana: [2], // Martes
+      horasSalida: ['09:00'],
+      precioAdulto: '100',
+      precioNino: '0', // Niños gratis los martes
+      precioResidente: '80',
+      precioNinoResidente: '0',
+    },
+    {
+      diasSemana: [3], // Miércoles
+      horasSalida: [],
+      precioAdulto: 0, // Adultos gratis en promoción
+      precioNino: null,
+      precioResidente: null,
+      precioNinoResidente: null,
+    },
+  ])
+
+  const r = validarVariante({
+    nombre: 'Estándar',
+    precioAdulto: '100',
+    precioNino: '50',
+    preciosDinamicosJson: reglasJson,
+  })
+
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    assert.equal(r.datos.preciosDinamicos?.length, 2)
+    const reglaMartes = r.datos.preciosDinamicos?.[0]
+    assert.deepEqual(reglaMartes?.diasSemana, [2])
+    assert.deepEqual(reglaMartes?.horasSalida, ['09:00'])
+    assert.equal(reglaMartes?.precioAdulto, 100)
+    assert.equal(reglaMartes?.precioNino, 0)
+    assert.equal(reglaMartes?.precioResidente, 80)
+    assert.equal(reglaMartes?.precioNinoResidente, 0)
+
+    const reglaMiercoles = r.datos.preciosDinamicos?.[1]
+    assert.deepEqual(reglaMiercoles?.diasSemana, [3])
+    assert.equal(reglaMiercoles?.precioAdulto, 0)
+    assert.equal(reglaMiercoles?.precioNino, null)
+  }
+})
