@@ -60,7 +60,7 @@ function Countdown({
           <span className="min-w-11 rounded-xl bg-foreground px-2 py-1.5 text-center font-mono text-lg font-bold tabular-nums text-background">
             {s.valor}
           </span>
-          <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {s.etiqueta}
           </span>
         </div>

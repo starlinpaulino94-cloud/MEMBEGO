@@ -73,12 +73,12 @@ export function UsageMeter({
         className={cn(
           'h-2 w-full overflow-hidden rounded-full',
           dark ? 'bg-white/20' : 'bg-muted',
-          agotado && (dark ? 'bg-rose-200/25' : 'bg-destructive/15')
+          agotado && (dark ? 'bg-destructive/25' : 'bg-destructive/15')
         )}
       >
         <div
           className={cn(
-            'h-full rounded-full transition-[width] duration-500',
+            'h-full rounded-full transition-[width] duration-hero',
             dark
               ? 'bg-gradient-to-r from-white/85 to-white'
               : 'bg-gradient-to-r from-primary/80 to-primary'
@@ -91,7 +91,7 @@ export function UsageMeter({
           'text-xs font-medium',
           agotado
             ? dark
-              ? 'text-rose-100'
+              ? 'text-destructive'
               : 'text-destructive'
             : dark
               ? 'text-white/85'

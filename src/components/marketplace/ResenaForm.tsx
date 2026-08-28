@@ -42,7 +42,7 @@ export function ResenaForm({
   return (
     <form
       action={action}
-      className="rounded-3xl border border-border/60 bg-card p-5 shadow-sm"
+      className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm"
     >
       <p className="text-sm font-bold text-foreground">
         {miResena ? 'Actualiza tu reseña' : `¿Cómo ha sido tu experiencia en ${companyName}?`}
@@ -74,7 +74,7 @@ export function ResenaForm({
               className={cn(
                 'h-7 w-7 transition-all',
                 n <= activa
-                  ? 'scale-110 fill-amber-400 text-amber-400'
+                  ? 'scale-110 fill-amber-400 text-warning'
                   : 'text-muted-foreground/40'
               )}
             />

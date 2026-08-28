@@ -75,7 +75,7 @@ export function MilestoneConfetti({ recompensas }: { recompensas: number }) {
   if (!piezas) return null
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-[60] overflow-hidden">
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-celebration overflow-hidden">
       <style>{`
         @keyframes membego-confetti-fall {
           0%   { transform: translateY(-6vh) rotate(0deg); opacity: 1; }

@@ -86,7 +86,7 @@ export default async function RegalosPage() {
           {giftCards.map((g) => (
             <div
               key={g.id}
-              className="flex flex-wrap items-center gap-3 rounded-3xl border border-border/70 bg-card p-4 shadow-card"
+              className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-card"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <CreditCard className="h-5 w-5" />
@@ -112,7 +112,7 @@ export default async function RegalosPage() {
                 </code>
               )}
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${GIFTCARD_CHIP[g.estado] ?? 'bg-muted text-muted-foreground'}`}
+                className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${GIFTCARD_CHIP[g.estado] ?? 'bg-muted text-muted-foreground'}`}
               >
                 {ESTADO_GIFTCARD_LABEL[g.estado] ?? g.estado}
               </span>

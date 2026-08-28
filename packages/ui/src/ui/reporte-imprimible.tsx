@@ -153,7 +153,7 @@ export function ReporteImprimible({
 
       {children}
 
-      {pie && <div className="text-caption text-muted-foreground print:text-[10px]">{pie}</div>}
+      {pie && <div className="text-caption text-muted-foreground print:text-xs">{pie}</div>}
     </div>
   )
 }
@@ -196,7 +196,7 @@ export function TablaReporte({
   }
   return (
     <div className={cn('overflow-x-auto', className)}>
-      <table className="w-full text-sm print:text-[10px]">
+      <table className="w-full text-sm print:text-xs">
         {titulo && (
           <caption className="sr-only text-left print:not-sr-only print:mb-1 print:font-bold">
             {titulo}
@@ -209,7 +209,7 @@ export function TablaReporte({
                 key={c.clave}
                 scope="col"
                 className={cn(
-                  'py-2 pr-3 text-overline font-semibold print:py-1 print:text-[9px]',
+                  'py-2 pr-3 text-overline font-semibold print:py-1 print:text-xs',
                   c.alinearDerecha && 'pr-0 text-right'
                 )}
               >

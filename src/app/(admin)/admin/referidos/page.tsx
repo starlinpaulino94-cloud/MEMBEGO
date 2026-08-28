@@ -350,7 +350,7 @@ export default async function ReferidosPage() {
                   <li key={t.nombre + i} className="flex items-center justify-between text-sm">
                     <span className="flex items-center gap-2 text-foreground">
                       <span
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums ${
                           ['bg-warning text-warning-foreground', 'bg-muted-foreground/30 text-foreground', 'bg-warning/40 text-warning-foreground'][i] ??
                           'bg-muted text-muted-foreground'
                         }`}
@@ -445,7 +445,7 @@ export default async function ReferidosPage() {
                         <span className="text-xs text-muted-foreground">
                           {new Intl.DateTimeFormat('es-DO', { dateStyle: 'short' }).format(r.fecha)}
                         </span>
-                        <Badge variant={e.variant} className="text-[10px]">{e.label}</Badge>
+                        <Badge variant={e.variant} className="text-xs">{e.label}</Badge>
                       </span>
                     </li>
                   )

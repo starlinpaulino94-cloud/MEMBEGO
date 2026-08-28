@@ -71,7 +71,7 @@ export function MetaForm({
             id="meta-ambito"
             name="ambito"
             value={ambito}
-            onChange={(e) => setAmbito(e.target.value as any)}
+            onChange={(e) => setAmbito(e.target.value as 'VENDEDOR' | 'TIPO_VENDEDOR' | 'GENERAL')}
             className="mt-1.5 block w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground"
           >
             <option value="VENDEDOR">Vendedores específicos</option>

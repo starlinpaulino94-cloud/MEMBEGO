@@ -68,7 +68,7 @@ export function CatalogoPlanesGlobal({
     <main className="container max-w-5xl py-8">
       <header className="animate-fade-up mb-6">
         <div className="flex items-start justify-between gap-4">
-          {/* `text-caption` (12.5px) y no el `text-[11px]` de la pantalla de
+          {/* `text-caption` (12.5px) y no el `text-xs` de la pantalla de
               al lado: 11px está por debajo del suelo del sistema de diseño y
               la guardia de deuda lo cuenta. Esta app se usa de pie. */}
           <p className="text-caption font-bold uppercase tracking-[0.22em] text-primary">

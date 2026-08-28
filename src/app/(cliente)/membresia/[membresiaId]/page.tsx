@@ -446,16 +446,16 @@ export default async function MembershipDetail({
         {membership.plan.beneficios && membership.plan.beneficios.length > 0 && (
           <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
             <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/15">
-                <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-success/10 dark:bg-success/15">
+                <Gift className="h-3.5 w-3.5 text-success" />
               </div>
               Beneficios del plan
             </h2>
             <ul className="space-y-3">
               {membership.plan.beneficios.map((benefit, idx) => (
                 <li key={idx} className="flex items-start gap-3 text-sm text-foreground">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 dark:bg-emerald-500/15">
-                    <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/10 dark:bg-success/15">
+                    <Check className="h-3 w-3 text-success" />
                   </span>
                   {benefit}
                 </li>
@@ -499,7 +499,7 @@ export default async function MembershipDetail({
               <div className="flex items-center justify-between py-3 text-sm last:pb-0">
                 <span className="text-muted-foreground">Tipo</span>
                 <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                  <InfinityIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> Ilimitado
+                  <InfinityIcon className="h-3.5 w-3.5 text-info" /> Ilimitado
                 </span>
               </div>
             )}
@@ -510,8 +510,8 @@ export default async function MembershipDetail({
         {enviosQr.length > 0 && (
           <section className="rounded-xl border border-border bg-card p-6 elevation-1">
             <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-foreground">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/15">
-                <Share2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-info/10 dark:bg-info/15">
+                <Share2 className="h-3.5 w-3.5 text-info" />
               </div>
               Envíos de tu QR
             </h2>
@@ -522,7 +522,7 @@ export default async function MembershipDetail({
                   className="flex items-center justify-between py-3 text-sm first:pt-0 last:pb-0"
                 >
                   <span className="inline-flex items-center gap-1.5 text-foreground">
-                    <Share2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> QR compartido
+                    <Share2 className="h-3.5 w-3.5 text-success" /> QR compartido
                   </span>
                   <span className="text-muted-foreground">
                     {fmtFechaHora(envio.createdAt)}

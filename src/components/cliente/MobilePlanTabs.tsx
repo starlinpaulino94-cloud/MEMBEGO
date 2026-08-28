@@ -38,7 +38,7 @@ export function MobilePlanTabs({
             aria-selected={active}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'min-h-10 flex-1 whitespace-nowrap rounded-xl px-3 text-xs font-semibold transition-all duration-200',
+              'min-h-10 flex-1 whitespace-nowrap rounded-xl px-3 text-xs font-semibold transition-all duration-base',
               active
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'

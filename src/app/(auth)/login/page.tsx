@@ -12,9 +12,9 @@ export default function LoginPage() {
   return (
     <>
       {faltantes.length > 0 && (
-        <div className="mb-6 rounded-lg border border-amber-400/40 bg-amber-400/10 p-4 text-sm text-amber-200">
+        <div className="mb-6 rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm text-warning">
           <p className="font-semibold">Este despliegue no está configurado.</p>
-          <p className="mt-1 text-amber-200/80">
+          <p className="mt-1 text-warning/80">
             Faltan variables de entorno: {faltantes.join(', ')}. En Vercel, márcalas
             también para el entorno <b>Preview</b> y vuelve a desplegar.
           </p>

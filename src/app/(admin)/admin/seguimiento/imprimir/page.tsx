@@ -109,7 +109,7 @@ export default async function SeguimientoImprimirPage({
             ['Perdidas (vencidas)', kpis.vencidos],
           ].map(([label, valor]) => (
             <div key={String(label)} className="rounded-xl border border-border p-3">
-              <p className="text-[11px] uppercase text-muted-foreground">{label}</p>
+              <p className="text-xs uppercase text-muted-foreground">{label}</p>
               <p className="text-lg font-bold tabular-nums">{valor}</p>
             </div>
           ))}

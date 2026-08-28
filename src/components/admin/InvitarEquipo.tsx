@@ -47,7 +47,7 @@ export function InvitarEquipo() {
           name="rol"
           required
           defaultValue="EMPLEADO"
-          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+          className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm shadow-sm"
         >
           {INVITABLE_ROLES.map((r) => (
             <option key={r} value={r}>

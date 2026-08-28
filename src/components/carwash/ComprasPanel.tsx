@@ -43,7 +43,7 @@ function fmtFecha(d: Date) {
 
 const CHIP: Record<string, string> = {
   BORRADOR: 'bg-muted text-muted-foreground',
-  PEDIDA: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  PEDIDA: 'bg-info/15 text-info',
   RECIBIDA: 'bg-success/15 text-success',
   CANCELADA: 'bg-destructive/10 text-destructive',
 }
@@ -130,9 +130,9 @@ function Kpi({
         destacar ? 'border-warning/40 bg-warning/10' : 'border-border/70 bg-card'
       }`}
     >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-xl font-bold tabular-nums text-foreground">{valor}</p>
-      <p className="text-[11px] text-muted-foreground">{pie}</p>
+      <p className="text-xs text-muted-foreground">{pie}</p>
     </div>
   )
 }
@@ -269,7 +269,7 @@ function Ordenes({ ordenes }: { ordenes: PanelCompras['ordenes'] }) {
                     >
                       {o.numero}
                     </Link>
-                    <p className="text-[11px] text-muted-foreground">{fmtFecha(o.createdAt)}</p>
+                    <p className="text-xs text-muted-foreground">{fmtFecha(o.createdAt)}</p>
                   </td>
                   <td className="max-w-40 truncate px-4 py-3 text-foreground">{o.proveedor}</td>
                   <td className="px-4 py-3 tabular-nums text-muted-foreground">{o.lineas}</td>
@@ -278,7 +278,7 @@ function Ordenes({ ordenes }: { ordenes: PanelCompras['ordenes'] }) {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                         CHIP[o.estado] ?? 'bg-muted text-muted-foreground'
                       }`}
                     >
@@ -318,7 +318,7 @@ function Proveedores({ proveedores }: { proveedores: ProveedorResumen[] }) {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {p.ordenesAbiertas > 0 && (
-                <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:text-sky-300">
+                <span className="rounded-full bg-info/15 px-2 py-0.5 text-xs font-bold text-info">
                   {p.ordenesAbiertas} abierta(s)
                 </span>
               )}

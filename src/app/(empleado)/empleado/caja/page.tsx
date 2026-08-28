@@ -92,7 +92,7 @@ export default async function CajaPage({
   const cierres = await getCierresRecientes(companyId).catch(() => [])
   const cierresRecientes =
     cierres.length === 0 ? null : (
-      <section className="rounded-3xl border border-border/70 bg-card p-5">
+      <section className="rounded-2xl border border-border/70 bg-card p-5">
         <h2 className="mb-3 text-sm font-semibold text-foreground">Cierres recientes</h2>
         <ul className="divide-y divide-border/60">
           {cierres.map((c) => {
@@ -153,7 +153,7 @@ export default async function CajaPage({
             que cree una en Admin → Sucursales.
           </p>
         ) : (
-          <div className="rounded-3xl border border-border/70 bg-card p-6 shadow-card">
+          <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-card">
             <AbrirCajaForm sucursales={sucursales} />
           </div>
         )}
@@ -175,7 +175,7 @@ export default async function CajaPage({
   return (
     <main className="container max-w-3xl space-y-6 py-8">
       {/* Estado de la caja */}
-      <header className="rounded-3xl border border-success/25 bg-success/5 p-5">
+      <header className="rounded-2xl border border-success/25 bg-success/5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold text-success">
@@ -260,7 +260,7 @@ export default async function CajaPage({
       {/* Últimos cobros del turno · cada cobro imprime su comprobante aquí
           mismo (58/80 mm, Carta o A4), sin pasar por el panel admin. */}
       {resumen.ultimos.length > 0 && (
-        <section className="rounded-3xl border border-border/70 bg-card p-5">
+        <section className="rounded-2xl border border-border/70 bg-card p-5">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Últimos cobros del turno</h2>
           <div className="divide-y divide-border/50">
             {resumen.ultimos.map((c) => (

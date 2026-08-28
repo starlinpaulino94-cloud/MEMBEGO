@@ -127,7 +127,7 @@ export default async function EstrategiaDetallePage({
         <ol className="space-y-2">
           {playbook.flow.map((paso, i) => (
             <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                 {i + 1}
               </span>
               {paso}
@@ -171,7 +171,7 @@ export default async function EstrategiaDetallePage({
         <Seccion icon={BarChart3} titulo="Métricas que genera (KPIs)">
           <div className="flex flex-wrap gap-1.5">
             {playbook.kpis.map((k) => (
-              <Badge key={k} variant="secondary" className="text-[11px]">
+              <Badge key={k} variant="secondary" className="text-xs">
                 {k.replaceAll('_', ' ')}
               </Badge>
             ))}
@@ -180,7 +180,7 @@ export default async function EstrategiaDetallePage({
         <Seccion icon={Settings2} titulo="Todo esto es configurable">
           <div className="flex flex-wrap gap-1.5">
             {playbook.editable.map((e) => (
-              <Badge key={e} variant="outline" className="text-[11px]">
+              <Badge key={e} variant="outline" className="text-xs">
                 {e}
               </Badge>
             ))}

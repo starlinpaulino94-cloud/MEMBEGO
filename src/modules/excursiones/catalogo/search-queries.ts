@@ -7,7 +7,12 @@
  */
 
 import { sinEmpresa } from '@/lib/tenant'
-import { calcularDisponibilidad, mapRow, type ExcursionPublica } from './public-queries'
+import {
+  calcularDisponibilidad,
+  mapRow,
+  type ExcursionPublica,
+  type ChildActividadParaCombo,
+} from './public-queries'
 
 export interface FiltrosExcursion {
   companyId?: string
@@ -186,7 +191,7 @@ export async function buscarExcursionesPublicas(filtros: FiltrosExcursion = {}):
         exc.horaRegreso,
         exc.horaSalida,
         exc.tipoItem,
-        exc.comboItems as any
+        exc.comboItems as ChildActividadParaCombo[]
       )
       const company = companyMap.get(exc.companyId)
       const mapped = mapRow({
@@ -386,7 +391,7 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
         exc.horaRegreso,
         exc.horaSalida,
         exc.tipoItem,
-        exc.comboItems as any
+        exc.comboItems as ChildActividadParaCombo[]
       )
       const company = companyMap.get(exc.companyId)
       return mapRow({

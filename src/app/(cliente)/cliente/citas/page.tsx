@@ -150,7 +150,7 @@ export default async function CitasClientePage({
         </Link>
       )}
       <header className="animate-fade-up">
-        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">
           Citas · {cliente.company.name}
         </p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground">

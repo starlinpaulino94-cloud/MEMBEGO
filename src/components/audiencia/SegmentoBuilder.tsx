@@ -236,7 +236,7 @@ function PreviewPanel({ estimacion }: { estimacion: Estimacion }) {
   const fmt = (n: number) => new Intl.NumberFormat('es-DO').format(n)
   return (
     <div className="space-y-3">
-      <div className="rounded-md border bg-muted/40 p-3">
+      <div className="rounded-lg border bg-muted/40 p-3">
         <div className="text-2xl font-bold tabular-nums">{fmt(estimacion.totalElegibles)}</div>
         <div className="text-xs text-muted-foreground">clientes elegibles</div>
       </div>
@@ -297,7 +297,7 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
 
   return (
     <div
-      className={`space-y-3 rounded-md border p-3 ${
+      className={`space-y-3 rounded-lg border p-3 ${
         esRaiz ? 'border-border bg-background' : 'border-dashed bg-muted/30'
       }`}
     >
@@ -309,6 +309,7 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
         )}
         <div className="flex items-center gap-2">
           <select
+            aria-label="Cómo se combinan las condiciones del grupo"
             className="rounded border bg-background px-2 py-1 text-sm"
             value={grupo.operador}
             onChange={(e) => onChange({ ...grupo, operador: e.target.value as GrupoUI['operador'] })}
@@ -419,8 +420,9 @@ function FilaCondicion({ cond, opciones, onChange, onQuitar }: FilaProps) {
   }
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 rounded-md border bg-background p-2">
+    <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border bg-background p-2">
       <select
+        aria-label="Campo de la condición"
         className="rounded border bg-background px-2 py-1 text-sm"
         value={cond.campo}
         onChange={(e) => cambiarCampo(e.target.value)}
@@ -432,6 +434,7 @@ function FilaCondicion({ cond, opciones, onChange, onQuitar }: FilaProps) {
         ))}
       </select>
       <select
+        aria-label="Operador de la condición"
         className="rounded border bg-background px-2 py-1 text-sm"
         value={cond.operador}
         onChange={(e) => {
@@ -488,6 +491,7 @@ function ValorControl({ def, cond, opciones, onChange }: ValorProps) {
     case 'bool':
       return (
         <select
+          aria-label="Valor de la condición"
           className="rounded border bg-background px-2 py-1 text-sm"
           value={String(cond.valor ?? true)}
           onChange={(e) => onChange(e.target.value === 'true')}
@@ -518,6 +522,7 @@ function ValorControl({ def, cond, opciones, onChange }: ValorProps) {
     case 'mes':
       return (
         <select
+          aria-label="Mes"
           className="rounded border bg-background px-2 py-1 text-sm"
           value={Number(cond.valor ?? 1)}
           onChange={(e) => onChange(Number(e.target.value))}
@@ -534,6 +539,7 @@ function ValorControl({ def, cond, opciones, onChange }: ValorProps) {
       return (
         <div className="flex items-center gap-2">
           <select
+            aria-label="Sucursal"
             className="rounded border bg-background px-2 py-1 text-sm"
             value={v.sucursalId}
             onChange={(e) => onChange({ ...v, sucursalId: e.target.value })}
@@ -613,6 +619,7 @@ function SelectorOpciones({
 
   return (
     <select
+      aria-label="Valor"
       className="max-w-xs rounded border bg-background px-2 py-1 text-sm"
       value={actual}
       onChange={(e) => onChange(e.target.value)}

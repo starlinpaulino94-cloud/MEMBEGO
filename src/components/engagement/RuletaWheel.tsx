@@ -111,7 +111,7 @@ export function RuletaWheel({
                 style={{ transform: `rotate(${angle}deg) translateY(-42%)` }}
               >
                 <span
-                  className="block max-w-[6rem] -translate-x-1/2 -translate-y-1/2 text-center text-[11px] font-bold leading-tight text-white drop-shadow"
+                  className="block max-w-[6rem] -translate-x-1/2 -translate-y-1/2 text-center text-xs font-bold leading-tight text-white drop-shadow"
                   style={{ transform: `translate(-50%,-50%) rotate(90deg)` }}
                 >
                   {p.nombre}
@@ -150,14 +150,14 @@ export function RuletaWheel({
 
       {/* Resultado */}
       {resultado && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
           <button
             className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
             aria-label="Cerrar"
             onClick={() => setResultado(null)}
           />
           <div
-            className="relative z-10 w-full max-w-sm rounded-3xl bg-card p-6 text-center shadow-2xl"
+            className="relative z-10 w-full max-w-sm rounded-2xl bg-card p-6 text-center shadow-2xl"
             style={{ animation: reduced ? 'none' : 'celebra-pop 0.4s cubic-bezier(0.16,1,0.3,1)' }}
           >
             <style>{`@keyframes celebra-pop {0%{transform:scale(0.85);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>

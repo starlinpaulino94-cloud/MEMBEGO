@@ -22,7 +22,7 @@ import { camposSinNombre } from '../scripts/campos-sin-etiqueta.mjs'
  *  · Donde entran CLIENTES y EMPLEADOS: cero. No es negociable — es gente que
  *    no eligió esta herramienta y que puede necesitar un lector de pantalla.
  *  · En el panel interno: un techo que solo baja, como la deuda tipográfica.
- *    Son 99 campos repartidos por formularios de administración; migrarlos de
+ *    Son 94 campos repartidos por formularios de administración; migrarlos de
  *    una barrida sin poder mirar ninguna pantalla sería peor que la deuda.
  */
 

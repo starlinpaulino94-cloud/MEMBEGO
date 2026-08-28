@@ -50,7 +50,7 @@ function etiquetaPendiente(r: RegaloItem): string {
 function EstadoChip({ r }: { r: RegaloItem }) {
   const base = ESTADO_REGALO[r.estado] ?? { label: r.estado, clase: 'bg-muted text-muted-foreground' }
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${base.clase}`}>
+    <span className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${base.clase}`}>
       {etiquetaPendiente(r)}
     </span>
   )

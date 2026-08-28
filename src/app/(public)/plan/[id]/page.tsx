@@ -63,10 +63,15 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
           {/* Encabezado con color del plan */}
           <div
             className="p-8 text-white"
+            /* Las variables CSS SÍ funcionan dentro de un `style` en línea, así
+               que el degradado de respaldo no tiene por qué ir a mano: con
+               `--primary` y `--accent` sigue al tema en vez de quedarse en un
+               morado fijo que en modo oscuro se ve igual que en claro. El color
+               de la empresa, cuando lo hay, manda por encima. */
             style={{
               background: plan.color
-                ? `linear-gradient(135deg, ${plan.color}, #0D9488)`
-                : 'linear-gradient(135deg, #6D28D9, #3B82F6, #0D9488)',
+                ? `linear-gradient(135deg, ${plan.color}, var(--accent))`
+                : 'linear-gradient(135deg, var(--primary), var(--accent))',
             }}
           >
             <div className="flex items-center gap-3">

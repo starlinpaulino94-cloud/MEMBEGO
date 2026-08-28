@@ -142,7 +142,7 @@ export function OpcionesPago({
                 onClick={() => setOpcion(key)}
                 aria-pressed={activa}
                 className={cn(
-                  'group relative rounded-2xl border p-4 text-left transition-all duration-200',
+                  'group relative rounded-2xl border p-4 text-left transition-all duration-base',
                   activa
                     ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary'
                     : 'border-border/60 bg-card hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md'
@@ -151,7 +151,7 @@ export function OpcionesPago({
                 {/* Marca de selección */}
                 <span
                   className={cn(
-                    'absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full transition-all duration-200',
+                    'absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full transition-all duration-base',
                     activa
                       ? 'scale-100 bg-primary text-primary-foreground opacity-100'
                       : 'scale-75 opacity-0'

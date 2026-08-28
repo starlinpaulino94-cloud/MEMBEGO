@@ -140,7 +140,7 @@ export function AppShell({
           "Campañas segmentadas" o "Métodos de pago". */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-200 ease-out lg:block',
+          'fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-base ease-out lg:block',
           rail ? 'w-[68px]' : 'w-64'
         )}
       >
@@ -176,7 +176,7 @@ export function AppShell({
           aria-modal="true"
           aria-label="Menú de navegación"
           className={cn(
-            'absolute inset-y-0 left-0 w-64 overflow-hidden rounded-r-2xl elevation-3 transition-transform duration-300',
+            'absolute inset-y-0 left-0 w-64 overflow-hidden rounded-r-2xl elevation-3 transition-transform duration-slow',
             mobileOpen ? 'translate-x-0' : '-translate-x-full'
           )}
         >
@@ -202,7 +202,7 @@ export function AppShell({
       {/* Main column */}
       <div
         className={cn(
-          'transition-[padding] duration-200 ease-out',
+          'transition-[padding] duration-base ease-out',
           rail ? 'lg:pl-[68px]' : 'lg:pl-64'
         )}
       >

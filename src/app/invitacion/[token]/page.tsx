@@ -38,7 +38,7 @@ export default async function AceptarInvitacionPage({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="MembeGo" width={32} height={32} />
           <span className="text-sm font-semibold tracking-tight text-foreground">
-            Membe<span className="text-emerald-500">Go</span>
+            Membe<span className="text-success">Go</span>
           </span>
         </div>
 

@@ -106,7 +106,7 @@ export default async function RegalosAdminPage({
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {tarjetas.map((k) => (
           <div key={k.label} className="rounded-2xl border border-border/70 bg-card p-4">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{k.label}</dt>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</dt>
             <dd className="mt-1 truncate text-lg font-bold tabular-nums text-foreground">{k.valor}</dd>
           </div>
         ))}
@@ -186,7 +186,7 @@ export default async function RegalosAdminPage({
                     </p>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                       {TIPO_REGALO_LABEL[r.tipo] ?? r.tipo}
                     </span>
                   </td>
@@ -194,12 +194,12 @@ export default async function RegalosAdminPage({
                   <td className="max-w-40 px-4 py-3">
                     <p className="truncate text-foreground">{r.destinatario}</p>
                     {r.sinCuenta && (
-                      <p className="text-[11px] text-muted-foreground">aún sin cuenta</p>
+                      <p className="text-xs text-muted-foreground">aún sin cuenta</p>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
                     >
                       {/* "Pendiente" a secas no dice si hay que cobrar algo o
                           si solo falta que el destinatario responda. Lo
@@ -213,7 +213,7 @@ export default async function RegalosAdminPage({
                     {r.espera === 'PAGO' && (
                       <Link
                         href="/admin/pagos"
-                        className="mt-1 block text-[11px] font-medium text-primary hover:underline"
+                        className="mt-1 block text-xs font-medium text-primary hover:underline"
                       >
                         {r.pago?.referencia ? `Cobrar ${r.pago.referencia}` : 'Ver en Pagos'}
                       </Link>
@@ -297,7 +297,7 @@ export default async function RegalosAdminPage({
                     <td className="max-w-40 px-4 py-3">
                       <p className="truncate text-foreground">{g.destinatario}</p>
                       {g.sinCuenta && (
-                        <p className="text-[11px] text-muted-foreground">aún sin cuenta</p>
+                        <p className="text-xs text-muted-foreground">aún sin cuenta</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
@@ -308,7 +308,7 @@ export default async function RegalosAdminPage({
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${GIFTCARD_CHIP[g.estado] ?? 'bg-muted text-muted-foreground'}`}
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${GIFTCARD_CHIP[g.estado] ?? 'bg-muted text-muted-foreground'}`}
                       >
                         {ESTADO_GIFTCARD_LABEL[g.estado] ?? g.estado}
                       </span>

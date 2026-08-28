@@ -71,7 +71,7 @@ export default async function PromotionsPage({
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 sm:px-6 lg:px-8">
           <Link
             href="/promociones"
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ${
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-fast ${
               !filters.type
                 ? 'bg-primary text-primary-foreground shadow-glow'
                 : 'bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground'
@@ -83,7 +83,7 @@ export default async function PromotionsPage({
             <Link
               key={type}
               href={`/promociones?type=${type}`}
-              className={`rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition-all duration-150 ${
+              className={`rounded-full px-3.5 py-1.5 text-sm font-medium capitalize transition-all duration-fast ${
                 filters.type === type
                   ? 'bg-primary text-primary-foreground shadow-glow'
                   : 'bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground'

@@ -279,7 +279,7 @@ export function CampanaLanding({ campana, refCode, invitanteNombre }: Props) {
 
   // ── Overlay: spinner de auto-login → o celebración de respaldo ────────────
   const Overlay = entrando ? (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/70 backdrop-blur-sm">
       <div className="flex flex-col items-center gap-3 text-white">
         <Loader2 className="h-10 w-10 animate-spin" />
         <p className="font-semibold">Entrando a tu cuenta…</p>
@@ -321,7 +321,7 @@ export function CampanaLanding({ campana, refCode, invitanteNombre }: Props) {
           </div>
 
           {/* Tarjeta principal */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
             {invitanteNombre && (
               <p className="mb-2 text-center text-sm font-medium text-slate-500">
                 <span className="font-bold text-slate-700">{invitanteNombre}</span> te invitó 🎁

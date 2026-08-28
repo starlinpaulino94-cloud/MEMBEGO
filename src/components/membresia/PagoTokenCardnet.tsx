@@ -105,6 +105,26 @@ const FORM_ID = 'membego_pago_form'
 
 type Estado = 'cargando' | 'listo' | 'capturando' | 'cobrando' | 'activacion' | 'aprobado' | 'error'
 
+/**
+ * Lo que devuelven `/cobrar`, `/confirmar` y `/activar`.
+ *
+ * Está escrito una sola vez y a propósito: los tres caminos se leían con tres
+ * castings distintos, y el que faltaba —`compraId` / `membershipId`— es
+ * justamente el que el comprobante necesita. Con un solo tipo, añadir un campo
+ * al servidor y olvidarse de uno de los tres sitios deja de ser posible.
+ *
+ * Solo lleva campos que el servidor manda DE VERDAD. No hay `ultimos4` ni
+ * `codigoAutorizacion` porque las rutas no los devuelven, y una pantalla de
+ * pago con una fila inventada es lo peor que se le puede enseñar a alguien
+ * que acaba de dar su tarjeta.
+ */
+interface RespuestaPago {
+  estado?: string
+  motivo?: string
+  compraId?: string | null
+  membershipId?: string | null
+}
+
 // Rastro de diagnóstico en la consola del navegador (estados y presencia,
 // nunca el token ni datos de tarjeta). Va por console.warn porque es el único
 // nivel informativo que permite el linter del proyecto.
@@ -164,6 +184,28 @@ export function PagoTokenCardnet({
     marca: string | null
     ultimos4: string | null
   } | null>(null)
+  /**
+   * El comprobante de lo que acaba de pasar.
+   *
+   * Solo lleva lo que el servidor devolvió DE VERDAD: la referencia del cobro
+   * y el instante en que se aprobó. No hay fila de «método» ni de «próximo
+   * cobro» porque el servidor no las da, y una tabla con datos inventados en
+   * una pantalla de pago es la peor cosa que se puede enseñar.
+   */
+  const [comprobante, setComprobante] = useState<{
+    referencia: string | null
+    cuando: Date
+  } | null>(null)
+  /**
+   * Qué clase de error es el que se está enseñando.
+   *
+   * `estado === 'error'` cubre cosas muy distintas: una tarjeta rechazada, una
+   * tarjeta que quedó activa pero sin cobrar, un corte por tiempo. Solo en el
+   * primer caso se puede afirmar que NO se cobró; decirlo en los otros sería
+   * mentir sobre dinero, que es la única mentira que no se perdona en una
+   * pantalla de pago.
+   */
+  const [tipoError, setTipoError] = useState<'rechazo' | 'otro'>('otro')
   const cobrandoRef = useRef(false)
   // Confirmación por servidor en curso (no solapar sondeos).
   const confirmandoRef = useRef(false)
@@ -179,6 +221,19 @@ export function PagoTokenCardnet({
   useEffect(() => {
     guardarRef.current = guardar
   }, [guardar])
+
+  /**
+   * Deja constancia de lo que acaba de aprobarse, con la referencia que el
+   * servidor devolvió. Si no vino ninguna, la fila simplemente no se enseña:
+   * un comprobante sin referencia es incompleto, uno con una referencia
+   * inventada es falso.
+   */
+  const anotarComprobante = useCallback((data: RespuestaPago) => {
+    setComprobante({
+      referencia: data.compraId ?? data.membershipId ?? null,
+      cuando: new Date(),
+    })
+  }, [])
 
   // Guarda la tarjeta (Fase 2) tras un cobro aprobado, si el cliente lo pidió.
   const guardarTarjeta = useCallback(async () => {
@@ -203,20 +258,26 @@ export function PagoTokenCardnet({
       cobrandoRef.current = true
       setEstado('cobrando')
       setMensaje(null)
+      // Cada intento empieza sin veredicto. Si no se limpiara, el «no se te
+      // cobró» de un rechazo anterior sobreviviría a un fallo técnico
+      // posterior y afirmaría algo sobre un dinero que nadie comprobó.
+      setTipoError('otro')
       try {
         const resp = await fetch('/api/pagos/cardnet-token/cobrar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ membershipId, trxToken }),
         })
-        const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+        const data = (await resp.json().catch(() => ({}))) as RespuestaPago
         rastro('[pago] resultado del cobro:', data.estado ?? resp.status, data.motivo ?? '')
         if (data.estado === 'aprobado') {
           if (guardarRef.current) await guardarTarjeta()
+          anotarComprobante(data)
           setEstado('aprobado')
           toast.success('¡Pago aprobado! Tu membresía está activa.')
+          // El refresco ya NO es automático: lo dispara el cliente desde la
+          // pantalla de pago aprobado. Ver la nota larga en esa pantalla.
           if (urlExito) router.push(urlExito)
-          else router.refresh()
         } else if (data.estado === 'pendiente_activacion') {
           // La pasarela dijo CS012: la tarjeta está registrada pero sin
           // activar. Este camino ANTES caía en el `else` de abajo y le decía
@@ -230,6 +291,7 @@ export function PagoTokenCardnet({
           setEstado('activacion')
           setMensaje(data.motivo ?? 'Tu tarjeta necesita activarse antes de poder cobrarla.')
         } else {
+          setTipoError(data.estado === 'rechazado' ? 'rechazo' : 'otro')
           setEstado('error')
           // SOLO se dice "rechazada" si el servidor rechazó DE VERDAD. Antes,
           // cualquier otro final (sesión vencida, límite de intentos, un 500,
@@ -251,7 +313,7 @@ export function PagoTokenCardnet({
         cobrandoRef.current = false
       }
     },
-    [membershipId, router, urlExito, guardarTarjeta]
+    [membershipId, router, urlExito, guardarTarjeta, anotarComprobante]
   )
 
   // Carga el script de CardNET una sola vez y engancha el callback del token.
@@ -291,6 +353,22 @@ export function PagoTokenCardnet({
 
     const src = `${scriptUrl}?key=${encodeURIComponent(publicKey)}`
     let script = document.querySelector<HTMLScriptElement>(`script[data-pwcheckout="1"]`)
+    /**
+     * SI EL `src` CAMBIÓ, EL SCRIPT VIEJO NO SIRVE.
+     *
+     * Se reutilizaba la etiqueta existente sin mirar a dónde apuntaba. La
+     * llave y el ambiente viajan EN LA URL (`?key=…`, y el host cambia entre
+     * pruebas y producción), así que al cambiar de juego de llaves seguía
+     * cargado el widget de la cuenta anterior — y el síntoma es justamente
+     * «el pago seguro todavía no está listo», sin nada que apunte a la causa.
+     *
+     * Se sustituye por uno nuevo. `PWCheckout` lo define el script al
+     * evaluarse, así que basta con volver a cargarlo.
+     */
+    if (script && script.src !== src) {
+      script.remove()
+      script = null
+    }
     if (!script) {
       script = document.createElement('script')
       script.src = src
@@ -419,16 +497,17 @@ export function PagoTokenCardnet({
           customerId: customerIdRef.current,
         }),
       })
-      const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+      const data = (await resp.json().catch(() => ({}))) as RespuestaPago
       rastro('[pago] confirmación en servidor:', data.estado ?? resp.status, data.motivo ?? '')
       if (data.estado === 'aprobado') {
+        anotarComprobante(data)
         setEstado('aprobado')
         toast.success('¡Pago aprobado! Tu membresía está activa.')
         if (urlExito) router.push(urlExito)
-        else router.refresh()
         return true
       }
       if (data.estado === 'rechazado') {
+        setTipoError('rechazo')
         setEstado('error')
         // Aquí sí es un rechazo real: el servidor cobró y la pasarela dijo que
         // no. Este camino ya estaba bien acotado; el del cobro directo no.
@@ -458,7 +537,7 @@ export function PagoTokenCardnet({
     } finally {
       confirmandoRef.current = false
     }
-  }, [membershipId, router, urlExito])
+  }, [membershipId, router, urlExito, anotarComprobante])
 
   // OJO: NO se consulta al proveedor mientras la ventana está abierta —
   // cualquier operación sobre el Customer invalida el UniqueID de la ventana
@@ -693,11 +772,16 @@ export function PagoTokenCardnet({
     const sdk = window.PWCheckout
     if (!sdk) {
       setEstado('error')
-      setMensaje('El pago seguro todavía no está listo. Recarga la página e intenta de nuevo.')
+      // No se manda a recargar a ciegas: recargar no arregla un ambiente mal
+      // puesto, y el cliente lo intentaría tres veces antes de rendirse.
+      setMensaje(
+        'No se pudo cargar el pago seguro. Si acabas de entrar, recarga la página; si sigue igual, avísanos.'
+      )
       return
     }
     setEstado('capturando')
     setMensaje(null)
+    setTipoError('otro')
 
     let sesion = sesionRef.current
     sesionRef.current = null // una sesión se usa una sola vez
@@ -772,6 +856,7 @@ export function PagoTokenCardnet({
     setSegundosEsperando(0)
     setActivando(true)
     setMensaje(null)
+    setTipoError('otro')
     try {
       const resp = await fetch('/api/pagos/cardnet-token/activar', {
         method: 'POST',
@@ -793,16 +878,16 @@ export function PagoTokenCardnet({
           guardar: guardarRef.current,
         }),
       })
-      const data = (await resp.json().catch(() => ({}))) as { estado?: string; motivo?: string }
+      const data = (await resp.json().catch(() => ({}))) as RespuestaPago
       rastro('[pago] resultado de la activación:', data.estado ?? resp.status)
       if (data.estado === 'aprobado') {
         // Ya no hay nada pendiente: el aviso de «tarjeta esperando su código»
         // desaparece con ella.
         setTarjetaPendiente(null)
+        anotarComprobante(data)
         setEstado('aprobado')
         toast.success('¡Tarjeta activada y pago aprobado! Tu membresía está activa.')
         if (urlExito) router.push(urlExito)
-        else router.refresh()
         return
       }
       if (data.estado === 'codigo_rechazado') {
@@ -827,6 +912,7 @@ export function PagoTokenCardnet({
         // pagar — ahora el cobro normal encontrará el perfil habilitado. Ya no
         // está pendiente de activar, así que el aviso sobra.
         setTarjetaPendiente(null)
+        setTipoError('otro')
         setEstado('error')
         setMensaje(data.motivo ?? 'Tu tarjeta quedó activa. Toca pagar para completar el cobro.')
         return
@@ -836,6 +922,7 @@ export function PagoTokenCardnet({
       // fallo, o se activó por otra vía—, así que seguir ofreciendo «ya tengo
       // mi código» mandaría al cliente a una pantalla sin tarjeta que activar.
       if (data.estado === 'sin_perfil') setTarjetaPendiente(null)
+      setTipoError('otro')
       setEstado('error')
       setMensaje(data.motivo ?? 'No se pudo activar la tarjeta. Intenta de nuevo.')
     } catch (e) {
@@ -853,16 +940,96 @@ export function PagoTokenCardnet({
     } finally {
       setActivando(false)
     }
-  }, [activando, codigoNormalizado, membershipId, router, urlExito])
+  }, [activando, codigoNormalizado, membershipId, router, urlExito, anotarComprobante])
 
+  /* PAGO COMPLETADO.
+
+     EL REFRESCO YA NO ES AUTOMÁTICO, y es el cambio importante de esta
+     pantalla. Antes se llamaba a `router.refresh()` en el mismo instante en
+     que el cobro aprobaba; como la página deja de pedir pago en cuanto la
+     membresía queda activa, esta pantalla se desmontaba sola antes de que
+     nadie alcanzara a leerla. El cliente veía un destello verde y ya. Un
+     comprobante que dura menos que un parpadeo no es un comprobante.
+
+     Ahora el pago aprobado se ENSEÑA, y el refresco lo dispara el cliente con
+     «Ver mi membresía». Cuando quien monta el componente pide una navegación
+     explícita (`urlExito`) esa sigue mandando: allí el destino es otra
+     página, no esta.
+
+     LA TABLA SOLO TIENE FILAS CIERTAS. No hay «método», ni «últimos 4», ni
+     «código de autorización», ni «próximo cobro»: el servidor no devuelve
+     ninguna de esas cosas. Rellenar una tabla de comprobante con datos
+     plausibles es la peor forma de ganarse la confianza de alguien que acaba
+     de entregar su tarjeta. */
   if (estado === 'aprobado') {
+    const cuando = comprobante
+      ? new Intl.DateTimeFormat('es-DO', {
+          dateStyle: 'long',
+          timeStyle: 'short',
+        }).format(comprobante.cuando)
+      : null
     return (
-      <div className="rounded-2xl border border-success/25 bg-success/10 p-6 text-center">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/15">
-          <CheckCircle2 className="h-8 w-8 text-success" aria-hidden />
-        </span>
-        <p className="mt-3 text-lg font-bold text-success">¡Pago aprobado!</p>
-        <p className="mt-1 text-sm text-foreground">Tu membresía quedó activa.</p>
+      <div className="overflow-hidden rounded-2xl border border-success/25 bg-card shadow-sm">
+        <div className="flex flex-col items-center border-b border-border/60 bg-success/5 px-6 pb-6 pt-8 text-center">
+          {/* El anillo doble da la sensación de sello. `animate-scale-in` ya
+              está desactivada globalmente bajo `prefers-reduced-motion`, así
+              que no hace falta condicionarla aquí. */}
+          <span className="animate-scale-in flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-success/20">
+              <CheckCircle2 className="h-8 w-8 text-success" aria-hidden />
+            </span>
+          </span>
+          <h3 className="mt-4 text-lg font-bold uppercase tracking-wide text-success">
+            Pago completado
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tu membresía quedó activa al instante.
+          </p>
+        </div>
+
+        <dl className="divide-y divide-border/60 px-6 text-sm">
+          {companyName ? (
+            <div className="flex items-baseline justify-between gap-4 py-3">
+              <dt className="text-muted-foreground">Empresa</dt>
+              <dd className="text-right font-medium text-foreground">{companyName}</dd>
+            </div>
+          ) : null}
+          <div className="flex items-baseline justify-between gap-4 py-3">
+            <dt className="text-muted-foreground">Monto pagado</dt>
+            <dd className="text-right text-base font-bold text-foreground">{montoTexto}</dd>
+          </div>
+          {cuando ? (
+            <div className="flex items-baseline justify-between gap-4 py-3">
+              <dt className="text-muted-foreground">Fecha y hora</dt>
+              <dd className="text-right font-medium text-foreground">{cuando}</dd>
+            </div>
+          ) : null}
+          {comprobante?.referencia ? (
+            <div className="flex items-baseline justify-between gap-4 py-3">
+              <dt className="shrink-0 text-muted-foreground">Referencia</dt>
+              {/* Se enseña entera y seleccionable a propósito: es el dato que
+                  el equipo pide cuando alguien escribe por un pago. Recortarla
+                  para que quepa la volvería inútil justo cuando hace falta. */}
+              <dd className="min-w-0 break-all text-right font-mono text-xs text-muted-foreground">
+                {comprobante.referencia}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <div className="space-y-3 px-6 pb-6 pt-5">
+          <Button
+            type="button"
+            variant="premium"
+            onClick={() => router.refresh()}
+            className="w-full rounded-full py-6 text-base font-semibold"
+          >
+            Ver mi membresía
+          </Button>
+          <p className="text-center text-xs leading-relaxed text-muted-foreground">
+            Te enviamos el comprobante de este pago a tu correo.
+          </p>
+        </div>
       </div>
     )
   }
@@ -876,10 +1043,44 @@ export function PagoTokenCardnet({
         <input type="hidden" name="PWToken" id="PWToken" />
       </form>
 
+      {/* PAGO NO COMPLETADO.
+
+          Era una línea de texto en rojo. Ahora tiene el peso que le toca:
+          quien acaba de ver fallar un pago necesita tres cosas, y ninguna es
+          decoración — qué pasó, si le cobraron, y qué hacer ahora.
+
+          «No se aplicó ningún cargo» SOLO aparece cuando el servidor dijo
+          `rechazado`. Este mismo estado se alcanza también por un corte de
+          tiempo o por una tarjeta que quedó activa sin cobrar, y en esos
+          casos nadie de este lado sabe qué pasó con el dinero. Afirmarlo
+          igualmente sería la única clase de error que una pantalla de pago no
+          puede permitirse.
+
+          El botón de reintentar NO está aquí: es el mismo de abajo, que ya
+          dice «Reintentar pago» en este estado. Duplicarlo daría dos botones
+          que hacen lo mismo a un metro de distancia. */}
       {estado === 'error' && mensaje && (
-        <p className="flex items-start gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {mensaje}
-        </p>
+        <div className="animate-fade-in overflow-hidden rounded-2xl border border-destructive/25 bg-card shadow-sm">
+          <div className="flex flex-col items-center border-b border-border/60 bg-destructive/5 px-6 pb-5 pt-7 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+              <AlertCircle className="h-7 w-7 text-destructive" aria-hidden />
+            </span>
+            <h3 className="mt-3 text-base font-bold uppercase tracking-wide text-destructive">
+              {tipoError === 'rechazo' ? 'Pago rechazado' : 'El pago no se completó'}
+            </h3>
+          </div>
+          <div className="space-y-3 px-6 py-5">
+            <p className="text-center text-sm leading-relaxed text-foreground">{mensaje}</p>
+            {tipoError === 'rechazo' ? (
+              <p className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-xs leading-relaxed text-muted-foreground">
+                <strong className="font-semibold text-foreground">
+                  No se aplicó ningún cargo por tu membresía.
+                </strong>{' '}
+                Puedes intentar con la misma tarjeta o registrar otra.
+              </p>
+            ) : null}
+          </div>
+        </div>
       )}
 
       {/* LA PUERTA DE VUELTA.
@@ -1169,122 +1370,144 @@ export function PagoTokenCardnet({
         </div>
       )}
 
-      {/* Fase 2: renovación automática, con interruptor. Solo antes de pagar. */}
-      {(estado === 'listo' || estado === 'error') && (
-        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-primary/30">
-          <span className="text-sm">
-            <span className="font-semibold text-foreground">Renovación automática</span>
-            <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-              Guarda tu tarjeta de forma encriptada y renueva sola cada período.
-              Puedes quitarla cuando quieras.
-            </span>
-          </span>
-          <span className="relative inline-flex shrink-0">
-            <input
-              type="checkbox"
-              checked={guardar}
-              onChange={(e) => setGuardar(e.target.checked)}
-              className="peer sr-only"
-            />
-            <span
-              className="block h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"
-              aria-hidden
-            />
-          </span>
-        </label>
-      )}
+      {/* EL BLOQUE DE PAGO, EN UNA SOLA PIEZA.
 
+          Antes eran cuatro elementos sueltos apilados —interruptor, botón,
+          aviso del RD$1.00 y sellos— separados por aire sobre el fondo de la
+          página. Leídos así, ninguno parecía tener que ver con el de al lado:
+          el aviso del cargo de verificación se leía como una advertencia
+          suelta en vez de como la letra pequeña del botón que está justo
+          encima.
+
+          Metidos en una sola tarjeta se leen como lo que son: un formulario
+          de pago. No se añade ni un dato nuevo — el resumen del cobro y el
+          total ya los enseña la página, y repetirlos aquí sería dar dos
+          versiones del mismo número en la misma pantalla. */}
       {estado !== 'activacion' && (
-      <Button
-        type="button"
-        variant="premium"
-        onClick={() => void abrirCaptura()}
-        disabled={ocupado}
-        className="w-full rounded-2xl py-7 text-base font-semibold"
-      >
-        {estado === 'cargando' ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Preparando pago seguro…
-          </>
-        ) : estado === 'cobrando' ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Procesando pago…
-          </>
-        ) : estado === 'capturando' ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Abriendo ventana segura…
-          </>
-        ) : estado === 'error' ? (
-          <>
-            <CreditCard className="mr-2 h-5 w-5" /> Reintentar pago
-          </>
-        ) : (
-          <>
-            <Lock className="mr-2 h-4 w-4" /> Pagar {montoTexto}
-          </>
+        <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+        {/* Fase 2: renovación automática, con interruptor. Solo antes de pagar. */}
+        {(estado === 'listo' || estado === 'error') && (
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-primary/30">
+            <span className="text-sm">
+              <span className="font-semibold text-foreground">Renovación automática</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                Guarda tu tarjeta de forma encriptada y renueva sola cada período.
+                Puedes quitarla cuando quieras.
+              </span>
+            </span>
+            <span className="relative inline-flex shrink-0">
+              <input
+                type="checkbox"
+                checked={guardar}
+                onChange={(e) => setGuardar(e.target.checked)}
+                className="peer sr-only"
+              />
+              <span
+                className="block h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40"
+                aria-hidden
+              />
+              <span
+                className="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"
+                aria-hidden
+              />
+            </span>
+          </label>
         )}
-      </Button>
-      )}
 
-      {/* Salida de emergencia: si el cliente cerró la ventana del proveedor,
-          la pantalla no se queda colgada. */}
-      {estado === 'capturando' && (
-        <button
+        <Button
           type="button"
-          onClick={() => {
-            setEstado('listo')
-            setMensaje(null)
-          }}
-          className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          variant="premium"
+          onClick={() => void abrirCaptura()}
+          disabled={ocupado}
+          className="w-full rounded-2xl py-7 text-base font-semibold"
         >
-          ¿Cerraste la ventana de pago? Volver a intentar
-        </button>
-      )}
+          {estado === 'cargando' ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Preparando pago seguro…
+            </>
+          ) : estado === 'cobrando' ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Procesando pago…
+            </>
+          ) : estado === 'capturando' ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Abriendo ventana segura…
+            </>
+          ) : estado === 'error' ? (
+            <>
+              <CreditCard className="mr-2 h-5 w-5" /> Reintentar pago
+            </>
+          ) : (
+            <>
+              <Lock className="mr-2 h-4 w-4" /> Pagar {montoTexto}
+            </>
+          )}
+        </Button>
 
-      {/* EL CARGO DE RD$1.00, DICHO ANTES DE QUE OCURRA.
+        {/* Salida de emergencia: si el cliente cerró la ventana del proveedor,
+            la pantalla no se queda colgada. */}
+        {estado === 'capturando' && (
+          <button
+            type="button"
+            onClick={() => {
+              setEstado('listo')
+              setMensaje(null)
+            }}
+            className="mx-auto block text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            ¿Cerraste la ventana de pago? Volver a intentar
+          </button>
+        )}
 
-          Estaba explicado solo dentro de la pantalla de activación, o sea
-          DESPUÉS de que el banco ya lo había hecho. Al cliente le aparecía un
-          cobro que nadie le había anunciado — y un cargo inesperado en la
-          tarjeta es exactamente lo que hace que la gente llame al banco a
-          reclamar un fraude.
+        {/* EL CARGO DE RD$1.00, DICHO ANTES DE QUE OCURRA.
 
-          Se redacta en condicional a propósito, y no es una evasiva: la
-          verificación depende del juego de llaves con el que opera la empresa.
-          Con las llaves CON autenticación la tarjeta nace deshabilitada y hay
-          cargo; sin ellas no lo hay. Prometer un cargo que puede no ocurrir
-          sería tan inexacto como callarlo. */}
-      {(estado === 'listo' || estado === 'error') && !tarjetaPendiente && (
-        <p className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span>
-            Si tu banco pide verificar la tarjeta, verás un cargo de{' '}
-            <strong className="font-semibold text-foreground">RD$1.00</strong> con un
-            código de 6 caracteres en su descripción. Sirve solo para confirmar que
-            la tarjeta es tuya, y te lo pediremos aquí para completar el pago.
+            Estaba explicado solo dentro de la pantalla de activación, o sea
+            DESPUÉS de que el banco ya lo había hecho. Al cliente le aparecía un
+            cobro que nadie le había anunciado — y un cargo inesperado en la
+            tarjeta es exactamente lo que hace que la gente llame al banco a
+            reclamar un fraude.
+
+            Se redacta en condicional a propósito, y no es una evasiva: la
+            verificación depende del juego de llaves con el que opera la empresa.
+            Con las llaves CON autenticación la tarjeta nace deshabilitada y hay
+            cargo; sin ellas no lo hay. Prometer un cargo que puede no ocurrir
+            sería tan inexacto como callarlo. */}
+        {(estado === 'listo' || estado === 'error') && !tarjetaPendiente && (
+          <p className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>
+              Si tu banco pide verificar la tarjeta, verás un cargo de{' '}
+              <strong className="font-semibold text-foreground">RD$1.00</strong> con un
+              código de 6 caracteres en su descripción. Sirve solo para confirmar que
+              la tarjeta es tuya, y te lo pediremos aquí para completar el pago.
+            </span>
+          </p>
+        )}
+
+        {/* Sellos de confianza: discretos, debajo del CTA.
+
+            Iban con `text-xs` y `emerald-600/400`. Lo primero es texto por
+            debajo del mínimo legible que se fijó para una plataforma que se usa
+            de pie; lo segundo es un verde crudo que no sigue el tema y que en
+            modo oscuro había que parchear a mano. Los dos son deuda medida por
+            el auditor de diseño, y esta pantalla se estaba tocando de todos
+            modos. */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-success" aria-hidden />
+            Encriptación bancaria
           </span>
-        </p>
+          <span className="inline-flex items-center gap-1">
+            <Lock className="h-3.5 w-3.5 text-success" aria-hidden />
+            Ventana de pago segura
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <CreditCard className="h-3.5 w-3.5 text-success" aria-hidden />
+            Nunca guardamos tu número
+          </span>
+        </div>
+        </div>
       )}
-
-      {/* Sellos de confianza: discretos, debajo del CTA. */}
-      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] font-medium text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
-          Encriptación bancaria
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <Lock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
-          Ventana de pago segura
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <CreditCard className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
-          Nunca guardamos tu número
-        </span>
-      </div>
     </div>
   )
 }

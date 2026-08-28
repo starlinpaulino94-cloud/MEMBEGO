@@ -191,16 +191,16 @@ function PlaybookCard({
         <CardContent className="flex h-full flex-col gap-3 p-4">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="font-mono text-[10px]">
+              <Badge variant="outline" className="font-mono text-xs">
                 {playbook.id}
               </Badge>
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary" className="text-xs">
                 {CATEGORIA_LABELS[playbook.category]}
               </Badge>
             </div>
             {instalada ? (
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${ESTADO_BADGE[instalada] ?? ''}`}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_BADGE[instalada] ?? ''}`}
               >
                 <CheckCircle2 className="h-3 w-3" />
                 {ESTADO_LABELS[instalada] ?? instalada}
@@ -271,11 +271,11 @@ function InstaladasLista({
             <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="font-mono text-[10px]">
+                  <Badge variant="outline" className="font-mono text-xs">
                     {playbookId}
                   </Badge>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ESTADO_BADGE[a.status] ?? ''}`}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_BADGE[a.status] ?? ''}`}
                   >
                     {ESTADO_LABELS[a.status] ?? a.status}
                   </span>

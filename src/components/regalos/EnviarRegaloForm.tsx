@@ -87,7 +87,7 @@ export function EnviarRegaloForm({ fuentes }: { fuentes: FuenteTransferencia[] }
   return (
     <form action={formAction} className="space-y-6">
       {/* Paso 1 · Destinatario */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-1 text-sm font-semibold text-foreground">1 · ¿Para quién?</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           Pega su <strong>@ID MembeGo</strong> (está en su perfil) o busca por nombre.
@@ -203,7 +203,7 @@ export function EnviarRegaloForm({ fuentes }: { fuentes: FuenteTransferencia[] }
       </section>
 
       {/* Paso 2 · Qué enviar */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold text-foreground">2 · ¿Qué le envías?</h2>
         <div className="space-y-2">
           {fuentesVisibles.map((f) => (
@@ -252,7 +252,7 @@ export function EnviarRegaloForm({ fuentes }: { fuentes: FuenteTransferencia[] }
       </section>
 
       {/* Paso 3 · Dedicatoria + enviar */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold text-foreground">3 · Dedicatoria (opcional)</h2>
         <Textarea name="mensaje" rows={2} maxLength={200} placeholder="¡Disfrútalo! 🎁" />
         <Button
@@ -263,7 +263,7 @@ export function EnviarRegaloForm({ fuentes }: { fuentes: FuenteTransferencia[] }
           {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
           Enviar regalo
         </Button>
-        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+        <p className="mt-2 text-center text-xs text-muted-foreground">
           Los usos se reservan al enviar y vuelven a ti si tu amigo no acepta a tiempo.
         </p>
       </section>

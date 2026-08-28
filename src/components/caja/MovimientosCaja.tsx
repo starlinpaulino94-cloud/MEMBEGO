@@ -44,7 +44,7 @@ export function MovimientosCaja({
   }, [state])
 
   return (
-    <section className="rounded-3xl border border-border/70 bg-card p-5">
+    <section className="rounded-2xl border border-border/70 bg-card p-5">
       <h2 className="mb-1 text-sm font-semibold text-foreground">Movimientos de efectivo</h2>
       <p className="mb-4 text-caption text-muted-foreground">
         Entradas y salidas de caja que no son cobros (fondo, retiros, gastos).

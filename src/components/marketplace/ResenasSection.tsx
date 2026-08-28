@@ -26,7 +26,7 @@ function Estrellas({ rating, className }: { rating: number; className?: string }
           aria-hidden
           className={cn(
             'h-3.5 w-3.5',
-            n <= rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'
+            n <= rating ? 'fill-amber-400 text-warning' : 'text-muted-foreground/30'
           )}
         />
       ))}
@@ -50,7 +50,7 @@ export function ResenasSection({
     <div className="space-y-6">
       {/* Resumen: promedio protagonista */}
       {resenas.total > 0 && (
-        <div className="flex items-center gap-5 rounded-3xl border border-border/60 bg-card p-5 shadow-sm">
+        <div className="flex items-center gap-5 rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
           <div className="text-center">
             <p className="text-4xl font-extrabold tabular-nums tracking-tight text-foreground">
               {resenas.promedio?.toFixed(1) ?? '—'}
@@ -91,7 +91,7 @@ export function ResenasSection({
                   </p>
                   <div className="flex items-center gap-2">
                     <Estrellas rating={r.rating} />
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {fmtFecha(r.fecha)}
                     </span>
                   </div>

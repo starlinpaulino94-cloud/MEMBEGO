@@ -45,7 +45,7 @@ export function WalletStack({ items }: { items: WalletStackItem[] }) {
                 setFlipped(false)
               }}
               aria-label={`Mostrar tarjeta de ${item.card.company.name}`}
-              className="relative block h-[4.5rem] w-full overflow-hidden rounded-[1.4rem] text-left shadow-card transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-ring"
+              className="relative block h-[4.5rem] w-full overflow-hidden rounded-[1.4rem] text-left shadow-card transition-transform duration-slow hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-ring"
               style={{ zIndex: idx + 1 }}
             >
               <WalletCard data={item.card} className="pointer-events-none" />
@@ -103,7 +103,7 @@ function FlippableCard({
       <Link
         href={`/membresia/${item.id}`}
         aria-label={`Ver detalles de la membresía de ${item.card.company.name}`}
-        className="block transition-transform duration-300 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-ring"
+        className="block transition-transform duration-slow hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-ring"
       >
         <WalletCard data={item.card} />
       </Link>
@@ -114,7 +114,7 @@ function FlippableCard({
     <div className="[perspective:1400px]">
       <div
         className={cn(
-          'relative aspect-[1.586/1] min-h-[196px] w-full transition-transform duration-500 [transform-style:preserve-3d]',
+          'relative aspect-[1.586/1] min-h-[196px] w-full transition-transform duration-hero [transform-style:preserve-3d]',
           flipped && '[transform:rotateY(180deg)]'
         )}
       >
@@ -137,7 +137,7 @@ function FlippableCard({
             type="button"
             onClick={onToggle}
             aria-label="Volver a la tarjeta"
-            className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
+            className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition hover:bg-muted"
           >
             <RotateCcw className="h-4 w-4" aria-hidden />
           </button>
@@ -153,7 +153,7 @@ function FlippableCard({
           ) : (
             <div className="skeleton-shimmer h-[62%] w-[40%] rounded-xl" />
           )}
-          <p className="text-xs font-medium text-slate-500">
+          <p className="text-xs font-medium text-muted-foreground">
             {item.card.company.name}
           </p>
           <Link

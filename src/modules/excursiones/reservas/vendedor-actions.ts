@@ -16,6 +16,7 @@ import {
   validarDisponibilidadComboMultiFecha,
   calcularPrecioEfectivo,
   normalizarHora,
+  type ReglaPrecioDinamico,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
@@ -229,7 +230,9 @@ export async function crearReservaVendedor(
     }
 
     const variante = excursion.variantes[0]
-    const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const reglasDin = variante.preciosDinamicos
+      ? (variante.preciosDinamicos as unknown as ReglaPrecioDinamico[])
+      : null
     const baseResidente = (variante as any).precioResidente != null ? (variante as any).precioResidente.toNumber() : null
     const baseNinoResidente = (variante as any).precioNinoResidente != null ? (variante as any).precioNinoResidente.toNumber() : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(

@@ -15,11 +15,6 @@ import {
   urlDeQr,
   type EstadoVendedor,
 } from '@/modules/excursiones/vendedores/nucleo'
-import {
-  ETAPA_ATRIBUCION_LABEL,
-  type EtapaAtribucion,
-} from '@/modules/excursiones/atribucion/nucleo'
-import { formatDateTime } from '@/lib/format'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { VendedorEstadoBotones } from '@/components/excursiones/VendedorEstadoBotones'
 import { VendedorQrCard } from '@/components/excursiones/VendedorQrCard'

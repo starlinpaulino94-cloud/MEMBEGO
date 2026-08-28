@@ -161,8 +161,8 @@ export default async function EvidenciasPage({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={e.url} alt={`Evidencia ${e.placa ?? ''}`} className="h-44 w-full object-cover" />
                 <span
-                  className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase text-white ${
-                    e.momento === 'ANTES' ? 'bg-amber-600/90' : 'bg-emerald-600/90'
+                  className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-bold uppercase text-white ${
+                    e.momento === 'ANTES' ? 'bg-warning/90' : 'bg-success/90'
                   }`}
                 >
                   {EVIDENCIA_MOMENTO_LABELS[e.momento as EvidenciaMomento] ?? e.momento}

@@ -17,7 +17,7 @@ export default function Loading() {
       </div>
 
       {/* Hero banner */}
-      <Skeleton className="mb-8 h-44 rounded-3xl" />
+      <Skeleton className="mb-8 h-44 rounded-2xl" />
 
       {/* Vistazo rápido */}
       <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3">

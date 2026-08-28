@@ -57,7 +57,7 @@ export function BitacoraTabla({
               )}
               <td className="px-4 py-3">
                 <p className="text-foreground">{i.entidadTipo}</p>
-                <p className="font-mono text-[11px] text-muted-foreground">{i.entidadId}</p>
+                <p className="font-mono text-xs text-muted-foreground">{i.entidadId}</p>
               </td>
             </tr>
           ))}

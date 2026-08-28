@@ -47,7 +47,7 @@ function SegmentedControl<T extends string>({
             disabled={op.disabled}
             onClick={() => onValueChange(op.value)}
             className={cn(
-              'rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+              'rounded-[10px] px-3 py-1.5 text-xs font-semibold transition-all duration-fast active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
               activa
                 ? 'bg-card text-foreground shadow-card'
                 : 'text-muted-foreground hover:text-foreground'

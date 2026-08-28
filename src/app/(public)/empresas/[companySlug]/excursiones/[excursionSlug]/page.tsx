@@ -11,7 +11,6 @@ import { getCompanyPublic } from '@/modules/marketplace/cached'
 import { formatMoney } from '@/lib/format'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
-import { DIAS_SEMANA } from '@/modules/excursiones/catalogo/nucleo'
 import { formatoMinutosAHora, minutosDesdeMedianoche } from '@/modules/excursiones/reservas/nucleo'
 import { getUser } from '@/lib/auth'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
@@ -50,14 +49,11 @@ export async function generateMetadata({
   })
 }
 
-const DIAS_LABEL: Record<number, string> = Object.fromEntries(
-  DIAS_SEMANA.map((d) => [d.n, d.label])
-)
-
-export default async function ExcursionDetailPage({ params, searchParams }: ExcursionDetailPageProps) {
+export default async function ExcursionDetailPage({ params }: ExcursionDetailPageProps) {
   const { companySlug, excursionSlug } = await params
-  const sp = searchParams ? await searchParams : {}
-  const enlaceVendedor = typeof sp?.e === 'string' ? sp.e : undefined
+  // Esta página NO lee `searchParams`. Leía el `?e=` del enlace de vendedor y
+  // no hacía nada con él: la atribución ocurre en `/e/[slug]`, que es quien
+  // siembra las cookies. Se quita para que nadie lo lea y crea que sí atribuye.
 
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
@@ -158,7 +154,7 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
             )}
 
             <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
+              <h1 className="text-h1 text-foreground">
                 {exc.nombre}
               </h1>
 
@@ -257,7 +253,7 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
                           <span
                             className={`flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full text-xs font-bold ${
                               esPd
-                                ? 'bg-emerald-500/10 text-emerald-700'
+                                ? 'bg-success/10 text-success'
                                 : 'bg-primary text-primary-foreground'
                             }`}
                           >
@@ -267,20 +263,20 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
                             <div className="flex items-center gap-2">
                               <p className="text-xs sm:text-sm font-bold text-foreground">{act.nombre}</p>
                               {esPd && (
-                                <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20">
                                   Daypass
                                 </span>
                               )}
                             </div>
                             {act.categoria && (
-                              <p className="text-[10px] text-muted-foreground">{act.categoria}</p>
+                              <p className="text-xs text-muted-foreground">{act.categoria}</p>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 font-mono text-[10px] sm:text-xs font-semibold text-foreground">
+                        <div className="flex items-center gap-2 font-mono text-xs sm:text-xs font-semibold text-foreground">
                           {esPd ? (
-                            <span className="text-emerald-700 font-medium">Acceso libre</span>
+                            <span className="text-success font-medium">Acceso libre</span>
                           ) : inicio !== '—' ? (
                             <span>
                               {inicio} {fin !== '—' ? `→ ${fin}` : ''} {dur ? `(${dur})` : ''}
@@ -415,7 +411,7 @@ export default async function ExcursionDetailPage({ params, searchParams }: Excu
       <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-border/80 bg-card/95 backdrop-blur-md px-4 py-2.5 shadow-lg">
         <div className="mx-auto flex max-w-md items-center justify-between gap-3">
           <div>
-            <span className="text-[10px] text-muted-foreground block uppercase font-medium">Precio desde</span>
+            <span className="text-xs text-muted-foreground block uppercase font-medium">Precio desde</span>
             <span className="text-base font-bold text-primary">
               {precioDesde != null ? formatMoney(Number(precioDesde), { moneda: exc.moneda }) : '—'}
             </span>

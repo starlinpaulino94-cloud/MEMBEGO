@@ -50,6 +50,7 @@ import {
   calcularPrecioEfectivo,
   normalizarHora,
   type EstadoReserva,
+  type ReglaPrecioDinamico,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
@@ -334,7 +335,9 @@ export async function crearReserva(
     if (!variante) return { error: 'Esa excursión no tiene variantes activas con precio.' }
 
     // Calcular precio efectivo con reglas dinámicas
-    const reglasDin = variante.preciosDinamicos ? (variante.preciosDinamicos as any[]) : null
+    const reglasDin = variante.preciosDinamicos
+      ? (variante.preciosDinamicos as unknown as ReglaPrecioDinamico[])
+      : null
     const baseAdulto = Number(variante.precioAdulto)
     const baseNino = variante.precioNino != null ? Number(variante.precioNino) : null
     const baseResidente = (variante as any).precioResidente != null ? Number((variante as any).precioResidente) : null

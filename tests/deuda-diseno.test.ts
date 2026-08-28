@@ -98,8 +98,8 @@ test('los techos no se quedan por encima de la realidad', () => {
  * Por eso tiene techo propio y más apretado que el del producto.
  */
 const TECHOS_PAQUETE: Record<string, number> = {
-  colorCrudo: 69,
-  radiosFuera: 20,
+  colorCrudo: 37,
+  radiosFuera: 0,
 }
 
 test('la deuda de @membego/ui no crece', () => {

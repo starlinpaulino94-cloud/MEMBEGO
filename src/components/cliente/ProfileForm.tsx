@@ -125,7 +125,7 @@ export function ProfileForm({
             id="genero"
             name="genero"
             defaultValue={genero ?? ''}
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-sm"
+            className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm shadow-sm"
           >
             <option value="">Prefiero no decir</option>
             <option value="M">Masculino</option>

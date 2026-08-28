@@ -77,7 +77,7 @@ export function CompartirOfertaButton({
         aria-label="Compartir"
         className={
           variant === 'icon'
-            ? 'inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground'
+            ? 'inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground'
             : 'inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition hover:bg-muted'
         }
       >

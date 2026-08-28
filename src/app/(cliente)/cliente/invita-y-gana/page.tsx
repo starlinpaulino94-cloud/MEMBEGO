@@ -178,7 +178,7 @@ export default async function InvitaYGanaPage({
       )}
 
       {/* Campaña activa: protagonismo del arte + mínimo texto + animación. */}
-      <Card className="animate-slide-up overflow-hidden border-emerald-200 shadow-premium">
+      <Card className="animate-slide-up overflow-hidden border-success shadow-premium">
         {(campana.bannerUrl || campana.imagenUrl) && (
           <div className="relative h-44 w-full sm:h-60">
             <Image
@@ -195,7 +195,7 @@ export default async function InvitaYGanaPage({
         <CardContent className="relative space-y-5 bg-gradient-to-br from-emerald-50 to-white pb-6 pt-0 text-center">
           {/* Regalo flotante que "sale" del banner */}
           <div className="-mt-9 flex justify-center">
-            <span className="animate-float flex h-[72px] w-[72px] items-center justify-center rounded-3xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-glow ring-4 ring-card">
+            <span className="animate-float flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-glow ring-4 ring-card">
               <Gift className="h-9 w-9 text-white" />
             </span>
           </div>
@@ -204,16 +204,16 @@ export default async function InvitaYGanaPage({
             <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
               {campana.titulo}
             </h1>
-            <p className="text-sm font-medium text-emerald-700">{t.subtitulo}</p>
+            <p className="text-sm font-medium text-success">{t.subtitulo}</p>
           </div>
 
           {/* Beneficio: un solo mensaje claro, sin límites ni condiciones. */}
-          <div className="animate-fade-up delay-100 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-emerald-200/80 bg-white p-4 text-left shadow-sm">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
-              <Gift className="h-5.5 w-5.5 text-emerald-600" />
+          <div className="animate-fade-up delay-100 mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-success/80 bg-white p-4 text-left shadow-sm">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-success">
+              <Gift className="h-5.5 w-5.5 text-success" />
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              <p className="text-xs font-bold uppercase tracking-wider text-success">
                 {t.beneficioEtiqueta}
               </p>
               <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
@@ -249,7 +249,7 @@ export default async function InvitaYGanaPage({
           {statCards.map((s) => (
             <Card key={s.label}>
               <CardContent className="flex flex-col items-center gap-1 py-4 text-center">
-                <s.icon className="h-5 w-5 text-emerald-600" />
+                <s.icon className="h-5 w-5 text-success" />
                 <p className="text-2xl font-bold tabular-nums text-foreground">
                   <AnimatedCounter value={s.valor} />
                 </p>
@@ -295,7 +295,7 @@ export default async function InvitaYGanaPage({
                       {inv.estado === 'COMPLETADO' ? 'Cliente activo' : 'Registrado'}
                     </Badge>
                     {inv.recompensaAplicada && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
                         <CheckCircle2 className="h-3 w-3" />
                         Recompensa obtenida
                       </span>

@@ -105,7 +105,7 @@ export function FacturaSheet({
           .filter(([, v]) => v)
           .map(([k, v]) => (
             <div key={k as string}>
-              <p className="text-[11px] uppercase tracking-wide text-neutral-500">{k}</p>
+              <p className="text-xs uppercase tracking-wide text-neutral-500">{k}</p>
               <p className="font-medium">{v}</p>
             </div>
           ))}
@@ -114,7 +114,7 @@ export function FacturaSheet({
       {/* Detalle */}
       <table className="mt-6 w-full border-collapse">
         <thead>
-          <tr className="border-b border-neutral-300 text-left text-[11px] uppercase tracking-wide text-neutral-500">
+          <tr className="border-b border-neutral-300 text-left text-xs uppercase tracking-wide text-neutral-500">
             <th className="py-2 pr-2 font-semibold">Descripción</th>
             <th className="py-2 pr-2 text-center font-semibold">Cant.</th>
             <th className="py-2 pr-2 text-right font-semibold">Precio</th>
@@ -175,7 +175,7 @@ export function FacturaSheet({
           <div className="shrink-0 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={qrUrl} alt={`QR ${t.codigo}`} className="mx-auto h-24 w-24" />
-            <p className="mt-1 font-mono text-[10px] text-neutral-500">{t.codigo}</p>
+            <p className="mt-1 font-mono text-xs text-neutral-500">{t.codigo}</p>
           </div>
         )}
       </div>

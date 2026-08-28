@@ -124,14 +124,14 @@ export function ComisionesPanel({
                       <p className="truncate text-xs text-muted-foreground" title={f.detalle ?? ''}>
                         {f.detalle ?? '—'}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">base {fmtRD(f.base)}</p>
+                      <p className="text-xs text-muted-foreground">base {fmtRD(f.base)}</p>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums text-foreground">
                       {fmtRD(f.monto)}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                           f.estado === 'PAGADA'
                             ? 'bg-success/15 text-success'
                             : 'bg-warning/15 text-warning'
@@ -140,7 +140,7 @@ export function ComisionesPanel({
                         {COMISION_ESTADO_LABELS[f.estado as ComisionEstado] ?? f.estado}
                       </span>
                       {f.loteRef && (
-                        <p className="font-mono text-[11px] text-muted-foreground">{f.loteRef}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{f.loteRef}</p>
                       )}
                     </td>
                   </tr>
@@ -175,7 +175,7 @@ function TarjetaLavador({
       <p className="mt-2 text-xl font-bold tabular-nums text-foreground">
         {fmtRD(lavador.pendiente)}
       </p>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         por pagar · {fmtRD(lavador.pagado)} ya pagado
       </p>
       {lavador.pendiente > 0 && (

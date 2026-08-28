@@ -34,7 +34,7 @@ function Contador({ expiraEn }: { expiraEn: string }) {
           <span className="min-w-[2.5rem] rounded-lg bg-white/25 px-2 py-1 text-center font-mono text-lg font-bold tabular-nums text-white">
             {pad(b.v)}
           </span>
-          <span className="mt-0.5 text-[9px] font-semibold uppercase text-white/70">{b.t}</span>
+          <span className="mt-0.5 text-xs font-semibold uppercase text-white/70">{b.t}</span>
         </div>
       ))}
     </div>
@@ -55,7 +55,7 @@ export function CampanaBanner({ exp }: { exp: ExperienciaHero }) {
 
   return (
     <div
-      className="animate-scale-in relative mb-6 overflow-hidden rounded-3xl p-5 text-white shadow-premium sm:p-6"
+      className="animate-scale-in relative mb-6 overflow-hidden rounded-2xl p-5 text-white shadow-premium sm:p-6"
       style={{ background: `linear-gradient(120deg, ${primary}, ${secondary})` }}
       data-experiencia={exp.tipo}
     >
@@ -70,7 +70,7 @@ export function CampanaBanner({ exp }: { exp: ExperienciaHero }) {
 
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider">
             <Flame className="h-3.5 w-3.5" /> {exp.eyebrow.replace(/^🔥\s*/, '')}
           </span>
           <h2 className="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl">
@@ -93,7 +93,7 @@ export function CampanaBanner({ exp }: { exp: ExperienciaHero }) {
         <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
           {exp.hasta && (
             <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-white/70">Termina en</p>
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-white/70">Termina en</p>
               <Contador expiraEn={exp.hasta} />
             </div>
           )}

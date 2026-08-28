@@ -1,6 +1,5 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowLeft, Target } from 'lucide-react'
+import { Target } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { vendedorDeUsuario, misComisiones } from '@/modules/excursiones/panel/queries'
 import { metasDeVendedor, realesDeVendedor } from '@/modules/excursiones/metricas/queries'

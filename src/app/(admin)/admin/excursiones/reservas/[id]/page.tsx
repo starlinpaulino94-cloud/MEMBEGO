@@ -170,7 +170,7 @@ export default async function ReservaDetallePage({
                     <span
                       className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
                         esPd
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          ? 'bg-success/10 text-success'
                           : 'bg-primary text-primary-foreground'
                       }`}
                     >
@@ -180,17 +180,17 @@ export default async function ReservaDetallePage({
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs sm:text-sm font-bold text-foreground truncate">{act.nombre}</p>
                         {esPd && (
-                          <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                          <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20 shrink-0">
                             Daypass
                           </span>
                         )}
                         {item.checkinAt && (
-                          <span className="text-[10px] font-bold bg-success/15 text-success px-2 py-0.5 rounded-full shrink-0">
+                          <span className="text-xs font-bold bg-success/15 text-success px-2 py-0.5 rounded-full shrink-0">
                             ✓ Embarcado
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                         {fechaDistinta && (
                           <span className="font-bold text-primary">{formatDate(item.fecha)}</span>
                         )}
@@ -207,14 +207,14 @@ export default async function ReservaDetallePage({
                   <div className="flex items-center gap-4 shrink-0">
                     <div className="font-mono text-xs font-semibold text-foreground text-right">
                       {esPd ? (
-                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">Acceso libre</span>
+                        <span className="text-success font-medium">Acceso libre</span>
                       ) : inicio !== '—' ? (
                         <div className="space-y-0.5">
                           <div className="text-foreground">
                             {inicio} {fin !== '—' ? `→ ${fin}` : ''}
                           </div>
                           {durTexto && (
-                            <div className="text-[11px] font-normal text-muted-foreground">
+                            <div className="text-xs font-normal text-muted-foreground">
                               Duración: {durTexto}
                             </div>
                           )}

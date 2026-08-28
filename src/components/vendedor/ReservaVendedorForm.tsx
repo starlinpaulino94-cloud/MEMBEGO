@@ -16,7 +16,6 @@ import {
   BedDouble,
   Search,
   Check,
-  Layers,
   Sparkles,
   ChevronRight,
   ShieldCheck,
@@ -31,7 +30,7 @@ import {
   calcularTotales,
   calcularPrecioEfectivo,
   generarCombinacionesCombo,
-  type CombinacionItinerarioCombo,
+  type ReglaPrecioDinamico,
 } from '@/modules/excursiones/reservas/nucleo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,7 +60,7 @@ export interface ExcursionOpcion {
     horarioFijo?: unknown
     horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
   }[]
-  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; precioResidente?: number | null; precioNinoResidente?: number | null; preciosDinamicos?: any[] }[]
+  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; precioResidente?: number | null; precioNinoResidente?: number | null; preciosDinamicos?: ReglaPrecioDinamico[] }[]
   horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
 }
 
@@ -158,31 +157,47 @@ export function ReservaVendedorForm({
     )
   }, [esCombo, excursion])
 
-  // Sincronizar turno de combo por defecto
-  useEffect(() => {
-    if (combinacionesCombo.length > 0) {
-      if (!combinacionesCombo.some((c) => c.id === comboTurnoSeleccionado)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setComboTurnoSeleccionado(combinacionesCombo[0].id)
-        setHora(combinacionesCombo[0].horaInicio)
-      }
-    }
-  }, [combinacionesCombo, comboTurnoSeleccionado])
+  /**
+   * AJUSTES EN RENDER, NO EN EFECTOS. Mismo criterio que en el formulario del
+   * cliente: cuando la excursión cambia y el turno, la variante o la hora que
+   * estaban elegidos ya no existen en la nueva, se cae al primero disponible.
+   * En un efecto costaba un render pintado con un valor que ya no valía.
+   */
+  if (
+    combinacionesCombo.length > 0 &&
+    !combinacionesCombo.some((c) => c.id === comboTurnoSeleccionado)
+  ) {
+    setComboTurnoSeleccionado(combinacionesCombo[0].id)
+    setHora(combinacionesCombo[0].horaInicio)
+  }
+  if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
+    setVarianteId(excursion.variantes[0]?.id ?? '')
+  }
+  if (excursion && !excursion.horarios?.find((h) => h.horaSalida === hora)) {
+    setHora(excursion.horarios?.[0]?.horaSalida ?? '')
+  }
 
-  // Inicializar itinerario multi-fecha
-  useEffect(() => {
-    if (esCombo && excursion?.comboItems) {
-      const inicial: Record<string, { fecha: string; hora: string }> = {}
-      for (const ci of excursion.comboItems) {
-        inicial[ci.id] = {
-          fecha: itinerarioMultiFecha[ci.id]?.fecha || fecha,
-          hora: ci.tipoItem === 'PASE_DIA' ? '' : itinerarioMultiFecha[ci.id]?.hora || ci.horaSalida || ci.horarios?.[0]?.horaSalida || '09:00',
-        }
+  /**
+   * El itinerario del combo se rearma solo cuando cambia la fecha o el combo,
+   * no cada vez que llega una referencia nueva de `excursion` por props: eso
+   * borraba lo que el vendedor hubiera elegido día por día.
+   */
+  const claveItinerario =
+    esCombo && excursion?.comboItems
+      ? `${fecha}|${excursion.comboItems.map((ci) => ci.id).join(',')}`
+      : null
+  const [itinerarioArmadoPara, setItinerarioArmadoPara] = useState<string | null>(null)
+  if (claveItinerario && claveItinerario !== itinerarioArmadoPara) {
+    setItinerarioArmadoPara(claveItinerario)
+    const inicial: Record<string, { fecha: string; hora: string }> = {}
+    for (const ci of excursion!.comboItems!) {
+      inicial[ci.id] = {
+        fecha: itinerarioMultiFecha[ci.id]?.fecha || fecha,
+        hora: ci.tipoItem === 'PASE_DIA' ? '' : itinerarioMultiFecha[ci.id]?.hora || ci.horaSalida || ci.horarios?.[0]?.horaSalida || '09:00',
       }
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setItinerarioMultiFecha(inicial)
     }
-  }, [esCombo, excursion, fecha])
+    setItinerarioMultiFecha(inicial)
+  }
 
   // Generar JSON para el formulario
   const comboItinerarioJson = useMemo(() => {
@@ -206,19 +221,6 @@ export function ReservaVendedorForm({
       )
     }
   }, [esCombo, excursion, modoComboFechas, itinerarioMultiFecha, fecha, combinacionesCombo, comboTurnoSeleccionado])
-
-  // Sincronizar variante y horario si cambia la excursión
-  useEffect(() => {
-    if (excursion) {
-      if (!excursion.variantes.find((v) => v.id === varianteId)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setVarianteId(excursion.variantes[0]?.id ?? '')
-      }
-      if (!excursion.horarios?.find((h) => h.horaSalida === hora)) {
-        setHora(excursion.horarios?.[0]?.horaSalida ?? '')
-      }
-    }
-  }, [excursion, varianteId, hora])
 
   // Toast de feedback
   useEffect(() => {
@@ -314,13 +316,13 @@ export function ReservaVendedorForm({
         {/* ── COLUMNA PRINCIPAL (PASOS DEL FORMULARIO) ── */}
         <div className="space-y-6 lg:col-span-8 w-full min-w-0 max-w-full">
           {state.error && (
-            <Alert variant="destructive" className="animate-in fade-in duration-300 w-full min-w-0">
+            <Alert variant="destructive" className="animate-in fade-in duration-slow w-full min-w-0">
               <AlertDescription className="font-semibold">{state.error}</AlertDescription>
             </Alert>
           )}
 
           {state.success && (
-            <Alert className="border-success/30 bg-success/10 text-success animate-in fade-in duration-300 w-full min-w-0">
+            <Alert className="border-success/30 bg-success/10 text-success animate-in fade-in duration-slow w-full min-w-0">
               <ShieldCheck className="h-5 w-5 text-success shrink-0" />
               <AlertDescription className="font-semibold">{state.success}</AlertDescription>
             </Alert>
@@ -330,7 +332,7 @@ export function ReservaVendedorForm({
           <section aria-labelledby="paso-excursion" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/60 pb-3 w-full min-w-0">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 1</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 1</span>
                 <h2 id="paso-excursion" className="text-base sm:text-lg font-bold text-foreground truncate">
                   Selecciona la excursión o paquete
                 </h2>
@@ -400,12 +402,13 @@ export function ReservaVendedorForm({
 
                       {/* Badge de tipo */}
                       <span
-                        className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold shadow-xs ${esC
-                            ? 'bg-amber-500 text-white'
+                        className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-bold shadow-xs ${
+                          esC
+                            ? 'bg-warning text-white'
                             : esP
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-primary text-primary-foreground'
-                          }`}
+                            ? 'bg-success text-white'
+                            : 'bg-primary text-primary-foreground'
+                        }`}
                       >
                         {esC ? 'Combo' : esP ? 'Daypass' : 'Actividad'}
                       </span>
@@ -416,7 +419,7 @@ export function ReservaVendedorForm({
                         <p className="font-bold text-xs sm:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                           {e.nombre}
                         </p>
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5 truncate">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 truncate">
                           {e.duracionMin && (
                             <span className="flex items-center gap-0.5 shrink-0">
                               <Clock className="h-3 w-3" />
@@ -433,7 +436,7 @@ export function ReservaVendedorForm({
                       </div>
 
                       <div className="flex items-center justify-between border-t border-border/50 pt-2 text-xs w-full min-w-0">
-                        <span className="text-[11px] text-muted-foreground">Desde</span>
+                        <span className="text-xs text-muted-foreground">Desde</span>
                         <span className="font-mono font-bold text-primary truncate">
                           {formatMoney(minPrecio, { moneda: e.moneda })}
                         </span>
@@ -460,7 +463,7 @@ export function ReservaVendedorForm({
           {/* PASO 2: VARIANTE Y HORARIOS */}
           <section aria-labelledby="paso-variante" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="border-b border-border/60 pb-3 w-full min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 2</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 2</span>
               <h2 id="paso-variante" className="text-base sm:text-lg font-bold text-foreground truncate">
                 Modalidad & Turno
               </h2>
@@ -590,8 +593,9 @@ export function ReservaVendedorForm({
                                   {ci.nombre}
                                 </span>
                                 <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${esPd
-                                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                  className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                    esPd
+                                      ? 'bg-success/10 text-success border border-success/20'
                                       : 'bg-primary/10 text-primary border border-primary/20'
                                     }`}
                                 >
@@ -600,7 +604,7 @@ export function ReservaVendedorForm({
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full min-w-0">
                                 <div className="space-y-1">
-                                  <Label className="text-[11px] text-muted-foreground font-semibold">
+                                  <Label className="text-xs text-muted-foreground font-semibold">
                                     Fecha
                                   </Label>
                                   <Input
@@ -618,11 +622,11 @@ export function ReservaVendedorForm({
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-[11px] text-muted-foreground font-semibold">
+                                  <Label className="text-xs text-muted-foreground font-semibold">
                                     Turno / Salida
                                   </Label>
                                   {esPd ? (
-                                    <div className="h-10 rounded-md border border-dashed border-emerald-500/30 bg-emerald-500/5 px-3 flex items-center text-xs font-medium text-emerald-700">
+                                    <div className="h-10 rounded-lg border border-dashed border-success/30 bg-success/5 px-3 flex items-center text-xs font-medium text-success">
                                       Acceso libre todo el día
                                     </div>
                                   ) : (
@@ -635,7 +639,7 @@ export function ReservaVendedorForm({
                                           [ci.id]: { ...prev[ci.id], hora: val },
                                         }))
                                       }}
-                                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs font-medium"
+                                      className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs font-medium"
                                     >
                                       {ci.horarios && ci.horarios.length > 0 ? (
                                         ci.horarios.map((h) => (
@@ -695,7 +699,7 @@ export function ReservaVendedorForm({
           {/* PASO 3: FECHA & PASAJEROS */}
           <section aria-labelledby="paso-fecha-pasajeros" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="border-b border-border/60 pb-3 w-full min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 3</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 3</span>
               <h2 id="paso-fecha-pasajeros" className="text-base sm:text-lg font-bold text-foreground truncate">
                 Fecha & Pasajeros
               </h2>
@@ -791,7 +795,7 @@ export function ReservaVendedorForm({
                   <div className="flex items-center justify-between rounded-xl border border-border bg-background p-3 sm:px-4 min-h-[56px] w-full min-w-0">
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">Adultos</span>
-                      <span className="block text-[11px] text-muted-foreground truncate">
+                      <span className="block text-xs text-muted-foreground truncate">
                         {variante ? formatMoney(variante.precioAdulto, { moneda: excursion.moneda }) : ''} c/u
                       </span>
                     </div>
@@ -823,7 +827,7 @@ export function ReservaVendedorForm({
                   <div className="flex items-center justify-between rounded-xl border border-border bg-background p-3 sm:px-4 min-h-[56px] w-full min-w-0">
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">Niños</span>
-                      <span className="block text-[11px] text-muted-foreground truncate">
+                      <span className="block text-xs text-muted-foreground truncate">
                         {variante
                           ? formatMoney(variante.precioNino ?? variante.precioAdulto, { moneda: excursion.moneda })
                           : ''} c/u
@@ -885,7 +889,7 @@ export function ReservaVendedorForm({
           <section aria-labelledby="paso-cliente" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3 w-full min-w-0">
               <div className="min-w-0">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 4</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 4</span>
                 <h2 id="paso-cliente" className="text-base sm:text-lg font-bold text-foreground truncate">
                   Datos del pasajero principal
                 </h2>
@@ -997,7 +1001,7 @@ export function ReservaVendedorForm({
             </div>
 
             {mostrarLogistica && (
-              <div className="space-y-4 pt-2 border-t border-primary/15 animate-in fade-in duration-300 w-full min-w-0">
+              <div className="space-y-4 pt-2 border-t border-primary/15 animate-in fade-in duration-slow w-full min-w-0">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 w-full min-w-0">
                   <div className="space-y-1.5 w-full min-w-0">
                     <Label htmlFor="voucherInput" className="text-xs font-bold text-muted-foreground flex items-center gap-1.5 truncate">
@@ -1123,8 +1127,8 @@ export function ReservaVendedorForm({
                 </div>
 
                 {esCombo && excursion.comboItems && (
-                  <div className="space-y-1.5 pt-2 border-t border-border/40 text-[11px]">
-                    <span className="font-bold text-muted-foreground uppercase tracking-wider text-[10px] block">
+                  <div className="space-y-1.5 pt-2 border-t border-border/40 text-xs">
+                    <span className="font-bold text-muted-foreground uppercase tracking-wider text-xs block">
                       Itinerario del Paquete
                     </span>
                     {excursion.comboItems.map((ci) => {
@@ -1146,7 +1150,7 @@ export function ReservaVendedorForm({
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground pt-1 border-t border-border/40 w-full min-w-0">
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground pt-1 border-t border-border/40 w-full min-w-0">
                   <span className="flex items-center gap-1 font-semibold text-foreground">
                     <CalendarIcon className="h-3 w-3 text-primary shrink-0" /> {fecha}
                   </span>
@@ -1224,7 +1228,7 @@ export function ReservaVendedorForm({
               )}
             </Button>
 
-            <p className="text-[11px] text-center text-muted-foreground">
+            <p className="text-xs text-center text-muted-foreground">
               Al crear la reserva se generará el localizador y se enviará el boleto digital con QR al correo del cliente.
             </p>
           </div>
