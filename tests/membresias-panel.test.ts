@@ -298,6 +298,23 @@ test('el superadmin puede alargar el vencimiento desde la tabla', () => {
   assert.match(AJUSTAR_VENCIMIENTO, /ajustarVencimientoMembresia/)
   assert.match(AJUSTAR_VENCIMIENTO, /type="date"/)
   assert.match(AJUSTAR_VENCIMIENTO, /Motivo/)
+  assert.match(AJUSTAR_VENCIMIENTO, /router\.refresh\(\)/)
+})
+
+test('el superadmin puede alargar el vencimiento desde la ficha del cliente', () => {
+  assert.match(
+    CLIENTE_DETALLE,
+    /import \{ AjustarVencimiento \} from '@\/components\/superadmin\/AjustarVencimiento'/
+  )
+  assert.match(CLIENTE_DETALLE, /import \{ fechaInputLocal \} from '@\/lib\/periodos'/)
+  assert.match(
+    CLIENTE_DETALLE,
+    /user\.metadata\.role === 'SUPERADMIN' \? \(\s*<AjustarVencimiento/
+  )
+  assert.match(
+    CLIENTE_DETALLE,
+    /fechaInputLocal\(\s*membership\.fechaVencimiento,\s*cliente\.company\.zonaHoraria/
+  )
 })
 
 test('alargar vencimiento exige superadmin, motivo y una fecha posterior', () => {

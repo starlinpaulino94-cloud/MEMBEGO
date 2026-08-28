@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CalendarClock, Check, Loader2, Pencil, X } from 'lucide-react'
 import { ajustarVencimientoMembresia } from '@/modules/superadmin/membresiaActions'
@@ -18,6 +19,7 @@ export function AjustarVencimiento({
   fecha: string
   fechaInput: string
 }) {
+  const router = useRouter()
   const [editando, setEditando] = useState(false)
   const [valor, setValor] = useState(fechaInput)
   const [motivo, setMotivo] = useState('')
@@ -63,6 +65,7 @@ export function AjustarVencimiento({
       } else {
         toast.success('Vencimiento actualizado.')
         setEditando(false)
+        router.refresh()
       }
     })
   }

@@ -9,6 +9,7 @@ import { emitirQrMembresia } from '@/modules/admin/actions'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { RenovarMembresiaDialog } from '@/components/admin/RenovarMembresiaDialog'
 import { formatMoney, formatDate, formatDateTime } from '@/lib/format'
+import { fechaInputLocal } from '@/lib/periodos'
 import { QRDisplay } from '@/components/qr/QRDisplay'
 import { EstadoBadge } from '@/components/EstadoBadge'
 import {
@@ -20,6 +21,7 @@ import { ConfirmarPagoButton, RechazarPagoButton } from '@/components/admin/Vali
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NotasCliente } from '@/components/admin/NotasCliente'
 import { AnularTransaccionesClienteButton } from '@/components/registros/AnularTransaccionesClienteButton'
+import { AjustarVencimiento } from '@/components/superadmin/AjustarVencimiento'
 import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButton'
 import { FileText, MessageCircle, Mail, QrCode, StickyNote } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
@@ -300,10 +302,23 @@ export default async function ClienteDetailPage({
                     }
                   />
                   <Info label="Inicio" value={fmtDate(membership.fechaInicio)} />
-                  <Info
-                    label="Vencimiento"
-                    value={fmtDate(membership.fechaVencimiento)}
-                  />
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Vencimiento</p>
+                    <div className="font-medium">
+                      {user.metadata.role === 'SUPERADMIN' ? (
+                        <AjustarVencimiento
+                          membershipId={membership.id}
+                          fecha={fmtDate(membership.fechaVencimiento)}
+                          fechaInput={fechaInputLocal(
+                            membership.fechaVencimiento,
+                            cliente.company.zonaHoraria ?? undefined
+                          )}
+                        />
+                      ) : (
+                        fmtDate(membership.fechaVencimiento)
+                      )}
+                    </div>
+                  </div>
                   <Info
                     label="Pago"
                     value={membership.pagoConfirmado ? 'Confirmado' : 'Pendiente'}
