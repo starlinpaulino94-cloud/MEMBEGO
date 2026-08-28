@@ -101,6 +101,8 @@ export async function crearExcursion(
       horarios: { horaSalida: string; diasSemana: number[] }[]
     }[] = []
     let horariosPorActividad: Record<string, string> = {}
+    let permitirSolapamientoMap: Record<string, boolean> = {}
+    let horarioFijoMap: Record<string, string[]> = {}
 
     if (v.datos.tipoItem === 'COMBO' && rawComboActividades.length < 2) {
       return { error: 'Un combo debe incluir al menos 2 actividades del catálogo.' }
@@ -112,6 +114,24 @@ export async function crearExcursion(
       if (comboHorariosRaw) {
         try {
           horariosPorActividad = JSON.parse(comboHorariosRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboSolapamientoRaw = String(formData.get('comboPermitirSolapamiento') ?? '')
+      if (comboSolapamientoRaw) {
+        try {
+          permitirSolapamientoMap = JSON.parse(comboSolapamientoRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboHorarioFijoRaw = String(formData.get('comboHorarioFijo') ?? '')
+      if (comboHorarioFijoRaw) {
+        try {
+          horarioFijoMap = JSON.parse(comboHorarioFijoRaw)
         } catch {
           /* ignore */
         }
@@ -152,6 +172,7 @@ export async function crearExcursion(
           a.horaSalida ||
           (a.horarios[0]?.horaSalida ? a.horarios[0].horaSalida : '09:00'),
         horaRegreso: null,
+        permitirSolapamiento: permitirSolapamientoMap[a.id] || false,
       }))
 
       const valItinerario = validarItinerarioCombo(actsConHorarios)
@@ -281,6 +302,14 @@ export async function crearExcursion(
                   horariosPorActividad[actividadId] ||
                   actsDbParaCombo.find((a) => a.id === actividadId)?.horaSalida ||
                   '09:00',
+                permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
+                // `horarioFijo` es una columna Json opcional y Prisma NO acepta
+                // `null` a secas ahí: quiere `Prisma.DbNull`. Escribirlo bien es
+                // lo que permite quitar el `as any` que había sobre TODO el
+                // objeto y apagaba de paso la comprobación de los otros campos.
+                horarioFijo: horarioFijoMap[actividadId]?.length
+                  ? horarioFijoMap[actividadId]
+                  : Prisma.DbNull,
               })),
             },
           }),
@@ -383,6 +412,8 @@ export async function actualizarExcursion(
     )
 
     let horariosPorActividad: Record<string, string> = {}
+    let permitirSolapamientoMap: Record<string, boolean> = {}
+    let horarioFijoMap: Record<string, string[]> = {}
     let actsDb: {
       id: string
       nombre: string
@@ -402,6 +433,24 @@ export async function actualizarExcursion(
       if (comboHorariosRaw) {
         try {
           horariosPorActividad = JSON.parse(comboHorariosRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboSolapamientoRaw = String(formData.get('comboPermitirSolapamiento') ?? '')
+      if (comboSolapamientoRaw) {
+        try {
+          permitirSolapamientoMap = JSON.parse(comboSolapamientoRaw)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const comboHorarioFijoRaw = String(formData.get('comboHorarioFijo') ?? '')
+      if (comboHorarioFijoRaw) {
+        try {
+          horarioFijoMap = JSON.parse(comboHorarioFijoRaw)
         } catch {
           /* ignore */
         }
@@ -442,6 +491,7 @@ export async function actualizarExcursion(
           a.horaSalida ||
           (a.horarios[0]?.horaSalida ? a.horarios[0].horaSalida : '09:00'),
         horaRegreso: null,
+        permitirSolapamiento: permitirSolapamientoMap[a.id] || false,
       }))
 
       const valItinerario = validarItinerarioCombo(actsConHorarios)
@@ -496,6 +546,8 @@ export async function actualizarExcursion(
                 horariosPorActividad[actividadId] ||
                 actsDb.find((a) => a.id === actividadId)?.horaSalida ||
                 '09:00',
+              permitirSolapamiento: permitirSolapamientoMap[actividadId] || false,
+              horarioFijo: horarioFijoMap[actividadId] || null,
             })),
           })
         }

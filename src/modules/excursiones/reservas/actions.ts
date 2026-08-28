@@ -303,7 +303,7 @@ export async function crearReserva(
           },
           variantes: {
             where: { id: varianteId, activa: true },
-            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
+            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, precioResidente: true, precioNinoResidente: true, preciosDinamicos: true },
           },
           comboItems: {
             include: {
@@ -340,12 +340,19 @@ export async function crearReserva(
       : null
     const baseAdulto = Number(variante.precioAdulto)
     const baseNino = variante.precioNino != null ? Number(variante.precioNino) : null
+    // Sin `as any`: los dos campos están en el `select` de esta consulta.
+    const baseResidente = variante.precioResidente != null ? Number(variante.precioResidente) : null
+    const baseNinoResidente =
+      variante.precioNinoResidente != null ? Number(variante.precioNinoResidente) : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
       baseAdulto,
       baseNino,
-      reglasDin
+      reglasDin,
+      v.datos.esResidente,
+      baseResidente,
+      baseNinoResidente
     )
 
     const totales = calcularTotales({
@@ -405,6 +412,7 @@ export async function crearReserva(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           },
           itemsComboAGuardar
@@ -438,6 +446,7 @@ export async function crearReserva(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )
@@ -537,6 +546,7 @@ export async function crearReserva(
               estado: 'PENDIENTE',
               canal: v.datos.canal,
               notas: v.datos.notas,
+              esResidente: v.datos.esResidente,
               voucherAgencia: v.datos.voucherAgencia || null,
               hotelRecogida: v.datos.hotelRecogida || null,
               lobbyRecogida: v.datos.lobbyRecogida || null,

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import {
   CalendarDays,
   ChevronLeft,
@@ -27,7 +26,6 @@ import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-action
 import { toggleSeguirEmpresa } from '@/modules/social/actions'
 import { formatMoney } from '@/lib/format'
 import { useExcursionCart } from '@/components/excursiones/ExcursionCarritoContext'
-import { PasarelaSimuladaModal } from '@/components/excursiones/PasarelaSimuladaModal'
 import {
   autoResolverItinerarioCombo,
   optimizarItinerarioCombo,
@@ -53,6 +51,8 @@ interface Horario {
 
 export interface ComboItemActividadPublica {
   horaSalida?: string | null
+  permitirSolapamiento?: boolean
+  horarioFijo?: unknown
   actividad: {
     id: string
     nombre: string
@@ -76,6 +76,7 @@ interface ReservaExcursionFormProps {
   companyId: string
   companySlug: string
   excursionId: string
+  excursionSlug: string
   nombreExcursion: string
   portadaUrl?: string | null
   moneda: string
@@ -114,7 +115,9 @@ const initial: ReservaClienteState = {}
 
 export function ReservaExcursionForm({
   companyId,
-  companySlug,
+  // `companySlug`, `excursionSlug` y `esEmpresaDemo` siguen en las props porque
+  // quien monta el formulario los pasa; este componente ya no los usa desde que
+  // la elección de pago se mudó a /checkout, así que no se desestructuran.
   excursionId,
   nombreExcursion,
   portadaUrl,
@@ -128,7 +131,6 @@ export function ReservaExcursionForm({
   agotadaGlobal,
   tipoItem,
   comboItems = [],
-  esEmpresaDemo,
 }: ReservaExcursionFormProps) {
   const router = useRouter()
   const [state, action, pending] = useActionState(reservarExcursion, initial)
@@ -136,8 +138,6 @@ export function ReservaExcursionForm({
   const followedRef = useRef(initialFollowing)
   const formRef = useRef<HTMLFormElement>(null)
   const [varianteId, setVarianteId] = useState(variantes[0]?.id ?? '')
-  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
-  const [isModalPagoOpen, setIsModalPagoOpen] = useState(false)
   // Lo que el usuario ELIGIÓ; la fecha efectiva se deriva más abajo.
   const [fechaElegida, setFechaElegida] = useState('')
   // Lo que el usuario ELIGIÓ. La hora efectiva (`hora`) se deriva de esto más
@@ -152,9 +152,10 @@ export function ReservaExcursionForm({
 
   // Modo de programación de combo: Mismo Día o Días Separados
   const [modoComboFechas, setModoComboFechas] = useState<'MISMO_DIA' | 'DIAS_DIFERENTES'>('MISMO_DIA')
-  // Modo de selección de turnos en combo: Recomendados o Personalizado por actividad
-  const [modoHorarioCombo, setModoHorarioCombo] = useState<'RECOMENDADOS' | 'PERSONALIZADO'>('RECOMENDADOS')
   const [itinerarioMultiFecha, setItinerarioMultiFecha] = useState<Record<string, { fecha: string; hora: string }>>({})
+
+  const [modoHorarioCombo, setModoHorarioCombo] = useState<'RECOMENDADOS' | 'PERSONALIZADO'>('RECOMENDADOS')
+  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
 
   // Daypasses y actividades con horario dentro del combo
   const pasesDiaEnCombo = useMemo(() => {
@@ -178,6 +179,8 @@ export function ReservaExcursionForm({
       horaSalida: ci.horaSalida || ci.actividad.horaSalida || '09:00',
       horaRegreso: ci.actividad.horaRegreso,
       horarios: ci.actividad.horarios || [],
+      permitirSolapamiento: !!ci.permitirSolapamiento,
+      horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
     }))
     return generarCombinacionesCombo(acts)
   }, [tipoItem, comboItems])
@@ -205,6 +208,8 @@ export function ReservaExcursionForm({
         horaSalida: init[ci.actividad.id] || '09:00',
         horaRegreso: ci.actividad.horaRegreso,
         horarios: ci.actividad.horarios || [],
+        permitirSolapamiento: !!ci.permitirSolapamiento,
+        horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
       }))
       const v = validarItinerarioCombo(actsConInit)
       if (v.ok) {
@@ -220,15 +225,17 @@ export function ReservaExcursionForm({
     return init
   })
 
-  // Índice de la combinación recomendada actualmente seleccionada
-  const combinacionSeleccionadaIdx = useMemo(() => {
-    if (combinacionesDisponibles.length === 0) return -1
-    return combinacionesDisponibles.findIndex((comb) => {
-      return Object.entries(comb.horariosAsignados).every(([actId, h]) => {
-        return comboHorarios[actId] === h
-      })
-    })
-  }, [combinacionesDisponibles, comboHorarios])
+  // Horarios válidos por actividad:哪些 horas forman parte de al menos 1 combinación válida
+  const horariosValidosPorActividad = useMemo(() => {
+    const map: Record<string, Set<string>> = {}
+    for (const comb of combinacionesDisponibles) {
+      for (const [actId, hora] of Object.entries(comb.horariosAsignados)) {
+        if (!map[actId]) map[actId] = new Set()
+        map[actId].add(hora)
+      }
+    }
+    return map
+  }, [combinacionesDisponibles])
 
   // Actividades del combo con sus horarios elegidos
   const comboActividadesConHorario = useMemo(() => {
@@ -247,6 +254,8 @@ export function ReservaExcursionForm({
           : '09:00'),
       horaRegreso: ci.actividad.horaRegreso,
       horarios: ci.actividad.horarios || [],
+      permitirSolapamiento: !!ci.permitirSolapamiento,
+      horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
     }))
   }, [tipoItem, comboItems, comboHorarios])
 
@@ -310,7 +319,7 @@ export function ReservaExcursionForm({
     if (fecha) {
       try {
         const d = parseISO(fecha)
-        if (!isSameMonth(mesActual, d)) setMesActual(d)
+        setMesActual((prev) => (isSameMonth(prev, d) ? prev : d))
       } catch { }
     }
   }
@@ -522,37 +531,6 @@ export function ReservaExcursionForm({
     // Already following — let the form action proceed
   }
 
-  // Not authenticated — show CTA
-  if (!isAuthenticated) {
-    return (
-      <div className="rounded-xl border bg-card p-6 text-center shadow-sm">
-        <h3 className="text-h3 font-bold">Reservar</h3>
-        {precioDesde != null && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Desde {formatMoney(precioDesde, { moneda })}
-          </p>
-        )}
-        <p className="mt-4 text-sm text-muted-foreground">
-          Inicia sesión o crea una cuenta para reservar esta excursión.
-        </p>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href={`/login?redirect=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionId}`)}`}
-            className="flex-1 rounded-lg border bg-card py-3 text-center text-sm font-semibold transition hover:bg-muted"
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            href={`/registro/${companySlug}?next=${encodeURIComponent(`/empresas/${companySlug}/excursiones/${excursionId}`)}`}
-            className="flex-1 rounded-lg bg-primary py-3 text-center text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
-          >
-            Crear cuenta
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
   // Agotada global — show out of stock
   if (agotadaGlobal) {
     return (
@@ -598,7 +576,6 @@ export function ReservaExcursionForm({
       <form ref={formRef} action={action} onSubmit={handleSubmit} className="space-y-4">
         <input type="hidden" name="companyId" value={companyId} />
         <input type="hidden" name="excursionId" value={excursionId} />
-        <input type="hidden" name="metodoPago" value={metodoPago} />
 
         {/* Variante */}
         {variantes.length > 1 && (
@@ -871,7 +848,7 @@ export function ReservaExcursionForm({
                     </p>
                     <div className="space-y-2">
                       {combinacionesDisponibles.map((comb, idx) => {
-                        const isSelected = idx === combinacionSeleccionadaIdx
+                        const isSelected = JSON.stringify(comboHorarios) === JSON.stringify(comb.horariosAsignados)
                         return (
                           <button
                             key={idx}
@@ -923,20 +900,29 @@ export function ReservaExcursionForm({
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    {/* Selector por actividad en el mismo día */}
+                    <p className="text-xs text-muted-foreground">
+                      Selecciona los turnos de cada actividad:
+                    </p>
                     {comboItems.map((ci, actIdx) => {
                       const act = ci.actividad
                       const actId = act.id
                       const esPd = act.tipoItem === 'PASE_DIA'
-                      const horariosAct = act.horarios || []
+                      const esHorarioFijo = Array.isArray(ci.horarioFijo) && ci.horarioFijo.length > 0
+                      if (esPd) return null
 
-                      const slotsUnicos = Array.from(
-                        new Set(horariosAct.map((h) => h.horaSalida.trim().slice(0, 5)))
-                      ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
+                      const horariosAct = act.horarios || []
+                      const slotsUnicos = esHorarioFijo
+                        ? (ci.horarioFijo as string[]).map((h) => h.trim().slice(0, 5))
+                        : Array.from(
+                            new Set(horariosAct.map((h) => h.horaSalida.trim().slice(0, 5)))
+                          ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
 
                       const slots = slotsUnicos.length > 0
                         ? slotsUnicos
                         : [act.horaSalida || '09:00']
+
+                      const validSet = horariosValidosPorActividad[actId]
+                      const tieneOpciones = slots.length > 1 && !esHorarioFijo
 
                       return (
                         <div
@@ -968,18 +954,22 @@ export function ReservaExcursionForm({
                             </span>
                           </div>
 
-                          {!esPd && slots.length > 1 && (
+                          {tieneOpciones && (
                             <div className="flex flex-wrap gap-1.5 pl-7">
                               {slots.map((slot) => {
                                 const isSelected = comboHorarios[actId] === slot
+                                const esValido = !validSet || validSet.has(slot)
                                 return (
                                   <button
                                     key={slot}
                                     type="button"
-                                    onClick={() => cambiarTurnoCombo(actId, slot)}
-                                    className={`rounded-lg px-2 py-1 text-xs font-semibold transition cursor-pointer ${isSelected
-                                      ? 'bg-primary text-primary-foreground shadow-xs'
-                                      : 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground'
+                                    disabled={!esValido}
+                                    onClick={() => esValido && cambiarTurnoCombo(actId, slot)}
+                                    className={`rounded-lg px-2 py-1 text-xs font-semibold transition ${isSelected
+                                      ? 'bg-primary text-primary-foreground shadow-xs cursor-pointer'
+                                      : esValido
+                                        ? 'border border-border/80 bg-muted/30 hover:bg-muted text-foreground cursor-pointer'
+                                        : 'border border-border/40 bg-muted/10 text-muted-foreground/40 cursor-not-allowed line-through'
                                       }`}
                                   >
                                     {formato12h(slot)}
@@ -992,7 +982,17 @@ export function ReservaExcursionForm({
                       )
                     })}
 
-                    {/* Acciones rápidas de itinerario */}
+                    {pasesDiaEnCombo.length > 0 && (
+                      <div className="rounded-lg border border-success/20 bg-success/5 p-2.5 text-xs text-success flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-success shrink-0" />
+                        <span>
+                          Incluye acceso libre todo el día para:{' '}
+                          <strong>{pasesDiaEnCombo.map((p) => p.actividad.nombre).join(', ')}</strong>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Acciones rápidas */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       <button
                         type="button"
@@ -1003,6 +1003,55 @@ export function ReservaExcursionForm({
                         Horario Óptimo
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Sin combinaciones o solo 1: mostrar info del turno único */}
+                {combinacionesDisponibles.length <= 1 && actividadesConHorarioEnCombo.length > 0 && (
+                  <div className="space-y-2.5">
+                    {combinacionesDisponibles.length === 1 && (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 text-xs text-primary flex items-center gap-2">
+                        <Clock className="h-4 w-4 shrink-0" />
+                        <span>
+                          Turno único: <strong>{combinacionesDisponibles[0].resumenTexto}</strong>
+                          {' '}({formato12h(combinacionesDisponibles[0].horaInicio)} → {formato12h(combinacionesDisponibles[0].horaFin)})
+                        </span>
+                      </div>
+                    )}
+                    {combinacionesDisponibles.length === 0 && (
+                      <div className="space-y-2.5">
+                        {comboItems.map((ci, actIdx) => {
+                          const act = ci.actividad
+                          const actId = act.id
+                          const esPd = act.tipoItem === 'PASE_DIA'
+                          if (esPd) return null
+
+                          return (
+                            <div
+                              key={actId}
+                              className="rounded-lg border border-border/70 bg-background/80 p-2.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                                    {actIdx + 1}
+                                  </span>
+                                  <span className="text-xs font-bold text-foreground">{act.nombre}</span>
+                                </div>
+                                <span className="font-mono text-xs font-semibold text-primary">
+                                  {formato12h(comboHorarios[actId] || act.horaSalida || '09:00')}
+                                  {act.duracionMin && (
+                                    <span className="text-xs font-normal text-muted-foreground ml-1">
+                                      ({act.duracionMin}min)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1338,6 +1387,7 @@ export function ReservaExcursionForm({
           </div>
         </div>
 
+
         {/* Notas */}
         <div>
           <label className="mb-1.5 block text-sm font-medium">Notas (opcional)</label>
@@ -1402,7 +1452,7 @@ export function ReservaExcursionForm({
           <button
             type="button"
             onClick={() => {
-              if (!fecha || !hora) return
+              if (!fecha || (tipoItem !== 'PASE_DIA' && !hora)) return
               cart.addItem({
                 excursionId,
                 companyId,
@@ -1417,8 +1467,11 @@ export function ReservaExcursionForm({
                 precioAdulto,
                 precioNino,
                 moneda })
+              if (!isAuthenticated) {
+                router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
+              }
             }}
-            disabled={pending || followingPending || !fecha || !hora || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
+            disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-primary bg-background py-3 text-sm font-semibold text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ShoppingCart className="h-4 w-4" />
@@ -1426,14 +1479,26 @@ export function ReservaExcursionForm({
           </button>
 
           <button
-            type={metodoPago === 'ONLINE_SIMULADO' ? 'button' : 'submit'}
+            type="button"
             onClick={() => {
-              if (metodoPago === 'ONLINE_SIMULADO') {
-                if (!fecha || !hora) return
-                setIsModalPagoOpen(true)
-              }
+              if (!fecha || (tipoItem !== 'PASE_DIA' && !hora)) return
+              cart.addItem({
+                excursionId,
+                companyId,
+                nombreExcursion,
+                portadaUrl: portadaUrl ?? null,
+                varianteId,
+                varianteNombre: varianteActual.nombre,
+                fecha,
+                hora,
+                adultos,
+                ninos,
+                precioAdulto,
+                precioNino,
+                moneda })
+              router.push(isAuthenticated ? '/checkout' : `/login?redirect=${encodeURIComponent('/checkout')}`)
             }}
-            disabled={pending || followingPending || !fecha || !hora || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
+            disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {followingPending ? (
@@ -1441,48 +1506,19 @@ export function ReservaExcursionForm({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Preparando...
               </span>
-            ) : pending ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Reservando...
-              </span>
-            ) : metodoPago === 'ONLINE_SIMULADO' ? (
-              <span className="flex items-center justify-center gap-2">
-                <CreditCard className="h-4 w-4" />
-                Pagar y Reservar ahora
-              </span>
             ) : (
-              'Reservar (Pagar en destino)'
+              <span className="flex items-center justify-center gap-2">
+                <ShoppingCart className="h-4 w-4" />
+                Reservar ahora
+              </span>
             )}
           </button>
         </div>
 
         <p className="text-center text-xs text-muted-foreground">
-          {metodoPago === 'ONLINE_SIMULADO'
-            ? 'Transacción simulada en entorno de pruebas. Emisión inmediata de QR.'
-            : 'Tu reserva quedará agendada para pago en persona el día del tour.'}
+          Selecciona tu método de pago al confirmar en el checkout.
         </p>
       </form>
-
-      {/* Modal de Pago Online Simulado */}
-      <PasarelaSimuladaModal
-        isOpen={isModalPagoOpen}
-        onClose={() => setIsModalPagoOpen(false)}
-        onConfirmPayment={async () => {
-          setIsModalPagoOpen(false)
-          formRef.current?.requestSubmit()
-        }}
-        montoTotal={subtotal}
-        moneda={moneda}
-        tituloConcepto={nombreExcursion}
-        esEmpresaDemo={esEmpresaDemo}
-        detallesItems={[
-          {
-            nombre: `${adultos} Adulto(s)${ninos > 0 ? ` + ${ninos} Niño(s)` : ''} (${varianteActual.nombre})`,
-            cantidad: 1,
-            subtotal },
-        ]}
-      />
     </div>
   )
 }

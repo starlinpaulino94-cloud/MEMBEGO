@@ -56,9 +56,11 @@ export interface ExcursionOpcion {
     tipoItem?: string
     duracionMin: number | null
     horaSalida?: string | null
+    permitirSolapamiento?: boolean
+    horarioFijo?: unknown
     horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
   }[]
-  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; preciosDinamicos?: ReglaPrecioDinamico[] }[]
+  variantes: { id: string; nombre: string; precioAdulto: number; precioNino: number | null; precioResidente?: number | null; precioNinoResidente?: number | null; preciosDinamicos?: ReglaPrecioDinamico[] }[]
   horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
 }
 
@@ -106,6 +108,7 @@ export function ReservaVendedorForm({
   const [fecha, setFecha] = useState(getTodayString())
   const [adultos, setAdultos] = useState(2)
   const [ninos, setNinos] = useState(0)
+  const [esResidente, setEsResidente] = useState(false)
 
   // Configuración específica de combos
   const [modoComboFechas, setModoComboFechas] = useState<'MISMO_DIA' | 'DIAS_DIFERENTES'>('MISMO_DIA')
@@ -148,6 +151,8 @@ export function ReservaVendedorForm({
         duracionMin: ci.duracionMin,
         horaSalida: ci.horaSalida,
         horarios: ci.horarios,
+        permitirSolapamiento: ci.permitirSolapamiento,
+        horarioFijo: Array.isArray(ci.horarioFijo) ? (ci.horarioFijo as string[]) : null,
       }))
     )
   }, [esCombo, excursion])
@@ -245,7 +250,16 @@ export function ReservaVendedorForm({
     if (!variante || !excursion) return null
     const fechaObj = fecha ? new Date(`${fecha}T12:00:00.000Z`) : new Date()
     const reglas = variante.preciosDinamicos ?? null
-    const { precioAdulto, precioNino } = calcularPrecioEfectivo(fechaObj, hora, variante.precioAdulto, variante.precioNino, reglas)
+    const { precioAdulto, precioNino } = calcularPrecioEfectivo(
+      fechaObj,
+      hora,
+      variante.precioAdulto,
+      variante.precioNino,
+      reglas,
+      esResidente,
+      variante.precioResidente ?? null,
+      variante.precioNinoResidente ?? null
+    )
 
     return calcularTotales({
       precioAdulto,
@@ -255,7 +269,7 @@ export function ReservaVendedorForm({
       ninos: ninos || 0,
       descuento: 0,
     })
-  }, [variante, excursion, adultos, ninos, fecha, hora])
+  }, [variante, excursion, adultos, ninos, fecha, hora, esResidente])
 
   // Handler para seleccionar cliente existente
   const handleSeleccionarClienteExistente = (clienteId: string) => {
@@ -296,6 +310,7 @@ export function ReservaVendedorForm({
       <input type="hidden" name="horaRecogida" value={horaRecogida} />
       <input type="hidden" name="habitacion" value={habitacion} />
       <input type="hidden" name="notas" value={notas} />
+      <input type="hidden" name="esResidente" value={String(esResidente)} />
 
       <div className="grid gap-6 lg:grid-cols-12 items-start w-full min-w-0 max-w-full">
         {/* ── COLUMNA PRINCIPAL (PASOS DEL FORMULARIO) ── */}
@@ -364,11 +379,10 @@ export function ReservaVendedorForm({
                       setVarianteId(e.variantes[0]?.id ?? '')
                       setHora(e.horarios?.[0]?.horaSalida ?? '')
                     }}
-                    className={`group relative flex flex-col rounded-xl border p-3 text-left transition-all w-full min-w-0 active:scale-[0.98] ${
-                      isSelected
+                    className={`group relative flex flex-col rounded-xl border p-3 text-left transition-all w-full min-w-0 active:scale-[0.98] ${isSelected
                         ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm'
                         : 'border-border bg-card hover:border-primary/40 hover:bg-muted/30'
-                    }`}
+                      }`}
                   >
                     {/* Imagen miniatura */}
                     <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-muted mb-2.5">
@@ -468,11 +482,10 @@ export function ReservaVendedorForm({
                       type="button"
                       key={v.id}
                       onClick={() => setVarianteId(v.id)}
-                      className={`flex items-center justify-between rounded-xl border p-3.5 text-left transition-all min-h-[56px] active:scale-[0.99] w-full min-w-0 overflow-hidden ${
-                        isSelected
+                      className={`flex items-center justify-between rounded-xl border p-3.5 text-left transition-all min-h-[56px] active:scale-[0.99] w-full min-w-0 overflow-hidden ${isSelected
                           ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm'
                           : 'border-border bg-card hover:border-primary/40'
-                      }`}
+                        }`}
                     >
                       <div className="min-w-0 flex-1 pr-2">
                         <p className="text-sm font-bold text-foreground truncate">{v.nombre}</p>
@@ -502,22 +515,20 @@ export function ReservaVendedorForm({
                       <button
                         type="button"
                         onClick={() => setModoComboFechas('MISMO_DIA')}
-                        className={`rounded-lg px-3 py-1.5 transition-all text-xs ${
-                          modoComboFechas === 'MISMO_DIA'
+                        className={`rounded-lg px-3 py-1.5 transition-all text-xs ${modoComboFechas === 'MISMO_DIA'
                             ? 'bg-card text-foreground shadow-sm font-bold border border-border/60'
                             : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                          }`}
                       >
                         Mismo Día (Turnos Acoplados)
                       </button>
                       <button
                         type="button"
                         onClick={() => setModoComboFechas('DIAS_DIFERENTES')}
-                        className={`rounded-lg px-3 py-1.5 transition-all text-xs ${
-                          modoComboFechas === 'DIAS_DIFERENTES'
+                        className={`rounded-lg px-3 py-1.5 transition-all text-xs ${modoComboFechas === 'DIAS_DIFERENTES'
                             ? 'bg-card text-foreground shadow-sm font-bold border border-border/60'
                             : 'text-muted-foreground hover:text-foreground'
-                        }`}
+                          }`}
                       >
                         Días Separados (Multi-Fecha)
                       </button>
@@ -540,11 +551,10 @@ export function ReservaVendedorForm({
                                 setComboTurnoSeleccionado(comb.id)
                                 setHora(comb.horaInicio)
                               }}
-                              className={`flex flex-col text-left rounded-xl border p-3.5 transition-all w-full min-w-0 active:scale-[0.99] ${
-                                isSel
+                              className={`flex flex-col text-left rounded-xl border p-3.5 transition-all w-full min-w-0 active:scale-[0.99] ${isSel
                                   ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm'
                                   : 'border-border bg-card hover:border-primary/40'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center justify-between w-full min-w-0">
                                 <span className="font-bold text-sm text-foreground flex items-center gap-1.5 truncate">
@@ -587,7 +597,7 @@ export function ReservaVendedorForm({
                                     esPd
                                       ? 'bg-success/10 text-success border border-success/20'
                                       : 'bg-primary/10 text-primary border border-primary/20'
-                                  }`}
+                                    }`}
                                 >
                                   {esPd ? 'Daypass (Acceso Libre)' : 'Actividad'}
                                 </span>
@@ -668,11 +678,10 @@ export function ReservaVendedorForm({
                           type="button"
                           key={h.id}
                           onClick={() => setHora(h.horaSalida)}
-                          className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 min-h-[44px] text-xs font-bold transition-all active:scale-95 ${
-                            isSelected
+                          className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 min-h-[44px] text-xs font-bold transition-all active:scale-95 ${isSelected
                               ? 'border-primary bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/30'
                               : 'border-border bg-background text-foreground hover:bg-muted'
-                          }`}
+                            }`}
                         >
                           <Clock className="h-3.5 w-3.5 shrink-0" />
                           {h.horaSalida}
@@ -714,8 +723,8 @@ export function ReservaVendedorForm({
                             {ci.tipoItem === 'PASE_DIA'
                               ? '(Acceso Libre)'
                               : itemConfig.hora
-                              ? `(${itemConfig.hora})`
-                              : ''}
+                                ? `(${itemConfig.hora})`
+                                : ''}
                           </span>
                         </div>
                       )
@@ -744,33 +753,30 @@ export function ReservaVendedorForm({
                     <button
                       type="button"
                       onClick={() => setFecha(getTodayString())}
-                      className={`rounded-lg border px-3 py-2 min-h-[40px] text-xs font-medium transition active:scale-95 ${
-                        fecha === getTodayString()
+                      className={`rounded-lg border px-3 py-2 min-h-[40px] text-xs font-medium transition active:scale-95 ${fecha === getTodayString()
                           ? 'border-primary bg-primary/10 text-primary font-bold'
                           : 'border-border bg-background hover:bg-muted text-muted-foreground'
-                      }`}
+                        }`}
                     >
                       Hoy
                     </button>
                     <button
                       type="button"
                       onClick={() => setFecha(addDaysToString(1))}
-                      className={`rounded-lg border px-3 py-2 min-h-[40px] text-xs font-medium transition active:scale-95 ${
-                        fecha === addDaysToString(1)
+                      className={`rounded-lg border px-3 py-2 min-h-[40px] text-xs font-medium transition active:scale-95 ${fecha === addDaysToString(1)
                           ? 'border-primary bg-primary/10 text-primary font-bold'
                           : 'border-border bg-background hover:bg-muted text-muted-foreground'
-                      }`}
+                        }`}
                     >
                       Mañana
                     </button>
                     <button
                       type="button"
                       onClick={() => setFecha(addDaysToString(2))}
-                      className={`rounded-lg border px-3 py-2 min-h-[40px] text-xs font-medium transition active:scale-95 ${
-                        fecha === addDaysToString(2)
+                      className={`rounded-lg border px-3 py-2 min-h-[40px] text-xs font-medium transition active:scale-95 ${fecha === addDaysToString(2)
                           ? 'border-primary bg-primary/10 text-primary font-bold'
                           : 'border-border bg-background hover:bg-muted text-muted-foreground'
-                      }`}
+                        }`}
                     >
                       Pasado mañana
                     </button>
@@ -850,10 +856,34 @@ export function ReservaVendedorForm({
                       </button>
                     </div>
                   </div>
+
+                  {/* Toggle Residente */}
+                  <div className="flex items-center justify-between rounded-xl border border-success/30 bg-success/5 p-3 sm:px-4 min-h-[56px] w-full min-w-0">
+                    <div className="min-w-0 flex-1 pr-2">
+                      <span className="text-sm font-bold text-foreground block truncate">¿Residente local?</span>
+                      <span className="block text-xs text-muted-foreground truncate">
+                        Tarifa preferencial para residentes
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={esResidente}
+                      onClick={() => setEsResidente(!esResidente)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-base ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${esResidente ? 'bg-success' : 'bg-muted'
+                        }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-base ease-in-out ${esResidente ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </section>
+
 
           {/* PASO 4: DATOS DEL CLIENTE / PASAJERO */}
           <section aria-labelledby="paso-cliente" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
@@ -870,18 +900,16 @@ export function ReservaVendedorForm({
                   <button
                     type="button"
                     onClick={() => setModoCliente('NUEVO')}
-                    className={`rounded-lg py-2 px-3 font-bold transition text-center ${
-                      modoCliente === 'NUEVO' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`rounded-lg py-2 px-3 font-bold transition text-center ${modoCliente === 'NUEVO' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Nuevo cliente
                   </button>
                   <button
                     type="button"
                     onClick={() => setModoCliente('EXISTENTE')}
-                    className={`rounded-lg py-2 px-3 font-bold transition text-center ${
-                      modoCliente === 'EXISTENTE' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`rounded-lg py-2 px-3 font-bold transition text-center ${modoCliente === 'EXISTENTE' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Cliente existente
                   </button>

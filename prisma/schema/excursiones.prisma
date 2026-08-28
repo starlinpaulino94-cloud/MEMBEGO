@@ -71,8 +71,10 @@ model ExcursionComboItem {
   actividadId String
   actividad   Excursion @relation("ActividadHija", fields: [actividadId], references: [id], onDelete: Cascade)
   varianteId  String?
-  horaSalida  String?
-  orden       Int       @default(0)
+  horaSalida            String?
+  orden                 Int       @default(0)
+  permitirSolapamiento  Boolean   @default(false)
+  horarioFijo           Json?
 
   createdAt DateTime @default(now())
 
@@ -333,6 +335,9 @@ model ReservaExc {
   estado      String    @default("PENDIENTE")
   canal       String?
   notas       String?
+  /// true = el cliente es residente local (mismo país que la empresa).
+  /// Se pregunta en el formulario de reserva y se usa para aplicar tarifa diferenciada.
+  esResidente Boolean   @default(false)
   creadaPorId String?
 
   /// Logística de Turoperador / Recogida en Hoteles:

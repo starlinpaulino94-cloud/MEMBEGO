@@ -108,7 +108,7 @@ export async function reservarExcursion(
           impuestoPct: true,
           variantes: {
             where: { activa: true },
-            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
+            select: { id: true, nombre: true, precioAdulto: true, precioNino: true, precioResidente: true, precioNinoResidente: true, preciosDinamicos: true },
             orderBy: { orden: 'asc' },
           },
         },
@@ -124,12 +124,19 @@ export async function reservarExcursion(
     const reglasDin = variante.preciosDinamicos
       ? (variante.preciosDinamicos as unknown as ReglaPrecioDinamico[])
       : null
+    // Sin `as any`: los dos campos están en el `select` de esta consulta.
+    const baseResidente = variante.precioResidente != null ? Number(variante.precioResidente) : null
+    const baseNinoResidente =
+      variante.precioNinoResidente != null ? Number(variante.precioNinoResidente) : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
       Number(variante.precioAdulto),
       variante.precioNino != null ? Number(variante.precioNino) : null,
-      reglasDin
+      reglasDin,
+      v.datos.esResidente,
+      baseResidente,
+      baseNinoResidente
     )
 
     // Validar disponibilidad: fecha, horario y cupo (y de sus actividades si es un combo)
@@ -224,6 +231,7 @@ export async function reservarExcursion(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           },
           itemsParaValidar
@@ -264,6 +272,7 @@ export async function reservarExcursion(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )
@@ -361,6 +370,7 @@ export async function reservarExcursion(
               estado: esPagoOnline ? 'PAGADA' : 'PENDIENTE',
               canal: 'ONLINE',
               notas: v.datos.notas,
+              esResidente: v.datos.esResidente,
               checkinToken,
               pasajeros: {
                 createMany: {
@@ -478,6 +488,7 @@ export interface CartItemPayload {
   adultos: number
   ninos: number
   notas?: string
+  esResidente?: boolean
 }
 
 /** CLIENTE · Reservar todos los ítems del carrito en una sola operación */
@@ -591,6 +602,7 @@ export async function reservarCarritoAction(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )
@@ -619,7 +631,19 @@ export async function reservarCarritoAction(
       const reglasDin = v.preciosDinamicos
         ? (v.preciosDinamicos as unknown as ReglaPrecioDinamico[])
         : null
-      const { precioAdulto, precioNino } = calcularPrecioEfectivo(fechaValida, item.horaSalida || null, v.precioAdulto.toNumber(), v.precioNino ? v.precioNino.toNumber() : null, reglasDin)
+      const baseResidenteCombo = v.precioResidente != null ? v.precioResidente.toNumber() : null
+      const baseNinoResidenteCombo =
+        v.precioNinoResidente != null ? v.precioNinoResidente.toNumber() : null
+      const { precioAdulto, precioNino } = calcularPrecioEfectivo(
+        fechaValida,
+        item.horaSalida || null,
+        v.precioAdulto.toNumber(),
+        v.precioNino ? v.precioNino.toNumber() : null,
+        reglasDin,
+        item.esResidente ?? false,
+        baseResidenteCombo,
+        baseNinoResidenteCombo
+      )
 
       const totales = calcularTotales({
         precioAdulto,
@@ -667,6 +691,7 @@ export async function reservarCarritoAction(
                 canal: 'ONLINE',
                 notas: item.notas || null,
                 checkinToken: esPagoOnline ? checkinToken : null,
+                esResidente: item.esResidente ?? false,
                 pasajeros: {
                   createMany: {
                     data: [

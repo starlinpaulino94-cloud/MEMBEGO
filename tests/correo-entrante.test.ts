@@ -32,8 +32,11 @@ test('ida y vuelta: la dirección generada se resuelve al mismo ticket', () => {
 })
 
 test('sin dominio o sin secreto no se genera dirección (se envía sin Reply-To)', () => {
-  assert.equal(crearDireccionRespuesta('ckabc123', undefined, SEC), null)
-  assert.equal(crearDireccionRespuesta('ckabc123', DOM, undefined), null)
+  // `undefined` como argumento activa el default param (process.env), que en
+  // test puede estar definido: la dirección SÍ se genera. Sin dominio vacío sí
+  // devuelve null porque `!""` es truthy.
+  assert.equal(crearDireccionRespuesta('ckabc123', '', SEC), null)
+  assert.equal(crearDireccionRespuesta('ckabc123', DOM, ''), null)
   assert.equal(crearDireccionRespuesta('', DOM, SEC), null)
 })
 

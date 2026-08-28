@@ -157,6 +157,8 @@ export interface ReglaPrecioDinamico {
   horasSalida: string[] // 'HH:MM' (vacío = cualquier hora)
   precioAdulto: number
   precioNino: number | null
+  precioResidente: number | null
+  precioNinoResidente: number | null
 }
 
 export interface VarianteDatos {
@@ -200,6 +202,8 @@ export function validarVariante(
               : [],
             precioAdulto: Number(r.precioAdulto) || precioAdulto, // Fallback al base
             precioNino: r.precioNino ? Number(r.precioNino) : null,
+            precioResidente: r.precioResidente ? Number(r.precioResidente) : null,
+            precioNinoResidente: r.precioNinoResidente ? Number(r.precioNinoResidente) : null,
           }
         })
       }

@@ -65,12 +65,11 @@ export function ExcursionCarritoProvider({ children }: { children: ReactNode }) 
   }, [items])
 
   const addItem = (item: Omit<CartItem, 'id'>) => {
-    // Si ya existe la misma excursión con misma variante, fecha y hora, sumamos
+    // Misma excursión + variante + fecha → sumar pasajeros (ignorar hora)
     const idx = items.findIndex(
       i => i.excursionId === item.excursionId && 
            i.varianteId === item.varianteId && 
-           i.fecha === item.fecha && 
-           i.hora === item.hora
+           i.fecha === item.fecha
     )
 
     if (idx >= 0) {

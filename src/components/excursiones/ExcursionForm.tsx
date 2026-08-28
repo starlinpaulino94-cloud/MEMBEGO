@@ -68,6 +68,8 @@ export interface ExcursionEditable {
   comboItems?: {
     actividadId?: string
     horaSalida?: string | null
+    permitirSolapamiento?: boolean
+    horarioFijo?: unknown
     actividad?: {
       id: string
       nombre?: string
@@ -190,6 +192,39 @@ export function ExcursionForm({
     return initial
   })
 
+  // Mapeo de permitirSolapamiento por actividad (actividadId -> boolean)
+  const [permitirSolapamiento, setPermitirSolapamiento] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    if (excursion?.comboItems && excursion.comboItems.length > 0) {
+      for (const ci of excursion.comboItems) {
+        const actId = ci.actividad?.id || ci.actividadId
+        if (actId && (ci as Record<string, unknown>).permitirSolapamiento) {
+          initial[actId] = true
+        }
+      }
+    }
+    return initial
+  })
+
+  const togglePermitirSolapamiento = (actId: string) => {
+    setPermitirSolapamiento((prev) => ({ ...prev, [actId]: !prev[actId] }))
+  }
+
+  // Mapeo de horarios fijos por actividad (actividadId -> string[])
+  const [horarioFijo, _setHorarioFijo] = useState<Record<string, string[]>>(() => {
+    const initial: Record<string, string[]> = {}
+    if (excursion?.comboItems && excursion.comboItems.length > 0) {
+      for (const ci of excursion.comboItems) {
+        const actId = ci.actividad?.id || ci.actividadId
+        if (actId && ci.horarioFijo) {
+          const raw = ci.horarioFijo
+          initial[actId] = Array.isArray(raw) ? (raw as string[]) : typeof raw === 'string' ? [raw] : []
+        }
+      }
+    }
+    return initial
+  })
+
   // Objetos de las actividades seleccionadas
   const actividadesSeleccionadasObjs = useMemo(() => {
     return actividadesDisponibles.filter((a) =>
@@ -209,14 +244,21 @@ export function ExcursionForm({
 
   // Actividades con horario seleccionadas con sus horas asignadas
   const actividadesConHorariosAsignados = useMemo(() => {
-    return actividadesConHorario.map((a) => ({
-      ...a,
-      horaSalida:
-        horariosPorActividad[a.id] ||
-        a.horaSalida ||
-        (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
-    }))
-  }, [actividadesConHorario, horariosPorActividad])
+    return actividadesConHorario.map((a) => {
+      // Si hay horarios fijos seleccionados, usar el primero como default
+      const fijos = horarioFijo[a.id]
+      const horaFromFijos = fijos && fijos.length > 0 ? fijos[0] : null
+      return {
+        ...a,
+        horaSalida:
+          horaFromFijos ||
+          horariosPorActividad[a.id] ||
+          a.horaSalida ||
+          (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
+        permitirSolapamiento: !!permitirSolapamiento[a.id],
+      }
+    })
+  }, [actividadesConHorario, horariosPorActividad, permitirSolapamiento, horarioFijo])
 
   // Días comunes compatibles (intersección)
   const diasComunes = useMemo(() => {
@@ -231,8 +273,15 @@ export function ExcursionForm({
   // Combinaciones válidas completas de horarios para el combo
   const combinacionesDisponibles = useMemo(() => {
     if (tipoItem !== 'COMBO' || actividadesSeleccionadasObjs.length < 2) return []
-    return generarCombinacionesCombo(actividadesSeleccionadasObjs)
-  }, [tipoItem, actividadesSeleccionadasObjs])
+    const acts = actividadesSeleccionadasObjs.map((a) => {
+      const fijos = horarioFijo[a.id]
+      return {
+        ...a,
+        horarioFijo: fijos && fijos.length > 0 ? fijos : null,
+      }
+    })
+    return generarCombinacionesCombo(acts)
+  }, [tipoItem, actividadesSeleccionadasObjs, horarioFijo])
 
   // Cambiar turno de una actividad con auto-resolución de solapamientos
   const cambiarHorarioActividad = (actId: string, nuevaHora: string) => {
@@ -346,23 +395,38 @@ export function ExcursionForm({
       if (diasComunes.length > 0) {
         setDiasSeleccionados(diasComunes)
       }
-      if (combinacionesDisponibles.length > 0) {
-        const todasHoras = Array.from(
-          new Set(combinacionesDisponibles.map((c) => c.horaInicio))
-        ).sort((a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b))
-        setHorasSalida(todasHoras)
-        const maxDur = Math.max(...combinacionesDisponibles.map((c) => c.duracionTotalMin))
-        if (maxDur > 0) {
-          setDuracionHoras(Number((maxDur / 60).toFixed(1)))
+      // Calcular duración como la hora de regreso más tardía de todas las actividades
+      if (actividadesSeleccionadasObjs.length > 0) {
+        let minInicio = Infinity
+        let maxFin = 0
+        for (const act of actividadesSeleccionadasObjs) {
+          const fijos = horarioFijo[act.id]
+          const horaBase = fijos && fijos.length > 0
+            ? fijos[0]
+            : act.horaSalida || (act.horarios && act.horarios.length > 0 ? act.horarios[0].horaSalida : '09:00')
+          const inicio = minutosDesdeMedianoche(horaBase.trim().slice(0, 5))
+          if (inicio < minInicio) minInicio = inicio
+          // Calcular fin: horaRegreso si existe, sino horaSalida + duracionMin
+          let fin: number
+          if (act.horaRegreso) {
+            fin = minutosDesdeMedianoche(act.horaRegreso.trim().slice(0, 5))
+          } else {
+            const dur = act.duracionMin && act.duracionMin > 0 ? act.duracionMin : 120
+            fin = inicio + dur
+          }
+          if (fin > maxFin) maxFin = fin
         }
-      } else if (itinerarioResult.itinerario.length > 0) {
-        const primeraHora = itinerarioResult.itinerario[0].inicio
-        setHorasSalida([primeraHora])
-        const ultimaHoraFin = itinerarioResult.itinerario[itinerarioResult.itinerario.length - 1].fin
-        const durTotalMin =
-          minutosDesdeMedianoche(ultimaHoraFin) - minutosDesdeMedianoche(primeraHora)
-        if (durTotalMin > 0) {
-          setDuracionHoras(Number((durTotalMin / 60).toFixed(1)))
+        if (minInicio < Infinity && maxFin > 0) {
+          const durTotalMin = maxFin - minInicio
+          if (durTotalMin > 0) {
+            setDuracionHoras(Number((durTotalMin / 60).toFixed(1)))
+          }
+          // Usar la primera hora de salida de la primera actividad
+          const primeraAct = actividadesSeleccionadasObjs[0]
+          const primeraHora = horarioFijo[primeraAct.id]?.[0] ||
+            primeraAct.horaSalida ||
+            (primeraAct.horarios && primeraAct.horarios.length > 0 ? primeraAct.horarios[0].horaSalida : '09:00')
+          setHorasSalida([primeraHora.trim().slice(0, 5)])
         }
       }
     }
@@ -489,6 +553,16 @@ export function ExcursionForm({
         type="hidden"
         name="comboActividadesHorarios"
         value={JSON.stringify(horariosPorActividad)}
+      />
+      <input
+        type="hidden"
+        name="comboPermitirSolapamiento"
+        value={JSON.stringify(permitirSolapamiento)}
+      />
+      <input
+        type="hidden"
+        name="comboHorarioFijo"
+        value={JSON.stringify(horarioFijo)}
       />
 
       {/* SECCIÓN 0: IMÁGENES Y MULTIMEDIA */}
@@ -691,6 +765,18 @@ export function ExcursionForm({
                                   </button>
                                 )
                               })}
+                              {(!act.horarios || act.horarios.length === 0) && (
+                                <span className="text-xs text-muted-foreground italic">Sin horarios</span>
+                              )}
+                              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-xs text-muted-foreground font-medium select-none" title="Permitir que esta actividad se solape con otras en el mismo turno">
+                                <input
+                                  type="checkbox"
+                                  checked={!!permitirSolapamiento[act.id]}
+                                  onChange={() => togglePermitirSolapamiento(act.id)}
+                                  className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                                />
+                                Solapar
+                              </label>
                             </div>
                           </div>
                         )
@@ -732,7 +818,7 @@ export function ExcursionForm({
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-primary" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                        Itinerario del Mismo Día (Sin Solapamiento)
+                        Itinerario del Mismo Día
                       </h4>
                     </div>
                     <div className="text-caption font-medium">
@@ -770,34 +856,82 @@ export function ExcursionForm({
                     </div>
                   )}
 
-                  {/* Pasos del Itinerario */}
-                  {itinerarioResult.itinerario.length > 0 ? (
-                    <div className="space-y-1.5 pt-1">
-                      {itinerarioResult.itinerario.map((bloque, idx) => (
-                        <div
-                          key={bloque.id || idx}
-                          className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-xs">
-                              {idx + 1}
-                            </span>
-                            <span className="font-medium text-foreground">{bloque.nombre}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
-                            <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
-                            <span>→</span>
-                            <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
-                            <span>({(bloque.duracionMin / 60).toFixed(1)}h)</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : pasesDiaSeleccionados.length > 0 ? (
+                  {/* Pasos del Itinerario — Gantt Anidado */}
+                  {itinerarioResult.itinerario.length > 0 && (() => {
+                    const bloques = itinerarioResult.itinerario
+                    // Construir mapa de hijos: actividad anidada -> actividad contenedora
+                    const hijosMap = new Map<string, typeof bloques[0]>()
+                    for (const b of bloques) {
+                      if (!b.permitirSolapamiento) continue
+                      const bInicio = minutosDesdeMedianoche(b.inicio)
+                      const bFin = minutosDesdeMedianoche(b.fin)
+                      for (const c of bloques) {
+                        if (c.id === b.id || c.permitirSolapamiento) continue
+                        const cInicio = minutosDesdeMedianoche(c.inicio)
+                        const cFin = minutosDesdeMedianoche(c.fin)
+                        if (cInicio >= bInicio && cFin <= bFin) {
+                          hijosMap.set(c.id!, b)
+                        }
+                      }
+                    }
+
+                    // Bloques raíz (no son hijos de nadie)
+                    const raiz = bloques.filter((b) => !hijosMap.has(b.id!))
+
+                    return (
+                      <div className="space-y-1.5 pt-1">
+                        {raiz.map((bloque, idx) => {
+                          const hijos = bloques.filter((b) => hijosMap.get(b.id!)?.id === bloque.id)
+                          const esContenedor = hijos.length > 0
+                          return (
+                            <div key={bloque.id || idx} className={`rounded-lg border px-3 py-2 text-xs ${esContenedor ? 'border-primary/30 bg-primary/5 space-y-1.5' : 'border-border/60 bg-muted/40'}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-xs">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="font-medium text-foreground">{bloque.nombre}</span>
+                                  {esContenedor && (
+                                    <span className="text-xs font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Contenedor</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
+                                  <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
+                                  <span>→</span>
+                                  <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
+                                  <span>({(bloque.duracionMin / 60).toFixed(1)}h)</span>
+                                </div>
+                              </div>
+                              {hijos.length > 0 && (
+                                <div className="ml-7 space-y-1 border-l-2 border-primary/20 pl-2.5">
+                                  {hijos.map((hijo, hIdx) => (
+                                    <div key={hijo.id || hIdx} className="flex items-center justify-between rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-warning">↳</span>
+                                        <span className="font-medium text-foreground">{hijo.nombre}</span>
+                                        <span className="text-xs font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded-full">Anidada</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
+                                        <span className="font-semibold text-foreground">{formato12h(hijo.inicio)}</span>
+                                        <span>→</span>
+                                        <span className="font-semibold text-foreground">{formato12h(hijo.fin)}</span>
+                                        <span>({(hijo.duracionMin / 60).toFixed(1)}h)</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                  {itinerarioResult.itinerario.length === 0 && pasesDiaSeleccionados.length > 0 && (
                     <div className="rounded-lg border border-dashed border-success/30 bg-success/5 p-2.5 text-xs text-success font-medium text-center">
                       Acceso libre durante todo el día para la fecha reservada
                     </div>
-                  ) : null}
+                  )}
                 </div>
 
                 {/* Listado de todas las combinaciones de turnos que el cliente podrá elegir */}
@@ -949,6 +1083,7 @@ export function ExcursionForm({
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative w-36">
                   <Input
+                    aria-label="Duración en horas"
                     type="number"
                     min="0.5"
                     max="24"
@@ -1033,6 +1168,7 @@ export function ExcursionForm({
               {/* Agregar nueva hora */}
               <div className="flex flex-wrap items-center gap-2 pt-2">
                 <Input
+                  aria-label="Nueva hora de salida"
                   type="time"
                   value={nuevaHoraInput}
                   onChange={(e) => setNuevaHoraInput(e.target.value)}
@@ -1252,7 +1388,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-adulto"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Adulto Turista *
+                      Adulto *
                     </Label>
                     <Input
                       id="exc-precio-adulto"
@@ -1272,7 +1408,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-nino"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Niño Turista
+                      Niño
                     </Label>
                     <Input
                       id="exc-precio-nino"
@@ -1314,7 +1450,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-residente"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Adulto Residente
+                      Adulto
                     </Label>
                     <Input
                       id="exc-precio-residente"
@@ -1333,7 +1469,7 @@ export function ExcursionForm({
                       htmlFor="exc-precio-nino-residente"
                       className="text-xs font-semibold text-foreground"
                     >
-                      Niño Residente
+                      Niño
                     </Label>
                     <Input
                       id="exc-precio-nino-residente"

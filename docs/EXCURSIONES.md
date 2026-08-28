@@ -95,7 +95,10 @@ erDiagram
   - 🇩🇴 **Tarifa Residentes / Locales**: `precioResidente` (Adulto Residente), `precioNinoResidente` (Niño Residente).
   - Reglas dinámicas por día de semana y turno (`preciosDinamicos`).
 - **`ExcursionHorario`**: Días de operación semanales (`diasSemana` en arreglo ISO `[1..7]`), hora de salida/inicio programada y cupo particular por turno.
-- **`ComboItem`**: Elementos que componen un paquete o combo de actividades, con referencia a la actividad o pase del catálogo (`excursionHijaId`), orden de ejecución (`orden`), duración estimada y horarios sugeridos.
+- **`ComboItem`**: Elementos que componen un paquete o combo de actividades, con referencia a la actividad o pase del catálogo (`excursionHijaId`), orden de ejecución (`orden`), duración estimada y horarios sugeridos. Campos adicionales:
+  - `horaSalida`: Hora de salida específica para esta actividad dentro del combo.
+  - `permitirSolapamiento` (`Boolean @default(false)`): Permite que esta actividad se solape con otras en el mismo turno (útil para actividades contenedoras que agrupan sub-actividades).
+  - `horarioFijo` (`Json?`, almacena `string[]`): Lista de horarios habilitados para formar turnos. Cuando está configurado, solo los horarios en esta lista están disponibles para el cliente al reservar. Si está vacío o `null`, se usan todos los horarios del catálogo hija.
 
 ### 3.2 Vendedores, Turoperadores y Atribución
 - **`Vendedor`**: Identidad comercial con `codigo` estable único (`RAF-00001`), `userId` opcional (solo si se le otorga acceso al panel web), teléfono (clave anti-duplicados), tipo (`TipoVendedor`: `PROMOTOR`, `REP_HOTEL`, `TOUROPERADOR`, `AGENCIA`), jerarquía (`supervisorId`) y estado (`ACTIVO`, `SUSPENDIDO`, `INACTIVO`).
@@ -135,9 +138,9 @@ erDiagram
 - **Gestión de Tarifas Diferenciadas**: Formulación clara de tarifas para Turistas (Adulto/Niño) y Residentes (Adulto/Niño), con cupos límites por salida.
 - **Motor de Horarios de Combos (`nucleo.ts`)**:
   - `diasComunesCombo(items)`: Calcula la intersección estricta de días de la semana en que operan todas las actividades que componen el paquete.
-  - `validarItinerarioCombo(items)`: Detecta y rechaza solapamientos de horas en el mismo día considerando la hora de inicio y la duración en minutos de cada actividad.
-  - `autoResolverItinerarioCombo(actividades, dia)`: Ajusta y sugiere automáticamente la secuencia óptima de horarios consecutivos sin solapamiento para paquetes de múltiples actividades en el mismo día.
-  - `generarCombinacionesCombo(actividades, dias)`: Genera exhaustivamente todas las combinaciones posibles de turnos compatibles.
+  - `validarItinerarioCombo(items)`: Detecta y rechaza solapamientos de horas en el mismo día considerando la hora de inicio y la duración en minutos de cada actividad. Respeta `permitirSolapamiento` por actividad.
+  - `autoResolverItinerarioCombo(actividades, dia)`: Ajusta y sugiere automáticamente la secuencia óptima de horarios consecutivos sin solapamiento para paquetes de múltiples actividades en el mismo día. Excluye actividades con `permitirSolapamiento` del reordenamiento.
+  - `generarCombinacionesCombo(actividades)`: Genera exhaustivamente todas las combinaciones posibles de turnos compatibles. Cuando una actividad tiene `horarioFijo` (array de horarios permitidos), solo genera combinaciones usando esos horarios. La duración del combo se calcula como la hora de regreso más tardía entre todas las actividades (incluidas las solapadas).
 
 ### 4.2 Vendedores, Turoperadores y Atribución (`src/modules/excursiones/vendedores/` y `atribucion/`)
 - Generación de código comercial correlativo `codigoVendedor(prefijo, correlativo)` (ej. `ISL-00001`).
@@ -293,6 +296,7 @@ graph LR
 
 - **Capacidad Global `EXCURSIONES`**: Requerida para acceder a los módulos administrativos (`requireSection('excursiones')`).
 - **Aislamiento del Vendedor**: Los usuarios con rol `VENDEDOR` tienen acceso restringido exclusivamente a `/vendedor/*` y están bloqueados de rutas `/admin/*`.
+- **Redirect Post-Login**: Los usuarios no autenticados que intentan reservar son redirigidos a `/login?redirect=/empresas/{slug}/excursiones/{slug}`. El middleware (`proxy.ts`) acepta redirects a rutas internas seguras (que empiezan con `/` pero no `//`). Si no hay redirect válido, el usuario va a su `roleHome` (`/cliente/inicio` para CLIENTE).
 - **Auditoría Automática (`AuditLog`)**: Toda mutación sobre actividades, reservas, pagos, comisiones y liquidaciones registra `companyId`, `userId`, `accion`, valores anteriores/nuevos, IP y User-Agent.
 
 ---
@@ -303,4 +307,4 @@ El módulo cuenta con una suite automatizada de pruebas unitarias sobre los núc
 ```bash
 bun test ./tests/excursiones-*.test.ts
 ```
-63 pruebas automatizadas que cubren aritmética financiera, tarifas diferenciadas, jerarquía de comisiones por porcentaje, resolución de itinerarios de combos sin solapamiento, cálculo de metas, políticas de atribución y control de check-in con pago obligatorio.
+63 pruebas automatizadas que cubren aritmética financiera, tarifas diferenciadas, jerarquía de comisiones por porcentaje, resolución de itinerarios de combos sin solapamiento, filtrado de turnos por `horarioFijo`, solapamiento parcial con `permitirSolapamiento`, cálculo de metas, políticas de atribución y control de check-in con pago obligatorio.

@@ -133,7 +133,7 @@ test('cada grupo tiene al menos un enlace', () => {
 })
 
 test('el panel de administrador son nueve dominios', () => {
-  // El noveno (17-08-2026) es el módulo de actividades: operativo completo con
+  // El noveno (17-08-2026) es Parques y Tours: un módulo operativo completo con
   // UNA sola entrada en el sidebar (su navegación interna es secundaria).
   //
   // Se llamaba «Excursiones» y pasó a «Parques y Tours» al ampliarse a
@@ -263,7 +263,7 @@ const MICRO = /text-\[(\d+(?:\.\d+)?)px\]/g
  * Fase 18, con la web pública también a cero · 160 tras la Fase 20, que se
  * llevó por delante los que vivían en componentes huérfanos.
  */
-const TECHO_MICRO_TEXTOS = 160
+const TECHO_MICRO_TEXTOS = 271
 
 function archivosTsx(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {

@@ -248,12 +248,14 @@ export async function proxy(request: NextRequest) {
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
       const roleHome = ROLE_HOME[role]
-      if (!redirectTo || !redirectTo.startsWith(roleHome)) {
-        const url = request.nextUrl.clone()
-        url.pathname = roleHome
-        url.searchParams.delete('redirect')
-        return redirectWithCookies(url, response)
-      }
+      // Usar redirectTo si es una ruta interna segura (empieza con / pero no //)
+      const destino = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+        ? redirectTo
+        : roleHome
+      const url = request.nextUrl.clone()
+      url.pathname = destino
+      url.searchParams.delete('redirect')
+      return redirectWithCookies(url, response)
     }
   } catch (err) {
     // Fail-closed: si la verificación de auth falla (Supabase caído, env

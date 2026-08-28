@@ -55,6 +55,7 @@ const eslintConfig = [
       'prisma/**',
       'src/components/ui/**',
       'src/hooks/use-mobile.ts',
+      'supabase/.temp/**',
     ],
   },
 ]

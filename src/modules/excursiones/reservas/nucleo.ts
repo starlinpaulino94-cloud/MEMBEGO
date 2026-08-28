@@ -124,10 +124,14 @@ export interface ReglaPrecioDinamico {
   horasSalida?: string[]
   precioAdulto: number
   precioNino: number | null
+  precioResidente: number | null
+  precioNinoResidente: number | null
 }
 
 /**
  * Resuelve el precio efectivo de una variante evaluando reglas dinámicas (ej. por día u hora).
+ * Si esResidente es true, usa precios de residente cuando la regla los define;
+ * si están vacíos (null), usa el precio base de la variante.
  * Retorna el precio base si ninguna regla coincide.
  */
 export function calcularPrecioEfectivo(
@@ -135,9 +139,15 @@ export function calcularPrecioEfectivo(
   hora: string | null,
   baseAdulto: number,
   baseNino: number | null,
-  reglas: ReglaPrecioDinamico[] | null
+  reglas: ReglaPrecioDinamico[] | null,
+  esResidente: boolean = false,
+  baseResidente: number | null = null,
+  baseNinoResidente: number | null = null
 ): { precioAdulto: number; precioNino: number | null } {
   if (!reglas || reglas.length === 0) {
+    if (esResidente && baseResidente != null) {
+      return { precioAdulto: baseResidente, precioNino: baseNinoResidente }
+    }
     return { precioAdulto: baseAdulto, precioNino: baseNino }
   }
 
@@ -153,13 +163,22 @@ export function calcularPrecioEfectivo(
     const cumpleHora = !regla.horasSalida || regla.horasSalida.length === 0 || (horaNormalizada && regla.horasSalida.includes(horaNormalizada))
 
     if (cumpleDia && cumpleHora) {
+      if (esResidente) {
+        return {
+          precioAdulto: regla.precioResidente ?? baseResidente ?? baseAdulto,
+          precioNino: regla.precioNinoResidente ?? baseNinoResidente ?? baseNino,
+        }
+      }
       return {
         precioAdulto: regla.precioAdulto,
-        precioNino: regla.precioNino
+        precioNino: regla.precioNino,
       }
     }
   }
 
+  if (esResidente && baseResidente != null) {
+    return { precioAdulto: baseResidente, precioNino: baseNinoResidente }
+  }
   return { precioAdulto: baseAdulto, precioNino: baseNino }
 }
 
@@ -235,6 +254,7 @@ export interface ReservaDatos {
   lobbyRecogida: string | null
   horaRecogida: string | null
   habitacion: string | null
+  esResidente: boolean
 }
 
 /**
@@ -272,6 +292,7 @@ export function validarReserva(
       lobbyRecogida: texto(form.lobbyRecogida, 80) || null,
       horaRecogida: normalizarHora(form.horaRecogida),
       habitacion: texto(form.habitacion, 30) || null,
+      esResidente: form.esResidente === 'true' || form.esResidente === true,
     },
   }
 }
@@ -492,6 +513,8 @@ export interface ActividadParaItinerario {
   duracionMin?: number | null
   horaRegreso?: string | null
   horarios?: { id?: string; horaSalida: string; cupo?: number | null; diasSemana?: number[] }[]
+  permitirSolapamiento?: boolean
+  horarioFijo?: string[] | null
 }
 
 export interface BloqueItinerario {
@@ -500,6 +523,7 @@ export interface BloqueItinerario {
   inicio: string
   fin: string
   duracionMin: number
+  permitirSolapamiento?: boolean
 }
 
 /**
@@ -555,6 +579,7 @@ export function validarItinerarioCombo(
       inicio,
       fin,
       duracionMin: duracion,
+      permitirSolapamiento: a.permitirSolapamiento,
     }
   })
 
@@ -570,6 +595,10 @@ export function validarItinerarioCombo(
     const inicioSiguienteMin = minutosDesdeMedianoche(siguiente.inicio)
 
     if (inicioSiguienteMin < finActualMin) {
+      // Si cualquiera de los dos permite solapamiento, no es error
+      if (actual.permitirSolapamiento || siguiente.permitirSolapamiento) {
+        continue
+      }
       return {
         ok: false,
         error: `Conflicto de horario: "${actual.nombre}" termina a las ${actual.fin} y "${siguiente.nombre}" inicia a las ${siguiente.inicio}. Las actividades del mismo día no deben solaparse.`,
@@ -667,6 +696,11 @@ export function autoResolverItinerarioCombo(
 
     if (act.tipoItem === 'PASE_DIA') {
       horariosAsignados[actId] = ''
+      continue
+    }
+
+    // Actividades con solapamiento permitido no se reordenan — se mantienen en su posición
+    if (act.permitirSolapamiento) {
       continue
     }
 
@@ -795,17 +829,22 @@ export function optimizarItinerarioCombo(
   }
 
   // Generar listas de horarios disponibles por actividad
+  // Las actividades con permitirSolapamiento se fijan en su slot actual y no participan del combinador
   const slotsPorActividad: { id: string; act: ActividadParaItinerario; slots: string[] }[] =
-    actividades.map((act) => {
-      const id = act.id || act.nombre
-      const slots =
-        act.horarios && act.horarios.length > 0
-          ? Array.from(new Set(act.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort(
-              (a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b)
-            )
-          : [act.horaSalida ? act.horaSalida.trim().slice(0, 5) : '09:00']
-      return { id, act, slots }
-    })
+    actividades
+      .filter((a) => !a.permitirSolapamiento)
+      .map((act) => {
+        const id = act.id || act.nombre
+        const slots =
+          act.horarios && act.horarios.length > 0
+            ? Array.from(new Set(act.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort(
+                (a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b)
+              )
+            : [act.horaSalida ? act.horaSalida.trim().slice(0, 5) : '09:00']
+        return { id, act, slots }
+      })
+
+  const actividadesFijas = actividades.filter((a) => a.permitirSolapamiento)
 
   // Función recursiva para buscar combinaciones válidas
   let mejorCombinacion: Record<string, string> | null = null
@@ -818,9 +857,18 @@ export function optimizarItinerarioCombo(
     asignacionActual: Record<string, string>
   ) {
     if (index >= slotsPorActividad.length) {
+      // Agregar actividades fijas (solapamiento permitido) a la asignación
+      const asignacionCompleta = { ...asignacionActual }
+      for (const fija of actividadesFijas) {
+        const fid = fija.id || fija.nombre
+        asignacionCompleta[fid] =
+          fija.horaSalida ||
+          (fija.horarios && fija.horarios.length > 0 ? fija.horarios[0].horaSalida : '09:00')
+      }
+
       const actsConHorario = actividades.map((a) => ({
         ...a,
-        horaSalida: asignacionActual[a.id || a.nombre],
+        horaSalida: asignacionCompleta[a.id || a.nombre],
       }))
       const v = validarItinerarioCombo(actsConHorario)
       if (v.ok && v.itinerario.length > 0) {
@@ -830,7 +878,7 @@ export function optimizarItinerarioCombo(
         if (span < menorSpan || (span === menorSpan && inicioMin < menorInicioMin)) {
           menorSpan = span
           menorInicioMin = inicioMin
-          mejorCombinacion = { ...asignacionActual }
+          mejorCombinacion = { ...asignacionCompleta }
           mejorItinerario = v.itinerario
         }
       }
@@ -892,10 +940,21 @@ export function generarCombinacionesCombo(
 ): CombinacionItinerarioCombo[] {
   if (actividades.length === 0) return []
 
-  const actividadesConHorario = actividades.filter((a) => a.tipoItem !== 'PASE_DIA')
+  const actividadesConHorario = actividades.filter(
+    (a) => a.tipoItem !== 'PASE_DIA' && !a.permitirSolapamiento
+  )
+  const actividadesSolapadas = actividades.filter(
+    (a) => a.tipoItem !== 'PASE_DIA' && a.permitirSolapamiento
+  )
 
-  // Si todas las actividades son pases de día, no existen turnos ni horarios restringidos
+  // Si todas las actividades son pases de día o solapadas, no existen turnos restringidos
   if (actividadesConHorario.length === 0) {
+    const asignaciones: Record<string, string> = {}
+    for (const sol of actividadesSolapadas) {
+      asignaciones[sol.id || sol.nombre] =
+        sol.horaSalida ||
+        (sol.horarios && sol.horarios.length > 0 ? sol.horarios[0].horaSalida : '09:00')
+    }
     return [
       {
         id: 'acceso-libre',
@@ -903,14 +962,14 @@ export function generarCombinacionesCombo(
         horaInicio: '',
         horaFin: '',
         duracionTotalMin: 0,
-        horariosAsignados: {},
+        horariosAsignados: asignaciones,
         itinerario: [],
         resumenTexto: 'Pase(s) con acceso libre para la fecha seleccionada',
       },
     ]
   }
 
-  // Si solo hay una actividad con horario (+ posibles pases de día asociados)
+  // Si solo hay una actividad con horario (+ posibles pases de día y solapadas asociados)
   if (actividadesConHorario.length === 1) {
     const act = actividadesConHorario[0]
     const slots =
@@ -921,15 +980,38 @@ export function generarCombinacionesCombo(
         : [act.horaSalida ? act.horaSalida.trim().slice(0, 5) : '09:00']
 
     return slots.map((slot) => {
-      const v = validarItinerarioCombo([{ ...act, horaSalida: slot }])
-      const horaInicio = slot
-      const bloqueHorario = v.itinerario.find((b) => b.id === act.id || b.nombre === act.nombre)
-      const horaFin = bloqueHorario?.fin || slot
+      // Agregar actividades solapadas a la asignación
+      const asignaciones: Record<string, string> = { [act.id || act.nombre]: slot }
+      for (const sol of actividadesSolapadas) {
+        asignaciones[sol.id || sol.nombre] =
+          sol.horaSalida ||
+          (sol.horarios && sol.horarios.length > 0 ? sol.horarios[0].horaSalida : '09:00')
+      }
+
+      const v = validarItinerarioCombo([
+        { ...act, horaSalida: slot },
+        ...actividadesSolapadas.map((a) => ({
+          ...a,
+          horaSalida:
+            a.horaSalida ||
+            (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
+        })),
+      ])
+      const horaInicio = v.itinerario[0]?.inicio || slot
+      // Calcular horaFin considerando también las actividades solapadas
+      let maxFinMinutos = minutosDesdeMedianoche(v.itinerario[v.itinerario.length - 1]?.fin || slot)
+      for (const sol of actividadesSolapadas) {
+        const inicioSol = (sol.horaSalida || '09:00').trim().slice(0, 5)
+        const durSol = sol.duracionMin && sol.duracionMin > 0 ? sol.duracionMin : 120
+        const finSolMinutos = minutosDesdeMedianoche(inicioSol) + durSol
+        if (finSolMinutos > maxFinMinutos) {
+          maxFinMinutos = finSolMinutos
+        }
+      }
+      const horaFin = formatoMinutosAHora(maxFinMinutos)
       const dur = minutosDesdeMedianoche(horaFin) - minutosDesdeMedianoche(horaInicio)
 
-      const asignaciones: Record<string, string> = { [act.id || act.nombre]: slot }
-
-      const resumen = `${act.nombre} (${horaAmPm(horaInicio)} → ${horaAmPm(horaFin)})`
+      const resumen = v.itinerario.map((b) => `${horaAmPm(b.inicio)} ${b.nombre}`).join(' ➔ ')
 
       return {
         id: slot,
@@ -946,8 +1028,9 @@ export function generarCombinacionesCombo(
 
   const slotsPorActividad = actividadesConHorario.map((act) => {
     const id = act.id || act.nombre
-    const slots =
-      act.horarios && act.horarios.length > 0
+    const slots = act.horarioFijo && act.horarioFijo.length > 0
+      ? act.horarioFijo.map((h) => h.trim().slice(0, 5))
+      : act.horarios && act.horarios.length > 0
         ? Array.from(new Set(act.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort(
             (a, b) => minutosDesdeMedianoche(a) - minutosDesdeMedianoche(b)
           )
@@ -960,19 +1043,44 @@ export function generarCombinacionesCombo(
 
   function explorar(index: number, asignacionActual: Record<string, string>) {
     if (index >= slotsPorActividad.length) {
+      // Agregar actividades solapadas (fijas) a la asignación
+      const asignacionCompleta = { ...asignacionActual }
+      for (const sol of actividadesSolapadas) {
+        const sid = sol.id || sol.nombre
+        asignacionCompleta[sid] =
+          sol.horaSalida ||
+          (sol.horarios && sol.horarios.length > 0 ? sol.horarios[0].horaSalida : '09:00')
+      }
+
       const actsConHorario = actividadesConHorario.map((a) => ({
         ...a,
-        horaSalida: asignacionActual[a.id || a.nombre],
+        horaSalida: asignacionCompleta[a.id || a.nombre],
       }))
-      const v = validarItinerarioCombo(actsConHorario)
+      const actsSolapadas = actividadesSolapadas.map((a) => ({
+        ...a,
+        horaSalida: asignacionCompleta[a.id || a.nombre],
+      }))
+      const v = validarItinerarioCombo([...actsConHorario, ...actsSolapadas])
       if (v.ok && v.itinerario.length > 0) {
         // Encontrar bloques con horarios reales para calcular inicio y fin del tour
         const horaInicio = v.itinerario[0]?.inicio || '09:00'
-        const horaFin = v.itinerario[v.itinerario.length - 1]?.fin || '18:00'
+
+        // Calcular horaFin como el máximo entre el último bloque del itinerario
+        // y la hora de regreso de cada actividad solapada
+        let maxFinMinutos = minutosDesdeMedianoche(v.itinerario[v.itinerario.length - 1]?.fin || '18:00')
+        for (const sol of actsSolapadas) {
+          const inicioSol = (sol.horaSalida || '09:00').trim().slice(0, 5)
+          const durSol = sol.duracionMin && sol.duracionMin > 0 ? sol.duracionMin : 120
+          const finSolMinutos = minutosDesdeMedianoche(inicioSol) + durSol
+          if (finSolMinutos > maxFinMinutos) {
+            maxFinMinutos = finSolMinutos
+          }
+        }
+        const horaFin = formatoMinutosAHora(maxFinMinutos)
         const duracionTotalMin =
           minutosDesdeMedianoche(horaFin) - minutosDesdeMedianoche(horaInicio)
 
-        const asignacionesCompletas: Record<string, string> = { ...asignacionActual }
+        const asignacionesCompletas: Record<string, string> = { ...asignacionCompleta }
 
         const key = Object.entries(asignacionesCompletas)
           .sort(([a], [b]) => a.localeCompare(b))
@@ -1030,6 +1138,8 @@ export function validarDisponibilidadCombo(
       nombre: string
       duracionMin?: number | null
       horaRegreso?: string | null
+      permitirSolapamiento?: boolean
+      horarioFijo?: string[] | null
     })[]
   }
 ): { ok: true; cupoDisponible: number; itinerario: BloqueItinerario[] } | { ok: false; error: string } {
@@ -1118,6 +1228,8 @@ export function validarDisponibilidadComboMultiFecha(
       nombre: string
       duracionMin?: number | null
       horaRegreso?: string | null
+      permitirSolapamiento?: boolean
+      horarioFijo?: string[] | null
     })[]
   },
   itemsItinerario: { actividadId: string; fecha: Date; hora: string | null }[]
@@ -1172,6 +1284,7 @@ export function validarDisponibilidadComboMultiFecha(
       horaSalida: item.hora,
       horaRegreso: act.horaRegreso,
       horarios: act.horarios,
+      permitirSolapamiento: act.permitirSolapamiento,
     })
     porFecha.set(fechaKey, lista)
 

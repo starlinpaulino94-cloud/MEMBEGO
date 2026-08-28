@@ -20,6 +20,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { StatusChip } from '@/components/ui/status-chip'
+import { SugerenciasReglas } from '@/components/excursiones/SugerenciasReglas'
+import { CalendarioPreviewPrecios } from '@/components/excursiones/CalendarioPreviewPrecios'
 
 const init: CatalogoActionState = {}
 
@@ -43,6 +45,12 @@ interface ReglaUI {
   horas: string[]
   precioAdulto: string
   precioNino: string
+  precioResidente: string
+  precioNinoResidente: string
+  gratisAdulto: boolean
+  gratisNino: boolean
+  gratisResidente: boolean
+  gratisNinoResidente: boolean
 }
 
 const DIAS = [
@@ -69,6 +77,12 @@ function parsearReglasDesdeJson(json?: string): ReglaUI[] {
         horas: Array.isArray(r.horasSalida) ? r.horasSalida.map(String) : [],
         precioAdulto: r.precioAdulto != null ? String(r.precioAdulto) : '',
         precioNino: r.precioNino != null ? String(r.precioNino) : '',
+        precioResidente: r.precioResidente != null ? String(r.precioResidente) : '',
+        precioNinoResidente: r.precioNinoResidente != null ? String(r.precioNinoResidente) : '',
+        gratisAdulto: r.precioAdulto === 0,
+        gratisNino: r.precioNino === 0,
+        gratisResidente: r.precioResidente === 0,
+        gratisNinoResidente: r.precioNinoResidente === 0,
       }
     })
   } catch {
@@ -81,19 +95,40 @@ function reglasAJson(reglas: ReglaUI[]): string {
   const salida = reglas.map((r) => ({
     diasSemana: r.diasSemana,
     horasSalida: r.horas.filter(Boolean),
-    precioAdulto: Number(r.precioAdulto) || 0,
-    precioNino: r.precioNino ? Number(r.precioNino) : null,
+    precioAdulto: r.gratisAdulto ? 0 : (Number(r.precioAdulto) || 0),
+    precioNino: r.gratisNino ? 0 : (r.precioNino ? Number(r.precioNino) : null),
+    precioResidente: r.gratisResidente ? 0 : (r.precioResidente ? Number(r.precioResidente) : null),
+    precioNinoResidente: r.gratisNinoResidente ? 0 : (r.precioNinoResidente ? Number(r.precioNinoResidente) : null),
   }))
   return JSON.stringify(salida)
 }
 
-function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { defaultValue?: string; horariosDisponibles?: string[] }) {
+function EditorPreciosDinamicos({
+  defaultValue,
+  horariosDisponibles = [],
+  precioBaseAdulto = 0,
+  precioBaseNino = null,
+  precioBaseResidente = null,
+  precioBaseNinoResidente = null,
+  moneda = 'DOP',
+}: {
+  defaultValue?: string
+  horariosDisponibles?: string[]
+  precioBaseAdulto?: number
+  precioBaseNino?: number | null
+  precioBaseResidente?: number | null
+  precioBaseNinoResidente?: number | null
+  moneda?: string
+}) {
   const [reglas, setReglas] = useState<ReglaUI[]>(() => parsearReglasDesdeJson(defaultValue))
 
   const agregar = () =>
-    setReglas((prev) => [...prev, { diasSemana: [], horas: [], precioAdulto: '', precioNino: '' }])
+    setReglas((prev) => [...prev, { diasSemana: [], horas: [], precioAdulto: '', precioNino: '', precioResidente: '', precioNinoResidente: '', gratisAdulto: false, gratisNino: false, gratisResidente: false, gratisNinoResidente: false }])
 
   const eliminar = (idx: number) => setReglas((prev) => prev.filter((_, i) => i !== idx))
+
+  const agregarDesdeSugerencia = (regla: { diasSemana: number[]; horas: string[]; precioAdulto: string; precioNino: string; precioResidente: string; precioNinoResidente: string }) =>
+    setReglas((prev) => [...prev, { ...regla, gratisAdulto: false, gratisNino: false, gratisResidente: false, gratisNinoResidente: false }])
 
   const actualizar = (idx: number, cambios: Partial<ReglaUI>) =>
     setReglas((prev) => prev.map((r, i) => (i === idx ? { ...r, ...cambios } : r)))
@@ -129,6 +164,15 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
       </div>
 
       <input type="hidden" name="preciosDinamicosJson" value={reglasAJson(reglas)} />
+
+      <SugerenciasReglas
+        precioBaseAdulto={precioBaseAdulto}
+        precioBaseNino={precioBaseNino}
+        precioBaseResidente={precioBaseResidente}
+        precioBaseNinoResidente={precioBaseNinoResidente}
+        horariosDisponibles={horariosDisponibles}
+        onAplicar={agregarDesdeSugerencia}
+      />
 
       {reglas.length === 0 ? (
         <p className="text-caption text-muted-foreground italic">
@@ -169,7 +213,10 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
 
               {horariosDisponibles.length > 0 && (
                 <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">2. Turnos aplicables</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    2. Turnos aplicables
+                  </Label>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {horariosDisponibles.map((h) => {
                       const sel = r.horas.includes(h)
@@ -178,10 +225,12 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                           key={h}
                           type="button"
                           onClick={() => toggleHora(idx, h)}
+                          title={sel ? `Turno ${h} activo — clic para desactivar` : `Activar turno ${h}`}
                           className={`rounded px-1.5 py-0.5 text-xs font-semibold transition ${
                             sel ? 'bg-primary/20 text-primary border border-primary/40' : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-transparent'
                           }`}
                         >
+                          <Clock className="h-2.5 w-2.5" />
                           {h}
                         </button>
                       )
@@ -190,35 +239,148 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Tarifa Adulto *</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Ej.: 90"
-                    className="h-8 text-xs"
-                    value={r.precioAdulto}
-                    onChange={(e) => actualizar(idx, { precioAdulto: e.target.value })}
-                  />
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-muted-foreground">Turista Adulto *</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nuevoGratis = !r.gratisAdulto
+                          actualizar(idx, {
+                            gratisAdulto: nuevoGratis,
+                            precioAdulto: nuevoGratis ? '0' : '',
+                          })
+                        }}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisAdulto ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      >
+                        {r.gratisAdulto ? '✓ Gratis' : 'Gratis'}
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej.: 90"
+                      className="h-8 text-xs"
+                      value={r.precioAdulto}
+                      disabled={r.gratisAdulto}
+                      onChange={(e) => actualizar(idx, { precioAdulto: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-muted-foreground">Turista Niño</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nuevoGratis = !r.gratisNino
+                          actualizar(idx, {
+                            gratisNino: nuevoGratis,
+                            precioNino: nuevoGratis ? '0' : '',
+                          })
+                        }}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisNino ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      >
+                        {r.gratisNino ? '✓ Gratis' : 'Gratis'}
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej.: 45"
+                      className="h-8 text-xs"
+                      value={r.precioNino}
+                      disabled={r.gratisNino}
+                      onChange={(e) => actualizar(idx, { precioNino: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Tarifa Niño</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Ej.: 45"
-                    className="h-8 text-xs"
-                    value={r.precioNino}
-                    onChange={(e) => actualizar(idx, { precioNino: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-success">Residente Adulto</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nuevoGratis = !r.gratisResidente
+                          actualizar(idx, {
+                            gratisResidente: nuevoGratis,
+                            precioResidente: nuevoGratis ? '0' : '',
+                          })
+                        }}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisResidente ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      >
+                        {r.gratisResidente ? '✓ Gratis' : 'Gratis'}
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Opcional"
+                      className="h-8 text-xs border-success/30"
+                      value={r.precioResidente}
+                      disabled={r.gratisResidente}
+                      onChange={(e) => actualizar(idx, { precioResidente: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-success">Residente Niño</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nuevoGratis = !r.gratisNinoResidente
+                          actualizar(idx, {
+                            gratisNinoResidente: nuevoGratis,
+                            precioNinoResidente: nuevoGratis ? '0' : '',
+                          })
+                        }}
+                        className={`text-xs font-semibold px-1.5 py-0.5 rounded transition ${r.gratisNinoResidente ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      >
+                        {r.gratisNinoResidente ? '✓ Gratis' : 'Gratis'}
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Opcional"
+                      className="h-8 text-xs border-success/30"
+                      value={r.precioNinoResidente}
+                      disabled={r.gratisNinoResidente}
+                      onChange={(e) => actualizar(idx, { precioNinoResidente: e.target.value })}
+                    />
+                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground italic">
+                  Si los campos de residente se dejan vacíos, se usan los precios base de la variante.
+                </p>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {reglas.length > 0 && (
+        <CalendarioPreviewPrecios
+          reglas={reglas.map((r) => ({
+            diasSemana: r.diasSemana,
+            horasSalida: r.horas,
+            precioAdulto: Number(r.precioAdulto) || precioBaseAdulto,
+            precioNino: r.precioNino ? Number(r.precioNino) : precioBaseNino,
+            precioResidente: r.precioResidente ? Number(r.precioResidente) : precioBaseResidente,
+            precioNinoResidente: r.precioNinoResidente ? Number(r.precioNinoResidente) : precioBaseNinoResidente,
+          }))}
+          precioBaseAdulto={precioBaseAdulto}
+          precioBaseNino={precioBaseNino}
+          precioBaseResidente={precioBaseResidente}
+          precioBaseNinoResidente={precioBaseNinoResidente}
+          moneda={moneda}
+        />
       )}
     </div>
   )
@@ -229,11 +391,13 @@ function FormVariante({
   variante,
   onCerrar,
   horariosDisponibles = [],
+  moneda = 'DOP',
 }: {
   excursionId: string
   variante?: VarianteFila
   onCerrar: () => void
   horariosDisponibles?: string[]
+  moneda?: string
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(guardarVariante, init)
@@ -250,7 +414,7 @@ function FormVariante({
     <form action={formAction} className="space-y-4 rounded-xl border border-dashed border-primary/40 bg-muted/40 p-4">
       <input type="hidden" name="excursionId" value={excursionId} />
       {variante ? <input type="hidden" name="varianteId" value={variante.id} /> : null}
-      
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor={`var-nombre-${variante?.id ?? 'nueva'}`}>Nombre de la variante *</Label>
@@ -288,7 +452,7 @@ function FormVariante({
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <Label htmlFor={`var-pa-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto Turista *</Label>
+              <Label htmlFor={`var-pa-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto *</Label>
               <Input
                 id={`var-pa-${variante?.id ?? 'nueva'}`}
                 name="precioAdulto"
@@ -302,7 +466,7 @@ function FormVariante({
               />
             </div>
             <div>
-              <Label htmlFor={`var-pn-${variante?.id ?? 'nueva'}`} className="text-xs">Niño Turista</Label>
+              <Label htmlFor={`var-pn-${variante?.id ?? 'nueva'}`} className="text-xs">Niño</Label>
               <Input
                 id={`var-pn-${variante?.id ?? 'nueva'}`}
                 name="precioNino"
@@ -327,7 +491,7 @@ function FormVariante({
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <Label htmlFor={`var-pr-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto Residente</Label>
+              <Label htmlFor={`var-pr-${variante?.id ?? 'nueva'}`} className="text-xs">Adulto</Label>
               <Input
                 id={`var-pr-${variante?.id ?? 'nueva'}`}
                 name="precioResidente"
@@ -340,7 +504,7 @@ function FormVariante({
               />
             </div>
             <div>
-              <Label htmlFor={`var-pnr-${variante?.id ?? 'nueva'}`} className="text-xs">Niño Residente</Label>
+              <Label htmlFor={`var-pnr-${variante?.id ?? 'nueva'}`} className="text-xs">Niño</Label>
               <Input
                 id={`var-pnr-${variante?.id ?? 'nueva'}`}
                 name="precioNinoResidente"
@@ -356,7 +520,15 @@ function FormVariante({
         </div>
       </div>
 
-      <EditorPreciosDinamicos defaultValue={variante?.preciosDinamicosJson} horariosDisponibles={horariosDisponibles} />
+      <EditorPreciosDinamicos
+        defaultValue={variante?.preciosDinamicosJson}
+        horariosDisponibles={horariosDisponibles}
+        precioBaseAdulto={variante?.precioAdulto ? Number(variante.precioAdulto) : 0}
+        precioBaseNino={variante?.precioNino ? Number(variante.precioNino) : null}
+        precioBaseResidente={variante?.precioResidente ? Number(variante.precioResidente) : null}
+        precioBaseNinoResidente={variante?.precioNinoResidente ? Number(variante.precioNinoResidente) : null}
+        moneda={moneda}
+      />
 
       {state.error ? (
         <Alert variant="destructive">
@@ -426,7 +598,7 @@ export function VariantesEditor({
       <div className="mt-3 space-y-2">
         {variantes.map((v) =>
           editando === v.id ? (
-            <FormVariante key={v.id} excursionId={excursionId} variante={v} onCerrar={() => setEditando(null)} horariosDisponibles={horariosDisponibles} />
+            <FormVariante key={v.id} excursionId={excursionId} variante={v} onCerrar={() => setEditando(null)} horariosDisponibles={horariosDisponibles} moneda={moneda} />
           ) : (
             <div key={v.id} className="flex items-center justify-between gap-3 rounded-xl border border-border px-3.5 py-3 hover:border-primary/30 transition">
               <div className="min-w-0 space-y-1">
@@ -464,7 +636,7 @@ export function VariantesEditor({
           )
         )}
         {editando === 'nueva' ? (
-          <FormVariante excursionId={excursionId} onCerrar={() => setEditando(null)} horariosDisponibles={horariosDisponibles} />
+          <FormVariante excursionId={excursionId} onCerrar={() => setEditando(null)} horariosDisponibles={horariosDisponibles} moneda={moneda} />
         ) : (
           <button
             type="button"

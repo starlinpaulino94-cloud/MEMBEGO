@@ -110,7 +110,7 @@ export async function crearReservaVendedor(
           },
           variantes: {
             where: { id: varianteId, activa: true },
-            select: { id: true, precioAdulto: true, precioNino: true, preciosDinamicos: true },
+            select: { id: true, precioAdulto: true, precioNino: true, precioResidente: true, precioNinoResidente: true, preciosDinamicos: true },
           },
         },
       })
@@ -162,6 +162,7 @@ export async function crearReservaVendedor(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           },
           itemsParaValidar
@@ -202,6 +203,7 @@ export async function crearReservaVendedor(
                 horaSalida: h.horaSalida,
                 cupo: h.cupo,
               })),
+              permitirSolapamiento: ci.permitirSolapamiento,
             })),
           }
         )
@@ -231,12 +233,19 @@ export async function crearReservaVendedor(
     const reglasDin = variante.preciosDinamicos
       ? (variante.preciosDinamicos as unknown as ReglaPrecioDinamico[])
       : null
+    // Sin `as any`: los dos campos están en el `select` de esta consulta.
+    const baseResidente = variante.precioResidente != null ? variante.precioResidente.toNumber() : null
+    const baseNinoResidente =
+      variante.precioNinoResidente != null ? variante.precioNinoResidente.toNumber() : null
     const { precioAdulto, precioNino } = calcularPrecioEfectivo(
       v.datos.fecha,
       v.datos.hora,
       variante.precioAdulto.toNumber(),
       variante.precioNino ? variante.precioNino.toNumber() : null,
-      reglasDin
+      reglasDin,
+      v.datos.esResidente,
+      baseResidente,
+      baseNinoResidente
     )
 
     const totales = calcularTotales({
@@ -392,6 +401,7 @@ export async function crearReservaVendedor(
               estado: 'PENDIENTE',
               canal: 'VENDEDOR',
               notas: v.datos.notas,
+              esResidente: v.datos.esResidente,
               voucherAgencia: v.datos.voucherAgencia,
               hotelRecogida: v.datos.hotelRecogida,
               lobbyRecogida: v.datos.lobbyRecogida,

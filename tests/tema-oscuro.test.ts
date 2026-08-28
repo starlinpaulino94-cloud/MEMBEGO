@@ -55,6 +55,8 @@ const DECLARADOS = new Map<string, string>([
   // Terceros y controles con blanco funcional.
   ['src/components/membresia/PagoTarjetaCardnet.tsx', 'marco del formulario de CardNET'],
   ['src/components/membresia/PagoTokenCardnet.tsx', 'perilla del interruptor'],
+  // Perilla del interruptor de residente: blanco funcional sobre bg-emerald-500.
+  ['src/components/vendedor/ReservaVendedorForm.tsx', 'perilla del interruptor de residente'],
   // Piezas públicas con paleta clara propia y completa. (FacturaSheet,
   // ReceiptTicket y CampanaLanding NO están aquí: usan blanco fijo CON texto
   // oscuro fijo, que es una pareja coherente y la guardia no la señala.)
