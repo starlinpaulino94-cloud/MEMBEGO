@@ -36,7 +36,8 @@
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
     "rls:preflight": "node scripts/rls-capa2-preflight.mjs",
-    "auditar:placas": "node scripts/auditar-placas.mjs"
+    "auditar:placas": "node scripts/auditar-placas.mjs",
+    "reparar:qrs-membresias": "node scripts/reparar-qrs-membresias-activas.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

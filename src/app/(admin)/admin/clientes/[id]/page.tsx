@@ -79,10 +79,14 @@ export default async function ClienteDetailPage({
       where: { id },
       include: {
         company: true,
-        qrTokens: { where: { activo: true }, take: 1 },
+        qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
         vehiculos: true,
         memberships: {
-          include: { plan: true, metodoPago: true },
+          include: {
+            plan: true,
+            metodoPago: true,
+            qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          },
           orderBy: { createdAt: 'desc' },
         },
         visits: {
@@ -153,7 +157,7 @@ export default async function ClienteDetailPage({
   }
 
   const membership = cliente.memberships[0]
-  const token = cliente.qrTokens[0]?.token
+  const token = membership?.qrTokens[0]?.token ?? cliente.qrTokens[0]?.token
 
   return (
     <div className="space-y-6">

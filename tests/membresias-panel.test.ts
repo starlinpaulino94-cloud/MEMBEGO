@@ -27,6 +27,14 @@ const PAGE = readFileSync(
 )
 const LISTA = readFileSync(join('src', 'modules', 'membresias', 'lista.ts'), 'utf8')
 const ACCIONES = readFileSync(join('src', 'modules', 'admin', 'actions.ts'), 'utf8')
+const CLIENTE_DETALLE = readFileSync(
+  join('src', 'app', '(admin)', 'admin', 'clientes', '[id]', 'page.tsx'),
+  'utf8'
+)
+const CARDNET_RENOVACION = readFileSync(
+  join('src', 'modules', 'pagos', 'cardnetTokenGuardado.ts'),
+  'utf8'
+)
 const PLAN_ACCIONES = readFileSync(join('src', 'modules', 'admin', 'planActions.ts'), 'utf8')
 const BOTONES = readFileSync(
   join('src', 'components', 'admin', 'MembershipAdminActions.tsx'),
@@ -105,6 +113,31 @@ test('y queda en el registro qué pasó con el código', () => {
   )
   assert.match(bloque, /qrEmitido/)
   assert.match(bloque, /qrRenovado/)
+})
+
+test('la renovación automática por tarjeta también devuelve QR escaneable', () => {
+  const bloque = CARDNET_RENOVACION.slice(
+    CARDNET_RENOVACION.indexOf('export async function renovarMembresiaPorTarjeta'),
+    CARDNET_RENOVACION.indexOf('/** Membresías que toca renovar ahora')
+  )
+  assert.ok(bloque.length > 0, 'no se encontró renovarMembresiaPorTarjeta')
+  assert.match(bloque, /qrToken\.findFirst/)
+  assert.match(bloque, /qrToken\.create/)
+  assert.match(bloque, /qrToken\.update/)
+  assert.match(bloque, /accion:\s*'QR_GENERADO'/)
+  assert.match(bloque, /qrEmitido/)
+  assert.match(bloque, /qrRenovado/)
+})
+
+test('la ficha admin muestra el QR de la membresía renovada, no uno cualquiera del cliente', () => {
+  assert.match(
+    CLIENTE_DETALLE,
+    /memberships:\s*\{[\s\S]*?qrTokens:\s*\{\s*where:\s*\{\s*activo:\s*true\s*\},\s*orderBy:\s*\{\s*createdAt:\s*'desc'\s*\},\s*take:\s*1\s*\}/
+  )
+  assert.match(
+    CLIENTE_DETALLE,
+    /const token = membership\?\.qrTokens\[0\]\?\.token \?\? cliente\.qrTokens\[0\]\?\.token/
+  )
 })
 
 test('y la pantalla ya no manda ese campo oculto', () => {

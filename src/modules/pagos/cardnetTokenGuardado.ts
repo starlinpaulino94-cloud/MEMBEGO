@@ -3,6 +3,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import { periodEnd } from '@/lib/server-utils'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
+import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import {
   cobrarConCredencialGuardada,
   borrarPerfilCardnet,
@@ -226,33 +227,77 @@ export async function renovarMembresiaPorTarjeta(
   if (marca.count === 0) return { estado: 'omitida', motivo: 'Ya estaba renovada.' }
 
   try {
-    await conEmpresa(m.companyId, (tx) =>
-      Promise.all([
-        tx.membership.update({
-          where: { id: membershipId },
+    await conEmpresa(m.companyId, async (tx) => {
+      await tx.membership.update({
+        where: { id: membershipId },
+        data: {
+          estado: 'ACTIVA',
+          fechaVencimiento: nuevaVigencia,
+          lavadosRestantes: m.plan.esIlimitado ? 0 : m.plan.lavadosIncluidos,
+          montoPagado: pesos,
+          pagoConfirmado: true,
+          // La renovación es un cobro nuevo: pisa la fecha anterior a
+          // propósito, porque lo que interesa es cuándo entró ESTE dinero.
+          fechaPago: now,
+        },
+      })
+
+      const qrVivo = await tx.qrToken.findFirst({
+        where: { membresiaId: membershipId, activo: true },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })
+
+      let qrEmitidoId: string | null = null
+      if (qrVivo) {
+        await tx.qrToken.update({
+          where: { id: qrVivo.id },
+          data: { expiraAt: vencimientoQr() },
+        })
+      } else {
+        const nuevoQr = await tx.qrToken.create({
           data: {
-            estado: 'ACTIVA',
-            fechaVencimiento: nuevaVigencia,
-            lavadosRestantes: m.plan.esIlimitado ? 0 : m.plan.lavadosIncluidos,
-            montoPagado: pesos,
-            pagoConfirmado: true,
-            // La renovación es un cobro nuevo: pisa la fecha anterior a
-            // propósito, porque lo que interesa es cuándo entró ESTE dinero.
-            fechaPago: now,
+            clienteId: m.clienteId,
+            membresiaId: membershipId,
+            token: nuevoTokenQr(),
+            expiraAt: vencimientoQr(),
           },
-        }),
-        tx.auditLog.create({
+          select: { id: true },
+        })
+        qrEmitidoId = nuevoQr.id
+        await tx.auditLog.create({
           data: {
             companyId: m.companyId,
             userId: null,
-            accion: 'PAGO_APROBADO',
-            entidadTipo: 'Membership',
-            entidadId: membershipId,
-            payload: { motivo: 'renovacion_automatica_tarjeta', monto: pesos, intentoId: intento.id },
+            accion: 'QR_GENERADO',
+            entidadTipo: 'QrToken',
+            entidadId: nuevoQr.id,
+            payload: {
+              clienteId: m.clienteId,
+              membresiaId: membershipId,
+              motivo: 'renovacion_automatica_tarjeta',
+            },
           },
-        }),
-      ])
-    )
+        })
+      }
+
+      await tx.auditLog.create({
+        data: {
+          companyId: m.companyId,
+          userId: null,
+          accion: 'PAGO_APROBADO',
+          entidadTipo: 'Membership',
+          entidadId: membershipId,
+          payload: {
+            motivo: 'renovacion_automatica_tarjeta',
+            monto: pesos,
+            intentoId: intento.id,
+            qrEmitido: qrEmitidoId,
+            qrRenovado: qrVivo?.id ?? null,
+          },
+        },
+      })
+    })
   } catch (e) {
     // El cobro SÍ ocurrió; no se revierte activadoAt. Se deja constancia.
     logErrorBd('pagos:renovacion:extension', e, { membershipId, intentoId: intento.id })
