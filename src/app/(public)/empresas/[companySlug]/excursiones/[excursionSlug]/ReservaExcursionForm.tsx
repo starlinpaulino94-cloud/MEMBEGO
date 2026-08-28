@@ -30,7 +30,9 @@ import {
   validarItinerarioCombo,
   generarCombinacionesCombo,
   minutosDesdeMedianoche,
+  calcularPrecioEfectivo,
 } from '@/modules/excursiones/reservas/nucleo'
+import type { ReglaPrecioDinamico } from '@/modules/excursiones/reservas/nucleo'
 import type { ReservaClienteState } from '@/modules/excursiones/reservas/cliente-actions'
 import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
@@ -39,6 +41,7 @@ interface Variante {
   nombre: string
   precioAdulto: number
   precioNino: number | null
+  preciosDinamicos?: unknown
 }
 
 interface Horario {
@@ -492,8 +495,38 @@ export function ReservaExcursionForm({
   }
 
   const varianteActual = variantes.find((v) => v.id === varianteId) ?? variantes[0]
-  const precioAdulto = varianteActual?.precioAdulto ?? 0
-  const precioNino = varianteActual?.precioNino ?? precioAdulto
+
+  // Parse dynamic price rules from JSON
+  const reglasDinamicas = useMemo(() => {
+    if (!varianteActual?.preciosDinamicos) return null
+    try {
+      const parsed = typeof varianteActual.preciosDinamicos === 'string'
+        ? JSON.parse(varianteActual.preciosDinamicos)
+        : varianteActual.preciosDinamicos
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as ReglaPrecioDinamico[]
+    } catch { /* ignore */ }
+    return null
+  }, [varianteActual])
+
+  // Compute effective price based on selected date + hour
+  const precioEfectivo = useMemo(() => {
+    if (!varianteActual) return { precioAdulto: 0, precioNino: 0 }
+    const fechaDate = fecha ? new Date(fecha + 'T12:00:00') : new Date()
+    const horaSeleccionada = hora || null
+    return calcularPrecioEfectivo(
+      fechaDate,
+      horaSeleccionada,
+      varianteActual.precioAdulto,
+      varianteActual.precioNino,
+      reglasDinamicas,
+      false,
+      null,
+      null
+    )
+  }, [varianteActual, fecha, hora, reglasDinamicas])
+
+  const precioAdulto = precioEfectivo.precioAdulto
+  const precioNino = precioEfectivo.precioNino ?? precioAdulto
   const subtotal = adultos * precioAdulto + ninos * precioNino
 
   // Redirect on success — in useEffect to avoid setState-during-render
