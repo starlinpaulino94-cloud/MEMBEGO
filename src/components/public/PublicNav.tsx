@@ -36,7 +36,7 @@ export function PublicNav() {
     <header className="sticky top-0 z-50 px-4 pt-3 sm:pt-4">
       <nav
         className={cn(
-          'mx-auto flex max-w-6xl items-center justify-between rounded-2xl border px-4 py-2.5 transition-all duration-300 sm:px-5',
+          'mx-auto flex max-w-6xl items-center justify-between rounded-2xl border px-4 py-2.5 transition-all duration-slow sm:px-5',
           scrolled
             ? 'border-border/80 bg-white/80 shadow-premium glass-strong'
             : 'border-transparent bg-white/40 glass'

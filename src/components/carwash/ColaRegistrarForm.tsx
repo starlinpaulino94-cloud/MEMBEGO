@@ -77,6 +77,7 @@ export function ColaRegistrarForm() {
             que es como se escribe una placa. Sin esto había que pulsar shift en
             cada letra y el corrector "arreglaba" la placa. */}
         <Input
+          aria-label="Placa"
           name="placa"
           placeholder="Placa (ej. A123456)"
           className="min-h-11 uppercase"
@@ -87,6 +88,7 @@ export function ColaRegistrarForm() {
           spellCheck={false}
         />
         <Input
+          aria-label="Vehículo"
           name="descripcion"
           placeholder="Vehículo (ej. Corolla gris)"
           className="min-h-11"
@@ -94,12 +96,14 @@ export function ColaRegistrarForm() {
           autoComplete="off"
         />
         <Input
+          aria-label="Servicio"
           name="servicio"
           placeholder="Servicio (ej. Lavado full)"
           className="min-h-11"
           maxLength={120}
         />
         <Input
+          aria-label="Nota interna"
           name="notaInterna"
           placeholder="Nota interna (opcional)"
           className="min-h-11"
@@ -118,7 +122,7 @@ export function ColaRegistrarForm() {
             <p className="truncate text-sm font-semibold text-foreground">
               {elegido.nombre}
               {elegido.esLocal && (
-                <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-bold uppercase text-muted-foreground">
                   mostrador
                 </span>
               )}
@@ -159,6 +163,7 @@ export function ColaRegistrarForm() {
       ) : (
         <div className="grid gap-2 rounded-xl border border-border/70 bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]">
           <Input
+            aria-label="Nombre del cliente"
             name="clienteNombre"
             placeholder="Nombre del cliente"
             className="min-h-11"
@@ -166,6 +171,7 @@ export function ColaRegistrarForm() {
             autoComplete="off"
           />
           <Input
+            aria-label="Teléfono del cliente"
             name="clienteTelefono"
             placeholder="Teléfono (opcional)"
             className="min-h-11"
@@ -222,6 +228,7 @@ function Buscador({
     <div className="space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3">
       <div className="flex gap-2">
         <Input
+          aria-label="Buscar cliente"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -267,7 +274,7 @@ function Buscador({
                   </span>
                 </span>
                 {c.esLocal && (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-bold uppercase text-muted-foreground">
                     mostrador
                   </span>
                 )}

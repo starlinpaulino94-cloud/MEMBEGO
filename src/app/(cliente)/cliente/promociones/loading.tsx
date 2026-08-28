@@ -15,8 +15,8 @@ export default function Loading() {
             </div>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="overflow-hidden rounded-3xl border border-border/60">
-                  <Skeleton className="h-44 w-full rounded-none" />
+                <div key={i} className="overflow-hidden rounded-2xl border border-border/60">
+                  <Skeleton className="h-44 w-full rounded-lg" />
                   <div className="space-y-3 p-5">
                     <Skeleton className="h-5 w-3/4" />
                     <Skeleton className="h-4 w-full" />

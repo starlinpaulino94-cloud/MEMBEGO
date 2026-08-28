@@ -124,7 +124,7 @@ function Fila({
         {activo ? (
           <CheckCircle2 className="h-4 w-4 text-success" />
         ) : (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
             inactivo
           </span>
         )}

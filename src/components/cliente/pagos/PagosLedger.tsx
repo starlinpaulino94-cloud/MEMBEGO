@@ -85,7 +85,7 @@ function LedgerRow({
         aria-hidden
         className={cn(
           'h-2 w-2 shrink-0 rounded-full',
-          aprobado ? 'bg-emerald-500' : 'bg-rose-500'
+          aprobado ? 'bg-success' : 'bg-destructive'
         )}
       />
 
@@ -161,7 +161,7 @@ function ReceiptDrawer({
                   aria-hidden
                   className={cn(
                     'h-2 w-2 rounded-full',
-                    aprobado ? 'bg-emerald-500' : 'bg-rose-500'
+                    aprobado ? 'bg-success' : 'bg-destructive'
                   )}
                 />
                 {aprobado ? 'Pago aprobado' : 'Pago rechazado'}

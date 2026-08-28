@@ -102,7 +102,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
                       return (
                         <div
                           key={i}
-                          className={`h-5 w-5 rounded-sm ${on ? 'bg-foreground' : 'bg-muted'}`}
+                          className={`h-5 w-5 rounded-lg ${on ? 'bg-foreground' : 'bg-muted'}`}
                         />
                       )
                     })}

@@ -147,7 +147,7 @@ export function ExcursionCarritoDrawer() {
                   }`}
                 >
                   <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
-                    <Banknote className="h-3.5 w-3.5 text-success dark:text-success" />
+                    <Banknote className="h-3.5 w-3.5 text-success" />
                     <span>En destino</span>
                   </div>
                   <span className="text-xs text-muted-foreground">Pagas el día del tour</span>
@@ -165,7 +165,7 @@ export function ExcursionCarritoDrawer() {
                   <div className="flex items-center gap-1 font-semibold text-xs text-foreground">
                     <CreditCard className="h-3.5 w-3.5 text-primary" />
                     <span>En línea</span>
-                    <span className="text-[8px] bg-warning/15 text-warning px-1 py-0.2 rounded font-bold">
+                    <span className="text-xs bg-warning/15 text-warning px-1 py-0.2 rounded font-bold">
                       Prueba
                     </span>
                   </div>

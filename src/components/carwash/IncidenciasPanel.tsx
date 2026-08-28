@@ -142,9 +142,9 @@ function Kpi({
         destacar ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card'
       }`}
     >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{valor}</p>
-      <p className="text-[11px] text-muted-foreground">{pie}</p>
+      <p className="text-xs text-muted-foreground">{pie}</p>
     </div>
   )
 }
@@ -263,14 +263,14 @@ function Fila({ f }: { f: PanelIncidencias['filas'][number] }) {
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
             {INCIDENCIA_TIPO_LABELS[f.tipo as IncidenciaTipo] ?? f.tipo}
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+              className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                 CHIP_ESTADO[f.estado] ?? 'bg-muted text-muted-foreground'
               }`}
             >
               {INCIDENCIA_ESTADO_LABELS[f.estado as IncidenciaEstado] ?? f.estado}
             </span>
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+              className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                 CHIP_GRAVEDAD[f.gravedad] ?? 'bg-muted text-muted-foreground'
               }`}
             >
@@ -298,7 +298,7 @@ function Fila({ f }: { f: PanelIncidencias['filas'][number] }) {
             <BotonRewash id={f.id} />
           )}
           {f.tieneRewash && (
-            <span className="rounded-lg bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+            <span className="rounded-lg bg-muted px-2.5 py-1 text-xs text-muted-foreground">
               En la cola para repetir
             </span>
           )}

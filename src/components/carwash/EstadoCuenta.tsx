@@ -45,7 +45,7 @@ function fmtFecha(d: Date) {
 
 const CHIP: Record<string, string> = {
   PENDIENTE: 'bg-warning/15 text-warning',
-  FACTURADO: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  FACTURADO: 'bg-info/15 text-info',
   PAGADO: 'bg-success/15 text-success',
   ANULADO: 'bg-muted text-muted-foreground',
 }
@@ -123,7 +123,7 @@ export function EstadoCuenta({ cuenta }: { cuenta: CuentaDetalle }) {
                       <td className="max-w-64 px-4 py-3">
                         <p className="truncate text-foreground">{c.concepto}</p>
                         {c.corteRef && (
-                          <p className="font-mono text-[11px] text-muted-foreground">{c.corteRef}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{c.corteRef}</p>
                         )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs uppercase text-muted-foreground">
@@ -134,7 +134,7 @@ export function EstadoCuenta({ cuenta }: { cuenta: CuentaDetalle }) {
                       </td>
                       <td className="px-4 py-3">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                             CHIP[c.estado] ?? 'bg-muted text-muted-foreground'
                           }`}
                         >
@@ -160,7 +160,7 @@ function Tarjeta({ label, valor, destacar }: { label: string; valor: number; des
         destacar ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card'
       }`}
     >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-lg font-bold tabular-nums text-foreground">{fmtRD(valor)}</p>
     </div>
   )

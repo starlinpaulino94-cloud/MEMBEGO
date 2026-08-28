@@ -1,7 +1,7 @@
-import { conEmpresa } from '@/lib/tenant'
+import { conEmpresa, type Tx } from '@/lib/tenant'
 import { generarCodigo } from '@/lib/codes'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { calcularSaldo } from './nucleo'
+import { calcularSaldo, type ReglaPrecioDinamico } from './nucleo'
 
 /**
  * Las reservas guardan ids planos hacia el Core (cliente, excursión, vendedor)
@@ -245,7 +245,7 @@ export async function excursionesReservables(companyId: string) {
         nombre: v.nombre,
         precioAdulto: Number(v.precioAdulto),
         precioNino: v.precioNino != null ? Number(v.precioNino) : null,
-        preciosDinamicos: v.preciosDinamicos as any[] | undefined,
+        preciosDinamicos: v.preciosDinamicos as unknown as ReglaPrecioDinamico[] | undefined,
       })),
       horarios: e.horarios.map((h) => ({
         id: h.id,
@@ -438,7 +438,10 @@ export async function reservasCliente(
  * considerando tanto reservas directas como reservas provenientes de combos (ReservaItem).
  */
 export async function verificarYBloquearCupoActividad(
-  tx: any,
+  // El cliente de transacción de Prisma tiene nombre en el proyecto desde
+  // `@/lib/tenant`. Con `any` esta función perdía la comprobación de TODAS sus
+  // consultas, que es justo lo que no conviene en el camino que bloquea cupo.
+  tx: Tx,
   params: {
     companyId: string
     actividadId: string
@@ -477,7 +480,8 @@ export async function verificarYBloquearCupoActividad(
   let cupoMaximo = act.capacidad && act.capacidad > 0 ? act.capacidad : 50
   if (!esPaseDia && horaNorm && act.horarios && act.horarios.length > 0) {
     const hEncontrado = act.horarios.find(
-      (h: any) => (h.horaSalida || '').trim().slice(0, 5) === horaNorm
+      (h: { horaSalida: string | null; cupo: number | null }) =>
+        (h.horaSalida || '').trim().slice(0, 5) === horaNorm
     )
     if (hEncontrado && hEncontrado.cupo && hEncontrado.cupo > 0) {
       cupoMaximo = Math.min(cupoMaximo, hEncontrado.cupo)

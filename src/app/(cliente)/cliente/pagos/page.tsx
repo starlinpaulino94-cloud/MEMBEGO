@@ -36,10 +36,10 @@ const NECESITA_PAGO = ['PENDIENTE', 'RECHAZADA']
 
 /** Color del micro-punto de estado según la variante semántica del estado. */
 const DOT_COLOR: Record<BadgeVariant, string> = {
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  info: 'bg-sky-500',
-  destructive: 'bg-rose-500',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  info: 'bg-info',
+  destructive: 'bg-destructive',
   secondary: 'bg-slate-400',
   outline: 'bg-slate-400',
   default: 'bg-primary',
@@ -77,23 +77,23 @@ function EstadoDot({ estado }: { estado: string }) {
  */
 const AVISO_PAGO: Record<string, { tono: string; titulo: string; texto: string }> = {
   ok: {
-    tono: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100',
+    tono: 'border-success/30 bg-success/10 text-success',
     titulo: 'Pago aprobado',
     texto: 'Tu compra ya está activa. Puedes usarla desde tus beneficios.',
   },
   rechazado: {
-    tono: 'border-rose-500/30 bg-rose-500/10 text-rose-900 dark:text-rose-100',
+    tono: 'border-destructive/30 bg-destructive/10 text-destructive',
     titulo: 'Pago rechazado',
     texto: 'El banco no aprobó la transacción. No se te cobró nada. Puedes intentar con otra tarjeta.',
   },
   pendiente: {
-    tono: 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+    tono: 'border-warning/30 bg-warning/10 text-warning',
     titulo: 'Estamos confirmando tu pago',
     texto:
       'No pudimos confirmar el resultado con el banco todavía. No vuelvas a pagar: si el cobro se realizó, tu compra se activará sola y te avisaremos.',
   },
   error: {
-    tono: 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+    tono: 'border-warning/30 bg-warning/10 text-warning',
     titulo: 'No pudimos procesar el retorno',
     texto: 'Si crees que se te cobró, escríbenos con la fecha y hora antes de intentar de nuevo.',
   },

@@ -109,7 +109,6 @@ import {
   autoResolverItinerarioCombo,
   optimizarItinerarioCombo,
   generarCombinacionesCombo,
-  type CombinacionItinerarioCombo,
   formatoMinutosAHora,
   minutosDesdeMedianoche,
 } from '@/modules/excursiones/reservas/nucleo'
@@ -172,7 +171,6 @@ export function ExcursionForm({
     return excursion?.actividadesComboIds ?? []
   })
 
-  console.log(actividadesDisponibles)
 
   // Mapeo interactivo de horario asignado por actividad (actividadId -> '09:00')
   const [horariosPorActividad, setHorariosPorActividad] = useState<Record<string, string>>(() => {
@@ -319,9 +317,32 @@ export function ExcursionForm({
     return [1, 2, 3, 4, 5, 6, 7]
   })
 
-  // Sincronización automática de días y horas cuando es un COMBO
-  useEffect(() => {
-    if (tipoItem === 'COMBO' && actividadesSeleccionadasObjs.length > 0) {
+  /**
+   * Días, horas y duración de un COMBO se derivan de sus actividades.
+   *
+   * Era un `useEffect` cuyas dependencias eran cuatro arrays derivados
+   * (`actividadesSeleccionadasObjs`, `diasComunes`, `combinacionesDisponibles`,
+   * `itinerarioResult`). Cada render creaba referencias nuevas, así que el
+   * efecto volvía a correr y PISABA lo que el administrador acabara de
+   * escribir en días, horas o duración.
+   *
+   * La clave se arma con el CONTENIDO, no con la referencia: mientras el
+   * contenido no cambie, no se rederiva nada. Y el ajuste va en el render,
+   * que es donde React quiere el estado derivado.
+   */
+  const claveCombo =
+    tipoItem === 'COMBO' && actividadesSeleccionadasObjs.length > 0
+      ? [
+          actividadesSeleccionadasObjs.map((a) => a.id).join(','),
+          diasComunes.join(','),
+          combinacionesDisponibles.map((c) => `${c.horaInicio}:${c.duracionTotalMin}`).join(','),
+          itinerarioResult.itinerario.map((i) => `${i.inicio}-${i.fin}`).join(','),
+        ].join('|')
+      : null
+  const [comboDerivadoDe, setComboDerivadoDe] = useState<string | null>(null)
+  if (claveCombo && claveCombo !== comboDerivadoDe) {
+    setComboDerivadoDe(claveCombo)
+    {
       if (diasComunes.length > 0) {
         setDiasSeleccionados(diasComunes)
       }
@@ -345,7 +366,7 @@ export function ExcursionForm({
         }
       }
     }
-  }, [tipoItem, actividadesSeleccionadasObjs, diasComunes, combinacionesDisponibles, itinerarioResult])
+  }
 
   const [nuevaHoraInput, setNuevaHoraInput] = useState('14:00')
 
@@ -573,7 +594,7 @@ export function ExcursionForm({
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {act.tipoItem === 'PASE_DIA' && (
-                          <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20">
                             Daypass
                           </span>
                         )}
@@ -607,7 +628,7 @@ export function ExcursionForm({
                         <Clock className="h-4 w-4 text-primary" />
                         Turnos y Horarios de las Actividades
                       </h4>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Elige la hora de salida de cada actividad. El sistema auto-sincronizará los turnos para evitar solapamientos.
                       </p>
                     </div>
@@ -645,13 +666,13 @@ export function ExcursionForm({
                           >
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-foreground">{act.nombre}</span>
-                              <span className="font-mono text-[11px] text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-full">
+                              <span className="font-mono text-xs text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-full">
                                 {formato12h(horaAsignada)} → {formato12h(horaFinAsignada)} ({(duracionActMin / 60).toFixed(1)}h)
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[11px] text-muted-foreground font-medium mr-1">Turno:</span>
+                              <span className="text-xs text-muted-foreground font-medium mr-1">Turno:</span>
                               {slots.map((s) => {
                                 const seleccionado = horaAsignada === s
                                 const finSlot = formatoMinutosAHora(minutosDesdeMedianoche(s) + duracionActMin)
@@ -661,7 +682,7 @@ export function ExcursionForm({
                                     type="button"
                                     title={`${formato12h(s)} a ${formato12h(finSlot)}`}
                                     onClick={() => cambiarHorarioActividad(act.id, s)}
-                                    className={`rounded-md px-2.5 py-1 text-xs font-bold transition ${seleccionado
+                                    className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${seleccionado
                                       ? 'bg-primary text-primary-foreground shadow-xs'
                                       : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
                                       }`}
@@ -682,19 +703,19 @@ export function ExcursionForm({
 
                     {/* Tarjeta informativa de Daypasses incluidos */}
                     {pasesDiaSeleccionados.length > 0 && (
-                      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-800 space-y-1.5">
-                        <div className="flex items-center gap-1.5 font-bold text-emerald-700">
-                          <Sparkles className="h-4 w-4 text-emerald-600" />
+                      <div className="rounded-lg border border-success/20 bg-success/5 p-3 text-xs text-success space-y-1.5">
+                        <div className="flex items-center gap-1.5 font-bold text-success">
+                          <Sparkles className="h-4 w-4 text-success" />
                           Pases de Día Incluidos (Acceso Libre todo el día):
                         </div>
-                        <p className="text-[11px] text-emerald-700/90 leading-relaxed">
+                        <p className="text-xs text-success/90 leading-relaxed">
                           Los pases de día ofrecen acceso libre continuo durante la fecha reservada y no requieren asignación de turnos horarios fijos ni interfieren con el itinerario de horas.
                         </p>
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           {pasesDiaSeleccionados.map((pd) => (
                             <span
                               key={pd.id}
-                              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-900 border border-emerald-500/20"
+                              className="inline-flex items-center gap-1 rounded-lg bg-success/10 px-2.5 py-1 text-xs font-semibold text-success border border-success/20"
                             >
                               {pd.nombre}
                             </span>
@@ -742,7 +763,7 @@ export function ExcursionForm({
                       <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-bold">{itinerarioResult.error}</p>
-                        <p className="text-[11px] opacity-90 mt-0.5">
+                        <p className="text-xs opacity-90 mt-0.5">
                           Haz clic en &quot;Auto-Sincronizar Turnos&quot; arriba o cambia los turnos para resolver el conflicto.
                         </p>
                       </div>
@@ -758,12 +779,12 @@ export function ExcursionForm({
                           className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-[10px]">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-xs">
                               {idx + 1}
                             </span>
                             <span className="font-medium text-foreground">{bloque.nombre}</span>
                           </div>
-                          <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-[11px]">
+                          <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
                             <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
                             <span>→</span>
                             <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
@@ -773,7 +794,7 @@ export function ExcursionForm({
                       ))}
                     </div>
                   ) : pasesDiaSeleccionados.length > 0 ? (
-                    <div className="rounded-lg border border-dashed border-emerald-500/30 bg-emerald-500/5 p-2.5 text-xs text-emerald-800 font-medium text-center">
+                    <div className="rounded-lg border border-dashed border-success/30 bg-success/5 p-2.5 text-xs text-success font-medium text-center">
                       Acceso libre durante todo el día para la fecha reservada
                     </div>
                   ) : null}
@@ -787,7 +808,7 @@ export function ExcursionForm({
                         <Sparkles className="h-4 w-4" />
                         Opciones de Turnos del Paquete ({combinacionesDisponibles.length} disponibles)
                       </span>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         Guardadas automáticamente en el catálogo
                       </span>
                     </div>
@@ -803,7 +824,7 @@ export function ExcursionForm({
                               {formato12h(c.horaInicio)} → {formato12h(c.horaFin)}
                             </span>
                           </div>
-                          <p className="text-[11px] text-muted-foreground line-clamp-1">
+                          <p className="text-xs text-muted-foreground line-clamp-1">
                             {c.resumenTexto}
                           </p>
                         </div>
@@ -1143,7 +1164,7 @@ export function ExcursionForm({
                 </div>
 
                 {ahorroCombo && ahorroCombo.ahorro > 0 ? (
-                  <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success">
                     🔥 Ahorro para el cliente: ${ahorroCombo.ahorro.toFixed(2)} ({ahorroCombo.pct}% descuento)
                   </span>
                 ) : null}
@@ -1215,12 +1236,12 @@ export function ExcursionForm({
                       <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">
                         Tarifa Turistas / General
                       </h4>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Boleto estándar internacional
                       </p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                     Principal
                   </span>
                 </div>
@@ -1269,20 +1290,20 @@ export function ExcursionForm({
               </div>
 
               {/* Tarifa Residentes / Locales */}
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
+              <div className="rounded-xl border border-success/20 bg-success/5 p-4 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between border-b border-success/20 pb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-base">🇩🇴</span>
                     <div>
                       <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">
                         Tarifa Residentes / Locales
                       </h4>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Precio especial para locales
                       </p>
                     </div>
                   </div>
-                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                  <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-bold text-success">
                     Opcional
                   </span>
                 </div>

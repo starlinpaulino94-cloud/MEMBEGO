@@ -26,12 +26,12 @@ function Calendar({
         month_grid: "w-full border-collapse space-x-1",
         weekdays: "flex",
         weekday:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem] select-none",
+          "text-muted-foreground rounded-lg w-8 font-normal text-[0.8rem] select-none",
         week: "flex w-full mt-2",
-        day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-md",
+        day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-end)]:rounded-r-lg",
         day_button:
           cn(
-            "inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md text-sm font-medium transition-colors",
+            "inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-lg text-sm font-medium transition-colors",
             "h-8 w-8 p-0 hover:bg-muted active:scale-95",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             "[&[aria-selected]]:bg-primary [&[aria-selected]]:text-primary-foreground",

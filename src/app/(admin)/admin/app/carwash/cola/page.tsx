@@ -163,7 +163,7 @@ export default async function ColaPage() {
                   )}
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                     e.estado === 'ENTREGADO'
                       ? 'bg-success/15 text-success'
                       : 'bg-muted text-muted-foreground'

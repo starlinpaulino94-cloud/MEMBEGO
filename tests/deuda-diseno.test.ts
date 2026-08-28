@@ -39,13 +39,13 @@ const MEDIDAS = MEDIDAS_SIN_TIPAR as Record<string, { que: string; porque: strin
  * Bajar uno: cámbialo aquí en el mismo commit que lo baja. Subir uno: no.
  */
 const TECHOS: Record<string, number> = {
-  hexEnInterfaz: 122,
-  colorCrudo: 315,
-  radiosFuera: 94,
-  microTextos: 135,
+  hexEnInterfaz: 121,
+  colorCrudo: 170,
+  radiosFuera: 0,
+  microTextos: 0,
   sombrasArbitrarias: 0,
-  duracionesSueltas: 48,
-  zIndexSueltos: 12,
+  duracionesSueltas: 0,
+  zIndexSueltos: 5,
 }
 
 test('ninguna deuda de diseño crece', () => {
@@ -98,8 +98,8 @@ test('los techos no se quedan por encima de la realidad', () => {
  * Por eso tiene techo propio y más apretado que el del producto.
  */
 const TECHOS_PAQUETE: Record<string, number> = {
-  colorCrudo: 69,
-  radiosFuera: 20,
+  colorCrudo: 37,
+  radiosFuera: 0,
 }
 
 test('la deuda de @membego/ui no crece', () => {

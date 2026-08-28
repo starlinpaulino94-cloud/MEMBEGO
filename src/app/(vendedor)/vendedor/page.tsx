@@ -117,7 +117,7 @@ export default async function VendedorInicioPage() {
                 <div key={e.clave} className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center transition-all hover:bg-muted/50">
                   <dd className="font-mono text-2xl sm:text-3xl font-extrabold text-foreground">{embudo[e.clave]}</dd>
                   <dt className="text-xs font-bold text-foreground mt-0.5">{e.label}</dt>
-                  <p className="text-[10px] text-muted-foreground">{e.detalle}</p>
+                  <p className="text-xs text-muted-foreground">{e.detalle}</p>
                 </div>
               ))}
             </dl>
@@ -139,7 +139,7 @@ export default async function VendedorInicioPage() {
                         {PERIODO_META_LABEL[m.periodo as PeriodoMeta] ?? m.periodo}
                       </p>
                       {m.excursionNombre ? (
-                        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary truncate max-w-[200px]">
+                        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary truncate max-w-[200px]">
                           {m.excursionTipoItem === 'COMBO' ? '📦 ' : '🎯 '} {m.excursionNombre}
                         </span>
                       ) : null}

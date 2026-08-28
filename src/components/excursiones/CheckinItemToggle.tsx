@@ -17,7 +17,8 @@ interface CheckinItemToggleProps {
 export function CheckinItemToggle({
   reservaId,
   itemId,
-  actividadNombre,
+  // `actividadNombre` sigue en las props porque quien lo monta lo pasa; este
+  // componente no lo pinta, así que no se desestructura.
   checkinAt,
   estado,
 }: CheckinItemToggleProps) {
@@ -45,7 +46,7 @@ export function CheckinItemToggle({
       disabled={isPending}
       className={`h-7 px-2.5 text-xs font-semibold gap-1.5 transition-all active:scale-95 shrink-0 ${
         estaEmbarcado
-          ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30'
+          ? 'border-success/30 text-success bg-success/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30'
           : 'bg-primary text-primary-foreground hover:bg-primary/90'
       }`}
       title={estaEmbarcado ? 'Haz clic para desmarcar check-in' : 'Confirmar check-in de esta actividad'}
@@ -54,7 +55,7 @@ export function CheckinItemToggle({
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : estaEmbarcado ? (
         <>
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
           <span>Embarcado</span>
         </>
       ) : (

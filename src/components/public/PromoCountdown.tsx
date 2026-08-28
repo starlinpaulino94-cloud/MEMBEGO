@@ -39,7 +39,7 @@ export function PromoCountdown({
     <span
       suppressHydrationWarning
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2.5 py-1 font-mono text-caption font-bold tabular-nums text-rose-600 dark:text-rose-400',
+        'inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 font-mono text-caption font-bold tabular-nums text-destructive',
         className
       )}
       aria-label={mounted ? `Termina en ${texto}` : undefined}

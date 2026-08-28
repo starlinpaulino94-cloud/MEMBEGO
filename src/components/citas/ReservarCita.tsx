@@ -97,7 +97,7 @@ export function ReservarCita({
               >
                 {s.hm}
                 {!agotado && s.libres > 1 && (
-                  <span className="mt-0.5 block text-[10px] font-medium text-muted-foreground">
+                  <span className="mt-0.5 block text-xs font-medium text-muted-foreground">
                     {s.libres} cupos
                   </span>
                 )}

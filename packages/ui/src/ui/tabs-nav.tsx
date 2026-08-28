@@ -68,7 +68,7 @@ export function TabsNav({
               {item.render({
                 className: cn(
                   // min-h-11: la pestaña es un destino táctil, no una etiqueta.
-                  'flex min-h-11 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-small font-medium transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                  'flex min-h-11 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-small font-medium transition-colors duration-fast outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                   item.active
                     ? 'border-primary text-primary'
                     : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'

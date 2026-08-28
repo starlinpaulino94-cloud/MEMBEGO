@@ -32,7 +32,7 @@ export function QRDisplay({
   return (
     <div className="rounded-[1.75rem] bg-gradient-to-br from-emerald-500 via-teal-400 to-emerald-600 p-[3px] shadow-premium-lg">
       <div
-        className="flex items-center justify-center rounded-3xl bg-card p-4"
+        className="flex items-center justify-center rounded-2xl bg-card p-4"
         style={{ width: size + 32, height: size + 32 }}
       >
         {dataUrl ? (

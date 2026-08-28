@@ -147,7 +147,7 @@ export function AgregarVehiculoWizard({
           <span>{pct}%</span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-primary transition-all duration-slow" style={{ width: `${pct}%` }} />
         </div>
       </div>
 

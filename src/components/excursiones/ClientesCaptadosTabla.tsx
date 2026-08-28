@@ -191,7 +191,7 @@ export function ClientesCaptadosTabla({
                     {c.telefono ?? c.email ?? '—'}
                   </td>
                   <td className="py-2.5 pr-3">
-                    <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                    <span className="inline-flex items-center rounded-lg bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
                       {ETAPA_ATRIBUCION_LABEL[c.etapa as EtapaAtribucion] ?? c.etapa}
                     </span>
                   </td>

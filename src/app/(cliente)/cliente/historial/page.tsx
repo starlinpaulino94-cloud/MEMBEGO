@@ -139,7 +139,7 @@ export default async function HistorialPage({
 
                       {/* Fase E4: identificador oficial de la operación */}
                       {v.transaccion && (
-                        <p className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                        <p className="inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
                           <Hash className="h-3 w-3" />
                           {v.transaccion.codigo} · {v.transaccion.ticketNumero}
                         </p>
@@ -160,7 +160,7 @@ export default async function HistorialPage({
                         </Badge>
                       )}
                       {v.transaccion && v.transaccion.estado !== 'APPLIED' && (
-                        <Badge variant="secondary" className="bg-warning/15 text-[10px] text-warning">
+                        <Badge variant="secondary" className="bg-warning/15 text-xs text-warning">
                           {v.transaccion.estado === 'REVERTED'
                             ? 'Revertida'
                             : v.transaccion.estado === 'CANCELLED'

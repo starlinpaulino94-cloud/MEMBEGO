@@ -51,7 +51,7 @@ export function MobileBottomSheet({
       <div
         className={cn(
           'pointer-events-auto mx-auto flex w-full max-w-2xl flex-col rounded-t-2xl border border-b-0 border-border bg-card elevation-3',
-          'transition-[max-height] duration-300 ease-out',
+          'transition-[max-height] duration-slow ease-out',
           abierta ? 'max-h-[75svh]' : 'max-h-[8.5rem]'
         )}
         // La barra inferior de navegación vive debajo: sin este hueco, la hoja

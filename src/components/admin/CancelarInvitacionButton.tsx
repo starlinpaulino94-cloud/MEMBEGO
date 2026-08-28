@@ -19,7 +19,7 @@ export function CancelarInvitacionButton({ id }: { id: string }) {
           else toast.success('Invitación cancelada.')
         })
       }
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-destructive disabled:opacity-50"
+      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-destructive disabled:opacity-50"
       aria-label="Cancelar invitación"
     >
       <X className="h-3.5 w-3.5" /> Cancelar

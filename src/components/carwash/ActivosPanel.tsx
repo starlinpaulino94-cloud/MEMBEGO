@@ -157,9 +157,9 @@ function Kpi({
         destacar ? 'border-destructive/40 bg-destructive/5' : 'border-border/70 bg-card'
       }`}
     >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{valor}</p>
-      <p className="text-[11px] text-muted-foreground">{pie}</p>
+      <p className="text-xs text-muted-foreground">{pie}</p>
     </div>
   )
 }
@@ -257,7 +257,7 @@ function Fila({ f }: { f: ActivoFila }) {
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
             {f.nombre}
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+              className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                 CHIP_ESTADO[f.estado] ?? 'bg-muted text-muted-foreground'
               }`}
             >
@@ -265,7 +265,7 @@ function Fila({ f }: { f: ActivoFila }) {
             </span>
             {urgencia && (
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${urgencia.clase}`}
+                className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${urgencia.clase}`}
               >
                 {urgencia.label}
               </span>

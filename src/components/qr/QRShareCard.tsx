@@ -179,7 +179,7 @@ export function QRShareCard({
   }, [buildShareImage])
 
   return (
-    <div className="mb-8 flex flex-col items-center rounded-3xl border border-border/60 bg-card px-6 py-8 text-center shadow-sm">
+    <div className="mb-8 flex flex-col items-center rounded-2xl border border-border/60 bg-card px-6 py-8 text-center shadow-sm">
       <h2 className="text-h2 text-foreground">Tu llave de acceso</h2>
       <p className="mt-1 max-w-sm text-small text-muted-foreground">
         Muéstralo en {companyName} y listo: tu membresía se valida al instante.
@@ -200,7 +200,7 @@ export function QRShareCard({
       {/* QR */}
       <div className="mt-5 rounded-[1.75rem] bg-gradient-to-br from-emerald-500 via-teal-400 to-emerald-600 p-[3px] shadow-premium-lg">
         <div
-          className="flex items-center justify-center rounded-3xl bg-card p-4"
+          className="flex items-center justify-center rounded-2xl bg-card p-4"
           style={{ width: size + 32, height: size + 32 }}
         >
           {dataUrl ? (

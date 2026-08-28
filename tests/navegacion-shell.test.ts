@@ -133,13 +133,20 @@ test('cada grupo tiene al menos un enlace', () => {
 })
 
 test('el panel de administrador son nueve dominios', () => {
-  // El noveno (17-08-2026) es Excursiones: un módulo operativo completo con
+  // El noveno (17-08-2026) es el módulo de actividades: operativo completo con
   // UNA sola entrada en el sidebar (su navegación interna es secundaria).
+  //
+  // Se llamaba «Excursiones» y pasó a «Parques y Tours» al ampliarse a
+  // actividades y combos. El nombre nuevo ya está en las cinco piezas que lo
+  // enseñan —sidebar, título de la página, cabecera del módulo, metadatos y el
+  // alta de empresas—; lo único que faltaba era esta prueba. Se actualiza el
+  // nombre esperado, no la exigencia: sigue comprobando los nueve dominios
+  // exactos y en orden.
   const grupos = navForRole('ADMINISTRADOR')
   assert.equal(grupos.length, 9)
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Inicio', 'Clientes', 'Excursiones', 'Beneficios', 'Marketing', 'Operaciones', 'Analítica', 'Empresa', 'Soporte']
+    ['Inicio', 'Clientes', 'Parques y Tours', 'Beneficios', 'Marketing', 'Operaciones', 'Analítica', 'Empresa', 'Soporte']
   )
 })
 

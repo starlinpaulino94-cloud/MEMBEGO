@@ -595,7 +595,10 @@ export interface AutoResolucionItinerarioResult {
  */
 export function autoResolverItinerarioCombo(
   actividades: ActividadParaItinerario[],
-  actividadModificadaId?: string
+  // Se recibe y NO se usa: la resolución automática reordena el itinerario
+  // entero, sin anclar la actividad que el usuario acabara de tocar. El guion
+  // bajo lo dice en el nombre en vez de dejar creer que se respeta.
+  _actividadModificadaId?: string
 ): AutoResolucionItinerarioResult {
   if (actividades.length === 0) {
     return { ok: true, horariosAsignados: {}, itinerario: [], ajustes: [] }
@@ -890,7 +893,6 @@ export function generarCombinacionesCombo(
   if (actividades.length === 0) return []
 
   const actividadesConHorario = actividades.filter((a) => a.tipoItem !== 'PASE_DIA')
-  const pasesDia = actividades.filter((a) => a.tipoItem === 'PASE_DIA')
 
   // Si todas las actividades son pases de día, no existen turnos ni horarios restringidos
   if (actividadesConHorario.length === 0) {

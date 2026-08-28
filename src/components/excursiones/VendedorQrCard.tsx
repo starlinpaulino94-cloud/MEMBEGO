@@ -66,7 +66,7 @@ export function VendedorQrCard({
           <Copy className="h-4 w-4" /> Copiar enlace
         </Button>
 
-        <Button asChild className="w-full gap-2 h-10 text-xs font-bold shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white">
+        <Button asChild className="w-full gap-2 h-10 text-xs font-bold shadow-sm bg-success hover:bg-success text-white">
           <a
             href={`https://wa.me/?text=${encodeURIComponent(mensaje)}`}
             target="_blank"

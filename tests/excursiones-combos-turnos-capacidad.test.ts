@@ -3,9 +3,6 @@ import assert from 'node:assert/strict'
 import {
   generarCombinacionesCombo,
   validarDisponibilidadComboMultiFecha,
-  validarItinerarioCombo,
-  autoResolverItinerarioCombo,
-  optimizarItinerarioCombo,
 } from '../src/modules/excursiones/reservas/nucleo'
 
 test('generarCombinacionesCombo soporta Daypasses sin obligar solapamiento horario', () => {

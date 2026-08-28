@@ -15,7 +15,7 @@ const avatarVariants = cva(
   {
     variants: {
       size: {
-        xs: 'size-6 text-[10px]',
+        xs: 'size-6 text-xs',
         sm: 'size-8 text-xs',
         md: 'size-10 text-sm',
         lg: 'size-14 text-lg',
@@ -29,10 +29,10 @@ const avatarVariants = cva(
 /** Tonos de iniciales — fijos, generados por hash del nombre. */
 const TONOS = [
   'bg-primary-100 text-primary-800',
-  'bg-sky-100 text-sky-800',
+  'bg-info text-info',
   'bg-violet-100 text-violet-800',
-  'bg-amber-100 text-amber-800',
-  'bg-rose-100 text-rose-800',
+  'bg-warning text-warning',
+  'bg-destructive text-destructive',
 ] as const
 
 function iniciales(nombre: string): string {

@@ -119,8 +119,9 @@ function FormAlta({ tipos }: { tipos: { id: string; nombre: string }[] }) {
         Para quien viene a lavar sin cuenta en la plataforma. Solo el nombre es obligatorio.
       </p>
 
-      <Input name="nombre" required maxLength={80} placeholder="Nombre" className={input} />
+      <Input aria-label="Nombre del cliente" name="nombre" required maxLength={80} placeholder="Nombre" className={input} />
       <Input
+        aria-label="Teléfono del cliente"
         name="telefono"
         maxLength={30}
         inputMode="tel"
@@ -131,6 +132,7 @@ function FormAlta({ tipos }: { tipos: { id: string; nombre: string }[] }) {
       <div className="border-t border-border/60 pt-3">
         <p className="mb-2 text-xs font-medium text-muted-foreground">Su vehículo (opcional)</p>
         <Input
+          aria-label="Placa del vehículo"
           name="placa"
           maxLength={20}
           placeholder="Placa"
@@ -140,13 +142,14 @@ function FormAlta({ tipos }: { tipos: { id: string; nombre: string }[] }) {
           spellCheck={false}
         />
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <Input name="marca" maxLength={40} placeholder="Marca" className={input} />
-          <Input name="modelo" maxLength={40} placeholder="Modelo" className={input} />
-          <Input name="color" maxLength={30} placeholder="Color" className={input} />
-          <Input name="anio" inputMode="numeric" placeholder="Año" className={input} />
+          <Input aria-label="Marca" name="marca" maxLength={40} placeholder="Marca" className={input} />
+          <Input aria-label="Modelo" name="modelo" maxLength={40} placeholder="Modelo" className={input} />
+          <Input aria-label="Color" name="color" maxLength={30} placeholder="Color" className={input} />
+          <Input aria-label="Año" name="anio" inputMode="numeric" placeholder="Año" className={input} />
         </div>
         {tipos.length > 0 && (
           <select
+            aria-label="Tipo de vehículo"
             name="tipoVehiculoId"
             defaultValue=""
             className="mt-2 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
@@ -201,6 +204,7 @@ function Buscador() {
       </p>
       <div className="mt-3 flex gap-2">
         <Input
+          aria-label="Buscar cliente por nombre, teléfono o placa"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -240,7 +244,7 @@ function Buscador() {
                       </span>
                     </span>
                     <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                         c.esLocal
                           ? 'bg-muted text-muted-foreground'
                           : 'bg-success/15 text-success'

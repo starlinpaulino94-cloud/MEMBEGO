@@ -35,8 +35,8 @@ const TONE_BG: Record<WalletCardTone, string> = {
 
 const TONE_CHIP: Record<WalletCardTone, string> = {
   active: 'bg-white/15 text-white ring-1 ring-white/25',
-  pending: 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-300/30',
-  expired: 'bg-red-500/25 text-red-100 ring-1 ring-red-300/30',
+  pending: 'bg-warning/25 text-warning ring-1 ring-warning/30',
+  expired: 'bg-destructive/25 text-destructive ring-1 ring-destructive/30',
 }
 
 /**

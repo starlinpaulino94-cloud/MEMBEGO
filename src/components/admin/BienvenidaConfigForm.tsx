@@ -67,7 +67,7 @@ export function BienvenidaConfigForm({
                   name="tipo"
                   value={tipo}
                   onChange={(e) => setTipo(e.target.value)}
-                  className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+                  className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
                 >
                   <option value="PORCENTAJE">Porcentaje (%)</option>
                   <option value="MONTO">Monto fijo</option>

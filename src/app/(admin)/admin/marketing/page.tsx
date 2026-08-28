@@ -81,7 +81,7 @@ export default async function AdminMarketingPage() {
                     <div
                       className="hidden h-12 w-12 shrink-0 rounded-xl sm:block"
                       style={{
-                        background: `linear-gradient(135deg, ${c.colorPrimario ?? '#e11d48'}, ${c.colorSecundario ?? '#9f1239'})`,
+                        background: `linear-gradient(135deg, ${c.colorPrimario ?? 'var(--primary)'}, ${c.colorSecundario ?? 'var(--accent)'})`,
                       }}
                     />
                     <div className="min-w-0 flex-1 space-y-1">

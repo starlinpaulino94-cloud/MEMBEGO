@@ -38,7 +38,7 @@ function FichaSucursal({
         <div className="min-w-0">
           <h3 className="truncate font-semibold text-foreground">{sucursal.nombre}</h3>
           {destacada && (
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
               Estás viendo esta sucursal
             </p>
           )}

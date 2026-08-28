@@ -90,7 +90,7 @@ export function FlashPromotion({
     <Shine
       modo="loop"
       className={cn(
-        'animate-scale-in block rounded-3xl',
+        'animate-scale-in block rounded-2xl',
         urgente && 'animate-glow-pulse',
         className
       )}
@@ -98,7 +98,7 @@ export function FlashPromotion({
       <div
         data-slot="flash-promotion"
         className={cn(
-          'relative flex flex-col gap-4 overflow-hidden rounded-3xl bg-gradient-to-br p-6 text-white shadow-hero sm:flex-row sm:items-center sm:justify-between sm:p-7',
+          'relative flex flex-col gap-4 overflow-hidden rounded-2xl bg-gradient-to-br p-6 text-white shadow-hero sm:flex-row sm:items-center sm:justify-between sm:p-7',
           TONOS[tono]
         )}
         {...props}
@@ -108,7 +108,7 @@ export function FlashPromotion({
 
         <div className="relative min-w-0">
           {eyebrow && (
-            <p className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-widest backdrop-blur-sm">
+            <p className="mb-1.5 inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-bold uppercase tracking-widest backdrop-blur-sm">
               {eyebrow}
             </p>
           )}

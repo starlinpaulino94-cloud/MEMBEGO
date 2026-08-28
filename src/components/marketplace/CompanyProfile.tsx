@@ -224,7 +224,7 @@ export function CompanyProfile({
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Header card */}
-        <div className="relative -mt-16 animate-slide-up rounded-3xl border border-border/80 bg-card p-6 shadow-premium-lg sm:p-8">
+        <div className="relative -mt-16 animate-slide-up rounded-2xl border border-border/80 bg-card p-6 shadow-premium-lg sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
             {/* Logo */}
             <div className="-mt-16 shrink-0 sm:-mt-20">
@@ -414,7 +414,7 @@ export function CompanyProfile({
                 return (
                   <div
                     key={plan.id}
-                    className={`card-interactive relative flex flex-col rounded-3xl border bg-card p-6 ${
+                    className={`card-interactive relative flex flex-col rounded-2xl border bg-card p-6 ${
                       featured
                         ? 'border-primary/40 shadow-premium ring-1 ring-info/30'
                         : 'border-border/80 shadow-card'
@@ -811,7 +811,7 @@ export function CompanyProfile({
 
       {/* CTA final */}
       {isApp ? (
-        <section className="mt-16 rounded-3xl bg-gradient-to-br from-blue-700 to-indigo-800 py-14 text-center text-white">
+        <section className="mt-16 rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-800 py-14 text-center text-white">
           <div className="mx-auto max-w-2xl px-4">
             <Sparkles className="mx-auto h-10 w-10 text-white" />
             <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">

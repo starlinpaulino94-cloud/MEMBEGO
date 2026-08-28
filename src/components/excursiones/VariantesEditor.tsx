@@ -60,12 +60,17 @@ function parsearReglasDesdeJson(json?: string): ReglaUI[] {
   try {
     const arr = JSON.parse(json)
     if (!Array.isArray(arr)) return []
-    return arr.map((r: any) => ({
-      diasSemana: Array.isArray(r.diasSemana) ? r.diasSemana : [],
-      horas: Array.isArray(r.horasSalida) ? r.horasSalida.map(String) : [],
-      precioAdulto: r.precioAdulto != null ? String(r.precioAdulto) : '',
-      precioNino: r.precioNino != null ? String(r.precioNino) : '',
-    }))
+    // Sale de `JSON.parse`: la forma no está garantizada. `unknown` obliga a
+    // comprobar cada campo antes de leerlo, que es lo que este bloque ya hacía.
+    return arr.map((crudo: unknown) => {
+      const r = (crudo ?? {}) as Record<string, unknown>
+      return {
+        diasSemana: Array.isArray(r.diasSemana) ? (r.diasSemana as number[]) : [],
+        horas: Array.isArray(r.horasSalida) ? r.horasSalida.map(String) : [],
+        precioAdulto: r.precioAdulto != null ? String(r.precioAdulto) : '',
+        precioNino: r.precioNino != null ? String(r.precioNino) : '',
+      }
+    })
   } catch {
     return []
   }
@@ -142,7 +147,7 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
               </button>
 
               <div>
-                <Label className="text-[11px] font-semibold text-muted-foreground">1. Días de la semana</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">1. Días de la semana</Label>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {DIAS.map((d) => {
                     const sel = r.diasSemana.includes(d.iso)
@@ -151,7 +156,7 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                         key={d.iso}
                         type="button"
                         onClick={() => toggleDia(idx, d.iso)}
-                        className={`h-6 w-6 rounded text-[10px] font-bold transition ${
+                        className={`h-6 w-6 rounded text-xs font-bold transition ${
                           sel ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                         }`}
                       >
@@ -164,7 +169,7 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
 
               {horariosDisponibles.length > 0 && (
                 <div>
-                  <Label className="text-[11px] font-semibold text-muted-foreground">2. Turnos aplicables</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">2. Turnos aplicables</Label>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {horariosDisponibles.map((h) => {
                       const sel = r.horas.includes(h)
@@ -173,7 +178,7 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                           key={h}
                           type="button"
                           onClick={() => toggleHora(idx, h)}
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                          className={`rounded px-1.5 py-0.5 text-xs font-semibold transition ${
                             sel ? 'bg-primary/20 text-primary border border-primary/40' : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-transparent'
                           }`}
                         >
@@ -187,7 +192,7 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-[11px] font-semibold text-muted-foreground">Tarifa Adulto *</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">Tarifa Adulto *</Label>
                   <Input
                     type="number"
                     min="0"
@@ -199,7 +204,7 @@ function EditorPreciosDinamicos({ defaultValue, horariosDisponibles = [] }: { de
                   />
                 </div>
                 <div>
-                  <Label className="text-[11px] font-semibold text-muted-foreground">Tarifa Niño</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">Tarifa Niño</Label>
                   <Input
                     type="number"
                     min="0"
@@ -279,7 +284,7 @@ function FormVariante({
             <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span>🌍</span> Tarifa Turistas / General
             </span>
-            <span className="text-[10px] font-semibold text-primary">Principal</span>
+            <span className="text-xs font-semibold text-primary">Principal</span>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div>
@@ -313,12 +318,12 @@ function FormVariante({
         </div>
 
         {/* Tarifas Residentes */}
-        <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3.5 space-y-2.5">
-          <div className="flex items-center justify-between border-b border-emerald-500/20 pb-1.5">
+        <div className="rounded-xl border border-success/25 bg-success/5 p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between border-b border-success/20 pb-1.5">
             <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
               <span>🇩🇴</span> Tarifa Residentes / Locales
             </span>
-            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">Preferencial</span>
+            <span className="text-xs font-semibold text-success">Preferencial</span>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <div>
@@ -435,7 +440,7 @@ export function VariantesEditor({
                     {v.precioNino ? ` · Ni ${v.precioNino}` : ''}
                   </span>
                   {(v.precioResidente || v.precioNinoResidente) ? (
-                    <span className="text-emerald-700 dark:text-emerald-400">
+                    <span className="text-success">
                       <strong className="font-semibold">Residente:</strong> {v.precioResidente ? `Ad ${v.precioResidente}` : ''}
                       {v.precioNinoResidente ? ` · Ni ${v.precioNinoResidente}` : ''}
                     </span>
@@ -447,7 +452,7 @@ export function VariantesEditor({
                 <button
                   type="button"
                   onClick={() => setEditando(v.id)}
-                  className="text-muted-foreground hover:text-primary p-1 rounded-md hover:bg-muted transition"
+                  className="text-muted-foreground hover:text-primary p-1 rounded-lg hover:bg-muted transition"
                   aria-label={`Editar ${v.nombre}`}
                   title="Editar"
                 >

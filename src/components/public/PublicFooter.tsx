@@ -69,16 +69,16 @@ export function PublicFooter() {
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-muted-foreground transition-colors duration-150 hover:text-white"
+                className="flex items-center gap-2 text-muted-foreground transition-colors duration-fast hover:text-white"
               >
-                <MessageCircle className="h-4 w-4 text-emerald-400" aria-hidden />
+                <MessageCircle className="h-4 w-4 text-success" aria-hidden />
                 {SOPORTE_PLATAFORMA.whatsappDisplay}
               </a>
               <a
                 href={`mailto:${SOPORTE_PLATAFORMA.email}`}
-                className="flex items-center gap-2 text-muted-foreground transition-colors duration-150 hover:text-white"
+                className="flex items-center gap-2 text-muted-foreground transition-colors duration-fast hover:text-white"
               >
-                <Mail className="h-4 w-4 text-sky-400" aria-hidden />
+                <Mail className="h-4 w-4 text-info" aria-hidden />
                 {SOPORTE_PLATAFORMA.email}
               </a>
             </div>
@@ -94,7 +94,7 @@ export function PublicFooter() {
                   <li key={l.href + l.label}>
                     <Link
                       href={l.href}
-                      className="text-muted-foreground transition-colors duration-150 hover:text-white"
+                      className="text-muted-foreground transition-colors duration-fast hover:text-white"
                     >
                       {l.label}
                     </Link>

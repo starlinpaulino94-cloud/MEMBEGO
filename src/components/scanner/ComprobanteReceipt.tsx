@@ -276,7 +276,7 @@ export function ComprobanteReceipt({
             </div>
             <div className="border-t border-black pt-2 text-center text-caption">
               <p>Gracias por tu preferencia.</p>
-              <p className="mt-1 text-caption text-gray-500">
+              <p className="mt-1 text-caption text-muted-foreground">
                 Ref: {visitId.slice(-12).toUpperCase()}
               </p>
             </div>

@@ -166,7 +166,7 @@ export default async function RegistrosPage({
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-2xl border border-border/70 bg-card p-4">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{k.label}</dt>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</dt>
             <dd className="mt-1 truncate text-lg font-bold tabular-nums text-foreground">{k.valor}</dd>
           </div>
         ))}
@@ -218,7 +218,7 @@ export default async function RegistrosPage({
                     <p className="font-mono text-xs text-muted-foreground">{r.codigo}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                       {r.tipoLabel}
                     </span>
                   </td>
@@ -236,7 +236,7 @@ export default async function RegistrosPage({
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
                     >
                       {r.estadoLabel}
                     </span>
@@ -289,7 +289,7 @@ export default async function RegistrosPage({
             <span><strong>Transferencia:</strong> {fmtRD(resumen.porMetodo.transferencia)}</span>
             <span><strong>Otro:</strong> {fmtRD(resumen.porMetodo.otro)}</span>
           </div>
-          <table className="w-full border-collapse text-[10px]">
+          <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="border-b border-black text-left">
                 <th className="py-1 pr-2">Fecha</th>

@@ -14,7 +14,7 @@ export default function Loading() {
       </div>
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-64 rounded-3xl" />
+          <Skeleton key={i} className="h-64 rounded-2xl" />
         ))}
       </div>
     </main>

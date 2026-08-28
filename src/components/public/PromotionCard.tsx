@@ -48,7 +48,7 @@ export function PromotionCard({
                 src={promotion.imagenUrl}
                 alt={promotion.titulo}
                 fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                className="object-cover transition-transform duration-hero group-hover:scale-105"
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -93,7 +93,7 @@ export function PromotionCard({
               src={promotion.imagenUrl}
               alt={promotion.titulo}
               fill
-              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              className="object-cover transition-transform duration-hero group-hover:scale-105"
             />
           ) : (
             <>

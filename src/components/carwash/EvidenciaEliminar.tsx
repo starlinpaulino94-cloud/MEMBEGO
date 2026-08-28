@@ -14,7 +14,7 @@ export function EvidenciaEliminar({ id }: { id: string }) {
       type="button"
       disabled={pending}
       title="Eliminar foto"
-      className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-[11px] font-semibold text-white hover:bg-black/70"
+      className="inline-flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs font-semibold text-white hover:bg-black/70"
       onClick={() => {
         if (!window.confirm('¿Eliminar esta foto de evidencia?')) return
         startTransition(async () => {

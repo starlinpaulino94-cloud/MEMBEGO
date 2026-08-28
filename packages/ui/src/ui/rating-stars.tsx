@@ -41,7 +41,7 @@ function RatingStars({
           ))}
         </span>
         <span
-          className="absolute inset-0 flex overflow-hidden text-amber-400"
+          className="absolute inset-0 flex overflow-hidden text-warning"
           style={{ width: `${(v / 5) * 100}%` }}
         >
           {Array.from({ length: 5 }, (_, i) => (

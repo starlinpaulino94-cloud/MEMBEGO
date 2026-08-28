@@ -59,7 +59,7 @@ export function PruebaSocial({ data, color }: { data: PruebaSocialData; color?: 
             )}
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-success">En vivo</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-success">En vivo</span>
           <div key={idx} className={`min-w-0 flex-1 ${reduced ? '' : 'animate-slide-up'}`}>
             <p className="truncate text-sm text-foreground">
               <span className="inline-flex items-center gap-1 font-semibold">
@@ -87,7 +87,7 @@ export function PruebaSocial({ data, color }: { data: PruebaSocialData; color?: 
                 <s.icon className="h-4 w-4" style={{ color: accent }} />
                 {s.value}
               </span>
-              <span className="text-[11px] leading-tight text-muted-foreground">{s.label}</span>
+              <span className="text-xs leading-tight text-muted-foreground">{s.label}</span>
             </div>
           ))}
         </div>

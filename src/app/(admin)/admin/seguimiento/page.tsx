@@ -130,7 +130,7 @@ export default async function SeguimientoPage({
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {tarjetas.map((k) => (
           <div key={k.label} className="rounded-2xl border border-border/70 bg-card p-4">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{k.label}</dt>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</dt>
             <dd className="mt-1 truncate text-lg font-bold tabular-nums text-foreground">{k.valor}</dd>
           </div>
         ))}
@@ -235,12 +235,12 @@ export default async function SeguimientoPage({
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
                     >
                       {SEGUIMIENTO_ESTADO_LABEL[r.estado]}
                     </span>
                     {r.estado === 'SIN_USAR' && (
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      <p className="mt-0.5 text-xs text-muted-foreground">
                         hace {r.diasDesdeOtorgado} día{r.diasDesdeOtorgado !== 1 ? 's' : ''}
                       </p>
                     )}

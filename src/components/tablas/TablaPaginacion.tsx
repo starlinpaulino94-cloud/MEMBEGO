@@ -107,7 +107,7 @@ export function TablaPaginacion({
               key={t}
               href={aRuta(urlDePagina(params, { page: 1, pageSize: t }, clave))}
               className={cn(
-                'rounded-md px-2 py-1 transition-colors',
+                'rounded-lg px-2 py-1 transition-colors',
                 t === r.tamano
                   ? 'bg-primary text-primary-foreground font-semibold'
                   : 'hover:bg-muted hover:text-foreground'

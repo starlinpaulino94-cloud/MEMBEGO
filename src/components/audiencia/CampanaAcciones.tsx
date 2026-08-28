@@ -102,7 +102,7 @@ export default function CampanaAcciones({
 
 function ResultadoEstimacion({ estimacion }: { estimacion: Estimacion }) {
   return (
-    <div className="rounded-md border bg-muted/40 p-3 text-sm">
+    <div className="rounded-lg border bg-muted/40 p-3 text-sm">
       <div className="font-semibold">Audiencia confirmada: {estimacion.totalElegibles} clientes</div>
       {estimacion.sinConsentimiento > 0 && (
         <p className="text-muted-foreground">

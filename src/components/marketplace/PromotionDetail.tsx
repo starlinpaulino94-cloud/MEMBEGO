@@ -47,7 +47,7 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
         </Link>
 
         {/* Main Card */}
-        <div className="mt-8 overflow-hidden rounded-3xl border border-border/80 shadow-premium">
+        <div className="mt-8 overflow-hidden rounded-2xl border border-border/80 shadow-premium">
           {/* Image */}
           {promotion.imagenUrl && (
             // LA IMAGEN SE MUESTRA A SU PROPORCIÓN REAL, a todo el ancho.

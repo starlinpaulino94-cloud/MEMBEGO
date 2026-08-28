@@ -155,7 +155,7 @@ export default async function ReportesOperativosPage({
       </Form>
 
       {reporte.recortado && (
-        <p className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+        <p className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
           El rango pedido era muy amplio; se muestran los primeros 92 días.
         </p>
       )}
@@ -163,7 +163,7 @@ export default async function ReportesOperativosPage({
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-2xl border border-border/70 bg-card p-4">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{k.label}</dt>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</dt>
             <dd className="mt-1 truncate text-lg font-bold tabular-nums text-foreground">
               {k.valor}
             </dd>
