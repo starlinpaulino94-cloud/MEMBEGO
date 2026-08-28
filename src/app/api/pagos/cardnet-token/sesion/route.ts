@@ -100,17 +100,18 @@ export async function POST(req: NextRequest) {
      * Customer que se usó NO sirve, para poder reintentar con uno nuevo.
      */
     const intentar = async (guardado: string | null) => {
-      const customerId = await obtenerCustomerId({
+      const res = await obtenerCustomerId({
         email,
         guardado,
         guardar: (valor) => guardar(valor),
       })
-      if (!customerId) return { customerId: null, consulta: null }
+      if (!res.ok) return { customerId: null, consulta: null, denegado: res.motivo === 'denegado' }
       // §4.1.2.2 punto 3-4: el GET trae los perfiles Y los datos de la ventana.
-      return { customerId, consulta: await consultarClienteCardnet(customerId) }
+      const consulta = await consultarClienteCardnet(res.customerId)
+      return { customerId: res.customerId, consulta, denegado: consulta.denegado }
     }
 
-    let { customerId, consulta } = await intentar(cliente?.cardnetCustomerId ?? null)
+    let { customerId, consulta, denegado } = await intentar(cliente?.cardnetCustomerId ?? null)
 
     /**
      * ¿El Customer que teníamos guardado ya no sirve?
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
     const teniamosGuardado = Boolean(cliente?.cardnetCustomerId)
     if (inservible && teniamosGuardado) {
       await guardar(null)
-      ;({ customerId, consulta } = await intentar(null))
+      ;({ customerId, consulta, denegado } = await intentar(null))
     }
 
     if (!customerId || !consulta) {
@@ -157,11 +158,36 @@ export async function POST(req: NextRequest) {
           huboCustomerId: Boolean(customerId),
           huboConsulta: Boolean(consulta),
           teniaGuardado: teniamosGuardado,
+          denegado,
           ambiente,
           ambienteVariable: valor ?? '(sin definir)',
           ambienteReconocido: reconocido,
         }
       )
+      /**
+       * «INTENTA DE NUEVO» NO SE LE DICE A CUALQUIERA.
+       *
+       * Si el proveedor nos DENEGÓ el paso (401/403), reintentar no arregla
+       * nada: puede ser una lista blanca de IP que no nos incluye, o unas
+       * credenciales todavía sin habilitar. Ninguna de las dos cosas cambia
+       * entre un clic y el siguiente. Invitar a reintentar ahí es mandar a
+       * alguien a repetir cien veces algo que ninguna de las cien va a
+       * funcionar, y encima en la pantalla donde iba a gastar su dinero.
+       *
+       * Se responde 503 —el servicio no está disponible, no es culpa de la
+       * petición— y el navegador usa `motivo` para ofrecer las OTRAS formas de
+       * pago, que sí funcionan.
+       */
+      if (denegado) {
+        return NextResponse.json(
+          {
+            ok: false,
+            motivo: 'proveedor_no_disponible',
+            error: 'El pago con tarjeta no está disponible en este momento.',
+          },
+          { status: 503 }
+        )
+      }
       return NextResponse.json(
         { ok: false, error: 'No se pudo iniciar la ventana de pago. Intenta de nuevo.' },
         { status: 502 }

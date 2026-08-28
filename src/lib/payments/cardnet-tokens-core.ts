@@ -13,6 +13,28 @@
 export type AmbienteTokens = 'pruebas' | 'produccion'
 
 /**
+ * POR QUÉ FALLÓ EL PROVEEDOR — y por qué la diferencia importa tanto.
+ *
+ * `denegado` es cuando el proveedor contesta 401 o 403: no nos deja pasar. Las
+ * llaves pueden estar perfectas y aun así pasar —una lista blanca de IP que no
+ * incluye la nuestra, unas credenciales de producción todavía sin habilitar— y
+ * lo que NO va a pasar es que se arregle solo entre un intento y el siguiente.
+ *
+ * Todo lo demás (`transitorio`) sí puede: un 500 del proveedor, un corte de
+ * red, un tiempo agotado.
+ *
+ * La diferencia no es cosmética: decide qué se le dice a quien está pagando.
+ * Ante un `transitorio`, «intenta de nuevo» es un consejo útil. Ante un
+ * `denegado`, es mandar a alguien a repetir cien veces algo que ninguna de las
+ * cien veces va a funcionar, en la pantalla donde iba a gastar su dinero.
+ */
+export type FalloProveedor = 'denegado' | 'transitorio'
+
+export function clasificarFalloProveedor(status: number): FalloProveedor {
+  return status === 401 || status === 403 ? 'denegado' : 'transitorio'
+}
+
+/**
  * QUÉ AMBIENTE PIDE LA VARIABLE — y por qué esto no era una comparación simple.
  *
  * Antes era `env === 'produccion' ? 'produccion' : 'pruebas'`. Cualquier otro
