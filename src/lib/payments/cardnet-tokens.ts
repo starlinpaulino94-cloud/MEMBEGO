@@ -1,5 +1,5 @@
 import 'server-only'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import {
   urlsTokens,
   apiCandidatos,
@@ -12,6 +12,9 @@ import {
   marcarCustomerIdConCuenta,
   leerCustomerIdDeCuenta,
   variantesDeRuta,
+  normalizarAmbiente,
+  clasificarFalloProveedor,
+  type FalloProveedor,
   reintentarConOtraGrafia,
   referenciaCobro,
   MONEDA_DOP_TOKENS,
@@ -57,8 +60,19 @@ export function getTokensConfig(): TokensConfig | null {
   return {
     publicKey,
     privateKey,
-    ambiente: process.env.CARDNET_TOKENS_AMBIENTE === 'produccion' ? 'produccion' : 'pruebas',
+    ambiente: ambienteConfigurado().ambiente,
   }
+}
+
+/**
+ * El ambiente que pide la variable, y si se entendió.
+ *
+ * Se separa de `getTokensConfig` para que el diagnóstico pueda enseñar el
+ * `reconocido` sin tener que tocar las llaves.
+ */
+export function ambienteConfigurado(): { ambiente: AmbienteTokens; reconocido: boolean; valor: string | null } {
+  const valor = process.env.CARDNET_TOKENS_AMBIENTE?.trim() || null
+  return { ...normalizarAmbiente(valor), valor }
 }
 
 /** ¿Están las dos llaves configuradas? Gobierna si se ofrece la tarjeta. */
@@ -222,7 +236,13 @@ async function llamadaBase(
   path: string,
   cuerpo: Record<string, unknown> | null,
   authValor: string
-): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+): Promise<{
+  ok: boolean
+  status: number
+  json: Record<string, unknown>
+  /** Cabeceras que identifican QUIÉN respondió. Ver `CABECERAS_DE_INTERES`. */
+  cabeceras: Record<string, string>
+}> {
   try {
     const resp = await fetch(`${base}${path}`, {
       method: metodo,
@@ -243,10 +263,49 @@ async function llamadaBase(
       // para diagnóstico — sin ella, un fallo del proveedor es invisible.
       json = texto ? { _texto: texto.slice(0, 500) } : {}
     }
-    return { ok: resp.ok, status: resp.status, json }
+    return { ok: resp.ok, status: resp.status, json, cabeceras: cabecerasDeInteres(resp.headers) }
   } catch (e) {
-    return { ok: false, status: 0, json: { _error: e instanceof Error ? e.message : 'fetch' } }
+    return {
+      ok: false,
+      status: 0,
+      json: { _error: e instanceof Error ? e.message : 'fetch' },
+      cabeceras: {},
+    }
   }
+}
+
+/**
+ * QUIÉN CONTESTÓ, cuando lo que contestó no fue la API.
+ *
+ * Un 401 con el cuerpo `{"status":401,"error":"Acceso denegado"}` —en español,
+ * y con una forma que la API de tokens no usa— no lo escribe la API: lo escribe
+ * algo delante de ella. Un cortafuegos, un balanceador, una pasarela que filtra
+ * por IP de origen. Y saber cuál de las dos cosas está pasando cambia por
+ * completo a quién hay que llamar: si es la API, el problema son las llaves; si
+ * es el filtro, las llaves pueden estar perfectas y lo que falta es que
+ * autoricen desde dónde llamamos.
+ *
+ * Estas cabeceras lo delatan y ninguna lleva nada nuestro dentro.
+ */
+const CABECERAS_DE_INTERES = [
+  'server',
+  'via',
+  'www-authenticate',
+  'content-type',
+  'x-cache',
+  'cf-ray',
+  'x-amz-cf-id',
+  'x-request-id',
+  'x-powered-by',
+]
+
+function cabecerasDeInteres(headers: Headers): Record<string, string> {
+  const salida: Record<string, string> = {}
+  for (const nombre of CABECERAS_DE_INTERES) {
+    const valor = headers.get(nombre)
+    if (valor) salida[nombre] = valor.slice(0, 200)
+  }
+  return salida
 }
 
 // Base y formato de auth que ya funcionaron en esta instancia: las llamadas
@@ -365,15 +424,20 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
    */
   captureUrl: string | null
   uniqueId: string | null
+  /** true = el proveedor NO nos dejó pasar (401/403), no es un fallo pasajero. */
+  denegado: boolean
 }> {
-  const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null }
+  const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null, denegado: false }
   if (!customerId) return vacio
-  const { ok, json } = await llamarTokensConRuta(
+  const { ok, status, json } = await llamarTokensConRuta(
     'GET',
     `/Customer/${encodeURIComponent(customerId)}`,
     null
   )
-  if (!ok) return vacio
+  if (!ok) {
+    anotarFalloProveedor('consultarCliente', status, json)
+    return { ...vacio, denegado: clasificarFalloProveedor(status) === 'denegado' }
+  }
   const { datos } = desenvolverRespuesta(json)
   const s = (...ks: string[]) => {
     for (const k of ks) {
@@ -384,6 +448,7 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
   }
   const captureUrl = s('CaptureURL', 'captureUrl', 'CaptureUrl')
   return {
+    denegado: false,
     email: s('Email', 'email'),
     perfiles: extraerPerfiles(json),
     // El formato documentado lleva barra final; la respuesta a veces no la trae.
@@ -406,9 +471,9 @@ export async function obtenerCustomerId(input: {
   email: string
   guardado: string | null
   guardar: (valorAGuardar: string) => Promise<void>
-}): Promise<string | null> {
+}): Promise<ResultadoCustomer> {
   const cfg = getTokensConfig()
-  if (!cfg) return null
+  if (!cfg) return { ok: false, motivo: 'transitorio' }
 
   // El id guardado solo sirve para LA MISMA cuenta de CardNET que lo emitió.
   // Al cambiar de juego de llaves se cambia de cuenta, y un CustomerId de la
@@ -416,17 +481,17 @@ export async function obtenerCustomerId(input: {
   // INTERNAL_SERVER_ERROR, sin ninguna pista de que la causa es un dato viejo.
   // Por eso se guarda etiquetado con la cuenta y se descarta si no coincide.
   const yaLoTengo = leerCustomerIdDeCuenta(input.guardado, cfg.publicKey, cfg.privateKey)
-  if (yaLoTengo) return yaLoTengo
+  if (yaLoTengo) return { ok: true, customerId: yaLoTengo }
 
   const cliente = await crearClienteCardnet({ email: input.email })
-  if (!cliente?.customerId) return null
+  if (!cliente.ok) return cliente
   // Best-effort: si la escritura falla, el cobro sigue — solo se pagará un
   // POST de más la próxima vez. Pero queda anotado: si falla siempre, el
   // síntoma vuelve a ser una ventana que muere sin explicación.
   await input
     .guardar(marcarCustomerIdConCuenta(cliente.customerId, cfg.publicKey, cfg.privateKey))
     .catch(anotarFallo('pagos:cardnet:guardarCustomerId'))
-  return cliente.customerId
+  return cliente
 }
 
 /**
@@ -436,7 +501,14 @@ export async function obtenerCustomerId(input: {
  * cuenta y hay que reclamarla a CardNET.
  */
 export async function probarSesionTokens(): Promise<
-  { url: string; formato: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+  {
+    url: string
+    formato: string
+    ok: boolean
+    status: number
+    respuesta: Record<string, unknown>
+    cabeceras: Record<string, string>
+  }[]
 > {
   const cfg = getTokensConfig()
   if (!cfg) return []
@@ -456,6 +528,9 @@ export async function probarSesionTokens(): Promise<
         ok: r.ok,
         status: r.status,
         respuesta: sinSensibles(r.json),
+        // Quién contestó. Un 401 de la API y un 401 de un filtro delante de la
+        // API se parecen en el cuerpo y no se parecen en nada en la solución.
+        cabeceras: r.cabeceras,
       })
       // Host muerto/ruta inexistente: pasar al siguiente host.
       if (r.status === 0 || r.status === 404) break
@@ -494,24 +569,64 @@ export async function consultarClienteDiagnostico(
  * Crea (o registra) un Customer en CardNET. Devuelve el CustomerId con el que
  * luego se asocia el perfil de pago. `POST /api/Customer`.
  */
+/**
+ * Deja constancia de que el proveedor rechazó una llamada, con el ambiente al
+ * que se estaba llamando.
+ *
+ * El ambiente es la mitad del diagnóstico y la que más veces es la culpable:
+ * unas llaves de producción contra la API de laboratorio dan 401 en todo, y el
+ * síntoma —una ventana de pago que no abre— no apunta a la variable de entorno
+ * ni de lejos. Sin llaves ni datos de tarjeta: solo el estado y el cuerpo ya
+ * saneado que devuelve el proveedor.
+ */
+function anotarFalloProveedor(paso: string, status: number, json: Record<string, unknown>): void {
+  const { ambiente, reconocido, valor } = ambienteConfigurado()
+  logErrorBd(`pagos:cardnet-tokens:${paso}`, new Error(`El proveedor respondió ${status}`), {
+    status,
+    ambiente,
+    ambienteVariable: valor ?? '(sin definir)',
+    ambienteReconocido: reconocido,
+    respuesta: sinSensibles(json),
+  })
+}
+
+/**
+ * Resultado de resolver el Customer. Cuando no se pudo, dice si el proveedor
+ * NOS DENEGÓ el paso o si fue algo pasajero: es lo que decide si tiene sentido
+ * invitar a reintentar. Ver `FalloProveedor`.
+ */
+export type ResultadoCustomer =
+  | { ok: true; customerId: string }
+  | { ok: false; motivo: FalloProveedor }
+
 export async function crearClienteCardnet(input: {
   email: string
   nombre?: string
   apellido?: string
-}): Promise<{ customerId: string } | null> {
-  const { ok, json } = await llamarTokensConRuta('POST', '/Customer', {
+}): Promise<ResultadoCustomer> {
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Customer', {
     Email: input.email,
     ...(input.nombre ? { FirstName: input.nombre } : {}),
     ...(input.apellido ? { LastName: input.apellido } : {}),
     Enable: 'true',
   })
-  if (!ok) return null
+  if (!ok) {
+    // ANTES ESTE FALLO ERA MUDO. Devolvía `null`, la ruta de sesión respondía
+    // «No se pudo iniciar la ventana de pago» y no quedaba ni una línea en
+    // ningún sitio diciendo qué había contestado el proveedor. Con llaves
+    // recién cambiadas, ese mensaje puede significar cinco cosas distintas y
+    // no había forma de saber cuál sin repetir el fallo a mano.
+    anotarFalloProveedor('crearCliente', status, json)
+    return { ok: false, motivo: clasificarFalloProveedor(status) }
+  }
   const { datos } = desenvolverRespuesta(json)
   const id = (datos.CustomerId ?? datos.customerId ?? datos.Id ?? datos.id ?? '') as
     | string
     | number
   const customerId = String(id).trim()
-  return customerId ? { customerId } : null
+  // Respuesta 2xx pero sin id: el proveedor contestó, así que no nos denegó
+  // nada — es un final raro y pasajero.
+  return customerId ? { ok: true, customerId } : { ok: false, motivo: 'transitorio' }
 }
 
 /**
@@ -523,14 +638,38 @@ export async function crearClienteCardnet(input: {
  * ventana de pago») que obligaba a adivinar. Con esto, el fallo se lee.
  */
 export async function registrarClienteDiagnostico(email: string): Promise<
-  { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[]
+  {
+    ruta: string
+    /** La URL COMPLETA contra la que se llamó. */
+    url: string
+    ok: boolean
+    status: number
+    respuesta: Record<string, unknown>
+  }[]
 > {
   const cfg = getTokensConfig()
   if (!cfg) return []
-  const salida: { ruta: string; ok: boolean; status: number; respuesta: Record<string, unknown> }[] = []
+  // Antes esto decía solo `/Customer`, y esa mitad del dato no sirve para
+  // preguntarle nada a nadie: la pregunta que hay que poder hacerle al
+  // proveedor es «¿es ESTA la URL de producción?», y para eso hace falta el
+  // host entero.
+  const base = apiCandidatos(cfg.ambiente)[0] ?? '(sin base)'
+  const salida: {
+    ruta: string
+    url: string
+    ok: boolean
+    status: number
+    respuesta: Record<string, unknown>
+  }[] = []
   for (const ruta of variantesDeRuta('/Customer')) {
     const r = await llamarTokens('POST', ruta, { Email: email, Enable: 'true' })
-    salida.push({ ruta, ok: r.ok, status: r.status, respuesta: sinSensibles(r.json) })
+    salida.push({
+      ruta,
+      url: `${base}${ruta}`,
+      ok: r.ok,
+      status: r.status,
+      respuesta: sinSensibles(r.json),
+    })
     if (r.ok) break
   }
   return salida

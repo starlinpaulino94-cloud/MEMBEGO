@@ -1,7 +1,11 @@
 import { createHash } from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
-import { cardnetTokensConfigurado, probarSesionTokens } from '@/lib/payments/cardnet-tokens'
+import {
+  cardnetTokensConfigurado,
+  probarSesionTokens,
+  ambienteConfigurado,
+} from '@/lib/payments/cardnet-tokens'
 import { paymentLimiter, paymentSessionLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { FULL_ADMIN_ROLES } from '@/types'
 
@@ -19,8 +23,11 @@ export const maxDuration = 60
  * valor de las llaves.
  *
  * Con `?probar=1` además intenta crear una sesión de captura contra el
- * proveedor y devuelve el status HTTP y la respuesta (sin sensibles): la forma
- * de ver POR QUÉ el proveedor rechaza, en vez de un error genérico.
+ * proveedor y devuelve, por cada URL y cada formato de autenticación probados:
+ * el status HTTP, la respuesta (sin sensibles), las cabeceras de quien contestó
+ * y la IP desde la que salió la llamada. Es lo que hace falta para distinguir
+ * «las llaves están mal» de «hay un filtro delante que no nos deja pasar», que
+ * se parecen en el mensaje y no se parecen en nada en la solución.
  *
  * Con `?correo=1` envía un correo de PRUEBA al email del usuario logueado y
  * devuelve el resultado: la forma de verificar la configuración de Resend
@@ -88,7 +95,14 @@ export async function GET(req: NextRequest) {
     publicKey: process.env.CARDNET_TOKENS_PUBLIC_KEY?.trim() ?? null,
     // De la privada, solo su huella: nunca el valor.
     privateKeyHuella: huellaCorta(process.env.CARDNET_TOKENS_PRIVATE_KEY),
-    ambiente: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
+    // El valor CRUDO de la variable y el ambiente al que se traduce, por
+    // separado. Verlos juntos es lo que delata el error más caro de esta
+    // integración: `production`, `Producción` o un espacio de más se leían
+    // como pruebas en silencio, y unas llaves de producción contra la API de
+    // laboratorio dan 401 en todo sin decir por qué.
+    ambienteVariable: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
+    ambiente: ambienteConfigurado().ambiente,
+    ambienteReconocido: ambienteConfigurado().reconocido,
     correo: {
       resendKeyPresente: Boolean(process.env.RESEND_API_KEY?.trim()),
       emailFromPresente: Boolean(process.env.EMAIL_FROM?.trim()),
@@ -378,8 +392,41 @@ export async function GET(req: NextRequest) {
   // Crea una sesión de captura real contra el proveedor: mismo riesgo que
   // `?sesion=1` sobre una ventana de pago abierta.
   if (!esAdminDespliegue) return soloAdmin()
-  const prueba = await probarSesionTokens()
-  return NextResponse.json({ ...base, prueba })
+  const [prueba, ipDeSalida] = await Promise.all([probarSesionTokens(), ipDeSalidaDelServidor()])
+  return NextResponse.json({ ...base, ipDeSalida, prueba })
+}
+
+/**
+ * LA IP DESDE LA QUE SALEN NUESTRAS LLAMADAS AL PROVEEDOR.
+ *
+ * Es la primera pregunta que hace una pasarela de pago cuando su producción
+ * responde «Acceso denegado» y las llaves son correctas: las autorizaciones de
+ * producción suelen ir por lista de IP, y esa lista se llena con la IP que ve
+ * el proveedor — no con la del navegador de quien administra. Sin este dato,
+ * la conversación es «no sé desde dónde llamamos», y eso son días.
+ *
+ * Es una llamada a un servicio externo, así que conviene decir exactamente qué
+ * hace: pide a un eco público que devuelva la IP de origen. NO manda nada
+ * nuestro — ni llaves, ni datos de cliente, ni el nombre del despliegue. Solo
+ * corre bajo `?probar=1`, que ya es de administrador, y si falla no rompe nada:
+ * devuelve null y el resto del diagnóstico sigue.
+ *
+ * OJO al interpretarla: en un despliegue sin IP fija esta IP puede cambiar
+ * entre invocaciones. Si el proveedor exige lista blanca, hace falta salida
+ * fija, y eso es una decisión de infraestructura, no de este código.
+ */
+async function ipDeSalidaDelServidor(): Promise<string | null> {
+  try {
+    const r = await fetch('https://api.ipify.org?format=json', {
+      signal: AbortSignal.timeout(5_000),
+      cache: 'no-store',
+    })
+    if (!r.ok) return null
+    const j = (await r.json()) as { ip?: unknown }
+    return typeof j.ip === 'string' ? j.ip : null
+  } catch {
+    return null
+  }
 }
 
 /**

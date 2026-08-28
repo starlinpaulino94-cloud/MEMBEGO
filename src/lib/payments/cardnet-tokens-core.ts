@@ -13,6 +13,68 @@
 export type AmbienteTokens = 'pruebas' | 'produccion'
 
 /**
+ * POR QUÉ FALLÓ EL PROVEEDOR — y por qué la diferencia importa tanto.
+ *
+ * `denegado` es cuando el proveedor contesta 401 o 403: no nos deja pasar. Las
+ * llaves pueden estar perfectas y aun así pasar —una lista blanca de IP que no
+ * incluye la nuestra, unas credenciales de producción todavía sin habilitar— y
+ * lo que NO va a pasar es que se arregle solo entre un intento y el siguiente.
+ *
+ * Todo lo demás (`transitorio`) sí puede: un 500 del proveedor, un corte de
+ * red, un tiempo agotado.
+ *
+ * La diferencia no es cosmética: decide qué se le dice a quien está pagando.
+ * Ante un `transitorio`, «intenta de nuevo» es un consejo útil. Ante un
+ * `denegado`, es mandar a alguien a repetir cien veces algo que ninguna de las
+ * cien veces va a funcionar, en la pantalla donde iba a gastar su dinero.
+ */
+export type FalloProveedor = 'denegado' | 'transitorio'
+
+export function clasificarFalloProveedor(status: number): FalloProveedor {
+  return status === 401 || status === 403 ? 'denegado' : 'transitorio'
+}
+
+/**
+ * QUÉ AMBIENTE PIDE LA VARIABLE — y por qué esto no era una comparación simple.
+ *
+ * Antes era `env === 'produccion' ? 'produccion' : 'pruebas'`. Cualquier otro
+ * valor caía en pruebas EN SILENCIO: `production` en inglés, `Producción` con
+ * tilde, `PRODUCCION` en mayúsculas, un espacio de más. Y el síntoma de caer en
+ * pruebas con llaves de producción no dice nada de la causa — la API de
+ * laboratorio responde 401 a esas llaves, el registro del Customer falla y la
+ * pantalla enseña «No se pudo iniciar la ventana de pago».
+ *
+ * Un despliegue de producción que se comporta como uno de prueba por una tilde
+ * es un fallo que puede durar días. Se aceptan las grafías que una persona
+ * escribe de verdad, y `reconocido` deja constancia de si el valor se entendió:
+ * quien lo escribió mal merece saberlo, no que se le adivine mal en silencio.
+ *
+ * Deliberadamente NO se acepta cualquier cosa que empiece por «prod»: entre
+ * ignorar un valor raro y mandar cobros de verdad a producción por un valor que
+ * nadie escribió, se falla del lado de pruebas.
+ */
+const AMBIENTES_PRODUCCION = new Set(['produccion', 'production', 'prod'])
+
+export function normalizarAmbiente(valor: string | undefined | null): {
+  ambiente: AmbienteTokens
+  /** false = había un valor y no se entendió (se cayó a pruebas). */
+  reconocido: boolean
+} {
+  const limpio = (valor ?? '')
+    .trim()
+    .toLowerCase()
+    // Quita las tildes: «producción» y «produccion» son la misma palabra.
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (!limpio) return { ambiente: 'pruebas', reconocido: true }
+  if (AMBIENTES_PRODUCCION.has(limpio)) return { ambiente: 'produccion', reconocido: true }
+  if (limpio === 'pruebas' || limpio === 'lab' || limpio === 'test' || limpio === 'sandbox') {
+    return { ambiente: 'pruebas', reconocido: true }
+  }
+  return { ambiente: 'pruebas', reconocido: false }
+}
+
+/**
  * URLs del servicio de tokens por ambiente — MANUAL TÉCNICO v1.7 §11.
  *
  *   · Pruebas:    https://lab.cardnet.com.do/servicios/tokens/v1

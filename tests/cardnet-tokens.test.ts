@@ -10,6 +10,8 @@ import {
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
   perfilPendienteDeActivar,
+  normalizarAmbiente,
+  clasificarFalloProveedor,
   mismoPerfilCardnet,
 } from '../src/lib/payments/cardnet-tokens-core'
 
@@ -927,4 +929,112 @@ test('un activate con Errors y HTTP 200 NO puede terminar en cobro', () => {
     /activacion\.errores\.length > 0/,
     'la clasificación dejó de mirar los errores que devuelve el proveedor'
   )
+})
+
+/**
+ * EL VALOR DE `CARDNET_TOKENS_AMBIENTE`.
+ *
+ * Esto no es una prueba de estilo. Con la comparación estricta que había,
+ * escribir `production` en inglés dejaba el despliegue apuntando a la API de
+ * LABORATORIO con llaves de producción — 401 en todo, y el cliente veía «No se
+ * pudo iniciar la ventana de pago» sin que nada dijera por qué.
+ */
+test('normalizarAmbiente: las grafías que una persona escribe de verdad', () => {
+  for (const valor of ['produccion', 'Producción', 'PRODUCCION', '  produccion  ', 'production', 'prod']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'produccion', `«${valor}» debería ser producción`)
+    assert.equal(r.reconocido, true, `«${valor}» debería reconocerse`)
+  }
+})
+
+test('normalizarAmbiente: sin valor es pruebas, y eso SÍ está reconocido', () => {
+  for (const valor of [undefined, null, '', '   ']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'pruebas')
+    assert.equal(r.reconocido, true, 'no definir la variable es una elección válida, no un error')
+  }
+  for (const valor of ['pruebas', 'lab', 'test', 'sandbox']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'pruebas')
+    assert.equal(r.reconocido, true)
+  }
+})
+
+test('normalizarAmbiente: un valor que no se entiende cae en pruebas Y lo dice', () => {
+  // Falla del lado seguro —nunca manda cobros de verdad por un valor que nadie
+  // escribió— pero deja `reconocido: false` para que el diagnóstico lo enseñe
+  // en vez de que el despliegue mienta en silencio.
+  for (const valor of ['produccion!', 'prd', 'produccion pruebas', 'live']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'pruebas', `«${valor}» no debe activar producción`)
+    assert.equal(r.reconocido, false, `«${valor}» debe quedar marcado como no reconocido`)
+  }
+})
+
+test('el fallo de la ventana de pago deja rastro', () => {
+  // La regresión que se está cerrando: este `return` pintaba el error en la
+  // pantalla del cliente y no escribía nada en ningún sitio.
+  const ruta = readFileSync('src/app/api/pagos/cardnet-token/sesion/route.ts', 'utf8')
+  // `lastIndexOf` y no `indexOf`: el mensaje aparece también en el comentario
+  // que explica este mismo arreglo, y buscar el primero medía el comentario en
+  // vez del código. Es exactamente el fallo que el auditor de diseño ya había
+  // encontrado en dos guardias del proyecto.
+  const i = ruta.lastIndexOf('No se pudo iniciar la ventana de pago')
+  assert.ok(i > 0, 'cambió el mensaje: revisa que esta guardia siga mirando el sitio correcto')
+  // Se busca por el NOMBRE del registro, no por distancia en caracteres: la
+  // primera versión miraba «las 1400 letras anteriores» y se rompió sola en
+  // cuanto se metió otro bloque en medio. Una guardia que falla por mover
+  // código no está midiendo lo que dice medir.
+  const j = ruta.indexOf("'pagos:cardnet-token:sesion-sin-ventana'")
+  assert.ok(j > 0, 'el 502 de la ventana de pago volvió a quedarse mudo')
+  assert.ok(j < i, 'el rastro tiene que escribirse ANTES de responder')
+  assert.match(
+    ruta.slice(j, i),
+    /ambiente/,
+    'el rastro debe decir a qué ambiente se estaba llamando'
+  )
+})
+
+/**
+ * «INTENTA DE NUEVO» NO SE LE DICE A CUALQUIERA.
+ *
+ * Un 401 del proveedor y un 500 del proveedor se parecen en la pantalla y no se
+ * parecen en nada en lo que el cliente debería hacer. Producción respondió 401
+ * «Acceso denegado» durante horas mientras la app invitaba a reintentar.
+ */
+test('clasificarFalloProveedor: 401 y 403 son denegación, no un tropiezo', () => {
+  assert.equal(clasificarFalloProveedor(401), 'denegado')
+  assert.equal(clasificarFalloProveedor(403), 'denegado')
+})
+
+test('clasificarFalloProveedor: lo demás sí puede arreglarse solo', () => {
+  // Incluido el 0, que es «no hubo respuesta»: un corte de red se arregla solo.
+  for (const status of [0, 400, 404, 409, 429, 500, 502, 503, 504]) {
+    assert.equal(
+      clasificarFalloProveedor(status),
+      'transitorio',
+      `${status} no debería apagar el pago con tarjeta`
+    )
+  }
+})
+
+test('la ruta de sesión responde 503 y un motivo cuando el proveedor deniega', () => {
+  const ruta = readFileSync('src/app/api/pagos/cardnet-token/sesion/route.ts', 'utf8')
+  assert.match(ruta, /proveedor_no_disponible/, 'el navegador necesita el motivo para ofrecer otra vía')
+  assert.match(ruta, /status: 503/, 'una denegación del proveedor no es un error de la petición')
+  // Y la denegación tiene que llegar hasta aquí: si nadie la propaga, el
+  // `if` de arriba nunca se cumple y la guardia pasaría estando ciega.
+  assert.match(ruta, /denegado/, 'el motivo tiene que viajar desde la llamada al proveedor')
+})
+
+test('la pantalla de pago no ofrece reintentar cuando la pasarela está caída', () => {
+  const comp = readFileSync('src/components/membresia/PagoTokenCardnet.tsx', 'utf8')
+  assert.match(comp, /pasarelaNoDisponible/, 'falta el estado que distingue este caso')
+  // El bloque con el botón de pagar se enseña SOLO si la pasarela responde.
+  assert.match(
+    comp,
+    /\{!pasarelaNoDisponible && estado !== 'activacion' && \(/,
+    'el botón de pagar volvió a mostrarse con la pasarela caída'
+  )
+  assert.match(comp, /Elegir otra forma de pago/, 'hay que dar una salida, no solo una disculpa')
 })
