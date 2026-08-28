@@ -1,18 +1,16 @@
 'use client'
 
-import { useState } from 'react'
 import { useExcursionCart } from './ExcursionCarritoContext'
 import { useRouter } from 'next/navigation'
 import { formatMoney } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { Trash2, CalendarDays, Clock, ShoppingCart, ArrowRight, Minus, Plus, Banknote, CreditCard } from 'lucide-react'
+import { Trash2, CalendarDays, Clock, Users, ShoppingCart, ArrowRight, Minus, Plus } from 'lucide-react'
 import Image from 'next/image'
 
 export function ExcursionCarritoDrawer() {
   const { items, isOpen, closeCart, openCart, removeItem, updateItem, subtotal } = useExcursionCart()
   const router = useRouter()
-  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
 
   const handleCheckout = () => {
     closeCart()
@@ -126,47 +124,6 @@ export function ExcursionCarritoDrawer() {
 
         {items.length > 0 && (
           <div className="border-t bg-card p-6 shadow-lg space-y-4">
-            {/* Selector de Modalidad de Pago */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-foreground">Modalidad de pago</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMetodoPago('DESTINO')}
-                  className={`flex flex-col items-start gap-0.5 p-2.5 rounded-xl border text-left transition ${
-                    metodoPago === 'DESTINO'
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                      : 'border-border bg-muted/20 hover:bg-muted/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
-                    <Banknote className="h-3.5 w-3.5 text-success" />
-                    <span>En destino</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">Pagas el día del tour</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setMetodoPago('ONLINE_SIMULADO')}
-                  className={`flex flex-col items-start gap-0.5 p-2.5 rounded-xl border text-left transition ${
-                    metodoPago === 'ONLINE_SIMULADO'
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                      : 'border-border bg-muted/20 hover:bg-muted/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-1 font-semibold text-xs text-foreground">
-                    <CreditCard className="h-3.5 w-3.5 text-primary" />
-                    <span>En línea</span>
-                    <span className="text-xs bg-warning/15 text-warning px-1 py-0.2 rounded font-bold">
-                      Prueba
-                    </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">Tarjeta • QR al instante</span>
-                </button>
-              </div>
-            </div>
-
             <div className="flex justify-between items-center pt-1 border-t">
               <span className="font-medium text-sm text-muted-foreground">Total a pagar</span>
               <span className="text-xl font-bold text-foreground">
@@ -183,9 +140,6 @@ export function ExcursionCarritoDrawer() {
                 <ArrowRight className="h-4 w-4" />
               </span>
             </Button>
-            <p className="text-xs text-center text-muted-foreground">
-              Revisa tu carrito y elige tu método de pago.
-            </p>
           </div>
         )}
       </SheetContent>

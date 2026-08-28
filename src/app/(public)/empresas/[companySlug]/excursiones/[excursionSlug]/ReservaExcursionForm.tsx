@@ -13,8 +13,6 @@ import {
   AlertCircle,
   X,
   ShoppingCart,
-  CreditCard,
-  Banknote,
   Sparkles,
   Wand2,
   Clock,
@@ -155,7 +153,6 @@ export function ReservaExcursionForm({
   const [itinerarioMultiFecha, setItinerarioMultiFecha] = useState<Record<string, { fecha: string; hora: string }>>({})
 
   const [modoHorarioCombo, setModoHorarioCombo] = useState<'RECOMENDADOS' | 'PERSONALIZADO'>('RECOMENDADOS')
-  const [metodoPago, setMetodoPago] = useState<'DESTINO' | 'ONLINE_SIMULADO'>('DESTINO')
 
   // Daypasses y actividades con horario dentro del combo
   const pasesDiaEnCombo = useMemo(() => {
@@ -1344,50 +1341,6 @@ export function ReservaExcursionForm({
           </div>
         </div>
 
-        {/* Selector de Modalidad de Pago */}
-        <div className="space-y-2 pt-1">
-          <label className="block text-sm font-medium">¿Cómo deseas pagar?</label>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setMetodoPago('DESTINO')}
-              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition ${metodoPago === 'DESTINO'
-                ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                : 'border-border bg-card hover:bg-muted/50'
-                }`}
-            >
-              <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
-                <Banknote className="h-4 w-4 text-success" />
-                <span>Pagar el día del tour</span>
-              </div>
-              <span className="text-xs text-muted-foreground leading-tight">
-                Pagas en el punto de encuentro al momento de abordar.
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMetodoPago('ONLINE_SIMULADO')}
-              className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition relative ${metodoPago === 'ONLINE_SIMULADO'
-                ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                : 'border-border bg-card hover:bg-muted/50'
-                }`}
-            >
-              <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
-                <CreditCard className="h-4 w-4 text-primary" />
-                <span>Pagar ahora en línea</span>
-                <span className="text-xs bg-warning/15 text-warning px-1.5 py-0.2 rounded-full font-bold">
-                  Prueba
-                </span>
-              </div>
-              <span className="text-xs text-muted-foreground leading-tight">
-                Tarjeta crédito/débito • Acceso y boleto de inmediato.
-              </span>
-            </button>
-          </div>
-        </div>
-
-
         {/* Notas */}
         <div>
           <label className="mb-1.5 block text-sm font-medium">Notas (opcional)</label>
@@ -1431,14 +1384,9 @@ export function ReservaExcursionForm({
 
           <div className="pt-2 border-t border-border/60 flex items-baseline justify-between">
             <span className="text-sm font-bold text-foreground">Total a pagar</span>
-            <div className="text-right">
-              <span className="text-h2 font-black text-primary font-mono">
-                {formatMoney(subtotal, { moneda })}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {metodoPago === 'ONLINE_SIMULADO' ? 'Pago inmediato online' : 'Pago presencial al abordar'}
-              </p>
-            </div>
+            <span className="text-h2 font-black text-primary font-mono">
+              {formatMoney(subtotal, { moneda })}
+            </span>
           </div>
         </div>
 
@@ -1514,10 +1462,6 @@ export function ReservaExcursionForm({
             )}
           </button>
         </div>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Selecciona tu método de pago al confirmar en el checkout.
-        </p>
       </form>
     </div>
   )
