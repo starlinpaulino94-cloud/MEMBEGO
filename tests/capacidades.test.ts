@@ -227,8 +227,12 @@ test('ninguna ruta del cliente la controlan dos módulos a la vez', () => {
 
 test('un módulo vacío se esconde y uno con contenido se ve', () => {
   const ocultas = rutasOcultasCliente({ MEMBRESIAS: false, OFERTAS: true })
-  assert.ok(ocultas.includes('/cliente/planes'))
   assert.ok(ocultas.includes('/mis-membresias'))
+  assert.equal(
+    ocultas.includes('/cliente/planes'),
+    false,
+    'Planes es catálogo de compra: no debe desaparecer por no tener membresía propia.'
+  )
   assert.equal(ocultas.includes('/cliente/promociones'), false)
 })
 

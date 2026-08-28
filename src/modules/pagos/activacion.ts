@@ -18,6 +18,8 @@ import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { periodEnd } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
+import { revalidateTag } from 'next/cache'
+import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
 
@@ -210,6 +212,7 @@ export async function activarMembresia(
     motivo: 'activacion',
     vigenteHasta: periodEnd(now, vigenciaDias),
   }).catch(anotarFallo('pagos:correo-confirmacion'))
+  revalidateTag(NAV_CLIENTE_TAG, 'max')
 
   return {
     ok: true,

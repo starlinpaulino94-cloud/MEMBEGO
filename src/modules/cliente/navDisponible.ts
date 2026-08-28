@@ -8,6 +8,7 @@ import {
   type ModuloCliente,
 } from '@/modules/capacidades/catalogo'
 import { CAPACIDADES_TAG } from '@/modules/capacidades/resolver'
+import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 
 /**
  * Navegación consciente del contenido (cliente).
@@ -175,5 +176,5 @@ export const getNavOcultoClienteCached = unstable_cache(
   ['nav-oculto-cliente'],
   // Con el tag de capacidades: cuando alguien fuerza un módulo en el panel, el
   // cambio se ve en el menú al instante y no dentro de cinco minutos.
-  { revalidate: 300, tags: [CAPACIDADES_TAG] }
+  { revalidate: 300, tags: [CAPACIDADES_TAG, NAV_CLIENTE_TAG] }
 )

@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { getUser } from '@/lib/auth'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
+import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -141,6 +142,7 @@ function revalidatePlanes() {
   revalidatePath('/admin/planes')
   revalidatePath('/cliente/planes')
   revalidatePath('/empresas', 'layout')
+  revalidateTag(NAV_CLIENTE_TAG, 'max')
 }
 
 /**

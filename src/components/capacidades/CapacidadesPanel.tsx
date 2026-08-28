@@ -138,9 +138,9 @@ export function CapacidadesPanel({
           <p className="mt-1 text-xs text-muted-foreground">
             En automático, un módulo aparece cuando tiene algo dentro y se esconde
             mientras esté vacío: así el cliente de un negocio que todavía no publicó
-            planes no ve una sección de membresías que no lleva a ninguna parte.
-            Fuérzalo solo cuando quieras adelantar un lanzamiento o guardarte algo
-            que ya existe.
+            planes no ve una sección de membresías propias que no lleva a ninguna
+            parte. El catálogo de Planes queda disponible como ruta de compra y
+            descubrimiento.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">

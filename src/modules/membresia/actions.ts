@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { notificarAdmins } from '@/modules/notificaciones/service'
@@ -10,6 +10,7 @@ import { calcularDescuentoBienvenida } from '@/lib/bienvenida'
 import { generarCodigo } from '@/lib/codes'
 import { categoriaDeEmpresa, vehiculosDe } from '@/modules/elegibilidad'
 import { requisitosParaAccion, decidirPlan } from '@/modules/elegibilidad/decidir'
+import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 
 export interface SeleccionState {
   error?: string
@@ -208,6 +209,7 @@ export async function seleccionarPlan(
 
     revalidatePath('/mis-membresias')
     revalidatePath('/cliente/planes')
+    revalidateTag(NAV_CLIENTE_TAG, 'max')
     return result
   } catch (e) {
     console.error('[membresia] seleccionarPlan error:', e)

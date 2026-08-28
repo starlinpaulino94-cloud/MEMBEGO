@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -15,6 +15,7 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { validarCobroMembresia } from '@/modules/membresias/cobro'
+import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -497,6 +498,7 @@ export async function crearMembresia(
     revalidatePath(`/admin/clientes/${clienteId}`)
     revalidatePath('/admin/clientes')
     revalidatePath('/admin/membresias')
+    revalidateTag(NAV_CLIENTE_TAG, 'max')
     return { success: true }
   } catch (e) {
     console.error('[admin] crearMembresia error:', e)

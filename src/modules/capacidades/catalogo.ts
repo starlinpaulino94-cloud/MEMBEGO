@@ -379,9 +379,9 @@ export function capacidadesSinCategoriaContradictoria(
  *
  * Es un eje distinto al de las capacidades: aquéllas dicen qué puede HACER el
  * negocio por dentro; éstos, de qué se le HABLA al cliente. Un negocio que
- * todavía no publicó un solo plan no debería tener una sección "Planes" que
- * abre en vacío, ni una que le pida datos para comprar algo que no existe:
- * un módulo vacío no es una promesa, es una puerta que no lleva a ningún sitio.
+ * todavía no publicó un solo plan no debería prometer una membresía propia
+ * que no existe. El catálogo de Planes es distinto: es una ruta de descubrimiento
+ * y compra, así que no debe desaparecer por el estado particular del cliente.
  *
  * La regla por defecto es AUTOMÁTICA (hay contenido → se ve). El forzado existe
  * para los dos casos que el dato no puede adivinar: enseñar algo el día antes de
@@ -400,7 +400,7 @@ export const MODULOS_CLIENTE = [
 export type ModuloCliente = (typeof MODULOS_CLIENTE)[number]
 
 export const MODULO_CLIENTE_LABELS: Record<ModuloCliente, string> = {
-  MEMBRESIAS: 'Planes y mis membresías',
+  MEMBRESIAS: 'Mis membresías',
   OFERTAS: 'Ofertas del negocio',
   BENEFICIOS: 'Mis beneficios comprados',
   REGALOS: 'Regalos y gift cards',
@@ -424,7 +424,11 @@ export const MODULO_CLIENTE_AUTO: Record<ModuloCliente, string> = {
 
 /** Rutas del menú del cliente que cada módulo controla. */
 export const RUTAS_POR_MODULO_CLIENTE: Record<ModuloCliente, string[]> = {
-  MEMBRESIAS: ['/cliente/planes', '/mis-membresias'],
+  // Planes es catálogo/adquisición. Si se ata a la membresía propia, dos
+  // clientes de la misma empresa pueden ver menús distintos solo porque uno ya
+  // compró y otro todavía no. La visibilidad automática controla "Mis
+  // membresías"; el enlace de compra permanece navegable.
+  MEMBRESIAS: ['/mis-membresias'],
   OFERTAS: ['/cliente/promociones'],
   BENEFICIOS: ['/cliente/mis-promociones'],
   REGALOS: ['/cliente/regalos'],
