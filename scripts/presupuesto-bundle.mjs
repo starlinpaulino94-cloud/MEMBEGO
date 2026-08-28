@@ -76,7 +76,7 @@ const PRESUPUESTOS = [
   {
     id: 'total',
     nombre: 'JavaScript de cliente (todo)',
-    techoKB: 6500,
+    techoKB: 7000, // 2026-08-28: subido de 6500 por html5-qrcode (281 KB), Sentry (202 KB), Lucide — deps necesarias del cliente
     porque: 'Indicador general de peso del proyecto. Ningún usuario lo descarga entero.',
   },
   {

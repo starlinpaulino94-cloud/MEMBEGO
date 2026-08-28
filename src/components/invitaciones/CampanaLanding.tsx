@@ -149,6 +149,7 @@ export function CampanaLanding({ campana, refCode, invitanteNombre }: Props) {
   // Tras registrarse: auto-login e ir a la app (celebración por encima del
   // Home). Si no se puede iniciar sesión (correo por verificar o error), se
   // muestra la celebración aquí mismo como respaldo.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (state.pendingVerification) {
       setRegistrado(true)
