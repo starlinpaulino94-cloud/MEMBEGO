@@ -113,7 +113,7 @@ export function FichaCliente({
                       <td className="max-w-64 truncate px-4 py-3 text-muted-foreground">
                         {v.servicios.join(' + ') || '—'}
                         {v.estado !== 'ENTREGADO' && (
-                          <span className="ml-2 text-[11px] uppercase">({v.estado})</span>
+                          <span className="ml-2 text-xs uppercase">({v.estado})</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-semibold tabular-nums text-foreground">
@@ -148,9 +148,9 @@ function Kpi({
         destacar ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card'
       }`}
     >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-2xl font-bold tabular-nums text-foreground">{valor}</p>
-      <p className="text-[11px] text-muted-foreground">{pie}</p>
+      <p className="text-xs text-muted-foreground">{pie}</p>
     </div>
   )
 }
@@ -162,8 +162,9 @@ function Datos({ ficha }: { ficha: FichaMostrador }) {
     <form action={formAction} className="space-y-3 rounded-2xl border border-border/70 bg-card p-5">
       <input type="hidden" name="id" value={ficha.id} />
       <h2 className="text-sm font-bold text-foreground">Datos</h2>
-      <Input name="nombre" required maxLength={80} defaultValue={ficha.nombre} className="min-h-11" />
+      <Input aria-label="Nombre del cliente" name="nombre" required maxLength={80} defaultValue={ficha.nombre} className="min-h-11" />
       <Input
+        aria-label="Teléfono del cliente"
         name="telefono"
         maxLength={30}
         inputMode="tel"
@@ -221,6 +222,7 @@ function Vehiculos({
         <form action={formAction} className="mt-3 space-y-2 border-t border-border/60 pt-3">
           <input type="hidden" name="clienteId" value={ficha.id} />
           <Input
+            aria-label="Placa del vehículo"
             name="placa"
             maxLength={20}
             placeholder="Placa"
@@ -230,13 +232,14 @@ function Vehiculos({
             spellCheck={false}
           />
           <div className="grid grid-cols-2 gap-2">
-            <Input name="marca" maxLength={40} placeholder="Marca" className="min-h-11" />
-            <Input name="modelo" maxLength={40} placeholder="Modelo" className="min-h-11" />
-            <Input name="color" maxLength={30} placeholder="Color" className="min-h-11" />
-            <Input name="anio" inputMode="numeric" placeholder="Año" className="min-h-11" />
+            <Input aria-label="Marca" name="marca" maxLength={40} placeholder="Marca" className="min-h-11" />
+            <Input aria-label="Modelo" name="modelo" maxLength={40} placeholder="Modelo" className="min-h-11" />
+            <Input aria-label="Color" name="color" maxLength={30} placeholder="Color" className="min-h-11" />
+            <Input aria-label="Año" name="anio" inputMode="numeric" placeholder="Año" className="min-h-11" />
           </div>
           {tipos.length > 0 && (
             <select
+              aria-label="Tipo de vehículo"
               name="tipoVehiculoId"
               defaultValue=""
               className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
@@ -315,6 +318,7 @@ function Vincular({ ficha }: { ficha: FichaMostrador }) {
         <>
           <div className="mt-3 flex gap-2">
             <Input
+              aria-label="Buscar cliente"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => {

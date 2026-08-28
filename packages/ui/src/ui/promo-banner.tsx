@@ -34,7 +34,7 @@ const promoBannerVariants = cva(
         /** Flash sale / oferta limitada — urgencia cálida. */
         hot: 'bg-gradient-to-br from-orange-500 to-rose-600',
         /** Premium / VIP — dorado sobre navy. */
-        premium: 'bg-gradient-to-br from-slate-900 to-slate-800 [&_[data-banner-titulo]]:text-amber-300',
+        premium: 'bg-gradient-to-br from-slate-900 to-slate-800 [&_[data-banner-titulo]]:text-warning',
         /** Informativo de marca — navy profundo del logo. */
         navy: 'bg-gradient-to-br from-slate-900 to-slate-950',
         /** Celebración — violeta festivo (premios, felicidades). */
@@ -44,7 +44,7 @@ const promoBannerVariants = cva(
         /** Tarjeta de banner en listas y homes. */
         base: 'rounded-2xl p-5 shadow-card',
         /** Protagonista de la pantalla. */
-        hero: 'rounded-3xl p-6 shadow-hero sm:p-8',
+        hero: 'rounded-2xl p-6 shadow-hero sm:p-8',
         /** Franja fina (avisos de campaña sticky). */
         slim: 'rounded-xl px-4 py-2.5 text-sm',
       },
@@ -78,7 +78,7 @@ function PromoBanner({
       <div aria-hidden className="pointer-events-none absolute -right-10 -top-16 size-48 rounded-full bg-white/10 blur-2xl" />
       <div className="relative min-w-0">
         {eyebrow && (
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/80">{eyebrow}</p>
+          <p className="mb-1 text-xs font-bold uppercase tracking-widest text-white/80">{eyebrow}</p>
         )}
         <p data-banner-titulo className={cn('font-bold', size === 'hero' ? 'text-h2' : 'text-h3')}>
           {titulo}

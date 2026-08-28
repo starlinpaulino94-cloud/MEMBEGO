@@ -91,7 +91,7 @@ export default async function AdquisicionPage({
           { label: 'Canales distintos', valor: String(data.porCanal.length) },
         ].map((k) => (
           <div key={k.label} className="rounded-2xl border border-border/70 bg-card p-4">
-            <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{k.label}</dt>
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</dt>
             <dd className="mt-1 truncate text-lg font-bold text-foreground">{k.valor}</dd>
           </div>
         ))}
@@ -171,7 +171,7 @@ export default async function AdquisicionPage({
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                           r.canal === 'directo'
                             ? 'bg-muted text-muted-foreground'
                             : r.canal === 'invitacion'

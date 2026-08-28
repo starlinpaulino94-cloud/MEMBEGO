@@ -123,7 +123,7 @@ export function MapaConfirmarVivienda({
         type="button"
         onClick={usarMiUbicacion}
         disabled={buscando}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-60"
       >
         <LocateFixed className="h-3.5 w-3.5" />
         {buscando ? 'Buscando…' : 'Usar mi ubicación'}

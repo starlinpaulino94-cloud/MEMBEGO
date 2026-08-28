@@ -73,18 +73,18 @@ function TabLink({ item, pathname }: { item: BottomNavItem; pathname: string }) 
         prefetch={false}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'group flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[12px] font-medium transition-colors duration-150 active:scale-[0.96]',
+          'group flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[12px] font-medium transition-colors duration-fast active:scale-[0.96]',
           active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
         )}
       >
         <span
           className={cn(
-            'flex h-7 w-12 items-center justify-center rounded-full transition-all duration-200',
+            'flex h-7 w-12 items-center justify-center rounded-full transition-all duration-base',
             active && 'bg-primary/12'
           )}
         >
           <Icon
-            className={cn('h-5 w-5 transition-transform duration-200', active && 'scale-110')}
+            className={cn('h-5 w-5 transition-transform duration-base', active && 'scale-110')}
             strokeWidth={active ? 2.4 : 2}
           />
         </span>
@@ -152,7 +152,7 @@ export function BottomNav({
           >
             <span
               className={cn(
-                'absolute -top-5 flex size-14 items-center justify-center rounded-full bg-gradient-brand text-white ring-4 ring-background transition-all duration-200 group-active:scale-95',
+                'absolute -top-5 flex size-14 items-center justify-center rounded-full bg-gradient-brand text-white ring-4 ring-background transition-all duration-base group-active:scale-95',
                 qrActivo ? 'shadow-glow-strong' : 'shadow-glow group-hover:shadow-glow-strong'
               )}
             >

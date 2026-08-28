@@ -98,16 +98,16 @@ export function FeedNovedades({ novedades }: { novedades: NovedadInicio[] }) {
               {/* Icono de marca de agua */}
               <Icon
                 aria-hidden
-                className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 text-white/10 transition-transform duration-500 group-hover:scale-110"
+                className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 text-white/10 transition-transform duration-hero group-hover:scale-110"
               />
               <div className="relative flex items-center justify-between gap-2">
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.chip}`}
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${meta.chip}`}
                 >
                   {meta.label}
                 </span>
                 {n.tipo === 'EVENTO' && (
-                  <span className="text-[11px] font-medium text-white/80">
+                  <span className="text-xs font-medium text-white/80">
                     {fmtFecha(n.fecha)}
                   </span>
                 )}
@@ -119,7 +119,7 @@ export function FeedNovedades({ novedades }: { novedades: NovedadInicio[] }) {
                 <p className="mt-1 truncate text-xs text-white/70">{n.companyName}</p>
               </div>
               {/* CTA de un toque (≥48px con el padding de la tarjeta) */}
-              <span className="relative mt-4 inline-flex min-h-10 w-fit items-center gap-1.5 rounded-full bg-white px-4 text-xs font-bold text-slate-900 shadow-sm transition group-hover:gap-2.5">
+              <span className="relative mt-4 inline-flex min-h-10 w-fit items-center gap-1.5 rounded-full bg-white px-4 text-xs font-bold text-foreground shadow-sm transition group-hover:gap-2.5">
                 {meta.cta} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
               </span>
             </Link>

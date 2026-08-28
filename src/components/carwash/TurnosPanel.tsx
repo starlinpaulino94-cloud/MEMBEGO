@@ -106,7 +106,7 @@ export function TurnosPanel({ panel }: { panel: PanelTurnos }) {
                   <div key={e.userId} className="rounded-2xl border border-border/70 bg-card p-4">
                     <p className="truncate font-semibold text-foreground">{e.nombre}</p>
                     <p className="mt-1 text-xl font-bold tabular-nums text-foreground">{e.horas} h</p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {e.turnos} turno(s) · {fmtRD(e.costo)}
                     </p>
                   </div>
@@ -139,9 +139,9 @@ function Kpi({
         destacar ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card'
       }`}
     >
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-2xl font-bold tabular-nums text-foreground">{valor}</p>
-      <p className="text-[11px] text-muted-foreground">{pie}</p>
+      <p className="text-xs text-muted-foreground">{pie}</p>
     </div>
   )
 }
@@ -286,7 +286,7 @@ function FilaTurno({ f }: { f: TurnoFila }) {
           <p className="truncate text-sm font-semibold text-foreground">
             {f.empleado}
             {f.abierto && (
-              <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold uppercase text-success">
+              <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-xs font-bold uppercase text-success">
                 abierto
               </span>
             )}

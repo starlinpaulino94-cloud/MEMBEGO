@@ -17,7 +17,7 @@ export default function Loading() {
       </div>
 
       {/* Hero banner */}
-      <Skeleton className="mb-6 h-44 rounded-3xl" />
+      <Skeleton className="mb-6 h-44 rounded-2xl" />
 
       {/* Wallet stack */}
       <Skeleton className="mb-3 h-6 w-32" />

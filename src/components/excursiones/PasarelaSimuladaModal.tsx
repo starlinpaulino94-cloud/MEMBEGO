@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import {
   CreditCard,
@@ -40,16 +40,25 @@ export function PasarelaSimuladaModal({
   esEmpresaDemo,
   detallesItems,
 }: PasarelaSimuladaModalProps) {
-  const [mounted, setMounted] = useState(false)
+  /**
+   * ¿Estamos ya en el navegador?
+   *
+   * Antes era `useState(false)` más un efecto que lo ponía a `true` al montar:
+   * un render entero desperdiciado, y un `setState` síncrono dentro de un
+   * efecto —que es justo lo que dispara renders en cascada—. `useSyncExternal-
+   * Store` responde lo mismo sin efecto y sin render de más: en el servidor
+   * devuelve `false`, en el cliente `true`, y la hidratación no se rompe.
+   */
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
   const [procesando, setProcesando] = useState(false)
   const [pagado, setPagado] = useState(false)
   const numeroTarjeta = '4242 •••• •••• 4242'
   const titular = 'CLIENTE MEMBEGO'
   const expiracion = '12/28'
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   if (!mounted || !isOpen) return null
 
@@ -65,8 +74,8 @@ export function PasarelaSimuladaModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-card border border-border shadow-2xl animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-base">
+      <div className="relative w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden rounded-2xl bg-card border border-border shadow-2xl animate-in zoom-in-95 duration-base">
         {/* Header con badge de simulación */}
         <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-5 border-b border-border/80 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -76,7 +85,7 @@ export function PasarelaSimuladaModal({
             <div>
               <div className="flex items-center gap-1.5">
                 <h3 className="text-base font-bold text-foreground">Pasarela de Pago</h3>
-                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning border border-warning/20">
                   {esEmpresaDemo ? 'Empresa de Prueba' : 'Modo Sandbox'}
                 </span>
               </div>
@@ -156,7 +165,7 @@ export function PasarelaSimuladaModal({
           </div>
 
           {/* Advertencia Sandbox */}
-          <div className="flex items-start gap-2.5 rounded-lg bg-warning/10 p-3 text-xs text-warning dark:text-warning border border-warning/20">
+          <div className="flex items-start gap-2.5 rounded-lg bg-warning/10 p-3 text-xs text-warning border border-warning/20">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warning" />
             <p>
               Esta es una <strong>transacción simulada de prueba</strong>. No se realizará ningún cargo real en tu tarjeta. Al confirmar, tu reserva quedará marcada automáticamente como <strong>PAGADA</strong> con su código QR de embarque emitido.
@@ -190,7 +199,7 @@ export function PasarelaSimuladaModal({
           </Button>
 
           <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground mt-1">
-            <ShieldCheck className="h-3.5 w-3.5 text-success dark:text-success" />
+            <ShieldCheck className="h-3.5 w-3.5 text-success" />
             <span>Encriptación SSL de 256 bits • Sandbox Integrado</span>
           </div>
         </div>

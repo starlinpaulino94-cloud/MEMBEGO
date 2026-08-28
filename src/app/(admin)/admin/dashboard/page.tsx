@@ -321,7 +321,7 @@ export default async function AdminDashboard() {
                     key={v.fecha}
                     // Azul como serie principal (§55). Era un degradado
                     // esmeralda: el color de la marca vieja.
-                    className="animate-grow-y group relative flex-1 rounded-t-md bg-primary/70 transition-colors hover:bg-primary"
+                    className="animate-grow-y group relative flex-1 rounded-t-lg bg-primary/70 transition-colors hover:bg-primary"
                     style={{
                       height: `${Math.max(4, (v.total / maxVisitas) * 100)}%`,
                       animationDelay: `${idx * 35}ms`,

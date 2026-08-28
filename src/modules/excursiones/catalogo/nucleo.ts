@@ -186,12 +186,22 @@ export function validarVariante(
     try {
       const parsed = JSON.parse(form.preciosDinamicosJson)
       if (Array.isArray(parsed)) {
-        preciosDinamicos = parsed.map((r: any) => ({
-          diasSemana: Array.isArray(r.diasSemana) ? r.diasSemana.map(Number).filter((n: number) => n >= 1 && n <= 7) : [],
-          horasSalida: Array.isArray(r.horasSalida) ? r.horasSalida.map(String).filter((s: string) => HORA_RE.test(s)) : [],
-          precioAdulto: Number(r.precioAdulto) || precioAdulto, // Fallback al base
-          precioNino: r.precioNino ? Number(r.precioNino) : null
-        }))
+        preciosDinamicos = parsed.map((crudo: unknown) => {
+          // Viene de `JSON.parse`: no hay ninguna garantía de forma. `unknown`
+          // obliga a comprobar antes de leer, que es lo que este bloque ya
+          // hacía campo por campo; el `any` solo lo ocultaba.
+          const r = (crudo ?? {}) as Record<string, unknown>
+          return {
+            diasSemana: Array.isArray(r.diasSemana)
+              ? r.diasSemana.map(Number).filter((n: number) => n >= 1 && n <= 7)
+              : [],
+            horasSalida: Array.isArray(r.horasSalida)
+              ? r.horasSalida.map(String).filter((s: string) => HORA_RE.test(s))
+              : [],
+            precioAdulto: Number(r.precioAdulto) || precioAdulto, // Fallback al base
+            precioNino: r.precioNino ? Number(r.precioNino) : null,
+          }
+        })
       }
     } catch {
       // Ignorar json inválido

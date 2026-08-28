@@ -663,7 +663,21 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
           className="h-[calc(100svh-3.5rem-4.5rem)] w-full lg:h-[calc(100vh-8rem)]"
         />
 
-        {/* ── Controles flotantes ────────────────────────────────────────────
+        {/* LOS z-[500] Y z-[600] DE ESTE ARCHIVO SE QUEDAN, Y NO ES DESCUIDO.
+
+            La escala con nombre del proyecto llega hasta 70 (`--z-celebration`),
+            y aquí no sirve: estos controles conviven con los paneles internos
+            de Leaflet, que se reparten de 200 a 700 (baldosas 200, superposición
+            400, marcador 600, globo 700). El contenedor del mapa no crea
+            contexto de apilamiento propio, así que esos números compiten
+            directamente con los de aquí: bajar a `z-map-overlay` (30) metería
+            los controles DEBAJO de las baldosas y desaparecerían.
+
+            Son los únicos cinco que el auditor sigue contando, y quedan
+            anotados a propósito: el día que se rehaga el apilamiento hay que
+            decidir a la vez qué hacer con la escala de Leaflet.
+
+            ── Controles flotantes ────────────────────────────────────────────
             Un solo bloque en la esquina, no dos capas sueltas con posiciones
             absolutas independientes. Antes las pills iban en `top-3` y el
             buscador en `top-14`: al envolverse las pills en pantallas estrechas

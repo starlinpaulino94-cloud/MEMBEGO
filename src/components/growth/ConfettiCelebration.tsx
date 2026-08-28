@@ -50,7 +50,7 @@ export function ConfettiCelebration({
           {piezas.map((p, i) => (
             <span
               key={i}
-              className="absolute -top-6 block rounded-sm"
+              className="absolute -top-6 block rounded-lg"
               style={{
                 left: `${p.left}%`,
                 width: p.size,

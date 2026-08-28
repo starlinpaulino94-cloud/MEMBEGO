@@ -39,7 +39,7 @@ function generateConfettiPieces() {
 function Confetti() {
   const pieces = useMemo(() => generateConfettiPieces(), [])
   return (
-    <div className="pointer-events-none fixed inset-0 z-[110] overflow-hidden" aria-hidden>
+    <div className="pointer-events-none fixed inset-0 z-celebration overflow-hidden" aria-hidden>
       <style>{`
         @keyframes confetti-fall {
           0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
@@ -108,7 +108,7 @@ export function CelebracionOverlay({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       {/* Fondo oscuro difuminado: el modal queda "por encima" de la app */}
       <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
       <Confetti />
@@ -119,13 +119,13 @@ export function CelebracionOverlay({
         }
       `}</style>
       <div
-        className="relative z-[120] max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl bg-card p-6 text-center shadow-2xl"
+        className="relative z-sticky max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-card p-6 text-center shadow-2xl"
         style={{ animation: 'celebra-pop 0.45s cubic-bezier(0.16,1,0.3,1)' }}
         role="dialog"
         aria-modal="true"
       >
-        <div className="mx-auto flex h-20 w-20 animate-bounce items-center justify-center rounded-full bg-emerald-100 shadow-lg">
-          <PartyPopper className="h-10 w-10 text-emerald-600" />
+        <div className="mx-auto flex h-20 w-20 animate-bounce items-center justify-center rounded-full bg-success shadow-lg">
+          <PartyPopper className="h-10 w-10 text-success" />
         </div>
         <h1 className="mt-4 text-3xl font-extrabold text-foreground">🎉 ¡Felicidades!</h1>
         <p className="mt-1.5 text-muted-foreground">
@@ -137,9 +137,9 @@ export function CelebracionOverlay({
         </p>
 
         {/* Regalo destacado */}
-        <div className="mt-5 rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/10 p-5 shadow-sm">
-          <Gift className="mx-auto mb-1.5 h-9 w-9 text-emerald-600" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+        <div className="mt-5 rounded-2xl border-2 border-success/40 bg-success/10 p-5 shadow-sm">
+          <Gift className="mx-auto mb-1.5 h-9 w-9 text-success" />
+          <p className="text-xs font-semibold uppercase tracking-wide text-success">
             Por tu registro recibiste
           </p>
           <p className="mt-1 text-2xl font-extrabold text-foreground">{regalo}</p>
@@ -160,8 +160,8 @@ export function CelebracionOverlay({
 
         {/* Invitar amigos: el momento de máxima emoción → cadena viral */}
         {data.codigoInvitacion && (
-          <div className="mt-5 rounded-2xl border-2 border-amber-500/40 bg-amber-500/10 p-5 shadow-sm">
-            <Sparkles className="mx-auto mb-1.5 h-8 w-8 text-amber-500" />
+          <div className="mt-5 rounded-2xl border-2 border-warning/40 bg-warning/10 p-5 shadow-sm">
+            <Sparkles className="mx-auto mb-1.5 h-8 w-8 text-warning" />
             <h2 className="text-lg font-bold text-foreground">Invita a tus amigos</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Ellos también recibirán{' '}

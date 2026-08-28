@@ -96,7 +96,7 @@ export default async function MiDineroPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 space-y-0.5">
                         <p className="text-xs font-bold text-foreground">{l.desglose}</p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           Venta <span className="font-mono font-semibold">{l.venta}</span> · {formatDate(l.createdAt)}
                           {l.liquidacion ? (
                             <> · Pago <span className="font-mono font-semibold">{l.liquidacion}</span></>
@@ -137,7 +137,7 @@ export default async function MiDineroPage() {
                   >
                     <div className="min-w-0 space-y-0.5">
                       <p className="font-mono text-xs font-bold text-foreground">{l.numero}</p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {formatDate(l.periodoDesde)} → {formatDate(l.periodoHasta)}
                         {l.pagadaAt ? ` · Pagado ${formatDate(l.pagadaAt)}` : ''}
                       </p>

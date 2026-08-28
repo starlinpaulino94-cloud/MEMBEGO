@@ -59,7 +59,7 @@ export default async function RuletaPage() {
       )}
 
       {premios.length === 0 ? (
-        <div className="rounded-3xl border border-border/70 bg-card p-10 text-center shadow-card">
+        <div className="rounded-2xl border border-border/70 bg-card p-10 text-center shadow-card">
           <Trophy className="mx-auto mb-3 h-12 w-12 text-muted-foreground/40" />
           <h2 className="text-lg font-bold text-foreground">Aún no hay premios</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -67,7 +67,7 @@ export default async function RuletaPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-3xl border border-border/70 bg-card p-6 shadow-card sm:p-8">
+        <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-card sm:p-8">
           <RuletaWheel premios={premios} costo={COSTO_RULETA} saldoInicial={saldo} />
         </div>
       )}

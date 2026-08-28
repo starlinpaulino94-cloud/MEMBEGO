@@ -311,7 +311,7 @@ export function ReceiptTemplateEditor({
             </p>
             <div
               className={cn(
-                'mx-auto overflow-hidden rounded-lg border border-border bg-white p-3 font-mono text-[10.5px] leading-[1.5] text-neutral-900 shadow-inner',
+                'mx-auto overflow-hidden rounded-lg border border-border bg-white p-3 font-mono text-xs leading-[1.5] text-foreground shadow-inner',
                 previewDoc.paperWidthMm === 58 ? 'max-w-[220px]' : 'max-w-[300px]'
               )}
             >
@@ -350,8 +350,8 @@ export function ReceiptTemplateEditor({
                   case 'qr':
                     return (
                       <div key={i} className="my-1 text-center">
-                        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded border border-dashed border-neutral-400">
-                          <QrCode className="h-8 w-8 text-neutral-500" />
+                        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded border border-dashed border-border">
+                          <QrCode className="h-8 w-8 text-muted-foreground" />
                         </span>
                         {line.caption && <div className="text-[0.85em]">{line.caption}</div>}
                       </div>
@@ -363,7 +363,7 @@ export function ReceiptTemplateEditor({
                         <img src={empresa.logoUrl} alt="" className="mx-auto max-h-10 object-contain grayscale" />
                       </div>
                     ) : (
-                      <div key={i} className="mb-1 text-center text-neutral-400">[logo]</div>
+                      <div key={i} className="mb-1 text-center text-muted-foreground">[logo]</div>
                     )
                   case 'feed':
                     return <div key={i} style={{ height: `${(line.lines ?? 1) * 0.8}em` }} />

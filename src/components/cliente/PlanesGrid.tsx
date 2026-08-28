@@ -256,7 +256,7 @@ export function PlanesGrid({
             <div
               key={plan.id}
               className={cn(
-                'group relative flex-col overflow-hidden rounded-3xl border bg-card shadow-card transition-all duration-300',
+                'group relative flex-col overflow-hidden rounded-2xl border bg-card shadow-card transition-all duration-slow',
                 'animate-fade-up',
                 DELAYS[idx % DELAYS.length],
                 // Tabs móviles: solo la tarjeta activa es visible en teléfono.
@@ -296,12 +296,12 @@ export function PlanesGrid({
                       {base}
                     </h3>
                     {variante && (
-                      <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="inline-flex rounded-lg bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
                         {variante}
                       </span>
                     )}
                     {plan.esIlimitado && (
-                      <span className="inline-flex rounded-md bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="inline-flex rounded-lg bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
                         Ilimitado
                       </span>
                     )}

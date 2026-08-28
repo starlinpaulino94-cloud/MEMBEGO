@@ -24,13 +24,11 @@ import {
   Layers,
   Clock,
   CalendarDays,
-  Sparkles,
   CheckSquare,
   Square,
   Minus,
   Plus,
   Banknote,
-  CreditCard,
   Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -200,7 +198,7 @@ export function CheckinScanner() {
               <div className="flex items-center gap-2">
                 <p className="text-h3 text-foreground">{reserva.cliente}</p>
                 {esCombo && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary border border-primary/20">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary border border-primary/20">
                     <Layers className="h-3 w-3" />
                     Combo ({reserva.itemsCompletados}/{reserva.totalItems} embarcados)
                   </span>
@@ -329,10 +327,10 @@ export function CheckinScanner() {
                             {item.actividadNombre}
                           </span>
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                               yaEmbarcado
-                                ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                                : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                                ? 'bg-success/10 text-success border border-success/20'
+                                : 'bg-warning/10 text-warning border border-warning/20'
                             }`}
                           >
                             {yaEmbarcado
@@ -446,15 +444,15 @@ export function CheckinScanner() {
 
           {/* PANEL DE FALTA DE PAGO / COBRO DE SALDO */}
           {reserva.saldo > 0 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+            <div className="rounded-xl border border-warning/30 bg-warning/5 p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                  <AlertTriangle className="h-5 w-5 text-warning shrink-0" />
                   <div>
-                    <p className="text-sm font-bold text-amber-950 dark:text-amber-300">
+                    <p className="text-sm font-bold text-warning">
                       Falta de pago: {formatMoney(reserva.saldo, { moneda: reserva.moneda }, 2)} pendientes
                     </p>
-                    <p className="text-xs text-amber-800 dark:text-amber-400">
+                    <p className="text-xs text-warning">
                       Registra el cobro antes de permitir el acceso al cliente.
                     </p>
                   </div>
@@ -462,7 +460,7 @@ export function CheckinScanner() {
                 <StatusChip tone="warning">Saldo pendiente</StatusChip>
               </div>
 
-              <div className="pt-2 border-t border-amber-500/20 space-y-3">
+              <div className="pt-2 border-t border-warning/20 space-y-3">
                 <label className="flex items-center gap-2.5 text-xs font-bold text-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -496,8 +494,12 @@ export function CheckinScanner() {
                       <select
                         name="metodoCobro"
                         value={metodoCobro}
-                        onChange={(e) => setMetodoCobro(e.target.value as any)}
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+                        onChange={(e) =>
+                          setMetodoCobro(
+                            e.target.value as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'LINK'
+                          )
+                        }
+                        className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
                       >
                         <option value="EFECTIVO">Efectivo</option>
                         <option value="TARJETA">Tarjeta / POS</option>
@@ -527,7 +529,7 @@ export function CheckinScanner() {
                     size="sm"
                     disabled={cobrandoSolo}
                     onClick={handleCobrarSolo}
-                    className="text-xs border-amber-500/40 text-amber-900 dark:text-amber-300 hover:bg-amber-500/10 gap-1.5"
+                    className="text-xs border-warning/40 text-warning hover:bg-warning/10 gap-1.5"
                   >
                     {cobrandoSolo ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

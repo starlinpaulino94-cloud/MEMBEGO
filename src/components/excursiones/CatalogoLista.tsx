@@ -18,7 +18,9 @@ type ExcursionRow = {
   categoria: string | null
   moneda: string
   estado: string
-  variantes: { precioAdulto: any }[]
+  // Llega como número ya convertido desde la consulta (el Decimal de Prisma
+  // se resuelve allí). El `any` de antes solo escondía de dónde venía.
+  variantes: { precioAdulto: number }[]
   _count: { variantes: number; horarios: number; comboItems: number }
 }
 
@@ -79,7 +81,7 @@ export function CatalogoLista({ excursiones }: { excursiones: ExcursionRow[] }) 
                             {e.nombre}
                           </Link>
                           {e.tipoItem === 'COMBO' ? (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                               Combo ({e._count.comboItems})
                             </span>
                           ) : null}

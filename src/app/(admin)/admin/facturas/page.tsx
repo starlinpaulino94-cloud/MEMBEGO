@@ -202,7 +202,7 @@ export default async function FacturasPage({
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                           f.tipo === 'SALE'
                             ? 'bg-primary/10 text-primary'
                             : 'bg-success/15 text-success'
@@ -231,12 +231,12 @@ export default async function FacturasPage({
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${ESTADO_CHIP[f.estado] ?? 'bg-muted text-muted-foreground'}`}
+                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[f.estado] ?? 'bg-muted text-muted-foreground'}`}
                       >
                         {ESTADO_LABEL[f.estado] ?? f.estado}
                       </span>
                       {f._count.impresiones > 0 && (
-                        <p className="mt-1 text-[10px] text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {f._count.impresiones} impresión{f._count.impresiones !== 1 ? 'es' : ''}
                         </p>
                       )}

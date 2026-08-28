@@ -413,7 +413,7 @@ function PreviewBanner({
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-3xl p-5 text-white shadow-premium"
+      className="relative overflow-hidden rounded-2xl p-5 text-white shadow-premium"
       style={{ background: `linear-gradient(120deg, ${primary}, ${secondary})` }}
     >
       {banner && (
@@ -428,7 +428,7 @@ function PreviewBanner({
       )}
       <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
       <div className="relative space-y-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider">
           <Flame className="h-3.5 w-3.5" /> Solo por tiempo limitado
         </span>
         <h2 className="text-2xl font-extrabold leading-tight tracking-tight">{titulo}</h2>

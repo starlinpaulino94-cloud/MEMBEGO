@@ -107,7 +107,7 @@ export default async function CrecimientoPage() {
                 <select
                   name="duracionHorasDefault"
                   defaultValue={config.duracionHorasDefault}
-                  className="rounded-md border border-border bg-background px-2 py-1"
+                  className="rounded-lg border border-border bg-background px-2 py-1"
                 >
                   {GROWTH_DURACIONES.map((d) => (
                     <option key={d.horas} value={d.horas}>

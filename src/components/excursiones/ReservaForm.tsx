@@ -21,7 +21,6 @@ import {
   Loader2,
   Calendar as CalendarIcon,
   Clock,
-  Users,
   User,
   Mail,
   Phone,
@@ -31,14 +30,10 @@ import {
   BedDouble,
   Search,
   Check,
-  Layers,
   Sparkles,
-  ChevronRight,
   ShieldCheck,
   Info,
   BadgePercent,
-  Compass,
-  Radio,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -49,7 +44,7 @@ import {
   calcularTotales,
   calcularPrecioEfectivo,
   generarCombinacionesCombo,
-  type CombinacionItinerarioCombo,
+  type ReglaPrecioDinamico,
 } from '@/modules/excursiones/reservas/nucleo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -82,7 +77,7 @@ export interface ExcursionOpcion {
     nombre: string
     precioAdulto: number
     precioNino: number | null
-    preciosDinamicos?: any[]
+    preciosDinamicos?: ReglaPrecioDinamico[]
   }[]
   horarios: { id: string; horaSalida: string; diasSemana: number[] }[]
 }
@@ -124,7 +119,8 @@ export function ReservaForm({
   excursiones,
   clientes = [],
   vendedores = [],
-  companyId,
+  // `companyId` llega por props y este formulario no lo usa: la empresa la
+  // resuelve el servidor en la acción, que es donde tiene que resolverse.
 }: {
   excursiones: ExcursionOpcion[]
   clientes?: ClienteOpcion[]
@@ -195,34 +191,62 @@ export function ReservaForm({
     )
   }, [esCombo, excursion])
 
-  // Seleccionar automáticamente el primer turno sugerido si es un combo
-  useEffect(() => {
-    if (esCombo && combinacionesCombo.length > 0) {
-      if (!comboTurnoSeleccionado || !combinacionesCombo.some((c) => c.id === comboTurnoSeleccionado)) {
-        setComboTurnoSeleccionado(combinacionesCombo[0].id)
-        setHora(combinacionesCombo[0].horaInicio)
-      }
-    }
-    if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
-      // La excepción es deliberada: reacciona al resultado async de la acción, no a un render.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setVarianteId(excursion.variantes[0]?.id ?? '')
-    }
-  }, [esCombo, combinacionesCombo, comboTurnoSeleccionado])
+  /**
+   * AJUSTES EN RENDER, NO EN EFECTOS.
+   *
+   * Los tres bloques de abajo hacen lo mismo que hacían tres `useEffect`:
+   * cuando la excursión cambia y la variante, el turno o la hora que había
+   * elegidos ya no existen en la nueva, se cae al primero disponible.
+   *
+   * Hacerlo en un efecto costaba un render pintado con un valor inválido —el
+   * precio de una variante que ya no está— antes de corregirlo. React
+   * documenta el ajuste durante el render justo para esto, y aquí converge
+   * solo: en cuanto el valor pertenece a la lista, la condición es falsa.
+   *
+   * Se mantienen las condiciones exactas que tenían los efectos. Uno de ellos
+   * llevaba además un `eslint-disable` con un motivo que ya no describía nada
+   * («reacciona al resultado async de la acción»): esto no reacciona a ninguna
+   * acción, ajusta estado derivado de props.
+   */
+  if (
+    esCombo &&
+    combinacionesCombo.length > 0 &&
+    (!comboTurnoSeleccionado || !combinacionesCombo.some((c) => c.id === comboTurnoSeleccionado))
+  ) {
+    setComboTurnoSeleccionado(combinacionesCombo[0].id)
+    setHora(combinacionesCombo[0].horaInicio)
+  }
+  if (excursion && !excursion.variantes.find((v) => v.id === varianteId)) {
+    setVarianteId(excursion.variantes[0]?.id ?? '')
+  }
+  if (excursion && !excursion.horarios?.find((h) => h.horaSalida === hora)) {
+    setHora(excursion.horarios?.[0]?.horaSalida ?? '')
+  }
 
-  // Inicializar estado de itinerario multi-fecha
-  useEffect(() => {
-    if (esCombo && excursion?.comboItems) {
-      const initial: Record<string, { fecha: string; hora: string }> = {}
-      excursion.comboItems.forEach((ci) => {
-        initial[ci.id] = {
-          fecha,
-          hora: ci.tipoItem === 'PASE_DIA' ? '' : ci.horaSalida || '09:00',
-        }
-      })
-      setItinerarioMultiFecha(initial)
-    }
-  }, [esCombo, excursion, fecha])
+  /**
+   * El itinerario del combo se rearma cuando cambia la fecha o el combo.
+   *
+   * El efecto anterior dependía del OBJETO `excursion`: bastaba con que el
+   * padre volviera a renderizar con una referencia nueva para que se borrara
+   * lo que el cliente hubiera elegido día por día. La clave por identidad
+   * —ids de los items más la fecha— solo cambia cuando cambió algo de verdad.
+   */
+  const claveItinerario =
+    esCombo && excursion?.comboItems
+      ? `${fecha}|${excursion.comboItems.map((ci) => ci.id).join(',')}`
+      : null
+  const [itinerarioArmadoPara, setItinerarioArmadoPara] = useState<string | null>(null)
+  if (claveItinerario && claveItinerario !== itinerarioArmadoPara) {
+    setItinerarioArmadoPara(claveItinerario)
+    const initial: Record<string, { fecha: string; hora: string }> = {}
+    excursion!.comboItems!.forEach((ci) => {
+      initial[ci.id] = {
+        fecha,
+        hora: ci.tipoItem === 'PASE_DIA' ? '' : ci.horaSalida || '09:00',
+      }
+    })
+    setItinerarioMultiFecha(initial)
+  }
 
   // Serializar itinerario combo para FormData
   const comboItinerarioJson = useMemo(() => {
@@ -250,17 +274,6 @@ export function ReservaForm({
     }
   }, [esCombo, excursion, modoComboFechas, itinerarioMultiFecha, fecha, combinacionesCombo, comboTurnoSeleccionado])
 
-  // Sincronizar variante y horario si cambia la excursión
-  useEffect(() => {
-    if (excursion) {
-      if (!excursion.variantes.find((v) => v.id === varianteId)) {
-        setVarianteId(excursion.variantes[0]?.id ?? '')
-      }
-      if (!excursion.horarios?.find((h) => h.horaSalida === hora)) {
-        setHora(excursion.horarios?.[0]?.horaSalida ?? '')
-      }
-    }
-  }, [excursion, varianteId, hora])
 
   // Redirección y Toast de feedback
   useEffect(() => {
@@ -366,7 +379,7 @@ export function ReservaForm({
           <section aria-labelledby="paso-excursion" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/60 pb-3 w-full min-w-0">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 1</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 1</span>
                 <h2 id="paso-excursion" className="text-base sm:text-lg font-bold text-foreground truncate">
                   Selecciona la excursión o paquete
                 </h2>
@@ -437,11 +450,11 @@ export function ReservaForm({
 
                       {/* Badge de tipo */}
                       <span
-                        className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold shadow-xs ${
+                        className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-bold shadow-xs ${
                           esC
-                            ? 'bg-amber-500 text-white'
+                            ? 'bg-warning text-white'
                             : esP
-                            ? 'bg-emerald-600 text-white'
+                            ? 'bg-success text-white'
                             : 'bg-primary text-primary-foreground'
                         }`}
                       >
@@ -454,7 +467,7 @@ export function ReservaForm({
                         <p className="font-bold text-xs sm:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                           {e.nombre}
                         </p>
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5 truncate">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 truncate">
                           {e.duracionMin && (
                             <span className="flex items-center gap-0.5 shrink-0">
                               <Clock className="h-3 w-3" />
@@ -471,7 +484,7 @@ export function ReservaForm({
                       </div>
 
                       <div className="flex items-center justify-between border-t border-border/50 pt-2 text-xs w-full min-w-0">
-                        <span className="text-[11px] text-muted-foreground">Desde</span>
+                        <span className="text-xs text-muted-foreground">Desde</span>
                         <span className="font-mono font-bold text-primary truncate">
                           {formatMoney(minPrecio, { moneda: e.moneda })}
                         </span>
@@ -492,7 +505,7 @@ export function ReservaForm({
           {/* PASO 2: MODALIDAD, TARIFAS & HORARIOS */}
           <section aria-labelledby="paso-modalidad" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="border-b border-border/60 pb-3 w-full min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 2</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 2</span>
               <h2 id="paso-modalidad" className="text-base sm:text-lg font-bold text-foreground truncate">
                 Modalidad, tarifas y turnos
               </h2>
@@ -523,11 +536,11 @@ export function ReservaForm({
                       </div>
                       <div className="mt-1 flex flex-wrap items-baseline gap-2 text-xs">
                         <span className="font-mono font-bold text-primary">
-                          {formatMoney(v.precioAdulto, { moneda: excursion.moneda })} <span className="text-[10px] font-normal text-muted-foreground">/adulto</span>
+                          {formatMoney(v.precioAdulto, { moneda: excursion.moneda })} <span className="text-xs font-normal text-muted-foreground">/adulto</span>
                         </span>
                         {v.precioNino != null && (
-                          <span className="font-mono text-muted-foreground text-[11px]">
-                            • {formatMoney(v.precioNino, { moneda: excursion.moneda })} <span className="text-[10px]">/niño</span>
+                          <span className="font-mono text-muted-foreground text-xs">
+                            • {formatMoney(v.precioNino, { moneda: excursion.moneda })} <span className="text-xs">/niño</span>
                           </span>
                         )}
                       </div>
@@ -551,7 +564,7 @@ export function ReservaForm({
                         <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
                         Modalidad de Fechas
                       </span>
-                      <p className="text-[11px] text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         ¿El cliente realizará las actividades el mismo día o en fechas separadas?
                       </p>
                     </div>
@@ -559,7 +572,7 @@ export function ReservaForm({
                       <button
                         type="button"
                         onClick={() => setModoComboFechas('MISMO_DIA')}
-                        className={`rounded-md px-3 py-1.5 transition ${
+                        className={`rounded-lg px-3 py-1.5 transition ${
                           modoComboFechas === 'MISMO_DIA'
                             ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                             : 'text-muted-foreground hover:text-foreground'
@@ -570,7 +583,7 @@ export function ReservaForm({
                       <button
                         type="button"
                         onClick={() => setModoComboFechas('DIAS_DIFERENTES')}
-                        className={`rounded-md px-3 py-1.5 transition ${
+                        className={`rounded-lg px-3 py-1.5 transition ${
                           modoComboFechas === 'DIAS_DIFERENTES'
                             ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                             : 'text-muted-foreground hover:text-foreground'
@@ -608,7 +621,7 @@ export function ReservaForm({
                                   <Clock className="h-4 w-4 text-primary shrink-0" />
                                   {comb.nombre}
                                   {idx === 0 && (
-                                    <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.2 rounded-full ml-1">
+                                    <span className="text-xs font-bold bg-primary text-primary-foreground px-1.5 py-0.2 rounded-full ml-1">
                                       Recomendado
                                     </span>
                                   )}
@@ -647,9 +660,9 @@ export function ReservaForm({
                                   {ci.nombre}
                                 </span>
                                 <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                  className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
                                     esPd
-                                      ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                      ? 'bg-success/10 text-success border border-success/20'
                                       : 'bg-primary/10 text-primary border border-primary/20'
                                   }`}
                                 >
@@ -658,7 +671,7 @@ export function ReservaForm({
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full min-w-0">
                                 <div className="space-y-1">
-                                  <Label className="text-[11px] text-muted-foreground font-semibold">
+                                  <Label className="text-xs text-muted-foreground font-semibold">
                                     Fecha
                                   </Label>
                                   <Input
@@ -676,11 +689,11 @@ export function ReservaForm({
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-[11px] text-muted-foreground font-semibold">
+                                  <Label className="text-xs text-muted-foreground font-semibold">
                                     Turno / Salida
                                   </Label>
                                   {esPd ? (
-                                    <div className="h-10 rounded-md border border-dashed border-emerald-500/30 bg-emerald-500/5 px-3 flex items-center text-xs font-medium text-emerald-700">
+                                    <div className="h-10 rounded-lg border border-dashed border-success/30 bg-success/5 px-3 flex items-center text-xs font-medium text-success">
                                       Acceso libre todo el día
                                     </div>
                                   ) : (
@@ -693,7 +706,7 @@ export function ReservaForm({
                                           [ci.id]: { ...prev[ci.id], hora: val },
                                         }))
                                       }}
-                                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-xs font-medium"
+                                      className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs font-medium"
                                     >
                                       {ci.horarios && ci.horarios.length > 0 ? (
                                         ci.horarios.map((h) => (
@@ -754,7 +767,7 @@ export function ReservaForm({
           {/* PASO 3: FECHA & PASAJEROS */}
           <section aria-labelledby="paso-fecha-pasajeros" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="border-b border-border/60 pb-3 w-full min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 3</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 3</span>
               <h2 id="paso-fecha-pasajeros" className="text-base sm:text-lg font-bold text-foreground truncate">
                 Fecha & Pasajeros
               </h2>
@@ -852,7 +865,7 @@ export function ReservaForm({
                   <div className="flex items-center justify-between rounded-xl border border-border bg-background p-3 sm:px-4 min-h-[56px] w-full min-w-0">
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">Adultos</span>
-                      <span className="block text-[11px] text-muted-foreground truncate">
+                      <span className="block text-xs text-muted-foreground truncate">
                         {variante ? formatMoney(variante.precioAdulto, { moneda: excursion.moneda }) : ''} c/u
                       </span>
                     </div>
@@ -884,7 +897,7 @@ export function ReservaForm({
                   <div className="flex items-center justify-between rounded-xl border border-border bg-background p-3 sm:px-4 min-h-[56px] w-full min-w-0">
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">Niños</span>
-                      <span className="block text-[11px] text-muted-foreground truncate">
+                      <span className="block text-xs text-muted-foreground truncate">
                         {variante
                           ? formatMoney(variante.precioNino ?? variante.precioAdulto, { moneda: excursion.moneda })
                           : ''} c/u
@@ -922,7 +935,7 @@ export function ReservaForm({
           <section aria-labelledby="paso-cliente" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3 w-full min-w-0">
               <div className="min-w-0">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 4</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 4</span>
                 <h2 id="paso-cliente" className="text-base sm:text-lg font-bold text-foreground truncate">
                   Datos del pasajero principal
                 </h2>
@@ -1034,7 +1047,7 @@ export function ReservaForm({
           {/* PASO 5: ATRIBUCIÓN COMERCIAL, CANAL Y DESCUENTO (ADMIN) */}
           <section aria-labelledby="paso-comercial" className="rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0 max-w-full overflow-hidden">
             <div className="border-b border-border/60 pb-3 w-full min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Paso 5</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">Paso 5</span>
               <h2 id="paso-comercial" className="text-base sm:text-lg font-bold text-foreground truncate">
                 Atribución Comercial & Descuentos
               </h2>
@@ -1131,7 +1144,7 @@ export function ReservaForm({
             </div>
 
             {mostrarLogistica && (
-              <div className="space-y-4 pt-2 border-t border-primary/15 animate-in fade-in duration-300 w-full min-w-0">
+              <div className="space-y-4 pt-2 border-t border-primary/15 animate-in fade-in duration-slow w-full min-w-0">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 w-full min-w-0">
                   <div className="space-y-1.5 w-full min-w-0">
                     <Label htmlFor="adminVoucherInput" className="text-xs font-bold text-muted-foreground flex items-center gap-1.5 truncate">
@@ -1223,7 +1236,7 @@ export function ReservaForm({
         <div className="lg:col-span-1 w-full min-w-0">
           <div className="sticky top-6 rounded-2xl border border-border/80 bg-card p-4 sm:p-6 shadow-sm space-y-4 w-full min-w-0">
             <div className="border-b border-border/60 pb-3 w-full min-w-0">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block truncate">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block truncate">
                 Resumen de Reserva
               </span>
               <h3 className="text-base sm:text-lg font-bold text-foreground truncate">
@@ -1243,7 +1256,7 @@ export function ReservaForm({
                     sizes="64px"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                  <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
                     Excursión
                   </div>
                 )}
@@ -1252,10 +1265,10 @@ export function ReservaForm({
                 <span className="text-xs font-bold text-foreground block truncate">
                   {variante.nombre}
                 </span>
-                <span className="text-[11px] text-muted-foreground block truncate">
+                <span className="text-xs text-muted-foreground block truncate">
                   📅 {fecha} {hora ? `· ⏰ ${hora}` : ''}
                 </span>
-                <span className="text-[11px] text-primary font-semibold block truncate">
+                <span className="text-xs text-primary font-semibold block truncate">
                   👥 {adultos} Adulto(s){ninos > 0 ? ` · ${ninos} Niño(s)` : ''}
                 </span>
               </div>
@@ -1285,7 +1298,7 @@ export function ReservaForm({
                 )}
 
                 {totales.descuento > 0 && (
-                  <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-semibold border-t border-border/50 pt-1.5">
+                  <div className="flex items-center justify-between text-success font-semibold border-t border-border/50 pt-1.5">
                     <span>Descuento aplicado</span>
                     <span className="font-mono shrink-0">
                       −{formatMoney(totales.descuento, { moneda: excursion.moneda })}
@@ -1335,7 +1348,7 @@ export function ReservaForm({
               )}
             </Button>
 
-            <div className="space-y-1.5 pt-1 text-[11px] text-muted-foreground border-t border-border/60">
+            <div className="space-y-1.5 pt-1 text-xs text-muted-foreground border-t border-border/60">
               <p className="flex items-center gap-1.5">
                 <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
                 Garantía de cupo validada en tiempo real.

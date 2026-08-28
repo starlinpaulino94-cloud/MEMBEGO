@@ -10,6 +10,7 @@ import {
   excursionesPublicas,
   calcularDisponibilidad,
   type SalidaDisponible,
+  type ChildActividadParaCombo,
 } from '@/modules/excursiones/catalogo/public-queries'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { cookies } from 'next/headers'
@@ -644,7 +645,7 @@ export async function buscarUnificado(
             exc.horaRegreso,
             exc.horaSalida,
             exc.tipoItem,
-            exc.comboItems as any
+            exc.comboItems as ChildActividadParaCombo[]
           )
 
           // Salidas futuras válidas no pasadas

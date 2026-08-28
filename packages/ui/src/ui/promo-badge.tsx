@@ -11,20 +11,20 @@ import { cn } from '../cn'
  * modo claro y oscuro. Ver docs/MDS.md § Badges.
  */
 const promoBadgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide [&>svg]:size-3',
+  'inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide [&>svg]:size-3',
   {
     variants: {
       tono: {
         /** Nuevo / Hoy — llegada reciente. */
-        nuevo: 'bg-sky-500 text-white',
+        nuevo: 'bg-info text-white',
         /** Hot / Oferta — demanda alta, rebaja. */
         hot: 'bg-gradient-to-r from-orange-500 to-rose-500 text-white',
         /** Premium / VIP / Exclusivo — estatus. */
-        premium: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950',
+        premium: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-warning',
         /** Expira / Limitado — urgencia (el único rojo de marketing). */
-        urgencia: 'bg-rose-600 text-white',
+        urgencia: 'bg-destructive text-white',
         /** Gratis / Regalo — beneficio sin costo (verde de marca). */
-        gratis: 'bg-emerald-500 text-white',
+        gratis: 'bg-success text-white',
         /** Recomendado — sugerencia del sistema. */
         recomendado: 'bg-violet-500 text-white',
         /** Neutro — metadatos sin carga emocional (categoría, cupo). */

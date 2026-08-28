@@ -18,7 +18,7 @@ export function BannerDemo({ nombreEmpresa }: { nombreEmpresa?: string | null })
   return (
     <div
       role="status"
-      className="sticky top-14 z-40 mb-6 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-900 backdrop-blur dark:text-amber-100"
+      className="sticky top-14 z-40 mb-6 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/15 px-4 py-2 text-sm font-semibold text-warning backdrop-blur"
     >
       <FlaskConical className="h-4 w-4 shrink-0" aria-hidden />
       <span className="flex-1">

@@ -96,7 +96,7 @@ export function ReporteEmpresaVista({
                   }`}
                   aria-hidden
                 />
-                <p className="text-small text-foreground print:text-[10px]">{i.texto}</p>
+                <p className="text-small text-foreground print:text-xs">{i.texto}</p>
               </li>
             ))}
           </ul>

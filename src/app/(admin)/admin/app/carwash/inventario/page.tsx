@@ -112,7 +112,7 @@ export default async function InventarioPage({
 
       <dl className="grid grid-cols-2 gap-3 sm:max-w-md">
         <div className="rounded-2xl border border-border/70 bg-card p-4">
-          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          <dt className="text-xs uppercase tracking-wide text-muted-foreground">
             Productos activos
           </dt>
           <dd className="mt-1 text-lg font-bold tabular-nums text-foreground">
@@ -120,7 +120,7 @@ export default async function InventarioPage({
           </dd>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card p-4">
-          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Stock bajo</dt>
+          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Stock bajo</dt>
           <dd
             className={`mt-1 text-lg font-bold tabular-nums ${
               inventario.bajos > 0 ? 'text-destructive' : 'text-foreground'
@@ -160,7 +160,7 @@ export default async function InventarioPage({
                       <p className="font-medium text-foreground">
                         {p.nombre}
                         {!p.activo && (
-                          <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                          <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-bold uppercase text-muted-foreground">
                             inactivo
                           </span>
                         )}
@@ -178,7 +178,7 @@ export default async function InventarioPage({
                       </span>{' '}
                       <span className="text-xs text-muted-foreground">{p.unidad}</span>
                       {bajo && (
-                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase text-destructive">
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-bold uppercase text-destructive">
                           <TriangleAlert className="h-3 w-3" /> bajo
                         </span>
                       )}

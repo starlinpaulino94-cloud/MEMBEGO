@@ -208,7 +208,7 @@ function PremioForm({
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         {editando ? 'Guardar cambios' : 'Agregar premio'}
       </Button>
-      <p className="text-center text-[11px] text-muted-foreground">
+      <p className="text-center text-xs text-muted-foreground">
         Mayor peso = más probable de salir. Ej: peso 3 sale el triple que peso 1.
       </p>
     </form>

@@ -79,7 +79,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
                     : 'border-dashed border-border/70 bg-muted/20'
                 }`}
               >
-                <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {b.nombre}
                 </p>
                 {b.ocupadaPor ? (
@@ -141,7 +141,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
           <h2 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Esperando
             {esperando.length > 0 && (
-              <span className="rounded-full bg-foreground px-2 py-0.5 text-[10px] text-background">
+              <span className="rounded-full bg-foreground px-2 py-0.5 text-xs text-background">
                 {esperando.length}
               </span>
             )}
@@ -183,7 +183,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
           <h2 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Listos para entregar
             {listos.length > 0 && (
-              <span className="rounded-full bg-success px-2 py-0.5 text-[10px] text-background">
+              <span className="rounded-full bg-success px-2 py-0.5 text-xs text-background">
                 {listos.length}
               </span>
             )}
@@ -216,28 +216,28 @@ export function Pista({ estado }: { estado: EstadoPista }) {
       {/* ── Cierre del día: abajo, que es donde se mira una vez ────────── */}
       <section className="grid grid-cols-2 gap-2 rounded-2xl border border-border/70 bg-muted/20 p-4 sm:grid-cols-4">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Hoy</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Hoy</p>
           <p className="text-xl font-bold tabular-nums text-foreground">{hoy.atendidos}</p>
-          <p className="text-[11px] text-muted-foreground">vehículos entregados</p>
+          <p className="text-xs text-muted-foreground">vehículos entregados</p>
         </div>
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Facturado</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Facturado</p>
           <p className="text-xl font-bold tabular-nums text-foreground">{fmtRD(hoy.ingresos)}</p>
-          <p className="text-[11px] text-muted-foreground">en servicios</p>
+          <p className="text-xs text-muted-foreground">en servicios</p>
         </div>
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Tiempo medio</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Tiempo medio</p>
           <p className="text-xl font-bold tabular-nums text-foreground">
             {hoy.tiempoMedioMin != null ? `${hoy.tiempoMedioMin}m` : '—'}
           </p>
-          <p className="text-[11px] text-muted-foreground">por vehículo</p>
+          <p className="text-xs text-muted-foreground">por vehículo</p>
         </div>
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">En pista</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">En pista</p>
           <p className="text-xl font-bold tabular-nums text-foreground">
             {enServicio + esperando.length}
           </p>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {enServicio} en servicio · {esperando.length} esperando
           </p>
         </div>

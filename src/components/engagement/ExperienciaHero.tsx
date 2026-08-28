@@ -48,7 +48,7 @@ export function ExperienciaHero({ exp }: { exp: Experiencia }) {
       className={exp.urgencia === 'media' ? 'animate-scale-in mb-6' : 'animate-fade-up mb-6'}
       data-experiencia={exp.tipo}
     >
-      <Shine modo="loop" className="block rounded-3xl">
+      <Shine modo="loop" className="block rounded-2xl">
         <PromoBanner
           tono={exp.tono}
           size={exp.urgencia === 'media' ? 'hero' : 'base'}

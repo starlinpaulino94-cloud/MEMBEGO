@@ -82,7 +82,7 @@ export function PopupInteligente({
   // vista, abajo. En el body, `fixed` es SIEMPRE la ventana: centrado
   // garantizado sin importar el scroll.
   return createPortal(
-    <div className="fixed inset-0 z-[95] flex items-center justify-center p-5">
+    <div className="fixed inset-0 z-modal flex items-center justify-center p-5">
       <button
         className="animate-fade-in absolute inset-0 bg-slate-950/65 backdrop-blur-sm"
         aria-label="Cerrar"
@@ -91,7 +91,7 @@ export function PopupInteligente({
 
       {/* Entrada con rebote elástico (MMS · burst) + halo de marca que respira */}
       <div
-        className="animate-burst shine shine-loop relative z-10 w-full max-w-sm overflow-hidden rounded-3xl bg-card shadow-hero"
+        className="animate-burst shine shine-loop relative z-10 w-full max-w-sm overflow-hidden rounded-2xl bg-card shadow-hero"
         style={{ ['--glow-color' as string]: '255 255 255' }}
         role="dialog"
         aria-modal="true"
@@ -121,13 +121,13 @@ export function PopupInteligente({
           <span aria-hidden className="animate-pulse-glow delay-500 absolute bottom-10 left-14 text-sm text-white/70">✦</span>
 
           {/* Icono flotando con anillo de vidrio */}
-          <span className="animate-float relative mx-auto flex h-20 w-20 items-center justify-center rounded-3xl border border-white/30 bg-white/20 text-white shadow-glow backdrop-blur-md">
+          <span className="animate-float relative mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-white/30 bg-white/20 text-white shadow-glow backdrop-blur-md">
             <Icon className="h-10 w-10 drop-shadow" />
           </span>
         </div>
 
         {/* ── Contenido: la tarjeta blanca "muerde" el gradiente ── */}
-        <div className="relative -mt-6 rounded-t-3xl bg-card px-6 pb-6 pt-6 text-center">
+        <div className="relative -mt-6 rounded-t-2xl bg-card px-6 pb-6 pt-6 text-center">
           <h2 className="text-h2 text-foreground">{candidato.titulo}</h2>
           <p className="mx-auto mt-2 max-w-[30ch] text-sm leading-relaxed text-muted-foreground">
             {candidato.descripcion}

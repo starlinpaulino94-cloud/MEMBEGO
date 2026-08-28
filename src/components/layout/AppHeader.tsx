@@ -155,7 +155,7 @@ export function AppHeader({
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="Buscar…"
-            className="h-10 w-full rounded-xl border border-transparent bg-muted/70 pl-9 pr-12 text-sm text-foreground outline-none transition-all duration-150 placeholder:text-muted-foreground/50 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20"
+            className="h-10 w-full rounded-xl border border-transparent bg-muted/70 pl-9 pr-12 text-sm text-foreground outline-none transition-all duration-fast placeholder:text-muted-foreground/50 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20"
           />
           {query ? (
             <button
@@ -167,7 +167,7 @@ export function AppHeader({
               <X className="h-4 w-4" />
             </button>
           ) : (
-            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-md border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[12px] leading-none text-muted-foreground sm:block">
+            <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded-lg border border-border/70 bg-background px-1.5 py-0.5 font-mono text-[12px] leading-none text-muted-foreground sm:block">
               /
             </kbd>
           )}

@@ -1003,7 +1003,7 @@ export default async function PagosPage({
                       <td className="max-w-64 px-4 py-3 text-xs text-muted-foreground">{s.situacion}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${dias >= 7 ? 'bg-destructive/10 text-destructive' : dias >= 3 ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'}`}
+                          className={`rounded-full px-2 py-0.5 text-xs font-bold ${dias >= 7 ? 'bg-destructive/10 text-destructive' : dias >= 3 ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'}`}
                         >
                           {dias === 0 ? 'hoy' : `${dias} día${dias !== 1 ? 's' : ''}`}
                         </span>

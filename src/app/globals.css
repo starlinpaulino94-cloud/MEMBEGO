@@ -972,6 +972,37 @@
 @keyframes border-glow-spin { to { transform: rotate(1turn); } }
 
 @layer utilities {
+  /* ── MMS · Duraciones con nombre ────────────────────────────────────
+     Los tokens `--duration-*` viven en `@theme`, pero Tailwind v4 no tiene
+     espacio de nombres para duraciones: `duration-fast` NO genera nada por
+     sí solo. Sin estas cuatro líneas, escribir `duration-base` no es un
+     alias sin declarar — es una clase que no existe, y la transición se
+     queda con la duración por defecto sin que nadie lo note.
+
+     Se escriben las dos formas: `--tw-duration` para que las utilidades
+     `transition-*` de Tailwind la recojan, y `transition-duration` directa
+     para cuando la transición se declaró a mano. */
+  .duration-instant     { --tw-duration: var(--duration-instant);     transition-duration: var(--duration-instant); }
+  .duration-fast        { --tw-duration: var(--duration-fast);        transition-duration: var(--duration-fast); }
+  .duration-base        { --tw-duration: var(--duration-base);        transition-duration: var(--duration-base); }
+  .duration-slow        { --tw-duration: var(--duration-slow);        transition-duration: var(--duration-slow); }
+  .duration-hero        { --tw-duration: var(--duration-hero);        transition-duration: var(--duration-hero); }
+  .duration-celebration { --tw-duration: var(--duration-celebration); transition-duration: var(--duration-celebration); }
+
+  /* ── Escala de apilamiento con nombre ───────────────────────────────
+     Mismo caso que las duraciones: los tokens `--z-*` estaban declarados y
+     no los consumía nadie, porque `z-modal` tampoco existe en Tailwind. El
+     resultado fue trece z-index a mano —`z-[9999]`, `z-[600]`, `z-[95]`—
+     que es exactamente cómo se acaba con un modal por debajo de un mapa. */
+  .z-base         { z-index: var(--z-base); }
+  .z-sticky       { z-index: var(--z-sticky); }
+  .z-dropdown     { z-index: var(--z-dropdown); }
+  .z-map-overlay  { z-index: var(--z-map-overlay); }
+  .z-drawer       { z-index: var(--z-drawer); }
+  .z-modal        { z-index: var(--z-modal); }
+  .z-toast        { z-index: var(--z-toast); }
+  .z-celebration  { z-index: var(--z-celebration); }
+
   .animate-fade-up    { animation: fade-up 0.35s ease both; }
   .animate-fade-in    { animation: fade-in 0.25s ease both; }
   .animate-scale-in   { animation: scale-in 0.2s ease both; }

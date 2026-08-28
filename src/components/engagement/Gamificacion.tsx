@@ -49,9 +49,9 @@ function LogroBadge({ logro }: { logro: LogroData }) {
           </span>
         )}
       </span>
-      <span className="text-[11px] font-semibold leading-tight text-foreground">{logro.nombre}</span>
+      <span className="text-xs font-semibold leading-tight text-foreground">{logro.nombre}</span>
       {enProgreso && (
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {logro.valor}/{logro.objetivo}
         </span>
       )}
@@ -82,7 +82,7 @@ export function Gamificacion({ data, color }: { data: GamificacionData; color?: 
               <Trophy className="h-6 w-6" />
             </span>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-white/80">
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/80">
                 Nivel {nivel.nivel}
               </p>
               <p className="text-xl font-extrabold leading-tight">{nivel.nombre}</p>
@@ -90,19 +90,19 @@ export function Gamificacion({ data, color }: { data: GamificacionData; color?: 
           </div>
           <div className="text-right">
             <p className="text-2xl font-extrabold tabular-nums">{puntos.toLocaleString('es-DO')}</p>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/80">puntos</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/80">puntos</p>
           </div>
         </div>
 
         {/* Progreso al siguiente nivel */}
         <div className="relative mt-4">
-          <div className="mb-1 flex justify-between text-[11px] font-medium text-white/85">
+          <div className="mb-1 flex justify-between text-xs font-medium text-white/85">
             <span>{siguiente ? `Rumbo a ${siguiente.nombre}` : '¡Nivel máximo!'}</span>
             {siguiente && <span>Faltan {faltan.toLocaleString('es-DO')} pts</span>}
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-white/25">
             <div
-              className="h-full rounded-full bg-white transition-all duration-700"
+              className="h-full rounded-full bg-white transition-all duration-celebration"
               style={{ width: `${progreso}%` }}
             />
           </div>
@@ -112,7 +112,7 @@ export function Gamificacion({ data, color }: { data: GamificacionData; color?: 
       {/* Logros */}
       <div className="p-4">
         <div className="mb-2 flex items-center gap-1.5">
-          <Trophy className="h-4 w-4 text-amber-500" />
+          <Trophy className="h-4 w-4 text-warning" />
           <h3 className="text-sm font-semibold text-foreground">Tus logros</h3>
           <span className="ml-auto text-xs text-muted-foreground">
             {logros.filter((l) => l.desbloqueado).length}/{logros.length}

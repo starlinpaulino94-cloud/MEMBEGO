@@ -62,10 +62,10 @@ const ACCENT = {
   warning: { bar: 'bg-warning',     iconBg: 'bg-warning/10 ring-warning/20',         iconText: 'text-warning-foreground' },
   danger:  { bar: 'bg-destructive', iconBg: 'bg-destructive/10 ring-destructive/20', iconText: 'text-destructive' },
   // Heredados (ver el comentario del tipo).
-  sky:    { bar: 'bg-sky-500',     iconBg: 'bg-sky-500/10 ring-sky-500/20',         iconText: 'text-sky-600 dark:text-sky-400' },
-  green:  { bar: 'bg-emerald-500', iconBg: 'bg-emerald-500/10 ring-emerald-500/20', iconText: 'text-emerald-600 dark:text-emerald-400' },
-  amber:  { bar: 'bg-amber-500',   iconBg: 'bg-amber-500/10 ring-amber-500/20',     iconText: 'text-amber-600 dark:text-amber-400' },
-  red:    { bar: 'bg-red-500',     iconBg: 'bg-red-500/10 ring-red-500/20',         iconText: 'text-red-600 dark:text-red-400' },
+  sky:    { bar: 'bg-info',     iconBg: 'bg-info/10 ring-info/20',         iconText: 'text-info' },
+  green:  { bar: 'bg-success', iconBg: 'bg-success/10 ring-success/20', iconText: 'text-success' },
+  amber:  { bar: 'bg-warning',   iconBg: 'bg-warning/10 ring-warning/20',     iconText: 'text-warning' },
+  red:    { bar: 'bg-destructive',     iconBg: 'bg-destructive/10 ring-destructive/20',         iconText: 'text-destructive' },
   indigo: { bar: 'bg-indigo-500',  iconBg: 'bg-indigo-500/10 ring-indigo-500/20',   iconText: 'text-indigo-600 dark:text-indigo-400' },
   violet: { bar: 'bg-violet-500',  iconBg: 'bg-violet-500/10 ring-violet-500/20',   iconText: 'text-violet-600 dark:text-violet-400' },
 }
@@ -93,7 +93,7 @@ export function StatCard({
           }
         : {})}
       className={cn(
-        'group relative block overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all duration-200 hover:shadow-card-hover hover:-translate-y-0.5',
+        'group relative block overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all duration-base hover:shadow-card-hover hover:-translate-y-0.5',
         // El foco visible solo cuando es pulsable: un anillo en algo que no
         // hace nada al pulsarlo es una promesa falsa.
         href &&
@@ -117,7 +117,7 @@ export function StatCard({
           {trend && (
             <span
               className={cn(
-                'mt-1.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium',
+                'mt-1.5 inline-flex items-center rounded-lg px-1.5 py-0.5 text-xs font-medium',
                 trend.positive !== false
                   ? 'bg-success/10 text-success'
                   : 'bg-destructive/10 text-destructive'

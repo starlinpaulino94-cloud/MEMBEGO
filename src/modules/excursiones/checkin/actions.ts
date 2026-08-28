@@ -122,7 +122,7 @@ export async function buscarParaCheckin(codigo: string): Promise<CheckinBusqueda
     }
 
     // El token/código busca la reserva dentro de ESTA empresa
-    let reserva = await conEmpresa(companyId, (tx) =>
+    const reserva = await conEmpresa(companyId, (tx) =>
       tx.reservaExc.findFirst({
         where: {
           companyId,
@@ -330,7 +330,7 @@ export async function registrarCheckin(
       }
     }
 
-    let reserva = await conEmpresa(companyId, (tx) =>
+    const reserva = await conEmpresa(companyId, (tx) =>
       tx.reservaExc.findFirst({
         where: { id: reservaId, companyId },
         select: {

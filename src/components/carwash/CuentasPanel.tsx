@@ -171,7 +171,7 @@ export function CuentasPanel({
                       {fmtRD(c.saldo)}
                     </span>
                     {c.excedeLimite && (
-                      <p className="flex items-center gap-1 text-[11px] text-destructive">
+                      <p className="flex items-center gap-1 text-xs text-destructive">
                         <TriangleAlert className="h-3 w-3" /> pasó el límite de{' '}
                         {fmtRD(c.limiteCredito ?? 0)}
                       </p>

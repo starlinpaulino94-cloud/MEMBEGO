@@ -218,7 +218,7 @@ export default async function PlanesPage({
       {/* ── Cabecera integrada y limpia (adiós al banner gigante) ─────────── */}
       <header className="animate-fade-up mb-8">
         <div className="flex items-start justify-between gap-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-primary">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">
             Membresías · {cliente.company.name}
           </p>
           <div className="-mt-1 flex shrink-0 items-center gap-1">

@@ -126,7 +126,7 @@ export function AppSidebar({
                     aria-label={item.label}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-150',
+                      'relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-fast',
                       active
                         ? 'bg-sidebar-active text-sidebar-primary'
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-white'
@@ -155,7 +155,7 @@ export function AppSidebar({
                 type="submit"
                 title="Cerrar sesión"
                 aria-label="Cerrar sesión"
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors duration-fast hover:bg-sidebar-hover hover:text-white"
               >
                 <LogOut className="h-[18px] w-[18px]" />
               </button>
@@ -210,7 +210,7 @@ export function AppSidebar({
                 aria-selected={activo}
                 onClick={() => setContextoElegido(c.id)}
                 className={cn(
-                  'min-h-9 flex-1 rounded-md px-2 text-[12.5px] font-medium transition-colors duration-150',
+                  'min-h-9 flex-1 rounded-lg px-2 text-[12.5px] font-medium transition-colors duration-fast',
                   activo
                     ? 'bg-sidebar-active text-white'
                     : 'text-sidebar-foreground/70 hover:text-white'
@@ -261,7 +261,7 @@ export function AppSidebar({
                           onClick={onNavigate}
                           aria-current={active ? 'page' : undefined}
                           className={cn(
-                            'group relative flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14.5px] font-medium transition-colors duration-150',
+                            'group relative flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14.5px] font-medium transition-colors duration-fast',
                             active
                               ? 'bg-sidebar-active text-white'
                               : 'text-sidebar-foreground/85 hover:bg-sidebar-hover hover:text-white'
@@ -272,7 +272,7 @@ export function AppSidebar({
                           )}
                           <Icon
                             className={cn(
-                              'h-[18px] w-[18px] shrink-0 transition-colors duration-150',
+                              'h-[18px] w-[18px] shrink-0 transition-colors duration-fast',
                               active
                                 ? 'text-sidebar-primary'
                                 : 'text-sidebar-foreground/70 group-hover:text-white'
@@ -306,7 +306,7 @@ export function AppSidebar({
               type="submit"
               title="Cerrar sesión"
               aria-label="Cerrar sesión"
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors duration-fast hover:bg-sidebar-hover hover:text-white"
             >
               <LogOut className="h-[18px] w-[18px]" />
             </button>

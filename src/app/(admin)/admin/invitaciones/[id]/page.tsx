@@ -139,9 +139,9 @@ export default async function CampanaDetallePage({
                       <Icon className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm text-muted-foreground">{step.label}</span>
                     </div>
-                    <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
+                    <div className="flex-1 h-6 bg-muted rounded-lg overflow-hidden">
                       <div
-                        className="h-full bg-primary/80 rounded-md transition-all"
+                        className="h-full bg-primary/80 rounded-lg transition-all"
                         style={{ width: `${width}%` }}
                       />
                     </div>

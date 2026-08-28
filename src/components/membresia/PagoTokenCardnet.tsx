@@ -1486,7 +1486,7 @@ export function PagoTokenCardnet({
 
         {/* Sellos de confianza: discretos, debajo del CTA.
 
-            Iban con `text-[11px]` y `emerald-600/400`. Lo primero es texto por
+            Iban con `text-xs` y `emerald-600/400`. Lo primero es texto por
             debajo del mínimo legible que se fijó para una plataforma que se usa
             de pie; lo segundo es un verde crudo que no sigue el tema y que en
             modo oscuro había que parchear a mano. Los dos son deuda medida por

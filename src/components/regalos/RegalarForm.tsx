@@ -82,7 +82,7 @@ export function RegalarForm({ opciones }: { opciones: OpcionRegalo[] }) {
   // ── Pantalla de éxito para membresía (referencia de pago) ──────────────────
   if (referencia) {
     return (
-      <div className="rounded-3xl border border-success/30 bg-success/5 p-6 text-center shadow-card">
+      <div className="rounded-2xl border border-success/30 bg-success/5 p-6 text-center shadow-card">
         <Gift className="mx-auto h-10 w-10 text-success" aria-hidden />
         <h2 className="mt-3 text-lg font-bold text-foreground">¡Regalo creado!</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -110,7 +110,7 @@ export function RegalarForm({ opciones }: { opciones: OpcionRegalo[] }) {
   return (
     <form action={formAction} className="space-y-6">
       {/* Paso 1 · Qué regalar */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold text-foreground">1 · ¿Qué le regalas?</h2>
         <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
           {opciones.map((o) => (
@@ -138,7 +138,7 @@ export function RegalarForm({ opciones }: { opciones: OpcionRegalo[] }) {
       </section>
 
       {/* Paso 2 · Destinatario */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-1 text-sm font-semibold text-foreground">2 · ¿Para quién?</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           Pega su <strong>@ID MembeGo</strong> o busca por nombre.
@@ -222,7 +222,7 @@ export function RegalarForm({ opciones }: { opciones: OpcionRegalo[] }) {
       </section>
 
       {/* Paso 3 · Dedicatoria + crear */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold text-foreground">3 · Dedicatoria (opcional)</h2>
         <Textarea name="mensaje" rows={2} maxLength={200} placeholder="¡Feliz cumpleaños! 🎂" />
         <Button
@@ -233,7 +233,7 @@ export function RegalarForm({ opciones }: { opciones: OpcionRegalo[] }) {
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           {opcion ? `Regalar por ${fmtRD(opcion.precio)}` : 'Regalar'}
         </Button>
-        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+        <p className="mt-2 text-center text-xs text-muted-foreground">
           Tú pagas (transferencia o en la sucursal). Tu amigo lo recibe cuando el
           negocio confirme el pago.
         </p>

@@ -88,7 +88,7 @@ export function WizardEmpresa({
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
                 ) : (
                   <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                       isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                     }`}
                   >

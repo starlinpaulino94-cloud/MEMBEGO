@@ -230,7 +230,7 @@ export function QRScanner({
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute inset-0 rounded-2xl bg-success/35 ring-4 ring-success transition-opacity duration-150',
+            'pointer-events-none absolute inset-0 rounded-2xl bg-success/35 ring-4 ring-success transition-opacity duration-fast',
             flash ? 'opacity-100' : 'opacity-0'
           )}
         />

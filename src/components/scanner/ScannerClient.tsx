@@ -448,7 +448,7 @@ export function ScannerClient({
 
       {modo === 'camara' ? (
         /* ── Cámara ── */
-        <Card className="overflow-hidden rounded-3xl border-border/60 py-0 shadow-premium">
+        <Card className="overflow-hidden rounded-2xl border-border/60 py-0 shadow-premium">
           <div className="relative bg-gradient-to-b from-slate-950 via-blue-950 to-slate-900 p-7 text-center sm:p-8">
             <div className="pointer-events-none absolute inset-0 bg-grid-light opacity-40" />
             <div className="pointer-events-none absolute left-1/2 top-0 h-32 w-64 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
@@ -541,7 +541,7 @@ function ReaderPanel({
   const Icon = s.icon
 
   return (
-    <Card className="overflow-hidden rounded-3xl border-border/60 py-0 shadow-premium">
+    <Card className="overflow-hidden rounded-2xl border-border/60 py-0 shadow-premium">
       <div
         className="relative cursor-text bg-gradient-to-b from-slate-950 via-blue-950 to-slate-900 p-8 text-center"
         onClick={onFocusArea}

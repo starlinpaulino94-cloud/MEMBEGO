@@ -120,7 +120,7 @@ export function MapaUbicacion({
         <button
           type="button"
           onClick={locateMe}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+          className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
         >
           <LocateFixed className="h-3.5 w-3.5" /> Usar mi ubicación
         </button>

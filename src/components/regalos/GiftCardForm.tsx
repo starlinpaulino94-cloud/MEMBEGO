@@ -69,7 +69,7 @@ export function GiftCardForm({ montoMin, montoMax }: { montoMin: number; montoMa
 
   if (codigo) {
     return (
-      <div className="rounded-3xl border border-success/30 bg-success/5 p-6 text-center shadow-card">
+      <div className="rounded-2xl border border-success/30 bg-success/5 p-6 text-center shadow-card">
         <CreditCard className="mx-auto h-10 w-10 text-success" aria-hidden />
         <h2 className="mt-3 text-lg font-bold text-foreground">¡Gift card creada!</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -95,7 +95,7 @@ export function GiftCardForm({ montoMin, montoMax }: { montoMin: number; montoMa
   return (
     <form action={formAction} className="space-y-6">
       {/* Paso 1 · Monto */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold text-foreground">1 · ¿Cuánto regalas?</h2>
         {sugeridos.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
@@ -131,7 +131,7 @@ export function GiftCardForm({ montoMin, montoMax }: { montoMin: number; montoMa
       </section>
 
       {/* Paso 2 · Destinatario */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-1 text-sm font-semibold text-foreground">2 · ¿Para quién?</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           Pega su <strong>@ID MembeGo</strong> o busca por nombre.
@@ -245,7 +245,7 @@ export function GiftCardForm({ montoMin, montoMax }: { montoMin: number; montoMa
       </section>
 
       {/* Paso 3 · Dedicatoria + crear */}
-      <section className="rounded-3xl border border-border/70 bg-card p-5 shadow-card">
+      <section className="rounded-2xl border border-border/70 bg-card p-5 shadow-card">
         <h2 className="mb-3 text-sm font-semibold text-foreground">3 · Dedicatoria (opcional)</h2>
         <Textarea name="mensaje" rows={2} maxLength={200} placeholder="¡Para que te consientas! 💛" />
         <Button
@@ -256,7 +256,7 @@ export function GiftCardForm({ montoMin, montoMax }: { montoMin: number; montoMa
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
           Crear gift card de {fmtRD(monto || 0)}
         </Button>
-        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+        <p className="mt-2 text-center text-xs text-muted-foreground">
           Tú pagas (transferencia o en la sucursal) citando el código. Se activa
           al confirmarse el pago y no expira.
         </p>

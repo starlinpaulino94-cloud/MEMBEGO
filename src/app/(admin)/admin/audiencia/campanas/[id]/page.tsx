@@ -174,7 +174,7 @@ export default async function CampanaDetallePage({ params }: Props) {
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-4">
             {campana.entregasPorEstado.map((e) => (
-              <div key={e.estado} className="rounded-md border bg-muted/40 p-3">
+              <div key={e.estado} className="rounded-lg border bg-muted/40 p-3">
                 <div className="text-2xl font-bold tabular-nums">{fmt(e.n)}</div>
                 <div className="text-xs text-muted-foreground">
                   {ETIQUETA_ENTREGA[e.estado] ?? e.estado}
