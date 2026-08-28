@@ -64,6 +64,7 @@ next-env.d.ts
 local-*
 
 # --- Archivos internos del proyecto (no son código) ---
+.omo/
 worklog.md
 agent-ctx/
 tool-results/
