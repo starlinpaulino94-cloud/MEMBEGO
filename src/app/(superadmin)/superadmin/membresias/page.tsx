@@ -13,7 +13,9 @@ import { membresiaEstadoUi } from '@/lib/estados'
 import { MembershipAdminActions } from '@/components/admin/MembershipAdminActions'
 import { DeleteMembresiaButton } from '@/components/admin/DeleteMembresiaButton'
 import { AjustarLavados } from '@/components/superadmin/AjustarLavados'
+import { AjustarVencimiento } from '@/components/superadmin/AjustarVencimiento'
 import { listarMembresias, type MembresiaFila } from '@/modules/membresias/lista'
+import { fechaInputLocal } from '@/lib/periodos'
 import {
   AMBITOS,
   AMBITO_LABEL,
@@ -289,7 +291,13 @@ export default async function SuperadminMembresiasPage({
                   <EstadoConVigencia fila={m} />
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{fmtDate(m.fechaInicio)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{fmtDate(m.fechaVencimiento)}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  <AjustarVencimiento
+                    membershipId={m.id}
+                    fecha={fmtDate(m.fechaVencimiento)}
+                    fechaInput={fechaInputLocal(m.fechaVencimiento)}
+                  />
+                </td>
                 <td className="px-4 py-3">
                   <MembershipAdminActions
                     membershipId={m.id}

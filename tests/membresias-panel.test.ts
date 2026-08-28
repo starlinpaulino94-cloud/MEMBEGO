@@ -36,8 +36,16 @@ const CARDNET_RENOVACION = readFileSync(
   'utf8'
 )
 const PLAN_ACCIONES = readFileSync(join('src', 'modules', 'admin', 'planActions.ts'), 'utf8')
+const SUPER_MEMBRESIA_ACCIONES = readFileSync(
+  join('src', 'modules', 'superadmin', 'membresiaActions.ts'),
+  'utf8'
+)
 const BOTONES = readFileSync(
   join('src', 'components', 'admin', 'MembershipAdminActions.tsx'),
+  'utf8'
+)
+const AJUSTAR_VENCIMIENTO = readFileSync(
+  join('src', 'components', 'superadmin', 'AjustarVencimiento.tsx'),
   'utf8'
 )
 
@@ -281,6 +289,30 @@ test('la ficha de empresa dice el nombre, no el id', () => {
   const f = leerFiltroMembresias({ empresa: 'cmp_1' })
   const [ficha] = fichasDeFiltro(f, '/x', [{ id: 'cmp_1', name: 'CARTOWN' }])
   assert.equal(ficha.texto, 'CARTOWN')
+})
+
+test('el superadmin puede alargar el vencimiento desde la tabla', () => {
+  assert.match(PAGE, /import \{ AjustarVencimiento \} from '@\/components\/superadmin\/AjustarVencimiento'/)
+  assert.match(PAGE, /fechaInputLocal\(m\.fechaVencimiento\)/)
+  assert.match(PAGE, /<AjustarVencimiento/)
+  assert.match(AJUSTAR_VENCIMIENTO, /ajustarVencimientoMembresia/)
+  assert.match(AJUSTAR_VENCIMIENTO, /type="date"/)
+  assert.match(AJUSTAR_VENCIMIENTO, /Motivo/)
+})
+
+test('alargar vencimiento exige superadmin, motivo y una fecha posterior', () => {
+  const bloque = SUPER_MEMBRESIA_ACCIONES.slice(
+    SUPER_MEMBRESIA_ACCIONES.indexOf('export async function ajustarVencimientoMembresia'),
+    SUPER_MEMBRESIA_ACCIONES.length
+  )
+  assert.ok(bloque.length > 0, 'no se encontró ajustarVencimientoMembresia')
+  assert.match(bloque, /metadata\.role !== 'SUPERADMIN'/)
+  assert.match(bloque, /Escribe el motivo/)
+  assert.match(bloque, /finDelDiaLocal/)
+  assert.match(bloque, /nuevaFecha <= membership\.fechaVencimiento/)
+  assert.match(bloque, /estado: 'ACTIVA'/)
+  assert.match(bloque, /tipo: 'AJUSTE_VENCIMIENTO'/)
+  assert.match(bloque, /revalidatePath\(`\/admin\/clientes\/\$\{membership\.clienteId\}`\)/)
 })
 
 test('el desplegable de empresa ya no se limita a las activas', () => {
