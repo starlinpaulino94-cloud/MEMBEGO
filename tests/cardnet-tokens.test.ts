@@ -1038,3 +1038,43 @@ test('la pantalla de pago no ofrece reintentar cuando la pasarela está caída',
   )
   assert.match(comp, /Elegir otra forma de pago/, 'hay que dar una salida, no solo una disculpa')
 })
+
+test('el diagnóstico distingue los DOS productos de CardNET', () => {
+  // Conviven dos integraciones con credenciales que no se sustituyen entre sí,
+  // y confundirlas deja el pago roto con todo «parecendo» configurado: se
+  // ponen las del modelo directo y la tokenización sigue devolviendo 401.
+  const ruta = readFileSync('src/app/api/pagos/cardnet-token/estado/route.ts', 'utf8')
+  assert.match(ruta, /tokenizacion/, 'falta decir si la tokenización está completa')
+  assert.match(ruta, /modeloDirecto3ds/, 'falta decir si el modelo directo está configurado')
+  assert.match(
+    ruta,
+    /laQueUsaLaPantallaDePago/,
+    'hay que decir CUÁL de las dos usa la pantalla de pago, no solo listarlas'
+  )
+  /**
+   * Y NUNCA EL VALOR DE UN SECRETO, solo su presencia.
+   *
+   * Se comprueba lo que de verdad importa: que ningún secreto se asigne a un
+   * campo de la respuesta. `Boolean(...)` y las cadenas de `&&` devuelven
+   * true/false y son seguras; lo que no puede aparecer es `campo:
+   * process.env.ALGUN_SECRETO`, que es como un diagnóstico acaba filtrando lo
+   * que vino a diagnosticar.
+   *
+   * La llave PÚBLICA es la excepción declarada y por eso no está en la lista:
+   * ya viaja al navegador para abrir el iframe.
+   */
+  const SECRETOS = [
+    'CARDNET_API_KEY',
+    'CARDNET_TOKENS_PRIVATE_KEY',
+    'CARDNET_MERCHANT_ID',
+    'CARDNET_TERMINAL_ID',
+    'CARDNET_INTEGRATOR_CODE',
+  ]
+  for (const variable of SECRETOS) {
+    assert.doesNotMatch(
+      ruta,
+      new RegExp(`[:=]\\s*process\\.env\\.${variable}\\b(?!\\?\\.trim\\(\\)\\s*&&)`),
+      `${variable} se está asignando a un campo: acabaría en la respuesta`
+    )
+  }
+})

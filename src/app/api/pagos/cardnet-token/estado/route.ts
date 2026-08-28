@@ -103,6 +103,46 @@ export async function GET(req: NextRequest) {
     ambienteVariable: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
     ambiente: ambienteConfigurado().ambiente,
     ambienteReconocido: ambienteConfigurado().reconocido,
+    /**
+     * QUÉ PRODUCTO DE CARDNET ESTÁ CONFIGURADO — y cuál usa de verdad la
+     * pantalla de pago.
+     *
+     * En el proyecto conviven DOS integraciones distintas de CardNET, con
+     * credenciales que no se parecen y que no se sustituyen entre sí:
+     *
+     *   · TOKENIZACIÓN (`CARDNET_TOKENS_*`): un par de llaves pública/privada.
+     *     La tarjeta se digita en la ventana hospedada de CardNET y nunca pasa
+     *     por nuestro servidor. Es la que usa la pantalla de membresías.
+     *   · MODELO DIRECTO 3DS (`CARDNET_MERCHANT_ID`, `CARDNET_TERMINAL_ID`,
+     *     `CARDNET_INTEGRATOR_CODE`, `CARDNET_API_KEY`): comercio, terminal,
+     *     integrador y una llave de API. Ahí el número de tarjeta SÍ pasa por
+     *     nuestro servidor.
+     *
+     * Se enseñan las dos porque confundirlas es fácil y caro: si CardNET
+     * entrega las credenciales del modelo directo y se ponen en Vercel, la
+     * tokenización sigue rechazando con 401 y todo «parece» configurado. Este
+     * bloque lo hace visible de un vistazo, sin enseñar ningún secreto.
+     */
+    productos: {
+      tokenizacion: {
+        laQueUsaLaPantallaDePago: true,
+        completo: cardnetTokensConfigurado(),
+      },
+      modeloDirecto3ds: {
+        laQueUsaLaPantallaDePago: false,
+        completo: Boolean(
+          process.env.CARDNET_MERCHANT_ID?.trim() &&
+            process.env.CARDNET_TERMINAL_ID?.trim() &&
+            process.env.CARDNET_INTEGRATOR_CODE?.trim() &&
+            process.env.CARDNET_API_KEY?.trim()
+        ),
+        merchantIdPresente: Boolean(process.env.CARDNET_MERCHANT_ID?.trim()),
+        terminalIdPresente: Boolean(process.env.CARDNET_TERMINAL_ID?.trim()),
+        integratorCodePresente: Boolean(process.env.CARDNET_INTEGRATOR_CODE?.trim()),
+        apiKeyPresente: Boolean(process.env.CARDNET_API_KEY?.trim()),
+        ambiente: process.env.CARDNET_AMBIENTE ?? '(sin definir)',
+      },
+    },
     correo: {
       resendKeyPresente: Boolean(process.env.RESEND_API_KEY?.trim()),
       emailFromPresente: Boolean(process.env.EMAIL_FROM?.trim()),
