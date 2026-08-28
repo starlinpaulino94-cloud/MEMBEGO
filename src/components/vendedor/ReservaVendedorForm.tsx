@@ -261,7 +261,7 @@ export function ReservaVendedorForm({
       variante.precioNinoResidente ?? null
     )
 
-    return calcularTotales({
+    const calc = calcularTotales({
       precioAdulto,
       precioNino,
       impuestoPct: excursion.impuestoPct ?? 0,
@@ -269,6 +269,12 @@ export function ReservaVendedorForm({
       ninos: ninos || 0,
       descuento: 0,
     })
+
+    return {
+      ...calc,
+      precioAdulto,
+      precioNino,
+    }
   }, [variante, excursion, adultos, ninos, fecha, hora, esResidente])
 
   // Handler para seleccionar cliente existente
@@ -796,7 +802,9 @@ export function ReservaVendedorForm({
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">Adultos</span>
                       <span className="block text-xs text-muted-foreground truncate">
-                        {variante ? formatMoney(variante.precioAdulto, { moneda: excursion.moneda }) : ''} c/u
+                        {totales
+                          ? formatMoney(totales.precioAdulto, { moneda: excursion.moneda })
+                          : variante ? formatMoney(variante.precioAdulto, { moneda: excursion.moneda }) : ''} c/u
                       </span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -828,7 +836,9 @@ export function ReservaVendedorForm({
                     <div className="min-w-0 flex-1 pr-2">
                       <span className="text-sm font-bold text-foreground block truncate">Niños</span>
                       <span className="block text-xs text-muted-foreground truncate">
-                        {variante
+                        {totales
+                          ? formatMoney(totales.precioNino ?? totales.precioAdulto, { moneda: excursion.moneda })
+                          : variante
                           ? formatMoney(variante.precioNino ?? variante.precioAdulto, { moneda: excursion.moneda })
                           : ''} c/u
                       </span>
@@ -1171,17 +1181,17 @@ export function ReservaVendedorForm({
               {variante && (
                 <>
                   <div className="flex justify-between text-muted-foreground gap-2">
-                    <span className="truncate">{adultos} Adulto(s) × {formatMoney(variante.precioAdulto, { moneda: excursion.moneda })}</span>
+                    <span className="truncate">{adultos} Adulto(s) × {formatMoney(totales?.precioAdulto ?? variante.precioAdulto, { moneda: excursion.moneda })}</span>
                     <span className="font-semibold text-foreground shrink-0">
-                      {formatMoney(adultos * variante.precioAdulto, { moneda: excursion.moneda })}
+                      {formatMoney(adultos * (totales?.precioAdulto ?? variante.precioAdulto), { moneda: excursion.moneda })}
                     </span>
                   </div>
 
                   {ninos > 0 && (
                     <div className="flex justify-between text-muted-foreground gap-2">
-                      <span className="truncate">{ninos} Niño(s) × {formatMoney(variante.precioNino ?? variante.precioAdulto, { moneda: excursion.moneda })}</span>
+                      <span className="truncate">{ninos} Niño(s) × {formatMoney(totales?.precioNino ?? (variante.precioNino ?? variante.precioAdulto), { moneda: excursion.moneda })}</span>
                       <span className="font-semibold text-foreground shrink-0">
-                        {formatMoney(ninos * (variante.precioNino ?? variante.precioAdulto), { moneda: excursion.moneda })}
+                        {formatMoney(ninos * (totales?.precioNino ?? (variante.precioNino ?? variante.precioAdulto)), { moneda: excursion.moneda })}
                       </span>
                     </div>
                   )}

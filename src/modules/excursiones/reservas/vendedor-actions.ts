@@ -241,7 +241,7 @@ export async function crearReservaVendedor(
       v.datos.fecha,
       v.datos.hora,
       variante.precioAdulto.toNumber(),
-      variante.precioNino ? variante.precioNino.toNumber() : null,
+      variante.precioNino != null ? variante.precioNino.toNumber() : null,
       reglasDin,
       v.datos.esResidente,
       baseResidente,

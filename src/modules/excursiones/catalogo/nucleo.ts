@@ -52,6 +52,10 @@ function texto(v: unknown, max: number): string {
 
 /** Precio del formulario → número con 2 decimales, o null si no aplica. */
 export function precio(v: unknown): number | null {
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || v < 0 || v > 9_999_999) return null
+    return Math.round(v * 100) / 100
+  }
   const s = typeof v === 'string' ? v.trim() : ''
   if (!s) return null
   const n = Number(s)
@@ -193,6 +197,11 @@ export function validarVariante(
           // obliga a comprobar antes de leer, que es lo que este bloque ya
           // hacía campo por campo; el `any` solo lo ocultaba.
           const r = (crudo ?? {}) as Record<string, unknown>
+          const pa = r.precioAdulto !== null && r.precioAdulto !== undefined && r.precioAdulto !== '' ? Number(r.precioAdulto) : null
+          const pn = r.precioNino !== null && r.precioNino !== undefined && r.precioNino !== '' ? Number(r.precioNino) : null
+          const pr = r.precioResidente !== null && r.precioResidente !== undefined && r.precioResidente !== '' ? Number(r.precioResidente) : null
+          const pnr = r.precioNinoResidente !== null && r.precioNinoResidente !== undefined && r.precioNinoResidente !== '' ? Number(r.precioNinoResidente) : null
+
           return {
             diasSemana: Array.isArray(r.diasSemana)
               ? r.diasSemana.map(Number).filter((n: number) => n >= 1 && n <= 7)
@@ -200,10 +209,10 @@ export function validarVariante(
             horasSalida: Array.isArray(r.horasSalida)
               ? r.horasSalida.map(String).filter((s: string) => HORA_RE.test(s))
               : [],
-            precioAdulto: Number(r.precioAdulto) || precioAdulto, // Fallback al base
-            precioNino: r.precioNino ? Number(r.precioNino) : null,
-            precioResidente: r.precioResidente ? Number(r.precioResidente) : null,
-            precioNinoResidente: r.precioNinoResidente ? Number(r.precioNinoResidente) : null,
+            precioAdulto: pa !== null && Number.isFinite(pa) && pa >= 0 ? Math.round(pa * 100) / 100 : precioAdulto,
+            precioNino: pn !== null && Number.isFinite(pn) && pn >= 0 ? Math.round(pn * 100) / 100 : null,
+            precioResidente: pr !== null && Number.isFinite(pr) && pr >= 0 ? Math.round(pr * 100) / 100 : null,
+            precioNinoResidente: pnr !== null && Number.isFinite(pnr) && pnr >= 0 ? Math.round(pnr * 100) / 100 : null,
           }
         })
       }

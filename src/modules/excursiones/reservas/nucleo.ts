@@ -146,7 +146,7 @@ export function calcularPrecioEfectivo(
 ): { precioAdulto: number; precioNino: number | null } {
   if (!reglas || reglas.length === 0) {
     if (esResidente && baseResidente != null) {
-      return { precioAdulto: baseResidente, precioNino: baseNinoResidente }
+      return { precioAdulto: baseResidente, precioNino: baseNinoResidente != null ? baseNinoResidente : baseNino }
     }
     return { precioAdulto: baseAdulto, precioNino: baseNino }
   }
@@ -166,18 +166,18 @@ export function calcularPrecioEfectivo(
       if (esResidente) {
         return {
           precioAdulto: regla.precioResidente ?? baseResidente ?? baseAdulto,
-          precioNino: regla.precioNinoResidente ?? baseNinoResidente ?? baseNino,
+          precioNino: regla.precioNinoResidente ?? baseNinoResidente ?? regla.precioNino ?? baseNino,
         }
       }
       return {
-        precioAdulto: regla.precioAdulto,
-        precioNino: regla.precioNino,
+        precioAdulto: regla.precioAdulto ?? baseAdulto,
+        precioNino: regla.precioNino ?? baseNino,
       }
     }
   }
 
   if (esResidente && baseResidente != null) {
-    return { precioAdulto: baseResidente, precioNino: baseNinoResidente }
+    return { precioAdulto: baseResidente, precioNino: baseNinoResidente != null ? baseNinoResidente : baseNino }
   }
   return { precioAdulto: baseAdulto, precioNino: baseNino }
 }

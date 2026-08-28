@@ -365,6 +365,7 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
                 nombre: v.nombre,
                 precioAdulto: Number(v.precioAdulto),
                 precioNino: v.precioNino != null ? Number(v.precioNino) : null,
+                preciosDinamicos: v.preciosDinamicos,
               }))}
               horarios={exc.horarios.map((h) => ({
                 id: h.id,

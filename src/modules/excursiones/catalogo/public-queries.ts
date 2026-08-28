@@ -24,6 +24,7 @@ function mapRow(r: any): ExcursionPublica {
       ...v,
       precioAdulto: Number(v.precioAdulto),
       precioNino: toNum(v.precioNino as unknown as Decimal | null),
+      preciosDinamicos: v.preciosDinamicos ?? null,
     })),
   }
 }
@@ -67,6 +68,7 @@ export interface ExcursionPublica {
     precioNino: number | null
     capacidad: number | null
     orden: number
+    preciosDinamicos: unknown
   }[]
   horarios: {
     id: string
@@ -472,6 +474,7 @@ export async function excursionesPublicas(companyId: string): Promise<ExcursionP
           precioNino: true,
           capacidad: true,
           orden: true,
+          preciosDinamicos: true,
         },
       },
       horarios: {
@@ -559,6 +562,7 @@ export async function excursionPublica(
           precioNino: true,
           capacidad: true,
           orden: true,
+          preciosDinamicos: true,
         },
       },
       tipoItem: true,
@@ -655,6 +659,7 @@ export async function excursionPorId(
           precioNino: true,
           capacidad: true,
           orden: true,
+          preciosDinamicos: true,
         },
       },
       tipoItem: true,

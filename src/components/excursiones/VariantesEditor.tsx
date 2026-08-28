@@ -92,14 +92,27 @@ function parsearReglasDesdeJson(json?: string): ReglaUI[] {
 
 function reglasAJson(reglas: ReglaUI[]): string {
   if (reglas.length === 0) return ''
-  const salida = reglas.map((r) => ({
-    diasSemana: r.diasSemana,
-    horasSalida: r.horas.filter(Boolean),
-    precioAdulto: r.gratisAdulto ? 0 : (Number(r.precioAdulto) || 0),
-    precioNino: r.gratisNino ? 0 : (r.precioNino ? Number(r.precioNino) : null),
-    precioResidente: r.gratisResidente ? 0 : (r.precioResidente ? Number(r.precioResidente) : null),
-    precioNinoResidente: r.gratisNinoResidente ? 0 : (r.precioNinoResidente ? Number(r.precioNinoResidente) : null),
-  }))
+  const salida = reglas.map((r) => {
+    const parseNum = (gratis: boolean, valor: string): number | null => {
+      if (gratis) return 0
+      if (valor !== '' && !Number.isNaN(Number(valor))) return Math.max(0, Number(valor))
+      return null
+    }
+
+    const pa = parseNum(r.gratisAdulto, r.precioAdulto)
+    const pn = parseNum(r.gratisNino, r.precioNino)
+    const pr = parseNum(r.gratisResidente, r.precioResidente)
+    const pnr = parseNum(r.gratisNinoResidente, r.precioNinoResidente)
+
+    return {
+      diasSemana: r.diasSemana,
+      horasSalida: r.horas.filter(Boolean),
+      precioAdulto: pa !== null ? pa : (r.precioAdulto ? Number(r.precioAdulto) : 0),
+      precioNino: pn,
+      precioResidente: pr,
+      precioNinoResidente: pnr,
+    }
+  })
   return JSON.stringify(salida)
 }
 
@@ -370,10 +383,10 @@ function EditorPreciosDinamicos({
           reglas={reglas.map((r) => ({
             diasSemana: r.diasSemana,
             horasSalida: r.horas,
-            precioAdulto: Number(r.precioAdulto) || precioBaseAdulto,
-            precioNino: r.precioNino ? Number(r.precioNino) : precioBaseNino,
-            precioResidente: r.precioResidente ? Number(r.precioResidente) : precioBaseResidente,
-            precioNinoResidente: r.precioNinoResidente ? Number(r.precioNinoResidente) : precioBaseNinoResidente,
+            precioAdulto: r.gratisAdulto ? 0 : (r.precioAdulto !== '' && !Number.isNaN(Number(r.precioAdulto)) ? Number(r.precioAdulto) : precioBaseAdulto),
+            precioNino: r.gratisNino ? 0 : (r.precioNino !== '' && !Number.isNaN(Number(r.precioNino)) ? Number(r.precioNino) : precioBaseNino),
+            precioResidente: r.gratisResidente ? 0 : (r.precioResidente !== '' && !Number.isNaN(Number(r.precioResidente)) ? Number(r.precioResidente) : precioBaseResidente),
+            precioNinoResidente: r.gratisNinoResidente ? 0 : (r.precioNinoResidente !== '' && !Number.isNaN(Number(r.precioNinoResidente)) ? Number(r.precioNinoResidente) : precioBaseNinoResidente),
           }))}
           precioBaseAdulto={precioBaseAdulto}
           precioBaseNino={precioBaseNino}
