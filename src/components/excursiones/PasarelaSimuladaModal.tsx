@@ -60,11 +60,6 @@ export function PasarelaSimuladaModal({
   const titular = 'CLIENTE MEMBEGO'
   const expiracion = '12/28'
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true)
-  }, [])
-
   if (!mounted || !isOpen) return null
 
   const handleSimularPago = async () => {

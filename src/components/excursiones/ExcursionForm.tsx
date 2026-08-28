@@ -762,7 +762,7 @@ export function ExcursionForm({
                                       : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
                                       }`}
                                   >
-                                    {formato12h(val)}
+                                    {formato12h(s)}
                                   </button>
                                 )
                               })}

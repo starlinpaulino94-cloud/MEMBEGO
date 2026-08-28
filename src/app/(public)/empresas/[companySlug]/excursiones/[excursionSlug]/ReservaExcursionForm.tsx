@@ -849,7 +849,7 @@ export function ReservaExcursionForm({
                     </p>
                     <div className="space-y-2">
                       {combinacionesDisponibles.map((comb, idx) => {
-                        const isSelected = idx === combinacionSeleccionadaIdx
+                        const isSelected = JSON.stringify(comboHorarios) === JSON.stringify(comb.horariosAsignados)
                         return (
                           <button
                             key={idx}
