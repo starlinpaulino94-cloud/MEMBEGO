@@ -1,7 +1,11 @@
 import { createHash } from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
-import { cardnetTokensConfigurado, probarSesionTokens } from '@/lib/payments/cardnet-tokens'
+import {
+  cardnetTokensConfigurado,
+  probarSesionTokens,
+  ambienteConfigurado,
+} from '@/lib/payments/cardnet-tokens'
 import { paymentLimiter, paymentSessionLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { FULL_ADMIN_ROLES } from '@/types'
 
@@ -88,7 +92,14 @@ export async function GET(req: NextRequest) {
     publicKey: process.env.CARDNET_TOKENS_PUBLIC_KEY?.trim() ?? null,
     // De la privada, solo su huella: nunca el valor.
     privateKeyHuella: huellaCorta(process.env.CARDNET_TOKENS_PRIVATE_KEY),
-    ambiente: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
+    // El valor CRUDO de la variable y el ambiente al que se traduce, por
+    // separado. Verlos juntos es lo que delata el error más caro de esta
+    // integración: `production`, `Producción` o un espacio de más se leían
+    // como pruebas en silencio, y unas llaves de producción contra la API de
+    // laboratorio dan 401 en todo sin decir por qué.
+    ambienteVariable: process.env.CARDNET_TOKENS_AMBIENTE ?? '(sin definir)',
+    ambiente: ambienteConfigurado().ambiente,
+    ambienteReconocido: ambienteConfigurado().reconocido,
     correo: {
       resendKeyPresente: Boolean(process.env.RESEND_API_KEY?.trim()),
       emailFromPresente: Boolean(process.env.EMAIL_FROM?.trim()),

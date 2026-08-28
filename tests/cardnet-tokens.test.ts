@@ -10,6 +10,7 @@ import {
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
   perfilPendienteDeActivar,
+  normalizarAmbiente,
   mismoPerfilCardnet,
 } from '../src/lib/payments/cardnet-tokens-core'
 
@@ -927,4 +928,59 @@ test('un activate con Errors y HTTP 200 NO puede terminar en cobro', () => {
     /activacion\.errores\.length > 0/,
     'la clasificación dejó de mirar los errores que devuelve el proveedor'
   )
+})
+
+/**
+ * EL VALOR DE `CARDNET_TOKENS_AMBIENTE`.
+ *
+ * Esto no es una prueba de estilo. Con la comparación estricta que había,
+ * escribir `production` en inglés dejaba el despliegue apuntando a la API de
+ * LABORATORIO con llaves de producción — 401 en todo, y el cliente veía «No se
+ * pudo iniciar la ventana de pago» sin que nada dijera por qué.
+ */
+test('normalizarAmbiente: las grafías que una persona escribe de verdad', () => {
+  for (const valor of ['produccion', 'Producción', 'PRODUCCION', '  produccion  ', 'production', 'prod']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'produccion', `«${valor}» debería ser producción`)
+    assert.equal(r.reconocido, true, `«${valor}» debería reconocerse`)
+  }
+})
+
+test('normalizarAmbiente: sin valor es pruebas, y eso SÍ está reconocido', () => {
+  for (const valor of [undefined, null, '', '   ']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'pruebas')
+    assert.equal(r.reconocido, true, 'no definir la variable es una elección válida, no un error')
+  }
+  for (const valor of ['pruebas', 'lab', 'test', 'sandbox']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'pruebas')
+    assert.equal(r.reconocido, true)
+  }
+})
+
+test('normalizarAmbiente: un valor que no se entiende cae en pruebas Y lo dice', () => {
+  // Falla del lado seguro —nunca manda cobros de verdad por un valor que nadie
+  // escribió— pero deja `reconocido: false` para que el diagnóstico lo enseñe
+  // en vez de que el despliegue mienta en silencio.
+  for (const valor of ['produccion!', 'prd', 'produccion pruebas', 'live']) {
+    const r = normalizarAmbiente(valor)
+    assert.equal(r.ambiente, 'pruebas', `«${valor}» no debe activar producción`)
+    assert.equal(r.reconocido, false, `«${valor}» debe quedar marcado como no reconocido`)
+  }
+})
+
+test('el fallo de la ventana de pago deja rastro', () => {
+  // La regresión que se está cerrando: este `return` pintaba el error en la
+  // pantalla del cliente y no escribía nada en ningún sitio.
+  const ruta = readFileSync('src/app/api/pagos/cardnet-token/sesion/route.ts', 'utf8')
+  // `lastIndexOf` y no `indexOf`: el mensaje aparece también en el comentario
+  // que explica este mismo arreglo, y buscar el primero medía el comentario en
+  // vez del código. Es exactamente el fallo que el auditor de diseño ya había
+  // encontrado en dos guardias del proyecto.
+  const i = ruta.lastIndexOf('No se pudo iniciar la ventana de pago')
+  assert.ok(i > 0, 'cambió el mensaje: revisa que esta guardia siga mirando el sitio correcto')
+  const antes = ruta.slice(Math.max(0, i - 1400), i)
+  assert.match(antes, /logErrorBd\(/, 'el 502 de la ventana de pago volvió a quedarse mudo')
+  assert.match(antes, /ambiente/, 'el rastro debe decir a qué ambiente se estaba llamando')
 })

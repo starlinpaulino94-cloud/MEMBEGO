@@ -1,5 +1,5 @@
 import 'server-only'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import {
   urlsTokens,
   apiCandidatos,
@@ -12,6 +12,7 @@ import {
   marcarCustomerIdConCuenta,
   leerCustomerIdDeCuenta,
   variantesDeRuta,
+  normalizarAmbiente,
   reintentarConOtraGrafia,
   referenciaCobro,
   MONEDA_DOP_TOKENS,
@@ -57,8 +58,19 @@ export function getTokensConfig(): TokensConfig | null {
   return {
     publicKey,
     privateKey,
-    ambiente: process.env.CARDNET_TOKENS_AMBIENTE === 'produccion' ? 'produccion' : 'pruebas',
+    ambiente: ambienteConfigurado().ambiente,
   }
+}
+
+/**
+ * El ambiente que pide la variable, y si se entendió.
+ *
+ * Se separa de `getTokensConfig` para que el diagnóstico pueda enseñar el
+ * `reconocido` sin tener que tocar las llaves.
+ */
+export function ambienteConfigurado(): { ambiente: AmbienteTokens; reconocido: boolean; valor: string | null } {
+  const valor = process.env.CARDNET_TOKENS_AMBIENTE?.trim() || null
+  return { ...normalizarAmbiente(valor), valor }
 }
 
 /** ¿Están las dos llaves configuradas? Gobierna si se ofrece la tarjeta. */
@@ -368,12 +380,15 @@ export async function consultarClienteCardnet(customerId: string): Promise<{
 }> {
   const vacio = { email: null, perfiles: [], captureUrl: null, uniqueId: null }
   if (!customerId) return vacio
-  const { ok, json } = await llamarTokensConRuta(
+  const { ok, status, json } = await llamarTokensConRuta(
     'GET',
     `/Customer/${encodeURIComponent(customerId)}`,
     null
   )
-  if (!ok) return vacio
+  if (!ok) {
+    anotarFalloProveedor('consultarCliente', status, json)
+    return vacio
+  }
   const { datos } = desenvolverRespuesta(json)
   const s = (...ks: string[]) => {
     for (const k of ks) {
@@ -494,18 +509,47 @@ export async function consultarClienteDiagnostico(
  * Crea (o registra) un Customer en CardNET. Devuelve el CustomerId con el que
  * luego se asocia el perfil de pago. `POST /api/Customer`.
  */
+/**
+ * Deja constancia de que el proveedor rechazó una llamada, con el ambiente al
+ * que se estaba llamando.
+ *
+ * El ambiente es la mitad del diagnóstico y la que más veces es la culpable:
+ * unas llaves de producción contra la API de laboratorio dan 401 en todo, y el
+ * síntoma —una ventana de pago que no abre— no apunta a la variable de entorno
+ * ni de lejos. Sin llaves ni datos de tarjeta: solo el estado y el cuerpo ya
+ * saneado que devuelve el proveedor.
+ */
+function anotarFalloProveedor(paso: string, status: number, json: Record<string, unknown>): void {
+  const { ambiente, reconocido, valor } = ambienteConfigurado()
+  logErrorBd(`pagos:cardnet-tokens:${paso}`, new Error(`El proveedor respondió ${status}`), {
+    status,
+    ambiente,
+    ambienteVariable: valor ?? '(sin definir)',
+    ambienteReconocido: reconocido,
+    respuesta: sinSensibles(json),
+  })
+}
+
 export async function crearClienteCardnet(input: {
   email: string
   nombre?: string
   apellido?: string
 }): Promise<{ customerId: string } | null> {
-  const { ok, json } = await llamarTokensConRuta('POST', '/Customer', {
+  const { ok, status, json } = await llamarTokensConRuta('POST', '/Customer', {
     Email: input.email,
     ...(input.nombre ? { FirstName: input.nombre } : {}),
     ...(input.apellido ? { LastName: input.apellido } : {}),
     Enable: 'true',
   })
-  if (!ok) return null
+  if (!ok) {
+    // ANTES ESTE FALLO ERA MUDO. Devolvía `null`, la ruta de sesión respondía
+    // «No se pudo iniciar la ventana de pago» y no quedaba ni una línea en
+    // ningún sitio diciendo qué había contestado el proveedor. Con llaves
+    // recién cambiadas, ese mensaje puede significar cinco cosas distintas y
+    // no había forma de saber cuál sin repetir el fallo a mano.
+    anotarFalloProveedor('crearCliente', status, json)
+    return null
+  }
   const { datos } = desenvolverRespuesta(json)
   const id = (datos.CustomerId ?? datos.customerId ?? datos.Id ?? datos.id ?? '') as
     | string
