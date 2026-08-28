@@ -140,6 +140,29 @@ test('la ficha admin muestra el QR de la membresía renovada, no uno cualquiera 
   )
 })
 
+test('si una membresía activa quedó sin código, la ficha permite generar QR', () => {
+  assert.match(CLIENTE_DETALLE, /import \{ emitirQrMembresia \} from '@\/modules\/admin\/actions'/)
+  assert.match(CLIENTE_DETALLE, /const puedeEmitirQr =/)
+  assert.match(CLIENTE_DETALLE, /accion=\{emitirQrMembresia\}/)
+  assert.match(CLIENTE_DETALLE, /Generar QR/)
+})
+
+test('generar QR manual valida la membresía y deja auditoría', () => {
+  const bloque = ACCIONES.slice(
+    ACCIONES.indexOf('export async function emitirQrMembresia'),
+    ACCIONES.indexOf('/** Create a team member')
+  )
+  assert.ok(bloque.length > 0, 'no se encontró emitirQrMembresia')
+  assert.match(bloque, /requireSection\('membresias', 'renovar'\)/)
+  assert.match(bloque, /membership\.estado !== 'ACTIVA'/)
+  assert.match(bloque, /!membership\.pagoConfirmado/)
+  assert.match(bloque, /lavadosRestantes \+ membership\.lavadosBonoRestantes/)
+  assert.match(bloque, /qrToken\.findFirst/)
+  assert.match(bloque, /qrToken\.create/)
+  assert.match(bloque, /accion:\s*'QR_GENERADO'/)
+  assert.match(bloque, /reparacion_manual_membresia_sin_qr/)
+})
+
 test('y la pantalla ya no manda ese campo oculto', () => {
   assert.ok(
     !/name="monto"/.test(sinComentarios(BOTONES)),

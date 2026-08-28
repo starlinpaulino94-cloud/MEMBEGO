@@ -5,6 +5,7 @@ import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { companyFilter } from '@/modules/admin/queries'
+import { emitirQrMembresia } from '@/modules/admin/actions'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { RenovarMembresiaDialog } from '@/components/admin/RenovarMembresiaDialog'
 import { formatMoney, formatDate, formatDateTime } from '@/lib/format'
@@ -20,9 +21,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NotasCliente } from '@/components/admin/NotasCliente'
 import { AnularTransaccionesClienteButton } from '@/components/registros/AnularTransaccionesClienteButton'
 import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButton'
-import { FileText, MessageCircle, Mail, StickyNote } from 'lucide-react'
+import { FileText, MessageCircle, Mail, QrCode, StickyNote } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
 import { TabsNav } from '@/components/ui/tabs-nav'
+import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
 import { HistorialCliente } from '@/components/admin/HistorialCliente'
 import { getHistorialCliente } from '@/modules/cliente/historial'
@@ -158,6 +160,13 @@ export default async function ClienteDetailPage({
 
   const membership = cliente.memberships[0]
   const token = membership?.qrTokens[0]?.token ?? cliente.qrTokens[0]?.token
+  const puedeEmitirQr =
+    !token &&
+    membership?.estado === 'ACTIVA' &&
+    membership.pagoConfirmado &&
+    (membership.fechaVencimiento == null || membership.fechaVencimiento > new Date()) &&
+    (membership.plan.esIlimitado ||
+      membership.lavadosRestantes + membership.lavadosBonoRestantes > 0)
 
   return (
     <div className="space-y-6">
@@ -234,7 +243,22 @@ export default async function ClienteDetailPage({
             {token ? (
               <QRDisplay token={token} size={200} />
             ) : (
-              <p className="text-muted-foreground">Sin código.</p>
+              <div className="flex flex-col items-center gap-3 text-center">
+                <p className="text-muted-foreground">Sin código.</p>
+                {puedeEmitirQr && membership && (
+                  <BotonConfirmado
+                    accion={emitirQrMembresia}
+                    estadoInicial={{}}
+                    campos={{ membershipId: membership.id }}
+                    size="sm"
+                    variant="outline"
+                    mensajeExito="Código QR generado."
+                  >
+                    <QrCode className="h-4 w-4" aria-hidden />
+                    Generar QR
+                  </BotonConfirmado>
+                )}
+              </div>
             )}
             <p className="break-all text-center text-xs text-muted-foreground">
               {token}

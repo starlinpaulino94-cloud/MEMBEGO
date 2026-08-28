@@ -823,6 +823,81 @@ export async function renovarMembresia(
   }
 }
 
+/** Emitir un QR para una membresía activa que quedó sin código. */
+export async function emitirQrMembresia(
+  _prev: AdminActionState,
+  formData: FormData
+): Promise<AdminActionState> {
+  try {
+    const user = await requireSection('membresias', 'renovar')
+    if (!user) return { error: 'No autorizado.' }
+
+    const membershipId = String(formData.get('membershipId') ?? '')
+    const membership = await assertOwnership(membershipId, user)
+    if (!membership) return { error: 'Membresía no encontrada.' }
+
+    const now = new Date()
+    if (membership.estado !== 'ACTIVA') {
+      return { error: 'Solo se puede generar QR para membresías activas.' }
+    }
+    if (!membership.pagoConfirmado) {
+      return { error: 'No se puede generar QR antes de confirmar el pago.' }
+    }
+    if (membership.fechaVencimiento && membership.fechaVencimiento <= now) {
+      return { error: 'La membresía está vencida. Renueva el plan antes de generar QR.' }
+    }
+
+    const saldo = membership.lavadosRestantes + membership.lavadosBonoRestantes
+    if (!membership.plan.esIlimitado && saldo <= 0) {
+      return { error: 'La membresía no tiene usos disponibles.' }
+    }
+
+    const meta = await getRequestMeta()
+    await conEmpresa(membership.cliente.companyId, async (tx) => {
+      const qrVivo = await tx.qrToken.findFirst({
+        where: { membresiaId: membership.id, activo: true },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })
+      if (qrVivo) return
+
+      const nuevoQr = await tx.qrToken.create({
+        data: {
+          clienteId: membership.clienteId,
+          membresiaId: membership.id,
+          token: nuevoTokenQr(),
+          expiraAt: vencimientoQr(),
+        },
+        select: { id: true },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          companyId: membership.cliente.companyId,
+          userId: user.metadata.dbUserId ?? null,
+          accion: 'QR_GENERADO',
+          entidadTipo: 'QrToken',
+          entidadId: nuevoQr.id,
+          payload: {
+            clienteId: membership.clienteId,
+            membresiaId: membership.id,
+            motivo: 'reparacion_manual_membresia_sin_qr',
+          },
+          ...meta,
+        },
+      })
+    })
+
+    revalidatePath(`/admin/clientes/${membership.clienteId}`)
+    revalidatePath('/admin/clientes')
+    revalidatePath('/superadmin/membresias')
+    return { success: true }
+  } catch (e) {
+    console.error('[admin] emitirQrMembresia error:', e)
+    return { error: 'No se pudo generar el QR. Intenta de nuevo.' }
+  }
+}
+
 /** Create a team member (rol elegible): Supabase auth user + DB User in the admin's company. */
 export async function crearEmpleado(
   _prev: AdminActionState,
