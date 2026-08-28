@@ -1284,7 +1284,7 @@ export function ReservaExcursionForm({
           <button
             type="button"
             onClick={() => {
-              if (!fecha || !hora) return
+              if (!fecha || (tipoItem !== 'PASE_DIA' && !hora)) return
               cart.addItem({
                 excursionId,
                 companyId,
@@ -1303,7 +1303,7 @@ export function ReservaExcursionForm({
                 router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
               }
             }}
-            disabled={pending || followingPending || !fecha || !hora || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
+            disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-primary bg-background py-3 text-sm font-semibold text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ShoppingCart className="h-4 w-4" />
@@ -1313,7 +1313,7 @@ export function ReservaExcursionForm({
           <button
             type="button"
             onClick={() => {
-              if (!fecha || !hora) return
+              if (!fecha || (tipoItem !== 'PASE_DIA' && !hora)) return
               cart.addItem({
                 excursionId,
                 companyId,
@@ -1330,7 +1330,7 @@ export function ReservaExcursionForm({
                 moneda })
               router.push(isAuthenticated ? '/checkout' : `/login?redirect=${encodeURIComponent('/checkout')}`)
             }}
-            disabled={pending || followingPending || !fecha || !hora || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
+            disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {followingPending ? (
