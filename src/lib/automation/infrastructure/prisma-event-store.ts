@@ -19,7 +19,7 @@ export class PrismaEventStore implements EventStore {
     payload?: Record<string, unknown>
     source?: string | null
   }): Promise<AutomationEvent> {
-    const row = await this.db.automationEvent.create({
+    const row = await this.db.domainEvent.create({
       data: {
         companyId: event.companyId,
         type: event.type,
@@ -33,6 +33,6 @@ export class PrismaEventStore implements EventStore {
   }
 
   async markProcessed(id: string): Promise<void> {
-    await this.db.automationEvent.update({ where: { id }, data: { processed: true } })
+    await this.db.domainEvent.update({ where: { id }, data: { processed: true } })
   }
 }

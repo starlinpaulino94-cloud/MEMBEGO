@@ -5,7 +5,10 @@
 import type {
   Automation as PrismaAutomation,
   AutomationRun as PrismaRun,
-  AutomationEvent as PrismaEvent,
+  // El modelo Prisma se llama `DomainEvent` desde Membego Connect F1 (misma
+  // tabla `automation_events`); la interfaz de dominio del motor conserva su
+  // nombre porque su vocabulario es el del motor, no el de la plataforma.
+  DomainEvent as PrismaEvent,
 } from '@prisma/client'
 import type {
   Automation,

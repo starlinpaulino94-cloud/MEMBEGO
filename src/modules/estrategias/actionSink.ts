@@ -189,7 +189,7 @@ export class LiveActionSink implements ActionSink {
   }) {
     const tipo = String(input.params.event ?? input.type)
     await conEmpresa(input.companyId, (tx) =>
-      tx.automationEvent.create({
+      tx.domainEvent.create({
         data: {
           companyId: input.companyId,
           type: tipo,

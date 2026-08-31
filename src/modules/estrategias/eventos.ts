@@ -37,6 +37,13 @@ export interface EventoEstrategia {
   subjectId?: string | null
   /** Hechos por namespace para condiciones/variables (ej. { cliente: {...} }). */
   payload?: Record<string, unknown>
+  /**
+   * Hilo que une los eventos de una misma operación de negocio. El outbox de
+   * satélites ya lo soportaba (`EventoSaliente.traceId`) pero se perdía en
+   * este salto: el emisor no tenía dónde declararlo. Opcional — sin él, cada
+   * evento es su propio hilo, como hasta ahora.
+   */
+  traceId?: string | null
 }
 
 export async function emitirEventoEstrategia(evento: EventoEstrategia): Promise<void> {
@@ -44,7 +51,7 @@ export async function emitirEventoEstrategia(evento: EventoEstrategia): Promise<
     // 1. Persistir el evento pendiente. Es la fuente de verdad: aunque QStash
     // caiga, el cron de barrido encuentra `processed=false` y lo repone.
     const creado = await conEmpresa(evento.companyId, (tx) =>
-      tx.automationEvent.create({
+      tx.domainEvent.create({
         data: {
           companyId: evento.companyId,
           type: evento.type,
@@ -52,6 +59,7 @@ export async function emitirEventoEstrategia(evento: EventoEstrategia): Promise<
           payload: (evento.payload ?? {}) as object,
           source: 'app',
           processed: false,
+          traceId: evento.traceId ?? null,
         },
       })
     )
@@ -76,7 +84,7 @@ export async function despacharEventoEstrategia(
   eventoId: string
 ): Promise<{ procesados: number; detalle?: string }> {
   const flip = await sinEmpresa('estrategias: flip atómico del evento por id (worker, cross-tenant)', (tx) =>
-    tx.automationEvent.updateMany({
+    tx.domainEvent.updateMany({
       where: { id: eventoId, processed: false },
       data: { processed: true },
     })
@@ -85,7 +93,7 @@ export async function despacharEventoEstrategia(
 
   try {
     const evento = await sinEmpresa('estrategias: evento por id (worker, cross-tenant)', (tx) =>
-      tx.automationEvent.findUnique({ where: { id: eventoId } })
+      tx.domainEvent.findUnique({ where: { id: eventoId } })
     )
     if (!evento) return { procesados: 0, detalle: 'evento no encontrado' }
 
@@ -108,13 +116,14 @@ export async function despacharEventoEstrategia(
       tipo: evento.type,
       subjectId: evento.subjectId ?? null,
       payload,
+      traceId: evento.traceId,
     })
 
     return { procesados: 1 }
   } catch (e) {
     // Reabrir el evento para que el reintento (o el barrido) lo vuelva a tomar.
     await sinEmpresa('estrategias: reabrir evento por id (worker, cross-tenant)', (tx) =>
-      tx.automationEvent
+      tx.domainEvent
         .updateMany({ where: { id: eventoId, processed: true }, data: { processed: false } })
         .catch((err) => console.error('[estrategias] no se pudo reabrir el evento', err))
     )
@@ -133,7 +142,7 @@ export async function despacharEventoEstrategia(
 export async function barrerEventosEstrategia(): Promise<{ reencolados: number }> {
   const corte = new Date(Date.now() - 6 * 60 * 60 * 1000)
   const pendientes = await sinEmpresa('estrategias: barrido global de eventos pendientes (cron)', (tx) =>
-    tx.automationEvent.findMany({
+    tx.domainEvent.findMany({
       where: { processed: false, occurredAt: { lt: corte } },
       select: { id: true, companyId: true },
       orderBy: { occurredAt: 'asc' },

@@ -5,6 +5,21 @@ import {
   validarDisponibilidadComboMultiFecha,
 } from '../src/modules/excursiones/reservas/nucleo'
 
+/**
+ * Fechas SIEMPRE en el futuro. Este archivo llevaba fechas fijas («el próximo
+ * lunes» del día en que se escribió) y explotó el día que el calendario lo
+ * alcanzó: la validación real rechaza —correctamente— reservar HOY una salida
+ * cuya hora ya pasó, así que a partir de esa tarde el test fallaba solo. Un
+ * test con fecha fija no prueba: cuenta los días que le quedan.
+ */
+function proximoLunesFuturo(): Date {
+  const hoy = new Date()
+  const base = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate())
+  const diaJS = new Date(base).getUTCDay() // 0=Dom … 6=Sáb
+  const hastaLunes = (8 - diaJS) % 7 || 7 // nunca hoy: como mínimo, dentro de 7 días
+  return new Date(base + hastaLunes * 86_400_000)
+}
+
 test('generarCombinacionesCombo soporta Daypasses sin obligar solapamiento horario', () => {
   const actividades = [
     {
@@ -77,10 +92,10 @@ test('validarDisponibilidadComboMultiFecha permite agendar en fechas distintas r
     ],
   }
 
-  // Fecha 1: Lunes 2026-08-31 (Día semana 1)
-  const fechaLunes = new Date(Date.UTC(2026, 7, 31))
-  // Fecha 2: Martes 2026-09-01 (Día semana 2)
-  const fechaMartes = new Date(Date.UTC(2026, 8, 1))
+  // Fecha 1: el próximo lunes EN EL FUTURO (día semana 1)
+  const fechaLunes = proximoLunesFuturo()
+  // Fecha 2: su martes (día semana 2)
+  const fechaMartes = new Date(fechaLunes.getTime() + 86_400_000)
 
   const itemsValidos = [
     { actividadId: 'act-1', fecha: fechaLunes, hora: '09:00' },
@@ -90,8 +105,8 @@ test('validarDisponibilidadComboMultiFecha permite agendar en fechas distintas r
   const resValida = validarDisponibilidadComboMultiFecha(4, comboConfig, itemsValidos)
   assert.equal(resValida.ok, true, 'Debe ser válida la reserva multi-fecha')
 
-  // Fecha Domingo 2026-09-06 (Día semana 7 - no opera Buggies)
-  const fechaDomingo = new Date(Date.UTC(2026, 8, 6))
+  // Su domingo (día semana 7 — no opera Buggies)
+  const fechaDomingo = new Date(fechaLunes.getTime() + 6 * 86_400_000)
   const itemsInoperativos = [
     { actividadId: 'act-1', fecha: fechaDomingo, hora: '09:00' },
     { actividadId: 'act-2', fecha: fechaMartes, hora: null },
@@ -131,7 +146,7 @@ test('validarDisponibilidadComboMultiFecha detecta solapamiento si coinciden el 
     ],
   }
 
-  const mismaFecha = new Date(Date.UTC(2026, 7, 31))
+  const mismaFecha = proximoLunesFuturo()
   const itemsSolapados = [
     { actividadId: 'act-1', fecha: mismaFecha, hora: '09:00' },
     { actividadId: 'act-2', fecha: mismaFecha, hora: '10:00' },
