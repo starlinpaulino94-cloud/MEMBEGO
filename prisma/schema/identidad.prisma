@@ -144,6 +144,14 @@ enum AuditAccion {
   INTEGRACION_REINTENTADA
   /// Se devolvieron a la cola los eventos que habían agotado sus intentos.
   INTEGRACION_REENCOLADA
+  // Cola de trabajos (Membego Connect · Fase 2): decisiones del superadmin
+  // sobre los trabajos difuntos. Reencolar re-ejecuta un trabajo con efectos
+  // reales (notificaciones, correos) y descartar renuncia a él para siempre —
+  // ninguna de las dos puede quedar sin nombre y sin fecha.
+  /// Se devolvió a la cola un trabajo que había agotado sus reintentos.
+  COLA_REENCOLADA
+  /// Se descartó definitivamente un trabajo difunto.
+  COLA_DESCARTADA
   /// Se evaluó un segmento de audiencia (auditoría de la estimación).
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.

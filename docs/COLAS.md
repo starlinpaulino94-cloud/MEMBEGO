@@ -133,3 +133,31 @@ publicación (rápida); el trabajo pesado corre en el worker.
 las recompensas ya otorgadas; la clave de dedup por `referidoId` garantiza además
 que cada conversión genere su propio trabajo (dos conversiones del mismo
 referente no se colapsan).
+
+## Fase 2 de Membego Connect — dead letter y salud de la cola
+
+**Los trabajos difuntos ya no desaparecen.** `encolar` publica con
+`Upstash-Failure-Callback` apuntando a `/api/jobs/muerto`: cuando QStash agota
+sus reintentos contra `/api/jobs`, entrega el mensaje difunto ahí (firmado con
+las mismas claves, verificado igual) y queda en `trabajos_muertos` con su carga
+íntegra. Idempotente por `sourceMessageId` — el callback también se reintenta.
+Antes, un trabajo que fracasaba tres veces terminaba en el DLQ de QStash, que
+nadie mira.
+
+**Reencolar y descartar son decisiones, no automatismos.** Misma doctrina que
+el DEAD_LETTER del outbox de satélites: ambas viven en el panel del superadmin
+(`/superadmin/integraciones`), piden confirmación y quedan en la bitácora de
+auditoría (`COLA_REENCOLADA` / `COLA_DESCARTADA`). El flip atómico
+PENDIENTE → REENCOLADO evita el doble clic; si al reencolar la cola no está,
+`encolar` degrada a ejecución en línea y el trabajo no se pierde.
+
+**La degradación en línea se cuenta.** Ejecutar un trabajo dentro del request
+por falta de QStash (o por una publicación rechazada) emite el evento
+estructurado `cola/degradacion` además del aviso en consola. «¿Cuántos trabajos
+corrieron en línea esta semana?» es la pregunta que dice si la cola está bien
+puesta, y una frase en consola no la contesta.
+
+**La salud se ve en una tarjeta.** `saludDeLaCola()` suma en cuatro números lo
+que antes había que consultar a mano: trabajos difuntos pendientes, webhooks a
+satélites en reintento, webhooks agotados y eventos del bus estancados (>6 h
+sin despachar).

@@ -1,5 +1,6 @@
 import { publicar, qstashConfigurado } from '@/lib/jobs/qstash'
-import { RUTA_TRABAJOS, type CargaTrabajo } from '@/modules/jobs/tipos'
+import { anotarFallo } from '@/lib/prisma-errors'
+import { RUTA_TRABAJOS, RUTA_TRABAJOS_MUERTOS, type CargaTrabajo } from '@/modules/jobs/tipos'
 
 /**
  * ENCOLAR UN TRABAJO — con degradación honesta.
@@ -22,13 +23,19 @@ export async function encolar(carga: CargaTrabajo): Promise<'cola' | 'en-linea'>
       // se descarta y nadie recibe la notificación dos veces.
       deduplicationId: claveDedup(carga),
       reintentos: 3,
+      // Dead letter (Fase 2 de Connect): si los 3 reintentos fracasan, QStash
+      // nos devuelve el mensaje difunto y queda en `trabajos_muertos` para
+      // reencolarlo desde el panel — antes simplemente desaparecía.
+      rutaFallo: RUTA_TRABAJOS_MUERTOS,
     })
     if (ok) return 'cola'
     console.error('[jobs] QStash rechazó la publicación; se ejecuta en línea:', carga.tipo)
+    anotarDegradacion(carga, 'publicacion_rechazada')
   } else if (process.env.NODE_ENV === 'production') {
     console.warn(
       '[jobs] QSTASH_TOKEN sin configurar en producción: los trabajos se ejecutan dentro del request. Ver docs/COLAS.md'
     )
+    anotarDegradacion(carga, 'sin_configurar')
   }
 
   const { ejecutarTrabajo } = await import('@/modules/jobs/ejecutor')
@@ -72,6 +79,27 @@ export function claveDedup(carga: CargaTrabajo): string {
       // El lote es la unidad idempotente: cada desplazamiento se procesa una vez.
       return `camp:${carga.campanaId}:${carga.desde}`
   }
+}
+
+/**
+ * La degradación deja de ser solo una frase en consola: como evento
+ * estructurado se puede CONTAR, y «cuántos trabajos corrieron en línea esta
+ * semana» es exactamente la pregunta que decide si la cola está bien puesta.
+ * (Era deuda ALTA de la Fase 0 de Connect.)
+ */
+function anotarDegradacion(carga: CargaTrabajo, motivo: string): void {
+  import('@/modules/observabilidad/eventos')
+    .then(({ registrarEvento }) =>
+      registrarEvento({
+        dominio: 'cola',
+        accion: 'degradacion',
+        ok: false,
+        motivo,
+        companyId: 'companyId' in carga ? (carga.companyId ?? null) : null,
+        extra: { tipo: carga.tipo },
+      })
+    )
+    .catch(anotarFallo('jobs:anotar-degradacion', { tipo: carga.tipo }))
 }
 
 /** Huella corta y estable de un texto. No es criptográfica ni lo necesita. */

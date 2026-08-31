@@ -2,7 +2,9 @@ import { requireRole } from '@/lib/auth/guards'
 import { plural } from '@/lib/plural'
 import { getPanelIntegraciones } from '@/modules/integraciones/panel'
 import { anclaSistema } from '@/modules/integraciones/diagnostico'
+import { saludDeLaCola, trabajosMuertosPendientes } from '@/modules/jobs/muertos'
 import { SistemaConectadoCard } from '@/components/superadmin/SistemaConectadoCard'
+import { ColaTrabajosCard } from '@/components/superadmin/ColaTrabajosCard'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -25,7 +27,11 @@ export const metadata = { title: 'Integraciones' }
  */
 export default async function IntegracionesPage() {
   await requireRole('SUPERADMIN')
-  const sistemas = await getPanelIntegraciones()
+  const [sistemas, salud, difuntos] = await Promise.all([
+    getPanelIntegraciones(),
+    saludDeLaCola(),
+    trabajosMuertosPendientes(),
+  ])
 
   const atascados = sistemas.filter((s) => s.pendientes > 0)
 
@@ -35,6 +41,11 @@ export default async function IntegracionesPage() {
         title="Integraciones"
         description="Sistemas satélite conectados a MembeGo y estado de la cola de eventos."
       />
+
+      {/* Fase 2 de Connect: la salud de TODO el procesamiento asíncrono en un
+          vistazo, y los trabajos que QStash agotó — antes desaparecían sin que
+          ninguna pantalla lo supiera. */}
+      <ColaTrabajosCard salud={salud} difuntos={difuntos} />
 
       {atascados.length > 0 && (
         <StatusBanner
