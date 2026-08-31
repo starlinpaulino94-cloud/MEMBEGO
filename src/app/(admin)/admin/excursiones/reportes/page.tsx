@@ -80,6 +80,7 @@ export default async function ReportesPage({
           id: v.id,
           nombre: `${v.nombre} ${v.apellido ?? ''}`.trim(),
           codigo: v.codigo,
+          tipo: v.tipo ?? null,
         }))}
         excursiones={excursiones.map((e) => ({
           id: e.id,

@@ -250,8 +250,10 @@ model VendedorMeta {
   metaPasajeros Int?
   metaIngresos  Decimal?  @db.Decimal(12, 2)
   metaRegistros Int?
-  metaReservas  Int?
-  activa        Boolean   @default(true)
+   metaReservas  Int?
+   /// Beneficio que la empresa le promete al vendedor cuando alcance la meta.
+   beneficio     String?
+   activa        Boolean   @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

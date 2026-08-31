@@ -6,13 +6,19 @@ import { formatMoney } from '@/lib/format'
  * vendedor: la misma cifra, con la misma cara, para que nadie discuta si «en
  * mi pantalla decía otra cosa».
  */
-export function MetaProgreso({ lineas, moneda }: { lineas: LineaProgreso[]; moneda: string }) {
+export function MetaProgreso({ lineas, moneda, beneficio }: { lineas: LineaProgreso[]; moneda: string; beneficio?: string | null }) {
   if (lineas.length === 0) return null
   const cifra = (n: number, esDinero: boolean) =>
     esDinero ? formatMoney(n, { moneda }, 2) : String(n)
 
   return (
-    <ul className="space-y-3">
+    <div>
+      {beneficio && (
+        <p className="text-sm text-muted-foreground mb-3">
+          Beneficio: {beneficio}
+        </p>
+      )}
+      <ul className="space-y-3">
       {lineas.map((l) => (
         <li key={l.clave}>
           <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -36,6 +42,7 @@ export function MetaProgreso({ lineas, moneda }: { lineas: LineaProgreso[]; mone
           </div>
         </li>
       ))}
-    </ul>
+      </ul>
+    </div>
   )
 }
