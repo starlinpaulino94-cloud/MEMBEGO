@@ -22,7 +22,7 @@ import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { correoBienvenidaClienteVendedor, correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
+import { correoAccesoCliente, correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
@@ -324,19 +324,21 @@ export async function crearReservaVendedor(
       )
       targetClienteId = nuevoCliente.id
 
-      // 3. Enviar correo de bienvenida con usuario y contraseña
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
-      await sendEmail({
-        to: clienteEmail,
-        subject: '¡Tu cuenta en MembeGo está lista!',
-        companyId,
-        html: correoBienvenidaClienteVendedor({
-          nombre: clienteNombre,
-          email: clienteEmail,
-          password,
-          urlLogin: `${siteUrl}/login`,
-        }),
-      })
+      // 3. Token de establecimiento de contraseña + correo (no bloquea)
+      try {
+        const token = randomBytes(32).toString('hex')
+        const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        await prisma.user.update({
+          where: { id: createdUser.id },
+          data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+        })
+
+        const urlBase = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const html = await correoAccesoCliente({ nombre: clienteNombre, email: clienteEmail, token, urlBase })
+        await sendEmail({ to: clienteEmail, subject: 'Establece tu contraseña - MembeGo', html })
+      } catch (e) {
+        console.error('[excursiones] crearReservaVendedor — token/email (no bloquea):', e)
+      }
     }
 
     // 4. Validar cupo real en BD y Crear Reserva

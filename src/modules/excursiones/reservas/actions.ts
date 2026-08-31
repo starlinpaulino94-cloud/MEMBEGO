@@ -54,7 +54,7 @@ import {
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
-import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
+import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
 
 export interface ReservaActionState {
   error?: string
@@ -253,31 +253,20 @@ export async function crearReserva(
         )
         targetClienteId = nuevoCliente.id
 
-        // Enviar correo de bienvenida con credenciales
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
-        await sendEmail({
-          to: clienteEmail,
-          subject: '¡Tu cuenta en MembeGo está lista!',
-          companyId,
-          html: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2>¡Hola ${clienteNombre}!</h2>
-              <p>Se ha creado tu cuenta para que puedas gestionar tus reservas y acceder a tu pase digital.</p>
-              <div style="background-color: #f4f4f5; padding: 16px; border-radius: 8px; margin: 24px 0;">
-                <p style="margin: 0 0 8px 0;"><strong>Usuario:</strong> ${clienteEmail}</p>
-                <p style="margin: 0;"><strong>Contraseña:</strong> ${password}</p>
-              </div>
-              <p>
-                <a href="${siteUrl}/login" style="display: inline-block; background-color: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                  Iniciar Sesión
-                </a>
-              </p>
-              <p style="color: #666; font-size: 14px; margin-top: 24px;">
-                Te recomendamos cambiar tu contraseña una vez hayas iniciado sesión por primera vez.
-              </p>
-            </div>
-          `,
-        }).catch((e) => console.error('[excursiones] Error enviando email de bienvenida en crearReserva:', e))
+        // Token + correo de establecimiento de contraseña (no bloquea la reserva)
+        try {
+          const token = randomBytes(32).toString('hex')
+          const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+          await prisma.user.update({
+            where: { id: createdUser.id },
+            data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+          })
+          const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+          const html = await correoAccesoCliente({ nombre: clienteNombre, email: clienteEmail, token, urlBase })
+          await sendEmail({ to: clienteEmail, subject: 'Establece tu contraseña - MembeGo', html })
+        } catch (e) {
+          console.error('[excursiones] crearReserva — token/email (no bloquea):', e)
+        }
       }
     } else {
       return { error: 'Selecciona un cliente existente o ingresa el nombre y correo del nuevo cliente.' }

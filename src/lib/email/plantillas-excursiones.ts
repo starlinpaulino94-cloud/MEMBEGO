@@ -70,6 +70,35 @@ export function correoAccesoVendedor(input: {
   `
 }
 
+/** Acceso al panel del cliente — el admin le da acceso y este establece su contraseña. */
+export async function correoAccesoCliente(input: {
+  nombre: string
+  email: string
+  token: string
+  urlBase: string
+}): Promise<string> {
+  const url = `${input.urlBase}/cliente/establecer-contrasena?token=${input.token}`
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>¡Hola ${input.nombre}!</h2>
+      <p>Se te ha creado una cuenta en MembeGo para gestionar tus reservas. Establece tu contraseña para acceder a tu panel.</p>
+      <div style="background-color: #f4f4f5; padding: 16px; border-radius: 8px; margin: 24px 0;">
+        <p style="margin: 0 0 8px 0;"><strong>Tu usuario (email):</strong> ${input.email}</p>
+        <p style="margin: 0;">Ahora solo necesitas establecer tu contraseña para acceder.</p>
+      </div>
+      <p>
+        <a href="${url}" style="display: inline-block; background-color: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Establecer mi contraseña
+        </a>
+      </p>
+      <p style="color: #666; font-size: 14px; margin-top: 16px;">
+        Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+        <a href="${url}" style="color: #666;">${url}</a>
+      </p>
+    </div>
+  `
+}
+
 /** Confirmación de reserva enviada al cliente después de reservar una excursión. */
 export async function correoConfirmacionReserva(input: {
   nombreCliente: string
