@@ -336,22 +336,28 @@ export async function darAccesoVendedor(
       app_metadata: { role: 'VENDEDOR', dbUserId: dbUser.id, companyId: cid },
     })
 
-    const token = randomBytes(32).toString('hex')
-    const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
-    await conEmpresa(cid, (tx) =>
-      tx.user.update({
-        where: { id: dbUser.id },
-        data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
-      })
-    )
+    // Token + email: no bloquean el acceso. Si fallan, el vendedor ya puede entrar
+    // y establecer contraseña después.
+    try {
+      const token = randomBytes(32).toString('hex')
+      const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      await conEmpresa(cid, (tx) =>
+        tx.user.update({
+          where: { id: dbUser.id },
+          data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+        })
+      )
 
-    const html = correoAccesoVendedor({
-      nombre: nombreCompleto,
-      email: correo,
-      token,
-      urlBase: process.env.NEXT_PUBLIC_APP_URL!,
-    })
-    await sendEmail({ to: correo, subject: 'Establece tu contraseña - MembeGo', html })
+      const html = correoAccesoVendedor({
+        nombre: nombreCompleto,
+        email: correo,
+        token,
+        urlBase: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000',
+      })
+      await sendEmail({ to: correo, subject: 'Establece tu contraseña - MembeGo', html })
+    } catch (emailErr) {
+      console.error('[excursiones] darAccesoVendedor — token/email (no bloquea):', emailErr)
+    }
 
     await auditar(cid, user.metadata.dbUserId ?? null, vendedor.id, {
       tipo: 'VENDEDOR_ACCESO_CREADO',
@@ -362,7 +368,13 @@ export async function darAccesoVendedor(
     return { success: 'Acceso otorgado. Se ha enviado un email con las instrucciones.' }
   } catch (e) {
     console.error('[excursiones] darAccesoVendedor:', e)
-    // Rollback: borrar DB user si se creó, y Supabase user si se creó.
+    // Rollback: desvincular vendedor, borrar DB user y Supabase user.
+    const vendedorIdRollback = String(formData.get('vendedorId') ?? '')
+    if (vendedorIdRollback && companyId) {
+      await conEmpresa(companyId, (tx) =>
+        tx.vendedor.updateMany({ where: { id: vendedorIdRollback, companyId }, data: { userId: null } })
+      ).catch(anotarFallo('excursiones:acceso-rollback-vendedor'))
+    }
     if (dbUserId && companyId) {
       await conEmpresa(companyId, (tx) =>
         tx.user.delete({ where: { id: dbUserId! } }).catch(anotarFallo('excursiones:acceso-rollback-db'))
