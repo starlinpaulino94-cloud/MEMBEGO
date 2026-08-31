@@ -114,3 +114,6 @@ export const TIPOS_TRABAJO = [
 
 /** Ruta del endpoint que ejecuta los trabajos. */
 export const RUTA_TRABAJOS = '/api/jobs'
+
+/** Ruta del failure callback: QStash entrega aquí los trabajos difuntos. */
+export const RUTA_TRABAJOS_MUERTOS = '/api/jobs/muerto'

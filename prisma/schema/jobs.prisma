@@ -1,0 +1,47 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// COLA DE TRABAJOS · dead letter (Membego Connect · Fase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Un trabajo que QStash agotó sus reintentos sin conseguir ejecutar.
+///
+/// EL HUECO QUE CIERRA: hasta hoy, cuando la cola se daba por vencida el
+/// trabajo desaparecía de nuestra vista — QStash guarda su propio DLQ, pero
+/// nadie lo mira. Un correo de bienvenida o una tanda de recompensas se perdía
+/// sin que ninguna pantalla nuestra lo supiera.
+///
+/// Con el failure callback (`Upstash-Failure-Callback`), QStash nos entrega el
+/// mensaje difunto y queda AQUÍ, con su carga íntegra: reencolarlo es un botón,
+/// igual que el DEAD_LETTER del outbox de satélites. Misma doctrina: un fallo
+/// se reintenta solo; un difunto necesita que alguien decida.
+model TrabajoMuerto {
+  id String @id @default(cuid())
+
+  /// `sourceMessageId` de QStash. Único: si el callback se entrega dos veces
+  /// (también se reintenta), la segunda choca y no duplica el difunto.
+  mensajeId String? @unique
+
+  /// Tipo del trabajo (`notificar`, `email`…), duplicado fuera de la carga
+  /// para poder filtrar sin abrir JSON.
+  tipo String
+
+  /// Empresa del trabajo, si la carga la lleva. Suelto, como en todo el
+  /// esquema de plataforma (Capa 2 de RLS por columna).
+  companyId String?
+
+  /// La carga ORIGINAL, íntegra — es lo que permite reencolar.
+  carga Json
+
+  /// Último error/estado HTTP que QStash vio antes de rendirse.
+  error    String?
+  intentos Int     @default(0)
+
+  /// PENDIENTE (espera decisión) | REENCOLADO | DESCARTADO.
+  estado String @default("PENDIENTE")
+
+  createdAt  DateTime  @default(now())
+  resueltoAt DateTime?
+
+  @@index([estado, createdAt])
+  @@index([companyId, createdAt])
+  @@map("trabajos_muertos")
+}

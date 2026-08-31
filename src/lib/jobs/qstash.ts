@@ -38,6 +38,13 @@ export interface OpcionesPublicar {
   deduplicationId?: string
   /** Reintentos antes de darse por vencido (por defecto los de QStash). */
   reintentos?: number
+  /**
+   * RUTA (relativa, misma app) a la que QStash entrega el mensaje cuando
+   * agota los reintentos — el dead letter de la cola (Fase 2 de Connect).
+   * Sin esto, un trabajo que fracasa tres veces desaparece de nuestra vista:
+   * QStash lo guarda en SU DLQ, que nadie mira.
+   */
+  rutaFallo?: string
 }
 
 /**
@@ -65,6 +72,7 @@ export async function publicar(
   if (opciones.retrasoS) headers['Upstash-Delay'] = `${opciones.retrasoS}s`
   if (opciones.deduplicationId) headers['Upstash-Deduplication-Id'] = opciones.deduplicationId
   if (opciones.reintentos != null) headers['Upstash-Retries'] = String(opciones.reintentos)
+  if (opciones.rutaFallo) headers['Upstash-Failure-Callback'] = destino(opciones.rutaFallo)
 
   try {
     const res = await fetch(`https://qstash.upstash.io/v2/publish/${url}`, {
