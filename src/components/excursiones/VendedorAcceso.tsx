@@ -8,11 +8,12 @@
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, KeyRound } from 'lucide-react'
+import { Loader2, KeyRound, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   darAccesoVendedor,
   quitarAccesoVendedor,
+  reenviarCorreoAccesoVendedor,
   type VendedorActionState,
 } from '@/modules/excursiones/vendedores/actions'
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,7 @@ export function VendedorAcceso({
   const router = useRouter()
   const [state, darAction, dando] = useActionState(darAccesoVendedor, init)
   const [quitarState, quitarAction, quitando] = useActionState(quitarAccesoVendedor, init)
+  const [reenviarState, reenviarAction, reenviando] = useActionState(reenviarCorreoAccesoVendedor, init)
 
   useEffect(() => {
     if (state.success) router.refresh()
@@ -46,6 +48,11 @@ export function VendedorAcceso({
     }
     if (quitarState.error) toast.error(quitarState.error)
   }, [quitarState, router])
+
+  useEffect(() => {
+    if (reenviarState.success) toast.success(reenviarState.success)
+    if (reenviarState.error) toast.error(reenviarState.error)
+  }, [reenviarState])
 
   if (state.success) {
     return (
@@ -80,6 +87,13 @@ export function VendedorAcceso({
           <input type="hidden" name="vendedorId" value={vendedorId} />
           <Button type="submit" size="sm" variant="ghost" disabled={quitando}>
             Quitar el acceso
+          </Button>
+        </form>
+        <form action={reenviarAction} className="mt-2">
+          <input type="hidden" name="vendedorId" value={vendedorId} />
+          <Button type="submit" size="sm" variant="ghost" disabled={reenviando} className="gap-1.5">
+            {reenviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+            Reenviar correo
           </Button>
         </form>
       </section>

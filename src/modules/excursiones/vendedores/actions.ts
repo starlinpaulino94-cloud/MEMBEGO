@@ -496,3 +496,60 @@ export async function establecerContrasenaVendedor(
     return { error: 'Error al procesar la solicitud. Intenta de nuevo.' }
   }
 }
+
+/**
+ * ADMIN · Reenviar el correo de acceso a un vendedor que ya tiene cuenta.
+ *
+ * Regenera el token (nueva expiración de 24 h) y reenvía el mismo correo
+ * con las instrucciones para establecer su contraseña.
+ */
+export async function reenviarCorreoAccesoVendedor(
+  _prev: VendedorActionState,
+  formData: FormData
+): Promise<VendedorActionState> {
+  try {
+    const user = await requireSection('excursiones', 'vendedor_acceso')
+    if (!user) return { error: 'No autorizado.' }
+    const companyId = await resolveCompanyId(user, formData)
+    if (!companyId) return { error: 'Empresa requerida.' }
+    const vendedorId = String(formData.get('vendedorId') ?? '')
+
+    const vendedor = await conEmpresa(companyId, (tx) =>
+      tx.vendedor.findFirst({
+        where: { id: vendedorId, companyId },
+        select: { id: true, userId: true },
+      })
+    )
+    if (!vendedor?.userId) return { error: 'Este vendedor no tiene acceso.' }
+
+    const dbUser = await conEmpresa(companyId, (tx) =>
+      tx.user.findFirst({
+        where: { id: vendedor.userId!, companyId, role: 'VENDEDOR' },
+        select: { id: true, email: true, name: true },
+      })
+    )
+    if (!dbUser) return { error: 'Cuenta no encontrada.' }
+
+    const token = randomBytes(32).toString('hex')
+    const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await conEmpresa(companyId, (tx) =>
+      tx.user.update({
+        where: { id: dbUser.id },
+        data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+      })
+    )
+
+    const html = correoAccesoVendedor({
+      nombre: dbUser.name,
+      email: dbUser.email,
+      token,
+      urlBase: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000',
+    })
+    await sendEmail({ to: dbUser.email, subject: 'Establece tu contraseña - MembeGo', html })
+
+    return { success: 'Correo reenviado exitosamente.' }
+  } catch (e) {
+    console.error('[excursiones] reenviarCorreoAccesoVendedor:', e)
+    return { error: 'No se pudo reenviar el correo. Intenta de nuevo.' }
+  }
+}
