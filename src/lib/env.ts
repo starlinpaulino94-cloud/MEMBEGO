@@ -71,6 +71,24 @@ export function getPlatformEventPrivateKey(): string | undefined {
   return process.env.PLATFORM_EVENT_PRIVATE_KEY
 }
 
+/**
+ * Claves maestras del cifrado de credenciales de Membego Connect
+ * (AES-256-GCM, `modules/connect/cifrado.ts`).
+ *
+ * Formato: `1:<base64 de 32 bytes>` — y durante una rotación, varias separadas
+ * por comas (`1:…,2:…`); se sella con la más alta y se abre con la que diga
+ * cada sello. Generar con: `openssl rand -base64 32`.
+ *
+ * Ausente devuelve `null` y el almacén de credenciales FALLA CERRADO: sin
+ * clave no se guarda ni se lee ninguna credencial de conector. Un valor por
+ * defecto derivado aquí sería cifrado de mentira — la base y el «secreto»
+ * vivirían en el mismo sitio.
+ */
+export function getConnectClavesMaestras(): string | null {
+  const valor = process.env.CONNECT_CLAVES_MAESTRAS
+  return valor && valor.trim() ? valor.trim() : null
+}
+
 /** Returns the list of missing required public env vars (for diagnostics). */
 export function missingPublicEnv(): string[] {
   return REQUIRED_PUBLIC.filter((k) => !process.env[k])

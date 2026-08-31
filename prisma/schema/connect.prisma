@@ -1,0 +1,266 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// MEMBEGO CONNECT · Fase 1 (Foundation)
+//
+// La capa de integraciones con servicios EXTERNOS (WhatsApp, Google Calendar…).
+// No confundir con `integraciones.prisma`, que son los sistemas SATÉLITE del
+// propio ecosistema (car wash, restaurant): aquéllos reciben SSO y webhooks
+// firmados; esto de aquí es MembeGo actuando como CLIENTE de APIs ajenas, más
+// las claves con las que terceros llaman a la API pública en nombre de UNA
+// empresa.
+//
+// Mismo patrón de aislamiento que el resto de la plataforma: `companyId`
+// suelto (sin FK a Company) para que la Capa 2 de RLS aísle por columna, y
+// todo acceso desde código pasa por `conEmpresa`/`sinEmpresa`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// CATÁLOGO de conectores nativos. Global (sin companyId): lo administra el
+/// superadmin, las empresas lo consumen.
+///
+/// El catálogo NACE VACÍO a propósito: una fila se crea cuando el conector
+/// está implementado de verdad (Fase 6), nunca antes. Un catálogo con logos de
+/// servicios que no funcionan es un interruptor pintado — la misma regla de
+/// honestidad que el módulo de Permisos.
+model Conector {
+  id String @id @default(cuid())
+
+  /// Identificador estable en URLs y en código (ej. "whatsapp",
+  /// "google-calendar"). Parte del contrato: no se renombra.
+  slug        String  @unique
+  nombre      String
+  descripcion String?
+  /// COMUNICACION | CALENDARIO | PAGOS | CONTABILIDAD | MARKETING | OTRO —
+  /// solo agrupa el catálogo en la UI; ninguna lógica decide con esto.
+  categoria String
+  icono     String?
+  docsUrl   String?
+
+  /// Cómo se autentica MembeGo contra el servicio:
+  /// OAUTH2 (WhatsApp, Google) | API_KEY (servicios con clave fija) | NINGUNA.
+  /// Decide qué flujo de alta ve la empresa y qué guarda `CredencialConexion`.
+  authTipo String
+
+  /// Mismo vocabulario de ciclo de vida que `SistemaConectado`:
+  /// DRAFT | ACTIVE | SUSPENDED | RETIRED. Solo ACTIVE se puede conectar;
+  /// SUSPENDED corta las conexiones existentes sin borrar nada.
+  estado String @default("DRAFT")
+
+  /// Scopes que el conector puede pedir al proveedor (los de Google/Meta, no
+  /// los nuestros). La conexión concreta guarda en su credencial cuáles
+  /// concedió de verdad el usuario.
+  scopesDisponibles String[]
+
+  /// Config estática del conector (endpoints, versión de API del proveedor…).
+  /// NUNCA secretos: para eso está `CredencialConexion`, cifrada.
+  config Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conexiones ConexionEmpresa[]
+
+  @@map("conectores")
+}
+
+/// La INSTANCIA de un conector en una empresa: «Bella Spa tiene WhatsApp
+/// conectado». Compatibilidad (catálogo) y concesión (esta fila) son cosas
+/// distintas — el mismo reparto que `SistemaConectado` / `EmpresaSistema`.
+model ConexionEmpresa {
+  id        String @id @default(cuid())
+  companyId String
+
+  conectorId String
+  /// Restrict, no Cascade: un conector con conexiones vivas no se borra — se
+  /// pone SUSPENDED/RETIRED. Borrar el catálogo jamás debe arrastrar en
+  /// silencio las conexiones (y credenciales) de las empresas.
+  conector Conector @relation(fields: [conectorId], references: [id], onDelete: Restrict)
+
+  /// PENDING (alta iniciada, sin credencial válida todavía) → CONNECTED →
+  /// ERROR (credencial caducada/revocada por el proveedor; se reintenta o se
+  /// reconecta) | DISCONNECTED (la empresa la apagó; conserva historial).
+  estado String @default("PENDING")
+
+  /// Ajustes de ESTA conexión (número de teléfono elegido, calendario
+  /// destino…). Nunca secretos.
+  config Json?
+
+  /// Salud observable sin abrir credenciales: cuándo funcionó por última vez
+  /// y cuál fue el último error. Lo que la UI de la Fase 4 enseña.
+  ultimoOkAt    DateTime?
+  ultimoErrorAt DateTime?
+  ultimoError   String?
+
+  /// `User.id` de quien la creó, para auditoría.
+  creadoPor String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  credenciales CredencialConexion[]
+
+  /// Una conexión por conector y empresa (v1). Si un día una empresa necesita
+  /// DOS cuentas del mismo servicio, se relaja aquí — relajar un unique es
+  /// expansivo; imponerlo después de que existan duplicados no lo es.
+  @@unique([companyId, conectorId])
+  @@index([companyId, estado])
+  @@index([conectorId, estado])
+  @@map("conexiones_empresa")
+}
+
+/// El secreto de una conexión (tokens OAuth, API key del proveedor…), SELLADO
+/// con AES-256-GCM en la aplicación (`modules/connect/cifrado.ts`).
+///
+/// `sellado` guarda el formato completo `cn1.<keyVersion>.<iv>.<tag>.<ct>`;
+/// `keyVersion` se duplica como columna para poder responder «¿cuántas filas
+/// quedan selladas con la clave vieja?» con un WHERE, sin abrir nada.
+///
+/// Un volcado de esta tabla no revela credenciales: hace falta además la
+/// clave maestra, que vive en el entorno de Vercel y nunca en la base.
+model CredencialConexion {
+  id String @id @default(cuid())
+
+  conexionId String
+  /// Cascade a propósito: si la conexión se borra, sus secretos no pueden
+  /// quedar huérfanos en la tabla. (El flujo normal ni borra: desconecta.)
+  conexion ConexionEmpresa @relation(fields: [conexionId], references: [id], onDelete: Cascade)
+
+  /// Duplicado de la conexión para el aislamiento por columna (Capa 2 RLS).
+  companyId String
+
+  /// OAUTH_TOKENS (access+refresh en un JSON sellado) | API_KEY | SECRETO.
+  tipo String
+
+  /// El sello completo. Solo `modules/connect/credenciales.ts` lo abre.
+  sellado String
+
+  /// Versión de la clave maestra que selló (columna de gestión de rotación).
+  keyVersion Int
+
+  /// Cuándo caduca el secreto DEL PROVEEDOR (el access token de Google, no
+  /// nuestro sello). Null = no caduca o no se sabe.
+  expiresAt DateTime?
+  rotadaAt  DateTime?
+
+  /// Datos NO sensibles que ayudan a operar sin abrir el sello: scopes
+  /// concedidos, cuenta conectada («+1 809 …», «calendario@…»).
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Una credencial viva por tipo y conexión: guardar de nuevo REEMPLAZA
+  /// (upsert), no acumula secretos viejos.
+  @@unique([conexionId, tipo])
+  @@index([companyId])
+  @@index([keyVersion])
+  @@map("credenciales_conexion")
+}
+
+/// Clave con la que un TERCERO (Zapier, un script del dueño, un partner) llama
+/// a la API pública EN NOMBRE DE UNA EMPRESA concreta.
+///
+/// Es el segundo principal de `/api/platform/v1` (decisión D4): la misma
+/// guardia y los mismos scopes que `CredencialSistema`, pero atada a UNA
+/// empresa — un satélite atiende a muchas; esta clave, a una sola.
+///
+/// Misma doctrina que `CredencialSistema.clientSecretHash`: de la clave solo
+/// queda un hash con sal (scrypt). Se enseña UNA vez al crearla; si se
+/// pierde, se rota.
+model ClaveApiEmpresa {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// Nombre para el panel («Zapier de recepción»).
+  nombre String
+
+  /// Parte PÚBLICA e indexable de la clave (`mbk_` + 12 chars). Viaja junto
+  /// al secreto y permite localizar la fila sin probar hashes contra toda la
+  /// tabla. No es secreto: sin la otra mitad no autentica nada.
+  prefijo String @unique
+
+  /// `scrypt$N$r$p$sal$hash` del secreto completo.
+  secretoHash String
+
+  /// Mismo vocabulario que los scopes de satélite (`packages/contracts`).
+  /// El token efectivo es la intersección, recalculada en cada petición.
+  scopes String[]
+
+  /// ACTIVE | REVOKED. Se comprueba en CADA petición: revocar cierra ya.
+  estado String @default("ACTIVE")
+
+  /// Null = no caduca. Una fecha convierte la rotación en algo que ocurre.
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  creadoPor  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, estado])
+  @@map("claves_api_empresa")
+}
+
+/// Lo que UNA empresa tiene concedido en Connect: features y límites.
+///
+/// Decisión D6: existe ANTES que el sistema de planes/billing. Hoy lo asigna
+/// el superadmin (mismo patrón que `EmpresaSistema`); cuando exista un plan
+/// comercial, será el plan quien escriba estas filas — y nada del código que
+/// las LEE cambiará. La alternativa era hardcodear planes, prohibida por §28.
+model EntitlementEmpresa {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// Código estable de lo concedido (ej. "conexiones.max",
+  /// "api_keys.habilitado", "webhooks.max"). Vocabulario en
+  /// `modules/connect/entitlements.ts`, no aquí: darlo de alta no exige migrar.
+  feature String
+
+  /// Límite numérico, si la feature es un cupo. Null = sin límite numérico.
+  limite Int?
+  /// Valor estructurado, si la feature no es un número.
+  valor Json?
+
+  /// Por qué se concedió («beta tester», «plan Pro manual») — para cuando el
+  /// superadmin del futuro pregunte por qué esta empresa tiene 50 webhooks.
+  notas String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, feature])
+  @@index([companyId])
+  @@map("entitlements_empresa")
+}
+
+/// BITÁCORA de actividad de Connect: qué hizo cada conexión/clave y cuándo.
+///
+/// Sin claves foráneas a propósito: el historial tiene que sobrevivir a la
+/// fila que lo generó (una conexión borrada no puede llevarse el registro de
+/// lo que hizo). Los ids se guardan sueltos y se resuelven al mostrar.
+///
+/// Aquí NUNCA entra un secreto ni un payload de cliente: `detalle` lleva
+/// metadatos operativos (códigos, duraciones, contadores). Es la tabla que
+/// las pantallas de actividad y salud (Fase 4) leen.
+model RegistroConector {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// De dónde viene el apunte: CONEXION | CLAVE_API | BUS | SISTEMA.
+  origen String
+  /// Id suelto de la fuente (conexionId, claveApiId…), según `origen`.
+  origenId String?
+
+  /// INFO | WARN | ERROR.
+  nivel String @default("INFO")
+
+  /// Qué pasó, en vocabulario estable (ej. "credencial.guardada",
+  /// "oauth.refresh", "webhook.entrega_fallida").
+  evento String
+
+  detalle Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([origenId, createdAt])
+  @@map("registros_conector")
+}

@@ -900,9 +900,18 @@ model AutomationRun {
   @@map("automation_runs")
 }
 
-/// Bus de eventos: toda acción importante genera un evento que otras
-/// automatizaciones pueden consumir (encadenado). `processed` evita reprocesar.
-model AutomationEvent {
+/// BUS CANÓNICO de eventos de dominio: toda acción importante genera un evento
+/// que consumen las automatizaciones (encadenado) y, vía fan-out, los sistemas
+/// satélite. `processed` evita reprocesar.
+///
+/// Antes se llamaba `AutomationEvent`. El renombre (decisión D5 de Membego
+/// Connect) es SOLO del modelo: `@@map` conserva la tabla `automation_events`,
+/// así que no hay migración de datos ni ventana de riesgo — el nombre físico
+/// se revisará en una fase de contracción, si algún día compensa. Dos buses
+/// paralelos (uno para automatizaciones, otro para integraciones) terminarían
+/// con eventos que llegan a un lado y no al otro; por eso se generaliza este
+/// en vez de crear otro.
+model DomainEvent {
   id          String   @id @default(cuid())
   companyId   String
   type        String // ej. "cliente.registrado", "cliente.visita", "cliente.subio_nivel"
@@ -912,6 +921,12 @@ model AutomationEvent {
   source      String? // automationId/módulo que lo emitió
   processed   Boolean  @default(false)
   occurredAt  DateTime @default(now())
+
+  /// Hilo que une los eventos de una misma operación de negocio. El outbox de
+  /// satélites (`EventoSaliente.traceId`) ya lo soportaba, pero el bus lo
+  /// PERDÍA en este salto: el emisor no podía declararlo y el despacho no lo
+  /// propagaba. Null en las filas históricas — el sobre usa entonces su id.
+  traceId String?
 
   @@index([companyId, type, processed])
   @@index([companyId, occurredAt])
