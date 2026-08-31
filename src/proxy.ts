@@ -26,6 +26,8 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions }
  * público. Fuente única de verdad: `ROUTE_PROTECTION` en `src/types`.
  */
 function matchProtected(path: string) {
+  // Esta ruta es pública (el vendedor aún no tiene contraseña): no requiere auth.
+  if (path.startsWith('/vendedor/establecer-contrasena')) return undefined
   return ROUTE_PROTECTION.find((r) => path.startsWith(r.prefix))
 }
 
@@ -66,6 +68,10 @@ export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
   const path = request.nextUrl.pathname
   const matched = matchProtected(path)
+
+  if (path.startsWith('/vendedor/establecer-contrasena')) {
+    request.headers.set('x-skip-vendedor-auth', '1')
+  }
   const isLoginPage = path === '/login' || path === '/acceso'
 
   // MODO MANTENIMIENTO (auditoría · A-08, Fase 5) — lo PRIMERO que se decide.

@@ -54,6 +54,7 @@ import {
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
+import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 
 export interface ReservaActionState {
   error?: string
@@ -608,6 +609,32 @@ export async function crearReserva(
     await sincronizarEstadoAgotada(companyId, excursionId)
     for (const it of itemsComboAGuardar) {
       await sincronizarEstadoAgotada(companyId, it.actividadId)
+    }
+
+    // Send confirmation email to client (non-blocking)
+    if (clienteEmail) {
+      const reservaCompleta = await conEmpresa(companyId, (tx) =>
+        tx.reservaExc.findFirst({
+          where: { id: creada.id, companyId },
+          select: { checkinToken: true },
+        })
+      )
+      const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+      if (reservaCompleta?.checkinToken) {
+        correoConfirmacionReserva({
+          nombreCliente: clienteNombre || clienteEmail,
+          numeroReserva: creada.numero,
+          nombreExcursion: excursion.nombre,
+          fecha: v.datos.fecha.toISOString().split('T')[0],
+          hora: v.datos.hora ?? '',
+          pasajeros: v.datos.adultos + v.datos.ninos,
+          total: `${excursion.moneda} ${Number(creada.total).toFixed(2)}`,
+          checkinToken: reservaCompleta.checkinToken,
+          urlBase,
+        }).then((html) =>
+          sendEmail({ to: clienteEmail, subject: `Confirmación de reserva ${creada.numero} — ${excursion.nombre}`, html, companyId })
+        ).catch((e) => console.error('[excursiones] Error enviando email confirmación en crearReserva:', e))
+      }
     }
 
     revalidatePath('/admin/excursiones/reservas')

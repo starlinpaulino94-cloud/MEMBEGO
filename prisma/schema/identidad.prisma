@@ -157,6 +157,8 @@ enum AuditAccion {
 model User {
   id                 String    @id @default(cuid())
   supabaseId         String    @unique
+  establecerContrasenaToken   String?
+  establecerContrasenaExpira  DateTime? @db.Timestamptz()
   email              String    @unique
   name               String
   role               AppRole   @default(CLIENTE)
