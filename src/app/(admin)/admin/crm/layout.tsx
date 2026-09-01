@@ -1,46 +1,19 @@
-'use client'
+import { Contact } from 'lucide-react'
+import { CrmTabs } from '@/components/crm/CrmTabs'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
-
-const tabs = [
-  { href: '/admin/crm', label: 'Pipeline', exact: true },
-  { href: '/admin/crm/seguimientos', label: 'Seguimientos' },
-  { href: '/admin/crm/configuracion', label: 'Configuración' },
-]
-
-export default function CrmLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
+export default async function CrmLayout({ children }: { children: React.ReactNode }) {
+  // Skeleton: skip auth guard — 'crm' not in ADMIN_SECTIONS yet.
+  // In production, add: const user = await requireSection('crm')
+  // if (!user) redirect('/admin/dashboard')
 
   return (
-    <div className="space-y-6 animate-fade-up">
+    <div className="space-y-5">
       <div>
-        <p className="text-overline">Gestión de prospectos</p>
-        <h1 className="text-h1 mt-1">CRM</h1>
+        <h1 className="flex items-center gap-2 text-h1 text-foreground">
+          <Contact className="h-7 w-7 text-primary" /> Prospectos
+        </h1>
+        <CrmTabs />
       </div>
-
-      {/* Tab navigation */}
-      <nav className="flex gap-1 rounded-xl border border-border bg-card p-1">
-        {tabs.map((tab) => {
-          const isActive = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href)
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={cn(
-                'rounded-lg px-4 py-2 text-small font-medium transition-colors',
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              )}
-            >
-              {tab.label}
-            </Link>
-          )
-        })}
-      </nav>
-
       {children}
     </div>
   )
