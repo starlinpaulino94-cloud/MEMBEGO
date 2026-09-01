@@ -63,6 +63,8 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'clave_revocar', label: 'Revocar claves de API' },
     { codigo: 'webhook_crear', label: 'Crear webhooks' },
     { codigo: 'webhook_estado', label: 'Pausar y reactivar webhooks' },
+    { codigo: 'app_conectar', label: 'Conectar aplicaciones (WhatsApp, Google…)' },
+    { codigo: 'app_desconectar', label: 'Desconectar aplicaciones' },
   ],
   promociones: [
     { codigo: 'crear', label: 'Crear promociones' },

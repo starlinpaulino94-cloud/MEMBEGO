@@ -138,7 +138,7 @@ export const ACTION_CATALOG: readonly ActionDefinition[] = [
   { id: ACTION_TYPES.SEND_EMAIL, category: 'NOTIFICACIONES', description: 'Enviar correo.' },
   { id: ACTION_TYPES.SEND_PUSH, category: 'NOTIFICACIONES', description: 'Enviar push.' },
   { id: ACTION_TYPES.SEND_SMS, category: 'NOTIFICACIONES', description: 'Enviar SMS (arquitectura).' },
-  { id: ACTION_TYPES.SEND_WHATSAPP, category: 'NOTIFICACIONES', description: 'Enviar WhatsApp (arquitectura futura).' },
+  { id: ACTION_TYPES.SEND_WHATSAPP, category: 'NOTIFICACIONES', description: 'Enviar WhatsApp (requiere el conector conectado).' },
   { id: ACTION_TYPES.SEND_INTERNAL_NOTIFICATION, category: 'NOTIFICACIONES', description: 'Notificación interna.' },
   { id: ACTION_TYPES.SEND_WEBHOOK, category: 'NOTIFICACIONES', description: 'Invocar webhook.' },
   // Auditoría

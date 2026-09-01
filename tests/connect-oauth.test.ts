@@ -168,11 +168,13 @@ test('oauth: los secretos de cliente viven en el entorno, nunca en la base', () 
   assert.match(leer('src/modules/connect/oauth.ts'), /process\.env\[input\.config\.clientSecretEnv\]/)
 })
 
-test('oauth: el catálogo de proveedores nace vacío y lo explica', () => {
+test('oauth: la config sale del conector y solo si está disponible', () => {
+  // En la Fase 5 este catálogo estaba vacío. La Fase 6 lo llenó, pero la
+  // exigencia no cambió: un conector que no esté configurado en ESTE
+  // despliegue no devuelve config, y la ruta de inicio contesta que no está
+  // disponible en vez de mandar al usuario a una pantalla rota.
   const src = leer('src/modules/connect/oauthRutas.ts')
-  assert.match(src, /PROVEEDORES_OAUTH: Record<string, ConfigOauthConector> = \{\}/)
-  // Un conector a medias dejaría un botón que lleva a una pantalla rota.
-  assert.match(src, /VACÍO A PROPÓSITO/)
+  assert.match(src, /if \(!def \|\| def\.authTipo !== 'OAUTH2' \|\| !def\.disponible\(\)\) return null/)
 })
 
 test('oauth/migración: el verificador no puede quedar vacío', () => {

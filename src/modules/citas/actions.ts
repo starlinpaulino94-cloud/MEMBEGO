@@ -319,6 +319,27 @@ export async function actualizarEstadoCita(
         titulo: 'Tu cita fue confirmada',
         mensaje: `Te esperamos el ${cuando}. ¡No faltes!`,
       }
+
+      /**
+       * Y a la agenda de Google del negocio, si la tiene conectada
+       * (Membego Connect · Fase 6).
+       *
+       * BEST-EFFORT Y SIN `await` QUE PUEDA ROMPER NADA: confirmar la cita ya
+       * ocurrió y está guardada. Que Google esté caído no puede deshacerla ni
+       * devolver un error a quien pulsó el botón — el fallo queda en la salud
+       * de la conexión, que es donde se mira.
+       */
+      const { crearEventoCalendario } = await import('@/modules/connect/googleCalendar')
+      await crearEventoCalendario({
+        companyId: cita.companyId,
+        evento: {
+          titulo: `${cita.servicio ?? 'Cita'} · ${cita.cliente?.nombre ?? 'Cliente'}`,
+          descripcion: 'Cita confirmada desde MembeGo.',
+          inicio: cita.inicio,
+          fin: new Date(cita.inicio.getTime() + cita.duracionMin * 60_000),
+          zonaHoraria: tz,
+        },
+      }).catch((e) => console.error('[citas] no se pudo crear el evento en Google:', e))
     } else if (accion === 'completar') {
       if (!activa) return { error: 'Esta cita no está activa.' }
       await conEmpresa(cita.companyId, (tx) =>

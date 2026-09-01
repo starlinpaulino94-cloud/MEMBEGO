@@ -1,5 +1,6 @@
 import 'server-only'
 import type { ConfigOauthConector } from '@/modules/connect/oauth'
+import { definicionDe } from '@/modules/connect/conectores'
 
 // Puro y por tanto probable: vive en el núcleo, se reexporta desde aquí para
 // que las rutas lo importen de un solo sitio.
@@ -27,20 +28,20 @@ export function redirectUriDeCallback(): string {
 }
 
 /**
- * CATÁLOGO DE PROVEEDORES OAUTH.
+ * De dónde sale la configuración OAuth de cada conector.
  *
- * VACÍO A PROPÓSITO. La fontanería de la Fase 5 está completa y probada, pero
- * los conectores nativos llegan en la Fase 6: añadir aquí a Google o Meta
- * ahora dejaría un botón que lleva a una pantalla de consentimiento con un
- * `client_id` inexistente. Cuando se añadan, el flujo ya está esperándolos.
+ * La define el conector (`modules/connect/conectores.ts`) y se resuelve en el
+ * momento, leyendo el entorno: los secretos NUNCA viven en una tabla ni en una
+ * constante del código — cada definición guarda el NOMBRE de su variable
+ * (`clientSecretEnv`) y el valor se lee al canjear.
  *
- * Los secretos NUNCA entran en esta tabla: cada entrada guarda el NOMBRE de la
- * variable de entorno (`clientSecretEnv`) donde vive el suyo, y el valor se lee
- * en el momento del canje. Un catálogo con secretos dentro acabaría, tarde o
- * temprano, en un volcado de la base o en una captura de pantalla.
+ * Devuelve null cuando el conector no es de OAuth o cuando su app no está
+ * configurada en este despliegue. La ruta de inicio contesta entonces «esa
+ * aplicación todavía no está disponible» en vez de mandar al usuario a una
+ * pantalla de consentimiento rota.
  */
-export const PROVEEDORES_OAUTH: Record<string, ConfigOauthConector> = {}
-
 export function configOauthDe(slug: string): ConfigOauthConector | null {
-  return PROVEEDORES_OAUTH[slug] ?? null
+  const def = definicionDe(slug)
+  if (!def || def.authTipo !== 'OAUTH2' || !def.disponible()) return null
+  return def.oauth?.() ?? null
 }

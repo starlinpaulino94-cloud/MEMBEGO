@@ -2,6 +2,7 @@ import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarConector } from '@/modules/connect/bitacora'
 import { eliminarCredencial } from '@/modules/connect/credenciales'
+import { slugsDisponibles } from '@/modules/connect/conectores'
 import { puedeTransicionar, type EstadoConexion } from '@/modules/connect/nucleo'
 
 export { puedeTransicionar } from '@/modules/connect/nucleo'
@@ -28,9 +29,15 @@ export type { EstadoConector, EstadoConexion } from '@/modules/connect/nucleo'
  * funciona es un interruptor pintado.
  */
 export async function catalogoParaEmpresas() {
+  // DOS filtros, y el segundo es el que importa: además de estar ACTIVE en la
+  // base, el conector tiene que estar CONFIGURADO en este despliegue. Google
+  // Calendar sin sus variables de entorno existe como fila y no se ofrece —
+  // enseñarlo sería un botón que lleva a una pantalla de error del proveedor.
+  const disponibles = slugsDisponibles()
+  if (disponibles.length === 0) return []
   return sinEmpresa('connect: catálogo global de conectores (sin datos de empresa)', (tx) =>
     tx.conector.findMany({
-      where: { estado: 'ACTIVE' },
+      where: { estado: 'ACTIVE', slug: { in: disponibles } },
       select: {
         id: true,
         slug: true,
