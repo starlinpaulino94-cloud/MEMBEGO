@@ -371,8 +371,15 @@ export async function darAccesoVendedor(
     // Rollback: desvincular vendedor, borrar DB user y Supabase user.
     const vendedorIdRollback = String(formData.get('vendedorId') ?? '')
     if (vendedorIdRollback && companyId) {
-      await conEmpresa(companyId, (tx) =>
-        tx.vendedor.updateMany({ where: { id: vendedorIdRollback, companyId }, data: { userId: null } })
+      // `companyId` es `let` (se rellena dentro del try), y TypeScript no
+      // conserva su estrechamiento dentro del cierre. Fijarlo aquí es lo que
+      // hace que el aislamiento sea también una garantía del tipo.
+      const empresa: string = companyId
+      await conEmpresa(empresa, (tx) =>
+        tx.vendedor.updateMany({
+          where: { id: vendedorIdRollback, companyId: empresa },
+          data: { userId: null },
+        })
       ).catch(anotarFallo('excursiones:acceso-rollback-vendedor'))
     }
     if (dbUserId && companyId) {

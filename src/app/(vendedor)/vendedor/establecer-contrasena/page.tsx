@@ -52,6 +52,15 @@ function EstablecerContrasenaForm() {
     )
   }
 
+  /**
+   * El `if (!token)` de arriba ya garantiza que aquí hay uno, pero
+   * `handleSubmit` es una declaración de función —se puede llamar desde
+   * cualquier punto— y TypeScript, con razón, no arrastra el estrechamiento
+   * hasta dentro. Fijarlo en una constante lo hace explícito y quita el error
+   * sin añadir una comprobación que nunca se cumpliría.
+   */
+  const tokenValido: string = token
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -66,7 +75,7 @@ function EstablecerContrasenaForm() {
     }
 
     setLoading(true)
-    const result = await establecerContrasenaVendedor(token, password)
+    const result = await establecerContrasenaVendedor(tokenValido, password)
     setLoading(false)
 
     if ('error' in result && result.error) {

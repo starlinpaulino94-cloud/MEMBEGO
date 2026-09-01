@@ -54,6 +54,11 @@ export const ADMIN_SECTIONS = [
   // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
   // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
   'excursiones',
+  // Membego Connect (Fase 4): claves de API, webhooks y actividad de las
+  // integraciones de la empresa. Es una sección de CONFIGURACIÓN sensible —
+  // una clave de API abre los datos de la empresa a un tercero— así que no
+  // entra en los roles acotados: solo la ve quien administra de verdad.
+  'integraciones',
   // `/admin/app/<vertical>/*`. El launchpad `/admin/aplicaciones` se retiró
   // —los sistemas de cada oficio se construyen aparte y se conectan por
   // contrato—, pero las pantallas de Car Wash siguen en el repositorio para su

@@ -199,6 +199,10 @@ const ADMIN_NAV: NavGroup[] = [
       { href: '/admin/personalizacion', label: 'Personalización', icon: Palette },
       { href: '/admin/empleados', label: 'Empleados', icon: UserCog },
       { href: '/admin/metodos-pago', label: 'Métodos de pago', icon: Landmark },
+      // Membego Connect (Fase 4): claves de API, webhooks y actividad. Va en
+      // «Empresa» y no en «Operaciones» porque es configuración de la cuenta,
+      // no trabajo de mostrador: se toca una vez y se olvida.
+      { href: '/admin/integraciones', label: 'Integraciones', icon: Plug },
       // «Aplicaciones» vivía aquí: un launchpad de sistemas especializados
       // CONSTRUIDOS DENTRO de MembeGo. Se retira porque esa idea cambió — los
       // sistemas de cada oficio se construyen aparte y se conectan por

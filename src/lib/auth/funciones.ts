@@ -54,9 +54,16 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   personalizacion: 'Personalización',
   app: 'App Car Wash',
   excursiones: 'Excursiones',
+  integraciones: 'Integraciones',
 }
 
 export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[]>> = {
+  integraciones: [
+    { codigo: 'clave_crear', label: 'Crear claves de API' },
+    { codigo: 'clave_revocar', label: 'Revocar claves de API' },
+    { codigo: 'webhook_crear', label: 'Crear webhooks' },
+    { codigo: 'webhook_estado', label: 'Pausar y reactivar webhooks' },
+  ],
   promociones: [
     { codigo: 'crear', label: 'Crear promociones' },
     { codigo: 'editar', label: 'Editar promociones' },
