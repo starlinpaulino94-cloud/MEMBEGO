@@ -64,13 +64,18 @@ test('panel: solo se ofrecen permisos de LECTURA', () => {
 })
 
 test('panel: el catálogo se lee de la base y el vacío se dice', () => {
-  // La Fase 6 sustituyó `CatalogoConectores` por `AplicacionesPanel`, que
-  // además conecta. La exigencia sigue siendo la misma: no hay una lista de
-  // conectores escrita en el componente, y cuando no hay ninguno disponible se
-  // dice en vez de disimularlo.
-  const src = leer('src/components/connect/AplicacionesPanel.tsx')
-  assert.match(src, /conectores\.length === 0/)
-  assert.match(src, /Todavía no hay aplicaciones para conectar/)
+  // La Fase 6 sustituyó `CatalogoConectores` por `AplicacionesPanel`; la Fase 10
+  // lo sustituyó por la rejilla. La exigencia sigue siendo la misma: no hay una
+  // lista de conectores escrita en el componente —la construye el servidor— y
+  // cuando no queda nada que enseñar se dice en vez de disimularlo.
+  const src = leer('src/components/connect/CatalogoIntegraciones.tsx')
+  assert.match(src, /entradas: EntradaCatalogo\[\]/)
+  assert.match(src, /filtradas\.length === 0/)
+  assert.match(src, /Nada coincide con esa búsqueda/)
+  // La rejilla no decide nada por su cuenta: el estado y el botón vienen
+  // calculados del servidor.
+  const tarjeta = leer('src/components/connect/TarjetaIntegracion.tsx')
+  assert.match(tarjeta, /entrada\.accion !== null/)
 })
 
 test('panel: la clave nueva se enseña una vez y la pantalla lo advierte', () => {

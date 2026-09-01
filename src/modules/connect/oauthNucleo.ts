@@ -119,6 +119,21 @@ export interface ProveedorOauth {
   extra?: Record<string, string>
 }
 
+/**
+ * Un proveedor OAuth con lo que hace falta para canjear: el secreto NO viaja
+ * aquí, viaja el NOMBRE de su variable de entorno. Un secreto en una
+ * estructura de datos acaba, tarde o temprano, en un log.
+ *
+ * Vive en el núcleo puro (y no en `oauth.ts`, que es `server-only`) para que
+ * el registro de proveedores pueda declararlo sin arrastrar la capa de base
+ * de datos: así las definiciones se pueden probar sin Prisma.
+ */
+export interface ConfigOauthConector extends ProveedorOauth {
+  /** Secreto del cliente OAuth. Sale del entorno, no de la base. */
+  clientSecretEnv: string
+  scopes: string[]
+}
+
 export function urlDeAutorizacion(input: {
   proveedor: ProveedorOauth
   redirectUri: string

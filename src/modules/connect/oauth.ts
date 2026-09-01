@@ -13,7 +13,7 @@ import {
   necesitaRefresco,
   nuevoPkce,
   urlDeAutorizacion,
-  type ProveedorOauth,
+  type ConfigOauthConector,
   type TokensOauth,
 } from '@/modules/connect/oauthNucleo'
 
@@ -29,11 +29,10 @@ import {
  */
 
 /** Los proveedores viven en la config del conector, no en el código. */
-export interface ConfigOauthConector extends ProveedorOauth {
-  /** Secreto del cliente OAuth. Sale del entorno, no de la base. */
-  clientSecretEnv: string
-  scopes: string[]
-}
+// El tipo vive en el núcleo puro desde la Fase 10, para que el registro de
+// proveedores lo pueda declarar sin importar esta capa. Se reexporta aquí para
+// no romper a quien ya lo importaba de este módulo.
+export type { ConfigOauthConector } from '@/modules/connect/oauthNucleo'
 
 export type ResultadoInicio =
   | { ok: true; url: string }

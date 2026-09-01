@@ -54,10 +54,17 @@ test('canales: un canal apagado siempre dice cómo encenderse', () => {
   const bloques = canales.match(/estado: [^\n]*'no_configurado'/g) ?? []
   assert.ok(bloques.length >= 1)
   assert.match(canales, /comoEncenderlo/)
-  const panel = leer('src/components/connect/CanalesPanel.tsx')
-  assert.match(panel, /comoEncenderlo && \(/)
-  // Y no se pinta como error: un canal apagado no es una avería.
-  assert.ok(!/text-destructive/.test(panel))
+  // La Fase 10 retiró `CanalesPanel` como bloque: esa información pasó a ser el
+  // ESTADO de cada tarjeta del catálogo. La exigencia no cambió de sitio, solo
+  // de pantalla — un estado sin salida sigue siendo una queja.
+  const detalle = leer('src/modules/connect/catalogo.ts')
+  assert.match(detalle, /function detalleDe\(/)
+  assert.match(detalle, /queFalta \|\| 'Esta integración no está configurada/)
+  // Y un canal apagado no se pinta como avería: «no disponible» y «sin plan»
+  // son estados neutros, no destructivos.
+  const chip = leer('src/components/connect/EstadoIntegracion.tsx')
+  assert.match(chip, /NO_DISPONIBLE: 'neutral'/)
+  assert.match(chip, /SIN_PLAN: 'neutral'/)
 })
 
 test('canales: Google Calendar no se presenta como canal de automatización', () => {

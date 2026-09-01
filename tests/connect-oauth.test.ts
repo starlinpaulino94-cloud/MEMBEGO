@@ -173,8 +173,13 @@ test('oauth: la config sale del conector y solo si está disponible', () => {
   // exigencia no cambió: un conector que no esté configurado en ESTE
   // despliegue no devuelve config, y la ruta de inicio contesta que no está
   // disponible en vez de mandar al usuario a una pantalla rota.
-  const src = leer('src/modules/connect/oauthRutas.ts')
-  assert.match(src, /if \(!def \|\| def\.authTipo !== 'OAUTH2' \|\| !def\.disponible\(\)\) return null/)
+  // La Fase 10 movió la resolución al registro de proveedores; la exigencia es
+  // la misma y ahora se comprueba donde vive.
+  const src = leer('src/modules/connect/proveedores/indice.ts')
+  assert.match(
+    src,
+    /if \(!p \|\| p\.autorizacion\.tipo !== 'OAUTH2' \|\| !p\.disponible\(\)\) return null/
+  )
 })
 
 test('oauth/migración: el verificador no puede quedar vacío', () => {

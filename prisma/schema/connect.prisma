@@ -89,6 +89,13 @@ model ConexionEmpresa {
   ultimoErrorAt DateTime?
   ultimoError   String?
 
+  /// POR QUÉ falló, en vocabulario cerrado (Fase 10):
+  /// AUTH | PERMISSIONS | RATE_LIMIT | NETWORK | PROVIDER | CONFIGURATION | UNKNOWN.
+  /// Existe porque cada clase implica una conducta distinta: AUTH pide
+  /// reconectar, RATE_LIMIT solo pide esperar. Sin ella, distinguirlas
+  /// obligaría a leer el texto del error a ojo. La base lo valida con CHECK.
+  claseError String?
+
   /// `User.id` de quien la creó, para auditoría.
   creadoPor String?
 

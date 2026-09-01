@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireSection } from '@/lib/auth/guards'
 import { iniciarOauth } from '@/modules/connect/oauth'
+import { asegurarConexion } from '@/modules/connect/registro'
 import {
   configOauthDe,
   destinoDeVueltaSeguro,
@@ -30,17 +31,28 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
 
   const config = configOauthDe(slug)
   if (!config) {
-    // Todavía no hay conectores nativos (llegan en la Fase 6). Se dice, en vez
-    // de mandar al usuario a una pantalla de consentimiento rota.
+    // El proveedor no existe, no es de OAuth, o su app no está dada de alta en
+    // este despliegue. Se dice, en vez de mandar al usuario a una pantalla de
+    // consentimiento rota.
     return NextResponse.json(
       { error: 'Esa aplicación todavía no está disponible.' },
       { status: 404 }
     )
   }
 
-  const conexionId = req.nextUrl.searchParams.get('conexionId')?.trim() ?? ''
+  // La fila tiene que existir antes de salir hacia el proveedor: el `state`
+  // firmado se ata a ella. Si quien llama no trae una, se resuelve o se crea
+  // aquí — exigirla al navegador convertía este botón en un 400.
+  const pedida = req.nextUrl.searchParams.get('conexionId')?.trim()
+  const conexionId =
+    pedida ||
+    (await asegurarConexion({
+      companyId: user.metadata.companyId,
+      conectorSlug: slug,
+      creadoPor: user.metadata.dbUserId ?? undefined,
+    }))
   if (!conexionId) {
-    return NextResponse.json({ error: 'Falta la conexión.' }, { status: 400 })
+    return NextResponse.json({ error: 'No se pudo preparar la conexión.' }, { status: 409 })
   }
 
   const res = await iniciarOauth({

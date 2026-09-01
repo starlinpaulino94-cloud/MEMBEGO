@@ -3,7 +3,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { getRequestMeta } from '@/lib/server-utils'
 import { ESTADOS_CONECTOR, type EstadoConector } from '@/modules/connect/nucleo'
-import { slugsDisponibles } from '@/modules/connect/conectores'
+import { estaImplementado, slugsDisponibles } from '@/modules/connect/proveedores/indice'
 import { FEATURES_CONNECT, type FeatureConnect } from '@/modules/connect/entitlements'
 
 /**
@@ -33,6 +33,8 @@ export interface ConectorAdmin {
   estado: string
   /** ¿Está configurado en ESTE despliegue? Un ACTIVE sin config no se ofrece. */
   disponible: boolean
+  /** ¿Existe código detrás? Si no, publicarlo lo enseña como «Próximamente». */
+  implementado: boolean
   conexionesTotales: number
   conexionesVivas: number
 }
@@ -63,6 +65,12 @@ export async function catalogoAdmin(): Promise<ConectorAdmin[]> {
     authTipo: c.authTipo,
     estado: c.estado,
     disponible: disponibles.has(c.slug),
+    // «Implementado» y «disponible» son preguntas distintas, y confundirlas
+    // hace que el panel avise de una avería donde no la hay: una integración
+    // PREVISTA está publicada a propósito sin código detrás, para que la
+    // empresa la vea como «Próximamente». Una implementada sin configurar sí
+    // es un problema que hay que arreglar.
+    implementado: estaImplementado(c.slug),
     conexionesTotales: c.conexiones.length,
     // «Vivas» es lo que importa para decidir si un conector sirve: una empresa
     // que lo conectó y lo desconectó cuenta en el total y no en la adopción.

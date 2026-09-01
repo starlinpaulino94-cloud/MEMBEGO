@@ -44,9 +44,17 @@ const TODOS = RAIZ.flatMap(archivos)
  * `@media print` heredara el tema, quien tenga el panel en oscuro imprimiría
  * texto casi blanco sobre una hoja blanca. El color de la impresión no es una
  * decisión de tema, es una propiedad del papel.
+ *
+ * `connect/proveedores/metadatos` entra por ese mismo razonamiento: el verde de
+ * WhatsApp y el azul de Google son propiedades de MARCAS AJENAS, no decisiones
+ * de nuestro tema. Pintarlos con un token semántico haría que el logotipo de
+ * WhatsApp saliera del color primario de Membego, que es justamente lo
+ * contrario de reconocer una marca. Es data sobre terceros, no estilo propio.
  */
 const SIN_VARIABLES_CSS = (ruta) =>
-  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible/i.test(ruta)
+  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible|connect\/proveedores\/metadatos/i.test(
+    ruta
+  )
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
 export const cuenta = (re, filtro = () => true) => {
