@@ -88,6 +88,36 @@ export function esClaseError(valor: string): valor is ClaseError {
   return (CLASES_ERROR as readonly string[]).includes(valor)
 }
 
+/**
+ * DE UN ESTADO HTTP A UNA CLASE DE ERROR.
+ *
+ * El reparto por defecto, que sirve para casi todos los proveedores. Uno con
+ * particularidades (Google devuelve 403 tanto por permiso que falta como por
+ * cuota agotada) lo afina en su propio módulo; esto es la base.
+ *
+ *   401  el token no vale  → AUTH, hay que reconectar
+ *   403  falta permiso     → PERMISSIONS, hay que reautorizar con más scope
+ *   404  no está           → CONFIGURATION, apunta a algo que ya no existe
+ *   429  demasiadas        → RATE_LIMIT, esperar; NO es culpa de la cuenta
+ *   5xx  suyo              → PROVIDER
+ */
+export function claseDeEstadoHttp(estado: number): ClaseError {
+  if (estado === 401) return 'AUTH'
+  if (estado === 403) return 'PERMISSIONS'
+  if (estado === 404) return 'CONFIGURATION'
+  if (estado === 429) return 'RATE_LIMIT'
+  if (estado >= 500) return 'PROVIDER'
+  return 'UNKNOWN'
+}
+
+/**
+ * Un fallo que ni siquiera llegó a tener respuesta: se cortó la conexión, se
+ * agotó el tiempo. No dice nada de la cuenta del cliente.
+ */
+export function claseDeFalloDeRed(): ClaseError {
+  return 'NETWORK'
+}
+
 // ─── Autorización ────────────────────────────────────────────────────────────
 
 /**
@@ -141,6 +171,16 @@ export interface PasoConexion {
   tipo: TipoPaso
   /** Solo para COMPONENTE: qué pinta el framework en su lugar. */
   componente?: string
+  /**
+   * CÓMO se da por cumplido este paso, cuando no basta con haberlo contestado.
+   *
+   * Existe por un caso muy concreto: el paso donde una empresa pega el token
+   * de WhatsApp NO puede guardar su respuesta en `setupState` —sería un
+   * secreto en claro dentro de un JSON— así que el token va directo a la
+   * credencial sellada y el paso se da por hecho porque LA CREDENCIAL EXISTE,
+   * no porque alguien apuntara que la escribió.
+   */
+  cumpleCon?: 'autorizado' | 'validado'
 }
 
 // ─── Metadatos de catálogo ───────────────────────────────────────────────────
@@ -214,6 +254,15 @@ export interface DefinicionProveedor {
   queFalta: string
   /** Solo ADAPTADA: a dónde lleva «Gestionar». */
   rutaGestionExterna?: string
+  /**
+   * De las respuestas del alta a la CONFIGURACIÓN OPERATIVA. Puro: es solo un
+   * mapeo, sin red ni base.
+   *
+   * Existe para que la frontera entre lo temporal y lo permanente la dibuje el
+   * proveedor y no el asistente: solo él sabe que `datos.calendario` se llama
+   * `calendarId` cuando vive para siempre.
+   */
+  configDesdeAlta?: (datos: Record<string, unknown>) => Record<string, unknown>
 }
 
 // ─── Estado de una integración, tal y como lo ve la empresa ──────────────────

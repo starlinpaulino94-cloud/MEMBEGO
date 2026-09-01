@@ -79,9 +79,21 @@ model ConexionEmpresa {
   /// reconecta) | DISCONNECTED (la empresa la apagó; conserva historial).
   estado String @default("PENDING")
 
-  /// Ajustes de ESTA conexión (número de teléfono elegido, calendario
-  /// destino…). Nunca secretos.
+  /// Ajustes OPERATIVOS de esta conexión (calendario destino, opciones de
+  /// sincronización…). Nunca secretos. Lo lee el motor cada vez que actúa y
+  /// vive mientras viva la conexión.
   config Json?
+
+  /// Estado TEMPORAL del alta guiada (Fase 12): qué se ha contestado hasta
+  /// ahora y con qué versión del guion se empezó. Se BORRA al terminar — un
+  /// progreso residual dentro de la configuración operativa es basura que
+  /// alguien acabaría borrando junto al calendario elegido.
+  setupState Json?
+
+  /// Con qué versión del guion se completó el alta. Permite saber que una
+  /// conexión se hizo antes de que pidiéramos un permiso nuevo, sin tener que
+  /// adivinarlo por fechas.
+  setupVersion Int?
 
   /// Salud observable sin abrir credenciales: cuándo funcionó por última vez
   /// y cuál fue el último error. Lo que la UI de la Fase 4 enseña.

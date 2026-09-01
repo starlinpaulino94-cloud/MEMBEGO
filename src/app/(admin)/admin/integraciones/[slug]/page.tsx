@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft, Check, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Check } from 'lucide-react'
 import { requireSection } from '@/lib/auth/guards'
 import { entradaDeCatalogo } from '@/modules/connect/catalogo'
 import { registrosDeEmpresa } from '@/modules/connect/bitacora'
+import { configuracionVisible } from '@/modules/connect/alta'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import { permiteConectar } from '@/modules/connect/proveedores/tipos'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { EstadoIntegracion } from '@/components/connect/EstadoIntegracion'
 import { LogoIntegracion } from '@/components/connect/LogoIntegracion'
-import { AltaWhatsapp } from '@/components/connect/AltaWhatsapp'
 import { DesconectarIntegracion } from '@/components/connect/DesconectarIntegracion'
 import { HistorialIntegracion } from '@/components/connect/HistorialIntegracion'
 
@@ -64,9 +64,12 @@ export default async function IntegracionPage({
       })
     : []
 
+  // La configuración operativa de una conexión terminada, para poder verla sin
+  // tener que abrir el asistente otra vez.
+  const configuracion = await configuracionVisible(user.metadata.companyId, slug)
+
   const puedeConectar = permiteConectar(entrada.estado)
   const conectada = entrada.estado !== 'DISPONIBLE' && entrada.conexionId !== null
-  const esOauth = proveedor?.autorizacion.tipo === 'OAUTH2'
   const provisional = proveedor?.autorizacion.provisional
 
   return (
@@ -125,7 +128,11 @@ export default async function IntegracionPage({
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  {entrada.estado === 'REAUTORIZAR' ? 'Vuelve a conectar' : 'Conectar'}
+                  {entrada.estado === 'REAUTORIZAR'
+                    ? 'Vuelve a conectar'
+                    : entrada.estado === 'ALTA_SIN_TERMINAR'
+                      ? 'Continúa donde lo dejaste'
+                      : 'Conectar'}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -136,30 +143,47 @@ export default async function IntegracionPage({
                   </StatusBanner>
                 )}
 
-                {esOauth ? (
-                  <div className="space-y-3">
+                {/* El alta la lleva el asistente, en su propia ruta. Una ruta y
+                    no una ventana flotante porque el paso de autorización SE VA
+                    del navegador y una ventana no sobrevive la vuelta. */}
+                {proveedor && proveedor.pasos.length > 0 ? (
+                  <>
                     <p className="text-sm text-muted-foreground">
-                      Te llevamos a {entrada.nombre} para que autorices. Membego no ve ni guarda
-                      tu contraseña.
+                      Son {proveedor.pasos.length} pasos y se pueden dejar a medias: al volver,
+                      sigues donde lo dejaste.
                     </p>
                     <Button asChild>
-                      <a
-                        href={`/api/connect/oauth/${encodeURIComponent(slug)}/iniciar?volverA=${encodeURIComponent(
-                          `/admin/integraciones/${slug}`
-                        )}`}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" aria-hidden />
+                      <Link href={`/admin/integraciones/${slug}/conectar`}>
                         {entrada.accion ?? 'Conectar'}
-                      </a>
+                      </Link>
                     </Button>
-                  </div>
-                ) : slug === 'whatsapp' ? (
-                  <AltaWhatsapp />
+                  </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     Esta integración todavía no tiene un alta guiada.
                   </p>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {conectada && configuracion.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Configuración</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="divide-y divide-border/60">
+                  {configuracion.map((c) => (
+                    <div
+                      key={c.etiqueta}
+                      className="flex flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
+                    >
+                      <dt className="text-sm text-muted-foreground">{c.etiqueta}</dt>
+                      <dd className="break-all text-sm font-medium">{c.valor}</dd>
+                    </div>
+                  ))}
+                </dl>
               </CardContent>
             </Card>
           )}
