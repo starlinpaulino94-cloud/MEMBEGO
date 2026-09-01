@@ -21,10 +21,13 @@ export const dynamic = 'force-dynamic'
  * eso es maquinaria interna de MembeGo y no tiene por qué salir (§69).
  */
 export async function GET(req: NextRequest) {
-  const auth = await autenticarSobreEmpresa(
+    const auth = await autenticarSobreEmpresa(
     req,
     'promotions:read',
     req.nextUrl.searchParams.get('companyId'),
+    // Lectura: se abre a CLAVES DE API DE EMPRESA (Connect · F3/F8).
+    // No depende de qué satélite pregunta.
+    { claveDeEmpresa: true }
   )
   if (esFallo(auth)) return auth.fallo
 

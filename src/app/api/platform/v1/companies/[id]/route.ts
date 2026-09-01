@@ -23,7 +23,11 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest, ctxRuta: { params: Promise<{ id: string }> }) {
   const { id } = await ctxRuta.params
-  const auth = await autenticarSobreEmpresa(req, null, id)
+  const auth = await autenticarSobreEmpresa(
+    req, null, id,
+    // Lectura: se abre a CLAVES DE API DE EMPRESA (Connect · F3/F8).
+    { claveDeEmpresa: true }
+  )
   if (esFallo(auth)) return auth.fallo
 
   const empresa = await conEmpresa(auth.companyId, (tx) =>
