@@ -11,9 +11,13 @@ import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
  * empresa pulsa «Conéctese con Facebook», autoriza, elige su cuenta de
  * WhatsApp Business y su número, y termina. Sin tokens, sin paneles ajenos.
  *
- * Hoy no se puede: Meta exige Verificación de Negocio y Revisión de la App
- * antes de habilitar ese flujo, y ese trámite no está iniciado. Los requisitos
- * exactos están en `docs/connect/whatsapp-embedded-signup.md`.
+ * LO QUE LA INVESTIGACIÓN DE LA FASE 14 CORRIGIÓ: la Verificación de Negocio y
+ * la Revisión de la App NO son bloqueantes para empezar. Meta permite dar de
+ * alta hasta 10 clientes cada 7 días sin ninguna de las dos; el trámite sube
+ * ese límite a 200. Lo que sí hace falta antes es ser Proveedor Técnico y
+ * tener una configuración de Inicio de Sesión de Facebook para Empresas.
+ * Todos los requisitos, con sus fuentes, en
+ * `docs/connect/whatsapp-embedded-signup.md`.
  *
  * Mientras tanto, el token permanente de Usuario del Sistema funciona y no se
  * retira, porque retirarlo dejaría a las empresas que ya lo usan sin canal.
