@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { StatusBanner } from '@/components/ui/status-banner'
+import { CandadoPlan, LimiteAlcanzado } from '@/components/connect/EstadoPlanConnect'
 
 /**
  * Webhooks de la empresa: a dónde avisamos cuando pasa algo suyo.
@@ -64,16 +65,24 @@ export function WebhooksPanel({
 
   const vivos = webhooks.filter((w) => w.estado !== 'DISABLED').length
   const puedeCrear = limite === null || vivos < limite
+  // «No concedido» y «lleno» son hechos distintos: la frase «tu plan no
+  // incluye webhooks» era falsa cuando sí los incluía y estaban todos usados.
+  const sinConcesion = limite === 0
+  const lleno = !puedeCrear && !sinConcesion && limite !== null
 
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle className="text-base">Webhooks</CardTitle>
-        {puedeCrear && (
+        {puedeCrear ? (
           <Button type="button" size="sm" onClick={() => setAbierto((v) => !v)}>
             <Webhook className="mr-2 h-4 w-4" aria-hidden />
             {abierto ? 'Cancelar' : 'Crear webhook'}
           </Button>
+        ) : (
+          sinConcesion && (
+            <CandadoPlan titulo="Los webhooks no están activados para tu negocio" />
+          )
         )}
       </CardHeader>
       <CardContent className="space-y-4">
@@ -97,9 +106,11 @@ export function WebhooksPanel({
           </StatusBanner>
         )}
 
-        {!puedeCrear && (
-          <StatusBanner variant="warning" title="Tu plan no incluye webhooks">
-            Escríbenos y te los habilitamos.
+        {lleno && limite !== null && <LimiteAlcanzado que="webhooks" limite={limite} />}
+
+        {sinConcesion && webhooks.length > 0 && (
+          <StatusBanner variant="info" title="Los webhooks ya no están activados">
+            Estos siguen entregando y puedes pausarlos, pero no se pueden crear nuevos.
           </StatusBanner>
         )}
 
@@ -140,26 +151,26 @@ export function WebhooksPanel({
               return (
                 <li
                   key={w.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border/60 px-3 py-2"
+                  className="flex flex-col gap-2 rounded-xl border border-border/60 px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
                 >
                   <span className="font-medium">{w.nombre}</span>
                   <Badge variant={e.variante}>{e.texto}</Badge>
                   <code className="min-w-0 break-all font-mono text-caption text-muted-foreground">
                     {w.url}
                   </code>
-                  <span className="w-full text-caption text-muted-foreground">
+                  <span className="text-caption text-muted-foreground sm:w-full">
                     {w.eventos.length === 0
                       ? 'Recibe todos los eventos'
                       : `Recibe: ${w.eventos.join(', ')}`}
                     {w.ultimoOkAt && ` · Última entrega correcta: ${formatDateTime(new Date(w.ultimoOkAt))}`}
                   </span>
                   {w.ultimoError && (
-                    <span className="w-full font-mono text-caption text-destructive">
+                    <span className="break-all font-mono text-caption text-destructive sm:w-full">
                       {w.ultimoError}
                     </span>
                   )}
                   {w.estado !== 'DISABLED' && (
-                    <span className="ml-auto">
+                    <span className="sm:ml-auto">
                       <BotonConfirmado
                         accion={cambiarEstadoWebhookAction}
                         estadoInicial={INIT}
@@ -175,7 +186,7 @@ export function WebhooksPanel({
                     </span>
                   )}
                   {w.estado === 'DISABLED' && (
-                    <span className="ml-auto">
+                    <span className="sm:ml-auto">
                       <BotonConfirmado
                         accion={cambiarEstadoWebhookAction}
                         estadoInicial={INIT}

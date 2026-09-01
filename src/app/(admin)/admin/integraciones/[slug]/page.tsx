@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, Check, ExternalLink } from 'lucide-react'
 import { requireSection } from '@/lib/auth/guards'
 import { entradaDeCatalogo } from '@/modules/connect/catalogo'
+import { registrosDeEmpresa } from '@/modules/connect/bitacora'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import { permiteConectar } from '@/modules/connect/proveedores/tipos'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { EstadoIntegracion } from '@/components/connect/EstadoIntegracion'
 import { LogoIntegracion } from '@/components/connect/LogoIntegracion'
 import { AltaWhatsapp } from '@/components/connect/AltaWhatsapp'
 import { DesconectarIntegracion } from '@/components/connect/DesconectarIntegracion'
+import { HistorialIntegracion } from '@/components/connect/HistorialIntegracion'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +53,16 @@ export default async function IntegracionPage({
   if (proveedor?.clase === 'ADAPTADA' && proveedor.rutaGestionExterna) {
     redirect(proveedor.rutaGestionExterna)
   }
+
+  // El historial de ESTA conexión, en idioma de negocio. Solo si existe fila:
+  // sin conexión no hay nada que contar, y una consulta más tampoco.
+  const historial = entrada.conexionId
+    ? await registrosDeEmpresa(user.metadata.companyId, {
+        origenId: entrada.conexionId,
+        origen: 'CONEXION',
+        limite: 20,
+      })
+    : []
 
   const puedeConectar = permiteConectar(entrada.estado)
   const conectada = entrada.estado !== 'DISPONIBLE' && entrada.conexionId !== null
@@ -151,6 +163,14 @@ export default async function IntegracionPage({
               </CardContent>
             </Card>
           )}
+
+          <HistorialIntegracion
+            registros={historial.map((r) => ({
+              id: r.id,
+              evento: r.evento,
+              createdAt: r.createdAt.toISOString(),
+            }))}
+          />
 
           {proveedor && proveedor.pasos.length > 0 && (
             <Card>

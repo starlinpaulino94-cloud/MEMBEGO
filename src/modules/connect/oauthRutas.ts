@@ -1,4 +1,5 @@
 import 'server-only'
+import { appUrl } from '@/lib/site'
 import type { ConfigOauthConector } from '@/modules/connect/oauthNucleo'
 import { oauthDe } from '@/modules/connect/proveedores/indice'
 
@@ -17,14 +18,26 @@ export { destinoDeVueltaSeguro } from '@/modules/connect/oauthNucleo'
  * el destino del atacante y el proveedor le entrega el código. Los proveedores
  * exigen registrarla precisamente por eso — y el registro no sirve de nada si
  * nosotros la aceptamos variable.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SALE DE `appUrl()`, QUE ES EL ÚNICO DUEÑO DE LAS URLS DE LA APLICACIÓN
+ *
+ * Antes se leía `NEXT_PUBLIC_APP_URL` a mano, saltándose la abstracción de
+ * dominios de `lib/site.ts`. Eso funcionaba solo mientras la landing y la
+ * aplicación compartieran dominio: el día que la aplicación se mude a su
+ * propio host, `NEXT_PUBLIC_APP_URL` seguiría apuntando a la landing y la
+ * `redirect_uri` dejaría de coincidir con la registrada en el proveedor. Todas
+ * las conexiones OAuth se romperían a la vez, y el motivo no estaría escrito
+ * en ningún sitio.
+ *
+ * Hoy `appUrl()` devuelve exactamente lo mismo (`NEXT_PUBLIC_APP_ORIGIN` no
+ * está definida y cae a `NEXT_PUBLIC_APP_URL`), así que este cambio NO mueve
+ * la URL: `https://membego.com/api/connect/oauth/callback` antes y después.
+ * Cuando llegue la separación, bastará definir `NEXT_PUBLIC_APP_ORIGIN` y
+ * registrar la URI nueva en el proveedor ANTES de desplegar.
  */
 export function redirectUriDeCallback(): string {
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : '')
-  return `${base.replace(/\/$/, '')}/api/connect/oauth/callback`
+  return `${appUrl()}/api/connect/oauth/callback`
 }
 
 /**

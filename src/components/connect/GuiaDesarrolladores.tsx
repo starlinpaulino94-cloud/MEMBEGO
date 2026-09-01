@@ -79,9 +79,11 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
                   {recursos.map((r) => (
                     <li key={`${r.metodo} ${r.ruta}`} className="flex flex-wrap items-center gap-2">
                       <Badge variant="secondary">{r.metodo}</Badge>
-                      <span className="font-mono text-caption">{r.ruta}</span>
+                      {/* `break-all`: una ruta con parámetros es más larga que
+                          la pantalla de un teléfono y desbordaba la tarjeta. */}
+                      <span className="break-all font-mono text-caption">{r.ruta}</span>
                       {r.scope && (
-                        <span className="font-mono text-caption text-muted-foreground">
+                        <span className="break-all font-mono text-caption text-muted-foreground">
                           {r.scope}
                         </span>
                       )}
