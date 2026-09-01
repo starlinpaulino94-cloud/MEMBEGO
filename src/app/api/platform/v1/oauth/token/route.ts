@@ -1,11 +1,11 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { getPlatformTokenSecret } from '@/lib/env'
 import { createRateLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { hashearSecreto, scopesPedidos, secretoValido } from '@/modules/plataforma/credenciales'
 import { errorApi, nuevoRequestId } from '@/modules/plataforma/errores'
-import { crearToken } from '@/modules/plataforma/token'
+import { crearToken, verificarToken } from '@/modules/plataforma/token'
 import { anotarUso } from '@/modules/plataforma/api'
 
 export const dynamic = 'force-dynamic'
@@ -138,12 +138,20 @@ export async function POST(req: NextRequest) {
   const { token, expiraEn } = crearToken(secretoFirma, { cid: cred.clientId, scopes })
   anotarUso(fila.id)
 
+  // DIAG TEMPORAL: huella del secreto que ESTE handler usó para FIRMAR, y si el
+  // token que acaba de firmar supera su propia verificación aquí mismo. Se
+  // compara con verify_fp de /branches. Borrar tras el fix.
+  const signFp = createHash('sha256').update(secretoFirma).digest('hex').slice(0, 12)
+  const selfVerify = verificarToken(secretoFirma, token).ok
+
   return NextResponse.json(
     {
       access_token: token,
       token_type: 'Bearer',
       expires_in: expiraEn,
       scope: scopes.join(' '),
+      _diag_sign_fp: signFp,
+      _diag_self_verify: selfVerify,
     },
     {
       headers: {
