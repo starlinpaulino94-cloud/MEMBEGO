@@ -9,6 +9,7 @@ import { nombreDelDestino, origenSeguro } from '@/modules/connect/oauthNucleo'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { AsistenteAlta } from '@/components/connect/AsistenteAlta'
 import { LogoIntegracion } from '@/components/connect/LogoIntegracion'
+import { configMetaDesdeEntorno } from '@/modules/connect/metaNucleo'
 
 export const dynamic = 'force-dynamic'
 
@@ -144,6 +145,14 @@ export default async function ConectarPage({
         completa={vista.completa}
         opciones={opciones}
         errorOpciones={errorOpciones}
+        meta={(() => {
+          // SOLO lo público. El secreto de la app se queda en el servidor: lo
+          // usa la acción del canje, y no baja al navegador ni una vez.
+          const c = configMetaDesdeEntorno()
+          return c
+            ? { appId: c.appId, configId: c.configId, versionGraph: c.versionGraph }
+            : null
+        })()}
         volverAlModulo={volver}
         nombreDelModulo={nombreDelDestino(volver)}
         volverA={

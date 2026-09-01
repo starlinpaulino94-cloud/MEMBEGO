@@ -73,7 +73,7 @@ test('alta: un paso puede cumplirse por un HECHO y no por una respuesta', () => 
   // en claro dentro de un JSON— así que su paso se da por hecho porque la
   // credencial existe.
   const wa = proveedorDe('whatsapp')!
-  const credencial = wa.pasos.find((p) => p.id === 'credencial')!
+  const credencial = wa.pasos().find((p) => p.id === 'credencial')!
   assert.equal(credencial.cumpleCon, 'autorizado')
   assert.equal(pasoCumplido(credencial, altaVacia(2), SIN_HECHOS), false)
   assert.equal(pasoCumplido(credencial, altaVacia(2), { autorizado: true, validado: false }), true)
@@ -211,7 +211,7 @@ test('alta: no se cierra un alta incompleta, lo diga quien lo diga', () => {
 test('alta: solo se contesta un paso que existe en el guion', () => {
   // Sin esto, un formulario manipulado metería claves arbitrarias en el estado.
   const src = codigo('src/modules/connect/alta.ts')
-  assert.match(src, /if \(!vista\.def\.pasos\.some\(\(p\) => p\.id === input\.pasoId\)\) return/)
+  assert.match(src, /if \(!vista\.def\.pasos\(\)\.some\(\(p\) => p\.id === input\.pasoId\)\) return/)
 })
 
 test('alta: las acciones sacan la empresa de la SESIÓN, nunca del formulario', () => {

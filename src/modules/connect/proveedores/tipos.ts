@@ -240,8 +240,18 @@ export interface DefinicionProveedor {
   autorizacion: AutorizacionProveedor
   /** Qué sabe hacer, en vocabulario nuestro. Se enseña en la página de detalle. */
   capacidades: readonly string[]
-  /** El guion del alta. Vacío solo para las ADAPTADAS, que no se altan aquí. */
-  pasos: readonly PasoConexion[]
+  /**
+   * El guion del alta. FUNCIÓN y no lista, por la misma razón que
+   * `disponible()`: depende del despliegue.
+   *
+   * WhatsApp es el caso que lo obliga. Con la app de Meta configurada, su alta
+   * es el diálogo del Alta Incrustada; sin ella, el token manual. No son dos
+   * proveedores: es el mismo con dos guiones, y cuál toca lo decide el
+   * entorno, no una copia del archivo.
+   *
+   * Vacío solo para las ADAPTADAS, que no se altan aquí.
+   */
+  pasos: () => readonly PasoConexion[]
   /**
    * Versión del guion. Cuando el alta cambie (un paso nuevo, un permiso más),
    * esto sube y las conexiones viejas quedan marcadas como «hechas con un

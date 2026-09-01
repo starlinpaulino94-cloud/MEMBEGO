@@ -107,7 +107,7 @@ export async function responderPaso(input: {
 
   // Solo se contesta un paso que EXISTE en el guion. Sin esto, un formulario
   // manipulado podría meter claves arbitrarias en el estado del alta.
-  if (!vista.def.pasos.some((p) => p.id === input.pasoId)) return { ok: false }
+  if (!vista.def.pasos().some((p) => p.id === input.pasoId)) return { ok: false }
 
   const nuevo = conRespuesta(vista.estado, input.pasoId, input.valor)
   await conEmpresa(input.companyId, (tx) =>
@@ -140,7 +140,7 @@ export async function olvidarPaso(input: {
   const vista = await vistaDelAlta(input.companyId, input.slug)
   if (!vista) return { ok: false }
 
-  const paso = vista.def.pasos.find((p) => p.id === input.pasoId)
+  const paso = vista.def.pasos().find((p) => p.id === input.pasoId)
   if (!paso || paso.tipo === 'AUTORIZACION') return { ok: false }
   if (!vista.visitables.some((p) => p.id === input.pasoId)) return { ok: false }
 

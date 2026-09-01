@@ -87,7 +87,7 @@ export function problemasDelRegistro(): string[] {
   }
 
   for (const p of PROVEEDORES) {
-    if (p.clase === 'NATIVA' && p.pasos.length === 0) {
+    if (p.clase === 'NATIVA' && p.pasos().length === 0) {
       problemas.push(`${p.metadatos.slug}: proveedor nativo sin pasos de alta`)
     }
     if (p.clase === 'ADAPTADA' && !p.rutaGestionExterna) {

@@ -55,6 +55,8 @@ export default async function IntegracionPage({
   if (!entrada) notFound()
 
   const proveedor = proveedorDe(slug)
+  // El guion depende del despliegue, así que se resuelve una vez y se usa.
+  const pasos = proveedor?.pasos() ?? []
 
   // Una integración ADAPTADA no se administra aquí: su estado vive en el
   // módulo que la gestiona de verdad. Llevar allí es lo correcto; pintar una
@@ -155,10 +157,10 @@ export default async function IntegracionPage({
                 {/* El alta la lleva el asistente, en su propia ruta. Una ruta y
                     no una ventana flotante porque el paso de autorización SE VA
                     del navegador y una ventana no sobrevive la vuelta. */}
-                {proveedor && proveedor.pasos.length > 0 ? (
+                {proveedor && pasos.length > 0 ? (
                   <>
                     <p className="text-sm text-muted-foreground">
-                      Son {proveedor.pasos.length} pasos y se pueden dejar a medias: al volver,
+                      Son {pasos.length} pasos y se pueden dejar a medias: al volver,
                       sigues donde lo dejaste.
                     </p>
                     <Button asChild>
@@ -209,14 +211,14 @@ export default async function IntegracionPage({
             }))}
           />
 
-          {proveedor && proveedor.pasos.length > 0 && (
+          {pasos.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">¿Qué ocurrirá a continuación?</CardTitle>
               </CardHeader>
               <CardContent>
                 <ol className="space-y-3">
-                  {proveedor.pasos.map((paso, i) => (
+                  {pasos.map((paso, i) => (
                     <li key={paso.id} className="flex gap-3">
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-caption font-bold">
                         {i + 1}
