@@ -151,6 +151,34 @@ export async function leerCredencial(input: {
 }
 
 /** Borra el secreto de una conexión (al desconectar). */
+/**
+ * METADATOS de una credencial, SIN abrirla.
+ *
+ * Lo que se guarda al lado del sello y no es secreto: qué permisos concedió de
+ * verdad el proveedor, si llegó refresh token, qué cuenta es. La validación de
+ * una conexión necesita justo eso y no necesita el secreto — pedirlo obligaría
+ * a descifrar para responder «¿tienes permiso para listar calendarios?».
+ *
+ * Devuelve null si no hay credencial: es la forma de preguntar «¿está
+ * autorizado?» sin tocar el material sensible.
+ */
+export async function metadatosCredencial(input: {
+  companyId: string
+  conexionId: string
+  tipo: TipoCredencial
+}): Promise<Record<string, unknown> | null> {
+  const fila = await conEmpresa(input.companyId, (tx) =>
+    tx.credencialConexion.findFirst({
+      where: { conexionId: input.conexionId, tipo: input.tipo },
+      select: { metadata: true },
+    })
+  ).catch(() => null)
+  if (!fila) return null
+  const m = fila.metadata
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return {}
+  return m as Record<string, unknown>
+}
+
 export async function eliminarCredencial(input: {
   companyId: string
   conexionId: string

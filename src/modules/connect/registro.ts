@@ -4,6 +4,7 @@ import { anotarConector } from '@/modules/connect/bitacora'
 import { eliminarCredencial } from '@/modules/connect/credenciales'
 import { proveedorDe, slugsDisponibles } from '@/modules/connect/proveedores/indice'
 import { puedeTransicionar, type EstadoConexion } from '@/modules/connect/nucleo'
+import { CLASES_TRANSITORIAS, type ClaseError } from '@/modules/connect/proveedores/tipos'
 
 export { puedeTransicionar } from '@/modules/connect/nucleo'
 export type { EstadoConector, EstadoConexion } from '@/modules/connect/nucleo'
@@ -231,7 +232,7 @@ export async function desconectarConexion(input: {
 export async function anotarSalud(input: {
   companyId: string
   conexionId: string
-  resultado: { ok: true } | { ok: false; error: string }
+  resultado: { ok: true } | { ok: false; error: string; clase?: ClaseError }
 }): Promise<void> {
   const fila = await conEmpresa(input.companyId, (tx) =>
     tx.conexionEmpresa.findFirst({
@@ -243,7 +244,12 @@ export async function anotarSalud(input: {
   const estadoActual = fila.estado as EstadoConexion
 
   if (input.resultado.ok) {
-    const data: { ultimoOkAt: Date; estado?: EstadoConexion } = { ultimoOkAt: new Date() }
+    const data: { ultimoOkAt: Date; claseError: null; estado?: EstadoConexion } = {
+      ultimoOkAt: new Date(),
+      // Un uso correcto borra la clase del fallo anterior: si no, una conexión
+      // que ya funciona seguiría pidiendo «vuelve a conectar tu cuenta».
+      claseError: null,
+    }
     if (estadoActual !== 'CONNECTED' && puedeTransicionar(estadoActual, 'CONNECTED')) {
       data.estado = 'CONNECTED'
     }
@@ -253,11 +259,27 @@ export async function anotarSalud(input: {
     return
   }
 
-  const data: { ultimoErrorAt: Date; ultimoError: string; estado?: EstadoConexion } = {
+  const clase: ClaseError = input.resultado.clase ?? 'UNKNOWN'
+  // UN LÍMITE DE CUOTA NO ROMPE UNA CONEXIÓN, Y UN CORTE DE RED TAMPOCO.
+  //
+  // La conexión está sana, el token es válido y no hay NADA que el dueño del
+  // negocio pueda arreglar. Marcarla ERROR le pintaría «Requiere atención»
+  // sobre una integración que funciona y le pediría reconectar una cuenta que
+  // no tiene ningún problema. Se anota el fallo —para que se vea en los
+  // registros— y el estado se queda donde estaba.
+  const transitorio = CLASES_TRANSITORIAS.includes(clase)
+
+  const data: {
+    ultimoErrorAt: Date
+    ultimoError: string
+    claseError: ClaseError
+    estado?: EstadoConexion
+  } = {
     ultimoErrorAt: new Date(),
     ultimoError: input.resultado.error.slice(0, 300),
+    claseError: clase,
   }
-  if (estadoActual !== 'ERROR' && puedeTransicionar(estadoActual, 'ERROR')) {
+  if (!transitorio && estadoActual !== 'ERROR' && puedeTransicionar(estadoActual, 'ERROR')) {
     data.estado = 'ERROR'
   }
   await conEmpresa(input.companyId, (tx) =>
@@ -267,8 +289,8 @@ export async function anotarSalud(input: {
     companyId: input.companyId,
     origen: 'CONEXION',
     origenId: input.conexionId,
-    nivel: 'WARN',
+    nivel: transitorio ? 'INFO' : 'WARN',
     evento: 'conexion.fallo',
-    detalle: { error: input.resultado.error.slice(0, 300) },
+    detalle: { error: input.resultado.error.slice(0, 300), clase },
   })
 }

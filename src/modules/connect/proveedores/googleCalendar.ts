@@ -54,10 +54,29 @@ export const GOOGLE_CALENDAR: DefinicionProveedor = {
       tipo: 'VALIDACION',
     },
   ],
-  versionAlta: 1,
+  // Sube a 2 con la ampliación de permisos de la Fase 12: una conexión hecha
+  // con la versión 1 no concedió el permiso de listar calendarios.
+  versionAlta: 2,
   disponible: () =>
     Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET),
   queFalta: 'Faltan las variables GOOGLE_OAUTH_CLIENT_ID y GOOGLE_OAUTH_CLIENT_SECRET.',
+  /**
+   * Lo que sobrevive al alta. Nótese lo que NO pasa: ni el paso de
+   * autorización ni el de validación dejan rastro aquí — eran trámites, no
+   * ajustes.
+   */
+  configDesdeAlta: (datos) => {
+    const opciones =
+      datos.opciones && typeof datos.opciones === 'object' && !Array.isArray(datos.opciones)
+        ? (datos.opciones as Record<string, unknown>)
+        : {}
+    return {
+      calendarId: typeof datos.calendario === 'string' ? datos.calendario : null,
+      zonaHoraria: typeof opciones.zonaHoraria === 'string' ? opciones.zonaHoraria : null,
+      // Por defecto SÍ: quien conecta un calendario lo conecta para esto.
+      sincronizarConfirmadas: opciones.sincronizarConfirmadas !== false,
+    }
+  },
 }
 
 /**
@@ -65,10 +84,11 @@ export const GOOGLE_CALENDAR: DefinicionProveedor = {
  * secretos no viven en una tabla ni en una constante, solo el NOMBRE de su
  * variable.
  *
- * LOS PERMISOS NO CAMBIAN EN ESTA FASE. Para ofrecer «elige tu calendario»
- * hará falta además poder leer la lista de calendarios, y ampliar permisos
- * obliga a que las conexiones existentes vuelvan a autorizar. Ese cambio va en
- * la Fase 12, después de comprobar en producción cuántas conexiones hay.
+ * LOS PERMISOS SE AMPLIARON EN LA FASE 12, y solo después de comprobarlo en
+ * producción: el diagnóstico de la migración anterior confirmó CERO conexiones
+ * de Google Calendar vivas, así que nadie tiene que volver a autorizar. Si
+ * hubiera habido alguna, este cambio la habría dejado en PERMISSIONS —con
+ * «vuelve a conectar tu cuenta»— hasta que su dueño reautorizara.
  */
 export function oauthGoogleCalendar(): ConfigOauthConector | null {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID
@@ -78,7 +98,19 @@ export function oauthGoogleCalendar(): ConfigOauthConector | null {
     urlToken: 'https://oauth2.googleapis.com/token',
     clientId,
     clientSecretEnv: 'GOOGLE_OAUTH_CLIENT_SECRET',
-    scopes: ['https://www.googleapis.com/auth/calendar.events'],
+    scopes: [
+      // Escribir las citas confirmadas. Es el permiso que hace el trabajo.
+      'https://www.googleapis.com/auth/calendar.events',
+      // Y LEER LA LISTA de calendarios, para poder ofrecer «elige cuál» en vez
+      // de escribir a ciegas en el principal. Es el permiso MÁS ESTRECHO que
+      // permite eso: `calendar.readonly` también dejaría leer el contenido de
+      // todos los eventos del cliente, que no necesitamos para nada.
+      //
+      // NO VERIFICADO contra la consola de Google: si su pantalla de
+      // consentimiento rechazara este permiso granular, la alternativa
+      // documentada es `calendar.readonly`. Se cambia solo aquí.
+      'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+    ],
     extra: {
       // Sin `access_type=offline` Google NO manda refresh token, y la conexión
       // moriría en una hora sin forma de renovarse.

@@ -48,21 +48,23 @@ export const WHATSAPP: DefinicionProveedor = {
     },
     {
       id: 'credencial',
-      // Este es el paso que desaparece cuando Meta apruebe.
-      titulo: 'Pega tu token permanente',
+      // Este es el paso que desaparece cuando Meta apruebe: se sustituye por
+      // uno igual de COMPONENTE con el diálogo del alta incrustada, y nada
+      // más cambia.
+      titulo: 'Conecta tu número',
       descripcion:
-        'Los dos datos salen del panel de WhatsApp de Meta, en «API Setup». El token debe ser permanente, de un Usuario del Sistema.',
-      tipo: 'FORMULARIO',
-    },
-    {
-      id: 'validacion',
-      titulo: 'Comprobamos con Meta',
-      descripcion:
-        'Verificamos el número contra Meta antes de guardar nada. Si el token no sirve, no se guarda.',
-      tipo: 'VALIDACION',
+        'Los dos datos salen del panel de WhatsApp de Meta, en «API Setup». Comprobamos el número con Meta antes de guardar nada: si el token no sirve, no se guarda.',
+      tipo: 'COMPONENTE',
+      componente: 'AltaWhatsapp',
+      // EL TOKEN NO PASA POR `setupState`. Va directo a la credencial sellada
+      // (AES-256-GCM), y el paso se da por hecho porque esa credencial existe.
+      cumpleCon: 'autorizado',
     },
   ],
-  versionAlta: 1,
+  // Sube a 2 en la Fase 12: el alta pasa por el asistente y el paso de
+  // validación separado desaparece — validar contra Meta ya ocurre dentro del
+  // propio guardado, que es donde tiene que estar.
+  versionAlta: 2,
   // No depende de configuración de la plataforma: cada empresa trae su token y
   // su número. Por eso está disponible siempre.
   disponible: () => true,
