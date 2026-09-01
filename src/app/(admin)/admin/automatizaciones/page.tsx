@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { StatusBanner } from '@/components/ui/status-banner'
+import { canalesDeEmpresa } from '@/modules/connect/canales'
+import { ConexionIntegracion } from '@/components/connect/ConexionIntegracion'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +52,12 @@ export default async function AutomatizacionesPage() {
     return <SinEmpresaActiva seccion="tus automatizaciones" />
   }
 
+  // Los canales los responde la MISMA función que consulta el motor en el
+  // momento de actuar. Si un día las dos respuestas se separaran, esta
+  // pantalla mentiría — por eso comparten la función, no la lógica copiada.
+  const canales = await canalesDeEmpresa(companyId)
+  const apagados = canales.filter((c) => c.estado === 'no_configurado')
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -66,6 +74,34 @@ export default async function AutomatizacionesPage() {
             <EjecutarAutomatizaciones />
           </div>
         }
+      />
+
+      {/* ANTES QUE LAS REGLAS, LO QUE DE VERDAD SALE.
+          Las acciones del motor DEGRADAN en silencio: una regla que manda un
+          WhatsApp sin conector conectado se marca como correcta y registra la
+          intención. Ese comportamiento es el bueno —una regla publicada no
+          puede empezar a fallar porque falte una conexión— pero tiene un
+          coste: quien la configuró cree que sus clientes reciben mensajes.
+          Esto pone esa verdad delante, ANTES de configurar nada. */}
+      {apagados.length > 0 && (
+        <StatusBanner
+          variant="warning"
+          title={
+            apagados.length === 1
+              ? 'Hay un canal que no está enviando'
+              : `Hay ${apagados.length} canales que no están enviando`
+          }
+        >
+          Las reglas que usen {apagados.map((c) => c.nombre).join(', ')} se registrarán como
+          hechas, pero tus clientes no recibirán nada hasta que los conectes.
+        </StatusBanner>
+      )}
+
+      <ConexionIntegracion
+        companyId={companyId}
+        slug="whatsapp"
+        volver="/admin/automatizaciones"
+        proposito="Lo que hace que tus reglas envíen mensajes de verdad y no solo los anoten."
       />
 
       <div className="grid gap-4 md:grid-cols-3">

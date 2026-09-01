@@ -57,6 +57,10 @@ export interface AsistenteProps {
   errorOpciones: string | null
   /** El paso anterior al que se puede volver, si lo hay. */
   volverA: PasoVista | null
+  /** Módulo desde el que se llegó (validado en el servidor), o null. */
+  volverAlModulo: string | null
+  /** Su nombre legible, para el enlace de vuelta. */
+  nombreDelModulo: string
   urlAutorizacion: string
 }
 
@@ -92,9 +96,18 @@ export function AsistenteAlta(props: AsistenteProps) {
             <p className="text-h3 font-bold">{nombre} está conectado</p>
             <p className="mt-1 text-muted-foreground">{cierre.success}</p>
           </div>
-          <Button asChild>
-            <Link href={`/admin/integraciones/${slug}`}>Ver la integración</Link>
-          </Button>
+          {/* Quien llegó desde Citas vuelve a Citas: terminar un alta y
+              aterrizar en otra sección es hacerle repetir el camino. */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {props.volverAlModulo && (
+              <Button asChild>
+                <Link href={props.volverAlModulo}>Volver a {props.nombreDelModulo}</Link>
+              </Button>
+            )}
+            <Button variant={props.volverAlModulo ? 'outline' : 'default'} asChild>
+              <Link href={`/admin/integraciones/${slug}`}>Ver la integración</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     )
@@ -316,7 +329,9 @@ export function AsistenteAlta(props: AsistenteProps) {
             <span />
           )}
           <Button variant="ghost" size="sm" asChild>
-            <Link href={`/admin/integraciones/${slug}`}>Salir sin terminar</Link>
+            <Link href={props.volverAlModulo ?? `/admin/integraciones/${slug}`}>
+              Salir sin terminar
+            </Link>
           </Button>
         </div>
       </CardContent>
