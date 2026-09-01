@@ -5,11 +5,13 @@ import { suscripcionesDeEmpresa } from '@/modules/connect/webhooks'
 import { registrosDeEmpresa } from '@/modules/connect/bitacora'
 import { catalogoParaEmpresas, conexionesDeEmpresa } from '@/modules/connect/registro'
 import { limiteDe } from '@/modules/connect/entitlements'
+import { calendarioDeEmpresa, canalesDeEmpresa } from '@/modules/connect/canales'
 import { PageHeader } from '@/components/ui/page-header'
 import { ClavesApiPanel } from '@/components/connect/ClavesApiPanel'
 import { WebhooksPanel } from '@/components/connect/WebhooksPanel'
 import { ActividadConnect } from '@/components/connect/ActividadConnect'
 import { AplicacionesPanel } from '@/components/connect/AplicacionesPanel'
+import { CanalesPanel } from '@/components/connect/CanalesPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,13 +35,25 @@ export default async function IntegracionesPage() {
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const companyId = user.metadata.companyId
 
-  const [conectores, conexiones, claves, webhooks, registros, maxClaves, maxWebhooks] =
+  const [
+    conectores,
+    conexiones,
+    claves,
+    webhooks,
+    registros,
+    canales,
+    calendario,
+    maxClaves,
+    maxWebhooks,
+  ] =
     await Promise.all([
       catalogoParaEmpresas(),
       conexionesDeEmpresa(companyId),
       clavesDeEmpresa(companyId),
       suscripcionesDeEmpresa(companyId),
       registrosDeEmpresa(companyId, { limite: 30 }),
+      canalesDeEmpresa(companyId),
+      calendarioDeEmpresa(companyId),
       limiteDe(companyId, 'api_keys.max'),
       limiteDe(companyId, 'webhooks.max'),
     ])
@@ -50,6 +64,11 @@ export default async function IntegracionesPage() {
         title="Integraciones"
         description="Conecta MembeGo con las herramientas que ya usas: claves de API para consultar tus datos y webhooks para que te avisemos cuando pasa algo."
       />
+
+      {/* Lo primero: qué está llegando de verdad. Antes que el catálogo, porque
+          la pregunta que trae aquí a una empresa casi nunca es «qué puedo
+          conectar» sino «¿esto que configuré está funcionando?». */}
+      <CanalesPanel canales={canales} calendario={calendario} />
 
       <AplicacionesPanel
         conectores={conectores}

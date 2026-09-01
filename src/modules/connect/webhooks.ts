@@ -84,6 +84,22 @@ export async function crearSuscripcion(input: {
   return { ok: true, id: fila.id, secreto }
 }
 
+/**
+ * ¿Tiene esta empresa algún destino vivo?
+ *
+ * Se pregunta ANTES de fabricar el sobre, para poder degradar con un motivo
+ * («sin webhooks suscritos») en vez de crear entregas que no irían a ningún
+ * sitio. Es una cuenta, no una lectura de filas: en el camino caliente de una
+ * automatización, traer las suscripciones para descartarlas sería trabajo de
+ * más en cada ejecución.
+ */
+export async function haySuscripcionesActivas(companyId: string): Promise<boolean> {
+  const n = await conEmpresa(companyId, (tx) =>
+    tx.suscripcionWebhook.count({ where: { companyId, estado: 'ACTIVE' } })
+  ).catch(() => 0)
+  return n > 0
+}
+
 /** Las suscripciones de una empresa, para el panel. */
 export async function suscripcionesDeEmpresa(companyId: string) {
   return conEmpresa(companyId, (tx) =>
