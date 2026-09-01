@@ -76,7 +76,8 @@ test('whatsapp: una credencial a medias no pasa por buena', () => {
 // ─── Honestidad del catálogo ─────────────────────────────────────────────────
 
 test('conectores: lo que no está configurado no se ofrece', () => {
-  const src = leer('src/modules/connect/conectores.ts')
+  // El registro se partió en la Fase 10: un archivo por proveedor.
+  const src = leer('src/modules/connect/proveedores/googleCalendar.ts')
   // Google depende de la app de MembeGo: sin sus variables, fuera del catálogo.
   assert.match(src, /GOOGLE_OAUTH_CLIENT_ID && process\.env\.GOOGLE_OAUTH_CLIENT_SECRET/)
   // Y el registro filtra la lectura por eso, no solo por el estado en la base.
@@ -86,7 +87,7 @@ test('conectores: lo que no está configurado no se ofrece', () => {
 })
 
 test('conectores: Google pide refresh token de forma explícita', () => {
-  const src = leer('src/modules/connect/conectores.ts')
+  const src = leer('src/modules/connect/proveedores/googleCalendar.ts')
   // Sin `access_type=offline` Google no manda refresh token y la conexión
   // moriría en una hora; sin `prompt=consent`, una reconexión se quedaría sin él.
   assert.match(src, /access_type: 'offline'/)
@@ -114,7 +115,7 @@ test('catálogo de acciones: WhatsApp ya no dice «arquitectura futura»', () =>
 // ─── Secretos ────────────────────────────────────────────────────────────────
 
 test('conectores: ningún secreto de proveedor vive en el código', () => {
-  const src = leer('src/modules/connect/conectores.ts')
+  const src = leer('src/modules/connect/proveedores/googleCalendar.ts')
   // Solo el NOMBRE de la variable de entorno, nunca un valor.
   assert.match(src, /clientSecretEnv: 'GOOGLE_OAUTH_CLIENT_SECRET'/)
   assert.ok(!/clientSecret:\s*'[^']+'/.test(src))

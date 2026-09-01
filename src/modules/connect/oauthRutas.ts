@@ -1,6 +1,6 @@
 import 'server-only'
-import type { ConfigOauthConector } from '@/modules/connect/oauth'
-import { definicionDe } from '@/modules/connect/conectores'
+import type { ConfigOauthConector } from '@/modules/connect/oauthNucleo'
+import { oauthDe } from '@/modules/connect/proveedores/indice'
 
 // Puro y por tanto probable: vive en el núcleo, se reexporta desde aquí para
 // que las rutas lo importen de un solo sitio.
@@ -30,7 +30,7 @@ export function redirectUriDeCallback(): string {
 /**
  * De dónde sale la configuración OAuth de cada conector.
  *
- * La define el conector (`modules/connect/conectores.ts`) y se resuelve en el
+ * La define el proveedor (`modules/connect/proveedores/`) y se resuelve en el
  * momento, leyendo el entorno: los secretos NUNCA viven en una tabla ni en una
  * constante del código — cada definición guarda el NOMBRE de su variable
  * (`clientSecretEnv`) y el valor se lee al canjear.
@@ -41,7 +41,5 @@ export function redirectUriDeCallback(): string {
  * pantalla de consentimiento rota.
  */
 export function configOauthDe(slug: string): ConfigOauthConector | null {
-  const def = definicionDe(slug)
-  if (!def || def.authTipo !== 'OAUTH2' || !def.disponible()) return null
-  return def.oauth?.() ?? null
+  return oauthDe(slug)
 }

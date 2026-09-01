@@ -62,7 +62,13 @@ function Acciones({ conector }: { conector: ConectorAdmin }) {
 }
 
 export function CatalogoAdminPanel({ conectores }: { conectores: ConectorAdmin[] }) {
-  const activosSinConfig = conectores.filter((c) => c.estado === 'ACTIVE' && !c.disponible)
+  // Solo avisa de lo IMPLEMENTADO y sin configurar: una integración prevista
+  // se publica a propósito sin código detrás, para que las empresas la vean
+  // como «Próximamente». Meterlas en este aviso sería una alarma falsa
+  // permanente de once líneas.
+  const activosSinConfig = conectores.filter(
+    (c) => c.estado === 'ACTIVE' && c.implementado && !c.disponible
+  )
 
   return (
     <Card>
@@ -93,8 +99,14 @@ export function CatalogoAdminPanel({ conectores }: { conectores: ConectorAdmin[]
                   <span className="font-medium">{c.nombre}</span>
                   <Badge variant={e.variante}>{e.texto}</Badge>
                   <Badge variant="secondary">{c.categoria}</Badge>
-                  {!c.disponible && (
-                    <span className="text-caption text-warning">Sin configurar aquí</span>
+                  {!c.implementado ? (
+                    <span className="text-caption text-muted-foreground">
+                      Prevista · si la publicas, se ve como «Próximamente» y no se puede conectar
+                    </span>
+                  ) : (
+                    !c.disponible && (
+                      <span className="text-caption text-warning">Sin configurar aquí</span>
+                    )
                   )}
                   <span className="text-caption text-muted-foreground">
                     {c.conexionesVivas} conectadas · {c.conexionesTotales} en total

@@ -2,7 +2,7 @@ import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarConector } from '@/modules/connect/bitacora'
 import { eliminarCredencial } from '@/modules/connect/credenciales'
-import { slugsDisponibles } from '@/modules/connect/conectores'
+import { proveedorDe, slugsDisponibles } from '@/modules/connect/proveedores/indice'
 import { puedeTransicionar, type EstadoConexion } from '@/modules/connect/nucleo'
 
 export { puedeTransicionar } from '@/modules/connect/nucleo'
@@ -80,7 +80,7 @@ export async function conexionesDeEmpresa(companyId: string) {
 
 export type ResultadoCrearConexion =
   | { ok: true; conexionId: string; reutilizada: boolean }
-  | { ok: false; motivo: 'conector_no_disponible' | 'ya_conectada' }
+  | { ok: false; motivo: 'conector_no_disponible' | 'ya_conectada' | 'no_se_conecta_aqui' }
 
 /**
  * Inicia el alta de una conexión (queda PENDING; la credencial llega después,
@@ -92,6 +92,23 @@ export async function crearConexion(input: {
   conectorSlug: string
   creadoPor?: string
 }): Promise<ResultadoCrearConexion> {
+  // LA GUARDIA DE «PRÓXIMAMENTE», Y VIVE EN EL SERVIDOR (Fase 10).
+  //
+  // Una fila publicada en el catálogo NO basta para conectar: hace falta que
+  // exista código que sepa hablar con ese proveedor. Las integraciones
+  // previstas tienen fila y no tienen implementación, y esta comprobación es
+  // lo que hace que su botón deshabilitado sea una consecuencia de la regla y
+  // no la regla misma. Ocultar un botón no prohíbe nada: quien llame esta
+  // acción a mano se encuentra lo mismo.
+  const proveedor = proveedorDe(input.conectorSlug)
+  if (!proveedor || !proveedor.disponible()) {
+    return { ok: false, motivo: 'conector_no_disponible' }
+  }
+  // Y una integración ADAPTADA no se da de alta aquí: su estado vive en el
+  // subsistema que la administra (CardNET, en el módulo de pagos). Crearle una
+  // fila sería inventar una segunda verdad sobre el mismo hecho.
+  if (proveedor.clase === 'ADAPTADA') return { ok: false, motivo: 'no_se_conecta_aqui' }
+
   const conector = await sinEmpresa('connect: resolver conector del catálogo global', (tx) =>
     tx.conector.findFirst({
       where: { slug: input.conectorSlug, estado: 'ACTIVE' },
@@ -143,6 +160,34 @@ export async function crearConexion(input: {
     detalle: { conector: input.conectorSlug },
   })
   return { ok: true, conexionId: creada.id, reutilizada: false }
+}
+
+/**
+ * RESUELVE o CREA la conexión de un conector para una empresa, y devuelve su
+ * id. Es lo que necesita todo flujo que empieza fuera de nuestra aplicación:
+ * el `state` de OAuth se ata a una fila concreta, así que la fila tiene que
+ * existir ANTES de mandar a nadie a Google.
+ *
+ * (Antes de la Fase 10 esto no existía y el botón «Conectar» de un conector
+ * OAuth iba directo a la ruta de inicio sin `conexionId`, que respondía «Falta
+ * la conexión» con un 400. El botón nunca llegó a funcionar.)
+ */
+export async function asegurarConexion(input: {
+  companyId: string
+  conectorSlug: string
+  creadoPor?: string
+}): Promise<string | null> {
+  const creada = await crearConexion(input)
+  if (creada.ok) return creada.conexionId
+  if (creada.motivo !== 'ya_conectada') return null
+
+  const fila = await conEmpresa(input.companyId, (tx) =>
+    tx.conexionEmpresa.findFirst({
+      where: { companyId: input.companyId, conector: { slug: input.conectorSlug } },
+      select: { id: true },
+    })
+  )
+  return fila?.id ?? null
 }
 
 /**

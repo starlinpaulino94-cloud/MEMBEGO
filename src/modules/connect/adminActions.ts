@@ -5,7 +5,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { crearClaveApi, revocarClaveApi } from '@/modules/connect/clavesApi'
 import { crearConexion, desconectarConexion } from '@/modules/connect/registro'
 import { conectarWhatsapp } from '@/modules/connect/whatsapp'
-import { definicionDe } from '@/modules/connect/conectores'
+import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import { cambiarEstadoSuscripcion, crearSuscripcion } from '@/modules/connect/webhooks'
 import { MENSAJE_URL } from '@/modules/connect/webhooksNucleo'
 import { SCOPES_POR_CAPABILITY } from '@membego/contracts'
@@ -242,7 +242,7 @@ export async function desconectarAppAction(
 
 /** La URL a la que mandar al usuario para conectar por OAuth. */
 export async function urlDeConexionOauth(slug: string): Promise<string | null> {
-  const def = definicionDe(slug)
-  if (!def || def.authTipo !== 'OAUTH2' || !def.disponible()) return null
+  const def = proveedorDe(slug)
+  if (!def || def.autorizacion.tipo !== 'OAUTH2' || !def.disponible()) return null
   return `/api/connect/oauth/${encodeURIComponent(slug)}/iniciar`
 }
