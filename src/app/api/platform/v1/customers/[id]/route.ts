@@ -26,10 +26,13 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: NextRequest, ctxRuta: { params: Promise<{ id: string }> }) {
   const { id } = await ctxRuta.params
-  const auth = await autenticarSobreEmpresa(
+    const auth = await autenticarSobreEmpresa(
     req,
     'customers:read',
-    req.nextUrl.searchParams.get('companyId')
+    req.nextUrl.searchParams.get('companyId'),
+    // Lectura: se abre a CLAVES DE API DE EMPRESA (Connect · F3/F8).
+    // No depende de qué satélite pregunta.
+    { claveDeEmpresa: true }
   )
   if (esFallo(auth)) return auth.fallo
 

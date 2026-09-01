@@ -23,10 +23,13 @@ export const dynamic = 'force-dynamic'
  * PINTA, y por eso mismo se proyecta como caché, nunca como autoridad.
  */
 export async function GET(req: NextRequest) {
-  const auth = await autenticarSobreEmpresa(
+    const auth = await autenticarSobreEmpresa(
     req,
     'memberships:read',
     req.nextUrl.searchParams.get('companyId'),
+    // Lectura: se abre a CLAVES DE API DE EMPRESA (Connect · F3/F8).
+    // No depende de qué satélite pregunta.
+    { claveDeEmpresa: true }
   )
   if (esFallo(auth)) return auth.fallo
 

@@ -310,8 +310,16 @@ test('ninguna ruta usa el companyId de la red sin validarlo', () => {
  *   · `.well-known/keys` publica la clave pública con la que se verifican los
  *     webhooks — que llegan antes de que nadie configure nada, y pedir un token
  *     para obtenerla sería un círculo.
+ *   · `openapi` describe la FORMA de la API, no sus datos. Quien integra tiene
+ *     que poder importarla en Postman o Zapier ANTES de tener credenciales, y
+ *     pedir un token para leer la documentación es el mismo círculo. No revela
+ *     nada que no se averigüe probando rutas: qué recursos existen y qué
+ *     permiso pide cada uno.
+ *
+ * La prueba de abajo impide que la exención sea una puerta: ninguna de las
+ * tres puede tocar la base.
  */
-const PUBLICAS = [join('oauth', 'token'), join('.well-known', 'keys')]
+const PUBLICAS = [join('oauth', 'token'), join('.well-known', 'keys'), join('v1', 'openapi')]
 
 const esPublica = (ruta: string) => PUBLICAS.some((p) => ruta.includes(p))
 

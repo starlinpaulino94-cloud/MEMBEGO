@@ -12,6 +12,7 @@ import { WebhooksPanel } from '@/components/connect/WebhooksPanel'
 import { ActividadConnect } from '@/components/connect/ActividadConnect'
 import { AplicacionesPanel } from '@/components/connect/AplicacionesPanel'
 import { CanalesPanel } from '@/components/connect/CanalesPanel'
+import { GuiaDesarrolladores } from '@/components/connect/GuiaDesarrolladores'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +106,10 @@ export default async function IntegracionesPage() {
         }))}
         limite={maxWebhooks}
       />
+
+      {/* La guía va DESPUÉS de las claves: primero se crea la credencial, y
+          entonces la documentación tiene a qué agarrarse. */}
+      <GuiaDesarrolladores base={process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.membego.com'} />
 
       <ActividadConnect
         registros={registros.map((r) => ({
