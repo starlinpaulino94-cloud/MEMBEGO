@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { verificarTokenSSO } from '@/modules/integraciones/nucleo'
-import { autenticar, autorizarEmpresa, esFallo } from '@/modules/plataforma/api'
+import { autenticar, autorizarEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { marcarTokenUsado } from '@/modules/plataforma/sso'
 
@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
   // no es un recurso de ninguna empresa, es la relación del sistema con MembeGo.
   const ctx = await autenticar(req, null)
   if (esFallo(ctx)) return ctx.fallo
+  // Recurso de SATÉLITE: describe la relación de un sistema con MembeGo, así
+  // que necesita saber cuál. Una clave de API de empresa no llega aquí — la
+  // guardia la rechaza antes con API_KEY_NOT_SUPPORTED.
+  const sistema = exigeSistema(ctx)
 
   const cuerpo = (await req.json().catch(() => ({}))) as Cuerpo
   const token = cuerpo.token?.trim() ?? ''
@@ -50,7 +54,7 @@ export async function POST(req: NextRequest) {
     'sso: secreto del sistema que canjea su propio token (catálogo global)',
     (tx) =>
       tx.sistemaConectado.findUnique({
-        where: { id: ctx.sistemaId },
+        where: { id: sistema.sistemaId },
         select: { secreto: true },
       })
   ).catch(() => null)
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
   // otro: no lo verificaría, porque no es su firma.
   const datos = verificarTokenSSO(secreto.secreto, token)
   if (!datos) {
-    console.warn('[sso-redeem] token inválido o vencido:', ctx.sistemaSlug, ctx.requestId)
+    console.warn('[sso-redeem] token inválido o vencido:', sistema.sistemaSlug, ctx.requestId)
     return errorApi('SSO_TOKEN_INVALID', ctx.requestId)
   }
 
@@ -75,17 +79,17 @@ export async function POST(req: NextRequest) {
   if (!datos.jti) {
     // Tokens emitidos antes de la Fase 5. Se canjean, y se avisa: sin `jti` no
     // hay nada que registrar y el uso único no se puede garantizar.
-    console.warn('[sso-redeem] token sin jti (sin uso único):', ctx.sistemaSlug)
+    console.warn('[sso-redeem] token sin jti (sin uso único):', sistema.sistemaSlug)
   } else {
     const canje = await marcarTokenUsado({
       jti: datos.jti,
-      sistemaId: ctx.sistemaId,
+      sistemaId: sistema.sistemaId,
       companyId: datos.companyId,
       direccion: 'SALIENTE',
       expiraAt: new Date(datos.exp * 1000),
     })
     if (canje === 'YA_USADO') {
-      console.warn('[sso-redeem] token ya canjeado:', ctx.sistemaSlug, datos.jti)
+      console.warn('[sso-redeem] token ya canjeado:', sistema.sistemaSlug, datos.jti)
       return errorApi('SSO_TOKEN_ALREADY_USED', ctx.requestId)
     }
   }

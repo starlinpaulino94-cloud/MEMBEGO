@@ -20,7 +20,7 @@
 // ── Catálogo ─────────────────────────────────────────────────────────────────
 
 model Excursion {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   companyId   String
   nombre      String
   slug        String
@@ -32,7 +32,7 @@ model Excursion {
   duracionMin Int?
   ubicacion   String?
   categoria   String?
-  moneda      String  @default("DOP")
+  moneda      String   @default("DOP")
   impuestoPct Decimal? @db.Decimal(5, 2)
   /// Capacidad total por salida (las variantes pueden acotarla).
   capacidad   Int?
@@ -43,9 +43,9 @@ model Excursion {
   incluye     String?
   noIncluye   String?
   /// 'ACTIVA' | 'PAUSADA' | 'AGOTADA' | 'TEMPORAL' | 'ARCHIVADA'.
-  estado      String  @default("ACTIVA")
+  estado      String   @default("ACTIVA")
   /// 'ACTIVIDAD' | 'COMBO' | 'PASE_DIA'
-  tipoItem    String  @default("ACTIVIDAD")
+  tipoItem    String   @default("ACTIVIDAD")
   /// Preparado para operadores terceros (Fase futura de proveedores).
   providerId  String?
 
@@ -64,17 +64,17 @@ model Excursion {
 }
 
 model ExcursionComboItem {
-  id          String    @id @default(cuid())
-  companyId   String
-  comboId     String
-  combo       Excursion @relation("ComboPadre", fields: [comboId], references: [id], onDelete: Cascade)
-  actividadId String
-  actividad   Excursion @relation("ActividadHija", fields: [actividadId], references: [id], onDelete: Cascade)
-  varianteId  String?
-  horaSalida            String?
-  orden                 Int       @default(0)
-  permitirSolapamiento  Boolean   @default(false)
-  horarioFijo           Json?
+  id                   String    @id @default(cuid())
+  companyId            String
+  comboId              String
+  combo                Excursion @relation("ComboPadre", fields: [comboId], references: [id], onDelete: Cascade)
+  actividadId          String
+  actividad            Excursion @relation("ActividadHija", fields: [actividadId], references: [id], onDelete: Cascade)
+  varianteId           String?
+  horaSalida           String?
+  orden                Int       @default(0)
+  permitirSolapamiento Boolean   @default(false)
+  horarioFijo          Json?
 
   createdAt DateTime @default(now())
 
@@ -85,11 +85,11 @@ model ExcursionComboItem {
 }
 
 model ExcursionVariante {
-  id              String    @id @default(cuid())
-  excursionId     String
-  excursion       Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
-  companyId       String
-  nombre          String
+  id                  String    @id @default(cuid())
+  excursionId         String
+  excursion           Excursion @relation(fields: [excursionId], references: [id], onDelete: Cascade)
+  companyId           String
+  nombre              String
   precioAdulto        Decimal   @db.Decimal(12, 2)
   precioNino          Decimal?  @db.Decimal(12, 2)
   precioResidente     Decimal?  @db.Decimal(12, 2)
@@ -130,7 +130,7 @@ model ExcursionHorario {
 // ── Vendedores y atribución ──────────────────────────────────────────────────
 
 model Vendedor {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   companyId    String
   /// Cuenta de MembeGo SOLO si el vendedor usará su panel (un hotel o un
   /// taxista no la necesitan). Las ventas cuelgan del vendedor, no del user.
@@ -153,25 +153,25 @@ model Vendedor {
   supervisorId String?
   supervisor   Vendedor?  @relation("VendedorSupervisor", fields: [supervisorId], references: [id])
   equipo       Vendedor[] @relation("VendedorSupervisor")
-  fechaIngreso DateTime  @default(now())
+  fechaIngreso DateTime   @default(now())
 
   /// Datos B2B / Corporativos (Touroperadores y Agencias):
   razonSocial      String?
   rnc              String?
-  diasCredito      Int?      @default(0)
-  limiteCredito    Decimal?  @db.Decimal(12, 2)
+  diasCredito      Int?     @default(0)
+  limiteCredito    Decimal? @db.Decimal(12, 2)
   emailFacturacion String?
   prefijoVoucher   String?
-  modeloComercial  String    @default("COMISION")
+  modeloComercial  String   @default("COMISION")
 
   /// 'ACTIVO' | 'SUSPENDIDO' | 'INACTIVO'. Nunca se borra: sus ventas,
   /// clientes y comisiones históricas permanecen (§99).
-  estado       String    @default("ACTIVO")
+  estado String @default("ACTIVO")
 
-  enlaces       VendedorEnlace[]
-  atribuciones  VendedorAtribucion[]
-  metas         VendedorMeta[]
-  bonos         VendedorBono[]
+  enlaces      VendedorEnlace[]
+  atribuciones VendedorAtribucion[]
+  metas        VendedorMeta[]
+  bonos        VendedorBono[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -266,17 +266,17 @@ model VendedorMeta {
 
 /// Bonificación (concepto SEPARADO de la comisión por diseño, §41).
 model VendedorBono {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   companyId     String
   vendedorId    String
-  vendedor      Vendedor  @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  vendedor      Vendedor @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
   descripcion   String
   /// Condición que lo otorgó ({pasajeros: 50} → +US$100), para el expediente.
   condicion     Json?
-  monto         Decimal   @db.Decimal(12, 2)
-  moneda        String    @default("DOP")
+  monto         Decimal  @db.Decimal(12, 2)
+  moneda        String   @default("DOP")
   /// 'PENDIENTE' | 'OTORGADO' | 'PAGADO' | 'ANULADO'.
-  estado        String    @default("PENDIENTE")
+  estado        String   @default("PENDIENTE")
   liquidacionId String?
 
   createdAt DateTime @default(now())
@@ -311,7 +311,7 @@ model CanalVenta {
 // ── Reservas, pagos y ventas ─────────────────────────────────────────────────
 
 model ReservaExc {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   companyId   String
   /// EXC-2026-000184: único por empresa, legible, buscable (§17).
   numero      String
@@ -323,23 +323,23 @@ model ReservaExc {
   sucursalId  String?
   fecha       DateTime
   hora        String?
-  adultos     Int       @default(0)
-  ninos       Int       @default(0)
-  subtotal    Decimal   @db.Decimal(12, 2)
-  descuento   Decimal   @default(0) @db.Decimal(12, 2)
-  impuestos   Decimal   @default(0) @db.Decimal(12, 2)
-  total       Decimal   @db.Decimal(12, 2)
-  moneda      String    @default("DOP")
+  adultos     Int      @default(0)
+  ninos       Int      @default(0)
+  subtotal    Decimal  @db.Decimal(12, 2)
+  descuento   Decimal  @default(0) @db.Decimal(12, 2)
+  impuestos   Decimal  @default(0) @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  moneda      String   @default("DOP")
   /// Tasa usada SI hubo conversión — congelada, jamás se recalcula (§63).
-  tasaCambio  Decimal?  @db.Decimal(12, 6)
+  tasaCambio  Decimal? @db.Decimal(12, 6)
   /// 'BORRADOR' | 'PENDIENTE' | 'CONFIRMADA' | 'PARCIALMENTE_PAGADA' |
   /// 'PAGADA' | 'COMPLETADA' | 'CANCELADA' | 'REEMBOLSADA' | 'NO_SHOW'.
-  estado      String    @default("PENDIENTE")
+  estado      String   @default("PENDIENTE")
   canal       String?
   notas       String?
   /// true = el cliente es residente local (mismo país que la empresa).
   /// Se pregunta en el formulario de reserva y se usa para aplicar tarifa diferenciada.
-  esResidente Boolean   @default(false)
+  esResidente Boolean  @default(false)
   creadaPorId String?
 
   /// Logística de Turoperador / Recogida en Hoteles:
@@ -348,13 +348,13 @@ model ReservaExc {
   lobbyRecogida   String?
   horaRecogida    String?
   habitacion      String?
-  tarifaNetaTotal Decimal?  @db.Decimal(12, 2)
+  tarifaNetaTotal Decimal? @db.Decimal(12, 2)
 
   /// QR de CHECK-IN (§84): identifica esta reserva el día de la salida. Es
   /// TRANSACCIONAL —marca quién se subió— y no tiene nada que ver con el QR de
   /// adquisición del vendedor. Nace con la reserva y no se reutiliza jamás en
   /// otra: por eso es único global.
-  checkinToken String?  @unique
+  checkinToken String?   @unique
   /// Cuándo embarcó el grupo. `null` = todavía no se presentó.
   checkinAt    DateTime?
   checkinPorId String?
@@ -394,8 +394,8 @@ model ReservaItem {
   estado      String     @default("PENDIENTE")
   checkinAt   DateTime?
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId, actividadId, fecha, hora])
   @@index([reservaId])
@@ -412,7 +412,7 @@ model ReservaPasajero {
   nombre    String?
   /// Se subió de verdad. Reservar cuatro y presentarse tres es lo normal, y el
   /// manifiesto del bus tiene que poder decir cuál de los cuatro faltó.
-  presente  Boolean  @default(false)
+  presente  Boolean    @default(false)
   checkinAt DateTime?
 
   @@index([reservaId])
@@ -423,20 +423,20 @@ model ReservaPasajero {
 /// historial completo permanece. La suma de pagos mueve el estado de la
 /// reserva (PARCIALMENTE_PAGADA → PAGADA) — nunca al revés.
 model ReservaPago {
-  id             String     @id @default(cuid())
-  reservaId      String
-  reserva        ReservaExc @relation(fields: [reservaId], references: [id], onDelete: Cascade)
-  companyId      String
-  monto          Decimal    @db.Decimal(12, 2)
-  moneda         String     @default("DOP")
+  id              String     @id @default(cuid())
+  reservaId       String
+  reserva         ReservaExc @relation(fields: [reservaId], references: [id], onDelete: Cascade)
+  companyId       String
+  monto           Decimal    @db.Decimal(12, 2)
+  moneda          String     @default("DOP")
   /// 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'LINK' | 'DEPOSITO' | libre.
-  metodo         String
-  referencia     String?
-  comprobanteUrl String?
+  metodo          String
+  referencia      String?
+  comprobanteUrl  String?
   /// 'REGISTRADO' | 'ANULADO' (anular = movimiento nuevo, no borrar).
-  estado         String     @default("REGISTRADO")
+  estado          String     @default("REGISTRADO")
   confirmadoPorId String?
-  notas          String?
+  notas           String?
 
   createdAt DateTime @default(now())
 
@@ -500,21 +500,21 @@ model ReembolsoExc {
 /// REGLAS del Commission Engine (§22–23). La prioridad al resolver:
 /// VENDEDOR_EXCURSION > VENDEDOR > EXCURSION > CATEGORIA > TIPO_VENDEDOR > GENERAL.
 model ComisionRegla {
-  id           String    @id @default(cuid())
-  companyId    String
+  id            String    @id @default(cuid())
+  companyId     String
   /// 'GENERAL' | 'TIPO_VENDEDOR' | 'CATEGORIA' | 'EXCURSION' | 'VENDEDOR' | 'VENDEDOR_EXCURSION'.
-  ambito       String
-  excursionId  String?
-  vendedorId   String?
-  categoria    String?
-  tipoVendedor String?
+  ambito        String
+  excursionId   String?
+  vendedorId    String?
+  categoria     String?
+  tipoVendedor  String?
   /// 'PORCENTAJE' | 'FIJO_VENTA' | 'FIJO_PASAJERO' | 'FIJO_ADULTO' |
   /// 'FIJO_NINO' | 'ESCALON'.
-  tipoCalculo  String
-  valor        Decimal   @db.Decimal(12, 2)
+  tipoCalculo   String
+  valor         Decimal   @db.Decimal(12, 2)
   /// Para ESCALON: [{desde:1, hasta:10, pct:10}, …].
-  escalones    Json?
-  activa       Boolean   @default(true)
+  escalones     Json?
+  activa        Boolean   @default(true)
   vigenciaDesde DateTime?
   vigenciaHasta DateTime?
 
@@ -529,19 +529,19 @@ model ComisionRegla {
 /// la produjo y desglose la explica en lenguaje humano
 /// («3 adultos × US$10 = US$30»). Cambiar reglas después NO la toca.
 model ComisionEntrada {
-  id            String   @id @default(cuid())
+  id            String       @id @default(cuid())
   companyId     String
   ventaId       String
-  venta         VentaExc @relation(fields: [ventaId], references: [id])
+  venta         VentaExc     @relation(fields: [ventaId], references: [id])
   vendedorId    String
-  base          Decimal  @db.Decimal(12, 2)
-  monto         Decimal  @db.Decimal(12, 2)
-  moneda        String   @default("DOP")
+  base          Decimal      @db.Decimal(12, 2)
+  monto         Decimal      @db.Decimal(12, 2)
+  moneda        String       @default("DOP")
   reglaSnapshot Json
   desglose      String
   /// 'ESTIMADA' | 'GENERADA' | 'APROBADA' | 'PENDIENTE_PAGO' | 'PAGADA' |
   /// 'ANULADA'. Una PAGADA jamás se anula: se ajusta (§27, §52).
-  estado        String   @default("GENERADA")
+  estado        String       @default("GENERADA")
   liquidacionId String?
   liquidacion   Liquidacion? @relation(fields: [liquidacionId], references: [id])
 
@@ -576,23 +576,23 @@ model ComisionAjuste {
 }
 
 model Liquidacion {
-  id            String    @id @default(cuid())
-  companyId     String
+  id             String    @id @default(cuid())
+  companyId      String
   /// PAY-2026-0014: único por empresa.
-  numero        String
-  vendedorId    String
-  periodoDesde  DateTime
-  periodoHasta  DateTime
-  total         Decimal   @db.Decimal(12, 2)
-  moneda        String    @default("DOP")
+  numero         String
+  vendedorId     String
+  periodoDesde   DateTime
+  periodoHasta   DateTime
+  total          Decimal   @db.Decimal(12, 2)
+  moneda         String    @default("DOP")
   /// 'BORRADOR' | 'PENDIENTE' | 'APROBADA' | 'PAGADA' | 'ANULADA'.
-  estado        String    @default("BORRADOR")
-  metodo        String?
-  referencia    String?
+  estado         String    @default("BORRADOR")
+  metodo         String?
+  referencia     String?
   comprobanteUrl String?
-  notas         String?
-  pagadaPorId   String?
-  pagadaAt      DateTime?
+  notas          String?
+  pagadaPorId    String?
+  pagadaAt       DateTime?
 
   comisiones ComisionEntrada[]
 
@@ -607,15 +607,15 @@ model Liquidacion {
 // ── Configuración del módulo por empresa ─────────────────────────────────────
 
 model ExcursionesConfig {
-  id                    String  @id @default(cuid())
-  companyId             String  @unique
+  id                    String @id @default(cuid())
+  companyId             String @unique
   /// 'PRIMERA' | 'ULTIMA' | 'RESERVA' (§12).
-  politicaAtribucion    String  @default("PRIMERA")
+  politicaAtribucion    String @default("PRIMERA")
   /// Días que vive una atribución de visita sin registro.
-  ventanaAtribucionDias Int     @default(30)
-  monedaDefecto         String  @default("DOP")
+  ventanaAtribucionDias Int    @default(30)
+  monedaDefecto         String @default("DOP")
   /// 'AUTOMATICA' (venta confirmada → APROBADA) | 'MANUAL'.
-  reglaAprobacion       String  @default("MANUAL")
+  reglaAprobacion       String @default("MANUAL")
   /// Prefijos de numeración ({reserva:'EXC', venta:'SAL', liquidacion:'PAY'}).
   config                Json?
 

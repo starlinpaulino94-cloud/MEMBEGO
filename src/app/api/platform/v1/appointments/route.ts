@@ -24,7 +24,15 @@ const LIMITE = 500
  */
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams
-  const auth = await autenticarSobreEmpresa(req, 'appointments:read', params.get('companyId'))
+  const auth = await autenticarSobreEmpresa(
+    req,
+    'appointments:read',
+    params.get('companyId'),
+    // Abierto a CLAVES DE API DE EMPRESA (Connect · Fase 3): es una lectura y
+    // no necesita saber qué satélite pregunta. Con una clave, la empresa viene
+    // atada a ella, así que `companyId` puede omitirse.
+    { claveDeEmpresa: true }
+  )
   if (esFallo(auth)) return auth.fallo
 
   // Ventana temporal. `desde` por defecto = ahora; fechas inválidas se rechazan

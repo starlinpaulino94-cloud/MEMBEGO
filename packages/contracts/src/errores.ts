@@ -23,6 +23,16 @@ export const CODIGOS_ERROR = {
   // 403 — sabemos quién es, y no puede
   INSUFFICIENT_SCOPE: 403,
   COMPANY_NOT_ENTITLED: 403,
+  /**
+   * La clave de API de empresa es válida, pero este recurso solo lo puede usar
+   * un sistema satélite (necesita saber QUÉ sistema realiza la operación: un
+   * canje sin sistema que lo respalde no se puede auditar).
+   *
+   * Se dice con claridad en vez de devolver un 401 genérico: la lista de
+   * recursos es API pública, así que no se filtra nada, y quien integra pierde
+   * media tarde averiguando si su clave está mal.
+   */
+  API_KEY_NOT_SUPPORTED: 403,
   // 404
   NOT_FOUND: 404,
   /** El beneficio existe pero no se puede consumir ahora. No reintentar igual. */

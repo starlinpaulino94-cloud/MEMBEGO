@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
+import { autenticarSobreEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi, type CodigoError } from '@/modules/plataforma/errores'
 import { conIdempotencia } from '@/modules/plataforma/idempotencia'
 import { ejecutarCanje, type MotivoRechazo } from '@/modules/visitas/canje'
@@ -86,6 +86,11 @@ export async function POST(req: NextRequest) {
   const auth = await autenticarSobreEmpresa(req, 'benefits:redeem', cuerpo.companyId)
   if (esFallo(auth)) return auth.fallo
   const { ctx, companyId } = auth
+  // Este recurso es de SATÉLITE: necesita saber qué sistema respalda la
+  // operación. `exigeSistema` lo afirma con el tipo — una clave de API de
+  // empresa no llega aquí (la guardia la rechaza antes con
+  // API_KEY_NOT_SUPPORTED), y si algún día llegara, esto lo detendría.
+  const sistema = exigeSistema(ctx)
 
   const clave = req.headers.get('idempotency-key')?.trim() ?? ''
   if (!clave) return errorApi('IDEMPOTENCY_KEY_REQUIRED', ctx.requestId)
@@ -99,7 +104,7 @@ export async function POST(req: NextRequest) {
   // La reserva va ANTES de canjear. Al revés —canjear y luego registrar— dos
   // reintentos simultáneos consumirían los dos antes de que ninguno guardara.
   const idem = await conIdempotencia({
-    sistemaId: ctx.sistemaId,
+    sistemaId: sistema.sistemaId,
     companyId,
     clave,
     endpoint: '/api/platform/v1/redemptions',
@@ -116,9 +121,9 @@ export async function POST(req: NextRequest) {
       // el rastro del sistema va en la auditoría y en el ticket: inventar un
       // usuario para que el campo no esté vacío sería falsificar quién atendió.
       dbUserId: null,
-      nombre: ctx.sistemaSlug,
+      nombre: sistema.sistemaSlug,
       companyId,
-      sistemaSlug: ctx.sistemaSlug,
+      sistemaSlug: sistema.sistemaSlug,
     },
     {
       membershipId: cuerpo.membershipId,
@@ -137,7 +142,7 @@ export async function POST(req: NextRequest) {
 
   if (!resultado.ok) {
     const code = HTTP_POR_MOTIVO[resultado.motivo]
-    console.warn('[redemptions] rechazado:', resultado.motivo, ctx.sistemaSlug, ctx.requestId)
+    console.warn('[redemptions] rechazado:', resultado.motivo, sistema.sistemaSlug, ctx.requestId)
     const fallo = errorApi(code, ctx.requestId, {
       message: resultado.mensaje,
       ...(code === 'BENEFIT_NOT_ELIGIBLE' ? { reason: resultado.motivo } : {}),

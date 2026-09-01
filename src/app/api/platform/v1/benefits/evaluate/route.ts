@@ -66,7 +66,15 @@ function motivoDe(mensaje: string | undefined): string {
 export async function POST(req: NextRequest) {
   const cuerpo = (await req.json().catch(() => ({}))) as Cuerpo
 
-  const auth = await autenticarSobreEmpresa(req, 'benefits:read', cuerpo.companyId)
+  const auth = await autenticarSobreEmpresa(
+    req,
+    'benefits:read',
+    cuerpo.companyId,
+    // Abierto a CLAVES DE API DE EMPRESA (Connect · Fase 3): es una lectura y
+    // no necesita saber qué satélite pregunta. Con una clave, la empresa viene
+    // atada a ella, así que `companyId` puede omitirse.
+    { claveDeEmpresa: true }
+  )
   if (esFallo(auth)) return auth.fallo
 
   const customerId = cuerpo.customerId?.trim() ?? ''

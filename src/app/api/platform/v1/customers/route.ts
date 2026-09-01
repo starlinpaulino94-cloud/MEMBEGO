@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { altaCliente } from '@/modules/plataforma/alta-cliente'
-import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
+import { autenticarSobreEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { conIdempotencia } from '@/modules/plataforma/idempotencia'
 
@@ -63,12 +63,17 @@ export async function POST(req: NextRequest) {
   const auth = await autenticarSobreEmpresa(req, 'customers:write', cuerpo.companyId)
   if (esFallo(auth)) return auth.fallo
   const { ctx, companyId } = auth
+  // Este recurso es de SATÉLITE: necesita saber qué sistema respalda la
+  // operación. `exigeSistema` lo afirma con el tipo — una clave de API de
+  // empresa no llega aquí (la guardia la rechaza antes con
+  // API_KEY_NOT_SUPPORTED), y si algún día llegara, esto lo detendría.
+  const sistema = exigeSistema(ctx)
 
   const clave = req.headers.get('idempotency-key')?.trim() ?? ''
   if (!clave) return errorApi('IDEMPOTENCY_KEY_REQUIRED', ctx.requestId)
 
   const idem = await conIdempotencia({
-    sistemaId: ctx.sistemaId,
+    sistemaId: sistema.sistemaId,
     companyId,
     clave,
     endpoint: '/api/platform/v1/customers',
@@ -83,7 +88,7 @@ export async function POST(req: NextRequest) {
   const alta = await altaCliente(
     companyId,
     { nombre: cuerpo.name, telefono: cuerpo.phone, email: cuerpo.email },
-    ctx.sistemaSlug
+    sistema.sistemaSlug
   ).catch(() => ({ error: 'INTERNAL' }) as const)
 
   if ('error' in alta) {

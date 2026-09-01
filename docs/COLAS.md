@@ -161,3 +161,21 @@ puesta, y una frase en consola no la contesta.
 que antes había que consultar a mano: trabajos difuntos pendientes, webhooks a
 satélites en reintento, webhooks agotados y eventos del bus estancados (>6 h
 sin despachar).
+
+## Fase 3 de Membego Connect — webhooks de empresa en la misma cola
+
+Las suscripciones de webhook que crea una empresa (`suscripciones_webhook`)
+usan el MISMO cron que el outbox de satélites (`/api/cron/integraciones`), no
+uno propio: es el mismo trabajo —vaciar una cola de entregas pendientes— y
+partirlo en dos gastaría una de las ranuras de cron del plan sin ganar nada.
+
+Dos umbrales distintos, porque responden a preguntas distintas:
+
+| Umbral | Qué significa | Qué pasa |
+|---|---|---|
+| 8 intentos de UNA entrega | «este mensaje no llega» | la entrega pasa a `DEAD_LETTER` |
+| 20 fallos SEGUIDOS de una suscripción | «este destino está muerto» | la suscripción pasa a `DISABLED` |
+
+`DISABLED` no es lo mismo que `PAUSED`: lo primero lo decidió el sistema y hay
+algo que mirar; lo segundo lo pidió la empresa y se reactiva con un clic (y al
+reactivar se pone el contador a cero, o volvería a apagarse al primer fallo).

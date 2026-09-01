@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
-import { autenticar, esFallo } from '@/modules/plataforma/api'
+import { autenticar, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { respuestaApi } from '@/modules/plataforma/errores'
 
 export const dynamic = 'force-dynamic'
@@ -25,12 +25,16 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const ctx = await autenticar(req, null)
   if (esFallo(ctx)) return ctx.fallo
+  // Recurso de SATÉLITE: describe la relación de un sistema con MembeGo, así
+  // que necesita saber cuál. Una clave de API de empresa no llega aquí — la
+  // guardia la rechaza antes con API_KEY_NOT_SUPPORTED.
+  const sistema = exigeSistema(ctx)
 
   const filas = await sinEmpresa(
     'api de plataforma: empresas habilitadas para el sistema llamante (cruza inquilinos por definición)',
     (tx) =>
       tx.empresaSistema.findMany({
-        where: { sistemaId: ctx.sistemaId, estado: 'ENABLED' },
+        where: { sistemaId: sistema.sistemaId, estado: 'ENABLED' },
         select: { companyId: true, plan: true, habilitadoAt: true },
         orderBy: { habilitadoAt: 'asc' },
       })

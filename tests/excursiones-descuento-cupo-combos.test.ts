@@ -5,6 +5,23 @@ import {
   validarDisponibilidadComboMultiFecha,
 } from '../src/modules/excursiones/reservas/nucleo'
 
+/**
+ * Fechas SIEMPRE en el futuro.
+ *
+ * Este archivo llevaba `2026-09-01` escrito a mano y explotó el día que el
+ * calendario lo alcanzó: la validación real rechaza —correctamente— una salida
+ * cuya hora ya pasó. Un test con fecha fija no prueba, cuenta los días que le
+ * quedan. Todas las actividades de aquí operan los siete días, así que basta
+ * con alejarse una semana.
+ */
+function dentroDeUnaSemana(dias = 7): Date {
+  const hoy = new Date()
+  return new Date(
+    Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()) + dias * 86_400_000
+  )
+}
+
+
 test('validarDisponibilidadCombo: el cupo disponible del combo está delimitado por el menor cupo entre sus actividades hijas', () => {
   const comboConfig = {
     capacidad: 50,
@@ -35,7 +52,7 @@ test('validarDisponibilidadCombo: el cupo disponible del combo está delimitado 
     ],
   }
 
-  const fecha = new Date(Date.UTC(2026, 8, 1)) // 2026-09-01
+  const fecha = dentroDeUnaSemana()
   const res = validarDisponibilidadCombo(fecha, '09:00', 5, comboConfig)
 
   assert.equal(res.ok, true, 'Debe aprobar la reserva de 5 pasajeros')
@@ -74,7 +91,7 @@ test('validarDisponibilidadCombo: rechaza si los pasajeros exceden el cupo de al
     ],
   }
 
-  const fecha = new Date(Date.UTC(2026, 8, 1))
+  const fecha = dentroDeUnaSemana()
   const res = validarDisponibilidadCombo(fecha, '09:00', 6, comboConfig)
 
   assert.equal(res.ok, false, 'Debe rechazar la reserva de 6 pasajeros')
@@ -147,8 +164,8 @@ test('validarDisponibilidadComboMultiFecha: calcula cupo mínimo en fechas disti
     ],
   }
 
-  const fechaDia1 = new Date(Date.UTC(2026, 8, 1))
-  const fechaDia2 = new Date(Date.UTC(2026, 8, 2))
+  const fechaDia1 = dentroDeUnaSemana()
+  const fechaDia2 = dentroDeUnaSemana(8)
 
   const items = [
     { actividadId: 'act-1', fecha: fechaDia1, hora: '09:00' },

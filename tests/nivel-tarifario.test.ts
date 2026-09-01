@@ -87,7 +87,9 @@ test('el endpoint pide benefits:read y no un ámbito nuevo', () => {
   // Un ámbito nuevo obligaría a reemitir las credenciales de todos los satélites
   // que ya evalúan beneficios. El nivel solo sirve para decidir cobertura, así
   // que cabe en el ámbito que ya existe para eso.
-  assert.match(ruta, /autenticarSobreEmpresa\(req, 'benefits:read'/)
+  // La llamada pasó a varias líneas al abrirse a claves de API de empresa
+  // (Connect · F3). La exigencia no cambia: este endpoint pide `benefits:read`.
+  assert.match(ruta, /autenticarSobreEmpresa\(\s*req,\s*'benefits:read'/)
 })
 
 test('el endpoint NO recibe ningún identificador de persona', () => {

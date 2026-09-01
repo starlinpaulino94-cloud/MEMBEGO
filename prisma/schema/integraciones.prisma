@@ -226,8 +226,8 @@ model TipoNegocio {
   descripcion String?
   icono       String?
   /// Orden de presentación en los selectores del panel.
-  orden  Int     @default(0)
-  activo Boolean @default(true)
+  orden       Int     @default(0)
+  activo      Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -281,7 +281,7 @@ model EmpresaSistema {
   deshabilitadoAt DateTime?
 
   /// Plan contratado del satélite, si el vertical cobra por niveles.
-  plan String?
+  plan          String?
   /// Ajustes por empresa que el satélite lee al arrancar la sesión.
   configuracion Json?
   metadata      Json?
@@ -368,7 +368,7 @@ model ClaveIdempotencia {
   createdAt DateTime @default(now())
   /// Las claves caducan: guardarlas para siempre convierte una tabla operativa
   /// en un archivo histórico de todas las operaciones de todos los satélites.
-  expiraAt DateTime
+  expiraAt  DateTime
 
   @@unique([sistemaId, clave])
   @@index([expiraAt])

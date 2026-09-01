@@ -186,7 +186,8 @@ test('el canje verifica con el secreto de QUIEN LLAMA', () => {
     join('src', 'app', 'api', 'platform', 'v1', 'sso', 'redeem', 'route.ts'),
     'utf8'
   )
-  assert.match(src, /where:\s*\{\s*id:\s*ctx\.sistemaId\s*\}/)
+  // `exigeSistema(ctx)` desde Connect · F3 (ver platform-canje).
+  assert.match(src, /where:\s*\{\s*id:\s*sistema\.sistemaId\s*\}/)
   assert.ok(src.includes('verificarTokenSSO(secreto.secreto, token)'))
 })
 
