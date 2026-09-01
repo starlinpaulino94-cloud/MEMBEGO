@@ -207,6 +207,51 @@ export function fusionarTokens(previos: TokensOauth | null, nuevos: TokensOauth)
  * `//otro.com` PARECE una ruta y es una URL absoluta con el esquema heredado.
  * Es el caso que se cuela cuando solo se comprueba el primer carácter.
  */
+/**
+ * DE DÓNDE VINO el usuario, o null si no vino de ningún sitio conocido.
+ *
+ * Se parece a `destinoDeVueltaSeguro` y responde una pregunta distinta, y por
+ * eso son dos funciones:
+ *
+ *   destinoDeVueltaSeguro  «¿a dónde mando a esta persona al terminar?»
+ *                          SIEMPRE tiene que dar una respuesta, así que ante
+ *                          la duda devuelve el panel de Integraciones.
+ *
+ *   origenSeguro           «¿venía de algún módulo?»
+ *                          Aquí «no» es una respuesta válida y necesaria: sin
+ *                          ella, una pantalla que llega sin parámetro creería
+ *                          que viene de Integraciones y pintaría un «volver»
+ *                          que no lleva a donde el usuario estaba.
+ *
+ * Un origen inválido se trata como ausente, NO como el panel: aceptarlo sería
+ * dejar que quien fabrica el enlace decida el texto y el destino del botón.
+ */
+export function origenSeguro(bruto: string | null | undefined): string | null {
+  const v = (bruto ?? '').trim()
+  if (!v || !v.startsWith('/admin/') || v.startsWith('//')) return null
+  return v
+}
+
+/**
+ * NOMBRE LEGIBLE de un módulo de la aplicación, para el enlace de vuelta.
+ *
+ * «Volver a Citas» dice a dónde va; «Volver a /admin/citas» obliga a leer una
+ * ruta. Lo que no está en la lista se llama «volver atrás», que es cierto sin
+ * afirmar de más.
+ */
+const NOMBRE_DE_RUTA: Record<string, string> = {
+  '/admin/citas': 'Citas',
+  '/admin/automatizaciones': 'Automatizaciones',
+  '/admin/comunicacion': 'Comunicación',
+  '/admin/metodos-pago': 'Métodos de pago',
+}
+
+export function nombreDelDestino(ruta: string | null): string {
+  if (!ruta) return 'atrás'
+  const limpia = ruta.split('?')[0].replace(/\/$/, '')
+  return NOMBRE_DE_RUTA[limpia] ?? 'atrás'
+}
+
 export function destinoDeVueltaSeguro(bruto: string | null | undefined): string {
   const v = (bruto ?? '').trim()
   if (!v.startsWith('/admin/') || v.startsWith('//')) return '/admin/integraciones'

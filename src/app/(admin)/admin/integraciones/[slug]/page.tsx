@@ -7,6 +7,7 @@ import { registrosDeEmpresa } from '@/modules/connect/bitacora'
 import { configuracionVisible } from '@/modules/connect/alta'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import { permiteConectar } from '@/modules/connect/proveedores/tipos'
+import { nombreDelDestino, origenSeguro } from '@/modules/connect/oauthNucleo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -35,10 +36,18 @@ export const dynamic = 'force-dynamic'
  */
 export default async function IntegracionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams: Promise<{ volver?: string }>
 }) {
   const { slug } = await params
+  const sp = await searchParams
+  // NUNCA se acepta el origen tal cual viene: `origenSeguro` solo deja pasar
+  // rutas internas de /admin/, y devuelve null para todo lo demás. Un destino
+  // elegido por quien llama es la forma clásica de convertir un enlace nuestro
+  // en un redirector abierto hacia el sitio de otro.
+  const volver = origenSeguro(sp.volver)
   const user = await requireSection('integraciones')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
 
@@ -75,11 +84,11 @@ export default async function IntegracionPage({
   return (
     <div className="space-y-6">
       <Link
-        href="/admin/integraciones"
+        href={volver ?? '/admin/integraciones'}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden />
-        Integraciones
+        {volver ? nombreDelDestino(volver) : 'Integraciones'}
       </Link>
 
       <div className="flex flex-wrap items-start gap-4">
@@ -153,7 +162,11 @@ export default async function IntegracionPage({
                       sigues donde lo dejaste.
                     </p>
                     <Button asChild>
-                      <Link href={`/admin/integraciones/${slug}/conectar`}>
+                      <Link
+                        href={`/admin/integraciones/${slug}/conectar${
+                          volver ? `?volver=${encodeURIComponent(volver)}` : ''
+                        }`}
+                      >
                         {entrada.accion ?? 'Conectar'}
                       </Link>
                     </Button>

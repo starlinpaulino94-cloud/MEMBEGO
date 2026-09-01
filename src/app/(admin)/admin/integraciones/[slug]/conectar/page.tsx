@@ -5,6 +5,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { opcionesDelPaso, vistaDelAlta, type OpcionPaso } from '@/modules/connect/alta'
 import { asegurarConexion } from '@/modules/connect/registro'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
+import { nombreDelDestino, origenSeguro } from '@/modules/connect/oauthNucleo'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { AsistenteAlta } from '@/components/connect/AsistenteAlta'
 import { LogoIntegracion } from '@/components/connect/LogoIntegracion'
@@ -37,10 +38,11 @@ export default async function ConectarPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>
-  searchParams: Promise<{ oauth?: string }>
+  searchParams: Promise<{ oauth?: string; volver?: string }>
 }) {
   const { slug } = await params
-  const { oauth } = await searchParams
+  const { oauth, volver: volverCrudo } = await searchParams
+  const volver = origenSeguro(volverCrudo)
 
   const user = await requireSection('integraciones', 'app_conectar')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
@@ -142,6 +144,8 @@ export default async function ConectarPage({
         completa={vista.completa}
         opciones={opciones}
         errorOpciones={errorOpciones}
+        volverAlModulo={volver}
+        nombreDelModulo={nombreDelDestino(volver)}
         volverA={
           anterior
             ? {
@@ -154,7 +158,12 @@ export default async function ConectarPage({
         }
         urlAutorizacion={`/api/connect/oauth/${encodeURIComponent(slug)}/iniciar?conexionId=${encodeURIComponent(
           vista.conexionId
-        )}&volverA=${encodeURIComponent(`/admin/integraciones/${slug}/conectar`)}`}
+        )}&volverA=${encodeURIComponent(
+          // El origen viaja DENTRO del destino de vuelta: si no, quien empezó
+          // desde Citas volvería de Google al asistente sin recordar de dónde
+          // venía, y al terminar se quedaría en Integraciones.
+          `/admin/integraciones/${slug}/conectar${volver ? `?volver=${volver}` : ''}`
+        )}`}
       />
     </div>
   )

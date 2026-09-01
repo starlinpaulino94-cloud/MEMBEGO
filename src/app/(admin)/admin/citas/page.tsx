@@ -19,6 +19,7 @@ import { CitaEstadoBadge } from '@/components/citas/CitaEstadoBadge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { ConexionIntegracion } from '@/components/connect/ConexionIntegracion'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Citas' }
@@ -116,6 +117,18 @@ export default async function CitasAdminPage({
           .
         </div>
       )}
+
+      {/* GOOGLE CALENDAR, AQUÍ Y NO SOLO EN INTEGRACIONES.
+          Quien administra una agenda no entra a «Integraciones» a buscar si su
+          calendario está conectado: entra aquí. El bloque lo pinta el
+          componente compartido, que lee el MISMO catálogo — no hay una segunda
+          consulta ni una segunda interpretación del estado. */}
+      <ConexionIntegracion
+        companyId={companyId}
+        slug="google-calendar"
+        volver="/admin/citas"
+        proposito="Lleva tus citas confirmadas a la agenda de Google del negocio."
+      />
 
       {/* Rango temporal */}
       <div className="flex flex-wrap gap-2">
