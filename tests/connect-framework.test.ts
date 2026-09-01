@@ -257,10 +257,19 @@ test('desarrolladores: las herramientas técnicas salieron del catálogo', () =>
   for (const panel of ['ClavesApiPanel', 'WebhooksPanel', 'GuiaDesarrolladores', 'ActividadConnect']) {
     assert.ok(!catalogo.includes(panel), `${panel} sigue en la pantalla del usuario de negocio`)
   }
-  // Pero NO se retiraron: viven enteros en su propia página.
-  const devs = leer('src/app/(admin)/admin/integraciones/desarrolladores/page.tsx')
+  // Pero NO se retiraron. La Fase 11 partió el hub en cuatro rutas, así que
+  // cada panel vive en la suya: se comprueba el segmento entero, no una página.
+  const DEV = 'src/app/(admin)/admin/integraciones/desarrolladores'
+  const hub = [
+    'page.tsx',
+    'claves/page.tsx',
+    'webhooks/page.tsx',
+    'registros/page.tsx',
+  ]
+    .map((r) => leer(`${DEV}/${r}`))
+    .join('\n')
   for (const panel of ['ClavesApiPanel', 'WebhooksPanel', 'GuiaDesarrolladores', 'ActividadConnect']) {
-    assert.ok(devs.includes(panel), `${panel} se perdió en la mudanza`)
+    assert.ok(hub.includes(panel), `${panel} se perdió en la mudanza`)
   }
 })
 

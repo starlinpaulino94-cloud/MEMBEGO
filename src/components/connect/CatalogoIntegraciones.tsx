@@ -85,8 +85,10 @@ export function CatalogoIntegraciones({ entradas }: { entradas: EntradaCatalogo[
         ]}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[14rem] flex-1">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {/* En un teléfono el buscador ocupa su propia línea: compartirla con
+            ocho filtros lo dejaba en un hueco donde no cabe una palabra. */}
+        <div className="relative w-full sm:w-auto sm:min-w-[14rem] sm:flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden
@@ -99,10 +101,14 @@ export function CatalogoIntegraciones({ entradas }: { entradas: EntradaCatalogo[
             className="pl-9"
           />
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        {/* Los filtros se ARRASTRAN en horizontal en móvil en vez de apilarse:
+            ocho categorías envueltas en tres filas empujaban la rejilla fuera
+            de la primera pantalla. Mismo patrón que las pestañas. */}
+        <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           <Button
             type="button"
             size="sm"
+            className="shrink-0"
             variant={categoria === null ? 'secondary' : 'ghost'}
             onClick={() => setCategoria(null)}
           >
@@ -113,6 +119,7 @@ export function CatalogoIntegraciones({ entradas }: { entradas: EntradaCatalogo[
               key={clave}
               type="button"
               size="sm"
+              className="shrink-0"
               variant={categoria === clave ? 'secondary' : 'ghost'}
               onClick={() => setCategoria((v) => (v === clave ? null : clave))}
             >

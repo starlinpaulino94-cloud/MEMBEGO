@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { StatusBanner } from '@/components/ui/status-banner'
+import { CandadoPlan, LimiteAlcanzado } from '@/components/connect/EstadoPlanConnect'
 
 /**
  * Claves de API de la empresa.
@@ -96,16 +97,23 @@ export function ClavesApiPanel({
 
   const activas = claves.filter((c) => c.estado === 'ACTIVE').length
   const puedeCrear = limite === null || activas < limite
+  // DOS situaciones distintas que antes decían lo mismo, y una de las dos
+  // frases era falsa: «tu plan no incluye claves» aparecía también cuando sí
+  // las incluía y simplemente estaban todas usadas.
+  const sinConcesion = limite === 0
+  const lleno = !puedeCrear && !sinConcesion && limite !== null
 
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
         <CardTitle className="text-base">Claves de API</CardTitle>
-        {puedeCrear && (
+        {puedeCrear ? (
           <Button type="button" size="sm" onClick={() => setAbierto((v) => !v)}>
             <KeyRound className="mr-2 h-4 w-4" aria-hidden />
             {abierto ? 'Cancelar' : 'Crear clave'}
           </Button>
+        ) : (
+          sinConcesion && <CandadoPlan titulo="Las claves de API no están activadas para tu negocio" />
         )}
       </CardHeader>
       <CardContent className="space-y-4">
@@ -121,9 +129,11 @@ export function ClavesApiPanel({
           </StatusBanner>
         )}
 
-        {!puedeCrear && (
-          <StatusBanner variant="warning" title="Tu plan no incluye claves de API">
-            Escríbenos y te la habilitamos.
+        {lleno && limite !== null && <LimiteAlcanzado que="claves" limite={limite} />}
+
+        {sinConcesion && claves.length > 0 && (
+          <StatusBanner variant="info" title="Las claves de API ya no están activadas">
+            Estas claves siguen funcionando y puedes revocarlas, pero no se pueden crear nuevas.
           </StatusBanner>
         )}
 
@@ -161,10 +171,12 @@ export function ClavesApiPanel({
             {claves.map((c) => (
               <li
                 key={c.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border/60 px-3 py-2"
+                className="flex flex-col gap-2 rounded-xl border border-border/60 px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3"
               >
                 <span className="font-medium">{c.nombre}</span>
-                <code className="font-mono text-caption text-muted-foreground">{c.prefijo}…</code>
+                <code className="break-all font-mono text-caption text-muted-foreground">
+                  {c.prefijo}…
+                </code>
                 <Badge variant={c.estado === 'ACTIVE' ? 'default' : 'outline'}>
                   {c.estado === 'ACTIVE' ? 'Activa' : 'Revocada'}
                 </Badge>
@@ -174,7 +186,7 @@ export function ClavesApiPanel({
                     : 'Sin usar todavía'}
                 </span>
                 {c.estado === 'ACTIVE' && (
-                  <span className="ml-auto">
+                  <span className="sm:ml-auto">
                     <BotonConfirmado
                       accion={revocarClaveAction}
                       estadoInicial={INIT}

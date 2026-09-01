@@ -48,16 +48,23 @@ export async function anotarConector(apunte: ApunteConector): Promise<void> {
   }
 }
 
-/** Lectura para las pantallas de actividad (Fase 4). Paginación simple. */
+/**
+ * Lectura para las pantallas de actividad.
+ *
+ * `origen` se añadió en la Fase 11: el historial de UNA integración pide solo
+ * los apuntes de conexiones, y filtrarlo aquí evita traerse las claves de API
+ * y los webhooks de toda la empresa para descartarlos después en memoria.
+ */
 export async function registrosDeEmpresa(
   companyId: string,
-  opciones?: { origenId?: string; limite?: number }
+  opciones?: { origenId?: string; origen?: OrigenBitacora; limite?: number }
 ) {
   return conEmpresa(companyId, (tx) =>
     tx.registroConector.findMany({
       where: {
         companyId,
         ...(opciones?.origenId ? { origenId: opciones.origenId } : {}),
+        ...(opciones?.origen ? { origen: opciones.origen } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(opciones?.limite ?? 50, 200),

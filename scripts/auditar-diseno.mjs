@@ -21,7 +21,7 @@
  * bajar, nunca subir.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 
 const RAIZ = ['src', 'packages/ui/src']
 const archivos = (d) => {
@@ -51,10 +51,27 @@ const TODOS = RAIZ.flatMap(archivos)
  * WhatsApp saliera del color primario de Membego, que es justamente lo
  * contrario de reconocer una marca. Es data sobre terceros, no estilo propio.
  */
+
+/**
+ * Archivos exentos por RUTA EXACTA, no por patrón.
+ *
+ * La diferencia importa: una expresión regular que dijera
+ * `connect/proveedores/metadatos` eximiría también a un futuro
+ * `metadatos-extra.tsx` o `metadatos/Tarjeta.tsx` sin que nadie lo decidiera.
+ * Una excepción del sistema de diseño tiene que ser una decisión explícita por
+ * archivo, y añadir uno a esta lista se ve en la revisión.
+ */
+const EXENTOS_EXACTOS = new Set([
+  // Los colores oficiales de marcas ajenas (el verde de WhatsApp, el azul de
+  // Google) son datos sobre terceros, no decisiones de nuestro tema. Pintarlos
+  // con un token semántico haría que el logotipo de WhatsApp saliera del color
+  // primario de Membego, que es lo contrario de reconocer una marca.
+  'src/modules/connect/proveedores/metadatos.ts',
+])
+
 const SIN_VARIABLES_CSS = (ruta) =>
-  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible|connect\/proveedores\/metadatos/i.test(
-    ruta
-  )
+  EXENTOS_EXACTOS.has(ruta.split(sep).join('/')) ||
+  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible/i.test(ruta)
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
 export const cuenta = (re, filtro = () => true) => {
