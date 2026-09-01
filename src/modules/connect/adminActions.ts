@@ -3,6 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
 import { crearClaveApi, revocarClaveApi } from '@/modules/connect/clavesApi'
+import { crearConexion, desconectarConexion } from '@/modules/connect/registro'
+import { conectarWhatsapp } from '@/modules/connect/whatsapp'
+import { definicionDe } from '@/modules/connect/conectores'
 import { cambiarEstadoSuscripcion, crearSuscripcion } from '@/modules/connect/webhooks'
 import { MENSAJE_URL } from '@/modules/connect/webhooksNucleo'
 import { SCOPES_POR_CAPABILITY } from '@membego/contracts'
@@ -155,4 +158,91 @@ export async function cambiarEstadoWebhookAction(
         ? 'Webhook reactivado. Los próximos eventos se te entregarán.'
         : 'Webhook pausado. Dejamos de entregarte eventos hasta que lo reactives.',
   }
+}
+
+/**
+ * CONECTAR WHATSAPP: la empresa pega su token permanente y su Phone number ID.
+ *
+ * Se valida contra Meta ANTES de guardar (ver `conectarWhatsapp`): un token
+ * mal pegado se descubriría semanas después, cuando una automatización
+ * intentara enviar. Aquí el error sale mientras la persona sigue en pantalla.
+ *
+ * Reutiliza el permiso `webhook_crear`… NO. Tiene el suyo: conectar una
+ * aplicación entrega credenciales de la empresa a un tercero y merece su
+ * propio interruptor.
+ */
+export async function conectarWhatsappAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'app_conectar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const token = String(formData.get('token') ?? '').trim()
+  const phoneNumberId = String(formData.get('phoneNumberId') ?? '').trim()
+  if (!token || !phoneNumberId) {
+    return { error: 'Pega el token y el identificador del número (Phone number ID).' }
+  }
+
+  const conexion = await crearConexion({
+    companyId: user.metadata.companyId,
+    conectorSlug: 'whatsapp',
+    creadoPor: user.metadata.dbUserId ?? undefined,
+  })
+  // `ya_conectada` no es un error para el usuario: quiere REEMPLAZAR el token,
+  // que es justo lo que se hace al guardar la credencial (upsert).
+  const conexionId =
+    conexion.ok ? conexion.conexionId : await idDeConexion(user.metadata.companyId, 'whatsapp')
+  if (!conexionId) return { error: 'WhatsApp no está disponible en este momento.' }
+
+  const res = await conectarWhatsapp({
+    companyId: user.metadata.companyId,
+    conexionId,
+    token,
+    phoneNumberId,
+  })
+  if (!res.ok) return { error: res.detalle }
+
+  revalidatePath('/admin/integraciones')
+  return {
+    success: res.numeroVisible
+      ? `WhatsApp conectado con el número ${res.numeroVisible}.`
+      : 'WhatsApp conectado.',
+  }
+}
+
+/** Id de la conexión existente de un conector, si la hay. */
+async function idDeConexion(companyId: string, slug: string): Promise<string | null> {
+  const { conexionesDeEmpresa } = await import('@/modules/connect/registro')
+  const conexiones = await conexionesDeEmpresa(companyId)
+  return conexiones.find((c) => c.conector.slug === slug)?.id ?? null
+}
+
+/**
+ * DESCONECTAR una aplicación. Borra sus credenciales además de apagarla:
+ * dejar un token vivo de un servicio que la empresa cree apagado sería
+ * exactamente lo contrario de lo que pidió.
+ */
+export async function desconectarAppAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'app_desconectar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta la conexión.' }
+
+  const res = await desconectarConexion({ companyId: user.metadata.companyId, conexionId: id })
+  if (!res.ok) return { error: 'Esa aplicación ya estaba desconectada.' }
+
+  revalidatePath('/admin/integraciones')
+  return { success: 'Aplicación desconectada y sus credenciales borradas.' }
+}
+
+/** La URL a la que mandar al usuario para conectar por OAuth. */
+export async function urlDeConexionOauth(slug: string): Promise<string | null> {
+  const def = definicionDe(slug)
+  if (!def || def.authTipo !== 'OAUTH2' || !def.disponible()) return null
+  return `/api/connect/oauth/${encodeURIComponent(slug)}/iniciar`
 }

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createHash } from 'crypto'
+import { getUser } from '@/lib/auth'
 import { getPlatformTokenSecret } from '@/lib/env'
 import { crearToken, verificarToken } from '@/modules/plataforma/token'
 
@@ -19,11 +20,29 @@ import { crearToken, verificarToken } from '@/modules/plataforma/token'
  *     significa que firmar y verificar son consistentes en este deployment.
  *
  * BORRAR cuando el problema quede resuelto.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SOLO SUPERADMIN (Connect · Fase 6)
+ *
+ * Nació público, y eso lo convertía en algo que no pretendía ser: cualquiera
+ * en internet podía leer la LONGITUD del secreto de firma de la plataforma y
+ * una huella suya. La huella no es reversible, pero sí permite CONFIRMAR un
+ * secreto adivinado sin hacer una sola petición más — y la longitud recorta
+ * el espacio de búsqueda antes de empezar.
+ *
+ * No se borra: sigue siendo útil y es de quien lo escribió. Se cierra a la
+ * sesión de superadmin, que es exactamente como se usó para depurar CardNET:
+ * abriendo la URL en el navegador con la sesión iniciada.
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest) {
+  const user = await getUser()
+  if (user?.metadata.role !== 'SUPERADMIN') {
+    return Response.json({ error: 'No autorizado.' }, { status: 401 })
+  }
+
   const secret = getPlatformTokenSecret()
   const fingerprint = secret
     ? createHash('sha256').update(secret, 'utf8').digest('hex').slice(0, 12)

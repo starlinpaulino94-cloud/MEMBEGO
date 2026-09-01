@@ -315,10 +315,27 @@ const PUBLICAS = [join('oauth', 'token'), join('.well-known', 'keys')]
 
 const esPublica = (ruta: string) => PUBLICAS.some((p) => ruta.includes(p))
 
+/**
+ * Autenticarse no es solo `autenticar()`.
+ *
+ * `diag` es una herramienta de operación (huella del secreto de firma, prueba
+ * de ida y vuelta) que no la usa un satélite sino una persona: pide sesión de
+ * SUPERADMIN, igual que el diagnóstico de CardNET. Eso es autenticación, y
+ * más estricta que la de la API — pero no pasa por la guardia de satélites.
+ *
+ * Nació PÚBLICA, que es lo que esta prueba destapó: cualquiera en internet
+ * podía leer la longitud del secreto y su huella. Se cerró en la Fase 6 de
+ * Connect. Se acepta la forma, no la ruta: cualquier otra que se autentique
+ * así también pasa, y la que no se autentique de ninguna manera sigue sin
+ * pasar.
+ */
+const seAutentica = (src: string) =>
+  src.includes('autenticar') || (src.includes('getUser()') && src.includes('SUPERADMIN'))
+
 test('toda ruta de la API v1 se autentica', () => {
   const sinGuardia = rutasPlataforma().filter((r) => {
     if (esPublica(r)) return false
-    return !readFileSync(r, 'utf8').includes('autenticar')
+    return !seAutentica(readFileSync(r, 'utf8'))
   })
   assert.deepEqual(sinGuardia, [], `rutas sin autenticación:\n${sinGuardia.join('\n')}`)
 })

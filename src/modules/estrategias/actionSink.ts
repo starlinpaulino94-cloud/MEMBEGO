@@ -16,13 +16,17 @@ import type { ActionSink, AutomationEngine, AutomationRepository } from '@/lib/a
  *                                    empresa tiene el beneficio por código)
  *  - record_event / create_event / → registro en automation_events (auditoría
  *    record_history / create_log     y métricas)
+ *  - send_whatsapp                 → mensaje REAL por la Cloud API de Meta, si
+ *                                    la empresa tiene el conector conectado
+ *                                    (Membego Connect · Fase 6). Si no lo
+ *                                    tiene, sigue siendo intención simulada.
  *  - run_workflow                  → ejecuta otra automatización publicada de
  *                                    la empresa (por templateKey)
  *
- * Los canales aún no integrados (whatsapp, sms, webhook…) y las acciones de
- * otros motores no cableados NO fallan: se registran como intención
- * (`simulated: true`) en la auditoría del run, para que ninguna estrategia
- * rompa un flujo en vivo. Sin 'use server': solo invocable desde servidor.
+ * Los canales aún no integrados (sms…) y las acciones de otros motores no
+ * cableados NO fallan: se registran como intención (`simulated: true`) en la
+ * auditoría del run, para que ninguna estrategia rompa un flujo en vivo.
+ * Sin 'use server': solo invocable desde servidor.
  */
 export class LiveActionSink implements ActionSink {
   private engine: AutomationEngine | null = null
@@ -56,6 +60,8 @@ export class LiveActionSink implements ActionSink {
         case ACTION_TYPES.CREATE_LOG:
         case ACTION_TYPES.SAVE_EVIDENCE:
           return await this.registrarEvento(input)
+        case ACTION_TYPES.SEND_WHATSAPP:
+          return await this.enviarWhatsapp(input)
         case ACTION_TYPES.RUN_WORKFLOW:
           return await this.ejecutarWorkflow(input)
         default:
@@ -104,6 +110,53 @@ export class LiveActionSink implements ActionSink {
       href: typeof input.params.href === 'string' ? input.params.href : undefined,
     })
     return { ok: true, detail: { channel: 'inapp', userId: destino.userId } }
+  }
+
+  /**
+   * WHATSAPP · deja de ser una intención simulada (Connect · Fase 6).
+   *
+   * DEGRADA, NO ROMPE. Si la empresa no tiene WhatsApp conectado, se sigue
+   * registrando la intención igual que antes (`simulated: true`): una
+   * automatización publicada hace meses no puede empezar a fallar porque
+   * hayamos añadido un canal. Solo cuando hay conexión viva se envía de
+   * verdad, y entonces el resultado —bueno o malo— queda en la auditoría del
+   * run con su motivo.
+   */
+  private async enviarWhatsapp(input: {
+    companyId: string
+    subjectId: string | null
+    params: Record<string, unknown>
+  }) {
+    const texto = String(input.params.body ?? input.params.message ?? '').trim()
+    if (!texto) return { ok: true, detail: { simulated: true, reason: 'sin texto' } }
+
+    const destino = await this.telefonoDeCliente(input.subjectId)
+    if (!destino) {
+      return { ok: true, detail: { simulated: true, reason: 'cliente sin teléfono' } }
+    }
+
+    const { whatsappDisponible, enviarWhatsapp } = await import('@/modules/connect/whatsapp')
+    if (!(await whatsappDisponible(input.companyId))) {
+      return { ok: true, detail: { simulated: true, reason: 'WhatsApp no conectado' } }
+    }
+
+    const res = await enviarWhatsapp({
+      companyId: input.companyId,
+      telefono: destino,
+      texto,
+    })
+    if (!res.ok) return { ok: false, detail: { channel: 'whatsapp', motivo: res.motivo } }
+    return { ok: true, detail: { channel: 'whatsapp', mensajeId: res.mensajeId } }
+  }
+
+  /** Teléfono de la ficha del cliente. Null si no lo tiene. */
+  private async telefonoDeCliente(subjectId: string | null): Promise<string | null> {
+    if (!subjectId) return null
+    const cliente = await sinEmpresa(
+      'estrategias: teléfono del cliente por id (cross-tenant)',
+      (tx) => tx.cliente.findUnique({ where: { id: subjectId }, select: { telefono: true } })
+    )
+    return cliente?.telefono?.trim() || null
   }
 
   private async notificarEquipo(input: {

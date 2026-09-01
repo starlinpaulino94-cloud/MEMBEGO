@@ -3,13 +3,13 @@ import { redirect } from 'next/navigation'
 import { clavesDeEmpresa } from '@/modules/connect/clavesApi'
 import { suscripcionesDeEmpresa } from '@/modules/connect/webhooks'
 import { registrosDeEmpresa } from '@/modules/connect/bitacora'
-import { catalogoParaEmpresas } from '@/modules/connect/registro'
+import { catalogoParaEmpresas, conexionesDeEmpresa } from '@/modules/connect/registro'
 import { limiteDe } from '@/modules/connect/entitlements'
 import { PageHeader } from '@/components/ui/page-header'
 import { ClavesApiPanel } from '@/components/connect/ClavesApiPanel'
 import { WebhooksPanel } from '@/components/connect/WebhooksPanel'
 import { ActividadConnect } from '@/components/connect/ActividadConnect'
-import { CatalogoConectores } from '@/components/connect/CatalogoConectores'
+import { AplicacionesPanel } from '@/components/connect/AplicacionesPanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,14 +33,16 @@ export default async function IntegracionesPage() {
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const companyId = user.metadata.companyId
 
-  const [conectores, claves, webhooks, registros, maxClaves, maxWebhooks] = await Promise.all([
-    catalogoParaEmpresas(),
-    clavesDeEmpresa(companyId),
-    suscripcionesDeEmpresa(companyId),
-    registrosDeEmpresa(companyId, { limite: 30 }),
-    limiteDe(companyId, 'api_keys.max'),
-    limiteDe(companyId, 'webhooks.max'),
-  ])
+  const [conectores, conexiones, claves, webhooks, registros, maxClaves, maxWebhooks] =
+    await Promise.all([
+      catalogoParaEmpresas(),
+      conexionesDeEmpresa(companyId),
+      clavesDeEmpresa(companyId),
+      suscripcionesDeEmpresa(companyId),
+      registrosDeEmpresa(companyId, { limite: 30 }),
+      limiteDe(companyId, 'api_keys.max'),
+      limiteDe(companyId, 'webhooks.max'),
+    ])
 
   return (
     <div className="space-y-6">
@@ -49,7 +51,16 @@ export default async function IntegracionesPage() {
         description="Conecta MembeGo con las herramientas que ya usas: claves de API para consultar tus datos y webhooks para que te avisemos cuando pasa algo."
       />
 
-      <CatalogoConectores conectores={conectores} />
+      <AplicacionesPanel
+        conectores={conectores}
+        conexiones={conexiones.map((c) => ({
+          id: c.id,
+          slug: c.conector.slug,
+          nombre: c.conector.nombre,
+          estado: c.estado,
+          ultimoError: c.ultimoError,
+        }))}
+      />
 
       <ClavesApiPanel
         claves={claves.map((c) => ({
