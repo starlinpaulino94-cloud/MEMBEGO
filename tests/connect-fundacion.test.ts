@@ -191,7 +191,10 @@ test('connect/credenciales: falla cerrado sin clave maestra y nunca anota el sec
 })
 
 test('connect/entitlements: lo que cuesta dinero nace apagado', () => {
-  const src = readFileSync(join(__dirname, '../src/modules/connect/entitlements.ts'), 'utf8')
+  // El vocabulario se movió a `nucleo.ts` en la Fase 9, para poder probarlo sin
+  // base. La exigencia no cambia: lo que consume servicios de pago nace en cero
+  // y se concede empresa a empresa.
+  const src = readFileSync(join(__dirname, '../src/modules/connect/nucleo.ts'), 'utf8')
   assert.match(src, /'api_keys\.max': \{ default: 0 \}/)
   assert.match(src, /'webhooks\.max': \{ default: 0 \}/)
 })

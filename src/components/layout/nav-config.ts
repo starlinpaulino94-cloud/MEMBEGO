@@ -46,6 +46,7 @@ import {
   Compass,
   SlidersHorizontal,
   type LucideIcon,
+  Blocks,
 } from 'lucide-react'
 import type { AppRole } from '@/types'
 import {
@@ -370,6 +371,11 @@ const SUPERADMIN_PLATAFORMA: NavGroup[] = [
       { href: '/superadmin/campanas', label: 'Campañas', icon: Megaphone },
       { href: '/superadmin/capacidades', label: 'Capacidades', icon: SlidersHorizontal },
       { href: '/superadmin/integraciones', label: 'Integraciones', icon: Plug },
+      // Membego Connect: catálogo de apps, adopción y qué tiene concedida cada
+      // empresa. Va aparte de «Integraciones» —que son los satélites— porque
+      // son dos cosas distintas: allí se administran sistemas del ecosistema,
+      // aquí se abren capacidades a las empresas.
+      { href: '/superadmin/connect', label: 'Connect', icon: Blocks },
     ],
   },
   {

@@ -1,5 +1,6 @@
 import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
+import { FEATURES_CONNECT, type FeatureConnect } from '@/modules/connect/nucleo'
 
 /**
  * ENTITLEMENTS de Membego Connect: qué tiene concedido cada empresa.
@@ -15,20 +16,9 @@ import { conEmpresa } from '@/lib/tenant'
  * tenía WhatsApp ilimitado».
  */
 
-/**
- * Vocabulario de features. Vive aquí y no en la base: dar de alta una feature
- * nueva es añadir una línea y su default, sin migrar nada.
- */
-export const FEATURES_CONNECT = {
-  /** Cuántas conexiones a conectores puede tener la empresa. */
-  'conexiones.max': { default: 2 },
-  /** Cuántas claves de API activas puede tener la empresa. */
-  'api_keys.max': { default: 0 },
-  /** Cuántas suscripciones de webhook salientes (Fase 3). */
-  'webhooks.max': { default: 0 },
-} as const
-
-export type FeatureConnect = keyof typeof FEATURES_CONNECT
+// El vocabulario es puro (se prueba sin base): vive en `nucleo.ts` y se
+// reexporta aquí para que quien use entitlements lo importe de un solo sitio.
+export { FEATURES_CONNECT, type FeatureConnect } from '@/modules/connect/nucleo'
 
 /**
  * Límite EFECTIVO de una feature: la fila si existe, el default si no.
