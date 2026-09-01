@@ -127,7 +127,10 @@ test('un satélite no se hace pasar por un empleado', () => {
   const src = leer(REDEMPTIONS)
   assert.match(src, /origen:\s*'SISTEMA'/)
   assert.match(src, /dbUserId:\s*null/)
-  assert.match(src, /sistemaSlug:\s*ctx\.sistemaSlug/)
+  // Desde Connect · F3 el principal es una unión discriminada y el satélite se
+  // obtiene con `exigeSistema(ctx)`. Lo que se vigila es lo mismo: que el canje
+  // viaje con el slug de QUIEN LLAMA y no con uno de otra procedencia.
+  assert.match(src, /sistemaSlug:\s*sistema\.sistemaSlug/)
 })
 
 test('la empresa se comprueba dos veces, no una', () => {

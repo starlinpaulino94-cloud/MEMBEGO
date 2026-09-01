@@ -368,7 +368,9 @@ test('el alta deja de quién vino, para poder distinguirlo después', () => {
     join('src', 'app', 'api', 'platform', 'v1', 'customers', 'route.ts'),
     'utf8'
   )
-  assert.match(ruta, /ctx\.sistemaSlug/)
+  // `exigeSistema(ctx)` desde Connect · F3: mismo dato, obtenido de forma que
+  // el tipo garantice que hay un satélite detrás.
+  assert.match(ruta, /sistema\.sistemaSlug/)
 })
 
 // ── El vocabulario ──────────────────────────────────────────────────────────

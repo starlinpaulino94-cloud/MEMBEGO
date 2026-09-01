@@ -30,9 +30,9 @@ model Conector {
   descripcion String?
   /// COMUNICACION | CALENDARIO | PAGOS | CONTABILIDAD | MARKETING | OTRO —
   /// solo agrupa el catálogo en la UI; ninguna lógica decide con esto.
-  categoria String
-  icono     String?
-  docsUrl   String?
+  categoria   String
+  icono       String?
+  docsUrl     String?
 
   /// Cómo se autentica MembeGo contra el servicio:
   /// OAUTH2 (WhatsApp, Google) | API_KEY (servicios con clave fija) | NINGUNA.
@@ -72,7 +72,7 @@ model ConexionEmpresa {
   /// Restrict, no Cascade: un conector con conexiones vivas no se borra — se
   /// pone SUSPENDED/RETIRED. Borrar el catálogo jamás debe arrastrar en
   /// silencio las conexiones (y credenciales) de las empresas.
-  conector Conector @relation(fields: [conectorId], references: [id], onDelete: Restrict)
+  conector   Conector @relation(fields: [conectorId], references: [id], onDelete: Restrict)
 
   /// PENDING (alta iniciada, sin credencial válida todavía) → CONNECTED →
   /// ERROR (credencial caducada/revocada por el proveedor; se reintenta o se
@@ -121,7 +121,7 @@ model CredencialConexion {
   conexionId String
   /// Cascade a propósito: si la conexión se borra, sus secretos no pueden
   /// quedar huérfanos en la tabla. (El flujo normal ni borra: desconecta.)
-  conexion ConexionEmpresa @relation(fields: [conexionId], references: [id], onDelete: Cascade)
+  conexion   ConexionEmpresa @relation(fields: [conexionId], references: [id], onDelete: Cascade)
 
   /// Duplicado de la conexión para el aislamiento por columna (Capa 2 RLS).
   companyId String
@@ -217,7 +217,7 @@ model EntitlementEmpresa {
   /// Límite numérico, si la feature es un cupo. Null = sin límite numérico.
   limite Int?
   /// Valor estructurado, si la feature no es un número.
-  valor Json?
+  valor  Json?
 
   /// Por qué se concedió («beta tester», «plan Pro manual») — para cuando el
   /// superadmin del futuro pregunte por qué esta empresa tiene 50 webhooks.
@@ -245,7 +245,7 @@ model RegistroConector {
   companyId String
 
   /// De dónde viene el apunte: CONEXION | CLAVE_API | BUS | SISTEMA.
-  origen String
+  origen   String
   /// Id suelto de la fuente (conexionId, claveApiId…), según `origen`.
   origenId String?
 
@@ -263,4 +263,97 @@ model RegistroConector {
   @@index([companyId, createdAt])
   @@index([origenId, createdAt])
   @@map("registros_conector")
+}
+
+/// SUSCRIPCIÓN a eventos: una empresa pide que le avisemos a SU URL.
+///
+/// Es el hermano abierto de `SistemaConectado`: aquel es un satélite del
+/// ecosistema, registrado por el superadmin y con SSO; esto lo crea la propia
+/// empresa apuntando a donde quiera —su Zapier, su n8n, su servidor— sin que
+/// nadie de MembeGo tenga que aprobar nada.
+///
+/// Por eso el aislamiento es más estricto, no menos: una suscripción solo
+/// recibe eventos de SU empresa, y eso se resuelve en el fan-out leyendo el
+/// `companyId` del evento, nunca un parámetro de quien suscribe.
+model SuscripcionWebhook {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// Nombre para el panel («Zapier · reservas»).
+  nombre String
+
+  /// A dónde se entrega. Solo https (lo exige el núcleo, no la base: el
+  /// mensaje de error es parte de la experiencia de quien integra).
+  url String
+
+  /// Eventos a los que está suscrita, en vocabulario v2 (`visit.completed`).
+  /// Vacío = TODOS los que la empresa pueda recibir.
+  eventos String[]
+
+  /// Secreto para firmar (HMAC-SHA256). Se enseña una vez al crear; con él, el
+  /// receptor comprueba que el webhook viene de nosotros y nadie más.
+  ///
+  /// A diferencia de las credenciales de conector, este NO va cifrado con la
+  /// clave maestra: tiene que poder ENSEÑARSE de nuevo en el panel (quien
+  /// integra lo copia a su servidor), y un secreto que se puede volver a ver
+  /// no gana nada por estar sellado. Lo que sí se puede es rotarlo.
+  secreto String
+
+  /// ACTIVE | PAUSED | DISABLED. PAUSED lo pone la empresa; DISABLED lo pone
+  /// el sistema tras demasiados fallos seguidos — y por eso son distintos:
+  /// reactivar lo primero es un clic, lo segundo exige mirar qué pasó.
+  estado String @default("ACTIVE")
+
+  /// Fallos consecutivos. Se pone a cero con cada entrega buena.
+  fallosSeguidos Int @default(0)
+
+  ultimoOkAt    DateTime?
+  ultimoErrorAt DateTime?
+  ultimoError   String?
+
+  creadoPor String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entregas EntregaWebhook[]
+
+  @@index([companyId, estado])
+  @@map("suscripciones_webhook")
+}
+
+/// Una entrega concreta: qué evento, a qué suscripción, cómo fue.
+///
+/// Mismo patrón outbox que `EventoSaliente`: la fila se crea ANTES de intentar
+/// el envío, así que un receptor caído no pierde nada — el cron reintenta. Se
+/// separa de `EventoSaliente` porque aquel apunta a un satélite (`sistemaId`
+/// obligatorio) y esto a una URL arbitraria: forzarlos en la misma tabla
+/// obligaría a que una de las dos columnas fuera mentira.
+model EntregaWebhook {
+  id String @id @default(cuid())
+
+  suscripcionId String
+  suscripcion   SuscripcionWebhook @relation(fields: [suscripcionId], references: [id], onDelete: Cascade)
+
+  companyId String
+
+  /// Nombre del evento tal como viaja por el cable (v2).
+  evento   String
+  /// Id del `DomainEvent` que lo originó. Permite reconstruir el hilo.
+  eventoId String?
+  payload  Json
+
+  /// PENDIENTE → ENVIADO | DEAD_LETTER (agotó los reintentos).
+  estado      String    @default("PENDIENTE")
+  intentos    Int       @default(0)
+  estadoHttp  Int?
+  ultimoError String?
+  enviadoAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([estado, createdAt])
+  @@index([companyId, createdAt])
+  @@index([suscripcionId, createdAt])
+  @@map("entregas_webhook")
 }

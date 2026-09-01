@@ -8,6 +8,8 @@ import { scopesEfectivos } from '@/modules/plataforma/credenciales'
 import { errorApi, nuevoRequestId, type CodigoError } from '@/modules/plataforma/errores'
 import { tokenDeCabecera, verificarToken } from '@/modules/plataforma/token'
 import { accesoASistema } from '@/modules/plataforma/registro'
+import { pareceClaveEmpresa, partirClave } from '@/modules/connect/clavesApiNucleo'
+import { anotarUsoClave, resolverClaveApi } from '@/modules/connect/clavesApi'
 
 /**
  * PLATAFORMA · Fase 2 — LA GUARDIA DE LA API v1.
@@ -57,14 +59,61 @@ const limitePlataforma = createRateLimiter({
   name: 'platform-api',
 })
 
+/**
+ * QUIÉN está llamando. Dos principales, y la diferencia no es cosmética:
+ *
+ *   sistema  un satélite que atiende a MUCHAS empresas. Dice de cuál habla en
+ *            cada petición, y `autorizarEmpresa` comprueba que le corresponde.
+ *   empresa  un tercero (Zapier, un script del dueño) que habla por UNA
+ *            empresa. La empresa viene ATADA a la clave: no la elige quien
+ *            llama, así que no hay comprobación que saltarse.
+ *
+ * Es una unión discriminada a propósito. Si `sistemaId` fuera un campo suelto
+ * que a veces vale la cadena vacía, la primera consulta que lo usara sin mirar
+ * devolvería filas de nadie —o de todos— y el tipo no habría avisado.
+ */
+export type PrincipalApi =
+  | {
+      tipo: 'sistema'
+      credencialId: string
+      clientId: string
+      sistemaId: string
+      sistemaSlug: string
+    }
+  | {
+      tipo: 'empresa'
+      claveId: string
+      prefijo: string
+      /** La única empresa de la que esta clave puede hablar. */
+      companyId: string
+    }
+
 export interface ContextoApi {
   requestId: string
+  principal: PrincipalApi
+  /** Scopes del token ∩ los concedidos hoy a la credencial (o los de la clave). */
+  scopes: string[]
+}
+
+/**
+ * Atajos de compatibilidad para las rutas de satélite.
+ *
+ * Las 22 rutas existentes se escribieron cuando solo había un principal y leen
+ * `ctx.sistemaId` directamente. En vez de tocarlas todas —y arriesgar 22
+ * cambios por una función nueva— se les da un accesor que EXIGE el principal
+ * de sistema. Si algún día una ruta de satélite se abriera a claves de empresa
+ * sin querer, esto lanza en vez de consultar con un id vacío.
+ */
+export function exigeSistema(ctx: ContextoApi): {
   credencialId: string
   clientId: string
   sistemaId: string
   sistemaSlug: string
-  /** Scopes del token ∩ los concedidos hoy a la credencial. */
-  scopes: string[]
+} {
+  if (ctx.principal.tipo !== 'sistema') {
+    throw new Error('Esta ruta requiere la credencial de un sistema satélite.')
+  }
+  return ctx.principal
 }
 
 type Fallo = { fallo: NextResponse; requestId: string }
@@ -88,9 +137,24 @@ function esFallo(r: unknown): r is Fallo {
  * manifest incluiría siempre: un permiso que tiene todo el mundo no es un
  * permiso, es ruido en la revisión.
  */
+export interface OpcionesAuth {
+  /**
+   * ¿Este recurso acepta también una CLAVE DE API DE EMPRESA?
+   *
+   * CERRADO POR DEFECTO, y esa es la decisión de diseño más importante de la
+   * Fase 3. Abrir un recurso a un principal nuevo se escribe recurso a
+   * recurso, a mano. Si el defecto fuera abierto, cada ruta añadida en el
+   * futuro nacería expuesta a un principal en el que su autor no pensó — y las
+   * que escriben (canjes, transacciones) necesitan saber QUÉ sistema respalda
+   * la operación, cosa que una clave de empresa no puede decir.
+   */
+  claveDeEmpresa?: boolean
+}
+
 export async function autenticar(
   req: NextRequest,
-  scopeRequerido: string | null
+  scopeRequerido: string | null,
+  opciones: OpcionesAuth = {}
 ): Promise<ContextoApi | Fallo> {
   const requestId = nuevoRequestId()
   const negar = (code: CodigoError, extra?: { requiredScope?: string }) => ({
@@ -98,10 +162,49 @@ export async function autenticar(
     requestId,
   })
 
+  const cabecera = req.headers.get('authorization')
+
+  // ── Principal 2: clave de API de empresa ───────────────────────────────
+  // Se reconoce por su marca de agua `mbk_`, antes de tocar la base: una
+  // cabecera con basura no debe costar una consulta.
+  const bruto = tokenDeCabecera(cabecera)
+  if (pareceClaveEmpresa(bruto)) {
+    if (!opciones.claveDeEmpresa) return negar('API_KEY_NOT_SUPPORTED')
+
+    // El límite se cuenta por PREFIJO —la mitad pública— y antes de verificar
+    // el secreto: si se contara después, probar secretos al azar saldría gratis.
+    const partida = partirClave(bruto)
+    if (!partida) return negar('INVALID_TOKEN')
+    if (!(await limitePlataforma(`platform:clave:${partida.prefijo}`))) {
+      return negar('RATE_LIMITED')
+    }
+
+    const clave = await resolverClaveApi(bruto)
+    if (!clave) return negar('INVALID_TOKEN')
+
+    if (scopeRequerido !== null && !clave.scopes.includes(scopeRequerido)) {
+      return negar('INSUFFICIENT_SCOPE', { requiredScope: scopeRequerido })
+    }
+
+    anotarUsoClave(clave.id, clave.companyId)
+
+    return {
+      requestId,
+      principal: {
+        tipo: 'empresa',
+        claveId: clave.id,
+        prefijo: clave.prefijo,
+        companyId: clave.companyId,
+      },
+      scopes: clave.scopes,
+    }
+  }
+
+  // ── Principal 1: credencial OAuth2 de un sistema satélite ──────────────
   const secretoFirma = getPlatformTokenSecret()
   if (!secretoFirma) return negar('PLATFORM_API_UNCONFIGURED')
 
-  const token = tokenDeCabecera(req.headers.get('authorization'))
+  const token = bruto
   if (!token) return negar('INVALID_TOKEN')
 
   const verificado = verificarToken(secretoFirma, token)
@@ -129,10 +232,13 @@ export async function autenticar(
 
   return {
     requestId,
-    credencialId: credencial.id,
-    clientId: credencial.clientId,
-    sistemaId: credencial.sistemaId,
-    sistemaSlug: credencial.sistemaSlug,
+    principal: {
+      tipo: 'sistema',
+      credencialId: credencial.id,
+      clientId: credencial.clientId,
+      sistemaId: credencial.sistemaId,
+      sistemaSlug: credencial.sistemaSlug,
+    },
     scopes,
   }
 }
@@ -207,11 +313,31 @@ export async function autorizarEmpresa(
     }), requestId: ctx.requestId }
   }
 
-  const { decision } = await accesoASistema(ctx.sistemaSlug, companyId)
+  /**
+   * CLAVE DE EMPRESA: la empresa no se autoriza, se IMPONE.
+   *
+   * La clave nació atada a una empresa, así que aquí no hay una decisión que
+   * tomar sino una igualdad que comprobar. Si el llamante nombra otra, no se
+   * le explica que existe: se le contesta lo mismo que a un sistema sin
+   * habilitación, porque distinguirlo convertiría la API en un directorio de
+   * los clientes de MembeGo.
+   */
+  if (ctx.principal.tipo === 'empresa') {
+    if (companyId !== ctx.principal.companyId) {
+      console.warn(
+        '[platform-api] clave de empresa nombrando otra empresa:',
+        ctx.principal.prefijo, '→', companyId, ctx.requestId
+      )
+      return { fallo: errorApi('COMPANY_NOT_ENTITLED', ctx.requestId), requestId: ctx.requestId }
+    }
+    return { companyId }
+  }
+
+  const { decision } = await accesoASistema(ctx.principal.sistemaSlug, companyId)
   if (!decision.permitido) {
     console.warn(
       '[platform-api] empresa no habilitada:',
-      ctx.sistemaSlug, '→', companyId, decision.motivo, ctx.requestId
+      ctx.principal.sistemaSlug, '→', companyId, decision.motivo, ctx.requestId
     )
     return { fallo: errorApi('COMPANY_NOT_ENTITLED', ctx.requestId), requestId: ctx.requestId }
   }
@@ -227,12 +353,21 @@ export async function autorizarEmpresa(
 export async function autenticarSobreEmpresa(
   req: NextRequest,
   scopeRequerido: string | null,
-  companyId: string | null | undefined
+  companyId: string | null | undefined,
+  opciones: OpcionesAuth = {}
 ): Promise<{ ctx: ContextoApi; companyId: string } | Fallo> {
-  const ctx = await autenticar(req, scopeRequerido)
+  const ctx = await autenticar(req, scopeRequerido, opciones)
   if (esFallo(ctx)) return ctx
 
-  const empresa = await autorizarEmpresa(ctx, companyId)
+  /**
+   * Con una clave de empresa, `companyId` es OPCIONAL: la clave ya dice de
+   * quién habla. Omitirlo es lo natural para quien integra («mi clave, mis
+   * datos») y mandarlo también vale, siempre que coincida.
+   */
+  const objetivo =
+    ctx.principal.tipo === 'empresa' && !companyId ? ctx.principal.companyId : companyId
+
+  const empresa = await autorizarEmpresa(ctx, objetivo)
   if (esFallo(empresa)) return empresa
 
   return { ctx, companyId: empresa.companyId }

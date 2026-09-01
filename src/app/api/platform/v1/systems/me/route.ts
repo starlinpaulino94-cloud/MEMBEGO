@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
-import { autenticar, esFallo } from '@/modules/plataforma/api'
+import { autenticar, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { respuestaApi } from '@/modules/plataforma/errores'
 
 export const dynamic = 'force-dynamic'
@@ -19,12 +19,16 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const ctx = await autenticar(req, null)
   if (esFallo(ctx)) return ctx.fallo
+  // Recurso de SATÉLITE: describe la relación de un sistema con MembeGo, así
+  // que necesita saber cuál. Una clave de API de empresa no llega aquí — la
+  // guardia la rechaza antes con API_KEY_NOT_SUPPORTED.
+  const llamante = exigeSistema(ctx)
 
   const sistema = await sinEmpresa(
     'api de plataforma: ficha del sistema llamante (catálogo global)',
     (tx) =>
       tx.sistemaConectado.findUnique({
-        where: { id: ctx.sistemaId },
+        where: { id: llamante.sistemaId },
         select: {
           slug: true,
           nombre: true,
@@ -38,7 +42,7 @@ export async function GET(req: NextRequest) {
     // La credencial existe pero su sistema no: solo pasa si alguien borró la
     // fila a mano. Se responde con lo que sí se sabe en vez de un 500.
     return respuestaApi(
-      { slug: ctx.sistemaSlug, nombre: ctx.sistemaSlug, estado: 'UNKNOWN', businessTypes: [], scopes: ctx.scopes },
+      { slug: llamante.sistemaSlug, nombre: llamante.sistemaSlug, estado: 'UNKNOWN', businessTypes: [], scopes: ctx.scopes },
       ctx.requestId
     )
   }

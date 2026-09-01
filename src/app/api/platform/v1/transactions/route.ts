@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { conEmpresa } from '@/lib/tenant'
 import { crearTransaccionAplicada } from '@/lib/transactions'
-import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
+import { autenticarSobreEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { conIdempotencia } from '@/modules/plataforma/idempotencia'
 
@@ -61,6 +61,11 @@ export async function POST(req: NextRequest) {
   const auth = await autenticarSobreEmpresa(req, 'transactions:write', cuerpo.companyId)
   if (esFallo(auth)) return auth.fallo
   const { ctx, companyId } = auth
+  // Este recurso es de SATÉLITE: necesita saber qué sistema respalda la
+  // operación. `exigeSistema` lo afirma con el tipo — una clave de API de
+  // empresa no llega aquí (la guardia la rechaza antes con
+  // API_KEY_NOT_SUPPORTED), y si algún día llegara, esto lo detendría.
+  const sistema = exigeSistema(ctx)
 
   const clave = req.headers.get('idempotency-key')?.trim() ?? ''
   if (!clave) return errorApi('IDEMPOTENCY_KEY_REQUIRED', ctx.requestId)
@@ -73,7 +78,7 @@ export async function POST(req: NextRequest) {
   }
 
   const idem = await conIdempotencia({
-    sistemaId: ctx.sistemaId,
+    sistemaId: sistema.sistemaId,
     companyId,
     clave,
     endpoint: '/api/platform/v1/transactions',
@@ -124,7 +129,7 @@ export async function POST(req: NextRequest) {
         // De dónde vino, para que una venta del satélite y una del mostrador no
         // sean indistinguibles al revisar un descuadre.
         origen: 'SISTEMA',
-        sistema: ctx.sistemaSlug,
+        sistema: sistema.sistemaSlug,
         externalId: cuerpo.externalId ?? null,
         requestId: ctx.requestId,
       },

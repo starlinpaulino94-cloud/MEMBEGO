@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
+import { autenticarSobreEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi, type CodigoError } from '@/modules/plataforma/errores'
 import { conIdempotencia } from '@/modules/plataforma/idempotencia'
 import { revertirVisita, type MotivoRechazoReversa } from '@/modules/visitas/reversa'
@@ -73,6 +73,11 @@ export async function POST(
   const auth = await autenticarSobreEmpresa(req, 'benefits:redeem', cuerpo.companyId)
   if (esFallo(auth)) return auth.fallo
   const { ctx, companyId } = auth
+  // Este recurso es de SATÉLITE: necesita saber qué sistema respalda la
+  // operación. `exigeSistema` lo afirma con el tipo — una clave de API de
+  // empresa no llega aquí (la guardia la rechaza antes con
+  // API_KEY_NOT_SUPPORTED), y si algún día llegara, esto lo detendría.
+  const sistema = exigeSistema(ctx)
 
   const clave = req.headers.get('idempotency-key')?.trim() ?? ''
   if (!clave) return errorApi('IDEMPOTENCY_KEY_REQUIRED', ctx.requestId)
@@ -88,7 +93,7 @@ export async function POST(
   // reintentos simultáneos devolverían los dos lavados antes de que ninguno
   // guardara su respuesta.
   const idem = await conIdempotencia({
-    sistemaId: ctx.sistemaId,
+    sistemaId: sistema.sistemaId,
     companyId,
     clave,
     endpoint: '/api/platform/v1/redemptions/{id}/reverse',
@@ -105,7 +110,7 @@ export async function POST(
       // y el rastro del sistema va en `revertidaPorSistema` y en la auditoría.
       dbUserId: null,
       companyId,
-      sistemaSlug: ctx.sistemaSlug,
+      sistemaSlug: sistema.sistemaSlug,
     },
     id.trim(),
     cuerpo.reason
@@ -113,7 +118,7 @@ export async function POST(
 
   if (!resultado.ok) {
     const code = HTTP_POR_MOTIVO[resultado.motivo]
-    console.warn('[reverse] rechazado:', resultado.motivo, ctx.sistemaSlug, ctx.requestId)
+    console.warn('[reverse] rechazado:', resultado.motivo, sistema.sistemaSlug, ctx.requestId)
     const fallo = errorApi(code, ctx.requestId, { message: resultado.mensaje })
     // Un rechazo también se guarda: el reintento de un satélite que ya recibió
     // «no existe» no debe encontrarse otra respuesta distinta.

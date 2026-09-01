@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { autorizarCron } from '@/lib/cron-auth'
 import { reintentarPendientes } from '@/modules/integraciones/despacho'
+import { reintentarWebhooksPendientes } from '@/modules/connect/webhooks'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -13,6 +14,10 @@ export const maxDuration = 60
 export async function GET(req: NextRequest) {
   const denegado = autorizarCron(req)
   if (denegado) return denegado
-  const resultado = await reintentarPendientes()
-  return NextResponse.json({ ok: true, ...resultado })
+  const satelites = await reintentarPendientes()
+  // Los webhooks de empresa (Connect · F3) comparten cron con los satélites: son
+  // el mismo trabajo —vaciar una cola de entregas pendientes— y separarlos en
+  // dos crons gastaría una de las ranuras del plan sin ganar nada.
+  const webhooks = await reintentarWebhooksPendientes()
+  return NextResponse.json({ ok: true, satelites, webhooks })
 }

@@ -119,6 +119,22 @@ export async function despacharEventoEstrategia(
       traceId: evento.traceId,
     })
 
+    // 3. Y a los webhooks que la propia EMPRESA haya suscrito (Connect · F3).
+    //
+    // Va después de los satélites y con el mismo contrato best-effort. Son dos
+    // destinos distintos del MISMO río de eventos: el satélite lo registra el
+    // superadmin y recibe el sobre v2 completo; la suscripción la crea la
+    // empresa apuntando a donde quiera. Que salgan del mismo sitio es lo que
+    // garantiza que ningún evento llegue a un lado y no al otro.
+    const { repartirEventoAWebhooks } = await import('@/modules/connect/webhooks')
+    const { tipoV2 } = await import('@membego/contracts')
+    await repartirEventoAWebhooks({
+      companyId: evento.companyId,
+      evento: tipoV2(evento.type),
+      eventoId: evento.id,
+      datos: { ...payload, ...(evento.subjectId ? { customerId: evento.subjectId } : {}) },
+    })
+
     return { procesados: 1 }
   } catch (e) {
     // Reabrir el evento para que el reintento (o el barrido) lo vuelva a tomar.

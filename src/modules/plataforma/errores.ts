@@ -70,6 +70,8 @@ const MENSAJES: Record<CodigoError, string> = {
   TOKEN_EXPIRED: 'The access token has expired. Request a new one.',
   INSUFFICIENT_SCOPE: 'The access token does not grant the required scope.',
   COMPANY_NOT_ENTITLED: 'This system is not enabled for the requested company.',
+  API_KEY_NOT_SUPPORTED:
+    'This resource requires a satellite system credential; company API keys cannot use it.',
   NOT_FOUND: 'The requested resource does not exist.',
   BENEFIT_NOT_ELIGIBLE: 'The benefit cannot be redeemed right now.',
   REDEMPTION_CONFLICT: 'The benefit changed while redeeming. Re-evaluate and retry.',
