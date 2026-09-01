@@ -357,3 +357,47 @@ model EntregaWebhook {
   @@index([suscripcionId, createdAt])
   @@map("entregas_webhook")
 }
+
+/// Un flujo OAuth EN CURSO. La fila ES el permiso de canjear el código.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// POR QUÉ UNA TABLA Y NO UNA COOKIE
+///
+/// El `state` firmado ya evita el CSRF, pero no el REPLAY: quien capture la
+/// URL de vuelta podría canjearla otra vez. El uso único se consigue con el
+/// borrado de esta fila dentro de la misma transacción del canje — igual que
+/// `TokenSSOUsado` hace con los tokens de SSO, y por el mismo motivo: no hay
+/// ventana entre comprobar y marcar.
+///
+/// Aquí vive además el `code_verifier` de PKCE, que por definición NO puede
+/// viajar por el navegador: si viajara, PKCE no protegería de nada.
+model EstadoOAuth {
+  id String @id @default(cuid())
+
+  companyId String
+
+  /// Conexión que se está dando de alta.
+  conexionId String
+
+  /// Conector, duplicado para poder diagnosticar sin unir tablas.
+  conectorSlug String
+
+  /// El secreto de PKCE. Se borra con la fila al canjear.
+  codeVerifier String
+
+  /// Quién inició el flujo (`User.id`), para la bitácora.
+  iniciadoPor String?
+
+  /// A dónde volver en MembeGo cuando termine. Se valida contra rutas propias
+  /// antes de guardarse: una URL de vuelta que acepte cualquier destino es un
+  /// redirector abierto con nuestro dominio de fachada.
+  volverA String?
+
+  createdAt DateTime @default(now())
+  /// Caduca a los 15 minutos. El cron purga lo que quede.
+  expiraAt  DateTime
+
+  @@index([companyId])
+  @@index([expiraAt])
+  @@map("estados_oauth")
+}
