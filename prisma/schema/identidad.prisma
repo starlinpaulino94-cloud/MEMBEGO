@@ -163,27 +163,27 @@ enum AuditAccion {
 // ─────────────────────────────────────────────
 
 model User {
-  id                 String    @id @default(cuid())
-  supabaseId         String    @unique
-  establecerContrasenaToken   String?
-  establecerContrasenaExpira  DateTime? @db.Timestamptz()
-  email              String    @unique
-  name               String
-  role               AppRole   @default(CLIENTE)
-  companyId          String?
-  company            Company?  @relation(fields: [companyId], references: [id])
+  id                         String    @id @default(cuid())
+  supabaseId                 String    @unique
+  establecerContrasenaToken  String?
+  establecerContrasenaExpira DateTime? @db.Timestamptz()
+  email                      String    @unique
+  name                       String
+  role                       AppRole   @default(CLIENTE)
+  companyId                  String?
+  company                    Company?  @relation(fields: [companyId], references: [id])
   /// Módulo de PERMISOS: ajustes por empleado sobre lo que su rol trae de
   /// serie ({v:1, secciones:{sec:bool}, funciones:{sec:{fn:false}}}). Solo
   /// diferencias; null = hereda el rol tal cual. Ver lib/auth/permissions.ts.
-  permisos           Json?
+  permisos                   Json?
   // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
   // y opt-in de comunicaciones de marketing, con la versión y el momento.
-  termsAcceptedAt    DateTime?
-  termsVersion       String?
-  marketingConsent   Boolean   @default(false)
-  marketingConsentAt DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  termsAcceptedAt            DateTime?
+  termsVersion               String?
+  marketingConsent           Boolean   @default(false)
+  marketingConsentAt         DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   memberships      Membership[]
   visits           Visit[]             @relation("EmpleadoVisits")
