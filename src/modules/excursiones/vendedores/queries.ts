@@ -69,7 +69,7 @@ export async function vendedoresParaSupervisor(companyId: string) {
     tx.vendedor.findMany({
       where: { companyId, estado: 'ACTIVO' },
       orderBy: { nombre: 'asc' },
-      select: { id: true, nombre: true, apellido: true, codigo: true },
+      select: { id: true, nombre: true, apellido: true, codigo: true, tipo: true },
     })
   )
 }

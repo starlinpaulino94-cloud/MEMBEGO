@@ -60,6 +60,7 @@ export async function crearMeta(
     const primerVendedor = rawVendedorIds[0] || String(formData.get('vendedorId') ?? '').trim()
     const tipoVendedor = String(formData.get('tipoVendedor') ?? '').trim() || null
     const excursionId = String(formData.get('excursionId') ?? '').trim() || null
+    const beneficio = String(formData.get('beneficio') ?? '').trim() || null
 
     const v = validarMeta({
       vendedorId: primerVendedor || null,
@@ -100,6 +101,7 @@ export async function crearMeta(
             metaIngresos: v.datos.metaIngresos,
             metaRegistros: v.datos.metaRegistros,
             metaReservas: v.datos.metaReservas,
+            beneficio,
           })),
         })
       )
@@ -119,6 +121,7 @@ export async function crearMeta(
             metaIngresos: v.datos.metaIngresos,
             metaRegistros: v.datos.metaRegistros,
             metaReservas: v.datos.metaReservas,
+            beneficio,
           },
         })
       )

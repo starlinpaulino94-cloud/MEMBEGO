@@ -18,6 +18,8 @@ import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { generarCodigo } from '@/lib/codes'
+import { sendEmail } from '@/lib/email'
+import { correoAccesoVendedor } from '@/lib/email/plantillas-excursiones'
 import {
   ESTADOS_VENDEDOR,
   codigoVendedor,
@@ -255,8 +257,8 @@ export async function cambiarEstadoVendedor(
  * de la empresa ni el escáner: la protección de rutas solo le abre `/vendedor`.
  * Por eso un hotel o un taxista pueden entrar sin ver tus clientes.
  *
- * La contraseña temporal se enseña UNA sola vez, aquí: no se guarda en claro
- * en ningún sitio y no hay pantalla donde volver a consultarla.
+ * Se envía un correo con un enlace para establecer su contraseña propia.
+ * El token es válido 24 horas.
  */
 export async function darAccesoVendedor(
   _prev: VendedorActionState,
@@ -334,19 +336,45 @@ export async function darAccesoVendedor(
       app_metadata: { role: 'VENDEDOR', dbUserId: dbUser.id, companyId: cid },
     })
 
+    // Token + email: no bloquean el acceso. Si fallan, el vendedor ya puede entrar
+    // y establecer contraseña después.
+    try {
+      const token = randomBytes(32).toString('hex')
+      const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      await conEmpresa(cid, (tx) =>
+        tx.user.update({
+          where: { id: dbUser.id },
+          data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+        })
+      )
+
+      const html = correoAccesoVendedor({
+        nombre: nombreCompleto,
+        email: correo,
+        token,
+        urlBase: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000',
+      })
+      await sendEmail({ to: correo, subject: 'Establece tu contraseña - MembeGo', html })
+    } catch (emailErr) {
+      console.error('[excursiones] darAccesoVendedor — token/email (no bloquea):', emailErr)
+    }
+
     await auditar(cid, user.metadata.dbUserId ?? null, vendedor.id, {
       tipo: 'VENDEDOR_ACCESO_CREADO',
       codigo: vendedor.codigo,
       correo,
     })
     revalidatePath(`/admin/excursiones/vendedores/${vendedor.id}`)
-    return {
-      success: 'Acceso creado.',
-      acceso: { correo, passwordTemporal },
-    }
+    return { success: 'Acceso otorgado. Se ha enviado un email con las instrucciones.' }
   } catch (e) {
     console.error('[excursiones] darAccesoVendedor:', e)
-    // Rollback: borrar DB user si se creó, y Supabase user si se creó.
+    // Rollback: desvincular vendedor, borrar DB user y Supabase user.
+    const vendedorIdRollback = String(formData.get('vendedorId') ?? '')
+    if (vendedorIdRollback && companyId) {
+      await conEmpresa(companyId, (tx) =>
+        tx.vendedor.updateMany({ where: { id: vendedorIdRollback, companyId }, data: { userId: null } })
+      ).catch(anotarFallo('excursiones:acceso-rollback-vendedor'))
+    }
     if (dbUserId && companyId) {
       await conEmpresa(companyId, (tx) =>
         tx.user.delete({ where: { id: dbUserId! } }).catch(anotarFallo('excursiones:acceso-rollback-db'))
@@ -416,5 +444,112 @@ export async function quitarAccesoVendedor(
   } catch (e) {
     console.error('[excursiones] quitarAccesoVendedor:', e)
     return { error: 'No se pudo quitar el acceso.' }
+  }
+}
+
+/**
+ * PUBLIC · Establecer contraseña propia del vendedor.
+ *
+ * Valida el token recibido por correo (válido 24 h), actualiza la contraseña
+ * en Supabase Auth y limpia el token para que no se reutilice.
+ */
+export async function establecerContrasenaVendedor(
+  token: string,
+  password: string
+): Promise<{ success?: string; error?: string }> {
+  try {
+    const user = await sinEmpresa('establecer-contrasena', (tx) =>
+      tx.user.findFirst({
+        where: { establecerContrasenaToken: token },
+        select: { id: true, supabaseId: true, establecerContrasenaExpira: true },
+      })
+    )
+
+    if (!user) {
+      return { error: 'Token inválido. Solicita un nuevo enlace de acceso.' }
+    }
+
+    if (!user.establecerContrasenaExpira || user.establecerContrasenaExpira < new Date()) {
+      return { error: 'El enlace ha expirado. Solicita un nuevo enlace de acceso.' }
+    }
+
+    const supabase = createAdminClient()
+    const { error } = await supabase.auth.admin.updateUserById(user.supabaseId, {
+      password: password,
+    })
+
+    if (error) {
+      console.error('[excursiones] establecerContrasenaVendedor:', error)
+      return { error: 'No se pudo actualizar la contraseña. Intenta de nuevo.' }
+    }
+
+    await sinEmpresa('establecer-contrasena:limpiar-token', (tx) =>
+      tx.user.update({
+        where: { id: user.id },
+        data: { establecerContrasenaToken: null, establecerContrasenaExpira: null },
+      })
+    )
+
+    return { success: 'Contraseña establecida. Ahora puedes iniciar sesión.' }
+  } catch (e) {
+    console.error('[excursiones] establecerContrasenaVendedor:', e)
+    return { error: 'Error al procesar la solicitud. Intenta de nuevo.' }
+  }
+}
+
+/**
+ * ADMIN · Reenviar el correo de acceso a un vendedor que ya tiene cuenta.
+ *
+ * Regenera el token (nueva expiración de 24 h) y reenvía el mismo correo
+ * con las instrucciones para establecer su contraseña.
+ */
+export async function reenviarCorreoAccesoVendedor(
+  _prev: VendedorActionState,
+  formData: FormData
+): Promise<VendedorActionState> {
+  try {
+    const user = await requireSection('excursiones', 'vendedor_acceso')
+    if (!user) return { error: 'No autorizado.' }
+    const companyId = await resolveCompanyId(user, formData)
+    if (!companyId) return { error: 'Empresa requerida.' }
+    const vendedorId = String(formData.get('vendedorId') ?? '')
+
+    const vendedor = await conEmpresa(companyId, (tx) =>
+      tx.vendedor.findFirst({
+        where: { id: vendedorId, companyId },
+        select: { id: true, userId: true },
+      })
+    )
+    if (!vendedor?.userId) return { error: 'Este vendedor no tiene acceso.' }
+
+    const dbUser = await conEmpresa(companyId, (tx) =>
+      tx.user.findFirst({
+        where: { id: vendedor.userId!, companyId, role: 'VENDEDOR' },
+        select: { id: true, email: true, name: true },
+      })
+    )
+    if (!dbUser) return { error: 'Cuenta no encontrada.' }
+
+    const token = randomBytes(32).toString('hex')
+    const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await conEmpresa(companyId, (tx) =>
+      tx.user.update({
+        where: { id: dbUser.id },
+        data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+      })
+    )
+
+    const html = correoAccesoVendedor({
+      nombre: dbUser.name,
+      email: dbUser.email,
+      token,
+      urlBase: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000',
+    })
+    await sendEmail({ to: dbUser.email, subject: 'Establece tu contraseña - MembeGo', html })
+
+    return { success: 'Correo reenviado exitosamente.' }
+  } catch (e) {
+    console.error('[excursiones] reenviarCorreoAccesoVendedor:', e)
+    return { error: 'No se pudo reenviar el correo. Intenta de nuevo.' }
   }
 }

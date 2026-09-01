@@ -1,18 +1,19 @@
 'use client'
 
 /**
- * Acceso del vendedor a SU panel. La contraseña temporal se enseña UNA vez, al
- * crearla: no se guarda en claro en ningún sitio y no hay pantalla donde
- * volver a consultarla. Si se pierde, se quita el acceso y se vuelve a dar.
+ * Acceso del vendedor a SU panel. Al crear acceso, se envía un correo con las
+ * instrucciones para establecer su contraseña. No se muestran credenciales.
+ * Si se pierde, se quita el acceso y se vuelve a dar.
  */
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, KeyRound, Copy } from 'lucide-react'
+import { Loader2, KeyRound, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   darAccesoVendedor,
   quitarAccesoVendedor,
+  reenviarCorreoAccesoVendedor,
   type VendedorActionState,
 } from '@/modules/excursiones/vendedores/actions'
 import { Button } from '@/components/ui/button'
@@ -34,9 +35,10 @@ export function VendedorAcceso({
   const router = useRouter()
   const [state, darAction, dando] = useActionState(darAccesoVendedor, init)
   const [quitarState, quitarAction, quitando] = useActionState(quitarAccesoVendedor, init)
+  const [reenviarState, reenviarAction, reenviando] = useActionState(reenviarCorreoAccesoVendedor, init)
 
   useEffect(() => {
-    if (state.acceso) router.refresh()
+    if (state.success) router.refresh()
   }, [state, router])
 
   useEffect(() => {
@@ -47,39 +49,26 @@ export function VendedorAcceso({
     if (quitarState.error) toast.error(quitarState.error)
   }, [quitarState, router])
 
-  // Credenciales recién creadas: la única vez que se pueden ver.
-  if (state.acceso) {
-    const { correo, passwordTemporal } = state.acceso
+  useEffect(() => {
+    if (reenviarState.success) toast.success(reenviarState.success)
+    if (reenviarState.error) toast.error(reenviarState.error)
+  }, [reenviarState])
+
+  if (state.success) {
     return (
       <section className="rounded-2xl border border-success/25 bg-success/5 p-5">
         <h2 className="text-h3 text-foreground">Acceso creado</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Entrégale estos datos ahora. La contraseña no se puede volver a ver: si se pierde,
-          quita el acceso y vuelve a dárselo.
+          {state.success}
         </p>
-        <dl className="mt-3 space-y-1 rounded-xl bg-card p-3 font-mono text-sm">
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Correo</dt>
-            <dd className="text-foreground">{correo}</dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Contraseña</dt>
-            <dd className="text-foreground">{passwordTemporal}</dd>
-          </div>
-        </dl>
         <Button
           type="button"
           size="sm"
           variant="outline"
-          className="mt-3 gap-1.5"
-          onClick={() => {
-            navigator.clipboard
-              ?.writeText(`Correo: ${correo}\nContraseña: ${passwordTemporal}`)
-              .then(() => toast.success('Copiado.'))
-              .catch(() => toast.error('No se pudo copiar; anótalo a mano.'))
-          }}
+          className="mt-3"
+          onClick={() => router.refresh()}
         >
-          <Copy className="h-3.5 w-3.5" /> Copiar
+          Cerrar
         </Button>
       </section>
     )
@@ -98,6 +87,13 @@ export function VendedorAcceso({
           <input type="hidden" name="vendedorId" value={vendedorId} />
           <Button type="submit" size="sm" variant="ghost" disabled={quitando}>
             Quitar el acceso
+          </Button>
+        </form>
+        <form action={reenviarAction} className="mt-2">
+          <input type="hidden" name="vendedorId" value={vendedorId} />
+          <Button type="submit" size="sm" variant="ghost" disabled={reenviando} className="gap-1.5">
+            {reenviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+            Reenviar correo
           </Button>
         </form>
       </section>

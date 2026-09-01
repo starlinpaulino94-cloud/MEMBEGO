@@ -235,6 +235,21 @@ export function MetaForm({
         </div>
       </fieldset>
 
+      <fieldset className="rounded-xl border border-border p-3">
+        <legend className="px-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+          Beneficio (Opcional)
+        </legend>
+        <div>
+          <Label htmlFor="meta-beneficio">Qué le prometes al vendedor si alcanza la meta</Label>
+          <Input
+            id="meta-beneficio"
+            name="beneficio"
+            placeholder="Ej: Comisión extra del 5%, día libre, etc."
+            className="mt-1.5"
+          />
+        </div>
+      </fieldset>
+
       {state.error ? (
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>

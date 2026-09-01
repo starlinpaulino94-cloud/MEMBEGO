@@ -22,7 +22,7 @@ import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { correoBienvenidaClienteVendedor } from '@/lib/email/plantillas-excursiones'
+import { correoAccesoCliente, correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
@@ -324,19 +324,21 @@ export async function crearReservaVendedor(
       )
       targetClienteId = nuevoCliente.id
 
-      // 3. Enviar correo de bienvenida con usuario y contraseña
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
-      await sendEmail({
-        to: clienteEmail,
-        subject: '¡Tu cuenta en MembeGo está lista!',
-        companyId,
-        html: correoBienvenidaClienteVendedor({
-          nombre: clienteNombre,
-          email: clienteEmail,
-          password,
-          urlLogin: `${siteUrl}/login`,
-        }),
-      })
+      // 3. Token de establecimiento de contraseña + correo (no bloquea)
+      try {
+        const token = randomBytes(32).toString('hex')
+        const expira = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        await prisma.user.update({
+          where: { id: createdUser.id },
+          data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
+        })
+
+        const urlBase = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const html = await correoAccesoCliente({ nombre: clienteNombre, email: clienteEmail, token, urlBase })
+        await sendEmail({ to: clienteEmail, subject: 'Establece tu contraseña - MembeGo', html })
+      } catch (e) {
+        console.error('[excursiones] crearReservaVendedor — token/email (no bloquea):', e)
+      }
     }
 
     // 4. Validar cupo real en BD y Crear Reserva
@@ -475,6 +477,32 @@ export async function crearReservaVendedor(
     await sincronizarEstadoAgotada(companyId, excursionId)
     for (const item of itemsComboAGuardar) {
       await sincronizarEstadoAgotada(companyId, item.actividadId)
+    }
+
+    // Send confirmation email to client (non-blocking)
+    if (clienteEmail) {
+      const reservaCompleta = await conEmpresa(companyId, (tx) =>
+        tx.reservaExc.findFirst({
+          where: { id: reserva.id, companyId },
+          select: { checkinToken: true },
+        })
+      )
+      const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+      if (reservaCompleta?.checkinToken) {
+        correoConfirmacionReserva({
+          nombreCliente: clienteNombre || clienteEmail,
+          numeroReserva: reserva.numero,
+          nombreExcursion: excursion.nombre,
+          fecha: v.datos.fecha.toISOString().split('T')[0],
+          hora: v.datos.hora ?? '',
+          pasajeros: v.datos.adultos + v.datos.ninos,
+          total: `${excursion.moneda} ${Number(totales.total).toFixed(2)}`,
+          checkinToken: reservaCompleta.checkinToken,
+          urlBase,
+        }).then((html) =>
+          sendEmail({ to: clienteEmail, subject: `Confirmación de reserva ${reserva.numero} — ${excursion.nombre}`, html, companyId })
+        ).catch((e) => console.error('[excursiones] Error enviando email confirmación en crearReservaVendedor:', e))
+      }
     }
 
     revalidatePath('/vendedor/reservas')

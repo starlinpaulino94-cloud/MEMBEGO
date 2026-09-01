@@ -32,6 +32,8 @@ import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { resolverEnlace, vendedorParaCliente, VENDEDOR_COOKIE } from '../atribucion/registrar'
 import { procesarVentaYComisionInterna } from '../ventas/actions'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
+import { sendEmail } from '@/lib/email'
+import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 
 export interface ReservaClienteState {
   error?: string
@@ -462,6 +464,24 @@ export async function reservarExcursion(
       await sincronizarEstadoAgotada(companyId, item.actividadId)
     }
 
+    // Send confirmation email to client (non-blocking)
+    if (user.email) {
+      const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+      correoConfirmacionReserva({
+        nombreCliente: user.email,
+        numeroReserva: creada.numero,
+        nombreExcursion: excursion.nombre,
+        fecha: v.datos.fecha.toISOString().split('T')[0],
+        hora: v.datos.hora ?? '',
+        pasajeros: v.datos.adultos + v.datos.ninos,
+        total: `${excursion.moneda} ${Number(totales.total).toFixed(2)}`,
+        checkinToken,
+        urlBase,
+      }).then((html) =>
+        sendEmail({ to: user.email!, subject: `Confirmación de reserva ${creada.numero} — ${excursion.nombre}`, html, companyId })
+      ).catch((e) => console.error('[excursiones] Error enviando email confirmación en reservarExcursion:', e))
+    }
+
     // Consumir cookie de atribución (un solo uso)
     if (vendedorId) {
       try {
@@ -759,6 +779,25 @@ export async function reservarCarritoAction(
       }
 
       if (reserva) nuevasReservas.push(reserva)
+
+      // Send confirmation email to client for this reservation (non-blocking)
+      if (reserva && user.email) {
+        const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+        correoConfirmacionReserva({
+          nombreCliente: user.email,
+          numeroReserva: reserva.numero,
+          nombreExcursion: exc.nombre,
+          fecha: fechaValida.toISOString().split('T')[0],
+          hora: item.horaSalida || '',
+          pasajeros: item.adultos + item.ninos,
+          total: `${exc.moneda} ${Number(totales.total).toFixed(2)}`,
+          checkinToken: checkinToken ?? reserva.numero,
+          urlBase,
+        }).then((html) =>
+          sendEmail({ to: user.email!, subject: `Confirmación de reserva ${reserva.numero} — ${exc.nombre}`, html, companyId: exc.companyId })
+        ).catch((e) => console.error('[excursiones] Error enviando email confirmación en reservarCarrito:', e))
+      }
+
       await sincronizarEstadoAgotada(exc.companyId, exc.id)
     }
 

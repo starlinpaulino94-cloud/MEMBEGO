@@ -35,7 +35,7 @@ export function ReporteDescarga({
   canal?: string
   estado?: string
   etiqueta: string
-  vendedores?: { id: string; nombre: string; codigo: string }[]
+  vendedores?: { id: string; nombre: string; codigo: string; tipo?: string | null }[]
   excursiones?: { id: string; nombre: string; tipoItem?: string }[]
 }) {
   const router = useRouter()
@@ -48,6 +48,9 @@ export function ReporteDescarga({
   const [excId, setExcId] = useState(excursionId)
   const [can, setCan] = useState(canal)
   const [est, setEst] = useState(estado)
+
+  const selectedVendor = vendedores.find((v) => v.id === vId)
+  const autoTipo = selectedVendor?.tipo ?? null
 
   const buildQuery = () => {
     const params = new URLSearchParams()
@@ -135,7 +138,10 @@ export function ReporteDescarga({
               id="rep-vendedor"
               name="vendedorId"
               value={vId}
-              onChange={(e) => setVId(e.target.value)}
+              onChange={(e) => {
+                setVId(e.target.value)
+                if (e.target.value === 'TODOS') setTVend('TODOS')
+              }}
               className="mt-1 block w-full rounded-lg border border-border bg-card px-2.5 py-2 text-xs text-foreground"
             >
               <option value="TODOS">Todos los vendedores</option>
@@ -152,8 +158,9 @@ export function ReporteDescarga({
             <select
               id="rep-tipo-vendedor"
               name="tipoVendedor"
-              value={tVend}
+              value={autoTipo && vId !== 'TODOS' ? autoTipo : tVend}
               onChange={(e) => setTVend(e.target.value)}
+              disabled={vId !== 'TODOS' && Boolean(autoTipo)}
               className="mt-1 block w-full rounded-lg border border-border bg-card px-2.5 py-2 text-xs text-foreground"
             >
               <option value="TODOS">Todos los tipos (Promotores, Touroperadores, etc.)</option>
