@@ -1447,7 +1447,9 @@ export function ReservaExcursionForm({
                 ninos,
                 precioAdulto,
                 precioNino,
-                moneda })
+                moneda,
+                notas: notas.trim() || undefined,
+              })
               if (!isAuthenticated) {
                 router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
               }
@@ -1476,7 +1478,9 @@ export function ReservaExcursionForm({
                 ninos,
                 precioAdulto,
                 precioNino,
-                moneda })
+                moneda,
+                notas: notas.trim() || undefined,
+              })
               router.push(isAuthenticated ? '/checkout' : `/login?redirect=${encodeURIComponent('/checkout')}`)
             }}
             disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}

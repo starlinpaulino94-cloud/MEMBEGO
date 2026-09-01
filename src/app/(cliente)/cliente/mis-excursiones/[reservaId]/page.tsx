@@ -11,8 +11,12 @@ import {
   TONO_RESERVA,
   formatoMinutosAHora,
   minutosDesdeMedianoche,
+  esModificable,
+  ESTADOS_CERRADOS,
 } from '@/modules/excursiones/reservas/nucleo'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { ReservaCheckinQrDisplay } from '@/components/excursiones/ReservaCheckinQrDisplay'
+import { ClienteModificarReserva } from '@/components/excursiones/ClienteModificarReserva'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,9 +65,19 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
 
   if (!data) redirect('/cliente/mis-excursiones')
 
-  const { reserva, excursion, saldo, checkinToken, checkinAt, checkinPorId } = data
+  const { reserva, excursion, variante, saldo, checkinToken, checkinAt, checkinPorId } = data
   const moneda = excursion?.moneda ?? 'DOP'
   const tono = TONO_RESERVA[reserva.estado as keyof typeof TONO_RESERVA] ?? 'neutral'
+
+  const config = await getExcursionesConfig(reserva.companyId)
+  const ahora = new Date()
+  const { modificable, horasRestantes } = esModificable(
+    reserva.fecha,
+    reserva.hora,
+    ahora,
+    config.politica.anticipacionMinimaHoras
+  )
+  const esCerrada = ESTADOS_CERRADOS.includes(reserva.estado as any)
 
   return (
     <div className="min-h-screen bg-background">
@@ -88,6 +102,24 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
           checkinPorId={checkinPorId}
           numero={reserva.numero}
         />
+
+        {/* Modificación de Pasajeros por el Cliente */}
+        {!esCerrada && (
+          <ClienteModificarReserva
+            reservaId={reserva.id}
+            adultos={reserva.adultos}
+            ninos={reserva.ninos}
+            precioAdulto={variante ? Number(variante.precioAdulto) : 0}
+            precioNino={variante?.precioNino != null ? Number(variante.precioNino) : null}
+            impuestoPct={excursion?.impuestoPct != null ? Number(excursion.impuestoPct) : null}
+            descuento={Number(reserva.descuento ?? 0)}
+            pagado={saldo.pagado}
+            moneda={moneda}
+            politica={config.politica}
+            horasRestantes={horasRestantes}
+            modificable={modificable}
+          />
+        )}
 
         {/* Card principal */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -405,15 +437,22 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
               )}
 
               {/* Políticas */}
-              {excursion.politicas && (
-                <div className="rounded-xl bg-info/10 p-3.5 border border-info/20">
+              {(excursion.politicas || config.notasPoliticas) && (
+                <div className="rounded-xl bg-info/10 p-3.5 border border-info/20 space-y-2">
                   <h4 className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-info">
                     <Shield className="h-4 w-4" />
                     Políticas y recomendaciones
                   </h4>
-                  <p className="mt-1.5 text-xs sm:text-sm text-foreground/80 whitespace-pre-line">
-                    {excursion.politicas}
-                  </p>
+                  {excursion.politicas && (
+                    <p className="mt-1.5 text-xs sm:text-sm text-foreground/80 whitespace-pre-line">
+                      {excursion.politicas}
+                    </p>
+                  )}
+                  {config.notasPoliticas && (
+                    <p className="text-xs sm:text-sm text-foreground/80 whitespace-pre-line pt-2 border-t border-info/20">
+                      <strong className="text-foreground">Políticas del operador:</strong> {config.notasPoliticas}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -487,6 +526,18 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Notas / Solicitudes especiales */}
+            {reserva.notas && (
+              <div className="rounded-xl bg-muted/50 p-3.5 border border-border/60">
+                <p className="text-xs uppercase font-bold text-muted-foreground mb-1">
+                  Notas / Solicitudes Especiales
+                </p>
+                <p className="text-xs sm:text-sm text-foreground/90 whitespace-pre-line">
+                  {reserva.notas}
+                </p>
               </div>
             )}
           </div>

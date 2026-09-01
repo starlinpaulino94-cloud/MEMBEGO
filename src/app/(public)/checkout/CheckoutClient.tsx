@@ -79,7 +79,7 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
         horaSalida: item.hora,
         adultos: item.adultos,
         ninos: item.ninos,
-        notas: '',
+        notas: item.notas || '',
       }))
 
       const res = await reservarCarritoAction(payload, metodo)
@@ -209,6 +209,11 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
                           <Clock className="h-3 w-3" /> {item.hora}
                         </span>
                       </div>
+                      {item.notas && (
+                        <p className="mt-1.5 text-xs text-muted-foreground italic truncate">
+                          Nota: {item.notas}
+                        </p>
+                      )}
                     </div>
 
                     <button
@@ -366,6 +371,11 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
                     <p className="text-xs text-muted-foreground">
                       {item.fecha} • {item.hora} • {item.adultos} Ad.{item.ninos > 0 ? ` ${item.ninos} Ni.` : ''}
                     </p>
+                    {item.notas && (
+                      <p className="text-xs text-muted-foreground italic mt-0.5">
+                        Nota: {item.notas}
+                      </p>
+                    )}
                   </div>
                   <span className="font-semibold whitespace-nowrap">
                     {formatMoney((item.adultos * item.precioAdulto) + (item.ninos * item.precioNino), { moneda: item.moneda })}
