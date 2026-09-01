@@ -20,6 +20,9 @@ import type { ActionSink, AutomationEngine, AutomationRepository } from '@/lib/a
  *                                    la empresa tiene el conector conectado
  *                                    (Membego Connect · Fase 6). Si no lo
  *                                    tiene, sigue siendo intención simulada.
+ *  - send_webhook                  → entrega por las suscripciones de webhook
+ *                                    de la empresa (Fase 7): hereda firma,
+ *                                    reintentos y dead letter de la Fase 3.
  *  - run_workflow                  → ejecuta otra automatización publicada de
  *                                    la empresa (por templateKey)
  *
@@ -62,6 +65,8 @@ export class LiveActionSink implements ActionSink {
           return await this.registrarEvento(input)
         case ACTION_TYPES.SEND_WHATSAPP:
           return await this.enviarWhatsapp(input)
+        case ACTION_TYPES.SEND_WEBHOOK:
+          return await this.invocarWebhook(input)
         case ACTION_TYPES.RUN_WORKFLOW:
           return await this.ejecutarWorkflow(input)
         default:
@@ -147,6 +152,52 @@ export class LiveActionSink implements ActionSink {
     })
     if (!res.ok) return { ok: false, detail: { channel: 'whatsapp', motivo: res.motivo } }
     return { ok: true, detail: { channel: 'whatsapp', mensajeId: res.mensajeId } }
+  }
+
+  /**
+   * WEBHOOK · una automatización alcanza cualquier sistema (Connect · Fase 7).
+   *
+   * NO abre una conexión nueva: entrega por las SUSCRIPCIONES que la empresa
+   * ya tiene dadas de alta (Fase 3). Eso importa más de lo que parece —
+   * significa que este envío hereda gratis todo lo que costó construir allí:
+   * la URL validada contra SSRF, la firma HMAC, el outbox con reintentos y el
+   * dead letter. Dejar que una regla escribiera su propia URL habría abierto
+   * un segundo camino sin ninguna de esas protecciones.
+   *
+   * El evento que viaja se llama `automation.<lo que diga la regla>`, con
+   * prefijo para que quien recibe pueda distinguir de un vistazo lo que nace
+   * de una automatización de lo que nace del negocio.
+   */
+  private async invocarWebhook(input: {
+    companyId: string
+    subjectId: string | null
+    params: Record<string, unknown>
+  }) {
+    const nombre = String(input.params.event ?? input.params.name ?? '').trim()
+    if (!nombre) return { ok: true, detail: { simulated: true, reason: 'sin nombre de evento' } }
+
+    const { repartirEventoAWebhooks, haySuscripcionesActivas } = await import(
+      '@/modules/connect/webhooks'
+    )
+    if (!(await haySuscripcionesActivas(input.companyId))) {
+      // Igual que WhatsApp: sin destino, se registra la intención. Una regla
+      // publicada no puede empezar a fallar porque nadie haya suscrito nada.
+      return { ok: true, detail: { simulated: true, reason: 'sin webhooks suscritos' } }
+    }
+
+    // `payload` es lo que la regla quiera mandar; `customerId` se añade aparte
+    // para que quien recibe no dependa de que la regla se acordara de ponerlo.
+    const datos =
+      input.params.payload && typeof input.params.payload === 'object'
+        ? (input.params.payload as Record<string, unknown>)
+        : {}
+
+    await repartirEventoAWebhooks({
+      companyId: input.companyId,
+      evento: `automation.${nombre}`,
+      datos: { ...datos, ...(input.subjectId ? { customerId: input.subjectId } : {}) },
+    })
+    return { ok: true, detail: { channel: 'webhook', evento: `automation.${nombre}` } }
   }
 
   /** Teléfono de la ficha del cliente. Null si no lo tiene. */
