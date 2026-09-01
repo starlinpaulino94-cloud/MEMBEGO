@@ -44,9 +44,12 @@ ALTER TABLE "vendedores"          ALTER COLUMN "updatedAt" DROP DEFAULT;
 ALTER TABLE "ventas_excursion"    ALTER COLUMN "updatedAt" DROP DEFAULT;
 
 -- El índice: mismas columnas, el nombre que genera Prisma. Sin esto Prisma cree
--- que le falta y lo crearía DUPLICADO. Idempotente para poder correrlo también
--- a mano en producción, donde estas tablas ya existen.
-DO $$ BEGIN
-  ALTER INDEX "vendedor_atribuciones_embudo_idx"
-    RENAME TO "vendedor_atribuciones_companyId_vendedorId_etapa_createdAt_idx";
-EXCEPTION WHEN undefined_object THEN NULL; END $$;
+-- que le falta y lo crearía DUPLICADO.
+--
+-- `ALTER INDEX IF EXISTS` y no un bloque DO con `EXCEPTION`: la primera versión
+-- de este archivo atrapaba `undefined_object`, pero PostgreSQL lanza
+-- `undefined_table` (42P01) cuando el índice no existe, así que la guardia no
+-- guardaba nada y el SQL moría al correrlo sobre una base donde el rename ya
+-- se había hecho. `IF EXISTS` no tiene ese matiz.
+ALTER INDEX IF EXISTS "vendedor_atribuciones_embudo_idx"
+  RENAME TO "vendedor_atribuciones_companyId_vendedorId_etapa_createdAt_idx";
