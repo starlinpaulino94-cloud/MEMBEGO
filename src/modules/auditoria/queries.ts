@@ -104,6 +104,9 @@ export const ACCION_LABEL: Record<string, string> = {
   SUCURSAL_UBICACION_GUARDADA: 'Ubicación de sucursal guardada',
   SUCURSAL_UBICACION_VERIFICADA: 'Ubicación de sucursal verificada',
   CATALOGO_GEO_APROBADO: 'Sector o ciudad aprobado',
+  // Membego Connect (Fase 9): concesiones y catálogo.
+  CONNECT_CONCEDIDO: 'Límite de integraciones concedido',
+  CONNECT_CONECTOR_ESTADO: 'Estado de un conector cambiado',
   // Cola de trabajos (Connect · Fase 2): decisiones sobre difuntos.
   COLA_REENCOLADA: 'Trabajo de la cola reencolado',
   COLA_DESCARTADA: 'Trabajo de la cola descartado',

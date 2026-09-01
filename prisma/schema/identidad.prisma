@@ -152,6 +152,14 @@ enum AuditAccion {
   COLA_REENCOLADA
   /// Se descartó definitivamente un trabajo difunto.
   COLA_DESCARTADA
+  // Membego Connect (Fase 9): lo que el superadmin concede y administra.
+  // Conceder claves de API a una empresa le abre sus datos a terceros: es una
+  // decisión comercial con consecuencias de seguridad y no puede quedar sin
+  // nombre y sin fecha.
+  /// Se concedió o ajustó un límite de Connect a una empresa.
+  CONNECT_CONCEDIDO
+  /// Se cambió el estado de un conector del catálogo.
+  CONNECT_CONECTOR_ESTADO
   /// Se evaluó un segmento de audiencia (auditoría de la estimación).
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.

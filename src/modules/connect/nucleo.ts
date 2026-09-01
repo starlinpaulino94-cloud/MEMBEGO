@@ -34,3 +34,26 @@ const TRANSICIONES: Record<EstadoConexion, readonly EstadoConexion[]> = {
 export function puedeTransicionar(de: EstadoConexion, a: EstadoConexion): boolean {
   return TRANSICIONES[de]?.includes(a) ?? false
 }
+
+/**
+ * VOCABULARIO de features de Connect y su valor por defecto.
+ *
+ * Vive aquí y no en la base: dar de alta una feature nueva es añadir una línea
+ * y su default, sin migrar nada.
+ *
+ * SIN FILA = EL DEFAULT, y los defaults son deliberadamente generosos en lo
+ * gratis y cerrados en lo que costará dinero de verdad: las features que
+ * consumen servicios externos de pago nacen apagadas y se encienden empresa a
+ * empresa. Eso evita el clásico «lanzamos y a los tres días todo el mundo
+ * tenía WhatsApp ilimitado».
+ */
+export const FEATURES_CONNECT = {
+  /** Cuántas conexiones a conectores puede tener la empresa. */
+  'conexiones.max': { default: 2 },
+  /** Cuántas claves de API activas puede tener la empresa. */
+  'api_keys.max': { default: 0 },
+  /** Cuántas suscripciones de webhook salientes. */
+  'webhooks.max': { default: 0 },
+} as const
+
+export type FeatureConnect = keyof typeof FEATURES_CONNECT
