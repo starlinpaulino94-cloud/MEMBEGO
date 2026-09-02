@@ -90,8 +90,11 @@ export function generarOpenApi(servidor: string): Record<string, unknown> {
   const paths: Record<string, Record<string, Operacion>> = {}
 
   for (const r of INVENTARIO_API) {
-    // El diagnóstico de operación no es contrato público: no se documenta como
-    // si alguien pudiera construir encima.
+    // Lo que pide sesión de superadmin es operación de la plataforma, no
+    // contrato público: no se documenta como si alguien pudiera construir
+    // encima. Hoy no queda ninguna ruta así —`/diag` era la última y se borró
+    // en la #440—, pero la regla se queda: sin ella, la siguiente entraría
+    // sola en el OpenAPI público.
     if (r.principal === 'superadmin') continue
 
     const ruta = r.ruta
