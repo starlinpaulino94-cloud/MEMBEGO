@@ -350,7 +350,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3 items-start">
           <div>
             <Label htmlFor="diasGraciaCheckin" className="text-xs font-semibold">
               Días de gracia
@@ -369,16 +369,16 @@ export function ExcursionesConfigForm({
             </p>
           </div>
 
-          <label htmlFor="permitirCheckinSinPago" className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 cursor-pointer hover:bg-muted transition-colors self-end">
-              <input
-                type="checkbox"
-                id="permitirCheckinSinPago"
-                name="permitirCheckinSinPago"
-                defaultChecked={config.permitirCheckinSinPago}
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
-              />
-              <span className="text-xs font-bold text-foreground">Permitir check-in sin pago</span>
-            </label>
+          <label htmlFor="permitirCheckinSinPago" className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 cursor-pointer hover:bg-muted transition-colors">
+            <input
+              type="checkbox"
+              id="permitirCheckinSinPago"
+              name="permitirCheckinSinPago"
+              defaultChecked={config.permitirCheckinSinPago}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+            />
+            <span className="text-xs font-bold text-foreground">Permitir check-in sin pago</span>
+          </label>
 
           <div>
             <Label htmlFor="prefijoCheckin" className="text-xs font-semibold">
@@ -486,15 +486,15 @@ export function ExcursionesConfigForm({
 
         <div className="grid gap-4 sm:grid-cols-3">
           <label htmlFor="enviarConfirmacionReserva" className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 cursor-pointer hover:bg-muted transition-colors self-end">
-              <input
-                type="checkbox"
-                id="enviarConfirmacionReserva"
-                name="enviarConfirmacionReserva"
-                defaultChecked={config.enviarConfirmacionReserva}
-                className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
-              />
-              <span className="text-xs font-bold text-foreground">Enviar confirmación de reserva</span>
-            </label>
+            <input
+              type="checkbox"
+              id="enviarConfirmacionReserva"
+              name="enviarConfirmacionReserva"
+              defaultChecked={config.enviarConfirmacionReserva}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+            />
+            <span className="text-xs font-bold text-foreground">Enviar confirmación de reserva</span>
+          </label>
 
           <div>
             <Label htmlFor="enviarRecordatorioHoras" className="text-xs font-semibold">
