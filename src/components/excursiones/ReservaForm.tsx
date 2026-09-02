@@ -373,6 +373,7 @@ export function ReservaForm({
       <input type="hidden" name="lobbyRecogida" value={lobbyRecogida} />
       <input type="hidden" name="horaRecogida" value={horaRecogida} />
       <input type="hidden" name="habitacion" value={habitacion} />
+      <input type="hidden" name="notas" value={notas} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 w-full min-w-0">
         {/* COLUMNA PRINCIPAL (PASOS 1 A 6) */}
@@ -1226,6 +1227,7 @@ export function ReservaForm({
               </Label>
               <Input
                 id="adminNotasInput"
+                name="notas"
                 value={notas}
                 onChange={(e) => setNotas(e.target.value)}
                 placeholder="Alergias, idiomas, solicitudes de asientos, etc."

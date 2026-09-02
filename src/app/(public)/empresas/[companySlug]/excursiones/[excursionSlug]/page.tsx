@@ -14,6 +14,7 @@ import { shareMetadata } from '@/lib/share/metadata'
 import { formatoMinutosAHora, minutosDesdeMedianoche } from '@/modules/excursiones/reservas/nucleo'
 import { getUser } from '@/lib/auth'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { ReservaExcursionForm } from './ReservaExcursionForm'
 import type { SalidaDisponible } from '@/modules/excursiones/catalogo/public-queries'
 
@@ -63,6 +64,8 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
 
   const exc = await excursionPublica(companyId, excursionSlug)
   if (!exc) notFound()
+
+  const config = await getExcursionesConfig(companyId)
 
   const precioDesde = exc.variantes[0]?.precioAdulto
 
@@ -340,12 +343,19 @@ export default async function ExcursionDetailPage({ params }: ExcursionDetailPag
             )}
 
             {/* Políticas */}
-            {exc.politicas && (
-              <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5">
-                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">Políticas</h3>
-                <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
-                  {exc.politicas}
-                </p>
+            {(exc.politicas || config.notasPoliticas) && (
+              <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 space-y-2">
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-foreground">Políticas y Términos</h3>
+                {exc.politicas && (
+                  <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
+                    {exc.politicas}
+                  </p>
+                )}
+                {config.notasPoliticas && (
+                  <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground whitespace-pre-line pt-2 border-t border-border/60">
+                    <strong className="text-foreground">Políticas de la empresa:</strong> {config.notasPoliticas}
+                  </p>
+                )}
               </div>
             )}
           </div>

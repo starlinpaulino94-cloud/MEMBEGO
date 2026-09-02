@@ -1091,6 +1091,7 @@ export function ReservaVendedorForm({
             </Label>
             <Input
               id="notasInput"
+              name="notas"
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               placeholder="Alergias, requerimientos de transporte, idiomas..."

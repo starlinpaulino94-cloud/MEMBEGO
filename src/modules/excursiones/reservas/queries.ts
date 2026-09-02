@@ -316,58 +316,66 @@ export async function reservaCliente(companyId: string, clienteId: string, reser
 
   const { checkinAt, checkinPorId } = reserva
 
-  const excursion = await conEmpresa(companyId, (tx) =>
-    tx.excursion.findFirst({
-      where: { id: reserva.excursionId, companyId },
-      select: {
-        id: true,
-        nombre: true,
-        slug: true,
-        descripcion: true,
-        portadaUrl: true,
-        galeria: true,
-        duracionMin: true,
-        ubicacion: true,
-        categoria: true,
-        moneda: true,
-        puntoSalida: true,
-        horaSalida: true,
-        horaRegreso: true,
-        incluye: true,
-        noIncluye: true,
-        politicas: true,
-        tipoItem: true,
-        comboItems: {
-          orderBy: { orden: 'asc' },
-          select: {
-            actividad: {
-              select: {
-                id: true,
-                nombre: true,
-                // La pantalla del cliente lo lee para saber si la actividad es
-                // un PASE_DIA (que no tiene hora de fin). Los otros dos
-                // `select` de comboItems de este archivo sí lo pedían: este se
-                // quedó atrás, y el campo llegaba `undefined` — o sea, ningún
-                // pase de día se reconocía como tal.
-                tipoItem: true,
-                duracionMin: true,
-                horaSalida: true,
-                horaRegreso: true,
-                categoria: true,
+  const [excursion, variante] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.excursion.findFirst({
+        where: { id: reserva.excursionId, companyId },
+        select: {
+          id: true,
+          nombre: true,
+          slug: true,
+          descripcion: true,
+          portadaUrl: true,
+          galeria: true,
+          duracionMin: true,
+          ubicacion: true,
+          categoria: true,
+          moneda: true,
+          impuestoPct: true,
+          puntoSalida: true,
+          horaSalida: true,
+          horaRegreso: true,
+          incluye: true,
+          noIncluye: true,
+          politicas: true,
+          tipoItem: true,
+          comboItems: {
+            orderBy: { orden: 'asc' },
+            select: {
+              actividad: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  tipoItem: true,
+                  duracionMin: true,
+                  horaSalida: true,
+                  horaRegreso: true,
+                  categoria: true,
+                },
               },
             },
           },
         },
-      },
-    })
-  )
+      })
+    ),
+    conEmpresa(companyId, (tx) =>
+      tx.excursionVariante.findFirst({
+        where: {
+          excursionId: reserva.excursionId,
+          ...(reserva.varianteId ? { id: reserva.varianteId } : { activa: true }),
+        },
+        select: { id: true, nombre: true, precioAdulto: true, precioNino: true },
+        orderBy: { orden: 'asc' },
+      })
+    ),
+  ])
 
   const saldo = calcularSaldo(
     Number(reserva.total),
     reserva.pagos.map((p) => ({ monto: Number(p.monto), estado: p.estado }))
   )
 
-  return { reserva, excursion, saldo, checkinToken, checkinAt, checkinPorId }
+  return { reserva, excursion, variante, saldo, checkinToken, checkinAt, checkinPorId }
 }
 
 /** Todas las reservas del cliente en una empresa, ordenadas por fecha desc. */

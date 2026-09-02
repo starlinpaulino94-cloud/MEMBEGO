@@ -219,6 +219,174 @@ export function estadoPorPagos(
   return 'PARCIALMENTE_PAGADA'
 }
 
+// ── Modificación y Reembolso ────────────────────────────────────────────────
+
+export interface PoliticaReembolso {
+  permitirReduccionPasajeros: boolean
+  permitirCancelacion: boolean
+  anticipacionMinimaHoras: number
+  anticipacionCancelacionHoras: number
+  penalizacionCancelacionPct: number
+  permitirReembolsoTotal: boolean
+  permitirReembolsoParcial: boolean
+  tipoReembolso: 'COMPLETO' | 'PARCIAL' | 'CREDITO' | 'NINGUNO'
+  horasLimiteReembolso: number
+}
+
+export const POLITICAS_REEMBOLSO_DEFAULT: PoliticaReembolso = {
+  permitirReduccionPasajeros: true,
+  permitirCancelacion: true,
+  anticipacionMinimaHoras: 24,
+  anticipacionCancelacionHoras: 48,
+  penalizacionCancelacionPct: 0,
+  permitirReembolsoTotal: true,
+  permitirReembolsoParcial: true,
+  tipoReembolso: 'COMPLETO',
+  horasLimiteReembolso: 24,
+}
+
+export interface ResultadoModificacion {
+  permitido: boolean
+  razon: string | null
+  nuevoTotal: number
+  montoReembolso: number
+  montoCobrar: number
+}
+
+/**
+ * Determina si una reserva puede ser modificada por el cliente.
+ * Compara la fecha/hora de la excursión contra el cutoff de anticipación.
+ */
+export function esModificable(
+  fechaExcursion: Date,
+  horaExcursion: string | null,
+  ahora: Date,
+  anticipacionMinHoras: number
+): { modificable: boolean; horasRestantes: number } {
+  const fechaBase = new Date(fechaExcursion)
+  if (horaExcursion) {
+    const [hh, mm] = horaExcursion.split(':').map(Number)
+    fechaBase.setUTCHours(hh, mm, 0, 0)
+  } else {
+    fechaBase.setUTCHours(8, 0, 0, 0)
+  }
+  const horasRestantes = (fechaBase.getTime() - ahora.getTime()) / (1000 * 60 * 60)
+  return {
+    modificable: horasRestantes >= anticipacionMinHoras,
+    horasRestantes: Math.round(horasRestantes * 10) / 10,
+  }
+}
+
+/**
+ * Calcula el resultado de modificar pasajeros en una reserva.
+ * Retorna el nuevo total, monto a reembolsar o monto adicional a cobrar.
+ */
+export function calcularModificacion(params: {
+  adultosOriginales: number
+  ninosOriginales: number
+  adultosNuevos: number
+  ninosNuevos: number
+  precioAdulto: number
+  precioNino: number | null
+  impuestoPct: number | null
+  descuentoActual: number
+  pagado: number
+  politica: PoliticaReembolso
+  horasRestantes: number
+}): ResultadoModificacion {
+  const { adultosOriginales, ninosOriginales, adultosNuevos, ninosNuevos } = params
+  const totalNuevos = adultosNuevos + ninosNuevos
+  const totalOriginales = adultosOriginales + ninosOriginales
+
+  if (totalNuevos > totalOriginales) {
+    return {
+      permitido: false,
+      razon: 'No se pueden agregar pasajeros. Crea una nueva reserva para pasajeros adicionales.',
+      nuevoTotal: 0,
+      montoReembolso: 0,
+      montoCobrar: 0,
+    }
+  }
+
+  if (totalNuevos === 0) {
+    if (!params.politica.permitirCancelacion) {
+      return {
+        permitido: false,
+        razon: 'Este negocio no permite cancelaciones.',
+        nuevoTotal: 0,
+        montoReembolso: 0,
+        montoCobrar: 0,
+      }
+    }
+    if (params.horasRestantes < params.politica.anticipacionCancelacionHoras) {
+      return {
+        permitido: false,
+        razon: `Las cancelaciones requieren al menos ${params.politica.anticipacionCancelacionHoras} horas de anticipación.`,
+        nuevoTotal: 0,
+        montoReembolso: 0,
+        montoCobrar: 0,
+      }
+    }
+  } else {
+    if (!params.politica.permitirReduccionPasajeros) {
+      return {
+        permitido: false,
+        razon: 'Este negocio no permite reducir pasajeros.',
+        nuevoTotal: 0,
+        montoReembolso: 0,
+        montoCobrar: 0,
+      }
+    }
+    if (params.horasRestantes < params.politica.anticipacionMinimaHoras) {
+      return {
+        permitido: false,
+        razon: `Las modificaciones requieren al menos ${params.politica.anticipacionMinimaHoras} horas de anticipación.`,
+        nuevoTotal: 0,
+        montoReembolso: 0,
+        montoCobrar: 0,
+      }
+    }
+  }
+
+  const pNino = params.precioNino ?? params.precioAdulto
+  const nuevoSubtotal = centavos(
+    adultosNuevos * params.precioAdulto + ninosNuevos * pNino
+  )
+  const base = centavos(Math.max(0, nuevoSubtotal - params.descuentoActual))
+  const pct = params.impuestoPct ?? 0
+  const nuevosImpuestos = pct > 0 ? centavos(base * (pct / 100)) : 0
+  const nuevoTotal = centavos(base + nuevosImpuestos)
+
+  const diferencia = centavos(params.pagado - nuevoTotal)
+  const montoReembolso = diferencia > 0 ? diferencia : 0
+  const montoCobrar = diferencia < 0 ? Math.abs(diferencia) : 0
+
+  let reembolsoFinal = montoReembolso
+  if (reembolsoFinal > 0 && params.politica.penalizacionCancelacionPct > 0 && totalNuevos === 0) {
+    reembolsoFinal = centavos(reembolsoFinal * (1 - params.politica.penalizacionCancelacionPct / 100))
+  }
+
+  if (reembolsoFinal > 0) {
+    if (params.politica.tipoReembolso === 'NINGUNO') {
+      return { permitido: true, razon: null, nuevoTotal, montoReembolso: 0, montoCobrar }
+    }
+    if (params.politica.tipoReembolso === 'CREDITO') {
+      return {
+        permitido: true,
+        razon: 'El reembolso se otorga como crédito para futuras reservas.',
+        nuevoTotal,
+        montoReembolso: reembolsoFinal,
+        montoCobrar,
+      }
+    }
+    if (params.politica.tipoReembolso === 'PARCIAL' && !params.politica.permitirReembolsoParcial) {
+      return { permitido: true, razon: null, nuevoTotal, montoReembolso: 0, montoCobrar }
+    }
+  }
+
+  return { permitido: true, razon: null, nuevoTotal, montoReembolso: reembolsoFinal, montoCobrar }
+}
+
 // ── Validación ───────────────────────────────────────────────────────────────
 
 function texto(v: unknown, max: number): string {
@@ -262,15 +430,16 @@ export interface ReservaDatos {
  * notas. Los precios NO: esos los pone el servidor desde el catálogo.
  */
 export function validarReserva(
-  form: Record<string, unknown>
+  form: Record<string, unknown>,
+  maxPasajeros: number = 500
 ): { ok: true; datos: ReservaDatos } | { ok: false; error: string } {
   const fechaS = texto(form.fecha, 10)
   if (!FECHA_RE.test(fechaS)) return { ok: false, error: 'Elige la fecha de la excursión.' }
   const fecha = new Date(`${fechaS}T12:00:00.000Z`)
   if (Number.isNaN(fecha.getTime())) return { ok: false, error: 'La fecha no es válida.' }
 
-  const adultos = entero(form.adultos, 500)
-  const ninos = entero(form.ninos, 500)
+  const adultos = entero(form.adultos, maxPasajeros)
+  const ninos = entero(form.ninos, maxPasajeros)
   if (adultos + ninos === 0) {
     return { ok: false, error: 'Una reserva necesita al menos un pasajero.' }
   }

@@ -64,7 +64,13 @@ export default async function ReservaDetallePage({
         </StatusChip>
       </div>
 
-      <ReservaEstadoBotones reservaId={reserva.id} estado={estado} />
+      <ReservaEstadoBotones
+        reservaId={reserva.id}
+        estado={estado}
+        adultos={reserva.adultos}
+        ninos={reserva.ninos}
+        moneda={moneda}
+      />
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="text-h3 text-foreground">La excursión</h2>
@@ -168,11 +174,10 @@ export default async function ReservaDetallePage({
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
-                        esPd
-                          ? 'bg-success/10 text-success'
-                          : 'bg-primary text-primary-foreground'
-                      }`}
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${esPd
+                        ? 'bg-success/10 text-success'
+                        : 'bg-primary text-primary-foreground'
+                        }`}
                     >
                       {idx + 1}
                     </span>

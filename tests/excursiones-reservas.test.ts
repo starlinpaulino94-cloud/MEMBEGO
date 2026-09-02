@@ -233,3 +233,50 @@ test('calcularPrecioEfectivo respeta tarifa de residente niño gratis (0)', () =
   assert.equal(precioTurista.precioNino, 60)
 })
 
+test('validarReserva procesa y preserva notas de la reserva correctamente', () => {
+  // Nota estándar
+  const r1 = validarReserva({
+    fecha: '2026-09-01',
+    adultos: '2',
+    notas: '  Cliente alérgico al marisco, necesita asiento adelante  ',
+  })
+  assert.equal(r1.ok, true)
+  if (r1.ok) {
+    assert.equal(r1.datos.notas, 'Cliente alérgico al marisco, necesita asiento adelante')
+  }
+
+  // Nota vacía o solo espacios normaliza a null
+  const r2 = validarReserva({
+    fecha: '2026-09-01',
+    adultos: '1',
+    notas: '   ',
+  })
+  assert.equal(r2.ok, true)
+  if (r2.ok) {
+    assert.equal(r2.datos.notas, null)
+  }
+
+  // Nota no provista normaliza a null
+  const r3 = validarReserva({
+    fecha: '2026-09-01',
+    adultos: '1',
+  })
+  assert.equal(r3.ok, true)
+  if (r3.ok) {
+    assert.equal(r3.datos.notas, null)
+  }
+
+  // Límite de caracteres
+  const notaLarga = 'X'.repeat(1200)
+  const r4 = validarReserva({
+    fecha: '2026-09-01',
+    adultos: '1',
+    notas: notaLarga,
+  })
+  assert.equal(r4.ok, true)
+  if (r4.ok) {
+    assert.equal(r4.datos.notas?.length, 1000)
+  }
+})
+
+

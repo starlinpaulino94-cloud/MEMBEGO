@@ -63,7 +63,8 @@ export interface ReservaParaCheckin {
  */
 export function evaluarCheckin(
   reserva: ReservaParaCheckin,
-  ahora: Date
+  ahora: Date,
+  diasGraciaCheckin: number = 1
 ): ResultadoCheckin {
   if (reserva.estado === 'CANCELADA') {
     return { ok: false, error: 'Esta reserva está cancelada. No debe embarcar.' }
@@ -80,9 +81,9 @@ export function evaluarCheckin(
 
   const dias = diasDeDiferencia(reserva.fecha, ahora)
   let aviso: string | null = null
-  if (dias < -DIAS_GRACIA_CHECKIN) {
+  if (dias < -diasGraciaCheckin) {
     aviso = `Esta excursión es dentro de ${Math.abs(dias)} días. Verifica que sea la reserva correcta.`
-  } else if (dias > DIAS_GRACIA_CHECKIN) {
+  } else if (dias > diasGraciaCheckin) {
     aviso = `Esta excursión era hace ${dias} días. Verifica que sea la reserva correcta.`
   }
 
@@ -119,8 +120,8 @@ export function resumenManifiesto(
  */
 export const PREFIJO_CHECKIN = 'EXC:'
 
-export function codigoDeCheckin(token: string): string {
-  return `${PREFIJO_CHECKIN}${token}`
+export function codigoDeCheckin(token: string, prefijo: string = 'EXC:'): string {
+  return `${prefijo}${token}`
 }
 
 /**

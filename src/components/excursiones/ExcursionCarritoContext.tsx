@@ -17,6 +17,7 @@ export interface CartItem {
   precioAdulto: number
   precioNino: number
   moneda: string
+  notas?: string
 }
 
 interface ExcursionCarritoContextType {
@@ -76,6 +77,11 @@ export function ExcursionCarritoProvider({ children }: { children: ReactNode }) 
       const newItems = [...items]
       newItems[idx].adultos += item.adultos
       newItems[idx].ninos += item.ninos
+      if (item.notas) {
+        newItems[idx].notas = newItems[idx].notas
+          ? `${newItems[idx].notas}\n${item.notas}`
+          : item.notas
+      }
       setItems(newItems)
     } else {
       const id = Math.random().toString(36).substring(2, 9)

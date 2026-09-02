@@ -21,6 +21,7 @@ import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { generarCodigo } from '@/lib/codes'
 import { evaluarCheckin, tokenDesdeCodigo, pasajerosQueEmbarcan } from './nucleo'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import {
   calcularSaldo,
   estadoPorPagos,
@@ -105,6 +106,8 @@ export async function buscarParaCheckin(codigo: string): Promise<CheckinBusqueda
     if (!user) return { error: 'No tienes permiso para hacer check-in.' }
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Empresa requerida.' }
+
+    const config = await getExcursionesConfig(companyId)
 
     const limpio = (codigo ?? '').trim().replace(/\s+/g, '')
     if (!limpio) return { error: 'Escribe o escanea un código de reserva.' }
@@ -202,7 +205,8 @@ export async function buscarParaCheckin(codigo: string): Promise<CheckinBusqueda
         checkinAt: reserva.checkinAt,
         totalPasajeros,
       },
-      new Date()
+      new Date(),
+      config.diasGraciaCheckin
     )
     if (!veredicto.ok) return { error: veredicto.error }
 
@@ -317,6 +321,9 @@ export async function registrarCheckin(
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
+
+    const config = await getExcursionesConfig(companyId)
+
     const reservaId = String(formData.get('reservaId') ?? '')
     const rawItemIds = formData.getAll('itemIds') as string[]
     const rawItemIdsJson = String(formData.get('itemIdsJson') ?? '')
@@ -375,7 +382,8 @@ export async function registrarCheckin(
         checkinAt: reserva.checkinAt,
         totalPasajeros: reserva.pasajeros.length,
       },
-      new Date()
+      new Date(),
+      config.diasGraciaCheckin
     )
     if (!veredicto.ok) return { error: veredicto.error }
 
@@ -423,8 +431,9 @@ export async function registrarCheckin(
       }
     }
 
-    // REGLA ESTRICTA: No se puede confirmar el embarque si la reserva tiene falta de pago
-    if (saldoRestante > 0.01) {
+    // REGLA: No se puede confirmar el embarque si la reserva tiene falta de pago,
+    // a menos que la config permita check-in sin pago.
+    if (saldoRestante > 0.01 && !config.permitirCheckinSinPago) {
       return {
         error: `No se puede confirmar el embarque: la reserva tiene un saldo pendiente de ${reserva.moneda} ${saldoRestante.toLocaleString('es-DO', { minimumFractionDigits: 2 })}. Debe saldarse el pago para autorizar el acceso.`,
       }
