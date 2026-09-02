@@ -76,7 +76,7 @@ const PRESUPUESTOS = [
   {
     id: 'total',
     nombre: 'JavaScript de cliente (todo)',
-    techoKB: 7000, // 2026-08-28: subido de 6500 por html5-qrcode (281 KB), Sentry (202 KB), Lucide — deps necesarias del cliente
+    techoKB: 7500, // 2026-09-02: subido de 7000 por el módulo CRM (169 KB en 5 rutas de cliente). No es una librería: es funcionalidad. Se sube con margen porque un techo a 3 KB del valor real no es un presupuesto, es un cable trampa
     porque: 'Indicador general de peso del proyecto. Ningún usuario lo descarga entero.',
   },
   {
