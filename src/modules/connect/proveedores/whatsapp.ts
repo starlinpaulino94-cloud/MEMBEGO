@@ -1,5 +1,6 @@
+import { metaConfigurado } from '@/modules/connect/metaNucleo'
 import { metadatosObligatorios } from '@/modules/connect/proveedores/metadatos'
-import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
+import type { DefinicionProveedor, PasoConexion } from '@/modules/connect/proveedores/tipos'
 
 /**
  * WHATSAPP · Meta Cloud API.
@@ -11,9 +12,13 @@ import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
  * empresa pulsa «Conéctese con Facebook», autoriza, elige su cuenta de
  * WhatsApp Business y su número, y termina. Sin tokens, sin paneles ajenos.
  *
- * Hoy no se puede: Meta exige Verificación de Negocio y Revisión de la App
- * antes de habilitar ese flujo, y ese trámite no está iniciado. Los requisitos
- * exactos están en `docs/connect/whatsapp-embedded-signup.md`.
+ * LO QUE LA INVESTIGACIÓN DE LA FASE 14 CORRIGIÓ: la Verificación de Negocio y
+ * la Revisión de la App NO son bloqueantes para empezar. Meta permite dar de
+ * alta hasta 10 clientes cada 7 días sin ninguna de las dos; el trámite sube
+ * ese límite a 200. Lo que sí hace falta antes es ser Proveedor Técnico y
+ * tener una configuración de Inicio de Sesión de Facebook para Empresas.
+ * Todos los requisitos, con sus fuentes, en
+ * `docs/connect/whatsapp-embedded-signup.md`.
  *
  * Mientras tanto, el token permanente de Usuario del Sistema funciona y no se
  * retira, porque retirarlo dejaría a las empresas que ya lo usan sin canal.
@@ -25,45 +30,82 @@ import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
  * envío, ni las automatizaciones, ni los webhooks, ni la bitácora. El secreto
  * que produzca el alta incrustada se guarda exactamente donde se guarda hoy.
  */
+/**
+ * EL GUION BUENO: el Alta Incrustada de Meta.
+ *
+ * Un botón, el diálogo de Meta, y listo. Sin paneles ajenos y sin tokens.
+ * Solo se ofrece si la plataforma tiene su app de Meta configurada — misma
+ * regla que Google: lo que no está configurado no se enseña.
+ */
+const PASOS_META: readonly PasoConexion[] = [
+  {
+    id: 'requisitos',
+    titulo: 'Antes de empezar',
+    descripcion:
+      'Necesitas una cuenta de empresa en Meta y un número de teléfono que NO esté en uso en la app normal de WhatsApp. Al terminar, Meta te pedirá añadir un método de pago en tu cuenta: te factura a ti el uso de la mensajería.',
+    tipo: 'INFORMATIVO',
+  },
+  {
+    id: 'credencial',
+    titulo: 'Conéctate con Facebook',
+    descripcion:
+      'Se abre una ventana de Meta donde eliges tu cuenta de WhatsApp Business y tu número. Membego no ve ni guarda tu contraseña.',
+    tipo: 'COMPONENTE',
+    componente: 'AltaMetaWhatsapp',
+    // El alta incrustada guarda la credencial sellada al canjear: el paso se da
+    // por hecho porque esa credencial existe, no porque alguien pasara por aquí.
+    cumpleCon: 'autorizado',
+  },
+]
+
+/**
+ * EL GUION PROVISIONAL: el token pegado a mano.
+ *
+ * Funciona, no se retira mientras haya empresas usándolo, y está marcado como
+ * provisional en la definición para que la interfaz lo diga en voz alta.
+ */
+const PASOS_TOKEN: readonly PasoConexion[] = [
+  {
+    id: 'requisitos',
+    titulo: 'Antes de empezar',
+    descripcion:
+      'Necesitas una cuenta de WhatsApp Business en Meta y un número dado de alta en ella.',
+    tipo: 'INFORMATIVO',
+  },
+  {
+    id: 'credencial',
+    titulo: 'Conecta tu número',
+    descripcion:
+      'Los dos datos salen del panel de WhatsApp de Meta, en «API Setup». Comprobamos el número con Meta antes de guardar nada: si el token no sirve, no se guarda.',
+    tipo: 'COMPONENTE',
+    componente: 'AltaWhatsapp',
+    // EL TOKEN NO PASA POR `setupState`. Va directo a la credencial sellada
+    // (AES-256-GCM), y el paso se da por hecho porque esa credencial existe.
+    cumpleCon: 'autorizado',
+  },
+]
+
 export const WHATSAPP: DefinicionProveedor = {
   metadatos: metadatosObligatorios('whatsapp'),
   clase: 'NATIVA',
-  autorizacion: {
-    tipo: 'API_KEY',
-    patron: 'CREDENCIAL',
-    provisional: {
-      motivo:
-        'El Alta Incrustada de Meta exige Verificación de Negocio y Revisión de la App, un trámite que todavía no está completado.',
-      sustituyePor: 'Meta Embedded Signup (patrón POPUP)',
-    },
+  // La forma de autorizar cambia con el despliegue, y con ella el patrón: el
+  // alta incrustada es un diálogo del SDK que devuelve el resultado a la
+  // ventana que lo abrió (POPUP), no una redirección OAuth normal.
+  get autorizacion() {
+    return metaConfigurado()
+      ? ({ tipo: 'OAUTH2', patron: 'POPUP' } as const)
+      : ({
+          tipo: 'API_KEY',
+          patron: 'CREDENCIAL',
+          provisional: {
+            motivo:
+              'El Alta Incrustada de Meta todavía no está configurada en esta plataforma.',
+            sustituyePor: 'Meta Embedded Signup (patrón POPUP)',
+          },
+        } as const)
   },
   capacidades: ['mensajes.enviar'],
-  pasos: [
-    {
-      id: 'requisitos',
-      titulo: 'Antes de empezar',
-      descripcion:
-        'Necesitas una cuenta de WhatsApp Business en Meta y un número dado de alta en ella.',
-      tipo: 'INFORMATIVO',
-    },
-    {
-      id: 'credencial',
-      // Este es el paso que desaparece cuando Meta apruebe: se sustituye por
-      // uno igual de COMPONENTE con el diálogo del alta incrustada, y nada
-      // más cambia.
-      titulo: 'Conecta tu número',
-      descripcion:
-        'Los dos datos salen del panel de WhatsApp de Meta, en «API Setup». Comprobamos el número con Meta antes de guardar nada: si el token no sirve, no se guarda.',
-      tipo: 'COMPONENTE',
-      componente: 'AltaWhatsapp',
-      // EL TOKEN NO PASA POR `setupState`. Va directo a la credencial sellada
-      // (AES-256-GCM), y el paso se da por hecho porque esa credencial existe.
-      cumpleCon: 'autorizado',
-    },
-  ],
-  // Sube a 2 en la Fase 12: el alta pasa por el asistente y el paso de
-  // validación separado desaparece — validar contra Meta ya ocurre dentro del
-  // propio guardado, que es donde tiene que estar.
+  pasos: () => (metaConfigurado() ? PASOS_META : PASOS_TOKEN),
   versionAlta: 2,
   // No depende de configuración de la plataforma: cada empresa trae su token y
   // su número. Por eso está disponible siempre.

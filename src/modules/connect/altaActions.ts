@@ -5,6 +5,9 @@ import { requireSection } from '@/lib/auth/guards'
 import { asegurarConexion } from '@/modules/connect/registro'
 import { olvidarPaso, responderPaso, terminarAlta, validarAlta } from '@/modules/connect/alta'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
+import { completarAltaMeta } from '@/modules/connect/metaEmbedded'
+import { leerRespuestaAlta, metaConfigurado } from '@/modules/connect/metaNucleo'
+import { vistaDelAlta } from '@/modules/connect/alta'
 
 /**
  * ACCIONES DEL ASISTENTE DE ALTA (Connect · Fase 12).
@@ -150,4 +153,75 @@ export async function terminarAltaAction(
   revalidatePath('/admin/integraciones')
   revalidatePath(`/admin/integraciones/${slug}`)
   return { success: '¡Listo! La integración quedó conectada.' }
+}
+
+/**
+ * EL ALTA INCRUSTADA DE META · la acción que corre contra reloj.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SE LLAMA EN CUANTO LLEGA EL CÓDIGO, NO AL PULSAR «SIGUIENTE»
+ *
+ * El código que devuelve el diálogo de Meta vive TREINTA SEGUNDOS. Si esta
+ * acción esperara a que la persona confirmara algo, la mitad de las altas
+ * fallarían por caducidad — y el mensaje de error no diría nada útil.
+ *
+ * Lo que llega del navegador viene de una VENTANA AJENA (la de Meta), así que
+ * no se da por bueno: `leerRespuestaAlta` comprueba la forma, y los
+ * identificadores tienen que ser numéricos antes de acabar dentro de una URL
+ * de la Graph API.
+ *
+ * La empresa sale de la sesión, como en todas las demás.
+ */
+export async function altaMetaAction(
+  _prev: AltaState,
+  formData: FormData
+): Promise<AltaState> {
+  const user = await requireSection('integraciones', 'app_conectar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  // Si la plataforma no tiene el alta incrustada configurada, esta acción no
+  // existe para nadie — aunque alguien la llame a mano.
+  if (!metaConfigurado()) return { error: 'El alta con Meta no está disponible aquí.' }
+
+  const lectura = leerRespuestaAlta({
+    code: formData.get('code'),
+    wabaId: formData.get('wabaId'),
+    phoneNumberId: formData.get('phoneNumberId'),
+  })
+  if (!lectura.ok) {
+    return {
+      error:
+        lectura.motivo === 'incompleta'
+          ? 'Meta no devolvió todos los datos. Vuelve a intentarlo.'
+          : 'La respuesta de Meta no se entendió. Vuelve a intentarlo.',
+    }
+  }
+
+  const vista = await vistaDelAlta(user.metadata.companyId, 'whatsapp')
+  if (!vista) return { error: 'No encontramos la conexión.' }
+
+  const res = await completarAltaMeta({
+    companyId: user.metadata.companyId,
+    conexionId: vista.conexionId,
+    respuesta: lectura.datos,
+  })
+
+  if (!res.ok) {
+    // El detalle técnico queda en la bitácora; aquí va lo que se puede hacer.
+    const porPaso: Record<string, string> = {
+      config: 'El alta con Meta no está configurada en la plataforma.',
+      canje: 'La autorización caducó antes de guardarse. Vuelve a intentarlo, es cosa de segundos.',
+      registro: 'Meta no pudo dar de alta tu número para enviar mensajes.',
+      webhooks: 'Tu cuenta se autorizó, pero no pudimos activar los avisos. Vuelve a intentarlo.',
+      guardado: 'No se pudo guardar la conexión.',
+    }
+    return { error: porPaso[res.paso] ?? 'No se pudo completar la conexión.' }
+  }
+
+  revalidatePath('/admin/integraciones/whatsapp/conectar')
+  return {
+    success: res.numeroVisible
+      ? `WhatsApp conectado con el número ${res.numeroVisible}.`
+      : 'WhatsApp conectado.',
+  }
 }

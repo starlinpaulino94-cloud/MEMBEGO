@@ -110,7 +110,7 @@ export function pasoActual(
   estado: EstadoAlta,
   hechos: HechosAlta
 ): PasoConexion | null {
-  return def.pasos.find((p) => !pasoCumplido(p, estado, hechos)) ?? null
+  return def.pasos().find((p) => !pasoCumplido(p, estado, hechos)) ?? null
 }
 
 /** ¿Se contestó todo? */
@@ -135,9 +135,10 @@ export function progreso(
   estado: EstadoAlta,
   hechos: HechosAlta
 ): Progreso {
-  const total = def.pasos.length
+  const pasos = def.pasos()
+  const total = pasos.length
   const actual = pasoActual(def, estado, hechos)
-  const indice = actual ? def.pasos.findIndex((p) => p.id === actual.id) : total
+  const indice = actual ? pasos.findIndex((p) => p.id === actual.id) : total
   return {
     numero: Math.min(indice + 1, total),
     total,
@@ -158,13 +159,14 @@ export function pasosVisitables(
   estado: EstadoAlta,
   hechos: HechosAlta
 ): PasoConexion[] {
+  const pasos = def.pasos()
   const actual = pasoActual(def, estado, hechos)
-  const hasta = actual ? def.pasos.findIndex((p) => p.id === actual.id) : def.pasos.length
-  const ultimaAutorizacion = def.pasos.reduce(
+  const hasta = actual ? pasos.findIndex((p) => p.id === actual.id) : pasos.length
+  const ultimaAutorizacion = pasos.reduce(
     (acc, p, i) => (p.tipo === 'AUTORIZACION' && hechos.autorizado ? i : acc),
     -1
   )
-  return def.pasos.slice(ultimaAutorizacion + 1, hasta + 1)
+  return pasos.slice(ultimaAutorizacion + 1, hasta + 1)
 }
 
 /** Guarda la respuesta de un paso. Puro: devuelve un estado nuevo. */

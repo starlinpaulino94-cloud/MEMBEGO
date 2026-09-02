@@ -35,7 +35,7 @@ export const CARDNET: DefinicionProveedor = {
   capacidades: ['pagos.tarjeta'],
   // Vacío A PROPÓSITO: una integración adaptada no se da de alta desde aquí.
   // Su alta es la del módulo que la administra, y ahí es donde lleva el botón.
-  pasos: [],
+  pasos: () => [],
   versionAlta: 1,
   /**
    * Mismas dos llaves que exige `getTokensConfig()` en

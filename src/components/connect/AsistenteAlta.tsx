@@ -17,6 +17,7 @@ import { Progress } from '@/components/ui/progress'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { Switch } from '@/components/ui/switch'
 import { AltaWhatsapp } from '@/components/connect/AltaWhatsapp'
+import { AltaMetaWhatsapp } from '@/components/connect/AltaMetaWhatsapp'
 import type { OpcionPaso } from '@/modules/connect/alta'
 
 /**
@@ -62,6 +63,12 @@ export interface AsistenteProps {
   /** Su nombre legible, para el enlace de vuelta. */
   nombreDelModulo: string
   urlAutorizacion: string
+  /**
+   * Configuración pública del alta incrustada de Meta. Null cuando este
+   * despliegue no la tiene: entonces el guion es el del token manual y este
+   * componente nunca llega a pedirla.
+   */
+  meta: { appId: string; configId: string; versionGraph: string } | null
 }
 
 function Cabecera({ numero, total, titulo }: { numero: number; total: number; titulo: string }) {
@@ -262,11 +269,19 @@ export function AsistenteAlta(props: AsistenteProps) {
             secreto va directo a la credencial sellada sin pasar por el estado
             del alta; mañana, el diálogo del alta incrustada de Meta. */}
         {paso.tipo === 'COMPONENTE' && paso.componente === 'AltaWhatsapp' && <AltaWhatsapp />}
-        {paso.tipo === 'COMPONENTE' && paso.componente !== 'AltaWhatsapp' && (
-          <StatusBanner variant="warning" title="Este paso todavía no está disponible">
-            Estamos terminando esta parte. Escríbenos y lo conectamos contigo.
-          </StatusBanner>
+        {paso.tipo === 'COMPONENTE' && paso.componente === 'AltaMetaWhatsapp' && props.meta && (
+          <AltaMetaWhatsapp
+            appId={props.meta.appId}
+            configId={props.meta.configId}
+            versionGraph={props.meta.versionGraph}
+          />
         )}
+        {paso.tipo === 'COMPONENTE' &&
+          !['AltaWhatsapp', 'AltaMetaWhatsapp'].includes(paso.componente ?? '') && (
+            <StatusBanner variant="warning" title="Este paso todavía no está disponible">
+              Estamos terminando esta parte. Escríbenos y lo conectamos contigo.
+            </StatusBanner>
+          )}
 
         {/* ── VALIDACIÓN ───────────────────────────────────────────────────── */}
         {paso.tipo === 'VALIDACION' && (

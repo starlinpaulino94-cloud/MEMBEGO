@@ -27,7 +27,7 @@ export const GOOGLE_CALENDAR: DefinicionProveedor = {
     patron: 'REDIRECCION',
   },
   capacidades: ['calendario.leer', 'calendario.escribir', 'disponibilidad.leer'],
-  pasos: [
+  pasos: () => [
     {
       id: 'autorizar',
       titulo: 'Autoriza con tu cuenta de Google',
