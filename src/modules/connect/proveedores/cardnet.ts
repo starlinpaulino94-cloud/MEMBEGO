@@ -32,6 +32,7 @@ export const CARDNET: DefinicionProveedor = {
     tipo: 'API_KEY',
     patron: 'CREDENCIAL',
   },
+  tipoCredencial: 'API_KEY',
   capacidades: ['pagos.tarjeta'],
   // Vacío A PROPÓSITO: una integración adaptada no se da de alta desde aquí.
   // Su alta es la del módulo que la administra, y ahí es donde lleva el botón.

@@ -132,6 +132,21 @@ export function claseDeFalloDeRed(): ClaseError {
  */
 export type PatronAutorizacion = 'REDIRECCION' | 'POPUP' | 'CREDENCIAL'
 
+/**
+ * QUÉ CLASE DE CREDENCIAL guarda un proveedor.
+ *
+ * Vive aquí, en el vocabulario puro, y no se DEDUCE del tipo de autorización.
+ * Deducirla fue un error real de la Fase 14 con consecuencias: WhatsApp con el
+ * alta incrustada pasó a declararse `OAUTH2`, así que el asistente buscaba una
+ * credencial `OAUTH_TOKENS` mientras el alta guardaba `API_KEY`. El paso jamás
+ * se daba por cumplido y el alta no terminaba nunca.
+ *
+ * La lección: «cómo autorizas» y «qué guardas» son dos hechos distintos. Un
+ * proveedor puede autorizar por OAuth y guardar una clave, que es exactamente
+ * lo que hace el alta incrustada de Meta.
+ */
+export type TipoCredencialConector = 'OAUTH_TOKENS' | 'API_KEY' | 'SECRETO'
+
 export interface AutorizacionProveedor {
   tipo: 'OAUTH2' | 'API_KEY'
   patron: PatronAutorizacion
@@ -238,6 +253,11 @@ export interface DefinicionProveedor {
   metadatos: MetadatosProveedor
   clase: ClaseProveedor
   autorizacion: AutorizacionProveedor
+  /**
+   * Qué clase de credencial deja su alta. NO se deduce de `autorizacion.tipo`:
+   * el alta incrustada de Meta autoriza por OAuth y guarda una clave.
+   */
+  tipoCredencial: TipoCredencialConector
   /** Qué sabe hacer, en vocabulario nuestro. Se enseña en la página de detalle. */
   capacidades: readonly string[]
   /**

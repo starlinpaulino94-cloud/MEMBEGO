@@ -1,4 +1,25 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto'
+
+/**
+ * Lo que TAMBIÉN corre en el navegador vive en `metaNavegador.ts` —importar
+ * este archivo desde un componente de cliente arrastraría `node:crypto` al
+ * paquete y el build se cae— y se reexporta aquí para que el servidor siga
+ * importando de un solo sitio.
+ */
+export {
+  MARGEN_CANJE_MS,
+  ORIGENES_META,
+  TTL_CODIGO_MS,
+  codigoCaducado,
+  crearRecolector,
+  leerMensajeMeta,
+  leerRespuestaAlta,
+  origenDeMeta,
+  type LecturaRespuesta,
+  type MensajeMeta,
+  type Recolector,
+  type RespuestaAlta,
+} from '@/modules/connect/metaNavegador'
 
 /**
  * META · núcleo puro del Alta Incrustada (Connect · Fase 14).
@@ -16,16 +37,6 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
  *   · la versión 2 del alta se retira el 15 de octubre de 2026, así que esto
  *     se construye contra la v4.
  */
-
-/**
- * CUÁNTO VIVE EL CÓDIGO CANJEABLE. No es un detalle: es lo que obliga a que el
- * canje salga hacia el servidor EN CUANTO llega, sin esperar a que nadie pulse
- * «siguiente». Por eso el paso de Meta tiene su propia acción.
- */
-export const TTL_CODIGO_MS = 30_000
-
-/** Margen para no intentar canjear un código que ya casi seguro caducó. */
-export const MARGEN_CANJE_MS = 3_000
 
 /**
  * LOS DOS PERMISOS, Y NI UNO MÁS.
@@ -76,7 +87,13 @@ export function configMetaDesdeEntorno(
   // llegaría hasta el diálogo de Meta y moriría al canjear, que es el peor
   // momento posible para descubrirlo.
   const secreto = entorno.META_APP_SECRET?.trim()
-  if (!appId || !configId || !secreto) return null
+  // EL TOKEN DEL WEBHOOK CUENTA COMO CONFIGURACIÓN (F14.1 · punto 8).
+  //
+  // Sin él, Meta no puede dar de alta nuestra URL, y sin URL dada de alta no
+  // llega `account_update` — que es requisito del alta incrustada. Ofrecer el
+  // botón sin esto produce conexiones que parecen buenas y nacen sordas.
+  const tokenWebhook = entorno.META_WEBHOOK_VERIFY_TOKEN?.trim()
+  if (!appId || !configId || !secreto || !tokenWebhook) return null
   return {
     appId,
     configId,
@@ -97,45 +114,37 @@ export function urlGraph(version: string, ruta: string): string {
   return `https://graph.facebook.com/${version}${limpia}`
 }
 
-// ─── Lo que devuelve el diálogo ──────────────────────────────────────────────
-
-export interface RespuestaAlta {
-  code: string
-  wabaId: string
-  phoneNumberId: string
-}
-
-export type LecturaRespuesta =
-  | { ok: true; datos: RespuestaAlta }
-  | { ok: false; motivo: 'incompleta' | 'formato' }
+// ─── El PIN de verificación en dos pasos ─────────────────────────────────────
 
 /**
- * Lee lo que el diálogo de Meta manda al navegador. Viene de una ventana
- * ajena, así que NADA se da por bueno: ni que sea un objeto, ni que los
- * campos sean cadenas, ni que no vengan vacíos.
+ * META EXIGE UN PIN DE SEIS DÍGITOS al registrar un número
+ * (`POST /{phoneNumberId}/register`, campo `pin`). Es el de la verificación en
+ * dos pasos de esa cuenta, y sin él la llamada falla — la Fase 14 lo omitía.
  *
- * No valida el CONTENIDO —eso solo lo puede decir Meta al canjear— sino la
- * forma. Un código inventado fallará en el canje, que es donde tiene que
- * fallar.
+ * Se GENERA aquí, no se le pide a nadie: es un secreto operativo entre Membego
+ * y Meta, no algo que la empresa tenga que inventar y recordar. Se guarda
+ * dentro de la credencial sellada (AES-256-GCM) junto al token, y de ahí se
+ * recupera si hay que volver a registrar el número.
+ *
+ * `randomInt` del módulo criptográfico y no `Math.random()`: un PIN predecible
+ * es un PIN que no protege nada.
+ *
+ * ⚠ CUIDADO CON LOS REINTENTOS: Meta limita el registro a 10 llamadas por
+ * número en una ventana móvil de 72 horas (error 133016). Reintentarlo en
+ * bucle deja el número bloqueado tres días.
  */
-export function leerRespuestaAlta(bruto: unknown): LecturaRespuesta {
-  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return { ok: false, motivo: 'formato' }
-  const o = bruto as Record<string, unknown>
-  const code = typeof o.code === 'string' ? o.code.trim() : ''
-  const wabaId = typeof o.wabaId === 'string' ? o.wabaId.trim() : ''
-  const phoneNumberId = typeof o.phoneNumberId === 'string' ? o.phoneNumberId.trim() : ''
-  if (!code || !wabaId || !phoneNumberId) return { ok: false, motivo: 'incompleta' }
-  // Los identificadores de Meta son numéricos. Rechazarlos aquí evita que una
-  // cadena arbitraria acabe formando parte de una URL de la Graph API.
-  if (!/^\d{1,32}$/.test(wabaId) || !/^\d{1,32}$/.test(phoneNumberId)) {
-    return { ok: false, motivo: 'formato' }
-  }
-  return { ok: true, datos: { code, wabaId, phoneNumberId } }
+export const LONGITUD_PIN = 6
+export const MAX_REGISTROS_72H = 10
+export const ERROR_META_LIMITE_REGISTRO = 133016
+
+export function generarPin(): string {
+  // Rango completo de seis dígitos, incluidos los que empiezan por cero: se
+  // formatea con relleno en vez de recortar el espacio a 900 000 valores.
+  return String(randomInt(0, 10 ** LONGITUD_PIN)).padStart(LONGITUD_PIN, '0')
 }
 
-/** ¿Llegó tarde? Un código de hace más de 30 segundos ya no sirve. */
-export function codigoCaducado(emitidoEnMs: number, ahoraMs = Date.now()): boolean {
-  return ahoraMs - emitidoEnMs > TTL_CODIGO_MS - MARGEN_CANJE_MS
+export function pinValido(pin: string): boolean {
+  return new RegExp(`^\\d{${LONGITUD_PIN}}$`).test(pin)
 }
 
 // ─── Webhooks entrantes ──────────────────────────────────────────────────────

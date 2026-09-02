@@ -65,33 +65,57 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  // El conector, una sola vez: la clave única es (conectorId, cuentaExterna).
+  const conector = await sinEmpresa('connect: webhook de Meta — resolver el conector', (tx) =>
+    tx.conector.findUnique({ where: { slug: 'whatsapp' }, select: { id: true } })
+  ).catch(anotarFallo('connect:webhook-meta-conector'))
+  if (!conector) return NextResponse.json({ ok: true })
+  const conectorWhatsapp = conector.id
+
   for (const entrada of cuerpo.entry ?? []) {
     const wabaId = entrada.id
     if (!wabaId) continue
 
-    // A QUÉ EMPRESA PERTENECE. El aviso llega sin sesión y sin empresa: la
-    // única pista es la cuenta de WhatsApp, que quedó anotada en los metadatos
-    // de la credencial al canjear el código (no en el sello — esto no abre
-    // nada). Cruzar empresas para averiguarlo es legítimo y va declarado.
-    const credencial = await sinEmpresa(
-      'connect: webhook de Meta — resolver a qué empresa pertenece la cuenta de WhatsApp',
+    // ────────────────────────────────────────────────────────────────────────
+    // A QUÉ EMPRESA PERTENECE (F14.1 · el fallo de aislamiento que la
+    // auditoría encontró).
+    //
+    // La Fase 14 buscaba con `findFirst` sobre los metadatos de las
+    // credenciales. Dos problemas, y el segundo es grave:
+    //
+    //   · sin unicidad garantizada, dos filas con el mismo valor hacen que
+    //     `findFirst` devuelva UNA CUALQUIERA — el aviso de una empresa
+    //     acabaría atribuido a otra;
+    //   · buscar por un campo de JSON sin índice ni restricción convierte una
+    //     frontera entre inquilinos en una convención.
+    //
+    // Ahora la cuenta vive en una COLUMNA de la conexión con UNIQUE por
+    // (conector, cuenta): `findUnique` no puede devolver la fila de otro,
+    // porque la base impide que exista.
+    //
+    // Cruzar empresas para averiguarlo es legítimo —el aviso llega sin sesión—
+    // y va declarado con su motivo.
+    const conexion = await sinEmpresa(
+      'connect: webhook de Meta — resolver la única conexión dueña de esta cuenta de WhatsApp',
       (tx) =>
-        tx.credencialConexion.findFirst({
-          where: { metadata: { path: ['wabaId'], equals: wabaId } },
-          select: { conexionId: true, conexion: { select: { companyId: true } } },
+        tx.conexionEmpresa.findUnique({
+          where: {
+            conectorId_cuentaExterna: { conectorId: conectorWhatsapp, cuentaExterna: wabaId },
+          },
+          select: { id: true, companyId: true },
         })
     ).catch(anotarFallo('connect:webhook-meta-resolver'))
 
-    // Sin empresa conocida no se anota nada. Pasa de verdad y no es un error:
-    // Meta puede avisar del alta ANTES de que el canje del código termine, y
-    // ese primer aviso no tiene dueño todavía. El alta deja su propio apunte.
-    if (!credencial?.conexion) continue
+    // Sin dueño conocido no se anota nada. Pasa de verdad y no es un error:
+    // Meta puede avisar del alta ANTES de que el canje termine, y ese primer
+    // aviso no tiene dueño todavía. El alta deja su propio apunte.
+    if (!conexion) continue
 
     for (const cambio of entrada.changes ?? []) {
       await anotarConector({
-        companyId: credencial.conexion.companyId,
+        companyId: conexion.companyId,
         origen: 'CONEXION',
-        origenId: credencial.conexionId,
+        origenId: conexion.id,
         evento: `meta.${cambio.field ?? 'desconocido'}`,
         // Del contenido NADA: en `value` viaja el número de teléfono de
         // clientes finales. Basta con saber que Meta avisó y de qué.

@@ -95,6 +95,24 @@ model ConexionEmpresa {
   /// adivinarlo por fechas.
   setupVersion Int?
 
+  /// IDENTIDAD DE ESTA CONEXIÓN EN EL PROVEEDOR (F14.1).
+  ///
+  /// `cuentaExterna`  la cuenta del cliente allí (el WABA de Meta).
+  /// `recursoExterno` el recurso concreto (el número de teléfono).
+  ///
+  /// Existen como COLUMNAS y no dentro de `config` o de los metadatos de la
+  /// credencial por una razón de aislamiento: un webhook entrante llega sin
+  /// sesión y sin empresa, y lo único que trae es esa cuenta. Buscarla en un
+  /// JSON con `findFirst` global es exactamente el fallo que la auditoría
+  /// encontró — sin unicidad garantizada, dos empresas con el mismo valor
+  /// harían que el aviso de una acabara atribuido a la otra.
+  ///
+  /// El UNIQUE por (conectorId, cuentaExterna) convierte «una cuenta externa
+  /// pertenece a UNA empresa» en una regla que la base impone, no en una
+  /// convención que alguien recuerde.
+  cuentaExterna  String?
+  recursoExterno String?
+
   /// Salud observable sin abrir credenciales: cuándo funcionó por última vez
   /// y cuál fue el último error. Lo que la UI de la Fase 4 enseña.
   ultimoOkAt    DateTime?
@@ -120,6 +138,9 @@ model ConexionEmpresa {
   /// DOS cuentas del mismo servicio, se relaja aquí — relajar un unique es
   /// expansivo; imponerlo después de que existan duplicados no lo es.
   @@unique([companyId, conectorId])
+  /// Una cuenta del proveedor pertenece a UNA sola empresa. Sin esto, el
+  /// webhook de Meta no puede saber de quién es lo que le llega.
+  @@unique([conectorId, cuentaExterna])
   @@index([companyId, estado])
   @@index([conectorId, estado])
   @@map("conexiones_empresa")

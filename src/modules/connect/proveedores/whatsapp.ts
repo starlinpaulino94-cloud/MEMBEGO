@@ -104,6 +104,11 @@ export const WHATSAPP: DefinicionProveedor = {
           },
         } as const)
   },
+  // API_KEY EN LOS DOS CAMINOS, y esto es lo que la Fase 14 se dejó: con el
+  // alta incrustada la autorización es OAuth, pero lo que acaba sellado es un
+  // token de negocio que se usa como clave. Deducirlo del tipo de autorización
+  // hacía que el asistente buscara una credencial que nunca se escribía.
+  tipoCredencial: 'API_KEY',
   capacidades: ['mensajes.enviar'],
   pasos: () => (metaConfigurado() ? PASOS_META : PASOS_TOKEN),
   versionAlta: 2,

@@ -207,15 +207,10 @@ export async function altaMetaAction(
   })
 
   if (!res.ok) {
-    // El detalle técnico queda en la bitácora; aquí va lo que se puede hacer.
-    const porPaso: Record<string, string> = {
-      config: 'El alta con Meta no está configurada en la plataforma.',
-      canje: 'La autorización caducó antes de guardarse. Vuelve a intentarlo, es cosa de segundos.',
-      registro: 'Meta no pudo dar de alta tu número para enviar mensajes.',
-      webhooks: 'Tu cuenta se autorizó, pero no pudimos activar los avisos. Vuelve a intentarlo.',
-      guardado: 'No se pudo guardar la conexión.',
-    }
-    return { error: porPaso[res.paso] ?? 'No se pudo completar la conexión.' }
+    // El mensaje ya viene redactado para una persona; el detalle técnico
+    // —fase, estado HTTP, código de Meta, traza y clase de error— quedó en la
+    // bitácora. Aquí NO se filtra nada de eso.
+    return { error: res.detalle }
   }
 
   revalidatePath('/admin/integraciones/whatsapp/conectar')
