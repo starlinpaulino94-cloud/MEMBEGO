@@ -3,7 +3,8 @@ import { adopcionConnect, catalogoAdmin, empresasConnect } from '@/modules/conne
 import { PageHeader } from '@/components/ui/page-header'
 import { CatalogoAdminPanel } from '@/components/superadmin/CatalogoAdminPanel'
 import { ConcesionesPanel } from '@/components/superadmin/ConcesionesPanel'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Activity, Building2, KeyRound, Webhook } from 'lucide-react'
+import { StatCard } from '@/components/ui/stat-card'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,26 +33,44 @@ export default async function ConnectSuperadminPage() {
         description="El catálogo de aplicaciones, cuánto se usa, y qué tiene concedida cada empresa."
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Adopción</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              { label: 'Empresas con una app conectada', valor: adopcion.empresasConConexion },
-              { label: 'Claves de API activas', valor: adopcion.clavesActivas },
-              { label: 'Webhooks activos', valor: adopcion.webhooksActivos },
-              { label: 'Entregas (últimos 7 días)', valor: adopcion.entregasUltimos7d },
-            ].map((m) => (
-              <div key={m.label} className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
-                <p className="text-lg font-semibold">{m.valor}</p>
-                <p className="text-caption text-muted-foreground">{m.label}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* ADOPCIÓN — cuatro números, y los cuatro salen de `adopcionConnect`,
+          que cuenta filas. No hay ninguna métrica de demostración aquí: si un
+          número está en cero es porque de verdad no hay nada, y eso es una
+          respuesta útil («todavía no lo usa nadie»), no un hueco.
+
+          Se usan las tarjetas del sistema de diseño en vez de la rejilla que
+          había escrita a mano: mismo dato, y además llevan a la pantalla que
+          lo explica. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Empresas conectadas"
+          value={adopcion.empresasConConexion}
+          sub="Con al menos una app viva"
+          icon={Building2}
+          accent="brand"
+        />
+        <StatCard
+          label="Claves de API activas"
+          value={adopcion.clavesActivas}
+          sub="En toda la plataforma"
+          icon={KeyRound}
+          accent="brand"
+        />
+        <StatCard
+          label="Webhooks activos"
+          value={adopcion.webhooksActivos}
+          sub="Suscripciones vivas"
+          icon={Webhook}
+          accent="success"
+        />
+        <StatCard
+          label="Entregas (7 días)"
+          value={adopcion.entregasUltimos7d}
+          sub="Eventos enviados"
+          icon={Activity}
+          accent="success"
+        />
+      </div>
 
       <CatalogoAdminPanel conectores={conectores} />
       <ConcesionesPanel empresas={empresas} />

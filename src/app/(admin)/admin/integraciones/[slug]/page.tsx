@@ -79,6 +79,31 @@ export default async function IntegracionPage({
   // tener que abrir el asistente otra vez.
   const configuracion = await configuracionVisible(user.metadata.companyId, slug)
 
+  /**
+   * LA FICHA TÉCNICA — cuatro datos, y los cuatro se leen de la definición del
+   * proveedor. Un proveedor sin definición (una entrada del roadmap) solo
+   * aporta su categoría, y la ficha lo dice en vez de inventarse el resto.
+   */
+  const fichaTecnica: { etiqueta: string; valor: string }[] = [
+    { etiqueta: 'Categoría', valor: entrada.categoriaLabel },
+    ...(proveedor
+      ? [
+          {
+            etiqueta: 'Autorización',
+            valor: proveedor.autorizacion.tipo === 'OAUTH2' ? 'OAuth 2.0' : 'Clave de API',
+          },
+          {
+            etiqueta: 'Tipo',
+            valor: proveedor.clase === 'NATIVA' ? 'Conexión nativa' : 'Módulo adaptado',
+          },
+          {
+            etiqueta: 'Pasos del alta',
+            valor: pasos.length > 0 ? String(pasos.length) : 'Sin alta guiada',
+          },
+        ]
+      : [{ etiqueta: 'Estado', valor: entrada.etiqueta }]),
+  ]
+
   const puedeConectar = permiteConectar(entrada.estado)
   const conectada = entrada.estado !== 'DISPONIBLE' && entrada.conexionId !== null
   const provisional = proveedor?.autorizacion.provisional
@@ -93,32 +118,38 @@ export default async function IntegracionPage({
         {volver ? nombreDelDestino(volver) : 'Integraciones'}
       </Link>
 
-      <div className="flex flex-wrap items-start gap-4">
-        <LogoIntegracion
-          slug={entrada.slug}
-          nombre={entrada.nombre}
-          marca={entrada.marca}
-          className="h-14 w-14 text-xl"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-h2 font-bold">{entrada.nombre}</h1>
-            <EstadoIntegracion estado={entrada.estado} />
-          </div>
-          <p className="mt-1 text-muted-foreground">{entrada.descripcion}</p>
-        </div>
-        {conectada && entrada.conexionId && (
-          <DesconectarIntegracion
-            conexionId={entrada.conexionId}
+      {/* La cabecera es una TARJETA y no texto suelto sobre el fondo: separa
+          la identidad de la integración —logotipo, nombre, estado y qué hace—
+          del resto de bloques, que son detalles. Es la misma jerarquía que en
+          el resto del producto: lo que identifica va sobre una superficie. */}
+      <Card>
+        <CardContent className="flex flex-wrap items-start gap-4 pt-6">
+          <LogoIntegracion
+            slug={entrada.slug}
             nombre={entrada.nombre}
-            consecuencia={
-              slug === 'google-calendar'
-                ? 'Las citas confirmadas dejarán de aparecer en tu agenda de Google.'
-                : 'Tus automatizaciones dejarán de enviar por este canal.'
-            }
+            marca={entrada.marca}
+            className="h-14 w-14 text-xl"
           />
-        )}
-      </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-h2 font-bold">{entrada.nombre}</h1>
+              <EstadoIntegracion estado={entrada.estado} />
+            </div>
+            <p className="mt-1 text-muted-foreground">{entrada.descripcion}</p>
+          </div>
+          {conectada && entrada.conexionId && (
+            <DesconectarIntegracion
+              conexionId={entrada.conexionId}
+              nombre={entrada.nombre}
+              consecuencia={
+                slug === 'google-calendar'
+                  ? 'Las citas confirmadas dejarán de aparecer en tu agenda de Google.'
+                  : 'Tus automatizaciones dejarán de enviar por este canal.'
+              }
+            />
+          )}
+        </CardContent>
+      </Card>
 
       {entrada.detalle && entrada.estado !== 'CONECTADA' && (
         <StatusBanner
@@ -135,6 +166,28 @@ export default async function IntegracionPage({
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-4">
+          {/* Lo primero que hay que saber de una integración es qué VA A HACER.
+              Estaba en la columna lateral, debajo del pliegue en un portátil:
+              quien entraba a decidir si conectar leía primero el formulario y
+              después para qué servía. */}
+          {entrada.capacidades.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Qué podrá hacer</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {entrada.capacidades.map((c) => (
+                    <li key={c} className="flex items-start gap-2 text-sm">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+                      <span>{ETIQUETA_CAPACIDAD[c] ?? c}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
           {puedeConectar && (
             <Card>
               <CardHeader>
@@ -235,23 +288,28 @@ export default async function IntegracionPage({
           )}
         </div>
 
-        {entrada.capacidades.length > 0 && (
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle className="text-base">Qué podrá hacer</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2">
-                {entrada.capacidades.map((c) => (
-                  <li key={c} className="flex items-start gap-2 text-sm">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
-                    <span>{ETIQUETA_CAPACIDAD[c] ?? c}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+        {/* FICHA TÉCNICA. Los cuatro datos salen de la definición del proveedor
+            y del catálogo — no hay ninguno redactado a mano aquí. Es lo que
+            pregunta quien tiene que decidir si esto encaja en su operación:
+            de qué tipo es, cómo se autoriza y cuánto trabajo cuesta. */}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="text-base">Detalles técnicos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="divide-y divide-border/60">
+              {fichaTecnica.map((f) => (
+                <div
+                  key={f.etiqueta}
+                  className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                >
+                  <dt className="text-sm text-muted-foreground">{f.etiqueta}</dt>
+                  <dd className="text-right text-sm font-medium">{f.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

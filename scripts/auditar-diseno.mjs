@@ -69,9 +69,20 @@ const EXENTOS_EXACTOS = new Set([
   'src/modules/connect/proveedores/metadatos.ts',
 ])
 
+/**
+ * Las rutas se NORMALIZAN a barra normal antes de mirarlas.
+ *
+ * En Windows las rutas llegan con barra invertida y los patrones de abajo
+ * estan escritos con barra normal, asi que "share/og" no casaba y los
+ * generadores de imagenes OG contaban como deuda SOLO en esa plataforma: 143
+ * en Windows contra 117 en CI sobre el MISMO codigo. El techo esta medido en
+ * CI, de modo que la suite fallaba en el portatil de quien la ejecutara.
+ *
+ * Un auditor que cuenta distinto segun el sistema operativo no mide nada.
+ */
 const SIN_VARIABLES_CSS = (ruta) =>
   EXENTOS_EXACTOS.has(ruta.split(sep).join('/')) ||
-  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible/i.test(ruta)
+  /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible/i.test(ruta.split(sep).join('/'))
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
 export const cuenta = (re, filtro = () => true) => {
