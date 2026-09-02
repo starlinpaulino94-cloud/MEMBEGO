@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
+
 import {
   Search,
   MessageCircle,
@@ -277,7 +277,7 @@ export default function ConversacionesPage() {
             ))}
           </div>
 
-          <Separator />
+          <div className="border-t border-border" />
 
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto">
