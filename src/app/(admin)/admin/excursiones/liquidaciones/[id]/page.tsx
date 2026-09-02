@@ -68,7 +68,14 @@ export default async function LiquidacionDetallePage({
         </div>
       </div>
 
-      <LiquidacionAcciones liquidacionId={liquidacion.id} estado={estado} />
+      <LiquidacionAcciones
+        liquidacionId={liquidacion.id}
+        estado={estado}
+        numero={liquidacion.numero}
+        total={Number(liquidacion.total)}
+        moneda={moneda}
+        vendedor={vendedor?.nombre ?? 'Vendedor'}
+      />
 
       {liquidacion.pagadaAt ? (
         <section className="rounded-2xl border border-success/25 bg-success/5 p-4 text-sm">
