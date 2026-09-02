@@ -26,6 +26,7 @@ export const GOOGLE_CALENDAR: DefinicionProveedor = {
     // incrustada— no se hace en ninguna de las dos formas.
     patron: 'REDIRECCION',
   },
+  tipoCredencial: 'OAUTH_TOKENS',
   capacidades: ['calendario.leer', 'calendario.escribir', 'disponibilidad.leer'],
   pasos: () => [
     {

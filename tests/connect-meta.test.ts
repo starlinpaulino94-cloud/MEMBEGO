@@ -36,13 +36,21 @@ const ENTORNO_COMPLETO: Record<string, string | undefined> = {
   NEXT_PUBLIC_META_APP_ID: '123456',
   NEXT_PUBLIC_META_CONFIG_ID: '987654',
   META_APP_SECRET: 'secreto-de-la-app',
+  // Añadida en la F14.1: sin ella Meta no puede dar de alta nuestra URL de
+  // webhook, y sin webhook el alta incrustada nace sorda.
+  META_WEBHOOK_VERIFY_TOKEN: 'token-de-verificacion',
 }
 
 // ─── Configuración: la regla de «lo que no está configurado no se ofrece» ────
 
-test('meta: sin las tres variables, el alta incrustada NO existe', () => {
+test('meta: si falta CUALQUIERA de las cuatro variables, el alta no existe', () => {
   assert.equal(metaConfigurado({}), false)
-  for (const falta of ['NEXT_PUBLIC_META_APP_ID', 'NEXT_PUBLIC_META_CONFIG_ID', 'META_APP_SECRET']) {
+  for (const falta of [
+    'NEXT_PUBLIC_META_APP_ID',
+    'NEXT_PUBLIC_META_CONFIG_ID',
+    'META_APP_SECRET',
+    'META_WEBHOOK_VERIFY_TOKEN',
+  ]) {
     const parcial = { ...ENTORNO_COMPLETO }
     delete parcial[falta]
     assert.equal(metaConfigurado(parcial), false, `falta ${falta} y aun así se ofrecería`)
@@ -229,11 +237,14 @@ test('meta: el secreto de la app NUNCA baja al navegador', () => {
 })
 
 test('meta: el diálogo filtra los mensajes por ORIGEN', () => {
+  // La F14.1 movió la comprobación a `leerMensajeMeta`, que es puro y se
+  // prueba ejecutándolo en `connect-meta-comportamiento`. Aquí se vigila que
+  // el componente NO se salte esa puerta.
   const src = codigo('src/components/connect/AltaMetaWhatsapp.tsx')
-  // Aceptar mensajes de cualquier ventana sería dejar que otra pestaña nos
-  // dicte qué cuenta de WhatsApp conectar.
-  assert.match(src, /if \(e\.origin !== ORIGEN_META\) return/)
-  assert.match(src, /const ORIGEN_META = 'https:\/\/www\.facebook\.com'/)
+  assert.match(src, /leerMensajeMeta\(e\.origin, e\.data\)/)
+  // Y que no vuelva a comparar orígenes a mano, que es donde se cuelan los
+  // `endsWith` mal escritos.
+  assert.ok(!/e\.origin ===|e\.origin !==|endsWith/.test(src))
 })
 
 test('meta: el canje se dispara SOLO, no al pulsar «siguiente»', () => {
@@ -257,26 +268,44 @@ test('meta: nada de lo que devuelve Meta en un error se registra en crudo', () =
   // En el cuerpo de un error de Meta puede viajar el número del cliente y, en
   // un eco de autorización fallida, el propio token.
   assert.ok(!src.includes('await resp.text()'))
-  assert.match(src, /m\.slice\(0, 160\)/)
-  // Y el mensaje de una excepción puede llevar la URL con el secreto dentro.
-  assert.match(src, /'No se pudo contactar con Meta\.'/)
+  // Solo el mensaje corto de Meta, recortado. Nunca el cuerpo entero.
+  assert.match(src, /\.slice\(0, 200\)/)
+  // Y el mensaje de una excepción puede llevar la URL —y la URL, el secreto—.
+  // La F14.1 lo cerró del todo: los `catch` ni siquiera reciben la excepción,
+  // así que no hay nada de ella que se pueda escapar por descuido.
+  // Solo en las llamadas a Meta: el `catch (e)` de más abajo es el de Prisma,
+  // que mira un código de error de la base y no toca ninguna respuesta ajena.
+  const llamadasAMeta = src.slice(
+    src.indexOf('async function canjearCodigo'),
+    src.indexOf('export async function completarAltaMeta')
+  )
+  assert.ok(!/catch \(e\)/.test(llamadasAMeta), 'un catch de Meta recibe la excepción')
+  assert.match(src, /mensaje: 'red'/)
 })
 
 test('meta: una conexión a medias NO se guarda', () => {
   const src = codigo('src/modules/connect/metaEmbedded.ts')
   const completar = src.slice(src.indexOf('export async function completarAltaMeta'))
   // Con token pero sin número registrado parecería sana y fallaría en el primer
-  // envío. Cada paso corta antes de llegar a guardar.
-  const orden = ['canjearCodigo', 'registrarNumero', 'suscribirWebhooks', 'guardarCredencial']
+  // envío. Cada fase corta antes de llegar a guardar. La F14.1 metió dos fases
+  // de comprobación ANTES de tocar nada en Meta.
+  const orden = [
+    'canjearCodigo',
+    'concesionesDelToken',
+    'numeroPerteneceAlWaba',
+    'registrarNumero',
+    'suscribirWebhooks',
+    'guardarCredencial',
+  ]
   let anterior = -1
   for (const fn of orden) {
     const i = completar.indexOf(fn)
     assert.ok(i > anterior, `${fn} está fuera de orden en el alta`)
     anterior = i
   }
-  assert.match(completar, /if \(!canje\.ok\) return canje/)
-  assert.match(completar, /if \(!registro\.ok\) return registro/)
-  assert.match(completar, /if \(!suscripcion\.ok\) return suscripcion/)
+  assert.match(completar, /if \(!canje\.ok\)/)
+  assert.match(completar, /if \(!registro\.ok\)/)
+  assert.match(completar, /if \(!suscripcion\.ok\)/)
 })
 
 test('webhook: sin secreto configurado la ruta no existe, y la firma va ANTES de leer', () => {

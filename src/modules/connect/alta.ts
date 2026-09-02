@@ -72,10 +72,12 @@ export async function vistaDelAlta(companyId: string, slug: string): Promise<Vis
   const leido = leerEstadoAlta(fila.setupState)
   const estado = leido && !guionCaducado(def, leido) ? leido : altaVacia(def.versionAlta)
 
+  // LO DECLARA EL PROVEEDOR, no se deduce del tipo de autorización. Deducirlo
+  // rompía el alta incrustada de Meta: autoriza por OAuth y guarda una clave.
   const meta = await metadatosCredencial({
     companyId,
     conexionId: fila.id,
-    tipo: def.autorizacion.tipo === 'OAUTH2' ? 'OAUTH_TOKENS' : 'API_KEY',
+    tipo: def.tipoCredencial,
   })
 
   const hechos: HechosAlta = {

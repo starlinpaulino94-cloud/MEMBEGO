@@ -125,7 +125,11 @@ const nextConfig: NextConfig = {
               // su script, abre su iframe y crea un worker (blob:) desde ese
               // dominio. Solo afecta a CARTOWN (única empresa con la pasarela).
               // Ver docs/PAGOS-CARDNET.md.
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://*.cardnet.com.do https://*.gtp-seglan.com",
+              // connect.facebook.net: el SDK del Alta Incrustada de WhatsApp.
+              // Dominio EXACTO y no `*.facebook.net`: un comodín aquí abriría
+              // cualquier subdominio presente y futuro de Meta, y solo hace
+              // falta el que sirve el SDK. Ver docs/connect/whatsapp-embedded-signup.md.
+              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://connect.facebook.net https://*.cardnet.com.do https://*.gtp-seglan.com",
               // El widget crea un Web Worker desde un blob:; sin worker-src la
               // CSP cae a script-src (que no lleva blob:) y lo bloquea.
               "worker-src 'self' blob:",
@@ -133,13 +137,22 @@ const nextConfig: NextConfig = {
               `img-src 'self' data: https: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}`,
               "font-src 'self' data: https://*.gtp-seglan.com",
               // api.github.com se eliminó: no se usa en la app.
-              `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''} https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://*.cardnet.com.do https://*.gtp-seglan.com`,
+              // graph.facebook.com y www.facebook.com: el SDK de Meta consulta
+              // la Graph API y publica el resultado del alta hacia su propio
+              // dominio. Los dos EXACTOS, sin comodín.
+              `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''} https://*.supabase.co https://*.ingest.sentry.io https://*.sentry.io https://graph.facebook.com https://www.facebook.com https://*.cardnet.com.do https://*.gtp-seglan.com`,
               // cardnet.com.do: el reto 3DS del banco se pinta en un iframe y el
               // formulario que lo abre hace POST a la pasarela. Sin estas dos
               // reglas, el navegador bloquea la pantalla del banco. Solo afecta a
               // CARTOWN (única empresa con la pasarela); para las demás, nunca se
               // carga ese iframe. Ver docs/PAGOS-CARDNET.md.
-              "frame-src 'self' https://*.cardnet.com.do https://*.gtp-seglan.com",
+              // www.facebook.com y web.facebook.com: el diálogo del Alta
+              // Incrustada se pinta en un marco servido desde ahí. Son los dos
+              // orígenes que el componente acepta por `postMessage`
+              // (ORIGENES_META), y la lista se mantiene igual en los dos
+              // sitios a propósito: si un día se abre uno aquí y no allá, el
+              // mensaje llegaría y se descartaría sin explicación.
+              "frame-src 'self' https://www.facebook.com https://web.facebook.com https://*.cardnet.com.do https://*.gtp-seglan.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self' https://*.cardnet.com.do https://*.gtp-seglan.com",
