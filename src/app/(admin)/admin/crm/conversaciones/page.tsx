@@ -14,6 +14,7 @@ import {
   Send,
   ExternalLink,
 } from 'lucide-react'
+import { CANAL_TINTE } from '../paleta'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,10 +41,10 @@ interface Conversation {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const CHANNEL_CONFIG: Record<Channel, { icon: typeof MessageCircle; label: string; color: string; bgColor: string }> = {
-  whatsapp: { icon: MessageCircle, label: 'WhatsApp', color: 'text-green-600', bgColor: 'bg-green-100' },
-  instagram: { icon: Camera, label: 'Instagram', color: 'text-purple-600', bgColor: 'bg-purple-100' },
-  messenger: { icon: MessageSquare, label: 'Messenger', color: 'text-blue-600', bgColor: 'bg-blue-100' },
-  email: { icon: Mail, label: 'Email', color: 'text-muted-foreground', bgColor: 'bg-muted' },
+  whatsapp: { icon: MessageCircle, label: 'WhatsApp', color: CANAL_TINTE.whatsapp.texto, bgColor: CANAL_TINTE.whatsapp.fondo },
+  instagram: { icon: Camera, label: 'Instagram', color: CANAL_TINTE.instagram.texto, bgColor: CANAL_TINTE.instagram.fondo },
+  messenger: { icon: MessageSquare, label: 'Messenger', color: CANAL_TINTE.messenger.texto, bgColor: CANAL_TINTE.messenger.fondo },
+  email: { icon: Mail, label: 'Email', color: CANAL_TINTE.email.texto, bgColor: CANAL_TINTE.email.fondo },
 }
 
 const FILTER_OPTIONS = [
@@ -254,6 +255,7 @@ export default function ConversacionesPage() {
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                aria-label="Buscar conversación"
                 placeholder="Buscar conversación..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -368,14 +370,14 @@ export default function ConversacionesPage() {
                       className={cn(
                         'max-w-[70%] px-3.5 py-2 text-small',
                         msg.sender === 'agent'
-                          ? 'bg-primary text-primary-foreground rounded-2xl rounded-br-sm'
-                          : 'bg-muted rounded-2xl rounded-bl-sm',
+                          ? 'bg-primary text-primary-foreground rounded-2xl rounded-br-lg'
+                          : 'bg-muted rounded-2xl rounded-bl-lg',
                       )}
                     >
                       <p>{msg.text}</p>
                       <p
                         className={cn(
-                          'mt-1 text-[10px]',
+                          'mt-1 text-caption',
                           msg.sender === 'agent' ? 'text-primary-foreground/70' : 'text-muted-foreground',
                         )}
                       >
@@ -392,6 +394,7 @@ export default function ConversacionesPage() {
             <div className="border-t border-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <Input
+                  aria-label="Escribe un mensaje"
                   placeholder="Escribe un mensaje..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}

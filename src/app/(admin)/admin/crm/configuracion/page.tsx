@@ -27,6 +27,7 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
+import { COLORES_ETAPA, ETAPA_PUNTO } from '../paleta'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -45,17 +46,14 @@ interface CampoPersonalizado {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const STAGE_COLORS = [
-  'bg-blue-500', 'bg-yellow-500', 'bg-orange-500', 'bg-purple-500', 'bg-green-500',
-  'bg-pink-500', 'bg-cyan-500', 'bg-red-500', 'bg-indigo-500', 'bg-teal-500',
-]
+const STAGE_COLORS = COLORES_ETAPA
 
 const DEFAULT_STAGES: Stage[] = [
-  { id: 's1', nombre: 'Nuevo', color: 'bg-blue-500' },
-  { id: 's2', nombre: 'Contactado', color: 'bg-yellow-500' },
-  { id: 's3', nombre: 'Cotización', color: 'bg-orange-500' },
-  { id: 's4', nombre: 'Negociación', color: 'bg-purple-500' },
-  { id: 's5', nombre: 'Cerrado', color: 'bg-green-500' },
+  { id: 's1', nombre: 'Nuevo', color: ETAPA_PUNTO.nuevo },
+  { id: 's2', nombre: 'Contactado', color: ETAPA_PUNTO.contactado },
+  { id: 's3', nombre: 'Cotización', color: ETAPA_PUNTO.cotizacion },
+  { id: 's4', nombre: 'Negociación', color: ETAPA_PUNTO.negociacion },
+  { id: 's5', nombre: 'Cerrado', color: ETAPA_PUNTO.cerrado },
 ]
 
 const DEFAULT_CAMPOS: CampoPersonalizado[] = [
@@ -173,6 +171,7 @@ export default function ConfiguracionPage() {
               {editingStageId === stage.id ? (
                 <div className="flex items-center gap-2 flex-1">
                   <Input
+                    aria-label={`Nuevo nombre de la etapa ${stage.nombre}`}
                     value={editingStageName}
                     onChange={(e) => setEditingStageName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') renameStage(stage.id); if (e.key === 'Escape') setEditingStageId(null) }}
@@ -252,6 +251,7 @@ export default function ConfiguracionPage() {
           {/* Add stage */}
           <div className="flex gap-2">
             <Input
+              aria-label="Nombre de la nueva etapa"
               placeholder="Nombre de la nueva etapa"
               value={newStageName}
               onChange={(e) => setNewStageName(e.target.value)}
@@ -282,6 +282,7 @@ export default function ConfiguracionPage() {
                 {editingCampoKey === campo.key ? (
                   <div className="flex items-center gap-2">
                     <Input
+                      aria-label={`Nuevo nombre del campo ${campo.label}`}
                       value={editingCampoLabel}
                       onChange={(e) => setEditingCampoLabel(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') renameCampo(campo.key); if (e.key === 'Escape') setEditingCampoKey(null) }}
@@ -299,13 +300,13 @@ export default function ConfiguracionPage() {
                   <>
                     <p className="text-small font-medium text-foreground">{campo.label}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <Badge variant="secondary" className="text-[10px]">{campo.tipo}</Badge>
+                      <Badge variant="secondary" className="text-caption">{campo.tipo}</Badge>
                       <span className="text-caption text-muted-foreground">key: {campo.key}</span>
                     </div>
                     {campo.tipo === 'select' && campo.opciones.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {campo.opciones.map((op) => (
-                          <Badge key={op} variant="outline" className="text-[10px]">{op}</Badge>
+                          <Badge key={op} variant="outline" className="text-caption">{op}</Badge>
                         ))}
                       </div>
                     )}
@@ -349,6 +350,7 @@ export default function ConfiguracionPage() {
             <p className="text-small font-medium text-foreground">Agregar campo</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
+                aria-label="Nombre del campo"
                 placeholder="Nombre del campo"
                 value={newCampoLabel}
                 onChange={(e) => setNewCampoLabel(e.target.value)}
@@ -367,6 +369,7 @@ export default function ConfiguracionPage() {
             </div>
             {newCampoTipo === 'select' && (
               <Input
+                aria-label="Opciones del campo, separadas por coma"
                 placeholder="Opciones separadas por coma"
                 value={newCampoOpciones}
                 onChange={(e) => setNewCampoOpciones(e.target.value)}
@@ -408,6 +411,7 @@ export default function ConfiguracionPage() {
               {autoRecordatorio && (
                 <div className="flex items-center gap-1.5">
                   <Input
+                    aria-label="Días de espera antes del recordatorio automático"
                     type="number"
                     min={1}
                     max={30}

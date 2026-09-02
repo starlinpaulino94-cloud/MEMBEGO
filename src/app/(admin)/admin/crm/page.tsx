@@ -43,6 +43,7 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ETAPA_CHIP, PRIORIDAD_PUNTO } from './paleta'
 import { toast } from 'sonner'
 import {
   Plus,
@@ -104,18 +105,14 @@ interface Oferta {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const COLUMN_META: { key: Etapa; label: string; badgeClass: string }[] = [
-  { key: 'nuevo', label: 'Nuevo', badgeClass: 'bg-blue-100 text-blue-800' },
-  { key: 'contactado', label: 'Contactado', badgeClass: 'bg-yellow-100 text-yellow-800' },
-  { key: 'cotizacion', label: 'Cotización', badgeClass: 'bg-orange-100 text-orange-800' },
-  { key: 'negociacion', label: 'Negociación', badgeClass: 'bg-purple-100 text-purple-800' },
-  { key: 'cerrado', label: 'Cerrado', badgeClass: 'bg-green-100 text-green-800' },
+  { key: 'nuevo', label: 'Nuevo', badgeClass: ETAPA_CHIP.nuevo },
+  { key: 'contactado', label: 'Contactado', badgeClass: ETAPA_CHIP.contactado },
+  { key: 'cotizacion', label: 'Cotización', badgeClass: ETAPA_CHIP.cotizacion },
+  { key: 'negociacion', label: 'Negociación', badgeClass: ETAPA_CHIP.negociacion },
+  { key: 'cerrado', label: 'Cerrado', badgeClass: ETAPA_CHIP.cerrado },
 ]
 
-const PRIORITY_DOT: Record<Priority, string> = {
-  alta: 'bg-red-500',
-  media: 'bg-yellow-400',
-  baja: 'bg-green-500',
-}
+const PRIORITY_DOT: Record<Priority, string> = PRIORIDAD_PUNTO
 
 const PRIORITY_LABEL: Record<Priority, string> = {
   alta: 'Alta',
@@ -499,6 +496,7 @@ export default function PipelinePage() {
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label="Buscar por nombre o email"
             placeholder="Buscar por nombre o email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -787,6 +785,7 @@ export default function PipelinePage() {
                         {/* Add nota */}
                         <div className="flex gap-2">
                           <Input
+                            aria-label="Agregar nota"
                             placeholder="Agregar nota..."
                             value={newNotaText}
                             onChange={(e) => setNewNotaText(e.target.value)}
@@ -864,12 +863,12 @@ export default function PipelinePage() {
                               </Select>
                             </div>
                             <div className="grid gap-2">
-                              <Label>Descripción</Label>
-                              <Input value={newActividadDesc} onChange={(e) => setNewActividadDesc(e.target.value)} placeholder="Descripción de la actividad" />
+                              <Label htmlFor="act-descripcion">Descripción</Label>
+                              <Input id="act-descripcion" value={newActividadDesc} onChange={(e) => setNewActividadDesc(e.target.value)} placeholder="Descripción de la actividad" />
                             </div>
                             <div className="grid gap-2">
-                              <Label>Fecha</Label>
-                              <Input type="datetime-local" value={newActividadFecha} onChange={(e) => setNewActividadFecha(e.target.value)} />
+                              <Label htmlFor="act-fecha">Fecha</Label>
+                              <Input id="act-fecha" type="datetime-local" value={newActividadFecha} onChange={(e) => setNewActividadFecha(e.target.value)} />
                             </div>
                             <DialogFooter>
                               <Button variant="ghost" onClick={() => setNewActividadOpen(false)}>Cancelar</Button>
@@ -906,11 +905,13 @@ export default function PipelinePage() {
                         {/* Add oferta */}
                         <div className="grid gap-2 rounded-lg border border-border p-3">
                           <Input
+                            aria-label="Nombre del plan"
                             placeholder="Nombre del plan"
                             value={newOfertaPlan}
                             onChange={(e) => setNewOfertaPlan(e.target.value)}
                           />
                           <Input
+                            aria-label="Monto de la oferta"
                             placeholder="Monto (ej: RD$1,500/mes)"
                             value={newOfertaMonto}
                             onChange={(e) => setNewOfertaMonto(e.target.value)}

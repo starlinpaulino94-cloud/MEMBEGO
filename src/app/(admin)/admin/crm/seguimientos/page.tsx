@@ -24,6 +24,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { ACTIVIDAD_CHIP } from '../paleta'
 import {
   Phone,
   Mail,
@@ -58,13 +59,7 @@ const TIPO_ICON: Record<string, typeof Phone> = {
   Reunión: Calendar,
 }
 
-const TIPO_COLORS: Record<string, string> = {
-  Llamada: 'bg-blue-100 text-blue-700',
-  Email: 'bg-purple-100 text-purple-700',
-  WhatsApp: 'bg-green-100 text-green-700',
-  Visita: 'bg-orange-100 text-orange-700',
-  Reunión: 'bg-cyan-100 text-cyan-700',
-}
+const TIPO_COLORS: Record<string, string> = ACTIVIDAD_CHIP
 
 const RESULTADO_BADGE: Record<string, { label: string; variant: 'success' | 'warning' | 'destructive' | 'info' }> = {
   contactado: { label: 'Contactado', variant: 'info' },
@@ -171,6 +166,7 @@ export default function SeguimientosPage() {
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label="Buscar por lead o descripción"
             placeholder="Buscar por lead o descripción..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -232,7 +228,7 @@ export default function SeguimientosPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-small font-medium text-foreground">{act.lead}</p>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-caption">
                         {act.tipo}
                       </Badge>
                     </div>
@@ -243,7 +239,7 @@ export default function SeguimientosPage() {
                         {act.fecha}
                       </span>
                       {resultadoMeta && (
-                        <Badge variant={resultadoMeta.variant} className="text-[10px]">
+                        <Badge variant={resultadoMeta.variant} className="text-caption">
                           {resultadoMeta.label}
                         </Badge>
                       )}
@@ -315,8 +311,9 @@ export default function SeguimientosPage() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Descripción *</Label>
+              <Label htmlFor="seg-descripcion">Descripción *</Label>
               <Textarea
+                id="seg-descripcion"
                 value={form.descripcion}
                 onChange={(e) => setForm((p) => ({ ...p, descripcion: e.target.value }))}
                 placeholder="Describe la actividad..."
@@ -324,8 +321,9 @@ export default function SeguimientosPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Fecha programada</Label>
+              <Label htmlFor="seg-fecha">Fecha programada</Label>
               <Input
+                id="seg-fecha"
                 type="datetime-local"
                 value={form.fecha}
                 onChange={(e) => setForm((p) => ({ ...p, fecha: e.target.value }))}
