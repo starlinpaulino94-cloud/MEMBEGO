@@ -52,10 +52,8 @@ import {
   normalizarHora,
   esModificable,
   calcularModificacion,
-  POLITICAS_REEMBOLSO_DEFAULT,
   type EstadoReserva,
   type ReglaPrecioDinamico,
-  type PoliticaReembolso,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'

@@ -13,6 +13,7 @@ import {
   minutosDesdeMedianoche,
   esModificable,
   ESTADOS_CERRADOS,
+  type EstadoReserva,
 } from '@/modules/excursiones/reservas/nucleo'
 import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { ReservaCheckinQrDisplay } from '@/components/excursiones/ReservaCheckinQrDisplay'
@@ -77,7 +78,7 @@ export default async function ReservaDetallePage({ params }: ReservaDetallePageP
     ahora,
     config.politica.anticipacionMinimaHoras
   )
-  const esCerrada = ESTADOS_CERRADOS.includes(reserva.estado as any)
+  const esCerrada = ESTADOS_CERRADOS.includes(reserva.estado as EstadoReserva)
 
   return (
     <div className="min-h-screen bg-background">

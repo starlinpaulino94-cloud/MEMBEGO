@@ -69,7 +69,6 @@ export default async function ReservaDetallePage({
         estado={estado}
         adultos={reserva.adultos}
         ninos={reserva.ninos}
-        moneda={moneda}
       />
 
       <section className="rounded-2xl border border-border bg-card p-5">

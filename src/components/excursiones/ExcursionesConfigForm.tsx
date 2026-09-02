@@ -12,7 +12,7 @@ import {
   type ConfigActionState,
 } from '@/modules/excursiones/config-actions'
 import type { ExcursionesConfigResuelta } from '@/modules/excursiones/config'
-import { Save, Settings2, ShieldCheck, RefreshCcw, DollarSign, FileText, ScanLine, CalendarDays, Bell, CreditCard, ArrowLeftRight } from 'lucide-react'
+import { Save, Settings2, RefreshCcw, DollarSign, FileText, ScanLine, CalendarDays, Bell, CreditCard, ArrowLeftRight } from 'lucide-react'
 
 const init: ConfigActionState = {}
 
