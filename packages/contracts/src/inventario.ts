@@ -198,6 +198,14 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
   },
   {
     metodo: 'POST',
+    ruta: '/promotions/redeem',
+    scope: 'benefits:redeem',
+    principal: 'sistema',
+    resumen: 'Canjea una promoción de un cliente (consume un uso). Deja constancia de qué sistema lo hizo.',
+    idempotente: true,
+  },
+  {
+    metodo: 'POST',
     ruta: '/transactions',
     scope: 'transactions:write',
     principal: 'sistema',
