@@ -58,7 +58,7 @@ export async function listadoLiquidaciones(companyId: string) {
 
 /** El recibo: la liquidación con cada comisión que la compone. */
 export async function liquidacionDetalle(companyId: string, liquidacionId: string) {
-  const [liquidacion, config] = await Promise.all([
+  const [liquidacion, bonosDb, config] = await Promise.all([
     conEmpresa(companyId, (tx) =>
       tx.liquidacion.findFirst({
         where: { id: liquidacionId, companyId },
@@ -70,6 +70,7 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
               base: true,
               monto: true,
               moneda: true,
+              reglaSnapshot: true,
               desglose: true,
               estado: true,
               createdAt: true,
@@ -77,6 +78,20 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
               venta: { select: { numero: true } },
             },
           },
+        },
+      })
+    ),
+    conEmpresa(companyId, (tx) =>
+      tx.vendedorBono.findMany({
+        where: { liquidacionId, companyId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          descripcion: true,
+          monto: true,
+          moneda: true,
+          estado: true,
+          createdAt: true,
         },
       })
     ),
@@ -98,9 +113,13 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
       c.ajustes.map((a) => ({ monto: Number(a.monto) }))
     )
     const conv = obtenerDetalleConversion(netoOrig, c.moneda, liquidacion.moneda, config.tasasCambio)
+    const snapshot = c.reglaSnapshot as { tipoCalculo?: string } | null
+    const tipoCalculo = snapshot?.tipoCalculo ?? 'PORCENTAJE'
+
     return {
       id: c.id,
       venta: c.venta?.numero ?? '—',
+      tipoCalculo,
       desglose: c.desglose,
       estado: c.estado,
       createdAt: c.createdAt,
@@ -113,6 +132,23 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
       ajustes,
     }
   })
+
+  const bonos = bonosDb.map((b) => {
+    const conv = obtenerDetalleConversion(Number(b.monto), b.moneda, liquidacion.moneda, config.tasasCambio)
+    return {
+      id: b.id,
+      descripcion: b.descripcion,
+      monedaOriginal: b.moneda,
+      montoOriginal: Number(b.monto),
+      monto: conv.montoConvertido,
+      moneda: liquidacion.moneda,
+      estado: b.estado,
+      createdAt: b.createdAt,
+    }
+  })
+
+  const { resumenRemuneracionLiquidacion } = await import('./nucleo')
+  const resumenRemuneracion = resumenRemuneracionLiquidacion(lineas, bonos)
 
   const comisionesConConversion = lineas.filter((l) => l.conversion.esConversion).length
   const tasasUsadas = [...new Set(lineas.filter((l) => l.conversion.esConversion).map((l) => l.conversion.tasaLabel))]
@@ -128,17 +164,18 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
         }
       : null,
     lineas,
+    bonos,
+    resumenRemuneracion,
     comisionesConConversion,
     tasasUsadas,
   }
 }
 
 /**
- * Vendedores con comisiones aprobadas sin liquidar, y cuánto se les debe. Es
- * lo primero que quiere ver quien va a pagar: a quién y cuánto.
+ * Vendedores con comisiones aprobadas o bonos sin liquidar, y cuánto se les debe.
  */
 export async function vendedoresPorLiquidar(companyId: string) {
-  const [pendientes, config] = await Promise.all([
+  const [pendientes, bonosPendientes, config] = await Promise.all([
     conEmpresa(companyId, (tx) =>
       tx.comisionEntrada.findMany({
         where: {
@@ -151,26 +188,52 @@ export async function vendedoresPorLiquidar(companyId: string) {
           monto: true,
           moneda: true,
           createdAt: true,
+          reglaSnapshot: true,
           ajustes: { select: { monto: true } },
+        },
+      })
+    ),
+    conEmpresa(companyId, (tx) =>
+      tx.vendedorBono.findMany({
+        where: {
+          companyId,
+          liquidacionId: null,
+          estado: 'OTORGADO',
+        },
+        select: {
+          vendedorId: true,
+          monto: true,
+          moneda: true,
+          createdAt: true,
         },
       })
     ),
     getExcursionesConfig(companyId),
   ])
-  if (pendientes.length === 0) return []
+  if (pendientes.length === 0 && bonosPendientes.length === 0) return []
 
   const { monedaDefecto, tasasCambio } = config
   const acumulado = new Map<
     string,
     { total: number; cantidad: number; minDate: Date; maxDate: Date }
   >()
+
+  // Comisiones aprobadas
   for (const c of pendientes) {
+    const snapshot = c.reglaSnapshot as { tipoCalculo?: string } | null
+    const esEspecie = snapshot?.tipoCalculo === 'PAQUETE_REGALO'
+
     const neto = netoComision(
       Number(c.monto),
       c.ajustes.map((a) => ({ monto: Number(a.monto) }))
     )
-    if (neto <= 0) continue
-    const convertido = convertirMoneda(neto, c.moneda, monedaDefecto, tasasCambio)
+    if (neto <= 0 && !esEspecie) continue
+
+    // Beneficios en especie no inflan la transferencia en dinero
+    const convertido = esEspecie
+      ? 0
+      : convertirMoneda(neto, c.moneda, monedaDefecto, tasasCambio)
+
     const previo = acumulado.get(c.vendedorId)
     const minDate = previo
       ? c.createdAt < previo.minDate
@@ -189,6 +252,31 @@ export async function vendedoresPorLiquidar(companyId: string) {
       maxDate,
     })
   }
+
+  // Bonos por metas otorgados
+  for (const b of bonosPendientes) {
+    const montoBono = Number(b.monto) || 0
+    if (montoBono <= 0) continue
+    const convertido = convertirMoneda(montoBono, b.moneda, monedaDefecto, tasasCambio)
+    const previo = acumulado.get(b.vendedorId)
+    const minDate = previo
+      ? b.createdAt < previo.minDate
+        ? b.createdAt
+        : previo.minDate
+      : b.createdAt
+    const maxDate = previo
+      ? b.createdAt > previo.maxDate
+        ? b.createdAt
+        : previo.maxDate
+      : b.createdAt
+    acumulado.set(b.vendedorId, {
+      total: Math.round(((previo?.total ?? 0) + convertido) * 100) / 100,
+      cantidad: (previo?.cantidad ?? 0) + 1,
+      minDate,
+      maxDate,
+    })
+  }
+
   if (acumulado.size === 0) return []
 
   const vendedores = await conEmpresa(companyId, (tx) =>

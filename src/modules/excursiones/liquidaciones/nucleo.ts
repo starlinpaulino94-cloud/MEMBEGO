@@ -83,6 +83,173 @@ export interface ComisionLiquidable {
   neto: number
   createdAt: Date
   liquidacionId: string | null
+  tipoCalculo?: string | null
+}
+
+/** Comprueba si el tipo de remuneración es en especie (no suma a transferencia en efectivo). */
+export function esRemuneracionEspecie(tipoCalculo?: string | null): boolean {
+  return tipoCalculo === 'PAQUETE_REGALO'
+}
+
+/**
+ * Total en efectivo de comisiones monetarias (excluye premios en especie).
+ */
+export function totalMonetarioComisiones(
+  comisiones: Array<{ neto: number; tipoCalculo?: string | null }>
+): number {
+  return centavos(
+    comisiones.reduce((suma, c) => {
+      if (esRemuneracionEspecie(c.tipoCalculo)) return suma
+      return suma + (Number(c.neto) || 0)
+    }, 0)
+  )
+}
+
+export interface LineaLiquidacionParaResumen {
+  id: string
+  tipoCalculo?: string | null
+  monto: number
+  neto: number
+  ajustes: Array<{ monto: number; motivo?: string }>
+  desglose?: string
+}
+
+export interface BonoLiquidacionParaResumen {
+  id: string
+  descripcion: string
+  monto: number
+  moneda?: string
+}
+
+export interface ResumenRemuneracion {
+  porcentaje: { total: number; cantidad: number }
+  fijoAdulto: { total: number; cantidad: number }
+  fijoNino: { total: number; cantidad: number }
+  fijoVenta: { total: number; cantidad: number }
+  fijoPasajero: { total: number; cantidad: number }
+  escalon: { total: number; cantidad: number }
+  bonosMetas: { total: number; cantidad: number }
+  ajustesPositivos: { total: number; cantidad: number }
+  ajustesNegativos: { total: number; cantidad: number }
+  premiosEspecie: { valorEstimado: number; cantidad: number; descripciones: string[] }
+  totalMonetario: number
+}
+
+/**
+ * Consolida el desglose por tipo de remuneración de una liquidación.
+ * Separa comisiones monetarias, bonos por metas y premios en especie (vouchers).
+ */
+export function resumenRemuneracionLiquidacion(
+  lineas: LineaLiquidacionParaResumen[],
+  bonos: BonoLiquidacionParaResumen[] = []
+): ResumenRemuneracion {
+  let porcentajeTotal = 0
+  let porcentajeCant = 0
+  let fijoAdultoTotal = 0
+  let fijoAdultoCant = 0
+  let fijoNinoTotal = 0
+  let fijoNinoCant = 0
+  let fijoVentaTotal = 0
+  let fijoVentaCant = 0
+  let fijoPasajeroTotal = 0
+  let fijoPasajeroCant = 0
+  let escalonTotal = 0
+  let escalonCant = 0
+  let ajustesPosTotal = 0
+  let ajustesPosCant = 0
+  let ajustesNegTotal = 0
+  let ajustesNegCant = 0
+  let especieValor = 0
+  let especieCant = 0
+  const especieDesc: string[] = []
+
+  for (const l of lineas) {
+    const tipo = (l.tipoCalculo || '').toUpperCase()
+
+    // Ajustes
+    for (const a of l.ajustes) {
+      const mAjuste = Number(a.monto) || 0
+      if (mAjuste > 0) {
+        ajustesPosTotal += mAjuste
+        ajustesPosCant += 1
+      } else if (mAjuste < 0) {
+        ajustesNegTotal += Math.abs(mAjuste)
+        ajustesNegCant += 1
+      }
+    }
+
+    if (tipo === 'PAQUETE_REGALO') {
+      especieValor += Number(l.monto) || 0
+      especieCant += 1
+      if (l.desglose) especieDesc.push(l.desglose)
+      continue
+    }
+
+    const neto = Number(l.neto) || 0
+    switch (tipo) {
+      case 'PORCENTAJE':
+        porcentajeTotal += neto
+        porcentajeCant += 1
+        break
+      case 'FIJO_ADULTO':
+        fijoAdultoTotal += neto
+        fijoAdultoCant += 1
+        break
+      case 'FIJO_NINO':
+        fijoNinoTotal += neto
+        fijoNinoCant += 1
+        break
+      case 'FIJO_VENTA':
+        fijoVentaTotal += neto
+        fijoVentaCant += 1
+        break
+      case 'FIJO_PASAJERO':
+        fijoPasajeroTotal += neto
+        fijoPasajeroCant += 1
+        break
+      case 'ESCALON':
+        escalonTotal += neto
+        escalonCant += 1
+        break
+      default:
+        porcentajeTotal += neto
+        porcentajeCant += 1
+        break
+    }
+  }
+
+  let bonosTotal = 0
+  for (const b of bonos) {
+    bonosTotal += Number(b.monto) || 0
+  }
+
+  const comisionesMonetarias =
+    porcentajeTotal +
+    fijoAdultoTotal +
+    fijoNinoTotal +
+    fijoVentaTotal +
+    fijoPasajeroTotal +
+    escalonTotal
+
+  const totalMonetario = centavos(comisionesMonetarias + bonosTotal)
+
+  return {
+    porcentaje: { total: centavos(porcentajeTotal), cantidad: porcentajeCant },
+    fijoAdulto: { total: centavos(fijoAdultoTotal), cantidad: fijoAdultoCant },
+    fijoNino: { total: centavos(fijoNinoTotal), cantidad: fijoNinoCant },
+    fijoVenta: { total: centavos(fijoVentaTotal), cantidad: fijoVentaCant },
+    fijoPasajero: { total: centavos(fijoPasajeroTotal), cantidad: fijoPasajeroCant },
+    escalon: { total: centavos(escalonTotal), cantidad: escalonCant },
+    bonosMetas: { total: centavos(bonosTotal), cantidad: bonos.length },
+    ajustesPositivos: { total: centavos(ajustesPosTotal), cantidad: ajustesPosCant },
+    ajustesNegativos: { total: centavos(ajustesNegTotal), cantidad: ajustesNegCant },
+    premiosEspecie: {
+      valorEstimado: centavos(especieValor),
+      cantidad: especieCant,
+      descripciones: especieDesc,
+    },
+    totalMonetario,
+  }
 }
 
 /**
@@ -106,7 +273,7 @@ export function comisionesDelPeriodo(
       c.vendedorId === criterio.vendedorId &&
       c.liquidacionId === null &&
       c.estado === 'APROBADA' &&
-      c.neto > 0 &&
+      (c.neto > 0 || c.tipoCalculo === 'PAQUETE_REGALO') &&
       c.createdAt >= criterio.desde &&
       c.createdAt <= criterio.hasta
   )

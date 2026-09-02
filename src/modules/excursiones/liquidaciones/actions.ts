@@ -23,6 +23,8 @@ import {
   ESTADOS_LIQUIDACION,
   comisionesDelPeriodo,
   totalLiquidacion,
+  totalMonetarioComisiones,
+  centavos,
   numeroLiquidacion,
   puedeTransicionarLiquidacion,
   motivoTransicionLiquidacion,
@@ -98,27 +100,46 @@ export async function crearLiquidacion(
     const moneda = config.monedaDefecto || 'DOP'
 
     const resultado = await conEmpresa(companyId, async (tx) => {
-      const candidatas = await tx.comisionEntrada.findMany({
-        where: {
-          companyId,
-          vendedorId: v.datos.vendedorId,
-          liquidacionId: null,
-          estado: 'APROBADA',
-          createdAt: { gte: v.datos.desde, lte: v.datos.hasta },
-        },
-        select: {
-          id: true,
-          vendedorId: true,
-          estado: true,
-          monto: true,
-          moneda: true,
-          createdAt: true,
-          liquidacionId: true,
-          ajustes: { select: { monto: true } },
-        },
-      })
+      const [candidatas, bonosCandidatos] = await Promise.all([
+        tx.comisionEntrada.findMany({
+          where: {
+            companyId,
+            vendedorId: v.datos.vendedorId,
+            liquidacionId: null,
+            estado: 'APROBADA',
+            createdAt: { gte: v.datos.desde, lte: v.datos.hasta },
+          },
+          select: {
+            id: true,
+            vendedorId: true,
+            estado: true,
+            monto: true,
+            moneda: true,
+            reglaSnapshot: true,
+            createdAt: true,
+            liquidacionId: true,
+            ajustes: { select: { monto: true } },
+          },
+        }),
+        tx.vendedorBono.findMany({
+          where: {
+            companyId,
+            vendedorId: v.datos.vendedorId,
+            liquidacionId: null,
+            estado: 'OTORGADO',
+            createdAt: { gte: v.datos.desde, lte: v.datos.hasta },
+          },
+          select: {
+            id: true,
+            monto: true,
+            moneda: true,
+            createdAt: true,
+          },
+        }),
+      ])
 
       const liquidables: ComisionLiquidable[] = candidatas.map((c) => {
+        const snapshot = c.reglaSnapshot as { tipoCalculo?: string } | null
         const netoOrig = netoComision(
           Number(c.monto),
           c.ajustes.map((a) => ({ monto: Number(a.monto) }))
@@ -131,6 +152,7 @@ export async function crearLiquidacion(
           neto: netoConvertido,
           createdAt: c.createdAt,
           liquidacionId: c.liquidacionId,
+          tipoCalculo: snapshot?.tipoCalculo ?? 'PORCENTAJE',
         }
       })
       const elegidas = comisionesDelPeriodo(liquidables, {
@@ -138,9 +160,20 @@ export async function crearLiquidacion(
         desde: v.datos.desde,
         hasta: v.datos.hasta,
       })
-      if (elegidas.length === 0) return { vacia: true as const }
 
-      const total = totalLiquidacion(elegidas.map((c) => c.neto))
+      if (elegidas.length === 0 && bonosCandidatos.length === 0) {
+        return { vacia: true as const }
+      }
+
+      // Total monetario: comisiones en efectivo (excluye premios en especie) + bonos por metas
+      const totalComisiones = totalMonetarioComisiones(elegidas)
+      const totalBonos = centavos(
+        bonosCandidatos.reduce((s, b) => {
+          const conv = convertirMoneda(Number(b.monto), b.moneda, moneda, config.tasasCambio)
+          return s + conv
+        }, 0)
+      )
+      const total = centavos(totalComisiones + totalBonos)
 
       let intento =
         (await tx.liquidacion.count({
@@ -181,19 +214,36 @@ export async function crearLiquidacion(
             data: { liquidacionId: liquidacion.id, estado: 'PENDIENTE_PAGO' },
           })
 
+          // Vincular los bonos de metas otorgados del período
+          if (bonosCandidatos.length > 0) {
+            await tx.vendedorBono.updateMany({
+              where: {
+                id: { in: bonosCandidatos.map((b) => b.id) },
+                companyId,
+                liquidacionId: null,
+                estado: 'OTORGADO',
+              },
+              data: { liquidacionId: liquidacion.id },
+            })
+          }
+
           if (tomadas.count !== elegidas.length) {
             const reales = await tx.comisionEntrada.findMany({
               where: { companyId, liquidacionId: liquidacion.id },
-              select: { monto: true, ajustes: { select: { monto: true } } },
+              select: { monto: true, moneda: true, reglaSnapshot: true, ajustes: { select: { monto: true } } },
             })
-            const totalReal = totalLiquidacion(
-              reales.map((r) =>
-                netoComision(
-                  Number(r.monto),
-                  r.ajustes.map((a) => ({ monto: Number(a.monto) }))
-                )
+            const realesComisiones = reales.map((r) => {
+              const snapshot = r.reglaSnapshot as { tipoCalculo?: string } | null
+              const netoOrig = netoComision(
+                Number(r.monto),
+                r.ajustes.map((a) => ({ monto: Number(a.monto) }))
               )
-            )
+              return {
+                neto: convertirMoneda(netoOrig, r.moneda, moneda, config.tasasCambio),
+                tipoCalculo: snapshot?.tipoCalculo ?? 'PORCENTAJE',
+              }
+            })
+            const totalReal = centavos(totalMonetarioComisiones(realesComisiones) + totalBonos)
             await tx.liquidacion.update({
               where: { id: liquidacion.id },
               data: { total: totalReal },
@@ -324,6 +374,10 @@ export async function cambiarEstadoLiquidacion(
           where: { companyId, liquidacionId: liquidacion.id, estado: 'PENDIENTE_PAGO' },
           data: { estado: 'PAGADA' },
         })
+        await tx.vendedorBono.updateMany({
+          where: { companyId, liquidacionId: liquidacion.id },
+          data: { estado: 'PAGADO' },
+        })
       }
 
       if (estado === 'ANULADA') {
@@ -333,6 +387,10 @@ export async function cambiarEstadoLiquidacion(
         await tx.comisionEntrada.updateMany({
           where: { companyId, liquidacionId: liquidacion.id, estado: 'PENDIENTE_PAGO' },
           data: { liquidacionId: null, estado: 'APROBADA' },
+        })
+        await tx.vendedorBono.updateMany({
+          where: { companyId, liquidacionId: liquidacion.id, estado: { not: 'PAGADO' } },
+          data: { liquidacionId: null, estado: 'OTORGADO' },
         })
       }
     })
