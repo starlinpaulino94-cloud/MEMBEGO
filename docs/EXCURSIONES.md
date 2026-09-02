@@ -144,7 +144,12 @@ erDiagram
     - `ANULADA` $\to$ `GENERADA`: Reanudar manual desde Comisiones.
     - Las comisiones `APROBADA`, `PENDIENTE_PAGO` y `PAGADA` quedan congeladas y no admiten ajustes posteriores; los ajustes (`ComisionAjuste`) con selector de Sumar/Restar solo se pueden aplicar mientras la comisión esté en estado `GENERADA` antes de ser aprobada.
 - **`ComisionAjuste`**: Contra-asientos contables firmados con signo (+/−) vinculados a la comisión (penalidad o bonificación previa a la aprobación).
-- **`Liquidacion`**: Agrupación de pago a un vendedor `numero` (`PAY-2026-0014`), rango de fechas, suma neta total, método, referencia bancaria y estado (`BORRADOR`, `APROBADA`, `PAGADA`, `ANULADA`). Las comisiones incluidas en distintas divisas se consolidan en la moneda predeterminada de la empresa (`monedaDefecto`) calculando el contravalor exacto mediante `obtenerDetalleConversion`. Solo comisiones en estado `APROBADA` sin liquidación previa son elegibles.
+- **`Liquidacion`**: Agrupación de pago a un vendedor `numero` (`PAY-2026-0014`), rango de fechas, suma neta total, método, referencia bancaria y estado (`BORRADOR`, `APROBADA`, `PAGADA`, `ANULADA`).
+  - **Tratamiento Integral de Tipos de Remuneración**:
+    - **Monetarias (`PORCENTAJE`, `FIJO_ADULTO`, `FIJO_NINO`, `FIJO_VENTA`, `ESCALON`)**: Se consolidan y suman al total de efectivo/transferencia a pagar al vendedor. Si provienen de diferentes monedas, se convierten a `monedaDefecto` usando `obtenerDetalleConversion`.
+    - **Premios en Especie (`PAQUETE_REGALO`)**: Se documentan y auditan en el recibo de liquidación como vouchers / cortesías otorgadas pero **no inflan el total de dinero a transferir por banco**.
+    - **Bonos por Metas Comerciales (`VendedorBono`)**: Los bonos en estado `OTORGADO` acumulados por el vendedor en el período se integran automáticamente en la liquidación como partidas a cobrar, pasando a `PAGADO` al registrar el pago o devolviéndose a `OTORGADO` si la liquidación es anulada.
+    - **Panel de Desglose Contable y Badges**: La vista detallada de la liquidación exhibe un panel de métricas multiconcepto y badges visuales para cada fila de comisión. Solo comisiones en estado `APROBADA` sin liquidación previa son elegibles.
 
 ---
 
@@ -175,19 +180,13 @@ erDiagram
 - **Máquina de Estados por Abonos**: `PENDIENTE` $\to$ `PARCIALMENTE_PAGADA` $\to$ `PAGADA`.
 - **Venta Automática e Idempotente**: Al saldar el 100% de la reserva, se dispara la venta (`SAL-XXXXXX`) y se genera el snapshot de comisión.
 
-### 4.4 Motor de Comisiones y Jerarquía de Reglas (`src/modules/excursiones/comisiones/`)
-Jerarquía de especificidad estricta para asignación de reglas de comisión:
-
-```mermaid
-graph TD
-    A["6. VENDEDOR_EXCURSION (Prioridad Máxima)"] --> B["5. VENDEDOR"]
-    B --> C["4. TIPO_VENDEDOR"]
-    C --> D["3. EXCURSION (Actividad)"]
-    D --> E["2. CATEGORIA"]
-    E --> F["1. GENERAL (Toda la Empresa)"]
-```
-
-- Soporta: `PORCENTAJE` (sobre tarifa por pasajero / venta), `FIJO_VENTA`, `FIJO_ADULTO`, `FIJO_NINO`, `ESCALON` y `PAQUETE_REGALO`.
+### 4.4 Motor de Comisiones y Evaluación Multi-Regla (`src/modules/excursiones/comisiones/`)
+- **Evaluación Multi-Regla (`reglasAplicables`)**:
+  - A cada venta se le aplican **todas las reglas vigentes** a las que aplique el vendedor (ej. porcentaje de excursión + paquete de regalo por fidelización + tarifa fija por tipo de vendedor).
+  - Si existen reglas con idéntico ámbito y tipo de cálculo, prevalece la más reciente; pero si tienen distinto tipo o ámbito, se ejecutan de manera acumulativa generando sus respectivas entradas en `ComisionEntrada` para esa venta.
+  - Si no existe ninguna regla aplicable, se utiliza la regla general del 10% por defecto.
+- **Tipos de Cálculo Soportados**: `PORCENTAJE` (sobre base neta), `FIJO_VENTA`, `FIJO_ADULTO`, `FIJO_NINO`, `ESCALON` y `PAQUETE_REGALO`.
+- **Integración de Paquetes en Liquidación**: Las comisiones aprobadas de `PAQUETE_REGALO` son auditadas y vinculadas a la liquidación (`comisionesDelPeriodo`), registrándose en el comprobante como vouchers/cortesías en especie sin inflar el importe dinerario a transferir por banco.
 - **Tope a la Base**: Si la comisión calculada excede el neto comisionable, se ajusta automáticamente al tope de la base sin crear deudas ficticias.
 - **Motor Multi-Moneda y Tasas Predeterminadas (`obtenerDetalleConversion`)**:
   - Toda venta de excursión se registra en su moneda operativa (`USD`, `DOP`, etc.).
