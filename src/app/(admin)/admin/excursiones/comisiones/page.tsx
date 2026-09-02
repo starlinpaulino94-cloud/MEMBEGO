@@ -11,6 +11,7 @@ import {
   TONO_COMISION,
   type EstadoComision,
 } from '@/modules/excursiones/comisiones/nucleo'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ComisionAcciones } from '@/components/excursiones/ComisionAcciones'
 import { StatusChip } from '@/components/ui/status-chip'
@@ -26,10 +27,32 @@ export default async function ComisionesPage() {
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="las comisiones de excursiones" />
 
-  const [comisiones, resumen] = await Promise.all([
+  const [comisiones, resumen, config] = await Promise.all([
     listadoComisiones(companyId),
     resumenComisiones(companyId),
+    getExcursionesConfig(companyId),
   ])
+
+  const convertir = (monto: number, de: string, a: string, tasas: Record<string, number>): number => {
+    if (de === a) return monto
+    const key = `${de}_${a}`
+    if (tasas[key]) return monto * tasas[key]
+    const reverse = `${a}_${de}`
+    if (tasas[reverse]) return monto / tasas[reverse]
+    return monto // ponytail: sin tasa disponible, asumir 1:1
+  }
+
+  const resumenUnificado = resumen.reduce((acc, r) => {
+    const existing = acc.find((a) => a.estado === r.estado)
+    const montoConvertido = convertir(r.total, r.moneda, config.monedaDefecto, config.tasasCambio)
+    if (existing) {
+      existing.total += montoConvertido
+      existing.cantidad += r.cantidad
+    } else {
+      acc.push({ estado: r.estado, total: montoConvertido, cantidad: r.cantidad })
+    }
+    return acc
+  }, [] as { estado: string; total: number; cantidad: number }[])
 
   return (
     <div className="space-y-4">
@@ -45,11 +68,11 @@ export default async function ComisionesPage() {
         </Button>
       </div>
 
-      {resumen.length > 0 ? (
+      {resumenUnificado.length > 0 ? (
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {resumen.map((r) => (
-            <div key={`${r.estado}-${r.moneda}`} className="rounded-xl border border-border bg-card p-3 text-center">
-              <dd className="text-h3 text-foreground">{formatMoney(r.total, { moneda: r.moneda }, 2)}</dd>
+          {resumenUnificado.map((r) => (
+            <div key={r.estado} className="rounded-xl border border-border bg-card p-3 text-center">
+              <dd className="text-h3 text-foreground">{formatMoney(r.total, { moneda: config.monedaDefecto }, 2)}</dd>
               <dt className="text-caption text-muted-foreground">
                 {ESTADO_COMISION_LABEL[r.estado as EstadoComision] ?? r.estado} · {r.cantidad}
               </dt>
