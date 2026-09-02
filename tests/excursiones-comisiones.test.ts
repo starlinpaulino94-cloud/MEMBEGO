@@ -7,6 +7,8 @@ import {
   ajustePorCancelacion,
   puedeTransicionar,
   motivoTransicionInvalida,
+  puedeTransicionarManualComision,
+  motivoTransicionManualInvalida,
   normalizarEscalones,
   validarRegla,
   type ReglaComision,
@@ -32,7 +34,7 @@ function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
     exports: mockExports,
     parent: null,
     children: [],
-  }
+  } as any
 }
 
 function restoreModules() {
@@ -64,6 +66,7 @@ mockModule('../src/lib/server-utils.ts', {
 })
 
 let mockFindFirstResult: unknown = null
+let mockCreatedAjuste: any = null
 mockModule('../src/lib/tenant.ts', {
   conEmpresa: async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) => {
     const tx = {
@@ -71,7 +74,10 @@ mockModule('../src/lib/tenant.ts', {
         findFirst: async () => mockFindFirstResult,
       },
       comisionAjuste: {
-        create: async () => ({}),
+        create: async (args: { data: Record<string, unknown> }) => {
+          mockCreatedAjuste = args.data
+          return {}
+        },
       },
       auditLog: {
         create: async () => ({}),
@@ -219,6 +225,30 @@ test('una comisión pagada es terminal: se corrige con ajuste, no con estado', (
   assert.equal(motivoTransicionInvalida('GENERADA', 'APROBADA'), null)
 })
 
+test('transiciones manuales desde la sección de comisiones están restringidas', () => {
+  // Manualmente solo se aprueba o anula
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'APROBADA'), true)
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'ANULADA'), true)
+  assert.equal(puedeTransicionarManualComision('APROBADA', 'ANULADA'), true)
+  assert.equal(puedeTransicionarManualComision('ANULADA', 'GENERADA'), true)
+
+  // Prohibido transicionar manualmente a PENDIENTE_PAGO o PAGADA
+  assert.equal(puedeTransicionarManualComision('APROBADA', 'PENDIENTE_PAGO'), false)
+  assert.equal(puedeTransicionarManualComision('APROBADA', 'PAGADA'), false)
+  assert.equal(puedeTransicionarManualComision('PENDIENTE_PAGO', 'PAGADA'), false)
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'PENDIENTE_PAGO'), false)
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'PAGADA'), false)
+
+  assert.match(
+    motivoTransicionManualInvalida('APROBADA', 'PENDIENTE_PAGO') ?? '',
+    /proceso de liquidación/
+  )
+  assert.match(
+    motivoTransicionManualInvalida('APROBADA', 'PAGADA') ?? '',
+    /proceso de liquidación/
+  )
+})
+
 test('reanudar: ANULADA → GENERADA está permitido, salto directo no', () => {
   assert.equal(puedeTransicionar('ANULADA', 'GENERADA'), true)
   assert.equal(puedeTransicionar('ANULADA', 'PAGADA'), false)
@@ -300,26 +330,30 @@ async function runAjustar(estado: string) {
   return ajustarComision({} as never, buildFormData())
 }
 
-test('ajustar comisión APROBADA tiene éxito', async () => {
-  const result = await runAjustar('APROBADA')
+test('ajustar comisión GENERADA tiene éxito (antes de aprobarse)', async () => {
+  const result = await runAjustar('GENERADA')
   assert.equal(result.error, undefined)
   assert.equal(result.success, 'Ajuste registrado.')
 })
 
-test('ajustar comisión GENERADA falla: estado no ajustable', async () => {
-  const result = await runAjustar('GENERADA')
-  assert.match(result.error ?? '', /Aprobada, Pendiente de pago o Pagada/)
+test('ajustar comisión APROBADA falla: no se ajusta tras aprobación', async () => {
+  const result = await runAjustar('APROBADA')
+  assert.match(result.error ?? '', /después de haber sido aprobada/)
+})
+
+test('ajustar comisión PENDIENTE_PAGO falla: no se ajusta en liquidación', async () => {
+  const result = await runAjustar('PENDIENTE_PAGO')
+  assert.match(result.error ?? '', /después de haber sido aprobada/)
+})
+
+test('ajustar comisión PAGADA falla: no se ajusta tras pago', async () => {
+  const result = await runAjustar('PAGADA')
+  assert.match(result.error ?? '', /después de haber sido aprobada/)
 })
 
 test('ajustar comisión ANULADA falla: estado no ajustable', async () => {
   const result = await runAjustar('ANULADA')
-  assert.match(result.error ?? '', /Aprobada, Pendiente de pago o Pagada/)
-})
-
-test('ajustar comisión PAGADA tiene éxito (caso principal)', async () => {
-  const result = await runAjustar('PAGADA')
-  assert.equal(result.error, undefined)
-  assert.equal(result.success, 'Ajuste registrado.')
+  assert.match(result.error ?? '', /Solo se pueden ajustar comisiones en estado Generada/)
 })
 
 test('ajustar comisión inexistente falla', async () => {
@@ -327,4 +361,49 @@ test('ajustar comisión inexistente falla', async () => {
   const result = ajustarComision({} as never, buildFormData())
   const resolved = await result
   assert.match(resolved.error ?? '', /no encontrada/)
+})
+
+test('ajustar comisión con selector RESTAR guarda monto negativo', async () => {
+  mockCreatedAjuste = null
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 100,
+    estado: 'GENERADA',
+    ajustes: [],
+  }
+  const fd = buildFormData({ monto: '25.50' })
+  fd.set('tipoAjuste', 'RESTAR')
+  const result = await ajustarComision({} as never, fd)
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+  assert.equal(mockCreatedAjuste?.monto, -25.50)
+})
+
+test('ajustar comisión con selector SUMAR guarda monto positivo', async () => {
+  mockCreatedAjuste = null
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 100,
+    estado: 'GENERADA',
+    ajustes: [],
+  }
+  const fd = buildFormData({ monto: '15' })
+  fd.set('tipoAjuste', 'SUMAR')
+  const result = await ajustarComision({} as never, fd)
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+  assert.equal(mockCreatedAjuste?.monto, 15)
+})
+
+test('ajustar comisión con selector RESTAR rechaza si excede el neto disponible', async () => {
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 50,
+    estado: 'GENERADA',
+    ajustes: [{ monto: -20 }], // neto actual = 30
+  }
+  const fd = buildFormData({ monto: '35' })
+  fd.set('tipoAjuste', 'RESTAR')
+  const result = await ajustarComision({} as never, fd)
+  assert.match(result.error ?? '', /no puede pasar del neto actual/)
 })

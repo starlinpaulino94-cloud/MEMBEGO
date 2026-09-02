@@ -17,10 +17,10 @@ import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
 import {
   validarRegla,
-  puedeTransicionar,
-  motivoTransicionInvalida,
   netoComision,
   ESTADOS_COMISION,
+  puedeTransicionarManualComision,
+  motivoTransicionManualInvalida,
   type EstadoComision,
 } from './nucleo'
 
@@ -291,8 +291,14 @@ export async function alternarRegla(
 }
 
 /**
- * ADMIN · Mover una comisión por su ciclo de vida. La máquina de estados vive
- * en el núcleo y aquí solo se obedece: una comisión pagada no retrocede.
+ * ADMIN · Mover una comisión por su ciclo de vida manual.
+ * Solo se permite:
+ * - GENERADA → APROBADA o ANULADA
+ * - APROBADA → ANULADA (si no está vinculada a una liquidación activa)
+ * - ANULADA → GENERADA
+ *
+ * Las transiciones a PENDIENTE_PAGO y PAGADA ocurren exclusivamente a través
+ * del flujo de liquidaciones.
  */
 export async function cambiarEstadoComision(
   _prev: ComisionActionState,
@@ -312,14 +318,25 @@ export async function cambiarEstadoComision(
     const comision = await conEmpresa(companyId, (tx) =>
       tx.comisionEntrada.findFirst({
         where: { id: comisionId, companyId },
-        select: { id: true, estado: true },
+        select: { id: true, estado: true, liquidacionId: true },
       })
     )
     if (!comision) return { error: 'Comisión no encontrada.' }
 
     const desde = comision.estado as EstadoComision
-    if (!puedeTransicionar(desde, estado)) {
-      return { error: motivoTransicionInvalida(desde, estado) ?? 'Cambio no permitido.' }
+    if (!puedeTransicionarManualComision(desde, estado)) {
+      return {
+        error:
+          motivoTransicionManualInvalida(desde, estado) ??
+          'Transición no permitida desde la sección de comisiones.',
+      }
+    }
+
+    if (desde === 'APROBADA' && estado === 'ANULADA' && comision.liquidacionId) {
+      return {
+        error:
+          'Esta comisión está vinculada a una liquidación. Cancela o modifica la liquidación primero.',
+      }
     }
 
     const esReanude = desde === 'ANULADA' && estado === 'GENERADA'
@@ -360,10 +377,19 @@ export async function ajustarComision(
     if (!companyId) return { error: 'Empresa requerida.' }
     const comisionId = String(formData.get('comisionId') ?? '')
     const motivo = String(formData.get('motivo') ?? '').trim().slice(0, 300)
-    const monto = Math.round(Number(String(formData.get('monto') ?? '')) * 100) / 100
+    const tipoAjuste = String(formData.get('tipoAjuste') ?? '').trim().toUpperCase()
+    const inputMonto = Math.round(Number(String(formData.get('monto') ?? '')) * 100) / 100
+
+    let monto = inputMonto
+    if (tipoAjuste === 'RESTAR') {
+      monto = -Math.abs(inputMonto)
+    } else if (tipoAjuste === 'SUMAR') {
+      monto = Math.abs(inputMonto)
+    }
+
     if (!motivo) return { error: 'Un ajuste sin motivo no se puede auditar: escribe por qué.' }
     if (!Number.isFinite(monto) || monto === 0) {
-      return { error: 'El ajuste debe ser un monto distinto de cero (negativo para descontar).' }
+      return { error: 'El ajuste debe ser un monto distinto de cero.' }
     }
 
     const comision = await conEmpresa(companyId, (tx) =>
@@ -374,9 +400,15 @@ export async function ajustarComision(
     )
     if (!comision) return { error: 'Comisión no encontrada.' }
 
-    const ESTADOS_AJUSTABLES = ['APROBADA', 'PENDIENTE_PAGO', 'PAGADA'] as const
+    const ESTADOS_AJUSTABLES = ['GENERADA'] as const
     if (!(ESTADOS_AJUSTABLES as readonly string[]).includes(comision.estado)) {
-      return { error: 'Solo se pueden ajustar comisiones en estado Aprobada, Pendiente de pago o Pagada.' }
+      if (['APROBADA', 'PENDIENTE_PAGO', 'PAGADA'].includes(comision.estado)) {
+        return {
+          error:
+            'Una comisión no se puede ajustar después de haber sido aprobada, puesta en liquidación o pagada.',
+        }
+      }
+      return { error: 'Solo se pueden ajustar comisiones en estado Generada (antes de ser aprobadas).' }
     }
 
     // Un ajuste no puede dejar al vendedor debiendo dinero.

@@ -110,12 +110,27 @@ export function resolver(raw: Record<string, unknown> | null): ExcursionesConfig
     enviarRecordatorioHoras: int(raw.enviarRecordatorioHoras, 24, 0, 168),
     emailNotificaciones: raw.emailNotificaciones != null ? String(raw.emailNotificaciones) : null,
     metodosPagoHabilitados: Array.isArray(raw.metodosPagoHabilitados)
-      ? (raw.metodosPagoHabilitados as unknown[]).filter((m): m is string => typeof m === 'string' && m.trim()).map(m => m.trim())
+      ? (raw.metodosPagoHabilitados as unknown[]).filter((m): m is string => typeof m === 'string' && Boolean(m.trim())).map(m => m.trim())
       : DEFAULTS.metodosPagoHabilitados,
     tasasCambio: (typeof raw.tasasCambio === 'object' && raw.tasasCambio !== null
       ? raw.tasasCambio as Record<string, number>
       : {}),
   }
+}
+
+/** Convierte un monto de una moneda a otra usando tasas de cambio. */
+export function convertirMoneda(
+  monto: number,
+  de: string,
+  a: string,
+  tasas: Record<string, number>
+): number {
+  if (de === a) return monto
+  const key = `${de}_${a}`
+  if (tasas[key]) return monto * tasas[key]
+  const reverse = `${a}_${de}`
+  if (tasas[reverse]) return monto / tasas[reverse]
+  return monto // sin tasa disponible, asumir 1:1
 }
 
 /** Configuración efectiva de la empresa (defaults si no hay fila/JSON). */
