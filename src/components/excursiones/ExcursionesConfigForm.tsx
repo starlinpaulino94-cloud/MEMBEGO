@@ -350,7 +350,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3 items-start">
+        <div className="grid gap-4 sm:grid-cols-3 items-center">
           <div>
             <Label htmlFor="diasGraciaCheckin" className="text-xs font-semibold">
               Días de gracia
