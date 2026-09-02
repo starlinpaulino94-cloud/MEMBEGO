@@ -47,6 +47,7 @@ import {
   SlidersHorizontal,
   type LucideIcon,
   Blocks,
+  Contact,
 } from 'lucide-react'
 import type { AppRole } from '@/types'
 import {
@@ -163,6 +164,7 @@ const ADMIN_NAV: NavGroup[] = [
     id: 'marketing',
     label: 'Marketing',
     items: [
+      { href: '/admin/crm', label: 'Prospectos', icon: Contact },
       { href: '/admin/campanas', label: 'Campañas', icon: Flag },
       { href: '/admin/publicaciones', label: 'Publicaciones', icon: Newspaper },
       { href: '/admin/notificaciones', label: 'Notificaciones', icon: Bell },
