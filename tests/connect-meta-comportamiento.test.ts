@@ -33,6 +33,17 @@ const codigo = (r: string) =>
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
+/**
+ * SQL sin sus comentarios. Hace falta por la misma razón de siempre: el
+ * archivo EXPLICA por qué no se usa `CONCURRENTLY`, y esa frase hacía fallar
+ * la comprobación que lo prohíbe, encontrándose a sí misma.
+ */
+const sql = (r: string) =>
+  leer(r)
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('--'))
+    .join('\n')
+
 const CODE = 'AQD-codigo-canjeable'
 const WABA = '102290129340398'
 const NUM = '106540352242922'
@@ -193,9 +204,14 @@ test('unicidad: la base impide que dos empresas reclamen la misma cuenta', () =>
   const esquema = leer('prisma/schema/connect.prisma')
   assert.match(esquema, /@@unique\(\[conectorId, cuentaExterna\]\)/)
 
-  const migracion = leer('prisma/migrations/20260905_connect_identidad_externa/migration.sql')
-  assert.match(migracion, /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS/)
+  const migracion = sql('prisma/migrations/20260905_connect_identidad_externa/migration.sql')
+  assert.match(migracion, /CREATE UNIQUE INDEX IF NOT EXISTS/)
   assert.match(migracion, /"conectorId", "cuentaExterna"/)
+  // `CONCURRENTLY` no puede correr dentro de una transacción y el editor SQL
+  // envuelve lo que se le pega en una: obligaba a partir el archivo a mano y
+  // reventaba con «25001». El archivo lo explica en un comentario, por eso se
+  // comprueba sobre el SQL sin comentarios.
+  assert.ok(!/CONCURRENTLY/.test(migracion), 'la migración volvió a usar CONCURRENTLY')
 
   // Y el alta traduce el choque a algo que se puede resolver.
   const src = codigo('src/modules/connect/metaEmbedded.ts')
