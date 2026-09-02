@@ -218,7 +218,7 @@ export function ComisionDetalleSheet({
                 <p className="text-sm text-foreground leading-relaxed">{comision.desglose}</p>
               </div>
               {comision.esReglaPredeterminada && (
-                <span className="shrink-0 text-[11px] font-medium bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-md">
+                <span className="shrink-0 text-xs font-medium bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-lg">
                   Regla general predeterminada
                 </span>
               )}
@@ -232,10 +232,10 @@ export function ComisionDetalleSheet({
                     <ArrowLeftRight className="h-3.5 w-3.5" />
                     Conversión con Tasa Predeterminada
                   </span>
-                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md ${
+                  <span className={`text-xs font-mono px-2 py-0.5 rounded-lg ${
                     comision.conversion.tasaConfigurada
                       ? 'bg-primary/10 text-primary font-medium'
-                      : 'bg-amber-500/20 text-amber-700 dark:text-amber-400 font-semibold'
+                      : 'bg-muted text-muted-foreground font-semibold border border-border'
                   }`}>
                     {comision.conversion.tasaConfigurada ? 'Tasa Configurada' : 'Tasa 1:1 no configurada'}
                   </span>
@@ -243,13 +243,13 @@ export function ComisionDetalleSheet({
 
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                   <div>
-                    <span className="text-muted-foreground block text-[11px]">Monto original ({comision.monedaOriginal})</span>
+                    <span className="text-muted-foreground block text-caption">Monto original ({comision.monedaOriginal})</span>
                     <p className="font-mono font-bold text-foreground">
                       {formatMoney(comision.netoOriginal ?? comision.monto, { moneda: comision.monedaOriginal ?? comision.moneda }, 2)}
                     </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block text-[11px]">Tasa de cambio aplicada</span>
+                    <span className="text-muted-foreground block text-caption">Tasa de cambio aplicada</span>
                     <p className="font-mono font-bold text-foreground">
                       {comision.conversion.tasaLabel}
                     </p>
@@ -257,7 +257,7 @@ export function ComisionDetalleSheet({
                 </div>
 
                 {!comision.conversion.tasaConfigurada && (
-                  <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2 rounded-lg mt-1">
+                  <p className="text-xs text-muted-foreground bg-muted/40 p-2 rounded-lg mt-1 border border-border">
                     Esta divisa no tiene una tasa de cambio configurada en los ajustes de la empresa, por lo que se utilizó una paridad 1:1 provisional.
                   </p>
                 )}
@@ -271,7 +271,7 @@ export function ComisionDetalleSheet({
                   {formatMoney(comision.base, { moneda: comision.moneda }, 2)}
                 </p>
                 {comision.conversion?.esConversion && comision.baseOriginal !== undefined && (
-                  <p className="text-[11px] text-muted-foreground font-mono">
+                  <p className="text-caption text-muted-foreground font-mono">
                     Orig: {formatMoney(comision.baseOriginal, { moneda: comision.monedaOriginal ?? comision.moneda }, 2)}
                   </p>
                 )}
@@ -282,7 +282,7 @@ export function ComisionDetalleSheet({
                   {formatMoney(comision.monto, { moneda: comision.moneda }, 2)}
                 </p>
                 {comision.conversion?.esConversion && comision.montoOriginal !== undefined && (
-                  <p className="text-[11px] text-muted-foreground font-mono">
+                  <p className="text-caption text-muted-foreground font-mono">
                     Orig: {formatMoney(comision.montoOriginal, { moneda: comision.monedaOriginal ?? comision.moneda }, 2)}
                   </p>
                 )}

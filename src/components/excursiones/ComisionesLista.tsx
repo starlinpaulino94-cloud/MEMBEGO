@@ -335,7 +335,7 @@ export function ComisionesLista({
                   <td className="px-4 py-3 max-w-md">
                     <p className="text-sm text-foreground">{c.desglose}</p>
                     {c.esReglaPredeterminada && (
-                      <span className="mt-1 inline-block text-[11px] font-medium bg-muted text-muted-foreground border border-border px-1.5 py-0.5 rounded">
+                      <span className="mt-1 inline-block text-xs font-medium bg-muted text-muted-foreground border border-border px-1.5 py-0.5 rounded-lg">
                         Regla general predeterminada
                       </span>
                     )}
@@ -356,28 +356,6 @@ export function ComisionesLista({
                     <p className="font-mono font-bold text-foreground">
                       {formatMoney(c.neto, { moneda: c.moneda }, 2)}
                     </p>
-                    {c.conversion?.esConversion ? (
-                      <div className="mt-1 space-y-0.5">
-                        <span
-                          className="inline-flex items-center gap-1 text-[11px] font-mono font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded"
-                          title={`Conversión con tasa predeterminada: ${c.conversion.tasaLabel}`}
-                        >
-                          💱 {c.conversion.tasaLabel}
-                        </span>
-                        <p className="text-caption text-muted-foreground font-mono">
-                          Orig: {formatMoney(c.netoOriginal ?? c.monto, { moneda: c.monedaOriginal ?? c.moneda }, 2)}
-                        </p>
-                        {!c.conversion.tasaConfigurada && (
-                          <span className="block text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
-                            Tasa 1:1 no configurada
-                          </span>
-                        )}
-                      </div>
-                    ) : c.neto !== c.monto ? (
-                      <p className="text-caption text-muted-foreground font-mono">
-                        Orig: {formatMoney(c.monto, { moneda: c.moneda }, 2)}
-                      </p>
-                    ) : null}
                   </td>
 
                   {/* Estado */}

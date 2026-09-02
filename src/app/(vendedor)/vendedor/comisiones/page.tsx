@@ -107,10 +107,10 @@ export default async function MiDineroPage() {
                         <p className="font-mono font-bold text-sm text-foreground">{dinero(l.neto, l.moneda)}</p>
                         {l.conversion?.esConversion ? (
                           <div className="mt-0.5 space-y-0.5">
-                            <span className="inline-block text-[10px] font-mono text-primary bg-primary/10 px-1 py-0.5 rounded" title={l.conversion.tasaLabel}>
+                            <span className="inline-block text-xs font-mono text-primary bg-primary/10 px-1 py-0.5 rounded-lg" title={l.conversion.tasaLabel}>
                               💱 {l.conversion.tasaLabel}
                             </span>
-                            <p className="text-[10px] text-muted-foreground font-mono">
+                            <p className="text-xs text-muted-foreground font-mono">
                               Orig: {formatMoney(l.netoOriginal, { moneda: l.monedaOriginal }, 2)}
                             </p>
                           </div>

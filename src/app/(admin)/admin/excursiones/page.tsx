@@ -124,29 +124,6 @@ export default async function ExcursionesPanelPage({
           </nav>
         </div>
 
-        {/* ── BARRA DE MONEDA Y TASAS PREDETERMINADAS ── */}
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Moneda base:</span>
-            <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md">
-              {config.monedaDefecto}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-            <span>Tasas predeterminadas:</span>
-            {Object.keys(config.tasasCambio).length > 0 ? (
-              Object.entries(config.tasasCambio).map(([k, v]) => (
-                <span key={k} className="font-mono bg-muted px-1.5 py-0.5 rounded border border-border text-foreground font-medium">
-                  {k.replace('_', ' → ')}: {v}
-                </span>
-              ))
-            ) : (
-              <span className="italic">Paridad 1:1</span>
-            )}
-          </div>
-        </div>
-
         <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {kpis.map((k) => (
             <div key={k.label} className="rounded-2xl border border-border bg-card p-4">
