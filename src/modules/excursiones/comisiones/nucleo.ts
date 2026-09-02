@@ -277,25 +277,61 @@ function vigente(regla: ReglaComision, fecha: Date): boolean {
   return true
 }
 
+function firmaRegla(r: ReglaComision): string {
+  return [
+    r.ambito,
+    r.tipoCalculo,
+    r.excursionId ?? '',
+    r.vendedorId ?? '',
+    r.tipoVendedor ?? '',
+    r.categoria ?? '',
+  ].join(':')
+}
+
 /**
- * La regla que gobierna esta venta: la más específica entre las vigentes y, a
- * igual especificidad, la más reciente. Sin regla no hay comisión — y eso es
- * un resultado legítimo, no un error: significa que la empresa no ha definido
- * cuánto paga, y adivinar una cifra sería inventar una deuda.
+ * Retorna TODAS las reglas que aplican a la venta y al vendedor.
+ * Permite esquemas multi-regla (ej. comisión porcentual + paquete de regalo + bono por tipo de vendedor).
+ * Si hay reglas duplicadas de idéntico ámbito y tipo de cálculo, prevalece la más reciente.
+ */
+export function reglasAplicables(
+  reglas: ReglaComision[],
+  ctx: ContextoVenta
+): ReglaComision[] {
+  const candidatas = reglas
+    .filter((r) => vigente(r, ctx.fecha) && reglaCorresponde(r, ctx))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+  // Deduplica por firma única para evitar evaluar dos veces la misma regla idéntica
+  const vistas = new Set<string>()
+  const unicas: ReglaComision[] = []
+
+  for (const r of candidatas) {
+    const firma = firmaRegla(r)
+    if (!vistas.has(firma)) {
+      vistas.add(firma)
+      unicas.push(r)
+    }
+  }
+
+  return unicas
+}
+
+/**
+ * La regla individual de mayor especificidad que gobierna esta venta.
+ * Se preserva para consultas individuales y compatibilidad histórica.
  */
 export function reglaAplicable(
   reglas: ReglaComision[],
   ctx: ContextoVenta
 ): ReglaComision | null {
-  const candidatas = reglas
-    .filter((r) => vigente(r, ctx.fecha) && reglaCorresponde(r, ctx))
-    .sort((a, b) => {
-      const pesoA = PESO_AMBITO[a.ambito as AmbitoRegla] ?? 0
-      const pesoB = PESO_AMBITO[b.ambito as AmbitoRegla] ?? 0
-      if (pesoA !== pesoB) return pesoB - pesoA
-      return b.createdAt.getTime() - a.createdAt.getTime()
-    })
-  return candidatas[0] ?? null
+  const todas = [...reglasAplicables(reglas, ctx)]
+  if (todas.length === 0) return null
+  return todas.sort((a, b) => {
+    const pesoA = PESO_AMBITO[a.ambito as AmbitoRegla] ?? 0
+    const pesoB = PESO_AMBITO[b.ambito as AmbitoRegla] ?? 0
+    if (pesoA !== pesoB) return pesoB - pesoA
+    return b.createdAt.getTime() - a.createdAt.getTime()
+  })[0] ?? null
 }
 
 export interface ComisionCalculada {
