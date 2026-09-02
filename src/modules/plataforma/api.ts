@@ -1,5 +1,4 @@
 import 'server-only'
-import { createHash } from 'crypto'
 import type { NextRequest, NextResponse } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -210,16 +209,7 @@ export async function autenticar(
 
   const verificado = verificarToken(secretoFirma, token)
   if (!verificado.ok) {
-    // DIAG TEMPORAL: la huella del secreto que ESTE handler usó para verificar,
-    // para compararla con la que usó /oauth/token al firmar. Si difieren, el
-    // token se firmó y se verificó con secretos distintos. Borrar tras el fix.
-    const verifyFp = createHash('sha256').update(secretoFirma).digest('hex').slice(0, 12)
-    return {
-      fallo: errorApi(verificado.fallo === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN', requestId, {
-        reason: `verify_fp=${verifyFp} fallo=${verificado.fallo}`,
-      }),
-      requestId,
-    }
+    return negar(verificado.fallo === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN')
   }
 
   // El límite se cuenta ANTES de tocar la base y DESPUÉS de verificar la firma:
