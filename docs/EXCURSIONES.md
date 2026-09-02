@@ -42,7 +42,7 @@ Empresa → Vendedor/Turoperador → Enlace/QR/Form → Cliente/Agencia → Auto
    - **Los precios provienen del servidor**: El navegador nunca envía montos; el backend consulta el catálogo y congela precios e impuestos en la reserva.
    - **Nada se borra**: Los pagos se anulan mediante contra-asientos registrados; las reservas y ventas se cancelan preservando auditoría.
    - **Comisiones con Snapshot**: La comisión guarda una fotografía inmutable de la regla (`reglaSnapshot`) y una explicación legible (`desglose`). Modificar reglas a futuro no altera comisiones históricas.
-   - **Comisiones pagadas no se anulan**: Se corrigen mediante `ComisionAjuste` con signo (+/−).
+   - **Ajustes de comisiones previos a la aprobación**: Las comisiones pueden ajustarse con signo (+/−) mediante `ComisionAjuste` mientras estén en estado `GENERADA`. Una vez aprobadas, en liquidación o pagadas, quedan congeladas y no admiten ajustes posteriores.
    - **Sin comisionar impuestos**: La base comisionable es el monto neto recibido por la empresa excluyendo el ITBIS/impuestos estatales.
 5. **Manejo de Zona Horaria**:
    - Plataforma fijada en `America/Santo_Domingo` (`OFFSET_PLATAFORMA_MIN = -240`, UTC−4 todo el año sin horario de verano).
@@ -127,8 +127,15 @@ erDiagram
   - **`ESCALON`**: Por tramos de volumen de pasajeros.
   - **`PAQUETE_REGALO`**: Paquete de cortesía cada N ventas.
 - **`ComisionEntrada`**: Registro de comisión generado. Congela la base, el monto calculado, `reglaSnapshot` JSON, texto explicativo `desglose` y estado (`ESTIMADA`, `GENERADA`, `APROBADA`, `PENDIENTE_PAGO`, `PAGADA`, `ANULADA`).
-- **`ComisionAjuste`**: Contra-asientos contables firmados con signo (+/−) vinculados a la comisión para cancelaciones o penalidades.
-- **`Liquidacion`**: Agrupación de pago a un vendedor `numero` (`PAY-2026-0014`), rango de fechas, suma neta total, método, referencia bancaria y estado (`BORRADOR`, `APROBADA`, `PAGADA`, `ANULADA`).
+  - **Ciclo de Vida y Transiciones**:
+    - `GENERADA` $\to$ `APROBADA` / `ANULADA`: Manual desde el módulo de Comisiones.
+    - `APROBADA` $\to$ `PENDIENTE_PAGO`: Automático al incluirse en un borrador de liquidación (`BORRADOR`).
+    - `PENDIENTE_PAGO` $\to$ `PAGADA`: Automático al registrar el pago de la liquidación (`PAGADA`).
+    - `PENDIENTE_PAGO` $\to$ `APROBADA`: Automático al anular la liquidación (`ANULADA`), liberando la comisión.
+    - `ANULADA` $\to$ `GENERADA`: Reanudar manual desde Comisiones.
+    - Las comisiones `APROBADA`, `PENDIENTE_PAGO` y `PAGADA` quedan congeladas y no admiten ajustes posteriores; los ajustes (`ComisionAjuste`) con selector de Sumar/Restar solo se pueden aplicar mientras la comisión esté en estado `GENERADA` antes de ser aprobada.
+- **`ComisionAjuste`**: Contra-asientos contables firmados con signo (+/−) vinculados a la comisión (penalidad o bonificación previa a la aprobación).
+- **`Liquidacion`**: Agrupación de pago a un vendedor `numero` (`PAY-2026-0014`), rango de fechas, suma neta total, método, referencia bancaria y estado (`BORRADOR`, `APROBADA`, `PAGADA`, `ANULADA`). Solo comisiones en estado `APROBADA` sin liquidación previa son elegibles.
 
 ---
 
@@ -255,10 +262,10 @@ graph LR
 | `/admin/excursiones/reservas` | Bandeja y filtros de reservas por estado, fecha y vendedor. |
 | `/admin/excursiones/reservas/nueva` | Creación de reserva manual desde administración. |
 | `/admin/excursiones/reservas/[id]` | Ficha de reserva: registro de abonos parciales, venta y boleto QR. |
-| `/admin/excursiones/comisiones` | Bandeja de comisiones generadas, desglose y aprobación contable. |
+| `/admin/excursiones/comisiones` | Bandeja de comisiones con filtros por vendedor y estado, desglose y aprobación contable. |
 | `/admin/excursiones/comisiones/reglas` | Gestor de reglas comerciales por ámbito (Vendedor, Tipo Vendedor, Escalonado). |
-| `/admin/excursiones/liquidaciones` | Generador y registro de liquidaciones y pagos bancarios. |
-| `/admin/excursiones/liquidaciones/[id]` | Detalle de liquidación con comprobante de pago con referencia. |
+| `/admin/excursiones/liquidaciones` | Generador de liquidaciones con autollenado de fechas y bandeja con filtros por vendedor, estado y período. |
+| `/admin/excursiones/liquidaciones/[id]` | Detalle de liquidación con comprobante y modal interactivo para registro de pago con referencia bancaria. |
 | `/admin/excursiones/checkin` | Escáner de boletos QR y manifiesto de acceso/embarque del día. |
 | `/admin/excursiones/metas` | Gestor de metas comerciales por vendedor y tipo de vendedor. |
 | `/admin/excursiones/reportes` | Selector de rango de fechas y descarga de reporte contable consolidado en CSV. |
