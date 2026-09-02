@@ -1,5 +1,4 @@
 import 'server-only'
-import { createHash } from 'crypto'
 import type { NextRequest, NextResponse } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -206,20 +205,11 @@ export async function autenticar(
   if (!secretoFirma) return negar('PLATFORM_API_UNCONFIGURED')
 
   const token = bruto
-  if (!token) return { fallo: errorApi('INVALID_TOKEN', requestId, { reason: 'no_token_en_cabecera' }), requestId }
+  if (!token) return negar('INVALID_TOKEN')
 
   const verificado = verificarToken(secretoFirma, token)
   if (!verificado.ok) {
-    // DIAG TEMPORAL: la huella del secreto que ESTE handler usó para verificar,
-    // para compararla con la que usó /oauth/token al firmar. Si difieren, el
-    // token se firmó y se verificó con secretos distintos. Borrar tras el fix.
-    const verifyFp = createHash('sha256').update(secretoFirma).digest('hex').slice(0, 12)
-    return {
-      fallo: errorApi(verificado.fallo === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN', requestId, {
-        reason: `verify_fp=${verifyFp} fallo=${verificado.fallo}`,
-      }),
-      requestId,
-    }
+    return negar(verificado.fallo === 'EXPIRED' ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN')
   }
 
   // El límite se cuenta ANTES de tocar la base y DESPUÉS de verificar la firma:
@@ -233,26 +223,7 @@ export async function autenticar(
   // recortarle permisos tiene que cerrar la puerta ya, no cuando caduque el
   // token que alguien pidió hace catorce minutos.
   const credencial = await leerCredencial(verificado.datos.cid)
-  if (!credencial) {
-    // DIAG TEMPORAL: por qué leerCredencial devolvió null. Reconsulta directa
-    // (sin el join a sistema) para distinguir "no existe" de "excepción en el
-    // join a sistema bajo RLS". Borrar tras el fix.
-    let motivo = 'cred_null:desconocido'
-    try {
-      const raw = await sinEmpresa('diag credencial (temporal)', (tx) =>
-        tx.credencialSistema.findUnique({
-          where: { clientId: verificado.datos.cid },
-          select: { estado: true, expiresAt: true, sistemaId: true },
-        })
-      )
-      motivo = raw
-        ? `cred_null:existe estado=${raw.estado} exp=${raw.expiresAt ? 'si' : 'no'} sistemaId=${raw.sistemaId}`
-        : 'cred_null:no_existe_por_clientId'
-    } catch (e) {
-      motivo = `cred_null:excepcion ${(e as Error).message.slice(0, 120)}`
-    }
-    return { fallo: errorApi('INVALID_TOKEN', requestId, { reason: motivo }), requestId }
-  }
+  if (!credencial) return negar('INVALID_TOKEN')
 
   const scopes = scopesEfectivos(verificado.datos.scopes, credencial.scopes)
   if (scopeRequerido !== null && !scopes.includes(scopeRequerido)) {
