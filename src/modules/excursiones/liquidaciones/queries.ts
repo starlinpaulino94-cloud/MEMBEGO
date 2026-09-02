@@ -1,27 +1,31 @@
 import { conEmpresa } from '@/lib/tenant'
+import { getExcursionesConfig, convertirMoneda } from '../config'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
 
 /** Liquidaciones de la empresa con el nombre de a quién se le pagó. */
 export async function listadoLiquidaciones(companyId: string) {
-  const liquidaciones = await conEmpresa(companyId, (tx) =>
-    tx.liquidacion.findMany({
-      where: { companyId },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        id: true,
-        numero: true,
-        vendedorId: true,
-        periodoDesde: true,
-        periodoHasta: true,
-        total: true,
-        moneda: true,
-        estado: true,
-        pagadaAt: true,
-        _count: { select: { comisiones: true } },
-      },
-    })
-  )
+  const [liquidaciones, config] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.liquidacion.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: {
+          id: true,
+          numero: true,
+          vendedorId: true,
+          periodoDesde: true,
+          periodoHasta: true,
+          total: true,
+          moneda: true,
+          estado: true,
+          pagadaAt: true,
+          _count: { select: { comisiones: true } },
+        },
+      })
+    ),
+    getExcursionesConfig(companyId),
+  ])
   if (liquidaciones.length === 0) return []
 
   const vendedores = await conEmpresa(companyId, (tx) =>
@@ -31,18 +35,20 @@ export async function listadoLiquidaciones(companyId: string) {
     })
   )
   const porId = new Map(vendedores.map((v) => [v.id, v]))
+  const { monedaDefecto, tasasCambio } = config
 
   return liquidaciones.map((l) => {
     const v = porId.get(l.vendedorId)
     return {
       id: l.id,
       numero: l.numero,
+      vendedorId: l.vendedorId,
       vendedor: v ? `${v.nombre} ${v.apellido ?? ''}`.trim() : 'Vendedor',
       vendedorCodigo: v?.codigo ?? null,
       periodoDesde: l.periodoDesde,
       periodoHasta: l.periodoHasta,
-      total: Number(l.total),
-      moneda: l.moneda,
+      total: convertirMoneda(Number(l.total), l.moneda, monedaDefecto, tasasCambio),
+      moneda: monedaDefecto,
       estado: l.estado,
       pagadaAt: l.pagadaAt,
       comisiones: l._count.comisiones,
@@ -112,35 +118,55 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
  * lo primero que quiere ver quien va a pagar: a quién y cuánto.
  */
 export async function vendedoresPorLiquidar(companyId: string) {
-  const pendientes = await conEmpresa(companyId, (tx) =>
-    tx.comisionEntrada.findMany({
-      where: {
-        companyId,
-        liquidacionId: null,
-        estado: { in: ['APROBADA', 'PENDIENTE_PAGO'] },
-      },
-      select: {
-        vendedorId: true,
-        monto: true,
-        moneda: true,
-        ajustes: { select: { monto: true } },
-      },
-    })
-  )
+  const [pendientes, config] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.comisionEntrada.findMany({
+        where: {
+          companyId,
+          liquidacionId: null,
+          estado: 'APROBADA',
+        },
+        select: {
+          vendedorId: true,
+          monto: true,
+          moneda: true,
+          createdAt: true,
+          ajustes: { select: { monto: true } },
+        },
+      })
+    ),
+    getExcursionesConfig(companyId),
+  ])
   if (pendientes.length === 0) return []
 
-  const acumulado = new Map<string, { total: number; cantidad: number; moneda: string }>()
+  const { monedaDefecto, tasasCambio } = config
+  const acumulado = new Map<
+    string,
+    { total: number; cantidad: number; minDate: Date; maxDate: Date }
+  >()
   for (const c of pendientes) {
     const neto = netoComision(
       Number(c.monto),
       c.ajustes.map((a) => ({ monto: Number(a.monto) }))
     )
     if (neto <= 0) continue
-    const previo = acumulado.get(c.vendedorId) ?? { total: 0, cantidad: 0, moneda: c.moneda }
+    const convertido = convertirMoneda(neto, c.moneda, monedaDefecto, tasasCambio)
+    const previo = acumulado.get(c.vendedorId)
+    const minDate = previo
+      ? c.createdAt < previo.minDate
+        ? c.createdAt
+        : previo.minDate
+      : c.createdAt
+    const maxDate = previo
+      ? c.createdAt > previo.maxDate
+        ? c.createdAt
+        : previo.maxDate
+      : c.createdAt
     acumulado.set(c.vendedorId, {
-      total: Math.round((previo.total + neto) * 100) / 100,
-      cantidad: previo.cantidad + 1,
-      moneda: previo.moneda,
+      total: Math.round(((previo?.total ?? 0) + convertido) * 100) / 100,
+      cantidad: (previo?.cantidad ?? 0) + 1,
+      minDate,
+      maxDate,
     })
   }
   if (acumulado.size === 0) return []
@@ -161,7 +187,9 @@ export async function vendedoresPorLiquidar(companyId: string) {
         codigo: v.codigo,
         total: datos.total,
         cantidad: datos.cantidad,
-        moneda: datos.moneda,
+        moneda: monedaDefecto,
+        fechaMasVieja: datos.minDate.toISOString().slice(0, 10),
+        fechaMasReciente: datos.maxDate.toISOString().slice(0, 10),
       }
     })
     .sort((a, b) => b.total - a.total)

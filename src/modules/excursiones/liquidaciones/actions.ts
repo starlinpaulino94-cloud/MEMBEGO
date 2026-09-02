@@ -100,7 +100,7 @@ export async function crearLiquidacion(
           companyId,
           vendedorId: v.datos.vendedorId,
           liquidacionId: null,
-          estado: { in: ['APROBADA', 'PENDIENTE_PAGO'] },
+          estado: 'APROBADA',
           createdAt: { gte: v.datos.desde, lte: v.datos.hasta },
         },
         select: {
@@ -163,13 +163,14 @@ export async function crearLiquidacion(
             select: { id: true, numero: true },
           })
 
-          // Reserva atómica: solo se llevan las que SIGUEN libres. Si otra
+          // Reserva atómica: solo se llevan las que SIGUEN libres y aprobadas. Si otra
           // liquidación ganó la carrera, aquí se ve y se corrige el total.
           const tomadas = await tx.comisionEntrada.updateMany({
             where: {
               id: { in: elegidas.map((c) => c.id) },
               companyId,
               liquidacionId: null,
+              estado: 'APROBADA',
             },
             data: { liquidacionId: liquidacion.id, estado: 'PENDIENTE_PAGO' },
           })
@@ -223,6 +224,7 @@ export async function crearLiquidacion(
       total: resultado.total,
     })
     revalidatePath('/admin/excursiones/liquidaciones')
+    revalidatePath('/admin/excursiones/comisiones')
     return {
       success: resultado.parcial
         ? `Liquidación ${resultado.liquidacion.numero} creada con ${resultado.cantidad} comisiones. Alguna quedó fuera porque ya entró en otra liquidación.`

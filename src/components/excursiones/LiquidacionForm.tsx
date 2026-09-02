@@ -6,7 +6,7 @@
  * calcula el servidor sumando las comisiones que realmente entran.
  */
 
-import { useActionState, useEffect } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -29,11 +29,16 @@ export interface PendientePorVendedor {
   total: number
   cantidad: number
   moneda: string
+  fechaMasVieja?: string
+  fechaMasReciente?: string
 }
 
 export function LiquidacionForm({ pendientes }: { pendientes: PendientePorVendedor[] }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(crearLiquidacion, init)
+  const [vendedorId, setVendedorId] = useState('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
 
   useEffect(() => {
     if (state.liquidacionId) {
@@ -41,6 +46,15 @@ export function LiquidacionForm({ pendientes }: { pendientes: PendientePorVended
       router.push(`/admin/excursiones/liquidaciones/${state.liquidacionId}`)
     }
   }, [state, router])
+
+  const handleVendedorChange = (id: string) => {
+    setVendedorId(id)
+    const p = pendientes.find((item) => item.id === id)
+    if (p?.fechaMasVieja && p?.fechaMasReciente) {
+      setDesde(p.fechaMasVieja)
+      setHasta(p.fechaMasReciente)
+    }
+  }
 
   if (pendientes.length === 0) {
     return (
@@ -68,6 +82,8 @@ export function LiquidacionForm({ pendientes }: { pendientes: PendientePorVended
         <select
           id="liq-vendedor"
           name="vendedorId"
+          value={vendedorId}
+          onChange={(e) => handleVendedorChange(e.target.value)}
           required
           className="mt-1.5 block w-full rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground"
         >
@@ -84,11 +100,25 @@ export function LiquidacionForm({ pendientes }: { pendientes: PendientePorVended
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="liq-desde">Desde *</Label>
-          <Input id="liq-desde" name="desde" type="date" required />
+          <Input 
+            id="liq-desde" 
+            name="desde" 
+            type="date" 
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            required 
+          />
         </div>
         <div>
           <Label htmlFor="liq-hasta">Hasta *</Label>
-          <Input id="liq-hasta" name="hasta" type="date" required />
+          <Input 
+            id="liq-hasta" 
+            name="hasta" 
+            type="date" 
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            required 
+          />
         </div>
       </div>
 

@@ -91,8 +91,8 @@ export interface ComisionLiquidable {
  *
  * - Del vendedor que se va a pagar.
  * - Dentro del período (por la fecha en que se generó la comisión).
- * - APROBADA o PENDIENTE_PAGO: una GENERADA todavía no la aprobó nadie, y una
- *   PAGADA o ANULADA ya no debe nada.
+ * - APROBADA: para liquidar una comisión debe estar previamente aprobada;
+ *   una GENERADA todavía no la aprobó nadie, y una PAGADA o ANULADA ya no debe nada.
  * - Sin liquidación previa: nadie cobra dos veces lo mismo (regla 1).
  *
  * Las de neto cero se dejan fuera: no son un pago, son ruido en el recibo.
@@ -105,7 +105,7 @@ export function comisionesDelPeriodo(
     (c) =>
       c.vendedorId === criterio.vendedorId &&
       c.liquidacionId === null &&
-      (c.estado === 'APROBADA' || c.estado === 'PENDIENTE_PAGO') &&
+      c.estado === 'APROBADA' &&
       c.neto > 0 &&
       c.createdAt >= criterio.desde &&
       c.createdAt <= criterio.hasta
