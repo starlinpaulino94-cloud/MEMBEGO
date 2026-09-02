@@ -6,7 +6,6 @@ import { Settings, Workflow, Zap, Plus, Pencil, Trash2, ChevronUp, ChevronDown, 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -67,7 +66,6 @@ const DEFAULT_CAMPOS: CampoPersonalizado[] = [
 ]
 
 let nextStageId = 10
-let nextCampoId = 100
 
 // ── Page ────────────────────────────────────────────────────────────────────
 

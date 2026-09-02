@@ -34,7 +34,6 @@ import {
   CheckCircle2,
   Plus,
   Search,
-  CalendarPlus,
 } from 'lucide-react'
 
 // ── Types ───────────────────────────────────────────────────────────────────

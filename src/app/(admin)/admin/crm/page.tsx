@@ -183,16 +183,24 @@ let nextOfertaId = 100
 function LeadCard({
   lead,
   onDragStart,
+  onDragEnd,
   onClick,
 }: {
   lead: Lead
   onDragStart: (id: string) => void
+  /**
+   * Sin esto, un arrastre que termina FUERA de una columna válida deja
+   * `draggedId` puesto: la tarjeta se queda medio transparente hasta la
+   * siguiente interacción. `onDrop` solo se dispara al soltar en un destino.
+   */
+  onDragEnd: () => void
   onClick: () => void
 }) {
   return (
     <Card
       draggable
       onDragStart={() => onDragStart(lead.id)}
+      onDragEnd={onDragEnd}
       onClick={onClick}
       className="cursor-grab select-none transition-shadow hover:shadow-md active:cursor-grabbing"
     >
@@ -552,6 +560,7 @@ export default function PipelinePage() {
                         <LeadCard
                           lead={lead}
                           onDragStart={onDragStart}
+                          onDragEnd={onDragEnd}
                           onClick={() => { setDetailLead(lead); setEditing(false) }}
                         />
                       </div>
