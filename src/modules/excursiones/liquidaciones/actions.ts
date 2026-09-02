@@ -18,6 +18,7 @@ import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
+import { getExcursionesConfig, convertirMoneda } from '../config'
 import {
   ESTADOS_LIQUIDACION,
   comisionesDelPeriodo,
@@ -93,6 +94,8 @@ export async function crearLiquidacion(
     if (!vendedor) return { error: 'Ese vendedor no existe en tu empresa.' }
 
     const anio = v.datos.hasta.getUTCFullYear()
+    const config = await getExcursionesConfig(companyId)
+    const moneda = config.monedaDefecto || 'DOP'
 
     const resultado = await conEmpresa(companyId, async (tx) => {
       const candidatas = await tx.comisionEntrada.findMany({
@@ -115,17 +118,21 @@ export async function crearLiquidacion(
         },
       })
 
-      const liquidables: ComisionLiquidable[] = candidatas.map((c) => ({
-        id: c.id,
-        vendedorId: c.vendedorId,
-        estado: c.estado,
-        neto: netoComision(
+      const liquidables: ComisionLiquidable[] = candidatas.map((c) => {
+        const netoOrig = netoComision(
           Number(c.monto),
           c.ajustes.map((a) => ({ monto: Number(a.monto) }))
-        ),
-        createdAt: c.createdAt,
-        liquidacionId: c.liquidacionId,
-      }))
+        )
+        const netoConvertido = convertirMoneda(netoOrig, c.moneda, moneda, config.tasasCambio)
+        return {
+          id: c.id,
+          vendedorId: c.vendedorId,
+          estado: c.estado,
+          neto: netoConvertido,
+          createdAt: c.createdAt,
+          liquidacionId: c.liquidacionId,
+        }
+      })
       const elegidas = comisionesDelPeriodo(liquidables, {
         vendedorId: v.datos.vendedorId,
         desde: v.datos.desde,
@@ -134,7 +141,6 @@ export async function crearLiquidacion(
       if (elegidas.length === 0) return { vacia: true as const }
 
       const total = totalLiquidacion(elegidas.map((c) => c.neto))
-      const moneda = candidatas[0]?.moneda ?? 'DOP'
 
       let intento =
         (await tx.liquidacion.count({

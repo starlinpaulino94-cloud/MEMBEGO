@@ -73,7 +73,7 @@ export function LiquidacionForm({ pendientes }: { pendientes: PendientePorVended
         <h2 className="text-h3 text-foreground">Preparar una liquidación</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Se incluyen las comisiones aprobadas del período que no estén ya en otra liquidación.
-          El total lo calcula MembeGo.
+          Los montos se consolidan en la moneda predeterminada de la empresa según la tasa de cambio configurada.
         </p>
       </div>
 

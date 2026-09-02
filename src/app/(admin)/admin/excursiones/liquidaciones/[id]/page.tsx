@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { liquidacionDetalle } from '@/modules/excursiones/liquidaciones/queries'
@@ -29,7 +29,7 @@ export default async function LiquidacionDetallePage({
   const { id } = await params
   const detalle = await liquidacionDetalle(companyId, id)
   if (!detalle) notFound()
-  const { liquidacion, vendedor, lineas } = detalle
+  const { liquidacion, vendedor, lineas, comisionesConConversion, tasasUsadas } = detalle
 
   const moneda = liquidacion.moneda
   const estado = liquidacion.estado as EstadoLiquidacion
@@ -89,6 +89,30 @@ export default async function LiquidacionDetallePage({
         </section>
       ) : null}
 
+      {comisionesConConversion > 0 && (
+        <section className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs space-y-2">
+          <div className="flex items-center gap-2">
+            <ArrowLeftRight className="h-4 w-4 text-primary shrink-0" />
+            <p className="font-semibold text-foreground text-sm">
+              Liquidación Multi-Moneda con Tasa Predeterminada
+            </p>
+          </div>
+          <p className="text-muted-foreground">
+            Esta liquidación en <strong className="text-foreground font-semibold">{moneda}</strong> incluye{' '}
+            <strong className="text-foreground font-semibold">{comisionesConConversion}</strong> comisi
+            {comisionesConConversion === 1 ? 'ón' : 'ones'} que requirieron conversión de divisa utilizando
+            las tasas predeterminadas configuradas en la empresa:
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {tasasUsadas.map((t) => (
+              <span key={t} className="font-mono bg-background border border-border px-2 py-0.5 rounded text-foreground font-medium">
+                {t}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="text-h3 text-foreground">Comisiones incluidas</h2>
         <p className="mt-1 text-caption text-muted-foreground">
@@ -122,7 +146,27 @@ export default async function LiquidacionDetallePage({
                     ) : null}
                   </td>
                   <td className="py-2 pr-3 text-muted-foreground">{formatDate(l.createdAt)}</td>
-                  <td className="py-2 text-right font-medium text-foreground">{dinero(l.neto)}</td>
+                  <td className="py-2 text-right font-medium text-foreground">
+                    <p className="font-mono font-bold">{dinero(l.neto)}</p>
+                    {l.conversion.esConversion ? (
+                      <div className="mt-1 space-y-0.5 text-right">
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-mono font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded"
+                          title={`Tasa predeterminada aplicada: ${l.conversion.tasaLabel}`}
+                        >
+                          💱 {l.conversion.tasaLabel}
+                        </span>
+                        <p className="text-caption text-muted-foreground font-mono">
+                          Orig: {formatMoney(l.netoOriginal, { moneda: l.monedaOriginal }, 2)}
+                        </p>
+                        {!l.conversion.tasaConfigurada && (
+                          <span className="block text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                            Tasa 1:1 no configurada
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

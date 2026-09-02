@@ -15,6 +15,7 @@ import {
   AlertCircle,
   PlusCircle,
   MinusCircle,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -27,6 +28,7 @@ import {
   TONO_COMISION,
   type EstadoComision,
 } from '@/modules/excursiones/comisiones/nucleo'
+import type { DetalleConversionMoneda } from '@/modules/excursiones/config'
 import {
   Sheet,
   SheetContent,
@@ -49,6 +51,12 @@ export interface ComisionDetalleItem {
   base: number
   monto: number
   neto: number
+  baseOriginal?: number
+  montoOriginal?: number
+  netoOriginal?: number
+  monedaOriginal?: string
+  conversion?: DetalleConversionMoneda
+  esReglaPredeterminada?: boolean
   ajustes: Array<{ monto: number; motivo: string }>
   moneda: string
   desglose: string
@@ -204,10 +212,57 @@ export function ComisionDetalleSheet({
             Cálculo & Regla
           </h3>
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <div className="flex items-start gap-2">
-              <Sliders className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-              <p className="text-sm text-foreground leading-relaxed">{comision.desglose}</p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2">
+                <Sliders className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-sm text-foreground leading-relaxed">{comision.desglose}</p>
+              </div>
+              {comision.esReglaPredeterminada && (
+                <span className="shrink-0 text-[11px] font-medium bg-muted text-muted-foreground border border-border px-2 py-0.5 rounded-md">
+                  Regla general predeterminada
+                </span>
+              )}
             </div>
+
+            {/* Conversión y Tasa Predeterminada */}
+            {comision.conversion?.esConversion && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    Conversión con Tasa Predeterminada
+                  </span>
+                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded-md ${
+                    comision.conversion.tasaConfigurada
+                      ? 'bg-primary/10 text-primary font-medium'
+                      : 'bg-amber-500/20 text-amber-700 dark:text-amber-400 font-semibold'
+                  }`}>
+                    {comision.conversion.tasaConfigurada ? 'Tasa Configurada' : 'Tasa 1:1 no configurada'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Monto original ({comision.monedaOriginal})</span>
+                    <p className="font-mono font-bold text-foreground">
+                      {formatMoney(comision.netoOriginal ?? comision.monto, { moneda: comision.monedaOriginal ?? comision.moneda }, 2)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Tasa de cambio aplicada</span>
+                    <p className="font-mono font-bold text-foreground">
+                      {comision.conversion.tasaLabel}
+                    </p>
+                  </div>
+                </div>
+
+                {!comision.conversion.tasaConfigurada && (
+                  <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 p-2 rounded-lg mt-1">
+                    Esta divisa no tiene una tasa de cambio configurada en los ajustes de la empresa, por lo que se utilizó una paridad 1:1 provisional.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/60 text-sm">
               <div>
@@ -215,12 +270,22 @@ export function ComisionDetalleSheet({
                 <p className="font-mono font-medium text-foreground">
                   {formatMoney(comision.base, { moneda: comision.moneda }, 2)}
                 </p>
+                {comision.conversion?.esConversion && comision.baseOriginal !== undefined && (
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    Orig: {formatMoney(comision.baseOriginal, { moneda: comision.monedaOriginal ?? comision.moneda }, 2)}
+                  </p>
+                )}
               </div>
               <div>
                 <span className="text-caption text-muted-foreground">Monto Original</span>
                 <p className="font-mono font-medium text-foreground">
                   {formatMoney(comision.monto, { moneda: comision.moneda }, 2)}
                 </p>
+                {comision.conversion?.esConversion && comision.montoOriginal !== undefined && (
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    Orig: {formatMoney(comision.montoOriginal, { moneda: comision.monedaOriginal ?? comision.moneda }, 2)}
+                  </p>
+                )}
               </div>
             </div>
 

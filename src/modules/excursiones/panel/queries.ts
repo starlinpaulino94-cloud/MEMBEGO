@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
 import { calcularSaldo } from '@/modules/excursiones/reservas/nucleo'
+import { getExcursionesConfig, obtenerDetalleConversion, type DetalleConversionMoneda } from '../config'
 
 /**
  * EXCURSIONES · Panel del vendedor — lecturas.
@@ -140,47 +141,60 @@ export async function misReservas(companyId: string, vendedorId: string) {
  * comisiones vivas — no hay contador guardado que se pueda desincronizar.
  */
 export async function misComisiones(companyId: string, vendedorId: string) {
-  const comisiones = await conEmpresa(companyId, (tx) =>
-    tx.comisionEntrada.findMany({
-      where: { companyId, vendedorId, estado: { not: 'ANULADA' } },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        id: true,
-        monto: true,
-        moneda: true,
-        desglose: true,
-        estado: true,
-        createdAt: true,
-        ajustes: { select: { monto: true } },
-        venta: { select: { numero: true } },
-        liquidacion: { select: { numero: true, estado: true } },
-      },
-    })
-  )
+  const [comisiones, config] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.comisionEntrada.findMany({
+        where: { companyId, vendedorId, estado: { not: 'ANULADA' } },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: {
+          id: true,
+          monto: true,
+          moneda: true,
+          desglose: true,
+          estado: true,
+          createdAt: true,
+          ajustes: { select: { monto: true } },
+          venta: { select: { numero: true } },
+          liquidacion: { select: { numero: true, estado: true } },
+        },
+      })
+    ),
+    getExcursionesConfig(companyId),
+  ])
 
-  const lineas = comisiones.map((c) => ({
-    id: c.id,
-    neto: netoComision(
+  const { monedaDefecto, tasasCambio } = config
+
+  const lineas = comisiones.map((c) => {
+    const netoOrig = netoComision(
       Number(c.monto),
       c.ajustes.map((a) => ({ monto: Number(a.monto) }))
-    ),
-    moneda: c.moneda,
-    desglose: c.desglose,
-    estado: c.estado,
-    createdAt: c.createdAt,
-    venta: c.venta?.numero ?? '—',
-    liquidacion: c.liquidacion?.numero ?? null,
-  }))
+    )
+    const conv = obtenerDetalleConversion(netoOrig, c.moneda, monedaDefecto, tasasCambio)
+    return {
+      id: c.id,
+      neto: conv.montoConvertido,
+      moneda: monedaDefecto,
+      netoOriginal: netoOrig,
+      monedaOriginal: c.moneda,
+      conversion: conv,
+      desglose: c.desglose,
+      estado: c.estado,
+      createdAt: c.createdAt,
+      venta: c.venta?.numero ?? '—',
+      liquidacion: c.liquidacion?.numero ?? null,
+    }
+  })
 
   const suma = (filtro: (l: (typeof lineas)[number]) => boolean) =>
     Math.round(lineas.filter(filtro).reduce((t, l) => t + l.neto, 0) * 100) / 100
 
   return {
     lineas,
-    moneda: lineas.find((l) => l.moneda)?.moneda ?? 'DOP',
+    moneda: monedaDefecto,
     porCobrar: suma((l) => l.estado !== 'PAGADA'),
     cobrado: suma((l) => l.estado === 'PAGADA'),
+    tasasCambio,
   }
 }
 

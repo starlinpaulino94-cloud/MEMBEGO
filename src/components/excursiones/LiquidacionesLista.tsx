@@ -228,7 +228,7 @@ export function LiquidacionesLista({
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-h3 text-foreground font-semibold">Historial de Liquidaciones</h2>
             <span className="text-xs text-muted-foreground">
-              {filtradas.length} registro{filtradas.length === 1 ? '' : 's'}
+              Consolidado en {monedaDefecto} · {filtradas.length} registro{filtradas.length === 1 ? '' : 's'}
             </span>
           </div>
           <table className="w-full text-sm">
@@ -238,7 +238,7 @@ export function LiquidacionesLista({
                 <th className="py-2 pr-3">Vendedor</th>
                 <th className="py-2 pr-3">Período</th>
                 <th className="py-2 pr-3">Comisiones</th>
-                <th className="py-2 pr-3">Total</th>
+                <th className="py-2 pr-3">Total ({monedaDefecto})</th>
                 <th className="py-2">Estado</th>
               </tr>
             </thead>

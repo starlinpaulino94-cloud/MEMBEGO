@@ -127,6 +127,15 @@ erDiagram
   - **`ESCALON`**: Por tramos de volumen de pasajeros.
   - **`PAQUETE_REGALO`**: Paquete de cortesía cada N ventas.
 - **`ComisionEntrada`**: Registro de comisión generado. Congela la base, el monto calculado, `reglaSnapshot` JSON, texto explicativo `desglose` y estado (`ESTIMADA`, `GENERADA`, `APROBADA`, `PENDIENTE_PAGO`, `PAGADA`, `ANULADA`).
+  - **Conversión de Moneda y Tasas Predeterminadas**:
+    - Las comisiones se generan en la moneda de la venta asociada (`monedaOriginal`).
+    - Al consultarse en listados, resúmenes contables y recibos de liquidación, se convierten a la moneda base de la empresa (`monedaDefecto`, ej. `DOP`) usando el motor puro `obtenerDetalleConversion`:
+      - **Tasa Directa**: Busca `${de}_${a}` en `tasasCambio` de `ExcursionesConfig` (ej: `USD_DOP: 58.50` $\to$ `monto * 58.50`).
+      - **Tasa Inversa**: Si solo existe `${a}_${de}`, invierte la paridad (ej: `monto / 58.50`).
+      - **Fallback 1:1 Seguro**: Si la divisa no tiene tasa configurada en la empresa, asume paridad 1:1 provisional y levanta una advertencia (`tasaConfigurada: false`) tanto en el banner contable como en la fila y ficha de la comisión.
+      - **Auditoría Transparente**: Se preservan siempre los valores originales (`monedaOriginal`, `baseOriginal`, `montoOriginal`, `netoOriginal`) junto a la etiqueta legible de la tasa (`tasaLabel`, ej. `1 USD = 58.5 DOP`).
+  - **Identificación de Regla General Predeterminada**:
+    - Las comisiones que caen en la regla general de la empresa (`ambito: 'GENERAL'` o fallback de 10%) se etiquetan con el indicador `esReglaPredeterminada` para trazabilidad inmediata.
   - **Ciclo de Vida y Transiciones**:
     - `GENERADA` $\to$ `APROBADA` / `ANULADA`: Manual desde el módulo de Comisiones.
     - `APROBADA` $\to$ `PENDIENTE_PAGO`: Automático al incluirse en un borrador de liquidación (`BORRADOR`).
@@ -135,7 +144,7 @@ erDiagram
     - `ANULADA` $\to$ `GENERADA`: Reanudar manual desde Comisiones.
     - Las comisiones `APROBADA`, `PENDIENTE_PAGO` y `PAGADA` quedan congeladas y no admiten ajustes posteriores; los ajustes (`ComisionAjuste`) con selector de Sumar/Restar solo se pueden aplicar mientras la comisión esté en estado `GENERADA` antes de ser aprobada.
 - **`ComisionAjuste`**: Contra-asientos contables firmados con signo (+/−) vinculados a la comisión (penalidad o bonificación previa a la aprobación).
-- **`Liquidacion`**: Agrupación de pago a un vendedor `numero` (`PAY-2026-0014`), rango de fechas, suma neta total, método, referencia bancaria y estado (`BORRADOR`, `APROBADA`, `PAGADA`, `ANULADA`). Solo comisiones en estado `APROBADA` sin liquidación previa son elegibles.
+- **`Liquidacion`**: Agrupación de pago a un vendedor `numero` (`PAY-2026-0014`), rango de fechas, suma neta total, método, referencia bancaria y estado (`BORRADOR`, `APROBADA`, `PAGADA`, `ANULADA`). Las comisiones incluidas en distintas divisas se consolidan en la moneda predeterminada de la empresa (`monedaDefecto`) calculando el contravalor exacto mediante `obtenerDetalleConversion`. Solo comisiones en estado `APROBADA` sin liquidación previa son elegibles.
 
 ---
 
@@ -180,10 +189,19 @@ graph TD
 
 - Soporta: `PORCENTAJE` (sobre tarifa por pasajero / venta), `FIJO_VENTA`, `FIJO_ADULTO`, `FIJO_NINO`, `ESCALON` y `PAQUETE_REGALO`.
 - **Tope a la Base**: Si la comisión calculada excede el neto comisionable, se ajusta automáticamente al tope de la base sin crear deudas ficticias.
+- **Motor Multi-Moneda y Tasas Predeterminadas (`obtenerDetalleConversion`)**:
+  - Toda venta de excursión se registra en su moneda operativa (`USD`, `DOP`, etc.).
+  - Para evitar desfases cambiarios y dar transparencia absoluta:
+    - Las comisiones congelan su `monedaOriginal` y montos base originales.
+    - El listado administrativo (`listadoComisiones`) y el resumen ejecutivo (`resumenComisiones`) calculan la conversión a la moneda predeterminada de la empresa (`monedaDefecto`) aplicando las tasas configuradas en `tasasCambio`.
+    - Cada fila muestra la insignia de conversión con la tasa aplicada (`1 USD = 58.5 DOP`), el neto en moneda base y el monto original en su divisa.
+    - Si una venta ocurre en una divisa sin tasa registrada, se advierte con alerta visual de tasa 1:1 no configurada.
+    - Si la comisión nació de la regla general de la empresa, se etiqueta explícitamente como regla general predeterminada.
 
 ### 4.5 Metas de Ventas y Reportes (`src/modules/excursiones/metricas/` y `reportes/`)
+- **Consolidación Financiera en Moneda Predeterminada**: `resumenDelPeriodo` y `rankingVendedores` convierten automáticamente todas las ventas y comisiones multi-moneda a la divisa base de la empresa (`monedaDefecto`) usando las tasas predeterminadas configuradas, garantizando KPIs coherentes sin mezclar divisas.
 - **Metas Comerciales**: Seguimiento en tiempo real por vendedor o tipo de vendedor en ventas, pasajeros, ingresos o captación.
-- **Exportación CSV Consolidada**: Estructurada en 4 bloques jerárquicos: Resumen del Período, Ventas, Comisiones (con ajustes firmados) y Liquidaciones bancarias con codificación UTF-8 BOM.
+- **Exportación CSV Consolidada**: Estructurada en 4 bloques jerárquicos: Resumen del Período, Ventas, Comisiones (con ajustes firmados y tasas) y Liquidaciones bancarias con codificación UTF-8 BOM.
 - **Corte de Fechas en Hora Local**: `America/Santo_Domingo` (UTC−4) garantizando coherencia fiscal y operativa.
 
 ### 4.6 Check-in y Boletos QR (`src/modules/excursiones/checkin/`)
@@ -252,7 +270,7 @@ graph LR
 
 | Ruta | Propósito |
 |---|---|
-| `/admin/excursiones` | Dashboard general con KPIs de ventas, ranking de promotores y accesos directos. |
+| `/admin/excursiones` | Dashboard general con KPIs consolidados en moneda predeterminada, barra de tasas de cambio activas y ranking normalizado. |
 | `/admin/excursiones/catalogo` | Catálogo de actividades, atracciones y paquetes combos con control de capacidad. |
 | `/admin/excursiones/catalogo/nueva` | Creador de actividades individuales, pases de día y paquetes combos. |
 | `/admin/excursiones/catalogo/[id]` | Edición de actividad, tarifas diferenciadas, horarios e ítems de combo. |
@@ -262,10 +280,10 @@ graph LR
 | `/admin/excursiones/reservas` | Bandeja y filtros de reservas por estado, fecha y vendedor. |
 | `/admin/excursiones/reservas/nueva` | Creación de reserva manual desde administración. |
 | `/admin/excursiones/reservas/[id]` | Ficha de reserva: registro de abonos parciales, venta y boleto QR. |
-| `/admin/excursiones/comisiones` | Bandeja de comisiones con filtros por vendedor y estado, desglose y aprobación contable. |
+| `/admin/excursiones/comisiones` | Bandeja de comisiones con banner de moneda base y tasas activas, filtros por estado/tasa predeterminada/regla general, insignias de conversión y drawer contable. |
 | `/admin/excursiones/comisiones/reglas` | Gestor de reglas comerciales por ámbito (Vendedor, Tipo Vendedor, Escalonado). |
-| `/admin/excursiones/liquidaciones` | Generador de liquidaciones con autollenado de fechas y bandeja con filtros por vendedor, estado y período. |
-| `/admin/excursiones/liquidaciones/[id]` | Detalle de liquidación con comprobante y modal interactivo para registro de pago con referencia bancaria. |
+| `/admin/excursiones/liquidaciones` | Generador de liquidaciones consolidadas en moneda predeterminada, banner de tasas activas y bandeja histórica. |
+| `/admin/excursiones/liquidaciones/[id]` | Detalle de liquidación con banner multi-moneda con tasas aplicadas, recibo desglosado por comisión (monto original + neto convertido) y registro de pago. |
 | `/admin/excursiones/checkin` | Escáner de boletos QR y manifiesto de acceso/embarque del día. |
 | `/admin/excursiones/metas` | Gestor de metas comerciales por vendedor y tipo de vendedor. |
 | `/admin/excursiones/reportes` | Selector de rango de fechas y descarga de reporte contable consolidado en CSV. |
@@ -278,7 +296,7 @@ graph LR
 | `/vendedor` | Dashboard móvil: balance de comisiones, tarjeta QR, embudo y metas. |
 | `/vendedor/reservas` | Listado de reservas atribuidas al vendedor con estado de pago. |
 | `/vendedor/reservas/nueva` | Formulario de reserva rápido con mobile sticky bar y logística de hotel. |
-| `/vendedor/comisiones` | Historial de comisiones ganadas y liquidaciones. |
+| `/vendedor/comisiones` | Historial de comisiones con insignias de conversión a moneda base según tasa predeterminada y recibos de liquidación. |
 | `/vendedor/metas` | Monitor interactivo de objetivos comerciales con barras de progreso. |
 
 ### Portal del Cliente (`/cliente`)

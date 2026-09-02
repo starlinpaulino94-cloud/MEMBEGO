@@ -1,5 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
-import { getExcursionesConfig, convertirMoneda } from '../config'
+import { getExcursionesConfig, convertirMoneda, obtenerDetalleConversion, type DetalleConversionMoneda } from '../config'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
 
 /** Liquidaciones de la empresa con el nombre de a quién se le pagó. */
@@ -58,26 +58,30 @@ export async function listadoLiquidaciones(companyId: string) {
 
 /** El recibo: la liquidación con cada comisión que la compone. */
 export async function liquidacionDetalle(companyId: string, liquidacionId: string) {
-  const liquidacion = await conEmpresa(companyId, (tx) =>
-    tx.liquidacion.findFirst({
-      where: { id: liquidacionId, companyId },
-      include: {
-        comisiones: {
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            base: true,
-            monto: true,
-            desglose: true,
-            estado: true,
-            createdAt: true,
-            ajustes: { select: { monto: true, motivo: true } },
-            venta: { select: { numero: true } },
+  const [liquidacion, config] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.liquidacion.findFirst({
+        where: { id: liquidacionId, companyId },
+        include: {
+          comisiones: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              base: true,
+              monto: true,
+              moneda: true,
+              desglose: true,
+              estado: true,
+              createdAt: true,
+              ajustes: { select: { monto: true, motivo: true } },
+              venta: { select: { numero: true } },
+            },
           },
         },
-      },
-    })
-  )
+      })
+    ),
+    getExcursionesConfig(companyId),
+  ])
   if (!liquidacion) return null
 
   const vendedor = await conEmpresa(companyId, (tx) =>
@@ -86,6 +90,32 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
       select: { id: true, nombre: true, apellido: true, codigo: true, telefono: true },
     })
   )
+
+  const lineas = liquidacion.comisiones.map((c) => {
+    const ajustes = c.ajustes.map((a) => ({ monto: Number(a.monto), motivo: a.motivo }))
+    const netoOrig = netoComision(
+      Number(c.monto),
+      c.ajustes.map((a) => ({ monto: Number(a.monto) }))
+    )
+    const conv = obtenerDetalleConversion(netoOrig, c.moneda, liquidacion.moneda, config.tasasCambio)
+    return {
+      id: c.id,
+      venta: c.venta?.numero ?? '—',
+      desglose: c.desglose,
+      estado: c.estado,
+      createdAt: c.createdAt,
+      monedaOriginal: c.moneda,
+      montoOriginal: Number(c.monto),
+      netoOriginal: netoOrig,
+      conversion: conv,
+      monto: conv.montoConvertido,
+      neto: conv.montoConvertido,
+      ajustes,
+    }
+  })
+
+  const comisionesConConversion = lineas.filter((l) => l.conversion.esConversion).length
+  const tasasUsadas = [...new Set(lineas.filter((l) => l.conversion.esConversion).map((l) => l.conversion.tasaLabel))]
 
   return {
     liquidacion,
@@ -97,19 +127,9 @@ export async function liquidacionDetalle(companyId: string, liquidacionId: strin
           telefono: vendedor.telefono,
         }
       : null,
-    lineas: liquidacion.comisiones.map((c) => ({
-      id: c.id,
-      venta: c.venta?.numero ?? '—',
-      desglose: c.desglose,
-      estado: c.estado,
-      createdAt: c.createdAt,
-      monto: Number(c.monto),
-      neto: netoComision(
-        Number(c.monto),
-        c.ajustes.map((a) => ({ monto: Number(a.monto) }))
-      ),
-      ajustes: c.ajustes.map((a) => ({ monto: Number(a.monto), motivo: a.motivo })),
-    })),
+    lineas,
+    comisionesConConversion,
+    tasasUsadas,
   }
 }
 

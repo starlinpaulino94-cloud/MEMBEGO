@@ -35,6 +35,12 @@ const ESTADOS_FILTRO: { valor: string; label: string }[] = [
   { valor: 'ANULADA', label: 'Anuladas' },
 ]
 
+const TASAS_FILTRO: { valor: string; label: string }[] = [
+  { valor: 'TODOS', label: 'Todas las comisiones' },
+  { valor: 'CON_CONVERSION', label: 'Con conversión de tasa predeterminada' },
+  { valor: 'REGLA_GENERAL', label: 'Regla general predeterminada' },
+]
+
 export function ComisionesLista({
   comisiones,
   vendedores,
@@ -47,6 +53,7 @@ export function ComisionesLista({
   const [busqueda, setBusqueda] = useState('')
   const [vendedorFiltro, setVendedorFiltro] = useState<string>('TODOS')
   const [estadoFiltro, setEstadoFiltro] = useState<string>('TODOS')
+  const [tasaFiltro, setTasaFiltro] = useState<string>('TODOS')
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [comisionSeleccionada, setComisionSeleccionada] = useState<ComisionRow | null>(null)
@@ -56,6 +63,7 @@ export function ComisionesLista({
     busqueda.trim() !== '' ||
     vendedorFiltro !== 'TODOS' ||
     estadoFiltro !== 'TODOS' ||
+    tasaFiltro !== 'TODOS' ||
     fechaDesde !== '' ||
     fechaHasta !== ''
 
@@ -84,6 +92,7 @@ export function ComisionesLista({
     setBusqueda('')
     setVendedorFiltro('TODOS')
     setEstadoFiltro('TODOS')
+    setTasaFiltro('TODOS')
     setFechaDesde('')
     setFechaHasta('')
   }
@@ -97,6 +106,13 @@ export function ComisionesLista({
       }
       // Filtro de estado
       if (estadoFiltro !== 'TODOS' && c.estado !== estadoFiltro) {
+        return false
+      }
+      // Filtro por tasa / regla
+      if (tasaFiltro === 'CON_CONVERSION' && !c.conversion?.esConversion) {
+        return false
+      }
+      if (tasaFiltro === 'REGLA_GENERAL' && !c.esReglaPredeterminada) {
         return false
       }
       // Filtro por fecha desde
@@ -123,7 +139,7 @@ export function ComisionesLista({
       }
       return true
     })
-  }, [comisiones, busqueda, vendedorFiltro, estadoFiltro, fechaDesde, fechaHasta])
+  }, [comisiones, busqueda, vendedorFiltro, estadoFiltro, tasaFiltro, fechaDesde, fechaHasta])
 
   return (
     <div className="space-y-4">
@@ -170,6 +186,22 @@ export function ComisionesLista({
               {ESTADOS_FILTRO.map((ef) => (
                 <option key={ef.valor} value={ef.valor}>
                   {ef.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro por Tasa Predeterminada */}
+          <div className="w-full sm:w-auto min-w-[170px]">
+            <select
+              aria-label="Filtrar por tasa predeterminada"
+              value={tasaFiltro}
+              onChange={(e) => setTasaFiltro(e.target.value)}
+              className="h-9 w-full rounded-lg border border-input bg-background px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {TASAS_FILTRO.map((tf) => (
+                <option key={tf.valor} value={tf.valor}>
+                  {tf.label}
                 </option>
               ))}
             </select>
@@ -302,6 +334,11 @@ export function ComisionesLista({
                   {/* Cálculo & Desglose */}
                   <td className="px-4 py-3 max-w-md">
                     <p className="text-sm text-foreground">{c.desglose}</p>
+                    {c.esReglaPredeterminada && (
+                      <span className="mt-1 inline-block text-[11px] font-medium bg-muted text-muted-foreground border border-border px-1.5 py-0.5 rounded">
+                        Regla general predeterminada
+                      </span>
+                    )}
                     {c.ajustes.length > 0 ? (
                       <ul className="mt-1.5 space-y-0.5 border-t border-border/60 pt-1">
                         {c.ajustes.map((a, i) => (
@@ -319,7 +356,24 @@ export function ComisionesLista({
                     <p className="font-mono font-bold text-foreground">
                       {formatMoney(c.neto, { moneda: c.moneda }, 2)}
                     </p>
-                    {c.neto !== c.monto ? (
+                    {c.conversion?.esConversion ? (
+                      <div className="mt-1 space-y-0.5">
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-mono font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded"
+                          title={`Conversión con tasa predeterminada: ${c.conversion.tasaLabel}`}
+                        >
+                          💱 {c.conversion.tasaLabel}
+                        </span>
+                        <p className="text-caption text-muted-foreground font-mono">
+                          Orig: {formatMoney(c.netoOriginal ?? c.monto, { moneda: c.monedaOriginal ?? c.moneda }, 2)}
+                        </p>
+                        {!c.conversion.tasaConfigurada && (
+                          <span className="block text-[10px] text-amber-700 dark:text-amber-400 font-semibold">
+                            Tasa 1:1 no configurada
+                          </span>
+                        )}
+                      </div>
+                    ) : c.neto !== c.monto ? (
                       <p className="text-caption text-muted-foreground font-mono">
                         Orig: {formatMoney(c.monto, { moneda: c.moneda }, 2)}
                       </p>
