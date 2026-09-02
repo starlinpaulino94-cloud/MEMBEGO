@@ -11,7 +11,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
-import { conEmpresa } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { cookies } from 'next/headers'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -26,8 +26,14 @@ import {
   validarDisponibilidadComboMultiFecha,
   normalizarHora,
   type ReglaPrecioDinamico,
+  ESTADOS_CERRADOS,
+  esModificable,
+  calcularModificacion,
+  POLITICAS_REEMBOLSO_DEFAULT,
+  type PoliticaReembolso,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
+import { getExcursionesConfig } from '../config'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { resolverEnlace, vendedorParaCliente, VENDEDOR_COOKIE } from '../atribucion/registrar'
 import { procesarVentaYComisionInterna } from '../ventas/actions'
@@ -820,5 +826,217 @@ export async function reservarCarritoAction(
   } catch (e) {
     anotarFallo('excursiones:reservarCarrito')(e)
     return { error: 'Error al procesar el carrito. Intenta de nuevo.' }
+  }
+}
+
+/** CLIENTE · Modificar sus propios pasajeros (solo reducción). */
+export async function modificarMiReserva(
+  _prev: ReservaClienteState,
+  formData: FormData
+): Promise<ReservaClienteState> {
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'Debes iniciar sesión.' }
+
+    const reservaId = String(formData.get('reservaId') ?? '')
+    const nuevosAdultos = Number(formData.get('adultos') ?? '0')
+    const nuevosNinos = Number(formData.get('ninos') ?? '0')
+
+    if (nuevosAdultos + nuevosNinos === 0) {
+      return { error: 'La reserva necesita al menos un pasajero. Para cancelar completa, usa la opción de cancelación.' }
+    }
+
+    // Buscar reserva del cliente
+    const clienteIds = await sinEmpresa('modificarMiReserva: buscar fichas', (tx) =>
+      tx.cliente.findMany({
+        where: { supabaseId: user.supabaseId },
+        select: { id: true, companyId: true },
+      })
+    )
+
+    let reservaEncontrada: {
+      id: string;
+      companyId: string;
+      estado: string;
+      adultos: number;
+      ninos: number;
+      total: { toNumber(): number };
+      moneda: string;
+      descuento: { toNumber(): number };
+      fecha: Date;
+      hora: string | null;
+      excursionId: string;
+      pagos: { monto: unknown; estado: string }[];
+    } | null = null
+
+    for (const c of clienteIds) {
+      const r = await conEmpresa(c.companyId, (tx) =>
+        tx.reservaExc.findFirst({
+          where: { id: reservaId, companyId: c.companyId, clienteId: c.id },
+          select: {
+            id: true, companyId: true, estado: true, adultos: true, ninos: true,
+            total: true, moneda: true, descuento: true,
+            fecha: true, hora: true, excursionId: true,
+            pagos: { select: { monto: true, estado: true } },
+          },
+        })
+      )
+      if (r) { reservaEncontrada = r; break }
+    }
+
+    if (!reservaEncontrada) return { error: 'Reserva no encontrada.' }
+    if (ESTADOS_CERRADOS.includes(reservaEncontrada.estado as typeof ESTADOS_CERRADOS[number])) {
+      return { error: 'Esta reserva ya está cerrada.' }
+    }
+
+    // Obtener precios del catálogo y datos de impuestos
+    const [variante, excursion] = await Promise.all([
+      conEmpresa(reservaEncontrada.companyId, (tx) =>
+        tx.excursionVariante.findFirst({
+          where: { excursionId: reservaEncontrada.excursionId, activa: true },
+          select: { precioAdulto: true, precioNino: true },
+          orderBy: { orden: 'asc' },
+        })
+      ),
+      conEmpresa(reservaEncontrada.companyId, (tx) =>
+        tx.excursion.findFirst({
+          where: { id: reservaEncontrada.excursionId, companyId: reservaEncontrada.companyId },
+          select: { impuestoPct: true },
+        })
+      ),
+    ])
+    if (!variante) return { error: 'No se encontraron precios de la excursión.' }
+
+    // Obtener config de la empresa
+    const config = await getExcursionesConfig(reservaEncontrada.companyId)
+
+    const pagado = Number(
+      reservaEncontrada.pagos
+        .filter((p) => p.estado === 'REGISTRADO')
+        .reduce((s, p) => s + Number(p.monto), 0)
+    )
+
+    const ahora = new Date()
+    const { modificable, horasRestantes } = esModificable(
+      reservaEncontrada.fecha,
+      reservaEncontrada.hora,
+      ahora,
+      config.politica.anticipacionMinimaHoras
+    )
+    if (!modificable) {
+      return {
+        error: `Faltan ${horasRestantes}h para la excursión. Las modificaciones requieren al menos ${config.politica.anticipacionMinimaHoras}h de anticipación.`,
+      }
+    }
+
+    const impuestoPct = excursion?.impuestoPct != null ? Number(excursion.impuestoPct) : null
+    const precioAdulto = Number(variante.precioAdulto)
+    const precioNino = variante.precioNino != null ? Number(variante.precioNino) : null
+
+    const resultado = calcularModificacion({
+      adultosOriginales: reservaEncontrada.adultos,
+      ninosOriginales: reservaEncontrada.ninos,
+      adultosNuevos: nuevosAdultos,
+      ninosNuevos: nuevosNinos,
+      precioAdulto,
+      precioNino,
+      impuestoPct,
+      descuentoActual: Number(reservaEncontrada.descuento ?? 0),
+      pagado,
+      politica: config.politica,
+      horasRestantes,
+    })
+
+    if (!resultado.permitido) return { error: resultado.razon ?? 'Modificación no permitida.' }
+
+    // Cliente no puede generar cobro adicional - solo reducción
+    if (resultado.montoCobrar > 0) {
+      return {
+        error: `La modificación requeriría un cobro adicional de ${reservaEncontrada.moneda} ${resultado.montoCobrar}. Contacta al negocio para cambios que aumenten el total.`,
+      }
+    }
+
+    const pNino = precioNino ?? precioAdulto
+    const nuevoSubtotal = Math.round((nuevosAdultos * precioAdulto + nuevosNinos * pNino) * 100) / 100
+    const base = Math.round(Math.max(0, nuevoSubtotal - Number(reservaEncontrada.descuento ?? 0)) * 100) / 100
+    const nuevosImpuestos = impuestoPct && impuestoPct > 0 ? Math.round(base * (impuestoPct / 100) * 100) / 100 : 0
+    const totalPasajerosNuevos = nuevosAdultos + nuevosNinos
+    const nuevoEstado = totalPasajerosNuevos === 0
+      ? 'CANCELADA'
+      : (pagado - resultado.montoReembolso >= resultado.nuevoTotal ? 'PAGADA' : (pagado > 0 ? 'PARCIALMENTE_PAGADA' : 'PENDIENTE'))
+
+    // Actualizar reserva y registros asociados
+    await conEmpresa(reservaEncontrada.companyId, async (tx) => {
+      await tx.reservaExc.update({
+        where: { id: reservaId },
+        data: {
+          adultos: nuevosAdultos,
+          ninos: nuevosNinos,
+          subtotal: nuevoSubtotal,
+          impuestos: nuevosImpuestos,
+          total: resultado.nuevoTotal,
+          estado: nuevoEstado,
+        },
+      })
+
+      // Sincronizar pasajeros
+      await tx.reservaPasajero.deleteMany({ where: { reservaId } })
+      if (totalPasajerosNuevos > 0) {
+        await tx.reservaPasajero.createMany({
+          data: [
+            ...Array.from({ length: nuevosAdultos }, () => ({
+              companyId: reservaEncontrada.companyId,
+              reservaId,
+              tipo: 'ADULTO',
+            })),
+            ...Array.from({ length: nuevosNinos }, () => ({
+              companyId: reservaEncontrada.companyId,
+              reservaId,
+              tipo: 'NINO',
+            })),
+          ],
+        })
+      }
+
+      // Sincronizar items de combo
+      await tx.reservaItem.updateMany({
+        where: { reservaId },
+        data: {
+          adultos: nuevosAdultos,
+          ninos: nuevosNinos,
+          ...(totalPasajerosNuevos === 0 ? { estado: 'CANCELADA' } : {}),
+        },
+      })
+
+      // Registrar reembolso si aplica
+      if (resultado.montoReembolso > 0) {
+        await tx.reservaPago.create({
+          data: {
+            companyId: reservaEncontrada.companyId,
+            reservaId,
+            monto: -resultado.montoReembolso,
+            moneda: reservaEncontrada.moneda,
+            metodo: 'REEMBOLSO',
+            referencia: `Reembolso por ${totalPasajerosNuevos === 0 ? 'cancelación' : 'reducción de pasajeros'}`,
+            notas: `De ${reservaEncontrada.adultos + reservaEncontrada.ninos} a ${totalPasajerosNuevos} pasajeros`,
+            estado: 'REGISTRADO',
+          },
+        })
+      }
+    })
+
+    revalidatePath('/cliente/mis-excursiones')
+    revalidatePath(`/cliente/mis-excursiones/${reservaId}`)
+    revalidatePath('/admin/excursiones/reservas')
+    revalidatePath(`/admin/excursiones/reservas/${reservaId}`)
+
+    return {
+      success: resultado.montoReembolso > 0
+        ? `Reserva modificada. Reembolso de ${reservaEncontrada.moneda} ${resultado.montoReembolso} registrado.`
+        : 'Reserva modificada exitosamente.',
+    }
+  } catch (e) {
+    anotarFallo('excursiones:modificarMiReserva')(e)
+    return { error: 'Error al modificar la reserva.' }
   }
 }

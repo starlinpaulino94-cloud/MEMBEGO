@@ -38,6 +38,7 @@ import { randomBytes } from 'crypto'
 import {
   ESTADOS_RESERVA,
   ESTADOS_CERRADOS,
+  centavos,
   calcularTotales,
   calcularSaldo,
   estadoPorPagos,
@@ -49,11 +50,16 @@ import {
   validarDisponibilidadComboMultiFecha,
   calcularPrecioEfectivo,
   normalizarHora,
+  esModificable,
+  calcularModificacion,
+  POLITICAS_REEMBOLSO_DEFAULT,
   type EstadoReserva,
   type ReglaPrecioDinamico,
+  type PoliticaReembolso,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
+import { getExcursionesConfig } from '../config'
 import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
 
 export interface ReservaActionState {
@@ -136,6 +142,7 @@ export async function crearReserva(
       return { error: 'Selecciona la excursión y una opción de tarifa.' }
     }
 
+    const config = await getExcursionesConfig(companyId)
     const v = validarReserva({
       fecha: String(formData.get('fecha') ?? ''),
       hora: String(formData.get('hora') ?? ''),
@@ -149,7 +156,7 @@ export async function crearReserva(
       lobbyRecogida: String(formData.get('lobbyRecogida') ?? ''),
       horaRecogida: String(formData.get('horaRecogida') ?? ''),
       habitacion: String(formData.get('habitacion') ?? ''),
-    })
+    }, config.maxPasajerosPorReserva)
     if (!v.ok) return { error: v.error }
 
     // =========================================================================
@@ -870,5 +877,198 @@ export async function cambiarEstadoReserva(
   } catch (e) {
     console.error('[excursiones] cambiarEstadoReserva:', e)
     return { error: 'No se pudo cambiar el estado.' }
+  }
+}
+
+/**
+ * ADMIN · Modificar pasajeros de una reserva (reducción con reembolso parcial).
+ */
+export async function modificarReserva(
+  _prev: ReservaActionState,
+  formData: FormData
+): Promise<ReservaActionState> {
+  try {
+    const user = await requireSection('excursiones', 'reserva_editar')
+    if (!user) return { error: 'No autorizado.' }
+    const companyId = await resolveCompanyId(user, formData)
+    if (!companyId) return { error: 'Empresa requerida.' }
+
+    const reservaId = String(formData.get('reservaId') ?? '')
+    const nuevosAdultos = Number(formData.get('adultos') ?? '0')
+    const nuevosNinos = Number(formData.get('ninos') ?? '0')
+
+    if (nuevosAdultos + nuevosNinos === 0 && !formData.get('confirmarCancelacion')) {
+      return { error: 'Para cancelar completa, marca la confirmación.' }
+    }
+
+    const reserva = await conEmpresa(companyId, (tx) =>
+      tx.reservaExc.findFirst({
+        where: { id: reservaId, companyId },
+        select: {
+          id: true, estado: true, adultos: true, ninos: true,
+          total: true, moneda: true, descuento: true,
+          fecha: true, hora: true, excursionId: true,
+          pagos: { select: { monto: true, estado: true } },
+        },
+      })
+    )
+    if (!reserva) return { error: 'Reserva no encontrada.' }
+    if (ESTADOS_CERRADOS.includes(reserva.estado as EstadoReserva)) {
+      return { error: 'Esta reserva ya está cerrada.' }
+    }
+
+    // Obtener precios del catálogo y datos de impuestos
+    const [variante, excursion] = await Promise.all([
+      conEmpresa(companyId, (tx) =>
+        tx.excursionVariante.findFirst({
+          where: { excursionId: reserva.excursionId, activa: true },
+          select: { precioAdulto: true, precioNino: true },
+          orderBy: { orden: 'asc' },
+        })
+      ),
+      conEmpresa(companyId, (tx) =>
+        tx.excursion.findFirst({
+          where: { id: reserva.excursionId, companyId },
+          select: { impuestoPct: true },
+        })
+      ),
+    ])
+    if (!variante) return { error: 'No se encontraron precios de la excursión.' }
+
+    // Obtener config de la empresa
+    const config = await getExcursionesConfig(companyId)
+
+    const pagado = Number(
+      reserva.pagos
+        .filter((p) => p.estado === 'REGISTRADO')
+        .reduce((s, p) => s + Number(p.monto), 0)
+    )
+
+    const ahora = new Date()
+    const { modificable, horasRestantes } = esModificable(
+      reserva.fecha,
+      reserva.hora,
+      ahora,
+      config.politica.anticipacionMinimaHoras
+    )
+    if (!modificable) {
+      return {
+        error: `Faltan ${horasRestantes}h para la excursión. Las modificaciones requieren al menos ${config.politica.anticipacionMinimaHoras}h de anticipación.`,
+      }
+    }
+
+    const impuestoPct = excursion?.impuestoPct != null ? Number(excursion.impuestoPct) : null
+    const precioAdulto = Number(variante.precioAdulto)
+    const precioNino = variante.precioNino != null ? Number(variante.precioNino) : null
+
+    const resultado = calcularModificacion({
+      adultosOriginales: reserva.adultos,
+      ninosOriginales: reserva.ninos,
+      adultosNuevos: nuevosAdultos,
+      ninosNuevos: nuevosNinos,
+      precioAdulto,
+      precioNino,
+      impuestoPct,
+      descuentoActual: Number(reserva.descuento),
+      pagado,
+      politica: config.politica,
+      horasRestantes,
+    })
+
+    if (!resultado.permitido) return { error: resultado.razon ?? 'Modificación no permitida.' }
+
+    const pNino = precioNino ?? precioAdulto
+    const nuevoSubtotal = centavos(nuevosAdultos * precioAdulto + nuevosNinos * pNino)
+    const base = centavos(Math.max(0, nuevoSubtotal - Number(reserva.descuento)))
+    const nuevosImpuestos = impuestoPct && impuestoPct > 0 ? centavos(base * (impuestoPct / 100)) : 0
+    const totalPasajerosNuevos = nuevosAdultos + nuevosNinos
+    const nuevoEstado = totalPasajerosNuevos === 0
+      ? 'CANCELADA'
+      : estadoPorPagos(
+          reserva.estado as EstadoReserva,
+          resultado.nuevoTotal,
+          pagado - resultado.montoReembolso
+        )
+
+    // Actualizar reserva en BD
+    await conEmpresa(companyId, async (tx) => {
+      await tx.reservaExc.update({
+        where: { id: reservaId },
+        data: {
+          adultos: nuevosAdultos,
+          ninos: nuevosNinos,
+          subtotal: nuevoSubtotal,
+          impuestos: nuevosImpuestos,
+          total: resultado.nuevoTotal,
+          estado: nuevoEstado,
+        },
+      })
+
+      // Sincronizar pasajeros en la base
+      await tx.reservaPasajero.deleteMany({ where: { reservaId } })
+      if (totalPasajerosNuevos > 0) {
+        await tx.reservaPasajero.createMany({
+          data: [
+            ...Array.from({ length: nuevosAdultos }, () => ({
+              companyId,
+              reservaId,
+              tipo: 'ADULTO',
+            })),
+            ...Array.from({ length: nuevosNinos }, () => ({
+              companyId,
+              reservaId,
+              tipo: 'NINO',
+            })),
+          ],
+        })
+      }
+
+      // Sincronizar items de combo si existen
+      await tx.reservaItem.updateMany({
+        where: { reservaId },
+        data: {
+          adultos: nuevosAdultos,
+          ninos: nuevosNinos,
+          ...(totalPasajerosNuevos === 0 ? { estado: 'CANCELADA' } : {}),
+        },
+      })
+
+      // Registrar reembolso si aplica
+      if (resultado.montoReembolso > 0) {
+        await tx.reservaPago.create({
+          data: {
+            companyId,
+            reservaId,
+            monto: -resultado.montoReembolso,
+            moneda: reserva.moneda,
+            metodo: 'REEMBOLSO',
+            referencia: `Reembolso por ${totalPasajerosNuevos === 0 ? 'cancelación' : 'reducción de pasajeros'}`,
+            notas: `De ${reserva.adultos + reserva.ninos} a ${totalPasajerosNuevos} pasajeros`,
+            estado: 'REGISTRADO',
+          },
+        })
+      }
+    })
+
+    revalidatePath('/admin/excursiones/reservas')
+    revalidatePath(`/admin/excursiones/reservas/${reservaId}`)
+    revalidatePath('/cliente/mis-excursiones')
+    revalidatePath(`/cliente/mis-excursiones/${reservaId}`)
+
+    // Registrar cobro adicional si aplica
+    if (resultado.montoCobrar > 0) {
+      return {
+        success: `Reserva modificada. Nuevo total: ${reserva.moneda} ${resultado.nuevoTotal}. Saldo adicional a cobrar: ${reserva.moneda} ${resultado.montoCobrar}.`,
+      }
+    }
+
+    return {
+      success: resultado.montoReembolso > 0
+        ? `Reserva modificada. Reembolso de ${reserva.moneda} ${resultado.montoReembolso} registrado.`
+        : 'Reserva modificada exitosamente.',
+    }
+  } catch (e) {
+    anotarFallo('excursiones:modificarReserva')(e)
+    return { error: 'Error al modificar la reserva.' }
   }
 }
