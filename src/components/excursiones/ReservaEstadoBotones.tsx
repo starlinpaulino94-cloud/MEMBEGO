@@ -7,7 +7,7 @@
  * PAGADA y ABONADA no están aquí — esos los decide el dinero, no un botón.
  */
 
-import { useActionState, useEffect, useState } from 'react'
+import { startTransition, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -34,13 +34,11 @@ export function ReservaEstadoBotones({
   estado,
   adultos = 0,
   ninos = 0,
-  moneda = 'DOP',
 }: {
   reservaId: string
   estado: EstadoReserva
   adultos?: number
   ninos?: number
-  moneda?: string
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(cambiarEstadoReserva, init)
@@ -52,15 +50,21 @@ export function ReservaEstadoBotones({
   const [nuevosAdultos, setNuevosAdultos] = useState(adultos)
   const [nuevosNinos, setNuevosNinos] = useState(ninos)
 
-  useEffect(() => {
+  // Sincronizar con las propiedades DURANTE el render, que es el patrón que
+  // documenta React: con `useEffect` se paga un render de más y lo prohíbe la
+  // regla de la casa.
+  const [base, setBase] = useState({ adultos, ninos })
+  if (base.adultos !== adultos || base.ninos !== ninos) {
+    setBase({ adultos, ninos })
     setNuevosAdultos(adultos)
     setNuevosNinos(ninos)
-  }, [adultos, ninos])
+  }
 
   useEffect(() => {
     if (state.success) {
       toast.success(state.success)
-      setCancelando(false)
+      // En un callback y no en el cuerpo del efecto: cerrar no es urgente.
+      startTransition(() => setCancelando(false))
       router.refresh()
     }
     if (state.error) toast.error(state.error)
@@ -69,7 +73,7 @@ export function ReservaEstadoBotones({
   useEffect(() => {
     if (modState.success) {
       toast.success(modState.success)
-      setModificando(false)
+      startTransition(() => setModificando(false))
       router.refresh()
     }
     if (modState.error) toast.error(modState.error)

@@ -74,14 +74,6 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     principal: 'sistema',
     resumen: 'Empresas que tienen habilitado el sistema que llama.',
   },
-  {
-    metodo: 'GET',
-    ruta: '/diag',
-    scope: null,
-    principal: 'superadmin',
-    resumen: 'Diagnóstico de operación del token de plataforma. No forma parte del contrato.',
-  },
-
   // ── Empresa y catálogo ──────────────────────────────────────────────────
   {
     metodo: 'GET',
@@ -202,6 +194,14 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'benefits:redeem',
     principal: 'sistema',
     resumen: 'Deshace un consumo y devuelve el beneficio al cliente.',
+    idempotente: true,
+  },
+  {
+    metodo: 'POST',
+    ruta: '/promotions/redeem',
+    scope: 'benefits:redeem',
+    principal: 'sistema',
+    resumen: 'Canjea una promoción de un cliente (consume un uso). Deja constancia de qué sistema lo hizo.',
     idempotente: true,
   },
   {

@@ -3,6 +3,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { validarConsumoCompra } from '@/modules/promociones/compra'
+import { efectoPromocion } from '@/lib/promociones'
 import { coberturaDeMembresia, type ContextoConsumo } from '@/modules/plataforma/cobertura'
 
 export const dynamic = 'force-dynamic'
@@ -138,7 +139,16 @@ export async function POST(req: NextRequest) {
         usosRestantes: true,
         fechaVencimiento: true,
         promocion: {
-          select: { titulo: true, diasPermitidos: true, horaDesde: true, horaHasta: true },
+          select: {
+            titulo: true,
+            diasPermitidos: true,
+            horaDesde: true,
+            horaHasta: true,
+            // El efecto monetario que el satélite necesita para rebajar su
+            // factura solo (%, monto fijo o gratis).
+            tipo: true,
+            descuento: true,
+          },
         },
       },
       orderBy: { fechaVencimiento: 'asc' },
@@ -203,6 +213,10 @@ export async function POST(req: NextRequest) {
         reason: v.puedeUsar ? null : motivoDe(v.mensaje),
         /** Una promoción no tiene tope de vehículo: cubre lo que dice su título. */
         coverage: null,
+        // Qué le hace a la factura del satélite. Deriva de tipo+descuento con el
+        // MISMO helper que usa el panel, para que «-20%» signifique lo mismo en
+        // los dos lados. `NONE` cuando no hay rebaja automática computable.
+        effect: efectoPromocion(c.promocion?.tipo ?? 'general', c.promocion?.descuento ?? null),
       }
     }),
   ]

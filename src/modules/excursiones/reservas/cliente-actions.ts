@@ -29,8 +29,6 @@ import {
   ESTADOS_CERRADOS,
   esModificable,
   calcularModificacion,
-  POLITICAS_REEMBOLSO_DEFAULT,
-  type PoliticaReembolso,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
 import { getExcursionesConfig } from '../config'

@@ -110,7 +110,9 @@ export function resolver(raw: Record<string, unknown> | null): ExcursionesConfig
     enviarRecordatorioHoras: int(raw.enviarRecordatorioHoras, 24, 0, 168),
     emailNotificaciones: raw.emailNotificaciones != null ? String(raw.emailNotificaciones) : null,
     metodosPagoHabilitados: Array.isArray(raw.metodosPagoHabilitados)
-      ? (raw.metodosPagoHabilitados as unknown[]).filter((m): m is string => typeof m === 'string' && Boolean(m.trim())).map(m => m.trim())
+      ? (raw.metodosPagoHabilitados as unknown[])
+          .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+          .map((m) => m.trim())
       : DEFAULTS.metodosPagoHabilitados,
     tasasCambio: (typeof raw.tasasCambio === 'object' && raw.tasasCambio !== null
       ? raw.tasasCambio as Record<string, number>
@@ -218,7 +220,7 @@ export async function getExcursionesConfig(companyId: string): Promise<Excursion
   if (!companyId) return DEFAULTS
   try {
     const cfg = await conEmpresa(companyId, (tx) =>
-      (tx as any).excursionesConfig.findUnique({ where: { companyId } })
+      tx.excursionesConfig.findUnique({ where: { companyId } })
     )
     return resolver(cfg as Record<string, unknown> | null)
   } catch (e) {
