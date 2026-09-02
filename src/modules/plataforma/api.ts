@@ -206,7 +206,7 @@ export async function autenticar(
   if (!secretoFirma) return negar('PLATFORM_API_UNCONFIGURED')
 
   const token = bruto
-  if (!token) return negar('INVALID_TOKEN')
+  if (!token) return { fallo: errorApi('INVALID_TOKEN', requestId, { reason: 'no_token_en_cabecera' }), requestId }
 
   const verificado = verificarToken(secretoFirma, token)
   if (!verificado.ok) {
@@ -233,7 +233,26 @@ export async function autenticar(
   // recortarle permisos tiene que cerrar la puerta ya, no cuando caduque el
   // token que alguien pidió hace catorce minutos.
   const credencial = await leerCredencial(verificado.datos.cid)
-  if (!credencial) return negar('INVALID_TOKEN')
+  if (!credencial) {
+    // DIAG TEMPORAL: por qué leerCredencial devolvió null. Reconsulta directa
+    // (sin el join a sistema) para distinguir "no existe" de "excepción en el
+    // join a sistema bajo RLS". Borrar tras el fix.
+    let motivo = 'cred_null:desconocido'
+    try {
+      const raw = await sinEmpresa('diag credencial (temporal)', (tx) =>
+        tx.credencialSistema.findUnique({
+          where: { clientId: verificado.datos.cid },
+          select: { estado: true, expiresAt: true, sistemaId: true },
+        })
+      )
+      motivo = raw
+        ? `cred_null:existe estado=${raw.estado} exp=${raw.expiresAt ? 'si' : 'no'} sistemaId=${raw.sistemaId}`
+        : 'cred_null:no_existe_por_clientId'
+    } catch (e) {
+      motivo = `cred_null:excepcion ${(e as Error).message.slice(0, 120)}`
+    }
+    return { fallo: errorApi('INVALID_TOKEN', requestId, { reason: motivo }), requestId }
+  }
 
   const scopes = scopesEfectivos(verificado.datos.scopes, credencial.scopes)
   if (scopeRequerido !== null && !scopes.includes(scopeRequerido)) {
