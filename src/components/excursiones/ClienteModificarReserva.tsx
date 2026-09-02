@@ -1,9 +1,9 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { startTransition, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Minus, Plus, Users, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { Minus, Plus, Users, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   modificarMiReserva,
@@ -53,15 +53,26 @@ export function ClienteModificarReserva({
   const [nuevosAdultos, setNuevosAdultos] = useState(adultos)
   const [nuevosNinos, setNuevosNinos] = useState(ninos)
 
-  useEffect(() => {
+  // SINCRONIZAR CON LAS PROPIEDADES SIN EFECTO.
+  //
+  // Cuando el servidor devuelve una reserva ya modificada, los contadores
+  // tienen que volver a partir de los valores nuevos. Hacerlo con un
+  // `useEffect` provoca un render de más y lo prohíbe la regla de la casa; el
+  // patrón que documenta React es ajustar el estado DURANTE el render,
+  // comparando contra el valor anterior.
+  const [base, setBase] = useState({ adultos, ninos })
+  if (base.adultos !== adultos || base.ninos !== ninos) {
+    setBase({ adultos, ninos })
     setNuevosAdultos(adultos)
     setNuevosNinos(ninos)
-  }, [adultos, ninos])
+  }
 
   useEffect(() => {
     if (state.success) {
       toast.success(state.success)
-      setAbierto(false)
+      // `startTransition`: cerrar el panel no es urgente y así el cambio de
+      // estado ocurre en un callback, no en el cuerpo del efecto.
+      startTransition(() => setAbierto(false))
       router.refresh()
     }
     if (state.error) {
