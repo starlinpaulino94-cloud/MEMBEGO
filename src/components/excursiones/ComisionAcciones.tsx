@@ -55,6 +55,10 @@ export function ComisionAcciones({
 
   const siguientes = ESTADOS_COMISION.filter((e) => puedeTransicionar(estado, e))
 
+  const LABEL: Partial<Record<EstadoComision, string>> =
+    estado === 'ANULADA' ? { GENERADA: 'Reanudar' } : {}
+  const PUEDE_AJUSTAR = ['APROBADA', 'PENDIENTE_PAGO', 'PAGADA'].includes(estado)
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       {siguientes.map((e) => (
@@ -67,7 +71,7 @@ export function ComisionAcciones({
             variant={e === 'ANULADA' ? 'ghost' : 'outline'}
             disabled={pending}
           >
-            {ESTADO_COMISION_LABEL[e]}
+            {LABEL[e] ?? ESTADO_COMISION_LABEL[e]}
           </Button>
         </form>
       ))}
@@ -99,9 +103,11 @@ export function ComisionAcciones({
           </Button>
         </form>
       ) : (
-        <Button type="button" size="sm" variant="ghost" onClick={() => setAjustando(true)}>
-          Ajustar
-        </Button>
+        PUEDE_AJUSTAR && (
+          <Button type="button" size="sm" variant="ghost" onClick={() => setAjustando(true)}>
+            Ajustar
+          </Button>
+        )
       )}
     </div>
   )

@@ -322,15 +322,17 @@ export async function cambiarEstadoComision(
       return { error: motivoTransicionInvalida(desde, estado) ?? 'Cambio no permitido.' }
     }
 
+    const esReanude = desde === 'ANULADA' && estado === 'GENERADA'
+
     await conEmpresa(companyId, (tx) =>
       tx.comisionEntrada.updateMany({
         where: { id: comision.id, companyId },
-        data: { estado },
+        data: esReanude ? { estado, liquidacionId: null } : { estado },
       })
     )
 
     await auditar(companyId, user.metadata.dbUserId ?? null, 'ComisionEntrada', comision.id, {
-      tipo: 'COMISION_ESTADO',
+      tipo: esReanude ? 'COMISION_REANUDE' : 'COMISION_ESTADO',
       desde,
       hacia: estado,
     })
@@ -367,10 +369,15 @@ export async function ajustarComision(
     const comision = await conEmpresa(companyId, (tx) =>
       tx.comisionEntrada.findFirst({
         where: { id: comisionId, companyId },
-        select: { id: true, monto: true, ajustes: { select: { monto: true } } },
+        select: { id: true, monto: true, estado: true, ajustes: { select: { monto: true } } },
       })
     )
     if (!comision) return { error: 'Comisión no encontrada.' }
+
+    const ESTADOS_AJUSTABLES = ['APROBADA', 'PENDIENTE_PAGO', 'PAGADA'] as const
+    if (!(ESTADOS_AJUSTABLES as readonly string[]).includes(comision.estado)) {
+      return { error: 'Solo se pueden ajustar comisiones en estado Aprobada, Pendiente de pago o Pagada.' }
+    }
 
     // Un ajuste no puede dejar al vendedor debiendo dinero.
     const neto = netoComision(

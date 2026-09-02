@@ -114,7 +114,7 @@ const TRANSICIONES: Record<EstadoComision, EstadoComision[]> = {
   APROBADA: ['PENDIENTE_PAGO', 'ANULADA'],
   PENDIENTE_PAGO: ['PAGADA', 'ANULADA'],
   PAGADA: [],
-  ANULADA: [],
+  ANULADA: ['GENERADA'],
 }
 
 export function puedeTransicionar(desde: EstadoComision, hacia: EstadoComision): boolean {
@@ -130,7 +130,7 @@ export function motivoTransicionInvalida(
   if (desde === 'PAGADA') {
     return 'Esta comisión ya se pagó. Lo que haya que corregir se hace con un ajuste, no borrando el pago.'
   }
-  if (desde === 'ANULADA') return 'Esta comisión está anulada: su histórico no se reescribe.'
+  if (desde === 'ANULADA') return 'Esta comisión está anulada. Si necesitas reactivarla, reanúdala a estado Generada.'
   return `No se puede pasar de ${ESTADO_COMISION_LABEL[desde]} a ${ESTADO_COMISION_LABEL[hacia]}.`
 }
 

@@ -84,7 +84,14 @@ export default async function ComisionesPage() {
                     ) : null}
                   </p>
                   <p className="text-caption text-muted-foreground">
-                    Venta <span className="font-mono">{c.venta?.numero ?? '—'}</span> ·{' '}
+                    Venta{' '}
+                    {c.venta ? (
+                      <Link href={`/admin/excursiones/ventas/${c.venta.id}`} className="font-mono text-foreground underline-offset-2 hover:underline">
+                        {c.venta.numero}
+                      </Link>
+                    ) : (
+                      <span className="font-mono">—</span>
+                    )}{' '}
                     {formatDate(c.createdAt)}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">{c.desglose}</p>

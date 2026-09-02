@@ -13,6 +13,77 @@ import {
   type ContextoVenta,
 } from '../src/modules/excursiones/comisiones/nucleo'
 
+// ── Mocks para ajustarComision (requiere Prisma + auth) ───────────────────────
+
+const mockUser = {
+  metadata: { dbUserId: 'user-1' },
+}
+
+// Simple module mocking using require cache
+const originalModules = new Map()
+
+function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
+  const resolvedPath = require.resolve(modulePath)
+  originalModules.set(resolvedPath, require.cache[resolvedPath])
+  require.cache[resolvedPath] = {
+    id: resolvedPath,
+    filename: resolvedPath,
+    loaded: true,
+    exports: mockExports,
+    parent: null,
+    children: [],
+  }
+}
+
+function restoreModules() {
+  for (const [path, original] of originalModules) {
+    if (original) {
+      require.cache[path] = original
+    } else {
+      delete require.cache[path]
+    }
+  }
+  originalModules.clear()
+}
+
+// Set up mocks before importing actions
+mockModule('../src/lib/auth/guards.ts', {
+  requireSection: async () => mockUser,
+})
+
+mockModule('../src/lib/auth/company-context.ts', {
+  resolveCompanyId: async () => 'company-1',
+})
+
+mockModule('next/cache', {
+  revalidatePath: () => {},
+})
+
+mockModule('../src/lib/server-utils.ts', {
+  getRequestMeta: async () => ({ ipAddress: null, userAgent: null }),
+})
+
+let mockFindFirstResult: unknown = null
+mockModule('../src/lib/tenant.ts', {
+  conEmpresa: async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) => {
+    const tx = {
+      comisionEntrada: {
+        findFirst: async () => mockFindFirstResult,
+      },
+      comisionAjuste: {
+        create: async () => ({}),
+      },
+      auditLog: {
+        create: async () => ({}),
+      },
+    }
+    return fn(tx)
+  },
+})
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ajustarComision } = require('../src/modules/excursiones/comisiones/actions')
+
 /**
  * Excursiones · Fase 6 — el motor de comisiones decide cuánto se le debe a una
  * persona. Se prueba puro y con fechas fijas: aquí no hay margen para «casi».
@@ -148,6 +219,14 @@ test('una comisión pagada es terminal: se corrige con ajuste, no con estado', (
   assert.equal(motivoTransicionInvalida('GENERADA', 'APROBADA'), null)
 })
 
+test('reanudar: ANULADA → GENERADA está permitido, salto directo no', () => {
+  assert.equal(puedeTransicionar('ANULADA', 'GENERADA'), true)
+  assert.equal(puedeTransicionar('ANULADA', 'PAGADA'), false)
+  assert.equal(puedeTransicionar('ANULADA', 'APROBADA'), false)
+  assert.equal(motivoTransicionInvalida('ANULADA', 'GENERADA'), null)
+  assert.match(motivoTransicionInvalida('ANULADA', 'PAGADA') ?? '', /reanúdala/)
+})
+
 test('el neto suma los ajustes firmados y nunca deja al vendedor debiendo', () => {
   assert.equal(netoComision(100, []), 100)
   assert.equal(netoComision(100, [{ monto: -40 }]), 60)
@@ -198,4 +277,54 @@ test('la vigencia no puede terminar antes de empezar', () => {
     vigenciaHasta: '2026-08-01',
   })
   assert.equal(r.ok, false)
+})
+
+// ── Ajustar comisión: restricción por estado ──────────────────────────────────
+
+function buildFormData(overrides: Record<string, string> = {}): FormData {
+  const fd = new FormData()
+  fd.set('comisionId', overrides.comisionId ?? 'c1')
+  fd.set('motivo', overrides.motivo ?? 'Corrección')
+  fd.set('monto', overrides.monto ?? '-10')
+  fd.set('companyId', overrides.companyId ?? 'company-1')
+  return fd
+}
+
+async function runAjustar(estado: string) {
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 100,
+    estado,
+    ajustes: [],
+  }
+  return ajustarComision({} as never, buildFormData())
+}
+
+test('ajustar comisión APROBADA tiene éxito', async () => {
+  const result = await runAjustar('APROBADA')
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+})
+
+test('ajustar comisión GENERADA falla: estado no ajustable', async () => {
+  const result = await runAjustar('GENERADA')
+  assert.match(result.error ?? '', /Aprobada, Pendiente de pago o Pagada/)
+})
+
+test('ajustar comisión ANULADA falla: estado no ajustable', async () => {
+  const result = await runAjustar('ANULADA')
+  assert.match(result.error ?? '', /Aprobada, Pendiente de pago o Pagada/)
+})
+
+test('ajustar comisión PAGADA tiene éxito (caso principal)', async () => {
+  const result = await runAjustar('PAGADA')
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+})
+
+test('ajustar comisión inexistente falla', async () => {
+  mockFindFirstResult = null
+  const result = ajustarComision({} as never, buildFormData())
+  const resolved = await result
+  assert.match(resolved.error ?? '', /no encontrada/)
 })
