@@ -21,23 +21,26 @@
 ALTER TABLE "conexiones_empresa" ADD COLUMN IF NOT EXISTS "cuentaExterna" TEXT;
 ALTER TABLE "conexiones_empresa" ADD COLUMN IF NOT EXISTS "recursoExterno" TEXT;
 
--- ── El UNIQUE, creado SIN bloquear la tabla ─────────────────────────────────
+-- ── El UNIQUE ───────────────────────────────────────────────────────────────
 --
--- `CONCURRENTLY` es deliberado y es la lección del CHECK de la Fase 10: un
--- índice único normal toma un lock que impide ESCRIBIR en la tabla mientras se
--- construye. Aquí no se notaría (la tabla es pequeña), pero el hábito no puede
--- depender del tamaño — el día que se aplique sobre una tabla con volumen, la
--- diferencia es una caída.
+-- ÍNDICE NORMAL, no `CONCURRENTLY`, y conviene dejar escrito por qué se
+-- cambió: `CONCURRENTLY` no puede ejecutarse dentro de una transacción, y el
+-- editor SQL de Supabase envuelve lo que se le pega en una. Obligaba a partir
+-- el archivo a mano, y encima tiene un modo de fallo peor para quien aplica
+-- SQL a mano: si se interrumpe a medias deja un índice INVÁLIDO que hay que
+-- localizar y borrar.
 --
--- NULL no colisiona con NULL en PostgreSQL, así que las conexiones que no
--- tengan cuenta externa (Google Calendar, CardNET) conviven sin problema.
+-- Aquí no aporta nada: `conexiones_empresa` tiene un puñado de filas y el
+-- bloqueo es de milisegundos.
 --
--- ⚠ IMPORTANTE AL EJECUTARLO A MANO: `CONCURRENTLY` NO PUEDE correr dentro de
--- una transacción. Si el editor SQL envuelve todo el archivo en una, esta
--- línea fallará con «CREATE INDEX CONCURRENTLY cannot run inside a
--- transaction block». En ese caso, ejecute ESTA sentencia sola, en su propia
--- pestaña, y después el resto del archivo.
-CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+-- ⚠ CUÁNDO SÍ HARÍA FALTA: sobre una tabla con volumen (clientes, pagos), un
+-- índice único normal bloquea las ESCRITURAS mientras se construye. Ahí se usa
+-- `CREATE UNIQUE INDEX CONCURRENTLY`, se ejecuta SOLO, en su propia pestaña, y
+-- se comprueba después con `SELECT indisvalid FROM pg_index ...`.
+--
+-- NULL no colisiona con NULL en PostgreSQL, así que las conexiones sin cuenta
+-- externa (Google Calendar, CardNET) conviven sin problema.
+CREATE UNIQUE INDEX IF NOT EXISTS
   "conexiones_empresa_conectorId_cuentaExterna_key"
   ON "conexiones_empresa" ("conectorId", "cuentaExterna");
 
