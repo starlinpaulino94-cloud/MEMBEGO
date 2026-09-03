@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { membresiaVigente } from '@/modules/membresia/vigencia'
+import { membresiaTerminada, membresiaVigente } from '@/modules/membresia/vigencia'
 import {
   DIAS_PARA_VENCER,
   DIAS_SIN_VISITAS,
@@ -97,8 +97,12 @@ export function whereClientes(
     case 'vencida':
       // Vencida Y sin ninguna vigente: quien renovó no está «vencido», está al
       // día, y aparecer en esta lista sería un error que cuesta una llamada.
+      //
+      // «Vencida» la decide `membresiaTerminada()`, que además de los estados
+      // marcados incluye las que siguen diciendo ACTIVA porque el job diario no
+      // pasó. Mirando solo el estado, esos clientes no salían en ningún filtro.
       condiciones.push({
-        memberships: { some: { estado: { in: ['VENCIDA', 'CANCELADA'] } } },
+        memberships: { some: membresiaTerminada(ahora) },
         NOT: { memberships: { some: membresiaVigente(ahora) } },
       })
       break

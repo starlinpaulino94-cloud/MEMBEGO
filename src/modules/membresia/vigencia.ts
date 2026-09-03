@@ -51,3 +51,30 @@ export function membresiaVigente(ahora: Date = new Date()): Prisma.MembershipWhe
 export function membresiaCaducada(ahora: Date = new Date()): Prisma.MembershipWhereInput {
   return { estado: 'ACTIVA', fechaVencimiento: { lt: ahora } }
 }
+
+/**
+ * «Vencida» tal y como la entiende quien mira la pantalla: se acabó.
+ *
+ * Son dos cosas a la vez, y la segunda es la que faltaba:
+ *
+ *  · La que alguien marcó —`VENCIDA` o `CANCELADA`—.
+ *  · La que sigue diciendo `ACTIVA` porque el job todavía no pasó, pero cuya
+ *    fecha quedó atrás. Es exactamente `membresiaCaducada()`.
+ *
+ * Sin la segunda rama, ese cliente no aparecía en NINGÚN filtro: la fecha lo
+ * sacaba de «vigente», el estado lo sacaba de «vencida», tenía membresía así
+ * que tampoco era «sin», y su fecha ya había pasado así que tampoco estaba
+ * «por vencer». Se caía por los cuatro huecos y desaparecía del directorio.
+ *
+ * Mismo criterio que `membresiaVigente()`: la verdad la decide la fecha, no que
+ * un proceso se ejecutara anoche.
+ *
+ * `fechaVencimiento: { lt: ahora }` deja fuera las perpetuas (`NULL`) por sí
+ * solo: en SQL `NULL < x` es NULL, no TRUE. Es lo correcto — una membresía sin
+ * fecha no vence nunca.
+ */
+export function membresiaTerminada(ahora: Date = new Date()): Prisma.MembershipWhereInput {
+  return {
+    OR: [{ estado: { in: ['VENCIDA', 'CANCELADA'] } }, membresiaCaducada(ahora)],
+  }
+}

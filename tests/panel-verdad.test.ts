@@ -26,6 +26,7 @@ import {
   whereMembresias,
 } from '../src/modules/admin/membresiasFiltro'
 import { leerFiltrosClientes, whereClientes } from '../src/modules/admin/clientesFiltro'
+import { membresiaTerminada } from '../src/modules/membresia/vigencia'
 import {
   diasDesde,
   diasHasta,
@@ -291,6 +292,29 @@ test('«membresía vencida» excluye a quien ya renovó', () => {
   }
   const rama = w.AND.find((c) => c.memberships)
   assert.ok(rama?.NOT, 'falta la exclusión de quien tiene una vigente')
+})
+
+test('«membresía vencida» encuentra a quien el job diario todavía no marcó', () => {
+  // El caso que hacía desaparecer clientes del directorio: la fecha ya pasó
+  // pero la fila sigue diciendo ACTIVA. Sin esta rama no salía en NINGÚN
+  // filtro — ni vigente, ni vencida, ni sin membresía, ni por vencer.
+  const w = whereClientes('c1', { membresia: 'vencida' }, AHORA) as {
+    AND: Array<{ memberships?: { some?: { OR?: Array<Record<string, unknown>> } } }>
+  }
+  const ramas = w.AND.find((c) => c.memberships)?.memberships?.some?.OR
+  assert.ok(ramas, 'el filtro debería mirar dos casos, no solo el estado marcado')
+  const porFecha = ramas.find((r) => r.estado === 'ACTIVA')
+  assert.ok(porFecha, 'falta la rama de las que siguen ACTIVA con la fecha pasada')
+  assert.deepEqual(porFecha.fechaVencimiento, { lt: AHORA })
+})
+
+test('una membresía perpetua nunca cuenta como vencida', () => {
+  // `fechaVencimiento: null` no debe entrar por la rama de la fecha: en SQL
+  // `NULL < x` es NULL, no TRUE, y sin fecha no se vence nunca.
+  const w = membresiaTerminada(AHORA) as { OR: Array<Record<string, unknown>> }
+  for (const rama of w.OR) {
+    assert.notEqual(rama.fechaVencimiento, null, 'ninguna rama debe casar con NULL')
+  }
 })
 
 test('los filtros de clientes también se combinan sin pisarse', () => {
