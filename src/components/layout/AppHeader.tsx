@@ -4,7 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ChevronRight, ExternalLink, Menu, Search, X } from 'lucide-react'
-import { breadcrumbs, buscarModulos, ofreceSalidaAPlataforma, type ContextoNav } from '@/components/layout/nav-config'
+import { cn } from '@/lib/utils'
+import {
+  ATERRIZAJE_EMPRESA,
+  ATERRIZAJE_PLATAFORMA,
+  breadcrumbs,
+  buscarModulos,
+  ofreceEntradaAEmpresa,
+  ofreceSalidaAPlataforma,
+  type ContextoNav,
+} from '@/components/layout/nav-config'
 import { NotificationBell } from '@/components/layout/NotificationBell'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { MenuUsuario } from '@/components/layout/MenuUsuario'
@@ -31,7 +40,50 @@ import { CompanySwitcher, type CompanyOption } from '@/components/cliente/Compan
  * `breadcrumbs()` y el resaltado del menú usan la misma coincidencia por
  * prefijo más largo. Escritas aparte se separan, y el síntoma es una cabecera
  * que dice que estás en un sitio mientras el menú resalta otro.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL CONMUTADOR DE ÁMBITO
+ *
+ * El superadministrador tiene dos mundos, Plataforma y Empresa, que nunca se
+ * mezclan en el menú. El paso de uno a otro es ESTE conmutador: dos segmentos,
+ * el activo como texto y el otro como enlace, siempre en el mismo sitio de la
+ * cabecera. Quién lo ve lo dicen `ofreceEntradaAEmpresa` y
+ * `ofreceSalidaAPlataforma` en nav-config; aquí no se mira el rol.
  */
+
+function SegmentoAmbito({
+  activo,
+  href,
+  title,
+  testId,
+  children,
+}: {
+  activo: boolean
+  href: string
+  title: string
+  testId?: string
+  children: React.ReactNode
+}) {
+  const base =
+    'inline-flex max-w-[16rem] items-center truncate rounded-full px-2.5 py-1 text-caption font-semibold outline-none transition-colors duration-fast focus-visible:ring-2 focus-visible:ring-ring'
+  if (activo) {
+    return (
+      <span
+        data-testid={testId}
+        aria-current="true"
+        className={cn(base, 'bg-sidebar-accent text-sidebar-accent-foreground')}
+      >
+        {children}
+      </span>
+    )
+  }
+  return (
+    <Link href={href} title={title} className={cn(base, 'text-muted-foreground hover:text-foreground')}>
+      {children}
+    </Link>
+  )
+}
+
 export function AppHeader({
   ctx,
   title,
@@ -110,35 +162,31 @@ export function AppHeader({
         <Menu className="h-5 w-5" aria-hidden />
       </button>
 
-      {/* Píldora de ámbito: en qué mundo estoy y cómo salir de él.
-          PLATFORM la ve solo el superadmin en su panel. En COMPANY el
-          superadmin ve "Empresa · <nombre>" con salida explícita a
-          Plataforma; el personal ve el nombre de su empresa. En móvil se
-          oculta: ahí mandan las migas y el buscador. */}
-      {ctx.scope === 'PLATFORM' ? (
-        <Link
-          href="/superadmin/dashboard"
-          title="Panel de plataforma"
-          className="hidden shrink-0 items-center rounded-full bg-sidebar-accent px-2.5 py-1 text-caption font-semibold text-sidebar-accent-foreground outline-none transition-colors duration-fast hover:bg-sidebar-hover focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+      {/* Conmutador de ámbito (solo superadmin): en qué mundo estoy y cómo
+          paso al otro. El personal de una empresa ve solo su nombre. En móvil
+          se oculta: ahí mandan las migas y el buscador. */}
+      {ofreceEntradaAEmpresa(ctx) || ofreceSalidaAPlataforma(ctx) ? (
+        <div
+          role="group"
+          aria-label="Ámbito"
+          className="hidden shrink-0 items-center gap-0.5 rounded-full bg-muted p-0.5 md:flex"
         >
-          Plataforma
-        </Link>
-      ) : ofreceSalidaAPlataforma(ctx) ? (
-        <span className="hidden min-w-0 shrink-0 items-center gap-1.5 md:flex">
-          <span
-            data-testid="ambito-pildora"
-            className="truncate rounded-full bg-sidebar-accent px-2.5 py-1 text-caption font-semibold text-sidebar-accent-foreground"
+          <SegmentoAmbito
+            activo={ctx.scope === 'PLATFORM'}
+            href={ATERRIZAJE_PLATAFORMA}
+            title="Panel de plataforma"
           >
-            Empresa{nombreEmpresa ? ` · ${nombreEmpresa}` : ''}
-          </span>
-          <Link
-            href="/superadmin/dashboard"
-            title="Volver al panel de plataforma"
-            className="shrink-0 rounded-lg text-caption text-muted-foreground outline-none transition-colors duration-fast hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            Plataforma
+          </SegmentoAmbito>
+          <SegmentoAmbito
+            activo={ctx.scope === 'COMPANY'}
+            href={ATERRIZAJE_EMPRESA}
+            title="Panel de empresa"
+            testId="ambito-pildora"
           >
-            ← Plataforma
-          </Link>
-        </span>
+            {ctx.scope === 'COMPANY' && nombreEmpresa ? `Empresa · ${nombreEmpresa}` : 'Empresa'}
+          </SegmentoAmbito>
+        </div>
       ) : nombreEmpresa ? (
         <span className="hidden min-w-0 shrink-0 truncate rounded-full bg-muted px-2.5 py-1 text-caption font-semibold text-muted-foreground md:block">
           {nombreEmpresa}

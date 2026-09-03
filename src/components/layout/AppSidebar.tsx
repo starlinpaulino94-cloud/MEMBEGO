@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NavRail } from '@/components/layout/NavRail'
 import { NavPanel, type BadgesNav } from '@/components/layout/NavPanel'
+import { NavColumna } from '@/components/layout/NavColumna'
 import {
+  menuEnUnaColumna,
   resolverRuta,
   visibleWorkspaces,
   workspaceLanding,
@@ -40,6 +42,13 @@ import {
  * ruta— es lo que hace imposible que los dos datos discrepen: solo hay uno, y
  * se compara. Un efecto que sincroniza dos estados siempre tiene una ventana
  * de un render en la que dicen cosas distintas.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DOS NIVELES O UNA COLUMNA
+ *
+ * Con un solo espacio visible (la plataforma, el mostrador) no hay riel: el
+ * segundo nivel se pinta entero y a todo el ancho con `NavColumna`. Lo decide
+ * `menuEnUnaColumna` en nav-config, no una cuenta hecha aquí.
  */
 
 /**
@@ -107,6 +116,21 @@ export function AppSidebar({
 
   const espacio = espacioAPintar(espacios, elegido, ruta?.workspaceId ?? null)
   const compactoReal = variante === 'movil' ? false : compacto
+
+  if (espacio && menuEnUnaColumna(espacios)) {
+    return (
+      <NavColumna
+        espacio={espacio}
+        rutaActiva={ruta?.href ?? null}
+        badges={badges}
+        onNavigate={onNavigate}
+        role={ctx.role}
+        userEmail={userEmail}
+        userName={userName}
+        ayudaHref={ayudaHref}
+      />
+    )
+  }
 
   return (
     <div className="flex h-full min-h-0">

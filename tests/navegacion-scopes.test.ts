@@ -1,9 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  ATERRIZAJE_EMPRESA,
+  ATERRIZAJE_PLATAFORMA,
   breadcrumbs,
   canSeeItem,
   CLAVES_BADGE,
+  menuEnUnaColumna,
+  ofreceEntradaAEmpresa,
   ofreceSalidaAPlataforma,
   visibleWorkspaces,
   workspaceLanding,
@@ -169,4 +173,50 @@ test('cada rol de empresa ve los nueve espacios (con Tours)', () => {
       'soporte',
     ])
   }
+})
+
+// ── Conmutador de ámbito y menú de una columna ───────────────────────────
+
+test('la entrada a Empresa solo se ofrece al superadmin en plataforma', () => {
+  // Es el sentido de ida del conmutador. Sin él, los módulos de empresa no
+  // tenían ningún enlace desde la plataforma: se llegaba escribiendo la URL.
+  assert.equal(ofreceEntradaAEmpresa(PLATFORM), true)
+  assert.equal(ofreceEntradaAEmpresa(EMPRESA_COMO_SA), false)
+  assert.equal(ofreceEntradaAEmpresa(ADMIN), false)
+  assert.equal(ofreceEntradaAEmpresa({ role: 'SUPERADMIN' }), false)
+  assert.equal(ofreceEntradaAEmpresa({ role: 'CLIENTE' }), false)
+})
+
+test('los dos sentidos del conmutador nunca se ofrecen a la vez', () => {
+  for (const ctx of [PLATFORM, EMPRESA_COMO_SA, ADMIN, { role: 'CLIENTE' } as ContextoNav]) {
+    assert.ok(!(ofreceEntradaAEmpresa(ctx) && ofreceSalidaAPlataforma(ctx)))
+  }
+})
+
+test('los aterrizajes del conmutador caen en un módulo real de su ámbito', () => {
+  // Un conmutador que lleva a una ruta sin menú aterriza sin contexto.
+  assert.equal(workspaceOf(ATERRIZAJE_PLATAFORMA, PLATFORM), 'plataforma')
+  assert.equal(workspaceOf(ATERRIZAJE_EMPRESA, EMPRESA_COMO_SA), 'inicio')
+})
+
+test('la plataforma se pinta en una columna; el panel de empresa, en dos niveles', () => {
+  // Un riel con un único icono no reparte nada. La plataforma y el mostrador
+  // son un solo espacio y van en una columna con sus grupos rotulados; el
+  // panel de empresa tiene nueve espacios y necesita el riel.
+  assert.equal(menuEnUnaColumna(visibleWorkspaces(PLATFORM)), true)
+  assert.equal(menuEnUnaColumna(visibleWorkspaces({ role: 'EMPLEADO' })), true)
+  assert.equal(menuEnUnaColumna(visibleWorkspaces(EMPRESA_COMO_SA)), false)
+  assert.equal(menuEnUnaColumna(visibleWorkspaces(ADMIN)), false)
+  assert.equal(menuEnUnaColumna(visibleWorkspaces({ role: 'CLIENTE' })), false)
+})
+
+test('en una columna, la plataforma sigue rotulando sus cuatro grupos', () => {
+  // Sin riel, los rótulos de grupo son la única estructura del menú: si
+  // alguien fundiera los grupos en uno, volvería la lista de dieciséis
+  // entradas sin nada que diga dónde mirar.
+  const [plataforma] = visibleWorkspaces(PLATFORM)
+  assert.deepEqual(
+    plataforma.groups.map((g) => g.label),
+    ['Resumen', 'Negocio', 'Operación', 'Sistema']
+  )
 })

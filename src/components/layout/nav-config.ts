@@ -1116,10 +1116,16 @@ const G_SA_SISTEMA: NavGroup = {
 
 /**
  * LA PLATAFORMA ES UN SOLO ESPACIO. El superadministrador administra lo
- * global desde un único riel —Resumen, Negocio, Operación y Sistema son
+ * global desde un único menú —Resumen, Negocio, Operación y Sistema son
  * GRUPOS del segundo nivel, no iconos— y entra al panel de una empresa
  * cambiando explícitamente de ámbito (scope COMPANY), nunca viendo los dos
- * mundos mezclados en el mismo riel.
+ * mundos mezclados en el mismo menú.
+ *
+ * Y como es un solo espacio, NO SE PINTA CON RIEL: un riel con un único icono
+ * no reparte nada. `menuEnUnaColumna` lo detecta y el shell pinta el segundo
+ * nivel entero, a todo el ancho y con sus grupos rotulados — el sidebar de
+ * una columna de siempre. El cambio de ámbito vive en la cabecera
+ * (`ofreceEntradaAEmpresa` / `ofreceSalidaAPlataforma`), no en el menú.
  */
 const ESPACIOS_PLATAFORMA: Workspace[] = [
   {
@@ -1332,6 +1338,42 @@ export function visibleWorkspaces(ctx: ContextoNav): EspacioVisible[] {
   return workspacesForRole(ctx.role)
     .filter((w) => canSeeWorkspace(w, ctx))
     .map((w) => ({ ...w, groups: visibleGroups(w, ctx) }))
+}
+
+/**
+ * ¿SE PINTA EL MENÚ EN UNA SOLA COLUMNA, SIN RIEL?
+ *
+ * El riel existe para REPARTIR: elegir un espacio reemplaza el segundo nivel.
+ * Con un único espacio visible no hay nada que elegir, y lo que queda es un
+ * icono siempre activo ocupando 68 px. En ese caso el segundo nivel se pinta
+ * entero y a todo el ancho, con sus grupos como secciones rotuladas.
+ *
+ * Hoy es la plataforma (superadministrador) y el mostrador (empleado,
+ * recepción). Se decide sobre los espacios YA filtrados y no por rol: si a un
+ * rol le quedara un solo espacio por capacidades o permisos, también lo vería
+ * en una columna — y si la plataforma se repartiera mañana en varios
+ * espacios, el riel volvería solo.
+ */
+export function menuEnUnaColumna(espacios: readonly EspacioVisible[]): boolean {
+  return espacios.length === 1
+}
+
+// ── Cambio de ámbito ────────────────────────────────────────────────────────
+
+/** A dónde lleva «Plataforma» en el conmutador de ámbito. */
+export const ATERRIZAJE_PLATAFORMA = '/superadmin/dashboard'
+/** A dónde lleva «Empresa» en el conmutador de ámbito. */
+export const ATERRIZAJE_EMPRESA = '/admin/dashboard'
+
+/**
+ * ¿Muestra la entrada explícita al panel de empresa? Solo cuando un
+ * superadministrador está en la plataforma. Es el sentido de ida del
+ * conmutador de ámbito; sin él, los 37 módulos de empresa no tenían ningún
+ * enlace en el menú del superadministrador —solo se llegaba escribiendo la
+ * URL—, que fue exactamente lo que se notó como «módulos que no aparecen».
+ */
+export function ofreceEntradaAEmpresa(ctx: ContextoNav): boolean {
+  return ctx.scope === 'PLATFORM' && ctx.role === 'SUPERADMIN'
 }
 
 // ── Resolución por ruta ─────────────────────────────────────────────────────
