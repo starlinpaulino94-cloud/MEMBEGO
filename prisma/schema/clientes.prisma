@@ -34,15 +34,20 @@ model Invitacion {
 }
 
 model Cliente {
-  id                 String    @id @default(cuid())
-  companyId          String
-  company            Company   @relation(fields: [companyId], references: [id])
+  id         String  @id @default(cuid())
+  companyId  String
+  company    Company @relation(fields: [companyId], references: [id])
   /// Identidad en Supabase Auth. Para los clientes de MOSTRADOR (`esLocal`)
   /// lleva el prefijo `local:` — Supabase solo emite UUID, así que un id con
   /// ese prefijo JAMÁS puede venir de una sesión real y ese cliente no puede
   /// iniciar sesión ni por accidente.
-  supabaseId         String
-  nombre             String
+  supabaseId String
+  nombre     String
+
+  /// Copia del nombre sin acentos y en minúsculas, SOLO para buscar. La
+  /// mantiene un disparador en la base: la aplicación nunca la escribe, así
+  /// que no puede quedarse desfasada porque alguien olvidara actualizarla.
+  nombreBusqueda     String?
   telefono           String?
   /// Vacío en los clientes de mostrador. `sendEmail` ya descarta destinatarios
   /// inválidos, así que un correo vacío no intenta enviar nada.
@@ -130,6 +135,7 @@ model Cliente {
   @@index([companyId])
   // Atribución de marketing: agrupación de registros por canal.
   @@index([companyId, canalOrigen])
+  @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "clientes_nombre_busqueda_trgm", type: Gin)
   @@map("clientes")
 }
 

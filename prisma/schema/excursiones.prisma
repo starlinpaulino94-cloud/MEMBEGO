@@ -130,30 +130,35 @@ model ExcursionHorario {
 // ── Vendedores y atribución ──────────────────────────────────────────────────
 
 model Vendedor {
-  id           String     @id @default(cuid())
-  companyId    String
+  id        String  @id @default(cuid())
+  companyId String
   /// Cuenta de MembeGo SOLO si el vendedor usará su panel (un hotel o un
   /// taxista no la necesitan). Las ventas cuelgan del vendedor, no del user.
-  userId       String?
-  nombre       String
-  apellido     String?
-  fotoUrl      String?
-  telefono     String?
-  whatsapp     String?
-  email        String?
-  documento    String?
-  direccion    String?
+  userId    String?
+  nombre    String
+
+  /// Copia del nombre sin acentos y en minúsculas, SOLO para buscar. La
+  /// mantiene un disparador en la base: la aplicación nunca la escribe, así
+  /// que no puede quedarse desfasada porque alguien olvidara actualizarla.
+  nombreBusqueda String?
+  apellido       String?
+  fotoUrl        String?
+  telefono       String?
+  whatsapp       String?
+  email          String?
+  documento      String?
+  direccion      String?
   /// Código comercial estable (RAF-00125). NUNCA derivado del nombre: el
   /// nombre cambia, el código no. Es lo que viaja en el QR y el enlace.
-  codigo       String
+  codigo         String
   /// Texto del catálogo TipoVendedor de la empresa (empleado, hotel, taxi…).
-  tipo         String?
-  sucursalId   String?
+  tipo           String?
+  sucursalId     String?
   /// Jerarquía comercial (supervisor → equipo). Self-relation.
-  supervisorId String?
-  supervisor   Vendedor?  @relation("VendedorSupervisor", fields: [supervisorId], references: [id])
-  equipo       Vendedor[] @relation("VendedorSupervisor")
-  fechaIngreso DateTime   @default(now())
+  supervisorId   String?
+  supervisor     Vendedor?  @relation("VendedorSupervisor", fields: [supervisorId], references: [id])
+  equipo         Vendedor[] @relation("VendedorSupervisor")
+  fechaIngreso   DateTime   @default(now())
 
   /// Datos B2B / Corporativos (Touroperadores y Agencias):
   razonSocial      String?
@@ -180,6 +185,7 @@ model Vendedor {
   @@index([companyId, estado])
   @@index([userId])
   @@index([supervisorId])
+  @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "vendedores_nombre_busqueda_trgm", type: Gin)
   @@map("vendedores")
 }
 
@@ -619,54 +625,54 @@ model ExcursionesConfig {
 
   // ── Políticas de Reserva y Reembolso ──────────────────────────────────────
   /// Permitir al cliente reducir pasajeros antes de la excursión.
-  permitirReduccionPasajeros  Boolean @default(true)
+  permitirReduccionPasajeros   Boolean @default(true)
   /// Horas mínimas de anticipación para modificar pasajeros.
-  anticipacionMinimaHoras     Int     @default(24)
+  anticipacionMinimaHoras      Int     @default(24)
   /// Permitir cancelación total de la reserva.
-  permitirCancelacion         Boolean @default(true)
+  permitirCancelacion          Boolean @default(true)
   /// Horas mínimas de anticipación para cancelar.
-  anticipacionCancelacionHoras Int    @default(48)
+  anticipacionCancelacionHoras Int     @default(48)
   /// Porcentaje de penalización al cancelar (0-100).
-  penalizacionCancelacionPct  Int     @default(0)
+  penalizacionCancelacionPct   Int     @default(0)
   /// Tipo de reembolso: COMPLETO, PARCIAL, CREDITO, NINGUNO.
-  tipoReembolso               String  @default("COMPLETO")
+  tipoReembolso                String  @default("COMPLETO")
   /// Horas antes de la excursión para poder solicitar reembolso.
-  horasLimiteReembolso        Int     @default(24)
+  horasLimiteReembolso         Int     @default(24)
   /// Notas de políticas visibles al cliente (texto libre).
-  notasPoliticas              String?
+  notasPoliticas               String?
 
   // ── Check-in ─────────────────────────────────────────────────────────────
   /// Días de gracia para check-in (permite escanear antes/después del día exacto).
-  diasGraciaCheckin           Int     @default(1)
+  diasGraciaCheckin      Int     @default(1)
   /// Permitir check-in con saldo pendiente de pago.
-  permitirCheckinSinPago      Boolean @default(false)
+  permitirCheckinSinPago Boolean @default(false)
   /// Prefijo del código QR de check-in (ej: "EXC:", "TOUR:", "PASE:").
-  prefijoCheckin              String  @default("EXC:")
+  prefijoCheckin         String  @default("EXC:")
 
   // ── Reserva ──────────────────────────────────────────────────────────────
   /// Horas mínimas antes de la excursión para crear una reserva.
-  anticipacionMinimaReservaHoras Int  @default(24)
+  anticipacionMinimaReservaHoras Int @default(24)
   /// Días máximos a futuro para crear una reserva.
-  anticipacionMaximaReservaDias  Int  @default(90)
+  anticipacionMaximaReservaDias  Int @default(90)
   /// Máximo total de pasajeros (adultos + niños) por reserva.
-  maxPasajerosPorReserva     Int     @default(50)
+  maxPasajerosPorReserva         Int @default(50)
 
   // ── Notificaciones ───────────────────────────────────────────────────────
   /// Enviar email de confirmación al crear reserva.
-  enviarConfirmacionReserva  Boolean @default(true)
+  enviarConfirmacionReserva Boolean @default(true)
   /// Horas antes del tour para enviar recordatorio (0 = deshabilitado).
-  enviarRecordatorioHoras    Int     @default(24)
+  enviarRecordatorioHoras   Int     @default(24)
   /// Email destino para notificaciones admin (nueva reserva, cancelación, etc).
-  emailNotificaciones        String?
+  emailNotificaciones       String?
 
   // ── Pago ─────────────────────────────────────────────────────────────────
   /// Métodos de pago habilitados para reservas (JSON array de strings).
-  metodosPagoHabilitados     Json    @default("[\"EFECTIVO\",\"TARJETA\",\"TRANSFERENCIA\",\"DEPOSITO\",\"LINK\"]")
+  metodosPagoHabilitados Json @default("[\"EFECTIVO\",\"TARJETA\",\"TRANSFERENCIA\",\"DEPOSITO\",\"LINK\"]")
   /// Tasas de conversión de moneda (JSON: {DOP_USD: 0.018, USD_DOP: 55.5, ...}).
-  tasasCambio                Json    @default("{}")
+  tasasCambio            Json @default("{}")
 
   /// Prefijos de numeración ({reserva:'EXC', venta:'SAL', liquidacion:'PAY'}).
-  config                      Json?
+  config Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

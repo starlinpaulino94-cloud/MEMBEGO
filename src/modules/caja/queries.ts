@@ -1,4 +1,5 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Caja (POS) · consultas del turno y búsqueda de órdenes pendientes.
@@ -525,7 +526,7 @@ export async function buscarOrdenesPendientes(
   const filtroCliente = term
     ? {
         OR: [
-          { nombre: { contains: term, mode: 'insensitive' as const } },
+          { nombreBusqueda: { contains: normalizarBusqueda(term) } },
           { telefono: { contains: term } },
           { email: { contains: term, mode: 'insensitive' as const } },
         ],

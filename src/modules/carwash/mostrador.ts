@@ -1,5 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarPlaca } from './cuentas'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * App Car Wash · CLIENTES DE MOSTRADOR.
@@ -76,7 +77,7 @@ export async function buscarClientes(
         where: {
           companyId,
           OR: [
-            { nombre: { contains: termino, mode: 'insensitive' } },
+            { nombreBusqueda: { contains: normalizarBusqueda(termino) } },
             ...(soloDigitos.length >= 3
               ? [{ telefono: { contains: soloDigitos } as const }]
               : []),

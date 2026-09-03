@@ -3,6 +3,7 @@ import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { DIAS_INACTIVO, POR_PAGINA, type FiltroUsuarios } from './filtros'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * EL CONTROL DE ACCESOS DE LA PLATAFORMA, LEÍDO EN UNA SOLA TRANSACCIÓN.
@@ -86,7 +87,7 @@ function whereFiltro(f: FiltroUsuarios, corteInactividad: Date): Prisma.UserWher
   if (f.q) {
     and.push({
       OR: [
-        { name: { contains: f.q, mode: 'insensitive' } },
+        { nombreBusqueda: { contains: normalizarBusqueda(f.q) } },
         { email: { contains: f.q, mode: 'insensitive' } },
       ],
     })

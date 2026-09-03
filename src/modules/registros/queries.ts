@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { armarCsv } from '@/lib/csv'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Registros / Comprobantes (Control de comprobantes · Fase 3 · G7+G10).
@@ -150,7 +151,7 @@ function construirWhere(
           OR: [
             { codigo: { contains: term.toUpperCase() } },
             { ticketNumero: { contains: term.toUpperCase() } },
-            { cliente: { nombre: { contains: term, mode: 'insensitive' as const } } },
+            { cliente: { nombreBusqueda: { contains: normalizarBusqueda(term) } } },
           ],
         }
       : {}),

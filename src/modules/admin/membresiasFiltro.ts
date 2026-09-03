@@ -7,6 +7,7 @@ import {
   haceDias,
   leerVentana,
 } from '@/modules/admin/filtrosComunes'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Filtros de la pantalla de Membresías — UNA definición, tres consumidores
@@ -128,7 +129,7 @@ export function whereMembresias(
   if (f.q) {
     condiciones.push({
       OR: [
-        { cliente: { nombre: { contains: f.q, mode: 'insensitive' } } },
+        { cliente: { nombreBusqueda: { contains: normalizarBusqueda(f.q) } } },
         { cliente: { email: { contains: f.q, mode: 'insensitive' } } },
         { cliente: { telefono: { contains: f.q } } },
         { plan: { nombre: { contains: f.q, mode: 'insensitive' } } },
