@@ -1,6 +1,14 @@
 import { conEmpresa } from '@/lib/tenant'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
-import { centavos, ticketPromedio, conversion, type Rango, type RealesMeta } from './nucleo'
+import { getExcursionesConfig, convertirMoneda } from '../config'
+import {
+  centavos,
+  ticketPromedio,
+  conversion,
+  calcularIngresosMeta,
+  type Rango,
+  type RealesMeta,
+} from './nucleo'
 
 /**
  * EXCURSIONES · Métricas — lecturas.
@@ -40,58 +48,76 @@ export async function resumenDelPeriodo(
       ? { vendedorId: { in: matchingVendedorIds } }
       : {}
 
-  const [registros, reservas, ventas, comisiones] = await conEmpresa(companyId, async (tx) => {
-    const [reg, res, ven, com] = await Promise.all([
-      tx.vendedorAtribucion.count({
-        where: {
-          companyId,
-          ...effectiveVendedorCondition,
-          etapa: 'REGISTRO',
-          ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-      }),
-      tx.reservaExc.findMany({
-        where: {
-          companyId,
-          ...effectiveVendedorCondition,
-          ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
-          ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
-          ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : { estado: { not: 'CANCELADA' } }),
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        select: { adultos: true, ninos: true },
-      }),
-      tx.ventaExc.findMany({
-        where: {
-          companyId,
-          ...effectiveVendedorCondition,
-          ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
-          ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
-          ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : { estado: { not: 'CANCELADA' } }),
-          confirmadaAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        select: { total: true, pasajeros: true, moneda: true },
-      }),
-      tx.comisionEntrada.findMany({
-        where: {
-          companyId,
-          ...effectiveVendedorCondition,
-          estado: { not: 'ANULADA' },
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        select: { monto: true, ajustes: { select: { monto: true } } },
-      }),
-    ])
-    return [reg, res, ven, com] as const
-  })
+  const [[registros, reservas, ventas, comisiones], config] = await Promise.all([
+    conEmpresa(companyId, async (tx) => {
+      const [reg, res, ven, com] = await Promise.all([
+        tx.vendedorAtribucion.count({
+          where: {
+            companyId,
+            ...effectiveVendedorCondition,
+            etapa: 'REGISTRO',
+            ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+        }),
+        tx.reservaExc.findMany({
+          where: {
+            companyId,
+            ...effectiveVendedorCondition,
+            ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
+            ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+            ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : { estado: { not: 'CANCELADA' } }),
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          select: { adultos: true, ninos: true },
+        }),
+        tx.ventaExc.findMany({
+          where: {
+            companyId,
+            ...effectiveVendedorCondition,
+            ...(filtros.excursionId && filtros.excursionId !== 'TODAS' ? { excursionId: filtros.excursionId } : {}),
+            ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
+            ...(filtros.estado && filtros.estado !== 'TODOS' ? { estado: filtros.estado } : { estado: { not: 'CANCELADA' } }),
+            confirmadaAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          select: { total: true, pasajeros: true, moneda: true },
+        }),
+        tx.comisionEntrada.findMany({
+          where: {
+            companyId,
+            ...effectiveVendedorCondition,
+            estado: { not: 'ANULADA' },
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          select: { monto: true, moneda: true, ajustes: { select: { monto: true } } },
+        }),
+      ])
+      return [reg, res, ven, com] as const
+    }),
+    getExcursionesConfig(companyId),
+  ])
 
-  const ingresos = centavos(ventas.reduce((t, v) => t + Number(v.total), 0))
-  const comisionado = centavos(
-    comisiones.reduce(
-      (t, c) => t + netoComision(Number(c.monto), c.ajustes.map((a) => ({ monto: Number(a.monto) }))),
+  const { monedaDefecto, tasasCambio } = config
+
+  const ingresos = centavos(
+    ventas.reduce(
+      (t, v) => t + convertirMoneda(Number(v.total), v.moneda, monedaDefecto, tasasCambio),
       0
     )
+  )
+
+  let comisionesConConversion = 0
+  const comisionado = centavos(
+    comisiones.reduce((t, c) => {
+      const netoOrig = netoComision(
+        Number(c.monto),
+        c.ajustes.map((a) => ({ monto: Number(a.monto) }))
+      )
+      if ((c.moneda || monedaDefecto).toUpperCase() !== monedaDefecto.toUpperCase()) {
+        comisionesConConversion++
+      }
+      return t + convertirMoneda(netoOrig, c.moneda, monedaDefecto, tasasCambio)
+    }, 0)
   )
 
   return {
@@ -102,10 +128,12 @@ export async function resumenDelPeriodo(
     pasajerosVendidos: ventas.reduce((t, v) => t + v.pasajeros, 0),
     ingresos,
     comisionado,
-    moneda: ventas[0]?.moneda ?? 'DOP',
+    moneda: monedaDefecto,
     ticket: ticketPromedio(ingresos, ventas.length),
     conversionReserva: conversion(reservas.length, registros),
     conversionVenta: conversion(ventas.length, reservas.length),
+    comisionesConConversion,
+    tasasCambio,
   }
 }
 
@@ -116,48 +144,50 @@ export async function resumenDelPeriodo(
  * un mal puesto en una lista.
  */
 export async function rankingVendedores(companyId: string, rango: Rango) {
-  const [vendedores, atribuciones, ventas] = await conEmpresa(companyId, async (tx) => {
-    const [v, a, ve] = await Promise.all([
-      tx.vendedor.findMany({
-        where: { companyId, estado: 'ACTIVO' },
-        select: { id: true, nombre: true, apellido: true, codigo: true },
-      }),
-      tx.vendedorAtribucion.groupBy({
-        by: ['vendedorId'],
-        where: {
-          companyId,
-          etapa: 'REGISTRO',
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        _count: { _all: true },
-      }),
-      tx.ventaExc.findMany({
-        where: {
-          companyId,
-          estado: { not: 'CANCELADA' },
-          vendedorId: { not: null },
-          confirmadaAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        select: { vendedorId: true, total: true, pasajeros: true, moneda: true },
-      }),
-    ])
-    return [v, a, ve] as const
-  })
+  const [[vendedores, atribuciones, ventas], config] = await Promise.all([
+    conEmpresa(companyId, async (tx) => {
+      const [v, a, ve] = await Promise.all([
+        tx.vendedor.findMany({
+          where: { companyId, estado: 'ACTIVO' },
+          select: { id: true, nombre: true, apellido: true, codigo: true },
+        }),
+        tx.vendedorAtribucion.groupBy({
+          by: ['vendedorId'],
+          where: {
+            companyId,
+            etapa: 'REGISTRO',
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          _count: { _all: true },
+        }),
+        tx.ventaExc.findMany({
+          where: {
+            companyId,
+            estado: { not: 'CANCELADA' },
+            vendedorId: { not: null },
+            confirmadaAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          select: { vendedorId: true, total: true, pasajeros: true, moneda: true },
+        }),
+      ])
+      return [v, a, ve] as const
+    }),
+    getExcursionesConfig(companyId),
+  ])
 
+  const { monedaDefecto, tasasCambio } = config
   const captados = new Map(atribuciones.map((a) => [a.vendedorId, a._count._all]))
   const porVendedor = new Map<string, { ingresos: number; ventas: number; pasajeros: number }>()
-  const monedaPorVendedor = new Map<string, string>()
+
   for (const venta of ventas) {
     if (!venta.vendedorId) continue
     const previo = porVendedor.get(venta.vendedorId) ?? { ingresos: 0, ventas: 0, pasajeros: 0 }
+    const convertido = convertirMoneda(Number(venta.total), venta.moneda, monedaDefecto, tasasCambio)
     porVendedor.set(venta.vendedorId, {
-      ingresos: centavos(previo.ingresos + Number(venta.total)),
+      ingresos: centavos(previo.ingresos + convertido),
       ventas: previo.ventas + 1,
       pasajeros: previo.pasajeros + venta.pasajeros,
     })
-    if (!monedaPorVendedor.has(venta.vendedorId)) {
-      monedaPorVendedor.set(venta.vendedorId, venta.moneda)
-    }
   }
 
   return vendedores
@@ -169,7 +199,7 @@ export async function rankingVendedores(companyId: string, rango: Rango) {
         codigo: v.codigo,
         captados: captados.get(v.id) ?? 0,
         ...datos,
-        moneda: monedaPorVendedor.get(v.id) ?? ventas[0]?.moneda ?? 'DOP',
+        moneda: monedaDefecto,
       }
     })
     .filter((v) => v.captados > 0 || v.ventas > 0)
@@ -201,46 +231,49 @@ export async function realesDeVendedor(
    * razón para que vayan por conexiones distintas. Dentro de una transacción
    * se ejecutan igual de bien y cuestan UNA.
    */
-  const { registros, reservas, ventas } = await conEmpresa(companyId, async (tx) => {
-    const [registros, reservas, ventas] = await Promise.all([
-      tx.vendedorAtribucion.count({
-        where: {
-          companyId,
-          vendedorId,
-          etapa: 'REGISTRO',
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-      }),
-      tx.reservaExc.count({
-        where: {
-          companyId,
-          vendedorId,
-          estado: { not: 'CANCELADA' },
-          ...(excursionId ? { excursionId } : {}),
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-      }),
-      tx.ventaExc.findMany({
-        where: {
-          companyId,
-          vendedorId,
-          estado: { not: 'CANCELADA' },
-          ...(excursionId ? { excursionId } : {}),
-          confirmadaAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        select: { total: true, pasajeros: true, moneda: true },
-      }),
-    ])
-    return { registros, reservas, ventas }
-  })
+  const [{ registros, reservas, ventas }, config] = await Promise.all([
+    conEmpresa(companyId, async (tx) => {
+      const [registros, reservas, ventas] = await Promise.all([
+        tx.vendedorAtribucion.count({
+          where: {
+            companyId,
+            vendedorId,
+            etapa: 'REGISTRO',
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+        }),
+        tx.reservaExc.count({
+          where: {
+            companyId,
+            vendedorId,
+            estado: { not: 'CANCELADA' },
+            ...(excursionId ? { excursionId } : {}),
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+        }),
+        tx.ventaExc.findMany({
+          where: {
+            companyId,
+            vendedorId,
+            estado: { not: 'CANCELADA' },
+            ...(excursionId ? { excursionId } : {}),
+            confirmadaAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          select: { total: true, pasajeros: true, moneda: true },
+        }),
+      ])
+      return { registros, reservas, ventas }
+    }),
+    getExcursionesConfig(companyId),
+  ])
 
   return {
     registros,
     reservas,
     ventas: ventas.length,
     pasajeros: ventas.reduce((t, v) => t + v.pasajeros, 0),
-    ingresos: centavos(ventas.reduce((t, v) => t + Number(v.total), 0)),
-    moneda: ventas[0]?.moneda ?? null,
+    ingresos: calcularIngresosMeta(ventas, config.monedaDefecto, config.tasasCambio),
+    moneda: config.monedaDefecto,
   }
 }
 

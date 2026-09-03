@@ -1,10 +1,11 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { ImageIcon, Loader2, UploadCloud, X, Plus } from 'lucide-react'
+import { ImageIcon, Loader2, UploadCloud, X, Plus, Crop } from 'lucide-react'
 import { toast } from 'sonner'
 import { subirImagenExcursion } from '@/modules/excursiones/catalogo/imageActions'
 import { Button } from '@/components/ui/button'
+import { ModalRecortePortada } from './ModalRecortePortada'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_MB = 5
@@ -24,6 +25,7 @@ export function ExcursionImagenUpload({
   const [galeriaUrls, setGaleriaUrls] = useState<string[]>(currentGaleria ?? [])
   const [uploadingPortada, setUploadingPortada] = useState(false)
   const [uploadingGaleria, setUploadingGaleria] = useState(false)
+  const [archivoParaRecortar, setArchivoParaRecortar] = useState<{ file?: File; url: string } | null>(null)
   
   const portadaRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
@@ -92,7 +94,18 @@ export function ExcursionImagenUpload({
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0]
-            if (f) void handleUpload(f, 'portada')
+            if (f) {
+              if (!ALLOWED.includes(f.type)) {
+                toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
+                return
+              }
+              if (f.size > MAX_MB * 1024 * 1024) {
+                toast.error(`La imagen no puede superar ${MAX_MB} MB.`)
+                return
+              }
+              const objUrl = URL.createObjectURL(f)
+              setArchivoParaRecortar({ file: f, url: objUrl })
+            }
           }}
         />
 
@@ -102,7 +115,7 @@ export function ExcursionImagenUpload({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={portadaUrl} alt="Portada de la excursión" className="h-48 w-full object-cover" />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -113,6 +126,16 @@ export function ExcursionImagenUpload({
               >
                 {uploadingPortada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
                 Cambiar portada
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={uploadingPortada}
+                onClick={() => setArchivoParaRecortar({ url: portadaUrl })}
+              >
+                <Crop className="h-3.5 w-3.5" /> Reajustar encuadre
               </Button>
               <Button
                 type="button"
@@ -198,6 +221,29 @@ export function ExcursionImagenUpload({
           </button>
         </div>
       </div>
+
+      {archivoParaRecortar && (
+        <ModalRecortePortada
+          open={Boolean(archivoParaRecortar)}
+          onOpenChange={(abierto) => {
+            if (!abierto) {
+              if (archivoParaRecortar.file && archivoParaRecortar.url.startsWith('blob:')) {
+                URL.revokeObjectURL(archivoParaRecortar.url)
+              }
+              setArchivoParaRecortar(null)
+              if (portadaRef.current) portadaRef.current.value = ''
+            }
+          }}
+          imagenSrc={archivoParaRecortar.url}
+          onConfirmar={(archivoRecortado) => {
+            if (archivoParaRecortar.file && archivoParaRecortar.url.startsWith('blob:')) {
+              URL.revokeObjectURL(archivoParaRecortar.url)
+            }
+            setArchivoParaRecortar(null)
+            void handleUpload(archivoRecortado, 'portada')
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -7,11 +7,88 @@ import {
   ajustePorCancelacion,
   puedeTransicionar,
   motivoTransicionInvalida,
+  puedeTransicionarManualComision,
+  motivoTransicionManualInvalida,
   normalizarEscalones,
   validarRegla,
   type ReglaComision,
   type ContextoVenta,
 } from '../src/modules/excursiones/comisiones/nucleo'
+
+// ── Mocks para ajustarComision (requiere Prisma + auth) ───────────────────────
+
+const mockUser = {
+  metadata: { dbUserId: 'user-1' },
+}
+
+// Simple module mocking using require cache
+const originalModules = new Map()
+
+function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
+  const resolvedPath = require.resolve(modulePath)
+  originalModules.set(resolvedPath, require.cache[resolvedPath])
+  require.cache[resolvedPath] = {
+    id: resolvedPath,
+    filename: resolvedPath,
+    loaded: true,
+    exports: mockExports,
+    parent: null,
+    children: [],
+  } as unknown as NodeJS.Module
+}
+
+function _restoreModules() {
+  for (const [path, original] of originalModules) {
+    if (original) {
+      require.cache[path] = original
+    } else {
+      delete require.cache[path]
+    }
+  }
+  originalModules.clear()
+}
+
+// Set up mocks before importing actions
+mockModule('../src/lib/auth/guards.ts', {
+  requireSection: async () => mockUser,
+})
+
+mockModule('../src/lib/auth/company-context.ts', {
+  resolveCompanyId: async () => 'company-1',
+})
+
+mockModule('next/cache', {
+  revalidatePath: () => {},
+})
+
+mockModule('../src/lib/server-utils.ts', {
+  getRequestMeta: async () => ({ ipAddress: null, userAgent: null }),
+})
+
+let mockFindFirstResult: unknown = null
+let mockCreatedAjuste: Record<string, unknown> = {}
+mockModule('../src/lib/tenant.ts', {
+  conEmpresa: async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) => {
+    const tx = {
+      comisionEntrada: {
+        findFirst: async () => mockFindFirstResult,
+      },
+      comisionAjuste: {
+        create: async (args: { data: Record<string, unknown> }) => {
+          mockCreatedAjuste = args.data
+          return {}
+        },
+      },
+      auditLog: {
+        create: async () => ({}),
+      },
+    }
+    return fn(tx)
+  },
+})
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { ajustarComision } = require('../src/modules/excursiones/comisiones/actions')
 
 /**
  * Excursiones · Fase 6 — el motor de comisiones decide cuánto se le debe a una
@@ -148,6 +225,38 @@ test('una comisión pagada es terminal: se corrige con ajuste, no con estado', (
   assert.equal(motivoTransicionInvalida('GENERADA', 'APROBADA'), null)
 })
 
+test('transiciones manuales desde la sección de comisiones están restringidas', () => {
+  // Manualmente solo se aprueba o anula
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'APROBADA'), true)
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'ANULADA'), true)
+  assert.equal(puedeTransicionarManualComision('APROBADA', 'ANULADA'), true)
+  assert.equal(puedeTransicionarManualComision('ANULADA', 'GENERADA'), true)
+
+  // Prohibido transicionar manualmente a PENDIENTE_PAGO o PAGADA
+  assert.equal(puedeTransicionarManualComision('APROBADA', 'PENDIENTE_PAGO'), false)
+  assert.equal(puedeTransicionarManualComision('APROBADA', 'PAGADA'), false)
+  assert.equal(puedeTransicionarManualComision('PENDIENTE_PAGO', 'PAGADA'), false)
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'PENDIENTE_PAGO'), false)
+  assert.equal(puedeTransicionarManualComision('GENERADA', 'PAGADA'), false)
+
+  assert.match(
+    motivoTransicionManualInvalida('APROBADA', 'PENDIENTE_PAGO') ?? '',
+    /proceso de liquidación/
+  )
+  assert.match(
+    motivoTransicionManualInvalida('APROBADA', 'PAGADA') ?? '',
+    /proceso de liquidación/
+  )
+})
+
+test('reanudar: ANULADA → GENERADA está permitido, salto directo no', () => {
+  assert.equal(puedeTransicionar('ANULADA', 'GENERADA'), true)
+  assert.equal(puedeTransicionar('ANULADA', 'PAGADA'), false)
+  assert.equal(puedeTransicionar('ANULADA', 'APROBADA'), false)
+  assert.equal(motivoTransicionInvalida('ANULADA', 'GENERADA'), null)
+  assert.match(motivoTransicionInvalida('ANULADA', 'PAGADA') ?? '', /reanúdala/)
+})
+
 test('el neto suma los ajustes firmados y nunca deja al vendedor debiendo', () => {
   assert.equal(netoComision(100, []), 100)
   assert.equal(netoComision(100, [{ monto: -40 }]), 60)
@@ -198,4 +307,103 @@ test('la vigencia no puede terminar antes de empezar', () => {
     vigenciaHasta: '2026-08-01',
   })
   assert.equal(r.ok, false)
+})
+
+// ── Ajustar comisión: restricción por estado ──────────────────────────────────
+
+function buildFormData(overrides: Record<string, string> = {}): FormData {
+  const fd = new FormData()
+  fd.set('comisionId', overrides.comisionId ?? 'c1')
+  fd.set('motivo', overrides.motivo ?? 'Corrección')
+  fd.set('monto', overrides.monto ?? '-10')
+  fd.set('companyId', overrides.companyId ?? 'company-1')
+  return fd
+}
+
+async function runAjustar(estado: string) {
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 100,
+    estado,
+    ajustes: [],
+  }
+  return ajustarComision({} as never, buildFormData())
+}
+
+test('ajustar comisión GENERADA tiene éxito (antes de aprobarse)', async () => {
+  const result = await runAjustar('GENERADA')
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+})
+
+test('ajustar comisión APROBADA falla: no se ajusta tras aprobación', async () => {
+  const result = await runAjustar('APROBADA')
+  assert.match(result.error ?? '', /después de haber sido aprobada/)
+})
+
+test('ajustar comisión PENDIENTE_PAGO falla: no se ajusta en liquidación', async () => {
+  const result = await runAjustar('PENDIENTE_PAGO')
+  assert.match(result.error ?? '', /después de haber sido aprobada/)
+})
+
+test('ajustar comisión PAGADA falla: no se ajusta tras pago', async () => {
+  const result = await runAjustar('PAGADA')
+  assert.match(result.error ?? '', /después de haber sido aprobada/)
+})
+
+test('ajustar comisión ANULADA falla: estado no ajustable', async () => {
+  const result = await runAjustar('ANULADA')
+  assert.match(result.error ?? '', /Solo se pueden ajustar comisiones en estado Generada/)
+})
+
+test('ajustar comisión inexistente falla', async () => {
+  mockFindFirstResult = null
+  const result = ajustarComision({} as never, buildFormData())
+  const resolved = await result
+  assert.match(resolved.error ?? '', /no encontrada/)
+})
+
+test('ajustar comisión con selector RESTAR guarda monto negativo', async () => {
+  mockCreatedAjuste = {}
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 100,
+    estado: 'GENERADA',
+    ajustes: [],
+  }
+  const fd = buildFormData({ monto: '25.50' })
+  fd.set('tipoAjuste', 'RESTAR')
+  const result = await ajustarComision({} as never, fd)
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+  assert.equal(mockCreatedAjuste.monto, -25.50)
+})
+
+test('ajustar comisión con selector SUMAR guarda monto positivo', async () => {
+  mockCreatedAjuste = {}
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 100,
+    estado: 'GENERADA',
+    ajustes: [],
+  }
+  const fd = buildFormData({ monto: '15' })
+  fd.set('tipoAjuste', 'SUMAR')
+  const result = await ajustarComision({} as never, fd)
+  assert.equal(result.error, undefined)
+  assert.equal(result.success, 'Ajuste registrado.')
+  assert.equal(mockCreatedAjuste.monto, 15)
+})
+
+test('ajustar comisión con selector RESTAR rechaza si excede el neto disponible', async () => {
+  mockFindFirstResult = {
+    id: 'c1',
+    monto: 50,
+    estado: 'GENERADA',
+    ajustes: [{ monto: -20 }], // neto actual = 30
+  }
+  const fd = buildFormData({ monto: '35' })
+  fd.set('tipoAjuste', 'RESTAR')
+  const result = await ajustarComision({} as never, fd)
+  assert.match(result.error ?? '', /no puede pasar del neto actual/)
 })

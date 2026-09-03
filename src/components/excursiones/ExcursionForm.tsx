@@ -149,10 +149,12 @@ export function ExcursionForm({
   companyId,
   excursion,
   actividadesDisponibles = [],
+  monedaDefecto = 'DOP',
 }: {
   companyId: string
   excursion?: ExcursionEditable
   actividadesDisponibles?: ActividadParaComboItem[]
+  monedaDefecto?: string
 }) {
   const router = useRouter()
   const accion = excursion ? actualizarExcursion : crearExcursion
@@ -1350,7 +1352,7 @@ export function ExcursionForm({
                 <select
                   id="exc-moneda"
                   name="moneda"
-                  defaultValue="DOP"
+                  defaultValue={monedaDefecto || 'DOP'}
                   className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-bold text-foreground outline-none focus:ring-2 focus:ring-primary"
                 >
                   {MONEDAS.map((m) => (

@@ -114,11 +114,53 @@ const TRANSICIONES: Record<EstadoComision, EstadoComision[]> = {
   APROBADA: ['PENDIENTE_PAGO', 'ANULADA'],
   PENDIENTE_PAGO: ['PAGADA', 'ANULADA'],
   PAGADA: [],
-  ANULADA: [],
+  ANULADA: ['GENERADA'],
 }
 
 export function puedeTransicionar(desde: EstadoComision, hacia: EstadoComision): boolean {
   return (TRANSICIONES[desde] ?? []).includes(hacia)
+}
+
+/**
+ * Transiciones manuales que se pueden ejecutar directamente desde la sección
+ * de comisiones. Las transiciones a PENDIENTE_PAGO y PAGADA ocurren
+ * exclusivamente durante el proceso de liquidaciones.
+ */
+export const TRANSICIONES_MANUALES_COMISION: Record<EstadoComision, EstadoComision[]> = {
+  ESTIMADA: ['GENERADA', 'ANULADA'],
+  GENERADA: ['APROBADA', 'ANULADA'],
+  APROBADA: ['ANULADA'],
+  PENDIENTE_PAGO: [],
+  PAGADA: [],
+  ANULADA: ['GENERADA'],
+}
+
+export function puedeTransicionarManualComision(
+  desde: EstadoComision,
+  hacia: EstadoComision
+): boolean {
+  return (TRANSICIONES_MANUALES_COMISION[desde] ?? []).includes(hacia)
+}
+
+/** Motivo legible del rechazo manual para la interfaz y acciones. */
+export function motivoTransicionManualInvalida(
+  desde: EstadoComision,
+  hacia: EstadoComision
+): string | null {
+  if (puedeTransicionarManualComision(desde, hacia)) return null
+  if (hacia === 'PENDIENTE_PAGO' || hacia === 'PAGADA') {
+    return 'El estado de pago de las comisiones solo se gestiona a través del proceso de liquidación.'
+  }
+  if (desde === 'PAGADA') {
+    return 'Esta comisión ya se pagó. Lo que haya que corregir se hace con un ajuste, no borrando el pago.'
+  }
+  if (desde === 'PENDIENTE_PAGO') {
+    return 'Esta comisión está incluida en un borrador o pago de liquidación. Se gestiona desde liquidaciones.'
+  }
+  if (desde === 'ANULADA') {
+    return 'Esta comisión está anulada. Si necesitas reactivarla, reanúdala a estado Generada.'
+  }
+  return `No se puede pasar manualmente de ${ESTADO_COMISION_LABEL[desde]} a ${ESTADO_COMISION_LABEL[hacia]}.`
 }
 
 /** Motivo legible del rechazo, para decirle a quien lo intenta POR QUÉ no. */
@@ -130,7 +172,7 @@ export function motivoTransicionInvalida(
   if (desde === 'PAGADA') {
     return 'Esta comisión ya se pagó. Lo que haya que corregir se hace con un ajuste, no borrando el pago.'
   }
-  if (desde === 'ANULADA') return 'Esta comisión está anulada: su histórico no se reescribe.'
+  if (desde === 'ANULADA') return 'Esta comisión está anulada. Si necesitas reactivarla, reanúdala a estado Generada.'
   return `No se puede pasar de ${ESTADO_COMISION_LABEL[desde]} a ${ESTADO_COMISION_LABEL[hacia]}.`
 }
 
@@ -235,25 +277,61 @@ function vigente(regla: ReglaComision, fecha: Date): boolean {
   return true
 }
 
+function firmaRegla(r: ReglaComision): string {
+  return [
+    r.ambito,
+    r.tipoCalculo,
+    r.excursionId ?? '',
+    r.vendedorId ?? '',
+    r.tipoVendedor ?? '',
+    r.categoria ?? '',
+  ].join(':')
+}
+
 /**
- * La regla que gobierna esta venta: la más específica entre las vigentes y, a
- * igual especificidad, la más reciente. Sin regla no hay comisión — y eso es
- * un resultado legítimo, no un error: significa que la empresa no ha definido
- * cuánto paga, y adivinar una cifra sería inventar una deuda.
+ * Retorna TODAS las reglas que aplican a la venta y al vendedor.
+ * Permite esquemas multi-regla (ej. comisión porcentual + paquete de regalo + bono por tipo de vendedor).
+ * Si hay reglas duplicadas de idéntico ámbito y tipo de cálculo, prevalece la más reciente.
+ */
+export function reglasAplicables(
+  reglas: ReglaComision[],
+  ctx: ContextoVenta
+): ReglaComision[] {
+  const candidatas = reglas
+    .filter((r) => vigente(r, ctx.fecha) && reglaCorresponde(r, ctx))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+  // Deduplica por firma única para evitar evaluar dos veces la misma regla idéntica
+  const vistas = new Set<string>()
+  const unicas: ReglaComision[] = []
+
+  for (const r of candidatas) {
+    const firma = firmaRegla(r)
+    if (!vistas.has(firma)) {
+      vistas.add(firma)
+      unicas.push(r)
+    }
+  }
+
+  return unicas
+}
+
+/**
+ * La regla individual de mayor especificidad que gobierna esta venta.
+ * Se preserva para consultas individuales y compatibilidad histórica.
  */
 export function reglaAplicable(
   reglas: ReglaComision[],
   ctx: ContextoVenta
 ): ReglaComision | null {
-  const candidatas = reglas
-    .filter((r) => vigente(r, ctx.fecha) && reglaCorresponde(r, ctx))
-    .sort((a, b) => {
-      const pesoA = PESO_AMBITO[a.ambito as AmbitoRegla] ?? 0
-      const pesoB = PESO_AMBITO[b.ambito as AmbitoRegla] ?? 0
-      if (pesoA !== pesoB) return pesoB - pesoA
-      return b.createdAt.getTime() - a.createdAt.getTime()
-    })
-  return candidatas[0] ?? null
+  const todas = [...reglasAplicables(reglas, ctx)]
+  if (todas.length === 0) return null
+  return todas.sort((a, b) => {
+    const pesoA = PESO_AMBITO[a.ambito as AmbitoRegla] ?? 0
+    const pesoB = PESO_AMBITO[b.ambito as AmbitoRegla] ?? 0
+    if (pesoA !== pesoB) return pesoB - pesoA
+    return b.createdAt.getTime() - a.createdAt.getTime()
+  })[0] ?? null
 }
 
 export interface ComisionCalculada {

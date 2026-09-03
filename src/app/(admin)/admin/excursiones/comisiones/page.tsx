@@ -5,18 +5,18 @@ import { ADMIN_ROLES } from '@/types'
 import {
   listadoComisiones,
   resumenComisiones,
+  vendedoresParaFiltro,
 } from '@/modules/excursiones/comisiones/queries'
 import {
   ESTADO_COMISION_LABEL,
-  TONO_COMISION,
   type EstadoComision,
 } from '@/modules/excursiones/comisiones/nucleo'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
-import { ComisionAcciones } from '@/components/excursiones/ComisionAcciones'
-import { StatusChip } from '@/components/ui/status-chip'
+import { ComisionesLista } from '@/components/excursiones/ComisionesLista'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/system/EmptyState'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Comisiones' }
@@ -26,9 +26,11 @@ export default async function ComisionesPage() {
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="las comisiones de excursiones" />
 
-  const [comisiones, resumen] = await Promise.all([
+  const [comisiones, resumen, config, vendedores] = await Promise.all([
     listadoComisiones(companyId),
     resumenComisiones(companyId),
+    getExcursionesConfig(companyId),
+    vendedoresParaFiltro(companyId),
   ])
 
   return (
@@ -45,11 +47,11 @@ export default async function ComisionesPage() {
         </Button>
       </div>
 
-      {resumen.length > 0 ? (
+      {resumen.porEstado.length > 0 ? (
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {resumen.map((r) => (
+          {resumen.porEstado.map((r) => (
             <div key={r.estado} className="rounded-xl border border-border bg-card p-3 text-center">
-              <dd className="text-h3 text-foreground">{formatMoney(r.total, { moneda: r.moneda }, 2)}</dd>
+              <dd className="text-h3 text-foreground">{formatMoney(r.total, { moneda: config.monedaDefecto }, 2)}</dd>
               <dt className="text-caption text-muted-foreground">
                 {ESTADO_COMISION_LABEL[r.estado as EstadoComision] ?? r.estado} · {r.cantidad}
               </dt>
@@ -70,57 +72,11 @@ export default async function ComisionesPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
-          {comisiones.map((c) => (
-            <article key={c.id} className="rounded-2xl border border-border bg-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-foreground">
-                    {c.vendedor}{' '}
-                    {c.vendedorCodigo ? (
-                      <span className="font-mono text-caption text-muted-foreground">
-                        {c.vendedorCodigo}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-caption text-muted-foreground">
-                    Venta <span className="font-mono">{c.venta?.numero ?? '—'}</span> ·{' '}
-                    {formatDate(c.createdAt)}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">{c.desglose}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-h3 text-foreground">
-                    {formatMoney(c.neto, { moneda: c.moneda }, 2)}
-                  </p>
-                  {c.neto !== c.monto ? (
-                    <p className="text-caption text-muted-foreground">
-                      Generada: {formatMoney(c.monto, { moneda: c.moneda }, 2)}
-                    </p>
-                  ) : null}
-                  <StatusChip tone={TONO_COMISION[c.estado as EstadoComision] ?? 'neutral'}>
-                    {ESTADO_COMISION_LABEL[c.estado as EstadoComision] ?? c.estado}
-                  </StatusChip>
-                </div>
-              </div>
-
-              {c.ajustes.length > 0 ? (
-                <ul className="mt-3 space-y-1 border-t border-border pt-2">
-                  {c.ajustes.map((a, i) => (
-                    <li key={i} className="text-caption text-muted-foreground">
-                      Ajuste {a.monto > 0 ? '+' : ''}
-                      {formatMoney(a.monto, { moneda: c.moneda }, 2)} · {a.motivo}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              <div className="mt-3 border-t border-border pt-3">
-                <ComisionAcciones comisionId={c.id} estado={c.estado as EstadoComision} />
-              </div>
-            </article>
-          ))}
-        </div>
+        <ComisionesLista
+          comisiones={comisiones}
+          vendedores={vendedores}
+          monedaDefecto={config.monedaDefecto}
+        />
       )}
     </div>
   )

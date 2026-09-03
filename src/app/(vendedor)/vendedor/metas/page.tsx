@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
 import { Target } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { vendedorDeUsuario, misComisiones } from '@/modules/excursiones/panel/queries'
+import { vendedorDeUsuario } from '@/modules/excursiones/panel/queries'
 import { metasDeVendedor, realesDeVendedor } from '@/modules/excursiones/metricas/queries'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import {
   rangoDePeriodo,
   progresoMeta,
@@ -23,9 +24,9 @@ export default async function VendedorMetasPage() {
     : null
   if (!vendedor) redirect('/login')
 
-  const [metas, comisiones] = await Promise.all([
+  const [metas, config] = await Promise.all([
     metasDeVendedor(vendedor.companyId, vendedor.id),
-    misComisiones(vendedor.companyId, vendedor.id),
+    getExcursionesConfig(vendedor.companyId),
   ])
 
   const ahora = new Date()
@@ -85,7 +86,7 @@ export default async function VendedorMetasPage() {
                 </span>
               </div>
 
-              <MetaProgreso lineas={m.lineas} moneda={comisiones.moneda ?? 'DOP'} />
+              <MetaProgreso lineas={m.lineas} moneda={config.monedaDefecto} />
             </article>
           ))}
         </div>
