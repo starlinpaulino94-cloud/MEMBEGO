@@ -47,6 +47,21 @@ export function membresiaVigente(ahora: Date = new Date()): Prisma.MembershipWhe
   }
 }
 
+/**
+ * La misma pregunta sobre una fila que ya está en memoria.
+ *
+ * `membresiaVigente()` sirve para consultar; esto sirve para decidir delante de
+ * un objeto que ya se leyó. Misma regla, para que no haya dos verdades: una
+ * fila que dice ACTIVA con la fecha pasada NO está vigente, la haya marcado el
+ * job o no.
+ */
+export function estaVigente(
+  m: { estado: string; fechaVencimiento: Date | null },
+  ahora: Date = new Date()
+): boolean {
+  return m.estado === 'ACTIVA' && (m.fechaVencimiento === null || m.fechaVencimiento > ahora)
+}
+
 /** Lo contrario: activa en la base pero ya pasada de fecha. Lo que el job barre. */
 export function membresiaCaducada(ahora: Date = new Date()): Prisma.MembershipWhereInput {
   return { estado: 'ACTIVA', fechaVencimiento: { lt: ahora } }

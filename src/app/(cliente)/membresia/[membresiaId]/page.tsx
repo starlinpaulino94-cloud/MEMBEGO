@@ -17,6 +17,7 @@ import {
   Utensils,
   Calendar,
   Gauge,
+  RefreshCw,
 } from 'lucide-react'
 import { QRShareCard } from '@/components/qr/QRShareCard'
 import { OpcionesPago } from '@/components/membresia/OpcionesPago'
@@ -160,6 +161,24 @@ export default async function MembershipDetail({
   const needsInitialPayment = ['PENDIENTE', 'RECHAZADA'].includes(membership.estado)
   const isChangePending = isActive && membership.planIdSolicitado != null
   const needsPayment = needsInitialPayment || isChangePending
+
+  /**
+   * SE ACABÓ, Y PUEDE VOLVER A EMPEZAR.
+   *
+   * No basta con mirar el estado: una membresía cuya fecha pasó sigue diciendo
+   * ACTIVA hasta que el trabajo diario la marca. Quien está en ese hueco veía
+   * su membresía muerta y NINGÚN botón — ni renovar, ni pagar, nada.
+   *
+   * `seleccionarPlan` ya sabe reabrir una VENCIDA o CANCELADA y devolverla a
+   * PENDIENTE para entrar de nuevo al flujo de pago. Lo único que faltaba era
+   * la puerta.
+   */
+  const seAcabo =
+    !needsPayment &&
+    (['VENCIDA', 'CANCELADA'].includes(membership.estado) ||
+      (membership.estado === 'ACTIVA' &&
+        membership.fechaVencimiento != null &&
+        membership.fechaVencimiento <= now))
   const planAPagar = isChangePending ? membership.planSolicitado : membership.plan
 
   const descuentoBienvenida =
@@ -265,6 +284,31 @@ export default async function MembershipDetail({
       </header>
 
       <div className="space-y-6">
+        {seAcabo && (
+          <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <RefreshCw className="h-5 w-5 text-primary" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Tu membresía terminó
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Puedes renovarla cuando quieras y volver a usarla en{' '}
+                  {company.name}.
+                </p>
+                <Link
+                  href="/cliente/planes"
+                  className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+                >
+                  Renovar membresía
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Sección de pago */}
         {needsPayment && (
           <section className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
