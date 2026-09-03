@@ -27,9 +27,11 @@ const init: MetaActionState = {}
 export function MetaForm({
   vendedores,
   excursiones = [],
+  monedaDefecto = 'DOP',
 }: {
   vendedores: { id: string; nombre: string; codigo: string }[]
   excursiones?: { id: string; nombre: string; tipoItem?: string }[]
+  monedaDefecto?: string
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(crearMeta, init)
@@ -229,7 +231,7 @@ export function MetaForm({
             <Input id="meta-pasajeros" name="metaPasajeros" type="number" min="1" placeholder="—" />
           </div>
           <div>
-            <Label htmlFor="meta-ingresos">Ingresos</Label>
+            <Label htmlFor="meta-ingresos">Ingresos ({monedaDefecto})</Label>
             <Input id="meta-ingresos" name="metaIngresos" type="number" min="1" step="0.01" placeholder="—" />
           </div>
         </div>

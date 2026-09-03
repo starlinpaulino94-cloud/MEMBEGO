@@ -14,6 +14,8 @@
  *    el cierre de mes no cuadra con lo que el negocio vio ese día.
  */
 
+import { convertirMoneda } from '../config'
+
 /** República Dominicana: UTC−4 todo el año (no hay horario de verano). */
 export const OFFSET_PLATAFORMA_MIN = -240
 
@@ -118,6 +120,23 @@ export function ticketPromedio(ingresos: number, ventas: number): number | null 
 export function conversion(parte: number, base: number): number | null {
   if (!base) return null
   return Math.round((parte / base) * 100)
+}
+
+/**
+ * Calcula el ingreso total consolidado de una lista de ventas convirtiéndolas
+ * a la moneda predeterminada de la empresa según sus tasas de cambio.
+ */
+export function calcularIngresosMeta(
+  ventas: { total: number | string | unknown; moneda: string }[],
+  monedaDefecto: string,
+  tasasCambio: Record<string, number> = {}
+): number {
+  return centavos(
+    ventas.reduce(
+      (t, v) => t + convertirMoneda(Number(v.total), v.moneda, monedaDefecto, tasasCambio),
+      0
+    )
+  )
 }
 
 // ── Metas ────────────────────────────────────────────────────────────────────

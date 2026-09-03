@@ -5,6 +5,7 @@ import {
   miEmbudo,
   misComisiones,
 } from '@/modules/excursiones/panel/queries'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { urlDeEnlace, urlDeQr } from '@/modules/excursiones/vendedores/nucleo'
 import { metasDeVendedor, realesDeVendedor } from '@/modules/excursiones/metricas/queries'
 import {
@@ -34,10 +35,11 @@ export default async function VendedorInicioPage() {
     : null
   if (!vendedor) redirect('/login')
 
-  const [embudo, comisiones, metas] = await Promise.all([
+  const [embudo, comisiones, metas, config] = await Promise.all([
     miEmbudo(vendedor.companyId, vendedor.id),
     misComisiones(vendedor.companyId, vendedor.id),
     metasDeVendedor(vendedor.companyId, vendedor.id),
+    getExcursionesConfig(vendedor.companyId),
   ])
 
   // Su progreso, con la misma cuenta que ve su administrador.
@@ -64,7 +66,7 @@ export default async function VendedorInicioPage() {
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-primary">Comisión por cobrar</span>
             <p className="mt-1 font-mono text-3xl sm:text-4xl font-extrabold text-foreground">
-              {formatMoney(comisiones.porCobrar, { moneda: comisiones.moneda }, 2)}
+              {formatMoney(comisiones.porCobrar, { moneda: config.monedaDefecto }, 2)}
             </p>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
@@ -76,7 +78,7 @@ export default async function VendedorInicioPage() {
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total ya cobrado</span>
             <p className="mt-1 font-mono text-3xl sm:text-4xl font-bold text-foreground/90">
-              {formatMoney(comisiones.cobrado, { moneda: comisiones.moneda }, 2)}
+              {formatMoney(comisiones.cobrado, { moneda: config.monedaDefecto }, 2)}
             </p>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
@@ -145,7 +147,7 @@ export default async function VendedorInicioPage() {
                       ) : null}
                     </div>
                     <div>
-                      <MetaProgreso lineas={m.lineas} moneda={comisiones.moneda} />
+                      <MetaProgreso lineas={m.lineas} moneda={config.monedaDefecto} />
                     </div>
                   </div>
                 ))}

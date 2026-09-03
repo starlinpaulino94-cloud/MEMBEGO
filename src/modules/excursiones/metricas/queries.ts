@@ -1,7 +1,14 @@
 import { conEmpresa } from '@/lib/tenant'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
 import { getExcursionesConfig, convertirMoneda } from '../config'
-import { centavos, ticketPromedio, conversion, type Rango, type RealesMeta } from './nucleo'
+import {
+  centavos,
+  ticketPromedio,
+  conversion,
+  calcularIngresosMeta,
+  type Rango,
+  type RealesMeta,
+} from './nucleo'
 
 /**
  * EXCURSIONES · Métricas — lecturas.
@@ -224,46 +231,49 @@ export async function realesDeVendedor(
    * razón para que vayan por conexiones distintas. Dentro de una transacción
    * se ejecutan igual de bien y cuestan UNA.
    */
-  const { registros, reservas, ventas } = await conEmpresa(companyId, async (tx) => {
-    const [registros, reservas, ventas] = await Promise.all([
-      tx.vendedorAtribucion.count({
-        where: {
-          companyId,
-          vendedorId,
-          etapa: 'REGISTRO',
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-      }),
-      tx.reservaExc.count({
-        where: {
-          companyId,
-          vendedorId,
-          estado: { not: 'CANCELADA' },
-          ...(excursionId ? { excursionId } : {}),
-          createdAt: { gte: rango.desde, lte: rango.hasta },
-        },
-      }),
-      tx.ventaExc.findMany({
-        where: {
-          companyId,
-          vendedorId,
-          estado: { not: 'CANCELADA' },
-          ...(excursionId ? { excursionId } : {}),
-          confirmadaAt: { gte: rango.desde, lte: rango.hasta },
-        },
-        select: { total: true, pasajeros: true, moneda: true },
-      }),
-    ])
-    return { registros, reservas, ventas }
-  })
+  const [{ registros, reservas, ventas }, config] = await Promise.all([
+    conEmpresa(companyId, async (tx) => {
+      const [registros, reservas, ventas] = await Promise.all([
+        tx.vendedorAtribucion.count({
+          where: {
+            companyId,
+            vendedorId,
+            etapa: 'REGISTRO',
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+        }),
+        tx.reservaExc.count({
+          where: {
+            companyId,
+            vendedorId,
+            estado: { not: 'CANCELADA' },
+            ...(excursionId ? { excursionId } : {}),
+            createdAt: { gte: rango.desde, lte: rango.hasta },
+          },
+        }),
+        tx.ventaExc.findMany({
+          where: {
+            companyId,
+            vendedorId,
+            estado: { not: 'CANCELADA' },
+            ...(excursionId ? { excursionId } : {}),
+            confirmadaAt: { gte: rango.desde, lte: rango.hasta },
+          },
+          select: { total: true, pasajeros: true, moneda: true },
+        }),
+      ])
+      return { registros, reservas, ventas }
+    }),
+    getExcursionesConfig(companyId),
+  ])
 
   return {
     registros,
     reservas,
     ventas: ventas.length,
     pasajeros: ventas.reduce((t, v) => t + v.pasajeros, 0),
-    ingresos: centavos(ventas.reduce((t, v) => t + Number(v.total), 0)),
-    moneda: ventas[0]?.moneda ?? null,
+    ingresos: calcularIngresosMeta(ventas, config.monedaDefecto, config.tasasCambio),
+    moneda: config.monedaDefecto,
   }
 }
 

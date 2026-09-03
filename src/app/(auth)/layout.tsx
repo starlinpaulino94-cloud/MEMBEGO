@@ -38,11 +38,11 @@ export default function AuthLayout({
           <p className="text-overline">Conecta · Disfruta · Ahorra</p>
         </div>
 
-        <div className="w-full max-w-md">{children}</div>
+        <div className="w-full max-w-md" suppressHydrationWarning>{children}</div>
       </main>
 
       <footer className="border-t border-border bg-sidebar py-5 text-center">
-        <p className="text-caption text-sidebar-foreground">
+        <p className="text-caption text-sidebar-foreground" suppressHydrationWarning>
           © {new Date().getFullYear()} MembeGo ·{' '}
           <Link href="/privacy" className="underline-offset-2 hover:underline">
             Privacidad
