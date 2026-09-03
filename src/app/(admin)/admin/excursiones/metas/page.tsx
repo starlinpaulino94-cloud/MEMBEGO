@@ -12,6 +12,7 @@ import {
 } from '@/modules/excursiones/metricas/nucleo'
 import { vendedoresParaSupervisor } from '@/modules/excursiones/vendedores/queries'
 import { listadoExcursiones } from '@/modules/excursiones/catalogo/queries'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { MetaForm } from '@/components/excursiones/MetaForm'
 import { MetaProgreso } from '@/components/excursiones/MetaProgreso'
@@ -26,10 +27,11 @@ export default async function MetasPage() {
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="las metas de excursiones" />
 
-  const [metas, vendedores, excursiones] = await Promise.all([
+  const [metas, vendedores, excursiones, config] = await Promise.all([
     metasActivas(companyId),
     vendedoresParaSupervisor(companyId),
     listadoExcursiones(companyId),
+    getExcursionesConfig(companyId),
   ])
 
   /**
@@ -66,8 +68,8 @@ export default async function MetasPage() {
     // a quién medirle nada todavía y se parte de cero, sin consultar.
     const reales = m.vendedorId
       ? await realesDeVendedor(companyId, m.vendedorId, rango, m.excursionId)
-      : { ventas: 0, pasajeros: 0, ingresos: 0, registros: 0, reservas: 0, moneda: 'DOP' }
-    conProgreso.push({ meta: m, rango, lineas: progresoMeta(m, reales), moneda: reales.moneda })
+      : { ventas: 0, pasajeros: 0, ingresos: 0, registros: 0, reservas: 0, moneda: config.monedaDefecto }
+    conProgreso.push({ meta: m, rango, lineas: progresoMeta(m, reales), moneda: reales.moneda ?? config.monedaDefecto })
   }
 
   return (
@@ -78,6 +80,7 @@ export default async function MetasPage() {
       </p>
 
       <MetaForm
+        monedaDefecto={config.monedaDefecto}
         vendedores={vendedores.map((v) => ({
           id: v.id,
           nombre: `${v.nombre} ${v.apellido ?? ''}`.trim(),

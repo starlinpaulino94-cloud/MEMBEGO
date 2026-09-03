@@ -7,6 +7,7 @@ import {
   conversion,
   progresoMeta,
   validarMeta,
+  calcularIngresosMeta,
 } from '../src/modules/excursiones/metricas/nucleo'
 
 /**
@@ -97,4 +98,54 @@ test('un rango exige sus dos fechas y en orden', () => {
     hasta: '2026-08-31',
   })
   assert.equal(r.ok, true)
+})
+
+test('calcularIngresosMeta: convierte ventas multimoneda a la moneda predeterminada con tasas de cambio', () => {
+  const ventas = [
+    { total: 100, moneda: 'USD' },
+    { total: 5000, moneda: 'DOP' },
+    { total: 50, moneda: 'USD' },
+  ]
+  const tasasCambio = { USD_DOP: 60 }
+
+  // 100 * 60 = 6000 DOP + 5000 DOP + 50 * 60 = 3000 DOP => Total 14000 DOP
+  const totalDop = calcularIngresosMeta(ventas, 'DOP', tasasCambio)
+  assert.equal(totalDop, 14000)
+
+  // A la inversa, de DOP a USD usando la misma tasa inversa
+  const ventasSoloDop = [{ total: 6000, moneda: 'DOP' }]
+  const totalUsd = calcularIngresosMeta(ventasSoloDop, 'USD', tasasCambio)
+  assert.equal(totalUsd, 100)
+
+  // Sin tasas configuradas, fallback 1:1
+  const sinTasa = calcularIngresosMeta([{ total: 100, moneda: 'EUR' }], 'DOP', {})
+  assert.equal(sinTasa, 100)
+
+  // Sin ventas
+  assert.equal(calcularIngresosMeta([], 'DOP', tasasCambio), 0)
+})
+
+test('progresoMeta: evalúa cumplimiento de meta de ingresos normalizada', () => {
+  const meta = {
+    metaVentas: null,
+    metaPasajeros: null,
+    metaIngresos: 10000,
+    metaRegistros: null,
+    metaReservas: null,
+  }
+  const reales = {
+    ventas: 2,
+    pasajeros: 4,
+    ingresos: 12000, // Superó la meta gracias a conversión de tasas
+    registros: 10,
+    reservas: 5,
+    moneda: 'DOP',
+  }
+  const progreso = progresoMeta(meta, reales)
+  assert.equal(progreso.length, 1)
+  assert.equal(progreso[0].clave, 'ingresos')
+  assert.equal(progreso[0].real, 12000)
+  assert.equal(progreso[0].meta, 10000)
+  assert.equal(progreso[0].cumplida, true)
+  assert.equal(progreso[0].pct, 100) // Topado a 100
 })
