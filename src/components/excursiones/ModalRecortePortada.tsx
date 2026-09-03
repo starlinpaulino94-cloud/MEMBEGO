@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -34,15 +34,22 @@ export function ModalRecortePortada({
   const viewportRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
 
-  // Restablecer valores cuando se abre una nueva imagen
-  useEffect(() => {
+  // Restablecer valores cuando se abre una nueva imagen. Se hace DURANTE el
+  // render comparando con la clave de la vez anterior (patrón de React para
+  // «reiniciar estado al cambiar una prop»), y no en un useEffect: un setState
+  // dentro de un efecto pinta primero el estado viejo y luego el nuevo, y el
+  // linter de React Compiler lo prohíbe por ese render en cascada.
+  const claveImagen = open ? imagenSrc : null
+  const [claveVista, setClaveVista] = useState<string | null>(claveImagen)
+  if (claveVista !== claveImagen) {
+    setClaveVista(claveImagen)
     if (open) {
       setZoom(1)
       setPan({ x: 0, y: 0 })
       setProcesando(false)
       setIsDragging(false)
     }
-  }, [open, imagenSrc])
+  }
 
   // Calcular límites de paneo para que la imagen siempre cubra el viewport 16:9
   const clampPan = useCallback((newX: number, newY: number, currentZoom: number) => {
