@@ -116,13 +116,30 @@ export type CapacidadNav = 'CITAS' | 'SEGUIMIENTO' | 'RULETA' | 'EXCURSIONES' | 
 export type TipoEmpresaNav = 'CAR_WASH' | 'BARBERIA' | 'RESTAURANTE' | 'GYM' | 'EXCURSIONES'
 
 /**
+ * Ámbito del menú. Es lo que impide mezclar la plataforma con una empresa:
+ * en PLATFORM solo se ofrecen módulos globales, en COMPANY solo empresariales.
+ * El cambio de uno a otro es una navegación explícita, nunca un icono más.
+ */
+export type ScopeNav = 'PLATFORM' | 'COMPANY'
+
+/**
  * Contadores que puede llevar una entrada del menú.
  *
  * Son CLAVES, no números: la configuración dice qué contador le corresponde a
  * cada módulo y quien renderiza recibe los valores por separado. Así la
  * configuración sigue siendo un dato puro y los conteos siguen siendo reales.
+ *
+ * `platformIncidents` existe aunque hoy ningún conteo la alimente: no hay una
+ * fuente de verdad de «incidentes abiertos» y un badge sin dato NO se pinta
+ * (fail-closed). Cuando exista la fuente, se conecta en `badgesDeNavegacion`.
  */
-export const CLAVES_BADGE = ['tickets', 'solicitudes', 'colaAtascada'] as const
+export const CLAVES_BADGE = [
+  'platformOpenTickets',
+  'companyOpenTickets',
+  'platformIncidents',
+  'solicitudes',
+  'colaAtascada',
+] as const
 export type ClaveBadge = (typeof CLAVES_BADGE)[number]
 
 export interface NavLink {
@@ -174,8 +191,15 @@ export interface NavGroup {
 export interface Workspace {
   id: string
   label: string
+  /** Etiqueta corta del riel: tiene que caber en ~76 px. Sin ella, el label. */
+  short?: string
   icon: LucideIcon
   description?: string
+  /**
+   * Ámbito del espacio. Sin ámbito no se filtra por ámbito: los menús de
+   * cliente y mostrador no conocen esta separación y siguen como estaban.
+   */
+  scope?: ScopeNav
   /**
    * Ancla el espacio al PIE del riel. Es para Configuración / Administración:
    * se usan poco y desde cualquier sitio, así que tienen que estar siempre en
@@ -199,6 +223,12 @@ export interface Workspace {
  */
 export interface ContextoNav {
   role: AppRole
+  /**
+   * Ámbito visible. PLATFORM = solo módulos globales; COMPANY = solo módulos
+   * de empresa. Ausente = no filtrar por ámbito (cliente, mostrador y lista
+   * plana histórica). Lo fijan los layouts de cada panel en el servidor.
+   */
+  scope?: ScopeNav
   /**
    * Capacidades contratadas. `undefined` = no se pudieron leer, y entonces NO
    * se filtra por capacidad (fail-open). Es la misma regla que el resolutor
@@ -236,15 +266,15 @@ const G_INICIO: NavGroup = {
   ],
 }
 
-const G_CLIENTES: NavGroup = {
-  id: 'clientes',
-  label: 'Clientes',
+const G_CLI_GESTION: NavGroup = {
+  id: 'clientes-gestion',
+  label: 'Gestión',
   items: [
     {
       href: '/admin/clientes',
       label: 'Directorio',
       icon: Users,
-      description: 'Quién te compra y qué tiene contratado.',
+      description: 'Clientes vinculados a la empresa.',
       principal: true,
       keywords: ['clientes', 'personas', 'directorio', 'contactos'],
     },
@@ -252,28 +282,35 @@ const G_CLIENTES: NavGroup = {
       href: '/admin/membresias',
       label: 'Membresías',
       icon: CreditCard,
-      description: 'Altas, renovaciones y vencimientos.',
+      description: 'Membresías adquiridas por clientes.',
       keywords: ['membresias', 'suscripciones', 'renovar'],
     },
     {
       href: '/admin/riesgo',
       label: 'En riesgo',
       icon: TriangleAlert,
-      description: 'A quién llamar hoy para no perderlo.',
+      description: 'Clientes que requieren atención.',
       keywords: ['riesgo', 'fuga', 'churn', 'retener'],
     },
     {
       href: '/admin/audiencia/segmentos',
       label: 'Segmentos',
       icon: SlidersHorizontal,
-      description: 'Grupos de clientes con reglas.',
+      description: 'Agrupaciones de clientes para análisis y acciones.',
       keywords: ['segmentos', 'audiencia', 'filtros'],
     },
+  ],
+}
+
+const G_CLI_RELACION: NavGroup = {
+  id: 'clientes-relacion',
+  label: 'Relación',
+  items: [
     {
       href: '/admin/citas',
       label: 'Citas',
       icon: CalendarDays,
-      description: 'La agenda del negocio.',
+      description: 'Agenda y citas de la empresa.',
       capacidad: 'CITAS',
       keywords: ['citas', 'agenda', 'reservas', 'turnos'],
     },
@@ -281,7 +318,7 @@ const G_CLIENTES: NavGroup = {
       href: '/admin/actividad',
       label: 'Actividad',
       icon: History,
-      description: 'Toda acción con su fecha y su hora.',
+      description: 'Historial real de acciones y eventos.',
       keywords: ['actividad', 'bitacora', 'historial', 'log'],
     },
   ],
@@ -303,15 +340,15 @@ const G_EXCURSIONES: NavGroup = {
   ],
 }
 
-const G_BENEFICIOS: NavGroup = {
-  id: 'beneficios',
-  label: 'Beneficios',
+const G_OFERTA: NavGroup = {
+  id: 'beneficios-oferta',
+  label: 'Oferta comercial',
   items: [
     {
       href: '/admin/planes',
       label: 'Planes',
       icon: Package,
-      description: 'Lo que vendes y a qué precio.',
+      description: 'Productos de membresía que vende la empresa.',
       principal: true,
       keywords: ['planes', 'precios', 'catalogo', 'productos'],
     },
@@ -319,21 +356,28 @@ const G_BENEFICIOS: NavGroup = {
       href: '/admin/ofertas',
       label: 'Ofertas',
       icon: Tag,
-      description: 'Promociones, banners y regalos VIP.',
+      description: 'Promociones y beneficios publicados.',
       keywords: ['ofertas', 'promociones', 'descuentos', 'banners'],
     },
     {
       href: '/admin/invitaciones',
       label: 'Invita y Gana',
       icon: Share2,
-      description: 'Referidos e invitaciones con premio.',
+      description: 'Programa de recomendación de clientes.',
       keywords: ['referidos', 'invitaciones', 'invita', 'gana'],
     },
+  ],
+}
+
+const G_FIDELIZACION: NavGroup = {
+  id: 'beneficios-fidelizacion',
+  label: 'Fidelización',
+  items: [
     {
       href: '/admin/gamificacion',
-      label: 'Ruleta de premios',
+      label: 'Ruleta',
       icon: Trophy,
-      description: 'Juego de premios para tus clientes.',
+      description: 'Premios y mecánicas de gamificación.',
       capacidad: 'RULETA',
       keywords: ['ruleta', 'gamificacion', 'premios', 'juego'],
     },
@@ -341,71 +385,80 @@ const G_BENEFICIOS: NavGroup = {
       href: '/admin/crecimiento',
       label: 'Crecimiento',
       icon: Rocket,
-      description: 'Reglas que premian el comportamiento.',
+      description: 'Acciones para aumentar recurrencia y adquisición.',
       keywords: ['crecimiento', 'growth', 'reglas'],
     },
     {
       href: '/admin/regalos',
       label: 'Regalos P2P',
       icon: HeartHandshake,
-      description: 'Un cliente le regala a otro.',
+      description: 'Beneficios transferidos entre clientes.',
       keywords: ['regalos', 'p2p', 'gift'],
     },
   ],
 }
 
-const G_MARKETING: NavGroup = {
-  id: 'marketing',
-  label: 'Marketing',
+const G_MKT_CONTENIDO: NavGroup = {
+  id: 'marketing-contenido',
+  label: 'Contenido',
   items: [
-    {
-      href: '/admin/crm',
-      label: 'Prospectos',
-      icon: Contact,
-      description: 'Quién preguntó y todavía no compra.',
-      principal: true,
-      keywords: ['crm', 'prospectos', 'leads', 'oportunidades'],
-    },
     {
       href: '/admin/campanas',
       label: 'Campañas',
       icon: Flag,
-      description: 'Envíos a tus clientes.',
+      description: 'Campañas de la empresa.',
+      principal: true,
       keywords: ['campanas', 'envios', 'marketing'],
     },
     {
       href: '/admin/publicaciones',
       label: 'Publicaciones',
       icon: Newspaper,
-      description: 'Novedades en el muro de tu negocio.',
+      description: 'Contenido programado o publicado.',
       keywords: ['publicaciones', 'posts', 'muro', 'novedades'],
     },
+    {
+      // Ruta real que no está en el diseño de espacios: se conserva tal cual.
+      // Es contenido de captación, así que vive en Contenido sin ser principal.
+      href: '/admin/crm',
+      label: 'Prospectos',
+      icon: Contact,
+      description: 'Quién preguntó y todavía no compra.',
+      keywords: ['crm', 'prospectos', 'leads', 'oportunidades'],
+    },
+  ],
+}
+
+const G_MKT_AUTO: NavGroup = {
+  id: 'marketing-automatica',
+  label: 'Comunicación automática',
+  items: [
     {
       href: '/admin/notificaciones',
       label: 'Notificaciones',
       icon: Bell,
-      description: 'Avisos que reciben tus clientes.',
+      description: 'Avisos enviados a clientes.',
       keywords: ['notificaciones', 'avisos', 'push'],
     },
     {
       href: '/admin/automatizaciones',
       label: 'Automatizaciones',
       icon: Zap,
-      description: 'Cosas que pasan solas.',
+      description: 'Reglas automáticas realmente configuradas.',
       keywords: ['automatizaciones', 'flujos', 'triggers'],
     },
   ],
 }
 
-const G_OPERACIONES: NavGroup = {
-  id: 'operaciones',
-  label: 'Operaciones',
+const G_ATENCION: NavGroup = {
+  id: 'operacion-atencion',
+  label: 'Atención diaria',
   items: [
     {
       href: '/admin/scanner',
       label: 'Escanear QR',
       icon: ScanLine,
-      description: 'Validar un beneficio en el mostrador.',
+      description: 'Validación de beneficios y membresías.',
       principal: true,
       keywords: ['escanear', 'qr', 'canjear', 'validar', 'scanner'],
     },
@@ -413,42 +466,49 @@ const G_OPERACIONES: NavGroup = {
       href: '/admin/pagos',
       label: 'Pagos',
       icon: Wallet,
-      description: 'Confirmar y revisar cobros.',
+      description: 'Cobros y pagos registrados.',
       keywords: ['pagos', 'cobros', 'transferencias'],
     },
     {
       href: '/admin/facturas',
       label: 'Comprobantes',
       icon: ReceiptText,
-      description: 'Facturas y recibos emitidos.',
+      description: 'Comprobantes emitidos por la empresa.',
       keywords: ['comprobantes', 'facturas', 'recibos', 'ncf'],
     },
     {
       href: '/admin/registros',
       label: 'Registros',
       icon: FileText,
-      description: 'Lo que se registró en el mostrador.',
+      description: 'Movimientos operativos registrados.',
       keywords: ['registros', 'entradas', 'visitas'],
     },
+  ],
+}
+
+const G_ORGANIZACION: NavGroup = {
+  id: 'operacion-organizacion',
+  label: 'Organización',
+  items: [
     {
       href: '/admin/sucursales',
       label: 'Sucursales',
       icon: Building2,
-      description: 'Tus locales y sus datos.',
+      description: 'Sedes y puntos de operación.',
       keywords: ['sucursales', 'locales', 'tiendas', 'branches'],
     },
   ],
 }
 
-const G_ANALITICA: NavGroup = {
-  id: 'analitica',
-  label: 'Analítica',
+const G_ANA_RESULTADOS: NavGroup = {
+  id: 'analitica-resultados',
+  label: 'Resultados',
   items: [
     {
       href: '/admin/reportes',
       label: 'Reportes',
       icon: BarChart3,
-      description: 'Los números del periodo.',
+      description: 'Resultados operativos y comerciales.',
       principal: true,
       keywords: ['reportes', 'informes', 'metricas', 'numeros'],
     },
@@ -456,50 +516,57 @@ const G_ANALITICA: NavGroup = {
       href: '/admin/retencion',
       label: 'Retención',
       icon: HeartPulse,
-      description: 'Quién vuelve y quién no.',
+      description: 'Permanencia y recurrencia de clientes.',
       keywords: ['retencion', 'cohortes', 'recurrencia'],
     },
     {
       href: '/admin/conciliacion',
       label: 'Conciliación',
       icon: Scale,
-      description: 'Que caja, pagos y membresías cuadren.',
+      description: 'Comprobación cruzada de movimientos.',
       keywords: ['conciliacion', 'cuadre', 'caja', 'diferencias'],
     },
+  ],
+}
+
+const G_ANA_CONOCIMIENTO: NavGroup = {
+  id: 'analitica-conocimiento',
+  label: 'Conocimiento del cliente',
+  items: [
     {
       href: '/admin/audiencia',
       label: 'Audiencia',
       icon: TrendingUp,
-      description: 'Cómo se comporta tu base de clientes.',
+      description: 'Comportamiento de la base de clientes.',
       keywords: ['audiencia', 'comportamiento', 'segmentacion'],
     },
     {
       href: '/admin/adquisicion',
-      label: 'Origen de clientes',
+      label: 'Origen',
       icon: Compass,
-      description: 'Por dónde llegan los nuevos.',
+      description: 'Canales de adquisición de clientes.',
       keywords: ['adquisicion', 'origen', 'canales', 'atribucion'],
     },
     {
       href: '/admin/seguimiento',
       label: 'Seguimiento',
       icon: QrCode,
-      description: 'Recompensas gratis y su uso.',
+      description: 'Seguimiento de recompensas y beneficios.',
       capacidad: 'SEGUIMIENTO',
       keywords: ['seguimiento', 'recompensas', 'gratis'],
     },
   ],
 }
 
-const G_EMPRESA: NavGroup = {
-  id: 'empresa',
+const G_ADM_EMPRESA: NavGroup = {
+  id: 'administracion-empresa',
   label: 'Empresa',
   items: [
     {
       href: '/admin/perfil',
       label: 'Perfil público',
       icon: Store,
-      description: 'Lo que ven tus clientes de ti.',
+      description: 'Información pública del negocio.',
       principal: true,
       keywords: ['perfil', 'publico', 'ficha', 'negocio'],
     },
@@ -507,28 +574,35 @@ const G_EMPRESA: NavGroup = {
       href: '/admin/personalizacion',
       label: 'Personalización',
       icon: Palette,
-      description: 'Colores, logo y textos.',
+      description: 'Identidad visual y presentación.',
       keywords: ['personalizacion', 'marca', 'colores', 'logo', 'tema'],
     },
     {
       href: '/admin/empleados',
       label: 'Empleados',
       icon: UserCog,
-      description: 'Tu equipo y sus permisos.',
+      description: 'Equipo, roles y permisos.',
       keywords: ['empleados', 'equipo', 'usuarios', 'permisos', 'staff'],
     },
     {
       href: '/admin/metodos-pago',
       label: 'Métodos de pago',
       icon: Landmark,
-      description: 'Cómo te pueden pagar.',
+      description: 'Formas de cobro aceptadas.',
       keywords: ['metodos', 'pago', 'cuentas', 'banco', 'cardnet'],
     },
+  ],
+}
+
+const G_ADM_CONEXIONES: NavGroup = {
+  id: 'administracion-conexiones',
+  label: 'Conexiones',
+  items: [
     {
       href: '/admin/integraciones',
       label: 'Integraciones',
       icon: Plug,
-      description: 'Conecta Membego con lo que ya usas.',
+      description: 'Aplicaciones, API, webhooks y conexiones de la empresa.',
       keywords: ['integraciones', 'conectar', 'api', 'webhooks', 'connect', 'apps'],
     },
   ],
@@ -542,8 +616,8 @@ const G_SOPORTE: NavGroup = {
       href: '/admin/tickets',
       label: 'Tickets',
       icon: LifeBuoy,
-      description: 'Lo que te han pedido tus clientes.',
-      badge: 'tickets',
+      description: 'Casos de soporte de la empresa.',
+      badge: 'companyOpenTickets',
       principal: true,
       keywords: ['tickets', 'soporte', 'ayuda', 'incidencias'],
     },
@@ -551,22 +625,28 @@ const G_SOPORTE: NavGroup = {
       href: '/admin/comunicacion',
       label: 'Comunicación',
       icon: MessageCircle,
-      description: 'Conversaciones con tus clientes.',
+      description: 'Canales de contacto y conversaciones de soporte.',
       keywords: ['comunicacion', 'mensajes', 'chat', 'conversaciones'],
     },
   ],
 }
 
-/** Los nueve dominios, en el orden en que se leen. */
+/** Los quince dominios, en el orden en que se leen. */
 const GRUPOS_ADMIN: NavGroup[] = [
   G_INICIO,
-  G_CLIENTES,
+  G_CLI_GESTION,
+  G_CLI_RELACION,
   G_EXCURSIONES,
-  G_BENEFICIOS,
-  G_MARKETING,
-  G_OPERACIONES,
-  G_ANALITICA,
-  G_EMPRESA,
+  G_OFERTA,
+  G_FIDELIZACION,
+  G_MKT_CONTENIDO,
+  G_MKT_AUTO,
+  G_ATENCION,
+  G_ORGANIZACION,
+  G_ANA_RESULTADOS,
+  G_ANA_CONOCIMIENTO,
+  G_ADM_EMPRESA,
+  G_ADM_CONEXIONES,
   G_SOPORTE,
 ]
 
@@ -576,63 +656,90 @@ const ESPACIOS_ADMIN: Workspace[] = [
   {
     id: 'inicio',
     label: 'Inicio',
+    short: 'Inicio',
     icon: LayoutDashboard,
-    description: 'El pulso del negocio.',
+    description: 'Panel principal de la empresa.',
+    scope: 'COMPANY',
     groups: [G_INICIO],
   },
   {
     id: 'clientes',
     label: 'Clientes',
+    short: 'Clientes',
     icon: Users,
-    description: 'Quiénes son y cómo van.',
-    groups: [G_CLIENTES],
+    description: 'Directorio, relación y actividad.',
+    scope: 'COMPANY',
+    groups: [G_CLI_GESTION, G_CLI_RELACION],
   },
   {
     // Un espacio entero para el vertical de excursiones: cuando la capacidad
     // está apagada desaparece del riel sin dejar hueco ni grupo vacío.
-    id: 'experiencias',
+    id: 'tours',
     label: 'Parques y Tours',
+    short: 'Tours',
     icon: Compass,
-    description: 'Ventas y operación de actividades.',
+    description: 'Ventas, vendedores y comisiones de excursiones.',
+    scope: 'COMPANY',
     capacidad: 'EXCURSIONES',
     groups: [G_EXCURSIONES],
   },
   {
-    id: 'crecimiento',
-    label: 'Crecimiento',
-    icon: Rocket,
-    description: 'Lo que ofreces y cómo lo cuentas.',
-    groups: [G_BENEFICIOS, G_MARKETING],
+    id: 'beneficios',
+    label: 'Beneficios',
+    short: 'Beneficios',
+    icon: Gift,
+    description: 'Oferta comercial y fidelización.',
+    scope: 'COMPANY',
+    groups: [G_OFERTA, G_FIDELIZACION],
   },
   {
-    id: 'operaciones',
-    label: 'Operaciones',
+    id: 'marketing',
+    label: 'Marketing',
+    short: 'Marketing',
+    icon: Megaphone,
+    description: 'Contenido y comunicación automática.',
+    scope: 'COMPANY',
+    groups: [G_MKT_CONTENIDO, G_MKT_AUTO],
+  },
+  {
+    id: 'operacion',
+    label: 'Operación',
+    short: 'Operación',
     icon: ClipboardList,
-    description: 'El trabajo del mostrador.',
-    groups: [G_OPERACIONES],
+    description: 'Atención diaria y organización.',
+    scope: 'COMPANY',
+    groups: [G_ATENCION, G_ORGANIZACION],
   },
   {
     id: 'analitica',
     label: 'Analítica',
+    short: 'Análisis',
     icon: BarChart3,
-    description: 'Leer los números.',
-    groups: [G_ANALITICA],
+    description: 'Resultados y conocimiento del cliente.',
+    scope: 'COMPANY',
+    groups: [G_ANA_RESULTADOS, G_ANA_CONOCIMIENTO],
   },
   {
     // ANCLADO al pie: se entra poco y desde cualquier sitio. Si flotara según
     // cuántos espacios tenga el rol delante, habría que buscarlo cada vez.
-    id: 'empresa',
-    label: 'Configuración',
+    id: 'administracion',
+    label: 'Administración',
+    short: 'Ajustes',
     icon: Settings,
-    description: 'Tu negocio, tu equipo y tus conexiones.',
+    description: 'Empresa, equipo y conexiones.',
+    scope: 'COMPANY',
     anclado: true,
-    groups: [G_EMPRESA],
+    groups: [G_ADM_EMPRESA, G_ADM_CONEXIONES],
   },
   {
+    // ANCLADO al pie, junto a Administración.
     id: 'soporte',
     label: 'Soporte',
+    short: 'Soporte',
     icon: LifeBuoy,
-    description: 'Lo que te piden y cómo responder.',
+    description: 'Casos y conversaciones de soporte.',
+    scope: 'COMPANY',
+    anclado: true,
     groups: [G_SOPORTE],
   },
 ]
@@ -858,14 +965,14 @@ const ESPACIOS_CLIENTE: Workspace[] = [
 // ── Espacios de la plataforma (superadministrador) ──────────────────────────
 
 const G_SA_INICIO: NavGroup = {
-  id: 'inicio',
-  label: 'Inicio',
+  id: 'resumen',
+  label: 'Resumen',
   items: [
     {
       href: '/superadmin/dashboard',
       label: 'Resumen',
       icon: LayoutDashboard,
-      description: 'El estado de la plataforma.',
+      description: 'Estado general de Membego.',
       principal: true,
       keywords: ['resumen', 'dashboard', 'plataforma'],
     },
@@ -880,7 +987,7 @@ const G_SA_NEGOCIO: NavGroup = {
       href: '/superadmin/solicitudes',
       label: 'Solicitudes',
       icon: Inbox,
-      description: 'Negocios que piden entrar.',
+      description: 'Solicitudes de incorporación de empresas.',
       badge: 'solicitudes',
       principal: true,
       keywords: ['solicitudes', 'altas', 'pendientes'],
@@ -889,28 +996,28 @@ const G_SA_NEGOCIO: NavGroup = {
       href: '/superadmin/empresas',
       label: 'Empresas',
       icon: Building2,
-      description: 'Todas las empresas de la plataforma.',
+      description: 'Empresas registradas y su estado real.',
       keywords: ['empresas', 'negocios', 'clientes'],
     },
     {
       href: '/superadmin/usuarios',
       label: 'Usuarios',
       icon: UserCog,
-      description: 'Todas las cuentas.',
+      description: 'Usuarios y roles de la plataforma.',
       keywords: ['usuarios', 'cuentas', 'personas'],
     },
     {
       href: '/superadmin/planes',
       label: 'Planes',
       icon: Package,
-      description: 'Los planes de toda la plataforma.',
+      description: 'Planes comerciales globales.',
       keywords: ['planes', 'precios'],
     },
     {
       href: '/superadmin/membresias',
       label: 'Membresías',
       icon: CreditCard,
-      description: 'Membresías de toda la plataforma.',
+      description: 'Membresías emitidas en la plataforma.',
       keywords: ['membresias', 'suscripciones'],
     },
   ],
@@ -924,7 +1031,7 @@ const G_SA_OPERACION: NavGroup = {
       href: '/superadmin/operaciones',
       label: 'Operaciones',
       icon: ClipboardList,
-      description: 'Lo que está pasando hoy.',
+      description: 'Operaciones globales que requieren seguimiento.',
       principal: true,
       keywords: ['operaciones', 'hoy', 'actividad'],
     },
@@ -932,29 +1039,29 @@ const G_SA_OPERACION: NavGroup = {
       href: '/superadmin/tickets',
       label: 'Tickets',
       icon: LifeBuoy,
-      description: 'Soporte de toda la plataforma.',
-      badge: 'tickets',
+      description: 'Solicitudes de soporte de las empresas.',
+      badge: 'platformOpenTickets',
       keywords: ['tickets', 'soporte', 'incidencias'],
     },
     {
       href: '/superadmin/campanas',
       label: 'Campañas',
       icon: Megaphone,
-      description: 'Envíos a toda la plataforma.',
+      description: 'Campañas administradas por la plataforma.',
       keywords: ['campanas', 'envios'],
     },
     {
       href: '/superadmin/capacidades',
       label: 'Capacidades',
       icon: SlidersHorizontal,
-      description: 'Qué módulos tiene encendidos cada empresa.',
+      description: 'Funciones concedidas a cada empresa.',
       keywords: ['capacidades', 'modulos', 'verticales', 'interruptores'],
     },
     {
       href: '/superadmin/integraciones',
       label: 'Integraciones',
       icon: Plug,
-      description: 'Sistemas satélite y salud de la cola.',
+      description: 'Sistemas satélite conectados a Membego.',
       badge: 'colaAtascada',
       keywords: ['integraciones', 'satelites', 'cola', 'webhooks', 'salud'],
     },
@@ -962,7 +1069,7 @@ const G_SA_OPERACION: NavGroup = {
       href: '/superadmin/connect',
       label: 'Connect',
       icon: Blocks,
-      description: 'Catálogo de aplicaciones y concesiones.',
+      description: 'Catálogo, despliegue, publicación, salud y adopción de conexiones.',
       keywords: ['connect', 'catalogo', 'apps', 'aplicaciones', 'concesiones'],
     },
   ],
@@ -976,7 +1083,7 @@ const G_SA_SISTEMA: NavGroup = {
       href: '/superadmin/reportes',
       label: 'Reportes',
       icon: BarChart3,
-      description: 'Los números de la plataforma.',
+      description: 'Indicadores globales de la plataforma.',
       principal: true,
       keywords: ['reportes', 'informes', 'metricas'],
     },
@@ -984,72 +1091,45 @@ const G_SA_SISTEMA: NavGroup = {
       href: '/superadmin/observabilidad',
       label: 'Observabilidad',
       icon: Activity,
-      description: 'Salud técnica del sistema.',
+      description: 'Salud técnica e incidentes reales.',
+      // Sin fuente de verdad de incidentes abiertos: la clave existe pero hoy
+      // ningún conteo la alimenta, así que la insignia no se pinta.
+      badge: 'platformIncidents',
       keywords: ['observabilidad', 'salud', 'errores', 'monitoreo'],
     },
     {
       href: '/superadmin/auditoria',
       label: 'Auditoría',
       icon: History,
-      description: 'Quién hizo qué y cuándo.',
+      description: 'Trazabilidad de acciones sensibles.',
       keywords: ['auditoria', 'bitacora', 'log'],
     },
     {
       href: '/superadmin/demo',
       label: 'Demostración',
       icon: FlaskConical,
-      description: 'Datos de práctica.',
+      description: 'Entorno explícitamente identificado como demostración.',
       keywords: ['demo', 'demostracion', 'practica', 'pruebas'],
     },
   ],
 }
 
 /**
- * El superadministrador tiene los espacios de la PLATAFORMA y, además, el
- * panel de empresa completo dentro de UN espacio propio.
- *
- * No se reparte el panel de empresa en ocho iconos más del riel: serían trece
- * y el riel dejaría de ser una orientación para volver a ser una lista. Como
- * un espacio, «Panel de empresa» conserva sus nueve dominios en el segundo
- * nivel, que es donde caben.
+ * LA PLATAFORMA ES UN SOLO ESPACIO. El superadministrador administra lo
+ * global desde un único riel —Resumen, Negocio, Operación y Sistema son
+ * GRUPOS del segundo nivel, no iconos— y entra al panel de una empresa
+ * cambiando explícitamente de ámbito (scope COMPANY), nunca viendo los dos
+ * mundos mezclados en el mismo riel.
  */
-const ESPACIOS_SUPERADMIN: Workspace[] = [
+const ESPACIOS_PLATAFORMA: Workspace[] = [
   {
     id: 'plataforma',
-    label: 'Resumen',
-    icon: LayoutDashboard,
-    description: 'El estado de Membego.',
-    groups: [G_SA_INICIO],
-  },
-  {
-    id: 'negocio',
-    label: 'Negocio',
-    icon: Building2,
-    description: 'Empresas, cuentas y planes.',
-    groups: [G_SA_NEGOCIO],
-  },
-  {
-    id: 'operacion',
-    label: 'Operación',
-    icon: ClipboardList,
-    description: 'Lo que pasa hoy en la plataforma.',
-    groups: [G_SA_OPERACION],
-  },
-  {
-    id: 'sistema',
-    label: 'Sistema',
-    icon: Settings,
-    description: 'Números, salud y auditoría.',
-    anclado: true,
-    groups: [G_SA_SISTEMA],
-  },
-  {
-    id: 'panel-empresa',
-    label: 'Panel de empresa',
-    icon: Store,
-    description: 'El panel completo de una empresa.',
-    // Sin «Inicio»: duplicaría el resumen de la plataforma con otro nombre.
-    groups: GRUPOS_ADMIN.filter((g) => g.id !== 'inicio'),
+    label: 'Plataforma',
+    short: 'Plataforma',
+    icon: Blocks,
+    description: 'Administración global de Membego.',
+    scope: 'PLATFORM',
+    groups: [G_SA_INICIO, G_SA_NEGOCIO, G_SA_OPERACION, G_SA_SISTEMA],
   },
 ]
 
@@ -1088,13 +1168,20 @@ const ESPACIOS_EMPLEADO: Workspace[] = [
   },
 ]
 
-/** Los espacios declarados para cada rol, antes de filtrar nada. */
+/**
+ * Los espacios declarados para cada rol, antes de filtrar nada.
+ *
+ * El SUPERADMIN ve los dos mundos, PERO NUNCA JUNTOS: el ámbito del contexto
+ * (`PLATFORM` en su panel, `COMPANY` cuando entra al de una empresa) decide
+ * cuál se pinta. Es el cambio explícito de contexto que impide operar una
+ * empresa creyendo que se está en la plataforma, y viceversa.
+ */
 export function workspacesForRole(role: AppRole): Workspace[] {
   switch (role) {
     case 'CLIENTE':
       return ESPACIOS_CLIENTE
     case 'SUPERADMIN':
-      return ESPACIOS_SUPERADMIN
+      return [...ESPACIOS_PLATAFORMA, ...ESPACIOS_ADMIN]
     case 'EMPLEADO':
     case 'RECEPCION':
       return ESPACIOS_EMPLEADO
@@ -1214,6 +1301,9 @@ export function visibleGroups(workspace: Workspace, ctx: ContextoNav): NavGroup[
  * roto».
  */
 export function canSeeWorkspace(workspace: Workspace, ctx: ContextoNav): boolean {
+  // Separación PLATFORM/COMPANY: un espacio con ámbito solo se pinta en su
+  // ámbito. Sin ámbito en el contexto no se filtra (cliente, mostrador).
+  if (ctx.scope && workspace.scope && workspace.scope !== ctx.scope) return false
   if (workspace.roles && !workspace.roles.includes(ctx.role)) return false
   if (workspace.rangoMinimo !== undefined && rankOf(ctx.role) < workspace.rangoMinimo) {
     return false
@@ -1226,6 +1316,15 @@ export function canSeeWorkspace(workspace: Workspace, ctx: ContextoNav): boolean
 /** Un espacio ya resuelto: sus grupos filtrados, listo para pintar. */
 export interface EspacioVisible extends Workspace {
   groups: NavGroup[]
+}
+/**
+ * ¿Muestra la salida explícita a Plataforma? Solo cuando un superadministrador
+ * está operando UNA empresa: es el cambio de ámbito en sentido contrario, y
+ * también vive aquí (y no como un `role ===` en el header) para que la guardia
+ * «ningún componente decide por rol» lo cubra.
+ */
+export function ofreceSalidaAPlataforma(ctx: ContextoNav): boolean {
+  return ctx.scope === 'COMPANY' && ctx.role === 'SUPERADMIN'
 }
 
 /** Los espacios que esta persona ve, con sus grupos ya filtrados. */

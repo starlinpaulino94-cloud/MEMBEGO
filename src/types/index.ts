@@ -13,8 +13,9 @@ export const ROLES_APP = [
   'SUPERVISOR',
   'EMPLEADO',
   'CLIENTE',
+  'VENDEDOR',
   'ADMIN_EMPRESA',
-] as const
+] as const satisfies readonly AppRole[]
 
 export type AppRole =
   | 'SUPERADMIN'

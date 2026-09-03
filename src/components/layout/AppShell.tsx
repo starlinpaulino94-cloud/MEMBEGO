@@ -131,6 +131,7 @@ export function AppShell({
   companies,
   qrHref,
   sistemasExternos,
+  nombreEmpresa,
   children,
 }: {
   /**
@@ -151,6 +152,8 @@ export function AppShell({
   qrHref?: string | null
   /** Sistema satélite conectado: el header ofrece el acceso directo por SSO. */
   sistemasExternos?: { slug: string; nombre: string }[]
+  /** Nombre de la empresa activa para la píldora de ámbito (solo texto). */
+  nombreEmpresa?: string | null
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -251,6 +254,7 @@ export function AppShell({
             companies={companies}
             onMenuClick={() => setMovilAbierto(true)}
             sistemasExternos={sistemasExternos}
+            nombreEmpresa={nombreEmpresa}
             userEmail={userEmail}
             userName={userName}
             ayudaHref={ayudaParaRol(ctx.role)}

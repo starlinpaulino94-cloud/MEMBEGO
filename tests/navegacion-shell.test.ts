@@ -70,13 +70,13 @@ test('no hay dos entradas con la misma etiqueta apuntando a rutas distintas', ()
   // /admin/campanas y /admin/audiencia/campanas, en el mismo menú. Etiqueta
   // idéntica y destino distinto es una trampa, no una decisión de diseño.
   //
-  // Se comprueba POR ESPACIO y no sobre la lista plana. El superadministrador
-  // tiene los espacios de la plataforma y además «Panel de empresa», que NUNCA
-  // se pintan juntos en el segundo nivel, y cada uno tiene su «Planes», su
+  // Se comprueba POR ESPACIO y no sobre la lista plana. Los espacios de la
+  // plataforma y los de una empresa NUNCA se pintan juntos en el segundo
+  // nivel (el ámbito los separa), y cada uno tiene su «Planes», sus
   // «Membresías» y sus «Reportes». Exigir unicidad sobre la unión obligaría a
   // colgarles un «globales» que dentro de su propio espacio no distingue nada.
   //
-  // El único sitio donde todos los espacios SÍ aparecen juntos es la paleta de
+  // El único sitio donde varios espacios SÍ aparecen juntos es la paleta de
   // comandos, y eso lo cubre la prueba siguiente.
   for (const role of ROLES) {
     for (const espacio of visibleWorkspaces(ctxDe(role))) {
@@ -139,16 +139,16 @@ test('cada grupo tiene al menos un enlace', () => {
   }
 })
 
-test('el panel de administrador siguen siendo nueve dominios', () => {
+test('el panel de administrador siguen siendo quince dominios', () => {
   // Esta prueba existía antes de los espacios y NO se relaja: es justamente la
   // garantía de que reagrupar dominios en espacios no movió módulos ni cambió
-  // el inventario. Los nueve dominios siguen siendo los mismos y en el mismo
-  // orden; lo único nuevo es cómo se reparten en el riel.
+  // el inventario. Los dominios siguen siendo los mismos y en el mismo orden;
+  // lo único nuevo es cómo se reparten en el riel.
   const grupos = navForRole('ADMINISTRADOR')
-  assert.equal(grupos.length, 9)
+  assert.equal(grupos.length, 15)
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Inicio', 'Clientes', 'Parques y Tours', 'Beneficios', 'Marketing', 'Operaciones', 'Analítica', 'Empresa', 'Soporte']
+    ['Inicio', 'Gestión', 'Relación', 'Parques y Tours', 'Oferta comercial', 'Fidelización', 'Contenido', 'Comunicación automática', 'Atención diaria', 'Organización', 'Resultados', 'Conocimiento del cliente', 'Empresa', 'Conexiones', 'Soporte']
   )
 })
 
@@ -172,10 +172,10 @@ test('los espacios cubren toda la navegación de su rol', () => {
 // ── Migas ────────────────────────────────────────────────────────────────
 
 test('las migas nombran el espacio, no solo la página', () => {
-  const m = breadcrumbs('/admin/campanas', ctxDe('ADMINISTRADOR'))
+  const m = breadcrumbs('/admin/ofertas', ctxDe('ADMINISTRADOR'))
   assert.deepEqual(
     m.map((x) => x.label),
-    ['Crecimiento', 'Marketing', 'Campañas']
+    ['Beneficios', 'Oferta comercial', 'Ofertas']
   )
   // La primera miga es un enlace al aterrizaje del espacio: volver deja de
   // exigir un viaje por el menú.

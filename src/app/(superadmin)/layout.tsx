@@ -16,7 +16,7 @@ export default async function SuperadminLayout({
   const [notifCount, sistemasExternos, ctx, badges] = await Promise.all([
     getUnreadCount().catch(() => 0),
     sistemasParaLanzador(user),
-    contextoDeNavegacion({ role: 'SUPERADMIN', companyId: null }),
+    contextoDeNavegacion({ role: 'SUPERADMIN', companyId: null, scope: 'PLATFORM' }),
     // Los contadores del menu: si alguno falla, su clave no viene y el modulo
     // se pinta sin insignia. La navegacion nunca depende de que cuadren.
     badgesDeNavegacion('SUPERADMIN', null).catch(() => ({})),

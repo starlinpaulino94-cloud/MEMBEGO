@@ -3,6 +3,7 @@ import type { PermisosUsuario } from '@/lib/auth/permissions'
 import type {
   CapacidadNav,
   ContextoNav,
+  ScopeNav,
   TipoEmpresaNav,
 } from '@/components/layout/nav-config'
 import type { AppRole } from '@/types'
@@ -58,11 +59,18 @@ function comoVertical(codigo: string): TipoEmpresaNav | null {
 export async function contextoDeNavegacion({
   role,
   companyId,
+  scope,
   permisos = null,
   ocultas = [],
 }: {
   role: AppRole
   companyId: string | null | undefined
+  /**
+   * Ámbito del panel que renderiza: PLATFORM (solo módulos globales) o
+   * COMPANY (solo módulos de empresa). Lo fija el layout en el servidor;
+   * nunca viene del navegador.
+   */
+  scope?: ScopeNav
   permisos?: PermisosUsuario | null
   /** Rutas ya descartadas (p. ej. las negadas por los ajustes del empleado). */
   ocultas?: string[]
@@ -70,13 +78,14 @@ export async function contextoDeNavegacion({
   // Sin empresa (superadmin en su panel de plataforma) no hay capacidades que
   // aplicar: sus módulos no dependen de lo que contrate nadie.
   if (!companyId) {
-    return { role, permisos, ocultas }
+    return { role, scope, permisos, ocultas }
   }
 
   try {
     const { categoria, activas } = await getCapacidadesEmpresa(companyId)
     return {
       role,
+      scope,
       capacidades: CAPACIDADES_DEL_MENU.filter((c) =>
         (activas as readonly string[]).includes(c)
       ),
@@ -86,6 +95,6 @@ export async function contextoDeNavegacion({
     }
   } catch {
     // Ver la nota de cabecera: sin capacidades, no se filtra por capacidad.
-    return { role, permisos, ocultas }
+    return { role, scope, permisos, ocultas }
   }
 }

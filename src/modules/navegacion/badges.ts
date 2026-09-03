@@ -108,12 +108,14 @@ export async function badgesDeNavegacion(
 
   if (role === 'SUPERADMIN') {
     tareas.push(
-      { clave: 'tickets', contar: ticketsDePlataforma },
+      { clave: 'platformOpenTickets', contar: ticketsDePlataforma },
       { clave: 'solicitudes', contar: solicitudesSinResolver },
       { clave: 'colaAtascada', contar: trabajosMuertos }
     )
+    // `platformIncidents` no se cuenta: no existe una fuente de verdad de
+    // incidentes abiertos y un badge sin dato no se pinta. Ver ClaveBadge.
   } else if (companyId) {
-    tareas.push({ clave: 'tickets', contar: () => ticketsDeEmpresa(companyId) })
+    tareas.push({ clave: 'companyOpenTickets', contar: () => ticketsDeEmpresa(companyId) })
   }
 
   const resultados = await Promise.allSettled(tareas.map((t) => t.contar()))

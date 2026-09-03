@@ -124,24 +124,32 @@ export default async function AdminLayout({
     contextoDeNavegacion({
       role: user.metadata.role,
       companyId: user.metadata.companyId,
+      // ÁMBITO EMPRESA, también para el SUPERADMIN que entre aquí: en /admin/*
+      // se opera UNA empresa y el riel solo ofrece sus módulos. Volver a la
+      // plataforma es una navegación explícita (píldora del header), nunca un
+      // icono mezclado con los de la empresa.
+      scope: 'COMPANY',
       permisos,
       ocultas: negadas,
     }),
     badgesDeNavegacion(user.metadata.role, user.metadata.companyId).catch(() => ({})),
   ])
+  const nombreEmpresaActiva =
+    empresas.find((e) => e.id === (user.metadata.companyId ?? null))?.name ?? null
 
   return (
     <AppShell
-      // El menú se resuelve por el rol REAL del usuario. Así un SUPERADMIN que
-      // entre a una página /admin/* conserva sus espacios de plataforma en vez
-      // de quedar "atrapado" en el panel de Administrador; los roles de empresa
-      // (ADMINISTRADOR, GERENTE…) siguen viendo el suyo.
+      // El menú se resuelve por el rol REAL del usuario dentro del ámbito
+      // COMPANY: un SUPERADMIN aquí ve el panel de la empresa (sin quedar
+      // bloqueado por permisos de empleado) y vuelve a Plataforma con la
+      // píldora del header. Los roles de empresa ven lo suyo.
       ctx={ctx}
       title="MembeGo"
       userEmail={user.email}
       notifCount={notifCount}
       badges={badges}
       sistemasExternos={sistemasExternos}
+      nombreEmpresa={nombreEmpresaActiva}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el

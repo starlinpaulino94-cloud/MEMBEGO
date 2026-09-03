@@ -110,8 +110,8 @@ function BotonEspacio({
         href={href}
         prefetch={false}
         onClick={onElegir}
-        aria-label={espacio.label}
-        title={espacio.label}
+        aria-label={espacio.short ?? espacio.label}
+        title={espacio.short ?? espacio.label}
         aria-current={activo ? 'true' : undefined}
         className={cn(
           'group relative flex h-11 w-11 items-center justify-center rounded-xl outline-none transition-colors duration-fast',

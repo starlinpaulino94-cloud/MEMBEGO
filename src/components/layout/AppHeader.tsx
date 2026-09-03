@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ChevronRight, ExternalLink, Menu, Search, X } from 'lucide-react'
-import { breadcrumbs, buscarModulos, type ContextoNav } from '@/components/layout/nav-config'
+import { breadcrumbs, buscarModulos, ofreceSalidaAPlataforma, type ContextoNav } from '@/components/layout/nav-config'
 import { NotificationBell } from '@/components/layout/NotificationBell'
 import { CommandPalette } from '@/components/layout/CommandPalette'
 import { MenuUsuario } from '@/components/layout/MenuUsuario'
@@ -42,6 +42,7 @@ export function AppHeader({
   userEmail,
   userName,
   ayudaHref,
+  nombreEmpresa,
 }: {
   ctx: ContextoNav
   /** Nombre del producto: solo se usa cuando la ruta no está en ningún menú. */
@@ -55,6 +56,8 @@ export function AppHeader({
   userName?: string | null
   /** Destino de "Ayuda"; sin él, la entrada no se muestra. */
   ayudaHref?: string | null
+  /** Nombre de la empresa activa (ámbito COMPANY). Solo texto: no autoriza. */
+  nombreEmpresa?: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -106,6 +109,41 @@ export function AppHeader({
       >
         <Menu className="h-5 w-5" aria-hidden />
       </button>
+
+      {/* Píldora de ámbito: en qué mundo estoy y cómo salir de él.
+          PLATFORM la ve solo el superadmin en su panel. En COMPANY el
+          superadmin ve "Empresa · <nombre>" con salida explícita a
+          Plataforma; el personal ve el nombre de su empresa. En móvil se
+          oculta: ahí mandan las migas y el buscador. */}
+      {ctx.scope === 'PLATFORM' ? (
+        <Link
+          href="/superadmin/dashboard"
+          title="Panel de plataforma"
+          className="hidden shrink-0 items-center rounded-full bg-sidebar-accent px-2.5 py-1 text-caption font-semibold text-sidebar-accent-foreground outline-none transition-colors duration-fast hover:bg-sidebar-hover focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+        >
+          Plataforma
+        </Link>
+      ) : ofreceSalidaAPlataforma(ctx) ? (
+        <span className="hidden min-w-0 shrink-0 items-center gap-1.5 md:flex">
+          <span
+            data-testid="ambito-pildora"
+            className="truncate rounded-full bg-sidebar-accent px-2.5 py-1 text-caption font-semibold text-sidebar-accent-foreground"
+          >
+            Empresa{nombreEmpresa ? ` · ${nombreEmpresa}` : ''}
+          </span>
+          <Link
+            href="/superadmin/dashboard"
+            title="Volver al panel de plataforma"
+            className="shrink-0 rounded-lg text-caption text-muted-foreground outline-none transition-colors duration-fast hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            ← Plataforma
+          </Link>
+        </span>
+      ) : nombreEmpresa ? (
+        <span className="hidden min-w-0 shrink-0 truncate rounded-full bg-muted px-2.5 py-1 text-caption font-semibold text-muted-foreground md:block">
+          {nombreEmpresa}
+        </span>
+      ) : null}
 
       {/* Migas: espacio › dominio › módulo › subpágina.
           En móvil se reducen a la última —el contexto es útil en escritorio,

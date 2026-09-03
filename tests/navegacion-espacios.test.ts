@@ -128,9 +128,9 @@ test('sin capacidades legibles NO se filtra nada (fail-open)', () => {
 test('el espacio entero desaparece cuando su capacidad está apagada', () => {
   const con = visibleWorkspaces(ctx({ capacidades: ['EXCURSIONES'] })).map((w) => w.id)
   const sin = visibleWorkspaces(ctx({ capacidades: [] })).map((w) => w.id)
-  assert.ok(con.includes('experiencias'))
+  assert.ok(con.includes('tours'))
   assert.ok(
-    !sin.includes('experiencias'),
+    !sin.includes('tours'),
     'Un icono en el riel que abre un panel vacío se lee como una aplicación rota.'
   )
 })
@@ -170,9 +170,9 @@ test('un espacio sin ni un módulo visible no se pinta', () => {
   // A Marketing no le corresponde ninguna sección del dominio «Empresa», así
   // que su espacio de Configuración no debe aparecer en el riel.
   const espacios = visibleWorkspaces({ role: 'MARKETING' })
-  const empresa = workspacesForRole('MARKETING').find((w) => w.id === 'empresa')!
+  const empresa = workspacesForRole('MARKETING').find((w) => w.id === 'administracion')!
   assert.equal(visibleGroups(empresa, { role: 'MARKETING' }).length, 0)
-  assert.ok(!espacios.some((w) => w.id === 'empresa'))
+  assert.ok(!espacios.some((w) => w.id === 'administracion'))
   assert.equal(canSeeWorkspace(empresa, { role: 'MARKETING' }), false)
 })
 
@@ -269,15 +269,15 @@ test('cada espacio visible tiene un aterrizaje que su dueño puede abrir', () =>
 
 test('el aterrizaje es el módulo marcado como principal', () => {
   const c = ctx()
-  const operaciones = visibleWorkspaces(c).find((w) => w.id === 'operaciones')!
+  const operaciones = visibleWorkspaces(c).find((w) => w.id === 'operacion')!
   assert.equal(workspaceLanding(operaciones, c), '/admin/scanner')
 })
 
 test('sin el principal, el aterrizaje cae al primer módulo que quede', () => {
   // A un supervisor «Escanear QR» sí se le ofrece; a Marketing, el espacio de
-  // Operaciones no le queda con nada. Se prueba con una negación puntual.
+  // Operación no le queda con nada. Se prueba con una negación puntual.
   const c = ctx({ permisos: { v: 1 as const, secciones: { scanner: false } } })
-  const operaciones = visibleWorkspaces(c).find((w) => w.id === 'operaciones')!
+  const operaciones = visibleWorkspaces(c).find((w) => w.id === 'operacion')!
   assert.equal(workspaceLanding(operaciones, c), '/admin/pagos')
 })
 
