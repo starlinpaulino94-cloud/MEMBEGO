@@ -1,4 +1,4 @@
-import { test as setup, expect } from '@playwright/test'
+import { test as setup, expect, type Page } from '@playwright/test'
 
 /**
  * SETUP de sesión para los e2e del shell.
@@ -18,7 +18,7 @@ import { test as setup, expect } from '@playwright/test'
 const ADMIN = { email: 'admin.cartown@membego.com', password: 'admin123' }
 const SUPER = { email: 'superadmin@membego.com', password: 'admin123' }
 
-async function entrar(page, creds: { email: string; password: string }, destino: string) {
+async function entrar(page: Page, creds: { email: string; password: string }, destino: string) {
   await page.goto('/acceso')
   await page.locator('#email').fill(creds.email)
   await page.locator('#password').fill(creds.password)
