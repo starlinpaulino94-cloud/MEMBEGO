@@ -112,6 +112,11 @@ test.describe('sidebar como superadmin', () => {
       els.map((e) => (e as HTMLAnchorElement).getAttribute('href'))
     )
     expect(hrefs.filter((h) => h?.startsWith('/admin'))).toEqual([])
+    // Un solo espacio: no hay riel, el menú es una columna con sus grupos.
+    await expect(page.getByRole('navigation', { name: 'Espacios de trabajo' })).toHaveCount(0)
+    await expect(page.getByText('Negocio', { exact: true })).toBeVisible()
+    // La entrada a Empresa vive en la cabecera, no en el menú.
+    await expect(page.getByRole('link', { name: 'Empresa', exact: true })).toBeVisible()
     await page.screenshot({ path: 'test-results/shots/superadmin-plataforma.png' })
   })
 
@@ -120,7 +125,7 @@ test.describe('sidebar como superadmin', () => {
     const pildora = page.getByTestId('ambito-pildora')
     await expect(pildora).toBeVisible()
     await expect(pildora).toContainText('Empresa')
-    await page.getByRole('link', { name: '← Plataforma' }).click()
+    await page.getByRole('link', { name: 'Plataforma', exact: true }).click()
     await page.waitForURL('**/superadmin/dashboard')
   })
 })

@@ -462,6 +462,7 @@ test('ningún componente del shell decide visibilidad por rol a mano', () => {
     'src/components/layout/AppSidebar.tsx',
     'src/components/layout/NavRail.tsx',
     'src/components/layout/NavPanel.tsx',
+    'src/components/layout/NavColumna.tsx',
     'src/components/layout/AppHeader.tsx',
     'src/components/layout/CommandPalette.tsx',
   ]) {
@@ -471,4 +472,39 @@ test('ningún componente del shell decide visibilidad por rol a mano', () => {
         'donde se puede probar.'
     )
   }
+})
+
+test('el menú de una columna lo decide nav-config, no el componente', () => {
+  const sidebar = leer('src/components/layout/AppSidebar.tsx')
+  assert.ok(
+    sidebar.includes('menuEnUnaColumna('),
+    'AppSidebar tiene que preguntar a nav-config si va en una columna'
+  )
+  assert.ok(
+    !/espacios\.length\s*===\s*1/.test(sidebar),
+    'contar espacios en el componente es volver a decidir en el .tsx lo que se prueba aquí'
+  )
+  assert.ok(sidebar.includes('<NavColumna'), 'sin NavColumna, la plataforma vuelve al riel de un icono')
+
+  const columna = leer('src/components/layout/NavColumna.tsx')
+  assert.ok(
+    columna.includes('<NavPanel'),
+    'la columna reutiliza NavPanel: una segunda lista de módulos se queda atrás'
+  )
+  assert.ok(
+    !columna.includes('data-nav-panel'),
+    'la columna no debe llevar data-nav-panel: la regla CSS del modo compacto la ocultaría entera'
+  )
+})
+
+test('el conmutador de ámbito vive en la cabecera y lo deciden los helpers', () => {
+  const header = leer('src/components/layout/AppHeader.tsx')
+  assert.ok(
+    header.includes('ofreceEntradaAEmpresa(') && header.includes('ofreceSalidaAPlataforma('),
+    'los dos sentidos del conmutador tienen que pasar por nav-config'
+  )
+  assert.ok(
+    header.includes('ATERRIZAJE_EMPRESA') && header.includes('ATERRIZAJE_PLATAFORMA'),
+    'los destinos del conmutador se declaran en nav-config, no a mano en el header'
+  )
 })
