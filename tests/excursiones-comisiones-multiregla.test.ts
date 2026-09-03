@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import {
   reglasAplicables,
   reglaAplicable,
-  calcularComision,
   type ReglaComision,
   type ContextoVenta,
 } from '../src/modules/excursiones/comisiones/nucleo'

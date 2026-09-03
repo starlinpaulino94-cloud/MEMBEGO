@@ -34,10 +34,10 @@ function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
     exports: mockExports,
     parent: null,
     children: [],
-  } as any
+  } as unknown as NodeJS.Module
 }
 
-function restoreModules() {
+function _restoreModules() {
   for (const [path, original] of originalModules) {
     if (original) {
       require.cache[path] = original
@@ -66,7 +66,7 @@ mockModule('../src/lib/server-utils.ts', {
 })
 
 let mockFindFirstResult: unknown = null
-let mockCreatedAjuste: any = null
+let mockCreatedAjuste: Record<string, unknown> = {}
 mockModule('../src/lib/tenant.ts', {
   conEmpresa: async (_companyId: string, fn: (tx: unknown) => Promise<unknown>) => {
     const tx = {
@@ -364,7 +364,7 @@ test('ajustar comisión inexistente falla', async () => {
 })
 
 test('ajustar comisión con selector RESTAR guarda monto negativo', async () => {
-  mockCreatedAjuste = null
+  mockCreatedAjuste = {}
   mockFindFirstResult = {
     id: 'c1',
     monto: 100,
@@ -376,11 +376,11 @@ test('ajustar comisión con selector RESTAR guarda monto negativo', async () => 
   const result = await ajustarComision({} as never, fd)
   assert.equal(result.error, undefined)
   assert.equal(result.success, 'Ajuste registrado.')
-  assert.equal(mockCreatedAjuste?.monto, -25.50)
+  assert.equal(mockCreatedAjuste.monto, -25.50)
 })
 
 test('ajustar comisión con selector SUMAR guarda monto positivo', async () => {
-  mockCreatedAjuste = null
+  mockCreatedAjuste = {}
   mockFindFirstResult = {
     id: 'c1',
     monto: 100,
@@ -392,7 +392,7 @@ test('ajustar comisión con selector SUMAR guarda monto positivo', async () => {
   const result = await ajustarComision({} as never, fd)
   assert.equal(result.error, undefined)
   assert.equal(result.success, 'Ajuste registrado.')
-  assert.equal(mockCreatedAjuste?.monto, 15)
+  assert.equal(mockCreatedAjuste.monto, 15)
 })
 
 test('ajustar comisión con selector RESTAR rechaza si excede el neto disponible', async () => {

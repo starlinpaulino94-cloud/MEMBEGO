@@ -1,5 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
-import { getExcursionesConfig, convertirMoneda, obtenerDetalleConversion, type DetalleConversionMoneda } from '../config'
+import { getExcursionesConfig, convertirMoneda, obtenerDetalleConversion } from '../config'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
 
 /** Liquidaciones de la empresa con el nombre de a quién se le pagó. */

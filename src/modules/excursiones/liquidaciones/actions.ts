@@ -22,7 +22,6 @@ import { getExcursionesConfig, convertirMoneda } from '../config'
 import {
   ESTADOS_LIQUIDACION,
   comisionesDelPeriodo,
-  totalLiquidacion,
   totalMonetarioComisiones,
   centavos,
   numeroLiquidacion,

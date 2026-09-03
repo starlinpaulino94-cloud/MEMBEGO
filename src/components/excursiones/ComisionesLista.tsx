@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Search, X, Filter, Calendar } from 'lucide-react'
+import { Search, X, Filter } from 'lucide-react'
 import {
   ESTADO_COMISION_LABEL,
   TONO_COMISION,
@@ -44,7 +44,10 @@ const TASAS_FILTRO: { valor: string; label: string }[] = [
 export function ComisionesLista({
   comisiones,
   vendedores,
-  monedaDefecto,
+  // Declarada en el contrato del componente pero todavía sin uso: cada fila
+  // ya trae su propia moneda. Se conserva el nombre para no romper a quien lo
+  // pasa desde la página.
+  monedaDefecto: _monedaDefecto,
 }: {
   comisiones: ComisionRow[]
   vendedores: VendedorOpcion[]

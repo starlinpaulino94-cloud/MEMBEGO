@@ -1,5 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
-import { getExcursionesConfig, convertirMoneda, obtenerDetalleConversion, type DetalleConversionMoneda } from '../config'
+import { getExcursionesConfig, obtenerDetalleConversion } from '../config'
 import { netoComision } from './nucleo'
 
 export interface ResumenComisionesResuelto {

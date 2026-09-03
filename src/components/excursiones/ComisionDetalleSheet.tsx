@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { startTransition, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -13,8 +13,6 @@ import {
   Sliders,
   DollarSign,
   AlertCircle,
-  PlusCircle,
-  MinusCircle,
   ArrowLeftRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -39,7 +37,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { StatusChip } from '@/components/ui/status-chip'
-import { formatDate, formatDateTime, formatMoney } from '@/lib/format'
+import { formatDateTime, formatMoney } from '@/lib/format'
 
 const init: ComisionActionState = {}
 
@@ -96,7 +94,7 @@ export function ComisionDetalleSheet({
   useEffect(() => {
     if (ajusteState.success) {
       toast.success(ajusteState.success)
-      setMostrandoAjuste(false)
+      startTransition(() => setMostrandoAjuste(false))
       router.refresh()
       onOpenChange(false)
     }

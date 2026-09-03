@@ -28,7 +28,6 @@ import {
   type EstadoReserva,
 } from '@/modules/excursiones/reservas/nucleo'
 import {
-  reglaAplicable,
   reglasAplicables,
   calcularComision,
   netoComision,

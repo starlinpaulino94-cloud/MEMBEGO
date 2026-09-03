@@ -9,7 +9,6 @@ import {
   Award,
   Gift,
   Scale,
-  DollarSign,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'

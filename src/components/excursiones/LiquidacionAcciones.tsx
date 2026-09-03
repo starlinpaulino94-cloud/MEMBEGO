@@ -6,7 +6,7 @@
  * Anular solicita motivo y libera las comisiones de vuelta al estado APROBADA.
  */
 
-import { useActionState, useEffect, useState } from 'react'
+import { startTransition, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, CreditCard, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -60,8 +60,13 @@ export function LiquidacionAcciones({
   useEffect(() => {
     if (state.success) {
       toast.success(state.success)
-      setPagarOpen(false)
-      setAnularOpen(false)
+      // El cierre del diálogo va en una transición: es una reacción a que la
+      // acción terminó, no una sincronización con un sistema externo, y en el
+      // cuerpo del efecto encadena renders.
+      startTransition(() => {
+        setPagarOpen(false)
+        setAnularOpen(false)
+      })
       router.refresh()
     }
     if (state.error) toast.error(state.error)

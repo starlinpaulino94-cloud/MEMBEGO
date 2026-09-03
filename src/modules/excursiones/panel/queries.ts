@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { conEmpresa } from '@/lib/tenant'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
 import { calcularSaldo } from '@/modules/excursiones/reservas/nucleo'
-import { getExcursionesConfig, obtenerDetalleConversion, type DetalleConversionMoneda } from '../config'
+import { getExcursionesConfig, obtenerDetalleConversion } from '../config'
 
 /**
  * EXCURSIONES · Panel del vendedor — lecturas.
