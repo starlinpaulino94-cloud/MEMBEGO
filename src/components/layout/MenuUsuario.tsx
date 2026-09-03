@@ -1,5 +1,6 @@
 'use client'
 
+import { useId } from 'react'
 import Link from 'next/link'
 import { CircleHelp, LogOut, User } from 'lucide-react'
 import {
@@ -10,12 +11,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import { logout } from '@/modules/auth/actions'
 import { roleLabel } from '@/components/layout/nav-config'
 import type { AppRole } from '@/types'
 
-/** El shell monta un solo menú de usuario, así que un id fijo es seguro. */
-const ID_FORM_SALIR = 'menu-usuario-cerrar-sesion'
+/**
+ * EL ID DEL FORMULARIO DE SALIDA SE GENERA, NO SE ESCRIBE.
+ *
+ * Era una constante: «el shell monta un solo menú de usuario, así que un id
+ * fijo es seguro». Dejó de serlo en cuanto el mismo menú se montó también en
+ * el pie del riel. Dos elementos con el mismo id es HTML inválido y el
+ * síntoma habría sido silencioso: `form="…"` resuelve al PRIMERO del
+ * documento, así que cerrar sesión desde el riel enviaría el formulario del
+ * menú de la cabecera. Funciona por casualidad hasta que uno de los dos no
+ * está montado.
+ */
 
 /**
  * Menú de perfil del header: identidad, ayuda y cerrar sesión.
@@ -34,29 +45,45 @@ export function MenuUsuario({
   userEmail,
   userName,
   ayudaHref,
+  align = 'end',
+  side,
+  triggerClassName,
 }: {
   role: AppRole
   userEmail: string
   userName?: string | null
   /** Sin destino, la entrada de ayuda no se muestra. */
   ayudaHref?: string | null
+  /**
+   * Dónde se abre el panel. Existe porque este MISMO menú se monta en dos
+   * sitios con geometrías opuestas: arriba a la derecha (cabecera) y abajo a
+   * la izquierda (pie del riel). Duplicar el componente para cambiar dos
+   * atributos habría duplicado también el formulario de cerrar sesión.
+   */
+  align?: 'start' | 'center' | 'end'
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  /** Estilo del disparador: la cabecera es clara y el riel es navy. */
+  triggerClassName?: string
 }) {
+  const idFormSalir = useId()
   const identidad = userName?.trim() || userEmail
   const inicial = (identidad[0] ?? 'U').toUpperCase()
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        id="menu-usuario-trigger"
         aria-label="Tu cuenta"
-        className="flex h-10 w-10 items-center justify-center rounded-lg outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          'flex h-10 w-10 items-center justify-center rounded-lg outline-none transition-colors duration-fast hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+          triggerClassName
+        )}
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-brand text-[13px] font-semibold text-white">
           {inicial}
         </span>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align={align} side={side} className="w-60">
         <DropdownMenuLabel className="font-normal">
           <p className="truncate text-small font-medium text-foreground" title={identidad}>
             {identidad}
@@ -88,9 +115,9 @@ export function MenuUsuario({
             va FUERA del item y el botón lo referencia con `form=`: así el item
             del menú sigue siendo un <button> real —con su rol, su foco y su
             Enter— en vez de un <form> disfrazado de opción de menú. */}
-        <form action={logout} id={ID_FORM_SALIR} className="hidden" />
+        <form action={logout} id={idFormSalir} className="hidden" />
         <DropdownMenuItem variant="destructive" asChild>
-          <button type="submit" form={ID_FORM_SALIR}>
+          <button type="submit" form={idFormSalir}>
             <LogOut aria-hidden />
             Cerrar sesión
           </button>

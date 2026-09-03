@@ -8,7 +8,8 @@ import { ColaTrabajosCard } from '@/components/superadmin/ColaTrabajosCard'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Plug } from 'lucide-react'
+import { Activity, CircleCheck, Inbox, Plug, TriangleAlert } from 'lucide-react'
+import { StatCard } from '@/components/ui/stat-card'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,12 +36,65 @@ export default async function IntegracionesPage() {
 
   const atascados = sistemas.filter((s) => s.pendientes > 0)
 
+  /**
+   * LOS CUATRO NÚMEROS DE ARRIBA, Y DE DÓNDE SALE CADA UNO.
+   *
+   * Todos de `saludDeLaCola()` y de los totales por sistema que ya trae
+   * `getPanelIntegraciones()`: cero consultas nuevas y cero estimaciones.
+   *
+   * La TASA DE ENTREGA se calcula sobre eventos realmente despachados
+   * (enviados + fallidos). Cuando no se ha despachado ninguno se muestra «—» y
+   * no «100 %»: sin denominador no hay porcentaje, y un 100 % sobre cero
+   * eventos es la clase de número que tranquiliza sin motivo.
+   */
+  const enviados = sistemas.reduce((n, x) => n + x.enviados, 0)
+  const fallidos = sistemas.reduce((n, x) => n + x.fallidos, 0)
+  const despachados = enviados + fallidos
+  const tasaEntrega =
+    despachados > 0 ? `${((enviados / despachados) * 100).toFixed(1)}%` : '—'
+  const activos = sistemas.filter((x) => x.estado === 'ACTIVE').length
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Integraciones"
         description="Sistemas satélite conectados a MembeGo y estado de la cola de eventos."
       />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Tasa de entrega"
+          value={tasaEntrega}
+          sub={
+            despachados > 0
+              ? `Sobre ${despachados} eventos despachados`
+              : 'Todavía no se ha despachado ninguno'
+          }
+          icon={CircleCheck}
+          accent={fallidos > 0 ? 'warning' : 'success'}
+        />
+        <StatCard
+          label="Eventos en cola"
+          value={salud.webhooksPendientes}
+          sub="Esperando su reintento"
+          icon={Inbox}
+          accent={salud.webhooksPendientes > 0 ? 'warning' : 'success'}
+        />
+        <StatCard
+          label="Eventos agotados"
+          value={salud.webhooksMuertos}
+          sub="Sin más reintentos: hay que mirarlos"
+          icon={TriangleAlert}
+          accent={salud.webhooksMuertos > 0 ? 'danger' : 'success'}
+        />
+        <StatCard
+          label="Sistemas conectados"
+          value={sistemas.length}
+          sub={`${activos} activos`}
+          icon={Activity}
+          accent="brand"
+        />
+      </div>
 
       {/* Fase 2 de Connect: la salud de TODO el procesamiento asíncrono en un
           vistazo, y los trabajos que QStash agotó — antes desaparecían sin que

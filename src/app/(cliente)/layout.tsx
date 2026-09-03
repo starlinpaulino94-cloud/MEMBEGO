@@ -13,6 +13,7 @@ import { getNavOcultoClienteCached } from '@/modules/cliente/navDisponible'
 import { BannerDemo } from '@/components/system/BannerDemo'
 import { nombreSiEsDemo } from '@/modules/demo'
 import { ExcursionCarritoWrapper } from '@/components/excursiones/ExcursionCarritoWrapper'
+import { contextoDeNavegacion } from '@/modules/navegacion/contexto'
 
 export default async function ClienteLayout({
   children,
@@ -62,12 +63,16 @@ export default async function ClienteLayout({
   // Rendimiento: este layout corre en CADA clic. Lo cosmético (switcher de
   // empresas, módulos ocultos del menú) va cacheado 5 min por usuario; solo
   // el badge de notificaciones y el QR activo se consultan en vivo.
-  const [notifCount, clienteCompanies, membresiaQrId, hiddenNav, demo] = await Promise.all([
+  const [notifCount, clienteCompanies, membresiaQrId, hiddenNav, demo, capacidades] =
+    await Promise.all([
     getUnreadCount().catch(() => 0),
     getClienteCompaniesCached(user.supabaseId).catch(() => []),
     getMembresiaActivaPrincipalId(user.supabaseId, user.metadata.clienteId),
     getNavOcultoClienteCached(user.metadata.clienteId, user.metadata.companyId),
     nombreSiEsDemo(user.metadata.companyId),
+    // El vertical decide, por ejemplo, si «Mis vehiculos» tiene sentido: solo
+    // un car wash le pide la placa a nadie.
+    contextoDeNavegacion({ role: 'CLIENTE', companyId: user.metadata.companyId }),
   ])
   const companies = clienteCompanies.map((c) => ({
     companyId: c.companyId,
@@ -77,15 +82,15 @@ export default async function ClienteLayout({
   }))
   return (
     <AppShell
-      role="CLIENTE"
+      // El menu del cliente combina lo que su empresa tiene contratado con los
+      // modulos que todavia no tienen contenido para el (`hiddenNav`).
+      ctx={{ ...capacidades, ocultas: hiddenNav }}
       title="MembeGo"
       userEmail={user.email}
       notifCount={notifCount}
       companies={companies}
       // Dock central "Mi QR" de la barra inferior (reemplaza al FAB flotante).
       qrHref={membresiaQrId ? `/membresia/${membresiaQrId}` : null}
-      // Oculta del menú los módulos del cliente que aún no tienen contenido.
-      hiddenNav={hiddenNav}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* El cliente de práctica también tiene que saberlo: si el personal usa

@@ -1,245 +1,286 @@
 'use client'
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { X } from 'lucide-react'
+import { Suspense, useCallback, useState, useSyncExternalStore } from 'react'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppHeader } from '@/components/layout/AppHeader'
 import { BottomNav } from '@/components/layout/BottomNav'
+import { NavProgress } from '@/components/layout/NavProgress'
+import type { BadgesNav } from '@/components/layout/NavPanel'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import type { CompanyOption } from '@/components/cliente/CompanySwitcher'
+import type { ContextoNav } from '@/components/layout/nav-config'
 import type { AppRole } from '@/types'
+
+/**
+ * ════════════════════════════════════════════════════════════════════════════
+ * LA CARCASA DE LA APLICACIÓN.
+ * ════════════════════════════════════════════════════════════════════════════
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA GEOMETRÍA, Y POR QUÉ ES ASÍ EXACTAMENTE
+ *
+ * Raíz en `flex` con `overflow-x-clip`; el menú es un hijo `sticky top-0
+ * h-screen self-start`; el contenido es el otro hijo y hace scroll con la
+ * página.
+ *
+ * `overflow-x-clip` y NO `overflow-x-hidden`. Parecen sinónimos y no lo son:
+ * `hidden` convierte al elemento en un contenedor de scroll, y un contenedor
+ * de scroll intermedio ROMPE `position: sticky` de sus descendientes — el menú
+ * se despega y sube con la página. `clip` recorta sin crear contenedor, que es
+ * lo único que aquí hace falta (evitar la barra horizontal que provoca una
+ * tabla ancha).
+ *
+ * `self-start` en el menú. Un hijo de flex se estira a la altura del
+ * contenedor por defecto; con `align-self: stretch` el menú mediría lo que
+ * mide la página entera y `sticky` no tendría contra qué pegarse. Con
+ * `self-start` mide `h-screen` y se queda quieto mientras el contenido corre.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL MODO COMPACTO NO PARPADEA
+ *
+ * La preferencia vive en `localStorage`, que el servidor no puede leer: si se
+ * aplicara al hidratar, todo el mundo con el menú plegado vería el panel
+ * ancho durante un instante y luego encogerse. Es el mismo problema del tema
+ * claro/oscuro y se resuelve igual — un script diminuto que corre ANTES de
+ * pintar y marca `<html data-nav-compacto>`, más una regla CSS que oculta el
+ * panel. React sigue renderizando lo mismo en servidor y cliente (así que no
+ * hay desajuste de hidratación) y el estado de React se pone al día justo
+ * después, que es cuando empieza a hacer falta para el flyout.
+ */
+
+const CLAVE_COMPACTO = 'membego.nav.compacto.v1'
 
 /** Roles con navegación inferior en móvil (experiencia principalmente táctil). */
 const BOTTOM_NAV_ROLES: readonly AppRole[] = ['CLIENTE']
 
-/** DXS · Persistencia del riel colapsado de la sidebar (desktop). */
-const RAIL_KEY = 'membego.sidebar.rail.v1'
-const emptySubscribe = () => () => {}
+/**
+ * Se ejecuta antes del primer pintado. Va en texto plano y sin dependencias a
+ * propósito: cualquier import lo retrasaría hasta después del pintado, que es
+ * exactamente lo que intenta evitar.
+ */
+const SCRIPT_COMPACTO = `try{document.documentElement.dataset.navCompacto=localStorage.getItem('${CLAVE_COMPACTO}')==='1'?'1':'0'}catch(e){}`
 
-function leerRail(): boolean {
+/**
+ * LA PREFERENCIA SE LEE, NO SE COPIA A UN ESTADO.
+ *
+ * `localStorage` es una fuente externa: con `useSyncExternalStore`, React la
+ * consulta en cada render y devuelve `false` en el servidor, que es lo correcto
+ * —el servidor no puede saberlo— sin que haya un efecto copiando el valor a un
+ * `useState`. Un efecto que hace `setState` al montar encadena un render extra
+ * y abre una ventana en la que el estado de React y el almacenamiento dicen
+ * cosas distintas.
+ *
+ * El parpadeo visual no lo evita esto, sino el script de arriba: aquí solo se
+ * asegura que la LÓGICA (el flyout) sepa lo mismo que ya se está pintando.
+ */
+const oyentes = new Set<() => void>()
+
+function suscribirCompacto(alCambiar: () => void) {
+  oyentes.add(alCambiar)
+  return () => {
+    oyentes.delete(alCambiar)
+  }
+}
+
+function leerCompacto(): boolean {
   try {
-    return localStorage.getItem(RAIL_KEY) === '1'
+    return localStorage.getItem(CLAVE_COMPACTO) === '1'
   } catch {
+    // Sin almacenamiento (modo privado, permisos): el menú funciona, solo no
+    // recuerda. Nunca es un error que valga la pena reportar.
     return false
   }
+}
+
+/** En el servidor no hay preferencia que leer: se pinta expandido. */
+const compactoEnServidor = () => false
+
+function guardarCompacto(valor: boolean) {
+  try {
+    localStorage.setItem(CLAVE_COMPACTO, valor ? '1' : '0')
+  } catch {
+    /* idem */
+  }
+  document.documentElement.dataset.navCompacto = valor ? '1' : '0'
+  for (const oyente of oyentes) oyente()
 }
 
 /**
  * Destino de "Ayuda" en el menú de usuario, por rol. Solo el cliente tiene
  * hoy una pantalla de ayuda propia; el personal la pide por Soporte, que ya
- * está en su menú lateral. Sin destino, la entrada no se pinta.
+ * está en su menú. Sin destino, la entrada no se pinta.
  */
 function ayudaParaRol(role: AppRole): string | null {
   return role === 'CLIENTE' ? '/cliente/ayuda' : null
 }
 
 export function AppShell({
-  role,
+  ctx,
   title,
   userEmail,
   userName,
   notifCount = 0,
+  badges,
   companies,
   qrHref,
-  hiddenNav,
   sistemasExternos,
+  nombreEmpresa,
   children,
 }: {
-  role: AppRole
+  /**
+   * Rol, capacidades encendidas, vertical y rutas negadas. Se arma en el
+   * servidor y viaja como datos planos: aquí NO llega la sesión ni nada
+   * sensible, solo lo que hace falta para decidir qué se ofrece.
+   */
+  ctx: ContextoNav
   title: string
   userEmail: string
   /** Nombre de la persona cuando se conoce; si no, manda el correo. */
   userName?: string | null
   notifCount?: number
+  /** Contadores REALES del menú. Los que fallaron no vienen y no se pintan. */
+  badges?: BadgesNav
   companies?: CompanyOption[]
   /** Destino del dock central "Mi QR" en la barra inferior (cliente). */
   qrHref?: string | null
-  /** Rutas a ocultar por no tener contenido todavía (cliente). */
-  hiddenNav?: string[]
   /** Sistema satélite conectado: el header ofrece el acceso directo por SSO. */
   sistemasExternos?: { slug: string; nombre: string }[]
+  /** Nombre de la empresa activa para la píldora de ámbito (solo texto). */
+  nombreEmpresa?: string | null
   children: React.ReactNode
 }) {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const drawerRef = useRef<HTMLElement>(null)
-  /** Quién abrió el menú, para devolverle el foco al cerrarlo. */
-  const abridorRef = useRef<HTMLElement | null>(null)
-  const hasBottomNav = BOTTOM_NAV_ROLES.includes(role)
+  const pathname = usePathname()
+  const hasBottomNav = BOTTOM_NAV_ROLES.includes(ctx.role)
 
-  // DXS · Riel colapsado (desktop): SSR/1er render expandido (sin mismatch de
-  // hidratación); tras montar aplica lo guardado. El toggle pisa con override.
-  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false)
-  const [railOverride, setRailOverride] = useState<boolean | null>(null)
-  const rail = railOverride ?? (mounted ? leerRail() : false)
+  const compacto = useSyncExternalStore(
+    suscribirCompacto,
+    leerCompacto,
+    compactoEnServidor
+  )
+  const alternarCompacto = useCallback(() => guardarCompacto(!leerCompacto()), [])
 
-  function toggleRail() {
-    const next = !rail
-    setRailOverride(next)
-    try {
-      localStorage.setItem(RAIL_KEY, next ? '1' : '0')
-    } catch {
-      /* sin almacenamiento: el riel funciona sin memoria */
-    }
-  }
-
-  // Lock body scroll when drawer is open
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? 'hidden' : ''
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [mobileOpen])
-
-  // A11y del drawer: Escape cierra, el foco entra al abrir, se queda dentro
-  // mientras está abierto (si no, tabular se escapa al contenido de atrás que
-  // el diálogo dice estar tapando) y vuelve al botón que lo abrió al cerrar.
-  useEffect(() => {
-    if (!mobileOpen) {
-      abridorRef.current?.focus()
-      abridorRef.current = null
-      return
-    }
-    abridorRef.current = document.activeElement as HTMLElement | null
-    const enfocables = () =>
-      Array.from(
-        drawerRef.current?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        ) ?? []
-      ).filter((el) => el.offsetParent !== null)
-
-    enfocables()[0]?.focus()
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setMobileOpen(false)
-        return
-      }
-      if (e.key !== 'Tab') return
-      const lista = enfocables()
-      if (lista.length === 0) return
-      const primero = lista[0]
-      const ultimo = lista[lista.length - 1]
-      const activo = document.activeElement
-      if (e.shiftKey && (activo === primero || !drawerRef.current?.contains(activo))) {
-        e.preventDefault()
-        ultimo.focus()
-      } else if (!e.shiftKey && activo === ultimo) {
-        e.preventDefault()
-        primero.focus()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [mobileOpen])
+  /**
+   * EL CAJÓN MÓVIL SE CIERRA SOLO AL CAMBIAR DE RUTA, SIN UN EFECTO QUE LO
+   * CIERRE.
+   *
+   * Lo que se guarda no es «abierto/cerrado» sino LA RUTA EN LA QUE SE ABRIÓ.
+   * Está abierto mientras esa ruta siga siendo la actual; en cuanto el
+   * enrutador aterriza en otra, la condición deja de cumplirse y se cierra en
+   * el mismo render.
+   *
+   * Cerrarlo por cambio de ruta y no en el `onClick` del enlace importa por
+   * dos motivos: así se cierra también cuando la navegación sale de las migas
+   * o de un botón de la pantalla, y NUNCA se cierra antes de tiempo si la
+   * navegación falla —el usuario se queda donde estaba, con su menú abierto.
+   */
+  const [abiertoEn, setAbiertoEn] = useState<string | null>(null)
+  const movilAbierto = abiertoEn !== null && abiertoEn === pathname
+  const setMovilAbierto = useCallback(
+    (abierto: boolean) => setAbiertoEn(abierto ? pathname : null),
+    [pathname]
+  )
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Desktop sidebar — fija, colapsable a riel de iconos (DXS).
-          DS 2.0 · 256px (w-64): con la tipografía del menú a 14.5px e iconos
-          de 18px, los 240px anteriores truncaban etiquetas como
-          "Campañas segmentadas" o "Métodos de pago". */}
-      <aside
-        className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-base ease-out lg:block',
-          rail ? 'w-[68px]' : 'w-64'
-        )}
-      >
-        <AppSidebar
-          role={role}
-          title={title}
-          userEmail={userEmail}
-          userName={userName}
-          rail={rail}
-          onToggleRail={toggleRail}
-          hiddenNav={hiddenNav}
-        />
-      </aside>
+    <>
+      <script dangerouslySetInnerHTML={{ __html: SCRIPT_COMPACTO }} />
 
-      {/* Mobile drawer */}
-      <div
-        inert={!mobileOpen}
-        className={cn(
-          'fixed inset-0 z-50 lg:hidden',
-          mobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
-        )}
-      >
-        <div
-          onClick={() => setMobileOpen(false)}
-          className={cn(
-            'absolute inset-0 bg-black/50 transition-opacity',
-            mobileOpen ? 'opacity-100' : 'opacity-0'
-          )}
-        />
+      {/* `useSearchParams` obliga a un límite de suspensión; la barra es
+          decorativa, así que su respaldo es nada. */}
+      <Suspense fallback={null}>
+        <NavProgress />
+      </Suspense>
+
+      <div className="flex min-h-screen w-full overflow-x-clip bg-background">
+        {/* Menú de escritorio. `self-start` + `h-screen` es lo que hace que
+            `sticky` funcione dentro de un contenedor flex (ver cabecera). */}
         <aside
-          ref={drawerRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Menú de navegación"
-          className={cn(
-            'absolute inset-y-0 left-0 w-64 overflow-hidden rounded-r-2xl elevation-3 transition-transform duration-slow',
-            mobileOpen ? 'translate-x-0' : '-translate-x-full'
-          )}
+          aria-label="Navegación principal"
+          className="sticky top-0 hidden h-screen shrink-0 self-start lg:block"
         >
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="absolute right-2 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-white"
-            aria-label="Cerrar menú"
-          >
-            <X className="h-5 w-5" />
-          </button>
           <AppSidebar
-            role={role}
-            title={title}
+            ctx={ctx}
+            badges={badges}
+            compacto={compacto}
+            onToggleCompacto={alternarCompacto}
             userEmail={userEmail}
             userName={userName}
-            onNavigate={() => setMobileOpen(false)}
-            hiddenNav={hiddenNav}
+            ayudaHref={ayudaParaRol(ctx.role)}
           />
         </aside>
-      </div>
 
-      {/* Main column */}
-      <div
-        className={cn(
-          'transition-[padding] duration-base ease-out',
-          rail ? 'lg:pl-[68px]' : 'lg:pl-64'
+        {/* Cajón móvil. Es el Sheet del sistema de diseño —Radix Dialog por
+            dentro—, así que el foco entra, se queda dentro, Escape cierra y al
+            cerrar vuelve al botón que lo abrió. Todo eso estaba escrito a mano
+            aquí y era ~60 líneas de gestión de foco que nadie probaba. */}
+        <Sheet open={movilAbierto} onOpenChange={setMovilAbierto}>
+          <SheetContent
+            side="left"
+            showCloseButton={false}
+            className="w-auto max-w-[calc(100vw-3rem)] gap-0 border-r-0 bg-sidebar-rail p-0 sm:max-w-none lg:hidden"
+          >
+            {/* Radix exige título y descripción accesibles; se anuncian al
+                lector de pantalla y no se pintan. */}
+            <SheetTitle className="sr-only">Menú de navegación</SheetTitle>
+            <SheetDescription className="sr-only">
+              Espacios de trabajo y módulos disponibles para tu cuenta.
+            </SheetDescription>
+            {/* MISMA navegación filtrada que el escritorio: no hay una segunda
+                lista de módulos que se quede atrás. */}
+            <AppSidebar
+              ctx={ctx}
+              badges={badges}
+              variante="movil"
+              userEmail={userEmail}
+              userName={userName}
+              ayudaHref={ayudaParaRol(ctx.role)}
+            />
+          </SheetContent>
+        </Sheet>
+
+        {/* Columna de contenido. `min-w-0` para que una tabla ancha empuje su
+            propio scroll y no el de la página. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <AppHeader
+            ctx={ctx}
+            title={title}
+            notifCount={notifCount}
+            companies={companies}
+            onMenuClick={() => setMovilAbierto(true)}
+            sistemasExternos={sistemasExternos}
+            nombreEmpresa={nombreEmpresa}
+            userEmail={userEmail}
+            userName={userName}
+            ayudaHref={ayudaParaRol(ctx.role)}
+          />
+
+          {/* Contenedor de página — la convención de espaciado vive AQUÍ, no
+              en cada pantalla. Ancho máximo 1280px y padding 16/24/32 según
+              tamaño. Una página no debe volver a declarar su propio `max-w-*`
+              ni su padding lateral: si lo hace, se desalinea del resto. Lo que
+              sí decide cada pantalla es la separación entre SUS secciones. */}
+          <main
+            className={cn(
+              'mx-auto w-full max-w-7xl px-4 py-8 md:px-6 lg:px-8',
+              // Hueco para la barra inferior. La clase vive en `globals.css`
+              // porque necesita `env(safe-area-inset-bottom)`.
+              hasBottomNav && 'con-dock-inferior'
+            )}
+          >
+            {children}
+          </main>
+        </div>
+
+        {hasBottomNav && (
+          <BottomNav role={ctx.role} qrHref={qrHref} hiddenNav={[...(ctx.ocultas ?? [])]} />
         )}
-      >
-        <AppHeader
-          role={role}
-          notifCount={notifCount}
-          companies={companies}
-          onMenuClick={() => setMobileOpen(true)}
-          hiddenNav={hiddenNav}
-          sistemasExternos={sistemasExternos}
-          userEmail={userEmail}
-          userName={userName}
-          ayudaHref={ayudaParaRol(role)}
-        />
-        {/* Contenedor de página — la convención de espaciado vive AQUÍ, no en
-            cada pantalla. Ancho máximo 1280px, padding 16/24/32 según tamaño
-            y 32px arriba y abajo. Una página no debe volver a declarar su
-            propio `max-w-*` ni su padding lateral: si lo hace, se desalinea
-            con el resto del producto. Lo que sí decide cada pantalla es la
-            separación entre SUS secciones (`space-y-8`). */}
-        <main
-          className={cn(
-            'mx-auto max-w-7xl px-4 py-8 md:px-6 lg:px-8',
-            // Hueco para la barra inferior. La clase vive en `globals.css`
-            // porque necesita `env(safe-area-inset-bottom)` —que no cabe en un
-            // valor arbitrario de Tailwind— y una media query para soltarlo en
-            // escritorio, donde no hay barra. El `pb-24` que había aquí eran
-            // 96 px a ojo y se quedaba corto en cualquier teléfono con barra de
-            // gestos, tapando el botón principal de la pantalla.
-            hasBottomNav && 'con-dock-inferior'
-          )}
-        >
-          {children}
-        </main>
       </div>
-
-      {hasBottomNav && <BottomNav role={role} qrHref={qrHref} hiddenNav={hiddenNav} />}
-    </div>
+    </>
   )
 }

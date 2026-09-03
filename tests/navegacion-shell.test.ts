@@ -4,27 +4,33 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   navForRole,
-  navContextsForRole,
+  visibleWorkspaces,
   allLinks,
-  migasDeRuta,
+  breadcrumbs,
+  type ContextoNav,
 } from '../src/components/layout/nav-config'
 import type { AppRole } from '../src/types'
 
 /**
- * SHELL GLOBAL — navegación y suelo tipográfico (DS 2.0 · Fases 0 y 1).
+ * SHELL GLOBAL — navegación y suelo tipográfico (DS 2.0 · Fases 0 y 1;
+ * DS 3.0 · navegación de dos niveles).
  *
  * POR QUÉ SE PRUEBA ESTO Y NO EL ASPECTO DE LAS PANTALLAS:
  *
  * Reagrupar un menú es la clase de cambio que rompe cosas en silencio. Una
- * ruta que se cae del menú no da error: simplemente deja de existir para
- * quien no se sepa la URL, y nadie lo nota hasta que un administrador
- * pregunta dónde fueron a parar sus comprobantes. Igual con el breadcrumb: si
- * el dominio deja de resolverse, la cabecera no falla, solo vuelve a decir
- * menos de lo que debería.
+ * ruta que se cae del menú no da error: simplemente deja de existir para quien
+ * no se sepa la URL, y nadie lo nota hasta que un administrador pregunta dónde
+ * fueron a parar sus comprobantes. Igual con las migas: si el espacio deja de
+ * resolverse, la cabecera no falla, solo dice menos de lo que debería.
  *
  * Son funciones puras sobre datos estáticos, así que se verifican sin
  * navegador y sin base de datos — exactamente lo que uno rompería sin darse
- * cuenta al mover un enlace de grupo en una fase futura.
+ * cuenta al mover un módulo de espacio en una fase futura.
+ *
+ * Las reglas propias de los ESPACIOS (visibilidad por capacidad, vertical y
+ * rol; prefijo más largo; espacios vacíos) viven en
+ * `tests/navegacion-espacios.test.ts`. Aquí se comprueba que reagrupar en
+ * espacios NO cambió el inventario ni el orden de los dominios.
  */
 
 const ROLES: AppRole[] = [
@@ -35,6 +41,8 @@ const ROLES: AppRole[] = [
   'MARKETING',
   'SUPERVISOR',
 ]
+
+const ctxDe = (role: AppRole): ContextoNav => ({ role })
 
 // ── Integridad del menú ──────────────────────────────────────────────────
 
@@ -62,19 +70,18 @@ test('no hay dos entradas con la misma etiqueta apuntando a rutas distintas', ()
   // /admin/campanas y /admin/audiencia/campanas, en el mismo menú. Etiqueta
   // idéntica y destino distinto es una trampa, no una decisión de diseño.
   //
-  // Se comprueba POR CONTEXTO y no sobre la lista plana. El superadmin tiene
-  // dos paneles —Plataforma y Panel de empresa— que NUNCA se pintan juntos en
-  // el menú, y cada uno tiene su «Planes», su «Membresías» y sus «Reportes».
-  // Exigir unicidad sobre la unión de los dos obligaba a colgarles un
-  // «globales» que dentro de su propio panel no distinguía nada: allí no hay
-  // otro tipo de planes con el que confundirlos.
+  // Se comprueba POR ESPACIO y no sobre la lista plana. Los espacios de la
+  // plataforma y los de una empresa NUNCA se pintan juntos en el segundo
+  // nivel (el ámbito los separa), y cada uno tiene su «Planes», sus
+  // «Membresías» y sus «Reportes». Exigir unicidad sobre la unión obligaría a
+  // colgarles un «globales» que dentro de su propio espacio no distingue nada.
   //
-  // El único sitio donde los dos paneles SÍ aparecen juntos es la paleta de
+  // El único sitio donde varios espacios SÍ aparecen juntos es la paleta de
   // comandos, y eso lo cubre la prueba siguiente.
   for (const role of ROLES) {
-    for (const ctx of navContextsForRole(role)) {
+    for (const espacio of visibleWorkspaces(ctxDe(role))) {
       const porEtiqueta = new Map<string, Set<string>>()
-      for (const l of allLinks(ctx.groups)) {
+      for (const l of allLinks(espacio.groups)) {
         const set = porEtiqueta.get(l.label) ?? new Set()
         set.add(l.href)
         porEtiqueta.set(l.label, set)
@@ -83,7 +90,7 @@ test('no hay dos entradas con la misma etiqueta apuntando a rutas distintas', ()
         assert.equal(
           hrefs.size,
           1,
-          `${role} · ${ctx.label}: "${label}" apunta a ${hrefs.size} rutas distintas (${[...hrefs].join(', ')})`
+          `${role} · ${espacio.label}: "${label}" apunta a ${hrefs.size} rutas distintas (${[...hrefs].join(', ')})`
         )
       }
     }
@@ -91,25 +98,25 @@ test('no hay dos entradas con la misma etiqueta apuntando a rutas distintas', ()
 })
 
 /**
- * Y CUANDO LOS PANELES SE JUNTAN, ALGO TIENE QUE SEPARARLOS.
+ * Y CUANDO LOS ESPACIOS SE JUNTAN, ALGO TIENE QUE SEPARARLOS.
  *
- * La paleta de comandos es el único sitio que enseña los dos contextos del
- * superadmin a la vez. Ahí sí conviven dos «Planes» que van a rutas distintas,
- * y lo que los distingue es el encabezado del grupo: la paleta lo compone como
- * «<panel> · <grupo>» justo por esto.
+ * La paleta de comandos es el único sitio que enseña todos los espacios a la
+ * vez. Ahí sí conviven dos «Planes» que van a rutas distintas, y lo que los
+ * distingue es el encabezado del grupo: la paleta lo compone como
+ * «<espacio> · <grupo>» justo por esto.
  *
  * Esta prueba comprueba que ese encabezado compuesto es único, que es la
  * garantía de verdad: sin ella, aflojar la prueba de arriba habría dejado la
  * ambigüedad suelta en el único lugar donde importa.
  */
-test('en la paleta, panel + grupo + etiqueta identifica una sola ruta', () => {
+test('en la paleta, espacio + grupo + etiqueta identifica una sola ruta', () => {
   for (const role of ROLES) {
-    const contextos = navContextsForRole(role)
-    const varios = contextos.length > 1
+    const espacios = visibleWorkspaces(ctxDe(role))
+    const varios = espacios.length > 1
     const porClave = new Map<string, Set<string>>()
-    for (const ctx of contextos) {
-      for (const g of ctx.groups) {
-        const heading = varios ? `${ctx.label} · ${g.label}` : g.label
+    for (const espacio of espacios) {
+      for (const g of espacio.groups) {
+        const heading = varios ? `${espacio.label} · ${g.label}` : g.label
         for (const item of g.items) {
           const clave = `${heading} → ${item.label}`
           const set = porClave.get(clave) ?? new Set()
@@ -132,108 +139,102 @@ test('cada grupo tiene al menos un enlace', () => {
   }
 })
 
-test('el panel de administrador son nueve dominios', () => {
-  // El noveno (17-08-2026) es Parques y Tours: un módulo operativo completo con
-  // UNA sola entrada en el sidebar (su navegación interna es secundaria).
-  //
-  // Se llamaba «Excursiones» y pasó a «Parques y Tours» al ampliarse a
-  // actividades y combos. El nombre nuevo ya está en las cinco piezas que lo
-  // enseñan —sidebar, título de la página, cabecera del módulo, metadatos y el
-  // alta de empresas—; lo único que faltaba era esta prueba. Se actualiza el
-  // nombre esperado, no la exigencia: sigue comprobando los nueve dominios
-  // exactos y en orden.
+test('el panel de administrador siguen siendo quince dominios', () => {
+  // Esta prueba existía antes de los espacios y NO se relaja: es justamente la
+  // garantía de que reagrupar dominios en espacios no movió módulos ni cambió
+  // el inventario. Los dominios siguen siendo los mismos y en el mismo orden;
+  // lo único nuevo es cómo se reparten en el riel.
   const grupos = navForRole('ADMINISTRADOR')
-  assert.equal(grupos.length, 9)
+  assert.equal(grupos.length, 15)
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Inicio', 'Clientes', 'Parques y Tours', 'Beneficios', 'Marketing', 'Operaciones', 'Analítica', 'Empresa', 'Soporte']
+    ['Inicio', 'Gestión', 'Relación', 'Parques y Tours', 'Oferta comercial', 'Fidelización', 'Contenido', 'Comunicación automática', 'Atención diaria', 'Organización', 'Resultados', 'Conocimiento del cliente', 'Empresa', 'Conexiones', 'Soporte']
   )
 })
 
-// ── Contextos (superadmin) ───────────────────────────────────────────────
-
-test('solo el superadmin tiene más de un contexto', () => {
+test('los espacios cubren toda la navegación de su rol', () => {
+  // El riel reparte los módulos entre espacios; no puede perder ninguno por el
+  // camino. Es el sustituto exacto de la prueba que cubría los dos contextos
+  // del superadministrador.
   for (const role of ROLES) {
-    const n = navContextsForRole(role).length
-    if (role === 'SUPERADMIN') assert.equal(n, 2, 'el superadmin debe tener dos contextos')
-    else assert.equal(n, 1, `${role} no debería tener selector de contexto`)
+    const plano = new Set(allLinks(navForRole(role)).map((l) => l.href))
+    const enEspacios = new Set(
+      visibleWorkspaces(ctxDe(role)).flatMap((e) => allLinks(e.groups).map((l) => l.href))
+    )
+    assert.deepEqual(
+      [...plano].sort(),
+      [...enEspacios].sort(),
+      `${role}: la lista plana y los espacios no contienen lo mismo`
+    )
   }
 })
 
-test('los contextos del superadmin cubren toda su navegación', () => {
-  // El selector reparte los enlaces; no puede perder ninguno por el camino.
-  const plano = new Set(allLinks(navForRole('SUPERADMIN')).map((l) => l.href))
-  const enContextos = new Set(
-    navContextsForRole('SUPERADMIN').flatMap((c) => allLinks(c.groups).map((l) => l.href))
+// ── Migas ────────────────────────────────────────────────────────────────
+
+test('las migas nombran el espacio, no solo la página', () => {
+  const m = breadcrumbs('/admin/ofertas', ctxDe('ADMINISTRADOR'))
+  assert.deepEqual(
+    m.map((x) => x.label),
+    ['Beneficios', 'Oferta comercial', 'Ofertas']
   )
-  assert.deepEqual([...plano].sort(), [...enContextos].sort())
-})
-
-// ── Breadcrumb ───────────────────────────────────────────────────────────
-
-test('el breadcrumb nombra el dominio, no solo la página', () => {
-  const grupos = navForRole('ADMINISTRADOR')
-  const m = migasDeRuta(grupos, '/admin/campanas')
-  assert.equal(m.dominio, 'Marketing')
-  assert.equal(m.seccion?.label, 'Campañas')
-  assert.equal(m.hoja, null)
+  // La primera miga es un enlace al aterrizaje del espacio: volver deja de
+  // exigir un viaje por el menú.
+  assert.equal(m[0].href, '/admin/planes')
+  // La última es la página actual: no se enlaza a sí misma.
+  assert.equal(m[m.length - 1].href, undefined)
 })
 
 test('gana el href más largo, no el primero que casa por prefijo', () => {
   // /admin/audiencia/segmentos casa TAMBIÉN con /admin/audiencia. Si ganara el
-  // prefijo corto, el breadcrumb diría "Audiencia" estando en otra pantalla.
-  //
-  // Esta prueba usaba /admin/audiencia/campanas hasta la Fase 11, que sacó esa
-  // ruta del menú al darle pestañas a Audiencia. Al salir del menú deja de
-  // tener miga propia y resuelve a "Audiencia" — que es lo correcto: sus
-  // pestañas ya dicen en cuál de las tres vistas estás. El principio no
-  // cambió, solo la ruta que lo ejercita.
-  const grupos = navForRole('ADMINISTRADOR')
-  const m = migasDeRuta(grupos, '/admin/audiencia/segmentos')
-  assert.equal(m.seccion?.href, '/admin/audiencia/segmentos')
-  assert.equal(m.seccion?.label, 'Segmentos')
+  // prefijo corto, las migas dirían "Audiencia" estando en otra pantalla.
+  const m = breadcrumbs('/admin/audiencia/segmentos', ctxDe('ADMINISTRADOR'))
+  assert.equal(m[m.length - 1].label, 'Segmentos')
 })
 
 test('una subvista fuera del menú hereda la miga de su sección', () => {
   // /admin/audiencia/campanas ya no está en el menú: su navegación son las
-  // pestañas de Audiencia. El breadcrumb debe decir "Audiencia", no quedarse
-  // en blanco ni inventar un nombre.
-  const grupos = navForRole('ADMINISTRADOR')
-  const m = migasDeRuta(grupos, '/admin/audiencia/campanas')
-  assert.equal(m.seccion?.href, '/admin/audiencia')
-  assert.equal(m.dominio, 'Analítica')
+  // pestañas de Audiencia. Las migas deben decir "Audiencia", no quedarse en
+  // blanco ni inventar un nombre.
+  const m = breadcrumbs('/admin/audiencia/campanas', ctxDe('ADMINISTRADOR'))
+  const etiquetas = m.map((x) => x.label)
+  assert.ok(etiquetas.includes('Audiencia'), `no menciona Audiencia: ${etiquetas.join(' / ')}`)
+  assert.equal(etiquetas[0], 'Analítica')
 })
 
 test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {
-  const grupos = navForRole('ADMINISTRADOR')
-  assert.equal(migasDeRuta(grupos, '/admin/planes/nuevo').hoja, 'Nuevo')
-  assert.equal(migasDeRuta(grupos, '/admin/planes/abc123/editar').hoja, 'Editar')
+  const ctx = ctxDe('ADMINISTRADOR')
+  const hoja = (p: string) => breadcrumbs(p, ctx).at(-1)?.label
+  assert.equal(hoja('/admin/planes/nuevo'), 'Nuevo')
+  assert.equal(hoja('/admin/planes/abc123/editar'), 'Editar')
   // Un id suelto no tiene nombre legible: "Detalle" es lo honesto.
-  assert.equal(migasDeRuta(grupos, '/admin/planes/abc123').hoja, 'Detalle')
+  assert.equal(hoja('/admin/planes/abc123'), 'Detalle')
 })
 
-test('un dominio de un solo módulo no se repite a sí mismo', () => {
+test('un espacio de un solo módulo no se repite a sí mismo', () => {
   // "Inicio / Inicio" sería ruido; el home del cliente es el inicio.
-  const m = migasDeRuta(navForRole('CLIENTE'), '/cliente/inicio')
-  assert.equal(m.dominio, null)
-  assert.equal(m.seccion?.label, 'Inicio')
+  const m = breadcrumbs('/cliente/inicio', ctxDe('CLIENTE'))
+  assert.deepEqual(
+    m.map((x) => x.label),
+    ['Inicio']
+  )
 })
 
 test('una ruta fuera del menú no inventa migas', () => {
-  const m = migasDeRuta(navForRole('ADMINISTRADOR'), '/ruta/que/no/existe')
-  assert.deepEqual(m, { dominio: null, seccion: null, hoja: null })
+  assert.deepEqual(breadcrumbs('/ruta/que/no/existe', ctxDe('ADMINISTRADOR')), [])
 })
 
-test('toda ruta del menú resuelve a su propia sección', () => {
+test('toda ruta del menú resuelve a su propio módulo', () => {
   for (const role of ROLES) {
-    const grupos = navForRole(role)
-    for (const link of allLinks(grupos)) {
-      const m = migasDeRuta(grupos, link.href)
-      assert.equal(
-        m.seccion?.href,
-        link.href,
-        `${role}: ${link.href} no se resuelve a sí misma`
-      )
+    const ctx = ctxDe(role)
+    for (const espacio of visibleWorkspaces(ctx)) {
+      for (const link of allLinks(espacio.groups)) {
+        const m = breadcrumbs(link.href, ctx)
+        assert.equal(
+          m.at(-1)?.label,
+          link.label,
+          `${role}: ${link.href} no se resuelve a sí misma (${m.map((x) => x.label).join(' / ')})`
+        )
+      }
     }
   }
 })

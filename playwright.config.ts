@@ -55,6 +55,17 @@ export default defineConfig({
 
   projects: [
     {
+      // Sesiones de prueba (un solo login por rol): el limitador de login
+      // (5 intentos / 15 min) no permite entrar por formulario en cada prueba.
+      // Se ejecuta primero de forma explícita (`playwright test setup`); en
+      // corridas completas el orden alfabético serial lo pone delante de los
+      // specs que consumen sus estados. A propósito SIN `dependencies`: que el
+      // setup corriera solo ante cada filtro manual quemaba el presupuesto de
+      // logins y dejaba la suite bloqueada 15 minutos.
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+    {
       name: 'movil',
       // Móvil primero y no escritorio: el 90% del tráfico de MembeGo es un
       // teléfono. Probar en 1920×1080 sería probar el caso que casi nadie usa.

@@ -130,6 +130,13 @@
   --color-surface-subtle: var(--muted);
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-active: var(--sidebar-active);
+  /* DS 3.0 - Navegacion de dos niveles. El riel es la capa mas profunda
+     (los espacios) y el panel se apoya encima (los modulos del espacio
+     activo). Dos tonos del mismo navy: sin diferencia, los dos niveles se
+     leen como una sola columna y el riel deja de significar nada. */
+  --color-sidebar-rail: var(--sidebar-rail);
+  --color-sidebar-selected: var(--sidebar-selected);
+  --color-sidebar-selected-foreground: var(--sidebar-selected-foreground);
 }
 
 @theme {
@@ -318,6 +325,14 @@
      como `bg-white/[0.05]` y `bg-white/[0.08]` en cada enlace. */
   --sidebar-hover: oklch(1 0 0 / 6%);
   --sidebar-active: oklch(1 0 0 / 10%);
+  /* DS 3.0 - Riel de espacios: un escalon MAS oscuro que el panel. */
+  --sidebar-rail: oklch(0.105 0.030 260);
+  /* Seleccion del menu, relleno solido (el patron del rediseno). Toma los
+     mismos valores que el boton principal, que ya esta auditado a 4.5:1:
+     una pastilla azul con texto blanco no puede tener otro contraste que
+     el boton azul con texto blanco de la misma pantalla. */
+  --sidebar-selected: oklch(0.55 0.22 255);
+  --sidebar-selected-foreground: oklch(0.99 0 0);
 }
 
 .dark {
@@ -370,6 +385,10 @@
   --sidebar-ring: oklch(0.72 0.15 255);
   --sidebar-hover: oklch(1 0 0 / 6%);
   --sidebar-active: oklch(1 0 0 / 10%);
+  /* El riel, un escalon por debajo del panel tambien en oscuro. */
+  --sidebar-rail: oklch(0.085 0.004 260);
+  --sidebar-selected: oklch(0.55 0.22 255);
+  --sidebar-selected-foreground: oklch(0.99 0 0);
 }
 
 /* Landing pública: identidad azul + blanco original de MembeGo. Se aplica al
@@ -442,6 +461,14 @@
   --sidebar-ring: oklch(0.72 0.15 255);
   --sidebar-hover: oklch(1 0 0 / 6%);
   --sidebar-active: oklch(1 0 0 / 10%);
+  /* DS 3.0 - Riel de espacios: un escalon MAS oscuro que el panel. */
+  --sidebar-rail: oklch(0.105 0.030 260);
+  /* Seleccion del menu, relleno solido (el patron del rediseno). Toma los
+     mismos valores que el boton principal, que ya esta auditado a 4.5:1:
+     una pastilla azul con texto blanco no puede tener otro contraste que
+     el boton azul con texto blanco de la misma pantalla. */
+  --sidebar-selected: oklch(0.55 0.22 255);
+  --sidebar-selected-foreground: oklch(0.99 0 0);
 }
 
 @layer base {
@@ -1002,6 +1029,21 @@
   .z-modal        { z-index: var(--z-modal); }
   .z-toast        { z-index: var(--z-toast); }
   .z-celebration  { z-index: var(--z-celebration); }
+
+  /* ── DS 3.0 - Modo compacto del menu, ANTES de hidratar ─────────────
+
+     La preferencia vive en localStorage y el servidor no puede leerla. Si se
+     aplicara al hidratar, quien tiene el menu plegado veria el panel ancho un
+     instante y encogerse despues: el mismo parpadeo que el tema claro/oscuro,
+     y se arregla igual. Un script minusculo marca <html data-nav-compacto>
+     antes del primer pintado y esta regla oculta el segundo nivel.
+
+     React renderiza LO MISMO en servidor y cliente —el panel siempre— asi que
+     no hay desajuste de hidratacion que reportar; lo que cambia es solo lo que
+     el navegador pinta. */
+  html[data-nav-compacto='1'] [data-nav-panel] {
+    display: none;
+  }
 
   .animate-fade-up    { animation: fade-up 0.35s ease both; }
   .animate-fade-in    { animation: fade-in 0.25s ease both; }

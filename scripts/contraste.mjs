@@ -83,6 +83,11 @@ export const PARES = [
   { texto: '--destructive-foreground', fondo: '--destructive', minimo: 4.5, que: 'Botón destructivo' },
   { texto: '--sidebar-foreground', fondo: '--sidebar', minimo: 4.5, que: 'Texto del menú' },
   { texto: '--sidebar-primary', fondo: '--sidebar', minimo: 4.5, que: 'Ítem activo del menú' },
+  // DS 3.0 - Navegacion de dos niveles: el riel es otra superficie, asi que
+  // el texto de encima necesita su propia medida. Y la pastilla de seleccion
+  // es un relleno solido, no un tinte: se audita como un boton.
+  { texto: '--sidebar-foreground', fondo: '--sidebar-rail', minimo: 4.5, que: 'Texto sobre el riel' },
+  { texto: '--sidebar-selected-foreground', fondo: '--sidebar-selected', minimo: 4.5, que: 'Modulo seleccionado' },
   { texto: '--primary', fondo: '--background', minimo: 4.5, que: 'Enlace de marca' },
   { texto: '--primary', fondo: '--card', minimo: 4.5, que: 'Enlace de marca en tarjeta' },
   { texto: '--success', fondo: '--card', minimo: 4.5, que: 'Texto de éxito' },

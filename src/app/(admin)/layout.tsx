@@ -14,6 +14,8 @@ import { getUnreadCount } from '@/modules/notificaciones/actions'
 import { BannerDemo } from '@/components/system/BannerDemo'
 import { nombreSiEsDemo } from '@/modules/demo'
 import { sistemasParaLanzador } from '@/modules/integraciones/sso'
+import { contextoDeNavegacion } from '@/modules/navegacion/contexto'
+import { badgesDeNavegacion } from '@/modules/navegacion/badges'
 
 /**
  * Empresas entre las que este usuario puede cambiar: superadmin ve todas;
@@ -108,19 +110,46 @@ export default async function AdminLayout({
     // quita de todas las superficies de navegación de inmediato).
     permisosDelUsuario(user.metadata.role, user.metadata.dbUserId),
   ])
-  const hiddenNav = hrefsNegadosPorPermisos(user.metadata.role, permisos)
+  const negadas = hrefsNegadosPorPermisos(user.metadata.role, permisos)
+
+  // EL MENU YA SABE QUE HAY CAPACIDADES. No lo sabia: una empresa sin CITAS
+  // veia «Citas» en el menu, la pulsaba y `requireSection` la echaba. El menu
+  // ofrecia una puerta que la plataforma tenia cerrada, y quien la pulsaba no
+  // entendia por que. Ahora el contexto lleva lo que la empresa tiene
+  // contratado y su vertical, y esos modulos dejan de ofrecerse.
+  //
+  // La autorizacion NO cambia ni un apice: `requireSection` sigue negando
+  // exactamente lo mismo. Lo que cambia es que ya no se ofrece lo que niega.
+  const [ctx, badges] = await Promise.all([
+    contextoDeNavegacion({
+      role: user.metadata.role,
+      companyId: user.metadata.companyId,
+      // ÁMBITO EMPRESA, también para el SUPERADMIN que entre aquí: en /admin/*
+      // se opera UNA empresa y el riel solo ofrece sus módulos. Volver a la
+      // plataforma es una navegación explícita (píldora del header), nunca un
+      // icono mezclado con los de la empresa.
+      scope: 'COMPANY',
+      permisos,
+      ocultas: negadas,
+    }),
+    badgesDeNavegacion(user.metadata.role, user.metadata.companyId).catch(() => ({})),
+  ])
+  const nombreEmpresaActiva =
+    empresas.find((e) => e.id === (user.metadata.companyId ?? null))?.name ?? null
+
   return (
     <AppShell
-      // Resolvemos el menú por el rol real del usuario. Así un SUPERADMIN que
-      // entre a una página /admin/* conserva su barra lateral (Superadmin) en
-      // vez de quedar "atrapado" en el menú de Administrador. Los roles admin
-      // (ADMIN_EMPRESA, GERENTE, etc.) siguen viendo el menú Admin.
-      role={user.metadata.role}
+      // El menú se resuelve por el rol REAL del usuario dentro del ámbito
+      // COMPANY: un SUPERADMIN aquí ve el panel de la empresa (sin quedar
+      // bloqueado por permisos de empleado) y vuelve a Plataforma con la
+      // píldora del header. Los roles de empresa ven lo suyo.
+      ctx={ctx}
       title="MembeGo"
       userEmail={user.email}
       notifCount={notifCount}
+      badges={badges}
       sistemasExternos={sistemasExternos}
-      hiddenNav={hiddenNav}
+      nombreEmpresa={nombreEmpresaActiva}
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el
