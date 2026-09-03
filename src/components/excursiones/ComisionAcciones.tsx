@@ -17,7 +17,7 @@ import {
 import {
   ESTADO_COMISION_LABEL,
   ESTADOS_COMISION,
-  puedeTransicionar,
+  puedeTransicionarManualComision,
   type EstadoComision,
 } from '@/modules/excursiones/comisiones/nucleo'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ export function ComisionAcciones({
   const [state, formAction, pending] = useActionState(cambiarEstadoComision, init)
   const [ajusteState, ajusteAction, ajustando] = useActionState(ajustarComision, init)
   const [ajustando_, setAjustando] = useState(false)
+  const [tipoAjuste, setTipoAjuste] = useState<'RESTAR' | 'SUMAR'>('RESTAR')
 
   useEffect(() => {
     if (state.success) {
@@ -53,7 +54,14 @@ export function ComisionAcciones({
     if (ajusteState.error) toast.error(ajusteState.error)
   }, [ajusteState, router])
 
-  const siguientes = ESTADOS_COMISION.filter((e) => puedeTransicionar(estado, e))
+  const siguientes = ESTADOS_COMISION.filter((e) => puedeTransicionarManualComision(estado, e))
+
+  const LABEL: Partial<Record<EstadoComision, string>> = {
+    APROBADA: 'Aprobar',
+    ANULADA: 'Anular',
+    GENERADA: 'Reanudar',
+  }
+  const PUEDE_AJUSTAR = estado === 'GENERADA'
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -64,10 +72,10 @@ export function ComisionAcciones({
           <Button
             type="submit"
             size="sm"
-            variant={e === 'ANULADA' ? 'ghost' : 'outline'}
+            variant={e === 'ANULADA' ? 'ghost' : e === 'APROBADA' ? 'default' : 'outline'}
             disabled={pending}
           >
-            {ESTADO_COMISION_LABEL[e]}
+            {LABEL[e] ?? ESTADO_COMISION_LABEL[e]}
           </Button>
         </form>
       ))}
@@ -75,21 +83,50 @@ export function ComisionAcciones({
       {ajustando_ ? (
         <form action={ajusteAction} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="comisionId" value={comisionId} />
+          <input type="hidden" name="tipoAjuste" value={tipoAjuste} />
+
+          {/* Selector para determinar si resta o suma */}
+          <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => setTipoAjuste('RESTAR')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                tipoAjuste === 'RESTAR'
+                  ? 'bg-destructive text-destructive-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Restar (−)
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoAjuste('SUMAR')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                tipoAjuste === 'SUMAR'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Sumar (+)
+            </button>
+          </div>
+
           <Input
             name="monto"
             type="number"
             step="0.01"
+            min="0.01"
             required
-            placeholder="Monto (− descuenta)"
-            aria-label="Monto del ajuste"
-            className="h-8 w-40"
+            placeholder={tipoAjuste === 'RESTAR' ? 'Monto a restar' : 'Monto a sumar'}
+            aria-label={tipoAjuste === 'RESTAR' ? 'Monto a restar' : 'Monto a sumar'}
+            className="h-8 w-36"
           />
           <Input
             name="motivo"
             required
             placeholder="Motivo del ajuste"
             aria-label="Motivo del ajuste"
-            className="h-8 w-48"
+            className="h-8 w-44"
           />
           <Button type="submit" size="sm" disabled={ajustando}>
             Guardar ajuste
@@ -99,9 +136,11 @@ export function ComisionAcciones({
           </Button>
         </form>
       ) : (
-        <Button type="button" size="sm" variant="ghost" onClick={() => setAjustando(true)}>
-          Ajustar
-        </Button>
+        PUEDE_AJUSTAR && (
+          <Button type="button" size="sm" variant="ghost" onClick={() => setAjustando(true)}>
+            Ajustar
+          </Button>
+        )
       )}
     </div>
   )

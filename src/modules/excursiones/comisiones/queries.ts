@@ -1,5 +1,24 @@
 import { conEmpresa } from '@/lib/tenant'
+import { getExcursionesConfig, obtenerDetalleConversion } from '../config'
 import { netoComision } from './nucleo'
+
+export interface ResumenComisionesResuelto {
+  porEstado: Array<{ estado: string; total: number; cantidad: number }>
+  monedaDefecto: string
+  tasasCambio: Record<string, number>
+  totalComisiones: number
+  comisionesConConversion: number
+  comisionesSinTasaConfigurada: number
+  comisionesReglaGeneral: number
+  desgloseMonedas: Array<{
+    moneda: string
+    totalOriginal: number
+    totalConvertido: number
+    cantidad: number
+    tasaLabel: string
+    tasaConfigurada: boolean
+  }>
+}
 
 /** Reglas de la empresa, de la más específica a la más general. */
 export async function listadoReglas(companyId: string) {
@@ -56,26 +75,39 @@ export async function listadoReglas(companyId: string) {
  * Comisiones con su neto ya calculado (monto + ajustes firmados) y el nombre
  * de a quién le tocan.
  */
-export async function listadoComisiones(companyId: string, filtros?: { estado?: string }) {
-  const comisiones = await conEmpresa(companyId, (tx) =>
-    tx.comisionEntrada.findMany({
-      where: { companyId, ...(filtros?.estado ? { estado: filtros.estado } : {}) },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        id: true,
-        vendedorId: true,
-        base: true,
-        monto: true,
-        moneda: true,
-        desglose: true,
-        estado: true,
-        createdAt: true,
-        ajustes: { select: { monto: true, motivo: true } },
-        venta: { select: { id: true, numero: true, estado: true } },
-      },
-    })
-  )
+export async function listadoComisiones(
+  companyId: string,
+  filtros?: { estado?: string; vendedorId?: string }
+) {
+  const where: Record<string, unknown> = { companyId }
+  if (filtros?.estado) where.estado = filtros.estado
+  if (filtros?.vendedorId) where.vendedorId = filtros.vendedorId
+
+  const [comisiones, config] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.comisionEntrada.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+        select: {
+          id: true,
+          vendedorId: true,
+          base: true,
+          monto: true,
+          moneda: true,
+          desglose: true,
+          reglaSnapshot: true,
+          estado: true,
+          createdAt: true,
+          liquidacionId: true,
+          liquidacion: { select: { id: true, numero: true } },
+          ajustes: { select: { monto: true, motivo: true } },
+          venta: { select: { id: true, numero: true, estado: true } },
+        },
+      })
+    ),
+    getExcursionesConfig(companyId),
+  ])
   if (comisiones.length === 0) return []
 
   const vendedorIds = [...new Set(comisiones.map((c) => c.vendedorId))]
@@ -86,44 +118,134 @@ export async function listadoComisiones(companyId: string, filtros?: { estado?: 
     })
   )
   const porId = new Map(vendedores.map((v) => [v.id, v]))
+  const { monedaDefecto, tasasCambio } = config
 
   return comisiones.map((c) => {
     const v = porId.get(c.vendedorId)
     const ajustes = c.ajustes.map((a) => ({ monto: Number(a.monto), motivo: a.motivo }))
+    const montoBase = Number(c.monto)
+    const baseNum = Number(c.base)
+    const netoOrig = netoComision(montoBase, ajustes)
+
+    const conversionNeto = obtenerDetalleConversion(netoOrig, c.moneda, monedaDefecto, tasasCambio)
+    const conversionMonto = obtenerDetalleConversion(montoBase, c.moneda, monedaDefecto, tasasCambio)
+    const conversionBase = obtenerDetalleConversion(baseNum, c.moneda, monedaDefecto, tasasCambio)
+
+    const reglaSnap = c.reglaSnapshot as Record<string, unknown> | null
+    const esReglaPredeterminada = Boolean(
+      reglaSnap && (reglaSnap.ambito === 'GENERAL' || reglaSnap.reglaId === 'default-general')
+    )
+
     return {
       id: c.id,
       vendedorId: c.vendedorId,
       vendedor: v ? `${v.nombre} ${v.apellido ?? ''}`.trim() : 'Vendedor',
       vendedorCodigo: v?.codigo ?? null,
-      base: Number(c.base),
-      monto: Number(c.monto),
-      neto: netoComision(Number(c.monto), ajustes),
+      base: conversionBase.montoConvertido,
+      monto: conversionMonto.montoConvertido,
+      neto: conversionNeto.montoConvertido,
+      moneda: monedaDefecto,
+      baseOriginal: baseNum,
+      montoOriginal: montoBase,
+      netoOriginal: netoOrig,
+      monedaOriginal: c.moneda,
+      conversion: conversionNeto,
+      esReglaPredeterminada,
+      reglaSnapshot: c.reglaSnapshot,
       ajustes,
-      moneda: c.moneda,
       desglose: c.desglose,
       estado: c.estado,
       createdAt: c.createdAt,
       venta: c.venta,
+      liquidacionId: c.liquidacionId,
+      liquidacion: c.liquidacion,
     }
   })
 }
 
-/** Totales por estado, para el encabezado del módulo. */
-export async function resumenComisiones(companyId: string) {
-  const filas = await conEmpresa(companyId, (tx) =>
-    tx.comisionEntrada.groupBy({
-      by: ['estado', 'moneda'],
-      where: { companyId },
-      _sum: { monto: true },
-      _count: { _all: true },
+/** Resumen financiero y desglose multi-moneda por estado y divisa original. */
+export async function resumenComisiones(companyId: string): Promise<ResumenComisionesResuelto> {
+  const [filas, config, comisionesTotal] = await Promise.all([
+    conEmpresa(companyId, (tx) =>
+      tx.comisionEntrada.groupBy({
+        by: ['estado', 'moneda'],
+        where: { companyId },
+        _sum: { monto: true },
+        _count: { _all: true },
+      })
+    ),
+    getExcursionesConfig(companyId),
+    conEmpresa(companyId, (tx) =>
+      tx.comisionEntrada.findMany({
+        where: { companyId },
+        select: { moneda: true, reglaSnapshot: true, monto: true },
+      })
+    ),
+  ])
+
+  const { monedaDefecto, tasasCambio } = config
+  const porEstado = new Map<string, { total: number; cantidad: number }>()
+  for (const f of filas) {
+    const previo = porEstado.get(f.estado) ?? { total: 0, cantidad: 0 }
+    const conv = obtenerDetalleConversion(Number(f._sum.monto ?? 0), f.moneda, monedaDefecto, tasasCambio)
+    porEstado.set(f.estado, {
+      total: Math.round((previo.total + conv.montoConvertido) * 100) / 100,
+      cantidad: previo.cantidad + f._count._all,
     })
-  )
-  return filas.map((f) => ({
-    estado: f.estado,
-    moneda: f.moneda,
-    total: Number(f._sum.monto ?? 0),
-    cantidad: f._count._all,
-  }))
+  }
+
+  // Agrupación por moneda original
+  const porMoneda = new Map<string, { totalOriginal: number; cantidad: number }>()
+  let comisionesConConversion = 0
+  let comisionesSinTasaConfigurada = 0
+  let comisionesReglaGeneral = 0
+
+  for (const c of comisionesTotal) {
+    const mon = (c.moneda || monedaDefecto).toUpperCase()
+    const conv = obtenerDetalleConversion(Number(c.monto), mon, monedaDefecto, tasasCambio)
+    if (conv.esConversion) {
+      comisionesConConversion++
+      if (!conv.tasaConfigurada) {
+        comisionesSinTasaConfigurada++
+      }
+    }
+    const snap = c.reglaSnapshot as Record<string, unknown> | null
+    if (snap && (snap.ambito === 'GENERAL' || snap.reglaId === 'default-general')) {
+      comisionesReglaGeneral++
+    }
+    const previo = porMoneda.get(mon) ?? { totalOriginal: 0, cantidad: 0 }
+    porMoneda.set(mon, {
+      totalOriginal: Math.round((previo.totalOriginal + Number(c.monto)) * 100) / 100,
+      cantidad: previo.cantidad + 1,
+    })
+  }
+
+  const desgloseMonedas = [...porMoneda.entries()].map(([moneda, info]) => {
+    const conv = obtenerDetalleConversion(info.totalOriginal, moneda, monedaDefecto, tasasCambio)
+    return {
+      moneda,
+      totalOriginal: info.totalOriginal,
+      totalConvertido: conv.montoConvertido,
+      cantidad: info.cantidad,
+      tasaLabel: conv.tasaLabel,
+      tasaConfigurada: conv.tasaConfigurada,
+    }
+  })
+
+  return {
+    porEstado: [...porEstado.entries()].map(([estado, { total, cantidad }]) => ({
+      estado,
+      total,
+      cantidad,
+    })),
+    monedaDefecto,
+    tasasCambio,
+    totalComisiones: comisionesTotal.length,
+    comisionesConConversion,
+    comisionesSinTasaConfigurada,
+    comisionesReglaGeneral,
+    desgloseMonedas,
+  }
 }
 
 /** Excursiones y vendedores para los selectores del formulario de reglas. */
@@ -162,4 +284,20 @@ export async function ventaDeReserva(companyId: string, reservaId: string) {
       select: { id: true, numero: true, estado: true, confirmadaAt: true },
     })
   )
+}
+
+/** Vendedores de la empresa para poblar el selector de filtros. */
+export async function vendedoresParaFiltro(companyId: string) {
+  const vendedores = await conEmpresa(companyId, (tx) =>
+    tx.vendedor.findMany({
+      where: { companyId },
+      orderBy: { nombre: 'asc' },
+      select: { id: true, nombre: true, apellido: true, codigo: true },
+    })
+  )
+  return vendedores.map((v) => ({
+    id: v.id,
+    nombre: `${v.nombre} ${v.apellido ?? ''}`.trim(),
+    codigo: v.codigo,
+  }))
 }

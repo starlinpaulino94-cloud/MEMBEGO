@@ -28,7 +28,7 @@ import {
   type EstadoReserva,
 } from '@/modules/excursiones/reservas/nucleo'
 import {
-  reglaAplicable,
+  reglasAplicables,
   calcularComision,
   netoComision,
   ajustePorCancelacion,
@@ -248,7 +248,7 @@ export async function procesarVentaYComisionInterna(
       ventasPreviasVendedor,
     }
 
-    let regla = reglaAplicable(
+    const candidatas = reglasAplicables(
       reglas.map(
         (r): ReglaComision => ({
           id: r.id,
@@ -269,57 +269,67 @@ export async function procesarVentaYComisionInterna(
       ctx
     )
 
-    // Si la empresa no ha creado reglas específicas, usar regla GENERAL del 10% por defecto
-    if (!regla) {
-      regla = {
-        id: 'default-general',
-        ambito: 'GENERAL',
-        tipoCalculo: 'PORCENTAJE',
-        valor: 10,
-        activa: true,
-        createdAt: new Date(),
-      }
-    }
+    // Si la empresa no ha creado reglas específicas aplicables, usar regla GENERAL del 10% por defecto
+    const reglasAEjecutar: ReglaComision[] =
+      candidatas.length > 0
+        ? candidatas
+        : [
+            {
+              id: 'default-general',
+              ambito: 'GENERAL',
+              tipoCalculo: 'PORCENTAJE',
+              valor: 10,
+              activa: true,
+              createdAt: new Date(),
+            },
+          ]
 
-    const c = calcularComision(regla, ctx)
-    await conEmpresa(companyId, (tx) =>
-      tx.comisionEntrada.create({
-        data: {
-          companyId,
-          ventaId: venta.id,
-          vendedorId: reserva.vendedorId!,
-          base: c.base,
-          monto: c.monto,
-          moneda: reserva.moneda,
-          reglaSnapshot: c.snapshot as unknown as Prisma.InputJsonObject,
-          desglose: c.desglose,
-          estado: config?.reglaAprobacion === 'AUTOMATICA' ? 'APROBADA' : 'GENERADA',
-        },
-      })
-    )
+    comisionCreada = { monto: 0, desglose: '' }
 
-    if (regla.tipoCalculo === 'PAQUETE_REGALO' && c.monto > 0) {
+    for (const regla of reglasAEjecutar) {
+      const c = calcularComision(regla, ctx)
       await conEmpresa(companyId, (tx) =>
-        tx.vendedorBono.create({
+        tx.comisionEntrada.create({
           data: {
             companyId,
+            ventaId: venta.id,
             vendedorId: reserva.vendedorId!,
-            descripcion: `Paquete de regalo: ${excursion?.nombre || 'Excursión'}`,
-            condicion: {
-              cadaVentas: regla.valor,
-              ventaId: venta.id,
-              excursionId: reserva.excursionId,
-              excursionNombre: excursion?.nombre,
-            },
+            base: c.base,
             monto: c.monto,
             moneda: reserva.moneda,
-            estado: 'OTORGADO',
+            reglaSnapshot: c.snapshot as unknown as Prisma.InputJsonObject,
+            desglose: c.desglose,
+            estado: config?.reglaAprobacion === 'AUTOMATICA' ? 'APROBADA' : 'GENERADA',
           },
         })
-      ).catch(anotarFallo('excursiones:ventas:vendedorBono'))
-    }
+      )
 
-    comisionCreada = { monto: c.monto, desglose: c.desglose }
+      if (regla.tipoCalculo === 'PAQUETE_REGALO' && c.monto > 0) {
+        await conEmpresa(companyId, (tx) =>
+          tx.vendedorBono.create({
+            data: {
+              companyId,
+              vendedorId: reserva.vendedorId!,
+              descripcion: `Paquete de regalo: ${excursion?.nombre || 'Excursión'}`,
+              condicion: {
+                cadaVentas: regla.valor,
+                ventaId: venta.id,
+                excursionId: reserva.excursionId,
+                excursionNombre: excursion?.nombre,
+              },
+              monto: c.monto,
+              moneda: reserva.moneda,
+              estado: 'OTORGADO',
+            },
+          })
+        ).catch(anotarFallo('excursiones:ventas:vendedorBono'))
+      }
+
+      comisionCreada.monto += c.monto
+      comisionCreada.desglose = comisionCreada.desglose
+        ? `${comisionCreada.desglose} | ${c.desglose}`
+        : c.desglose
+    }
   }
 
   await auditar(companyId, userId, venta.id, {

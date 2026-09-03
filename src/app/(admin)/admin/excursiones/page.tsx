@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resumenDelPeriodo, rankingVendedores } from '@/modules/excursiones/metricas/queries'
 import { rangoDelPanel, RANGOS_PANEL } from '@/modules/excursiones/metricas/nucleo'
+import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { formatMoney } from '@/lib/format'
 
@@ -74,9 +75,10 @@ export default async function ExcursionesPanelPage({
   const { r } = await searchParams
   const clave = r ?? 'MES'
   const { label, rango } = rangoDelPanel(clave, new Date())
-  const [resumen, ranking] = await Promise.all([
+  const [resumen, ranking, config] = await Promise.all([
     resumenDelPeriodo(companyId, rango),
     rankingVendedores(companyId, rango),
+    getExcursionesConfig(companyId),
   ])
 
   const dinero = (n: number) => formatMoney(n, { moneda: resumen.moneda }, 2)
@@ -85,13 +87,19 @@ export default async function ExcursionesPanelPage({
     { label: 'Clientes captados', valor: String(resumen.registros), pie: 'por el QR de un vendedor' },
     { label: 'Reservas', valor: String(resumen.reservas), pie: `${resumen.pasajerosReservados} pasajeros` },
     { label: 'Ventas', valor: String(resumen.ventas), pie: `${resumen.pasajerosVendidos} pasajeros` },
-    { label: 'Ingresos', valor: dinero(resumen.ingresos), pie: 'ventas confirmadas' },
+    { label: 'Ingresos', valor: dinero(resumen.ingresos), pie: `ventas confirmadas (${config.monedaDefecto})` },
     {
       label: 'Ticket promedio',
       valor: resumen.ticket !== null ? dinero(resumen.ticket) : '—',
       pie: resumen.ticket !== null ? 'por venta' : 'sin ventas todavía',
     },
-    { label: 'Comisiones', valor: dinero(resumen.comisionado), pie: 'generadas en el período' },
+    {
+      label: 'Comisiones',
+      valor: dinero(resumen.comisionado),
+      pie: resumen.comisionesConConversion > 0
+        ? `generadas (${resumen.comisionesConConversion} con tasa predeterminada)`
+        : `generadas en el período (${config.monedaDefecto})`,
+    },
   ]
 
   return (
@@ -150,7 +158,7 @@ export default async function ExcursionesPanelPage({
                   <th className="py-2 pr-3">Captados</th>
                   <th className="py-2 pr-3">Ventas</th>
                   <th className="py-2 pr-3">Pasajeros</th>
-                  <th className="py-2 text-right">Ingresos</th>
+                  <th className="py-2 text-right">Ingresos ({config.monedaDefecto})</th>
                 </tr>
               </thead>
               <tbody>

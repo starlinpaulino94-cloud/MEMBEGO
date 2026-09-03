@@ -33,18 +33,18 @@ const criterio = {
   hasta: new Date('2026-08-31T23:59:59.999Z'),
 }
 
-test('entran las aprobadas y las pendientes de pago del vendedor y del período', () => {
+test('entran solo las aprobadas del vendedor y del período (sin liquidación)', () => {
   const dentro = comisionesDelPeriodo(
     [
       c({ id: 'a' }),
-      c({ id: 'b', estado: 'PENDIENTE_PAGO' }),
+      c({ id: 'b', estado: 'PENDIENTE_PAGO' }), // ya en borrador o liquidación previa
       c({ id: 'c', estado: 'GENERADA' }), // nadie la aprobó todavía
-      c({ id: 'd', estado: 'PAGADA' }), // ya no debe nada
+      c({ id: 'd', estado: 'PAGADA' }), // ya pagada
       c({ id: 'e', estado: 'ANULADA' }),
     ],
     criterio
   )
-  assert.deepEqual(dentro.map((x) => x.id), ['a', 'b'])
+  assert.deepEqual(dentro.map((x) => x.id), ['a'])
 })
 
 test('nadie cobra dos veces: la que ya está en otra liquidación queda fuera', () => {

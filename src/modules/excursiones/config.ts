@@ -111,9 +111,6 @@ export function resolver(raw: Record<string, unknown> | null): ExcursionesConfig
     emailNotificaciones: raw.emailNotificaciones != null ? String(raw.emailNotificaciones) : null,
     metodosPagoHabilitados: Array.isArray(raw.metodosPagoHabilitados)
       ? (raw.metodosPagoHabilitados as unknown[])
-          // `m.trim()` devuelve una CADENA, no un booleano: el predicado de un
-          // type guard tiene que ser `boolean`, y con la cadena vacía además
-          // se colaba lo contrario de lo que se pretendía filtrar.
           .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
           .map((m) => m.trim())
       : DEFAULTS.metodosPagoHabilitados,
@@ -121,6 +118,101 @@ export function resolver(raw: Record<string, unknown> | null): ExcursionesConfig
       ? raw.tasasCambio as Record<string, number>
       : {}),
   }
+}
+
+export interface DetalleConversionMoneda {
+  montoOriginal: number
+  monedaOriginal: string
+  montoConvertido: number
+  monedaDestino: string
+  tasa: number | null
+  tasaLabel: string
+  esConversion: boolean
+  tasaConfigurada: boolean
+  esInversa: boolean
+}
+
+/**
+ * Analiza y calcula la conversión de moneda detallando la tasa predeterminada aplicada,
+ * identificando si se usó tasa directa, tasa inversa o si no está configurada (1:1).
+ */
+export function obtenerDetalleConversion(
+  monto: number,
+  de: string,
+  a: string,
+  tasas: Record<string, number> = {}
+): DetalleConversionMoneda {
+  const montoNum = Number.isFinite(monto) ? monto : 0
+  const monedaDe = (de || '').trim().toUpperCase()
+  const monedaA = (a || '').trim().toUpperCase()
+
+  if (!monedaDe || !monedaA || monedaDe === monedaA) {
+    return {
+      montoOriginal: montoNum,
+      monedaOriginal: monedaDe || monedaA || 'DOP',
+      montoConvertido: montoNum,
+      monedaDestino: monedaA || monedaDe || 'DOP',
+      tasa: 1,
+      tasaLabel: '1:1 (Misma moneda)',
+      esConversion: false,
+      tasaConfigurada: true,
+      esInversa: false,
+    }
+  }
+
+  const directKey = `${monedaDe}_${monedaA}`
+  if (tasas[directKey] && Number.isFinite(tasas[directKey]) && tasas[directKey] > 0) {
+    const factor = tasas[directKey]
+    return {
+      montoOriginal: montoNum,
+      monedaOriginal: monedaDe,
+      montoConvertido: Math.round(montoNum * factor * 100) / 100,
+      monedaDestino: monedaA,
+      tasa: factor,
+      tasaLabel: `1 ${monedaDe} = ${factor} ${monedaA}`,
+      esConversion: true,
+      tasaConfigurada: true,
+      esInversa: false,
+    }
+  }
+
+  const reverseKey = `${monedaA}_${monedaDe}`
+  if (tasas[reverseKey] && Number.isFinite(tasas[reverseKey]) && tasas[reverseKey] > 0) {
+    const factor = tasas[reverseKey]
+    return {
+      montoOriginal: montoNum,
+      monedaOriginal: monedaDe,
+      montoConvertido: Math.round((montoNum / factor) * 100) / 100,
+      monedaDestino: monedaA,
+      tasa: 1 / factor,
+      tasaLabel: `1 ${monedaA} = ${factor} ${monedaDe}`,
+      esConversion: true,
+      tasaConfigurada: true,
+      esInversa: true,
+    }
+  }
+
+  return {
+    montoOriginal: montoNum,
+    monedaOriginal: monedaDe,
+    montoConvertido: montoNum,
+    monedaDestino: monedaA,
+    tasa: 1,
+    tasaLabel: '1:1 (Tasa no configurada)',
+    esConversion: true,
+    tasaConfigurada: false,
+    esInversa: false,
+  }
+}
+
+/** Convierte un monto de una moneda a otra usando tasas de cambio. */
+export function convertirMoneda(
+  monto: number,
+  de: string,
+  a: string,
+  tasas: Record<string, number>
+): number {
+  return obtenerDetalleConversion(monto, de, a, tasas).montoConvertido
 }
 
 /** Configuración efectiva de la empresa (defaults si no hay fila/JSON). */
