@@ -11,13 +11,22 @@ import { test, expect } from '@playwright/test'
  * el limitador de login no permite entrar por formulario en cada prueba.
  * Solo proyecto de PRUEBAS. Nunca producción.
  * Uso local: E2E_BASE_URL=http://localhost:3000 npx playwright test sidebar
+ *
+ * Sin `E2E_SUPABASE_URL` el setup no pudo crear sesiones y los estados no
+ * existen en disco: se salta ANTES de pedir el storageState, que si no
+ * revienta al leer el archivo (docs/PRUEBAS-E2E.md §4).
  */
 
+const AUTENTICADO = Boolean(process.env.E2E_SUPABASE_URL)
+const sesion = (rol: 'admin' | 'super') =>
+  AUTENTICADO ? { storageState: `playwright/.auth/state-${rol}.json` } : {}
+
 test.describe('sidebar como administradora', () => {
-  test.use({ storageState: 'playwright/.auth/state-admin.json' })
+  test.use(sesion('admin'))
 
   // El riel de escritorio no existe en móvil (allí manda el cajón).
   test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(!AUTENTICADO, 'requiere Supabase de pruebas (docs/PRUEBAS-E2E.md §4)')
     test.skip(
       testInfo.project.name !== 'escritorio',
       'solo viewport escritorio'
@@ -55,8 +64,9 @@ test.describe('sidebar como administradora', () => {
 })
 
 test.describe('cajón móvil', () => {
-  test.use({ storageState: 'playwright/.auth/state-admin.json' })
+  test.use(sesion('admin'))
   test.beforeEach(async ({}, testInfo) => {
+    test.skip(!AUTENTICADO, 'requiere Supabase de pruebas (docs/PRUEBAS-E2E.md §4)')
     test.skip(
       testInfo.project.name !== 'movil',
       'solo viewport móvil'
@@ -85,9 +95,10 @@ test.describe('cajón móvil', () => {
 })
 
 test.describe('sidebar como superadmin', () => {
-  test.use({ storageState: 'playwright/.auth/state-super.json' })
+  test.use(sesion('super'))
   // Píldora y riel son de escritorio (en móvil se ocultan).
   test.beforeEach(async ({}, testInfo) => {
+    test.skip(!AUTENTICADO, 'requiere Supabase de pruebas (docs/PRUEBAS-E2E.md §4)')
     test.skip(
       testInfo.project.name !== 'escritorio',
       'solo viewport escritorio'
