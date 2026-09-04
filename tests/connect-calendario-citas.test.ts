@@ -11,6 +11,8 @@ import {
   idEventoDeCita,
   sincronizaConfirmadas,
 } from '../src/modules/connect/googleCalendarNucleo'
+import { GOOGLE_CALENDAR } from '../src/modules/connect/proveedores/googleCalendar'
+import { faltantesConnectPlataforma } from '../src/lib/env'
 
 /**
  * GOOGLE CALENDAR · el ciclo de vida completo del evento de una cita.
@@ -178,4 +180,53 @@ test('revocar: Google tiene punto de revocación y la llamada tiene tope de tiem
   // Y no cierra el ciclo oauth → registro → oauth.
   assert.ok(!/from '@\/modules\/connect\/oauth'/.test(rev))
   assert.ok(!/from '@\/modules\/connect\/registro'/.test(rev))
+})
+
+// ─── La plataforma también tiene que estar lista ─────────────────────────────
+
+test('google: sin firma o sin clave maestra, el catálogo NO ofrece conectar', () => {
+  // Con las variables de Google puestas y las de la plataforma vacías, el
+  // catálogo decía «Conectar» y el botón respondía 503: cada pieza comprobaba
+  // solo lo suyo. Ahora la puerta se cierra donde se ve.
+  const CLAVES = [
+    'GOOGLE_OAUTH_CLIENT_ID',
+    'GOOGLE_OAUTH_CLIENT_SECRET',
+    'PLATFORM_TOKEN_SECRET',
+    'CONNECT_CLAVES_MAESTRAS',
+  ] as const
+  const previo = Object.fromEntries(CLAVES.map((k) => [k, process.env[k]]))
+  try {
+    process.env.GOOGLE_OAUTH_CLIENT_ID = 'id-de-prueba'
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'secreto-de-prueba'
+
+    delete process.env.PLATFORM_TOKEN_SECRET
+    process.env.CONNECT_CLAVES_MAESTRAS = '1:clave-de-prueba'
+    assert.equal(GOOGLE_CALENDAR.disponible(), false, 'sin firma del state no se puede iniciar OAuth')
+    assert.deepEqual(faltantesConnectPlataforma(), ['PLATFORM_TOKEN_SECRET'])
+    assert.match(GOOGLE_CALENDAR.queFalta, /PLATFORM_TOKEN_SECRET/)
+
+    process.env.PLATFORM_TOKEN_SECRET = 'x'.repeat(40)
+    delete process.env.CONNECT_CLAVES_MAESTRAS
+    assert.equal(GOOGLE_CALENDAR.disponible(), false, 'sin clave maestra no se pueden sellar los tokens')
+    assert.deepEqual(faltantesConnectPlataforma(), ['CONNECT_CLAVES_MAESTRAS'])
+    assert.match(GOOGLE_CALENDAR.queFalta, /CONNECT_CLAVES_MAESTRAS/)
+
+    process.env.CONNECT_CLAVES_MAESTRAS = '1:clave-de-prueba'
+    assert.equal(GOOGLE_CALENDAR.disponible(), true)
+    assert.deepEqual(faltantesConnectPlataforma(), [])
+  } finally {
+    for (const k of CLAVES) {
+      if (previo[k] === undefined) delete process.env[k]
+      else process.env[k] = previo[k]
+    }
+  }
+})
+
+test('iniciar OAuth: el motivo real queda en el log del servidor', () => {
+  // Un 503 mudo obligaba a adivinar si faltaba la fila o la firma.
+  const ruta = leer('src/app/api/connect/oauth/[slug]/iniciar/route.ts')
+  assert.match(ruta, /console\.error\('\[connect\] no se pudo iniciar OAuth/)
+  assert.match(ruta, /PLATFORM_TOKEN_SECRET/)
+  // Y la clave maestra está documentada donde se buscan las variables.
+  assert.match(leer('.env.example'), /^CONNECT_CLAVES_MAESTRAS=/m)
 })
