@@ -6,6 +6,7 @@ import { getUser } from '@/lib/auth'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { rutaValida } from '@/modules/storage/comprobantes'
+import { estaVigente } from '@/modules/membresia/vigencia'
 import { calcularDescuentoBienvenida } from '@/lib/bienvenida'
 import { generarCodigo } from '@/lib/codes'
 import { categoriaDeEmpresa, vehiculosDe } from '@/modules/elegibilidad'
@@ -73,7 +74,11 @@ export async function seleccionarPlan(
         },
       })
 
-      if (existing?.estado === 'ACTIVA') {
+      // Vigente de verdad: ACTIVA *y* sin vencer. Mirando solo el estado, a
+      // quien se le venció la membresía y el job todavía no marcó se le
+      // respondía «espera a que venza» algo que ya venció — y se quedaba sin
+      // poder renovar, que es justo lo que esta rama debe permitir.
+      if (existing && estaVigente(existing)) {
         return {
           error: 'Ya tienes una membresía activa en esta empresa. Espera a que venza para cambiar.',
         } as SeleccionState

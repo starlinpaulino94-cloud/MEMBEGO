@@ -1,4 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * App Car Wash · E5 — EVIDENCIA FOTOGRÁFICA (antes/después).
@@ -29,7 +30,7 @@ export async function getEvidencias(
           ? {
               OR: [
                 { placa: { contains: q, mode: 'insensitive' } },
-                { cliente: { nombre: { contains: q, mode: 'insensitive' } } },
+                { cliente: { nombreBusqueda: { contains: normalizarBusqueda(q) } } },
               ],
             }
           : {}),

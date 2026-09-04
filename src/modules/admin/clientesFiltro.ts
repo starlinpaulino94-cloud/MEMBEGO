@@ -7,6 +7,7 @@ import {
   haceDias,
   leerVentana,
 } from '@/modules/admin/filtrosComunes'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Filtros del directorio de clientes — UNA definición, varios consumidores
@@ -118,7 +119,7 @@ export function whereClientes(
   if (f.q) {
     condiciones.push({
       OR: [
-        { nombre: { contains: f.q, mode: 'insensitive' } },
+        { nombreBusqueda: { contains: normalizarBusqueda(f.q) } },
         { email: { contains: f.q, mode: 'insensitive' } },
         { telefono: { contains: f.q } },
       ],

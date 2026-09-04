@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { membresiaVigente, membresiaCaducada } from '@/modules/membresia/vigencia'
 import type { FiltroMembresias } from './filtros'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * EL PUESTO DE MANDO DE MEMBRESÍAS, LEÍDO DE UNA VEZ.
@@ -107,7 +108,7 @@ export function whereMembresias(f: FiltroMembresias, ahora: Date): Prisma.Member
     and.push({
       cliente: {
         OR: [
-          { nombre: { contains: f.q, mode: 'insensitive' } },
+          { nombreBusqueda: { contains: normalizarBusqueda(f.q) } },
           { email: { contains: f.q, mode: 'insensitive' } },
         ],
       },

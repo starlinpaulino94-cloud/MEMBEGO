@@ -1,6 +1,7 @@
 import { conEmpresa } from '@/lib/tenant'
 import type { Prisma } from '@prisma/client'
 import { SEGUIMIENTO_DEFAULTS, type SeguimientoConfig } from '@/modules/seguimiento/config'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Seguimiento de beneficios gratis (docs/SEGUIMIENTO-BENEFICIOS.md · Fase S1).
@@ -207,7 +208,7 @@ export async function getSeguimiento(
     const q = filtro.q.trim()
     where.cliente = {
       OR: [
-        { nombre: { contains: q, mode: 'insensitive' } },
+        { nombreBusqueda: { contains: normalizarBusqueda(q) } },
         { telefono: { contains: q } },
         { email: { contains: q, mode: 'insensitive' } },
       ],

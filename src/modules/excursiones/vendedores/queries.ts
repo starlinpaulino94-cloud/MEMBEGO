@@ -1,4 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /** Listado del equipo comercial con su embudo (captados = atribuciones). */
 export async function listadoVendedores(companyId: string) {
@@ -122,7 +123,7 @@ export async function clientesCaptados(
         where: {
           companyId,
           OR: [
-            { nombre: { contains: qClean, mode: 'insensitive' } },
+            { nombreBusqueda: { contains: normalizarBusqueda(qClean) } },
             { telefono: { contains: qClean } },
             { email: { contains: qClean, mode: 'insensitive' } },
           ],

@@ -8,6 +8,7 @@ import {
   ymdEnTz,
   type HorarioSemanal,
 } from '@/modules/citas/disponibilidad'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Módulo de Citas · consultas. Multi-tenant: todo se filtra por companyId.
@@ -287,7 +288,7 @@ export async function getAgenda(
       ? {
           cliente: {
             OR: [
-              { nombre: { contains: q, mode: 'insensitive' as const } },
+              { nombreBusqueda: { contains: normalizarBusqueda(q) } },
               { telefono: { contains: q } },
             ],
           },

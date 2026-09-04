@@ -19,6 +19,7 @@ import {
 } from '@/modules/promociones/compra'
 import { generarCodigo } from '@/lib/codes'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Regalos P2P · Fase R1 (docs/REGALOS-P2P.md).
@@ -115,7 +116,7 @@ export async function buscarDestinatario(
         companyId,
         id: { not: clienteId },
         OR: [
-          { nombre: { contains: term, mode: 'insensitive' } },
+          { nombreBusqueda: { contains: normalizarBusqueda(term) } },
           { email: { equals: term, mode: 'insensitive' } },
           ...(digits.length >= 7 ? [{ telefono: { contains: digits } }] : []),
         ],

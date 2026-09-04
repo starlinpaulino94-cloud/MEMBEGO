@@ -3,6 +3,7 @@ import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { COLAS_TICKET, colaDeEstado, type ColaTicket } from '@/lib/soporte'
 import { POR_PAGINA, type FiltroTickets } from './filtros'
 import type { SessionUser } from '@/types'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 export interface CompanyOption {
   id: string
@@ -155,7 +156,7 @@ function whereTickets(
     and.push({
       OR: [
         { asunto: { contains: f.q, mode: 'insensitive' } },
-        { cliente: { nombre: { contains: f.q, mode: 'insensitive' } } },
+        { cliente: { nombreBusqueda: { contains: normalizarBusqueda(f.q) } } },
       ],
     })
   }

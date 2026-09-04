@@ -1,5 +1,6 @@
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { armarCsv } from '@/lib/csv'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Bitácora de actividad (AuditLog).
@@ -222,7 +223,7 @@ export async function getAuditoria(
               OR: [
                 { entidadId: { contains: q, mode: 'insensitive' } },
                 { entidadTipo: { contains: q, mode: 'insensitive' } },
-                { user: { name: { contains: q, mode: 'insensitive' } } },
+                { user: { nombreBusqueda: { contains: normalizarBusqueda(q) } } },
                 { user: { email: { contains: q, mode: 'insensitive' } } },
               ],
             }

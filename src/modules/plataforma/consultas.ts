@@ -6,6 +6,7 @@ import {
   mismoTelefono,
 } from '@/modules/plataforma/consultas-nucleo'
 import type { CustomerDTO, VehicleDTO } from '@membego/contracts'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 // La regla del teléfono vive en `consultas-nucleo.ts` —pura, sin `server-only`—
 // para que se pueda probar caso por caso. Se reexporta para que quien la use no
@@ -128,7 +129,7 @@ export async function buscarClientes(companyId: string, termino: string): Promis
       where: {
         companyId,
         OR: [
-          { nombre: { contains: q, mode: 'insensitive' } },
+          { nombreBusqueda: { contains: normalizarBusqueda(q) } },
           { telefono: { contains: q } },
           { email: { contains: q, mode: 'insensitive' } },
         ],

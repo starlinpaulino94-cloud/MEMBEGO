@@ -177,21 +177,26 @@ model User {
   establecerContrasenaExpira DateTime? @db.Timestamptz()
   email                      String    @unique
   name                       String
-  role                       AppRole   @default(CLIENTE)
-  companyId                  String?
-  company                    Company?  @relation(fields: [companyId], references: [id])
+
+  /// Copia del nombre sin acentos y en minúsculas, SOLO para buscar. La
+  /// mantiene un disparador en la base: la aplicación nunca la escribe, así
+  /// que no puede quedarse desfasada porque alguien olvidara actualizarla.
+  nombreBusqueda     String?
+  role               AppRole   @default(CLIENTE)
+  companyId          String?
+  company            Company?  @relation(fields: [companyId], references: [id])
   /// Módulo de PERMISOS: ajustes por empleado sobre lo que su rol trae de
   /// serie ({v:1, secciones:{sec:bool}, funciones:{sec:{fn:false}}}). Solo
   /// diferencias; null = hereda el rol tal cual. Ver lib/auth/permissions.ts.
-  permisos                   Json?
+  permisos           Json?
   // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
   // y opt-in de comunicaciones de marketing, con la versión y el momento.
-  termsAcceptedAt            DateTime?
-  termsVersion               String?
-  marketingConsent           Boolean   @default(false)
-  marketingConsentAt         DateTime?
-  createdAt                  DateTime  @default(now())
-  updatedAt                  DateTime  @updatedAt
+  termsAcceptedAt    DateTime?
+  termsVersion       String?
+  marketingConsent   Boolean   @default(false)
+  marketingConsentAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   memberships      Membership[]
   visits           Visit[]             @relation("EmpleadoVisits")
@@ -241,6 +246,7 @@ model User {
   turnosCerrados            Turno[]                    @relation("TurnoCerradoPor")
 
   @@index([companyId])
+  @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
   @@map("users")
 }
 
