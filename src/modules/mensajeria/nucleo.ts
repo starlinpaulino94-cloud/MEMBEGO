@@ -108,6 +108,50 @@ export function leerEntranteWhatsapp(payload: unknown): MensajeEntranteWhatsapp 
   return { idExterno: id, de, nombre, tipo, texto: cuerpo, adjuntos, contextoIdExterno: contexto, timestamp }
 }
 
+// ─── Lectura de un entrante de Messenger / Instagram ─────────────────────────
+
+export interface MensajeEntranteMensajeria {
+  idExterno: string
+  /** PSID (Messenger) o IGSID (Instagram) del remitente. */
+  de: string
+  tipo: string
+  texto: string | null
+  adjuntos: Record<string, unknown> | null
+  contextoIdExterno: string | null
+  timestamp: Date
+  /** Un eco de lo que enviamos nosotros: no es un entrante. */
+  eco: boolean
+}
+
+/**
+ * Lee un item `messaging` de la Messenger Platform (Messenger e Instagram
+ * comparten formato): `sender.id`, `recipient.id`, `timestamp` (ms),
+ * `message.mid`, `message.text`, `message.attachments[]`. De los adjuntos se
+ * guarda lo que Meta manda (tipo y URL temporal), nunca el binario.
+ */
+export function leerEntranteMensajeria(payload: unknown): MensajeEntranteMensajeria | null {
+  if (!esObj(payload) || !esObj(payload.message)) return null
+  const m = payload.message
+  const de = esObj(payload.sender) ? texto(payload.sender.id) : null
+  const mid = texto(m.mid)
+  if (!de || !mid) return null
+  const ts = typeof payload.timestamp === 'number' ? payload.timestamp : typeof payload.timestamp === 'string' ? Number(payload.timestamp) : NaN
+  const timestamp = Number.isFinite(ts) && ts > 0 ? new Date(ts < 1e12 ? ts * 1000 : ts) : new Date()
+  const adjuntos = Array.isArray(m.attachments) && m.attachments.length > 0 ? m.attachments : null
+  const primero = adjuntos && esObj(adjuntos[0]) ? texto((adjuntos[0] as Obj).type) : null
+  const cuerpo = texto(m.text)
+  return {
+    idExterno: mid,
+    de,
+    tipo: cuerpo ? 'text' : (primero ?? 'unsupported'),
+    texto: cuerpo,
+    adjuntos: adjuntos ? { attachments: adjuntos } : null,
+    contextoIdExterno: esObj(m.reply_to) ? texto(m.reply_to.mid) : null,
+    timestamp,
+    eco: m.is_echo === true,
+  }
+}
+
 /** La vista previa de la lista: el texto, o el tipo entre corchetes. */
 export function vistaPrevia(tipo: string, cuerpo: string | null): string {
   const t = (cuerpo ?? '').trim()

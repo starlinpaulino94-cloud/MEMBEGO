@@ -135,6 +135,12 @@ export async function enviarTextoEnConversacion(input: {
 }): Promise<ResultadoEnvioConversacion> {
   const c = await conversacionDe(input.companyId, input.conversacionId)
   if (!c) return { ok: false, motivo: 'no_existe' }
+  if (c.canal === 'MESSENGER' || c.canal === 'INSTAGRAM') {
+    // Messenger e Instagram: token de Página, mismo módulo (Meta · Fase 3).
+    const { enviarTextoMensajeria } = await import('@/modules/mensajeria/messenger')
+    const r = await enviarTextoMensajeria(input)
+    return r.ok ? { ok: true, mensajeId: r.mensajeId } : { ok: false, motivo: r.motivo === 'sin_token' ? 'sin_credencial' : r.motivo, detalle: r.detalle }
+  }
   if (c.canal !== 'WHATSAPP') return { ok: false, motivo: 'canal' }
   if (!ventanaAbierta(c.ultimoEntranteAt)) return { ok: false, motivo: 'ventana_cerrada' }
 

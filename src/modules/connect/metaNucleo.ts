@@ -102,6 +102,55 @@ export function configMetaDesdeEntorno(
   }
 }
 
+/**
+ * LOS PERMISOS DE «FACEBOOK E INSTAGRAM» (Meta · Fase 3), mínimo privilegio:
+ *
+ *   pages_show_list             listar las Páginas que administra
+ *   pages_manage_metadata       suscribir la app a los avisos de la Página
+ *   pages_messaging             Messenger: recibir y enviar
+ *   instagram_basic             la cuenta profesional enlazada a la Página
+ *   instagram_manage_messages   los mensajes directos de Instagram
+ *
+ * No se piden `pages_read_engagement`, `pages_manage_posts`,
+ * `instagram_manage_comments` ni `instagram_content_publish`: no publicamos ni
+ * leemos el muro. Para servir a empresas ajenas cada uno necesita Acceso
+ * avanzado vía App Review.
+ */
+export const PERMISOS_META_PAGINAS = [
+  'pages_show_list',
+  'pages_manage_metadata',
+  'pages_messaging',
+  'instagram_basic',
+  'instagram_manage_messages',
+] as const
+
+/**
+ * La configuración de Login for Business para Páginas e Instagram: la MISMA
+ * app y el mismo secreto que WhatsApp, pero otra configuración (token de
+ * usuario, otros permisos). Sin las cuatro variables no se ofrece.
+ */
+export function configMetaPaginasDesdeEntorno(
+  entorno: Record<string, string | undefined> = process.env
+): ConfigMeta | null {
+  const appId = entorno.NEXT_PUBLIC_META_APP_ID?.trim()
+  const configId = entorno.NEXT_PUBLIC_META_CONFIG_ID_PAGES?.trim()
+  const secreto = entorno.META_APP_SECRET?.trim()
+  const tokenWebhook = entorno.META_WEBHOOK_VERIFY_TOKEN?.trim()
+  if (!appId || !configId || !secreto || !tokenWebhook) return null
+  return {
+    appId,
+    configId,
+    versionGraph: entorno.META_GRAPH_VERSION?.trim() || VERSION_GRAPH_POR_DEFECTO,
+    appSecretEnv: 'META_APP_SECRET',
+  }
+}
+
+export function metaPaginasConfigurado(
+  entorno: Record<string, string | undefined> = process.env
+): boolean {
+  return configMetaPaginasDesdeEntorno(entorno) !== null
+}
+
 /** ¿Puede este despliegue ofrecer el alta incrustada? */
 export function metaConfigurado(
   entorno: Record<string, string | undefined> = process.env

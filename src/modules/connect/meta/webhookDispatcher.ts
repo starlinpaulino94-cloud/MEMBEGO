@@ -149,6 +149,11 @@ async function manejadorPara(objeto: string, campo: string): Promise<ManejadorEv
     if (campo === 'statuses') return m.estadoWhatsapp
     if (campo === 'message_template_status_update') return m.plantillaActualizada
   }
+  if (objeto === 'page' || objeto === 'instagram') {
+    const m = await import('@/modules/mensajeria/manejadoresMeta')
+    if (campo === 'messages') return m.entranteMensajeria
+    if (campo === 'message_deliveries' || campo === 'message_reads') return m.estadoMensajeria
+  }
   return null
 }
 

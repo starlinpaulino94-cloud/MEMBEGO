@@ -1,6 +1,7 @@
 import 'server-only'
 import type { ManejadorEvento } from '@/modules/connect/meta/webhookDispatcher'
 import { aplicarEstadoWhatsapp, registrarEntranteWhatsapp } from '@/modules/mensajeria/entrantes'
+import { aplicarEstadoMensajeria, registrarEntranteMensajeria } from '@/modules/mensajeria/messenger'
 
 /**
  * LOS MANEJADORES DE MENSAJERÍA para el despachador de webhooks de Meta
@@ -12,6 +13,11 @@ import { aplicarEstadoWhatsapp, registrarEntranteWhatsapp } from '@/modules/mens
 export const entranteWhatsapp: ManejadorEvento = (ev) => registrarEntranteWhatsapp(ev)
 
 export const estadoWhatsapp: ManejadorEvento = (ev) => aplicarEstadoWhatsapp(ev)
+
+/** Messenger e Instagram comparten formato (`messaging`) y manejadores (Fases 3 y 4). */
+export const entranteMensajeria: ManejadorEvento = (ev) => registrarEntranteMensajeria(ev)
+
+export const estadoMensajeria: ManejadorEvento = (ev) => aplicarEstadoMensajeria(ev)
 
 /** Meta avisa de que una plantilla cambió de estado: se resincronizan todas. */
 export const plantillaActualizada: ManejadorEvento = async (ev) => {

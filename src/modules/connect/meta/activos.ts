@@ -158,6 +158,33 @@ export async function activosDeConexion(
   }))
 }
 
+/** Los activos vivos de un tipo en una empresa (para adaptadores y bandeja). */
+export async function activosDeEmpresaPorTipo(
+  companyId: string,
+  tipo: TipoActivo
+): Promise<ActivoMetaVista[]> {
+  const filas = await conEmpresa(companyId, (tx) =>
+    tx.activoMeta.findMany({
+      where: { companyId, tipo, estado: 'ACTIVE' },
+      orderBy: { nombre: 'asc' },
+    })
+  )
+  return filas.map((f) => ({
+    id: f.id,
+    companyId: f.companyId,
+    conexionId: f.conexionId,
+    tipo: f.tipo as TipoActivo,
+    idExterno: f.idExterno,
+    nombre: f.nombre,
+    padreId: f.padreId,
+    estado: f.estado,
+    metadata:
+      f.metadata && typeof f.metadata === 'object' && !Array.isArray(f.metadata)
+        ? (f.metadata as Record<string, unknown>)
+        : {},
+  }))
+}
+
 /** Al desconectar: los activos se RETIRAN, no se borran (historial). */
 export async function retirarActivosDeConexion(input: {
   companyId: string

@@ -8,7 +8,7 @@ import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import { nombreDelDestino, origenSeguro } from '@/modules/connect/oauthNucleo'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { AsistenteAlta } from '@/components/connect/AsistenteAlta'
-import { configMetaDesdeEntorno } from '@/modules/connect/metaNucleo'
+import { configMetaDesdeEntorno, configMetaPaginasDesdeEntorno } from '@/modules/connect/metaNucleo'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,6 +148,11 @@ export default async function ConectarPage({
           return c
             ? { appId: c.appId, configId: c.configId, versionGraph: c.versionGraph }
             : null
+        })()}
+        metaPaginas={(() => {
+          // Igual que `meta`: SOLO lo público de la configuración de Páginas.
+          const c = configMetaPaginasDesdeEntorno()
+          return c ? { appId: c.appId, configId: c.configId, versionGraph: c.versionGraph } : null
         })()}
         volverAlModulo={volver}
         nombreDelModulo={nombreDelDestino(volver)}

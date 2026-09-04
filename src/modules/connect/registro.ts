@@ -230,6 +230,14 @@ export async function desconectarConexion(input: {
       () => undefined
     )
   }
+  // FACEBOOK E INSTAGRAM (Meta · Fase 3): revocar cada permiso concedido
+  // mientras el token de usuario aún vale (DELETE /{user}/permissions/{p}).
+  if (fila.conector.slug === 'facebook') {
+    const { revocarPermisosPaginas } = await import('@/modules/connect/meta/paginas')
+    await revocarPermisosPaginas({ companyId: input.companyId, conexionId: fila.id }).catch(
+      () => undefined
+    )
+  }
 
   for (const tipo of ['OAUTH_TOKENS', 'API_KEY', 'SECRETO'] as const) {
     await eliminarCredencial({ companyId: input.companyId, conexionId: fila.id, tipo })

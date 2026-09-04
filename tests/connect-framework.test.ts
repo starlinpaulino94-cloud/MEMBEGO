@@ -165,7 +165,8 @@ test('registro: sano — metadata e implementación no se han separado', () => {
 })
 
 test('registro: lo previsto NO tiene implementación, y por tanto no se conecta', () => {
-  assert.ok(METADATOS_PREVISTOS.length >= 11, 'faltan integraciones previstas en el catálogo')
+  // Nueve desde Meta · Fase 3: Facebook e Instagram pasaron a implementados.
+  assert.ok(METADATOS_PREVISTOS.length >= 9, 'faltan integraciones previstas en el catálogo')
   for (const m of METADATOS_PREVISTOS) {
     assert.equal(estaImplementado(m.slug), false, `${m.slug} está en previstos y tiene código`)
     assert.equal(proveedorDe(m.slug), null)
