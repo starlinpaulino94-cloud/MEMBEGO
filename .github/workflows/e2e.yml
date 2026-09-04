@@ -70,6 +70,16 @@ jobs:
       - name: Navegador
         run: npx playwright install --with-deps chromium
 
+      # Las extensiones las crea la migración de búsqueda sin acentos, pero
+      # aquí NO corren migraciones (ver el paso siguiente): `db push` levanta
+      # el esquema de hoy, y el esquema de hoy lleva índices GIN de `pg_trgm`.
+      # Un postgres pelado no trae la extensión, así que se crea antes o el
+      # push revienta con «operator class gin_trgm_ops does not exist».
+      - name: Extensiones de Postgres
+        run: >-
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "CREATE EXTENSION IF NOT EXISTS pg_trgm; CREATE EXTENSION IF NOT EXISTS unaccent;"
+
       # `db push` y no `migrate deploy`: la base de pruebas nace vacía en cada
       # ejecución y lo que interesa es el esquema que el código ESPERA, no el
       # historial de cómo se llegó a él.
