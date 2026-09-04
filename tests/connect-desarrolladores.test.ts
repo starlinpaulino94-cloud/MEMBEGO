@@ -228,6 +228,9 @@ test('móvil: lo que puede ser más largo que la pantalla se parte', () => {
   assert.match(webhooks, /break-all[^"]*">\s*\{w\.url\}|break-all/)
   const guia = leer('src/components/connect/GuiaDesarrolladores.tsx')
   assert.match(guia, /break-all font-mono text-caption">\{r\.ruta\}/)
-  // Los bloques de código desplazan en horizontal en vez de desbordar.
-  assert.match(guia, /<pre className="overflow-x-auto/)
+  // Los bloques de código desplazan en horizontal en vez de desbordar. El
+  // <pre> tiene un único dueño (BloqueCodigo); la guía y el resumen lo usan.
+  assert.match(guia, /<BloqueCodigo/)
+  const bloque = leer('src/components/connect/BloqueCodigo.tsx')
+  assert.match(bloque, /<pre className="overflow-x-auto/)
 })

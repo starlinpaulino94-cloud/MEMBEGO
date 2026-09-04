@@ -8,7 +8,6 @@ import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import { nombreDelDestino, origenSeguro } from '@/modules/connect/oauthNucleo'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { AsistenteAlta } from '@/components/connect/AsistenteAlta'
-import { LogoIntegracion } from '@/components/connect/LogoIntegracion'
 import { configMetaDesdeEntorno } from '@/modules/connect/metaNucleo'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 /**
- * EL ASISTENTE DE ALTA (Connect · Fase 12).
+ * EL ASISTENTE DE ALTA (Connect · Fase 12, rediseño «hub»).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * RUTA PROPIA, Y NO UNA VENTANA FLOTANTE
@@ -33,6 +32,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  *
  * LA FILA SE CREA AL ENTRAR. El `state` firmado de OAuth se ata a una conexión
  * concreta, así que tiene que existir antes de mandar a nadie fuera.
+ *
+ * LA CABECERA VIVE DENTRO DEL ASISTENTE. La tarjeta tiene forma de diálogo —
+ * título, salida, pasos, contenido, pie— y repetir el nombre encima sería
+ * decir dos veces dónde se está. Aquí quedan las migas y los avisos de la
+ * vuelta de OAuth, que son de la PÁGINA y no del paso.
  */
 export default async function ConectarPage({
   params,
@@ -83,8 +87,12 @@ export default async function ConectarPage({
     : vista.visitables.length
   const anterior = indiceActual > 0 ? vista.visitables[indiceActual - 1] : null
 
+  // El guion entero, para la barra de pasos. Es el MISMO guion del que sale el
+  // progreso (`def.pasos()` depende del despliegue y se resuelve una vez).
+  const guion = def.pasos().map((p) => ({ id: p.id, titulo: p.titulo }))
+
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <nav aria-label="Ruta" className="flex flex-wrap items-center gap-1 text-caption">
         <Link href="/admin/integraciones" className="text-muted-foreground hover:text-foreground">
           Integraciones
@@ -99,19 +107,6 @@ export default async function ConectarPage({
         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         <span className="font-medium">Conectar</span>
       </nav>
-
-      <div className="flex items-center gap-3">
-        <LogoIntegracion
-          slug={slug}
-          nombre={def.metadatos.nombre}
-          marca={def.metadatos.marca}
-          className="h-12 w-12 text-lg"
-        />
-        <div>
-          <h1 className="text-h2 font-bold">Conectar {def.metadatos.nombre}</h1>
-          <p className="text-caption text-muted-foreground">{def.metadatos.descripcion}</p>
-        </div>
-      </div>
 
       {/* La vuelta del proveedor, contada en el idioma de quien la vive. El
           código de error de OAuth se queda en la bitácora. */}
@@ -129,6 +124,7 @@ export default async function ConectarPage({
       <AsistenteAlta
         slug={slug}
         nombre={def.metadatos.nombre}
+        pasos={guion}
         paso={
           vista.paso
             ? {
