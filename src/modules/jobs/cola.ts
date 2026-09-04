@@ -78,6 +78,9 @@ export function claveDedup(carga: CargaTrabajo): string {
     case 'campana-dirigida':
       // El lote es la unidad idempotente: cada desplazamiento se procesa una vez.
       return `camp:${carga.campanaId}:${carga.desde}`
+    case 'meta-evento':
+      // El evento ya es único en la base (claveDedupe); aquí, uno por fila.
+      return `meta:${carga.eventoId}`
   }
 }
 

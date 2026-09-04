@@ -451,5 +451,7 @@ const ETIQUETA_CAPACIDAD: Record<string, string> = {
   'calendario.escribir': 'Crear eventos con tus citas confirmadas',
   'disponibilidad.leer': 'Consultar tus horas ocupadas',
   'mensajes.enviar': 'Enviar mensajes a tus clientes',
+  'mensajes.recibir': 'Recibir los mensajes de tus clientes en Membego',
+  'paginas.leer': 'Ver las Páginas de Facebook que administras',
   'pagos.tarjeta': 'Cobrar con tarjeta de crédito y débito',
 }

@@ -220,13 +220,24 @@ test('unicidad: la base impide que dos empresas reclamen la misma cuenta', () =>
 })
 
 test('aislamiento: el webhook resuelve por clave única, no por findFirst global', () => {
-  const src = codigo('src/app/api/connect/meta/webhook/route.ts')
-  // `findFirst` sobre metadata devolvía UNA CUALQUIERA de las filas que
-  // coincidieran: el aviso de una empresa podía acabar atribuido a otra.
-  assert.ok(!src.includes('findFirst'), 'el webhook volvió a un findFirst')
-  assert.ok(!src.includes('metadata'), 'el webhook vuelve a buscar dentro de un JSON')
-  assert.match(src, /findUnique/)
-  assert.match(src, /conectorId_cuentaExterna/)
+  // La resolución vive en el despachador desde Meta · Fase 1; la ruta no
+  // consulta la base. `findFirst` sobre metadata devolvía UNA CUALQUIERA de
+  // las filas que coincidieran: el aviso de una empresa podía acabar
+  // atribuido a otra.
+  const ruta = codigo('src/app/api/connect/meta/webhook/route.ts')
+  assert.ok(!/findFirst|findUnique|metadata/.test(ruta), 'la ruta volvió a consultar la base')
+  for (const archivo of [
+    'src/modules/connect/meta/webhookDispatcher.ts',
+    'src/modules/connect/meta/activos.ts',
+  ]) {
+    const src = codigo(archivo)
+    assert.ok(!src.includes('findFirst'), `${archivo} volvió a un findFirst`)
+    assert.ok(!/where:[^}]*metadata/.test(src), `${archivo} busca dentro de un JSON`)
+    assert.match(src, /findUnique/)
+  }
+  // Las dos claves únicas: la del activo (todo Meta) y la histórica del WABA.
+  assert.match(codigo('src/modules/connect/meta/activos.ts'), /tipo_idExterno/)
+  assert.match(codigo('src/modules/connect/meta/webhookDispatcher.ts'), /conectorId_cuentaExterna/)
 })
 
 // ─── 9 · credencial reconocida por el asistente ──────────────────────────────

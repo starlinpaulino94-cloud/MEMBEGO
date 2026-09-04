@@ -60,6 +60,25 @@ export const METADATOS_IMPLEMENTADOS: MetadatosProveedor[] = [
     // y no voy a inventarlo. Se corrige cuando se verifique su guía de marca.
     marca: marca('#475569'),
   },
+  // UNA conexión para los dos (Meta · Fase 3): Meta entrega en un login las
+  // Páginas y, por cada una, su cuenta de Instagram. La tarjeta de Instagram
+  // existe para que quien la busque la encuentre, y lleva a esta conexión.
+  {
+    slug: 'facebook',
+    nombre: 'Facebook e Instagram',
+    descripcion:
+      'Recibe y responde desde Membego los mensajes de tus Páginas de Facebook y de las cuentas de Instagram enlazadas.',
+    categoria: 'COMUNICACION',
+    marca: marca('#1877F2'),
+    sitioUrl: 'https://www.facebook.com/business',
+  },
+  {
+    slug: 'instagram',
+    nombre: 'Instagram',
+    descripcion: 'Responde los mensajes directos de tu cuenta profesional desde Membego.',
+    categoria: 'COMUNICACION',
+    marca: marca('#E4405F'),
+  },
 ]
 
 /**
@@ -81,20 +100,6 @@ export const METADATOS_PREVISTOS: MetadatosProveedor[] = [
     descripcion: 'Entra con tu cuenta de Google y sincroniza los datos de tu negocio.',
     categoria: 'IDENTIDAD',
     marca: marca('#4285F4'),
-  },
-  {
-    slug: 'facebook',
-    nombre: 'Facebook',
-    descripcion: 'Recibe en Membego los mensajes y clientes potenciales de tu página.',
-    categoria: 'MARKETING',
-    marca: marca('#1877F2'),
-  },
-  {
-    slug: 'instagram',
-    nombre: 'Instagram',
-    descripcion: 'Responde los mensajes directos de tu cuenta desde Membego.',
-    categoria: 'MARKETING',
-    marca: marca('#E4405F'),
   },
   {
     slug: 'paypal',

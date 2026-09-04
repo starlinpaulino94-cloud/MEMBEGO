@@ -94,6 +94,18 @@ export interface CargaCampanaDirigida {
   desde: number
 }
 
+/**
+ * Un evento de webhook de Meta ya guardado (Meta · Fase 1). La ruta pública
+ * solo firma, guarda y encola; el trabajo resuelve a quién pertenece y qué
+ * significa. `companyId` puede ser null: un aviso puede llegar antes de que
+ * el alta que lo origina termine.
+ */
+export interface CargaEventoMeta {
+  tipo: 'meta-evento'
+  eventoId: string
+  companyId: string | null
+}
+
 export type CargaTrabajo =
   | CargaNotificar
   | CargaAutomatizaciones
@@ -101,6 +113,7 @@ export type CargaTrabajo =
   | CargaEvento
   | CargaRecompensas
   | CargaCampanaDirigida
+  | CargaEventoMeta
 
 /** Tipos aceptados por el endpoint `/api/jobs` (cada caso del ejecutor). */
 export const TIPOS_TRABAJO = [
@@ -110,6 +123,7 @@ export const TIPOS_TRABAJO = [
   'evento-estrategia',
   'recompensas-referido',
   'campana-dirigida',
+  'meta-evento',
 ] as const
 
 /** Ruta del endpoint que ejecuta los trabajos. */

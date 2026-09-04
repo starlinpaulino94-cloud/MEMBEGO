@@ -52,6 +52,31 @@ function aadDe(conexionId: string, tipo: TipoCredencial): string {
 }
 
 /**
+ * SELLOS ATADOS A UN ACTIVO (Meta · Fase 3). Un token de Página de Facebook
+ * es de UNA Página: se sella con el activo como AAD, así un sello movido a
+ * otra fila no se abre. Misma clave maestra, mismo formato, misma regla de
+ * fallo cerrado que las credenciales de conexión.
+ */
+export async function sellarParaActivo(
+  activoId: string,
+  secreto: string
+): Promise<{ ok: true; sellado: string; keyVersion: number } | { ok: false }> {
+  const km = claves()
+  if (!km) return { ok: false }
+  return { ok: true, sellado: sellar(km, secreto, `activo:${activoId}`), keyVersion: versionActual(km) }
+}
+
+export async function abrirDeActivo(
+  activoId: string,
+  sellado: string
+): Promise<{ ok: true; secreto: string } | { ok: false }> {
+  const km = claves()
+  if (!km) return { ok: false }
+  const abierto = abrir(km, sellado, `activo:${activoId}`)
+  return abierto.ok ? { ok: true, secreto: abierto.datos } : { ok: false }
+}
+
+/**
  * Guarda (o REEMPLAZA — upsert) el secreto de una conexión. `secreto` es la
  * representación completa en texto (para OAUTH_TOKENS, el JSON con access +
  * refresh; para API_KEY, la clave tal cual).
