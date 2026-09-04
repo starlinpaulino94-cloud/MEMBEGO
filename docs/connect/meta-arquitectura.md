@@ -346,3 +346,24 @@ Reglas: nunca en claro, nunca al navegador, nunca en logs (los `catch` no serial
 | **7 · Automatizaciones** | Disparador «mensaje entrante», acciones `send_whatsapp` con plantilla, `send_messenger`, `send_instagram` | Regla real de extremo a extremo |
 
 Cada fase termina con: tests (unitarios + fuente), suite completa en verde, PR propio, y una comprobación **contra Meta** de lo que toca Meta. Las fases 3–4 requieren App Review para terceros: se desarrollan con Páginas propias y se pide la revisión con el prototipo grabado.
+
+## 12. Estado de la implementación (4 de septiembre de 2026)
+
+Las siete fases de código están en la rama `claude/meta-integracion` (PR #453), cada una con sus pruebas y la suite completa en verde:
+
+| Fase | Estado | Dónde |
+|---|---|---|
+| 1 · Núcleo | Hecha | `modules/connect/meta/*`, `ActivoMeta`, `EventoMeta`, cola `meta-evento` |
+| 2 · WhatsApp | Hecha | `modules/mensajeria/{entrantes,salientes,plantillas,contactos}.ts` |
+| 3 · Facebook | Hecha | conector `facebook` («Facebook e Instagram»), `modules/connect/meta/paginas.ts`, `modules/mensajeria/messenger.ts` |
+| 4 · Instagram | Hecha | tarjeta adaptada; DM por `POST /{PAGE-ID}/messages` con token de Página (verificado) |
+| 5 · Bandeja | Hecha | `/admin/crm/conversaciones`, `modules/mensajeria/{bandeja,actions}.ts` |
+| 6 · CRM | Hecha | `modules/crm/*`, prospecto automático en `modules/mensajeria/trasEntrante.ts` |
+| 7 · Automatizaciones | Hecha | `mensaje.recibido`, `prospecto.creado`; `send_whatsapp` (plantilla), `send_messenger`, `send_instagram` |
+
+**Lo que NO se ha hecho todavía** (y no puede hacerse desde el código):
+
+- La fase 0 del panel de Meta: app de tipo Business, las dos configuraciones de Login for Business (`NEXT_PUBLIC_META_CONFIG_ID` para WhatsApp, `NEXT_PUBLIC_META_CONFIG_ID_PAGES` para Páginas), el webhook en `https://membego.com/api/connect/meta/webhook` con `META_WEBHOOK_VERIFY_TOKEN`, dominios, Tech Provider y verificación del negocio; y las variables en `.env.local` y Vercel.
+- La comprobación **contra Meta** de cada fase (alta incrustada real, un mensaje real por cada canal, un webhook real).
+- Tres puntos marcados ⚠ en el código porque la documentación no pudo confirmarlos: el cuerpo de envío de plantilla (`cuerpoMensajePlantilla`, verificar con la colección de Postman antes del primer envío real), la forma de `delivery`/`read` de Messenger (solo se aplican con `mids`), y los `extras` del Embedded Signup v4.
+- Tras desplegar: `bun run db:migrate:deploy` y reaplicar `prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql` (hay seis tablas nuevas con `companyId`); el superadmin debe publicar los conectores `facebook` e `instagram` en el catálogo.
