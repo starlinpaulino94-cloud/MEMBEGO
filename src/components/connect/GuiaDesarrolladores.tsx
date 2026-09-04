@@ -1,6 +1,7 @@
 import { INVENTARIO_API, TIPO_V2 } from '@membego/contracts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { BloqueCodigo } from '@/components/connect/BloqueCodigo'
 
 /**
  * Guía para quien va a integrar (Connect · Fase 8).
@@ -12,7 +13,9 @@ import { Badge } from '@/components/ui/badge'
  * sitio. Una prueba compara el inventario con las rutas reales, así que esto
  * no puede quedarse viejo.
  *
- * Es servidor: no hay estado ni interacción. Solo lectura.
+ * Es servidor: no hay estado ni interacción. Solo lectura. Los bloques de
+ * código vienen de `BloqueCodigo`, que es el único dueño de ese estilo (y del
+ * botón de copiar, que sí es cliente).
  */
 
 /** Los recursos que una clave de empresa puede usar, agrupados por área. */
@@ -35,14 +38,6 @@ function Bloque({ titulo, children }: { titulo: string; children: React.ReactNod
   )
 }
 
-function Codigo({ children }: { children: string }) {
-  return (
-    <pre className="overflow-x-auto rounded-xl bg-muted px-3 py-2 font-mono text-caption">
-      <code>{children}</code>
-    </pre>
-  )
-}
-
 export function GuiaDesarrolladores({ base }: { base: string }) {
   const areas = porArea()
   const eventos = Object.values(TIPO_V2)
@@ -50,7 +45,7 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Para tu desarrollador</CardTitle>
+        <CardTitle className="text-h3">Para tu desarrollador</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         <p className="text-caption text-muted-foreground">
@@ -64,8 +59,10 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
             Manda tu clave como <span className="font-mono">Bearer</span>. La empresa va atada a la
             clave, así que no hace falta indicarla.
           </p>
-          <Codigo>{`curl "${base}/api/platform/v1/customers/search?q=809" \\
-  -H "Authorization: Bearer mbk_xxxxxxxxxxxx.tu-secreto"`}</Codigo>
+          <BloqueCodigo
+            codigo={`curl "${base}/api/platform/v1/customers/search?q=809" \\
+  -H "Authorization: Bearer mbk_xxxxxxxxxxxx.tu-secreto"`}
+          />
         </Bloque>
 
         <Bloque titulo="2. Qué puedes consultar">
@@ -100,7 +97,7 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
           <p className="text-caption text-muted-foreground">
             Impórtala en Postman, Zapier o Make. No necesita credenciales para leerse.
           </p>
-          <Codigo>{`${base}/api/platform/v1/openapi`}</Codigo>
+          <BloqueCodigo codigo={`${base}/api/platform/v1/openapi`} />
         </Bloque>
 
         <Bloque titulo="4. Verificar la firma de un webhook">
@@ -109,7 +106,8 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
             contenido — sin esta comprobación, cualquiera que conozca tu URL puede mandarte datos
             falsos.
           </p>
-          <Codigo>{`import { createHmac, timingSafeEqual } from 'node:crypto'
+          <BloqueCodigo
+            codigo={`import { createHmac, timingSafeEqual } from 'node:crypto'
 
 // El cuerpo CRUDO, tal cual llegó: si lo parseas y lo vuelves a serializar,
 // cualquier diferencia de formato rompe la firma de un aviso legítimo.
@@ -121,7 +119,8 @@ function firmaValida(cuerpoCrudo, cabecera, secreto) {
   )
 }
 
-// cabecera: X-Membego-Signature`}</Codigo>
+// cabecera: X-Membego-Signature`}
+          />
         </Bloque>
 
         <Bloque titulo="5. Eventos que puedes recibir">
