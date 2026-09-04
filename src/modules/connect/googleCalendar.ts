@@ -6,13 +6,22 @@ import { configOauthDe } from '@/modules/connect/oauthRutas'
 import { metadatosCredencial } from '@/modules/connect/credenciales'
 import { oauthGoogleCalendar } from '@/modules/connect/proveedores/googleCalendar'
 import {
+  borradoYaHecho,
+  creacionYaHecha,
+  cuerpoEvento,
+  idEventoDeCita,
+  sincronizaConfirmadas,
+  type EventoCita,
+} from '@/modules/connect/googleCalendarNucleo'
+import {
   claseDeEstadoHttp,
   claseDeFalloDeRed,
   type ClaseError,
 } from '@/modules/connect/proveedores/tipos'
 
 /**
- * CONECTOR DE GOOGLE CALENDAR (Fase 6 · completado en la Fase 12).
+ * CONECTOR DE GOOGLE CALENDAR (Fase 6 · completado en la Fase 12 · ciclo de
+ * vida completo con la referencia v3).
  *
  * Lleva las citas confirmadas a la agenda del negocio, que es donde su equipo
  * ya mira. La dirección es de ida: MembeGo escribe en Google. Traer eventos de
@@ -29,16 +38,33 @@ import {
  *   · listar los calendarios de la cuenta, para poder ELEGIR uno;
  *   · validar la conexión SIN ESCRIBIR NADA en la agenda del cliente;
  *   · escribir en el calendario elegido en vez de en «primary» a ciegas.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LO QUE FALTABA PARA ESTAR INTEGRADO DE VERDAD
+ *
+ *   · CREAR ES IDEMPOTENTE: el id del evento se deriva de la cita
+ *     (`events.insert` admite un id propio) y un 409 se lee como «ya estaba».
+ *     La cita guarda ese id.
+ *   · BORRAR: `events.delete` al cancelar, con `sendUpdates=none` para no
+ *     mandar correos de «evento cancelado» desde la cuenta del negocio; 404 y
+ *     410 cuentan como hecho.
+ *   · LA OPCIÓN DEL ALTA SE RESPETA: `sincronizarConfirmadas: false` se
+ *     guardaba y se ignoraba.
+ *
+ * Las reglas puras (id, cuerpo, qué respuesta cuenta como hecha) viven en
+ * `googleCalendarNucleo.ts` y se prueban sin red.
  */
 
 const API = 'https://www.googleapis.com/calendar/v3'
 const TIMEOUT_MS = 10_000
 
+export type { EventoCita }
+
 export type ResultadoEvento =
   | { ok: true; eventoId: string | null }
   | {
       ok: false
-      motivo: 'sin_conexion' | 'sin_token' | 'sin_configurar' | 'proveedor'
+      motivo: 'sin_conexion' | 'sin_token' | 'sin_configurar' | 'desactivado' | 'proveedor'
       detalle?: string
     }
 
@@ -291,13 +317,20 @@ export async function validarCalendario(input: {
 
 // ─── Escribir ────────────────────────────────────────────────────────────────
 
-export interface EventoCita {
-  titulo: string
-  descripcion?: string
-  inicio: Date
-  fin: Date
-  /** IANA («America/Santo_Domingo»). Google la exige junto a la hora. */
-  zonaHoraria: string
+/** Lo común a crear y borrar: la conexión viva, su calendario y un token. */
+async function prepararEscritura(companyId: string) {
+  const conexion = await conexionCalendario(companyId)
+  if (!conexion) return { ok: false as const, motivo: 'sin_conexion' as const }
+
+  const calendarId = conexion.config.calendarId
+  if (typeof calendarId !== 'string' || !calendarId) {
+    return { ok: false as const, motivo: 'sin_configurar' as const }
+  }
+
+  const token = await tokenDe(companyId, conexion.id)
+  if (!token.ok) return { ok: false as const, motivo: 'sin_token' as const, detalle: token.motivo }
+
+  return { ok: true as const, conexion, calendarId, token: token.token }
 }
 
 /**
@@ -308,50 +341,55 @@ export interface EventoCita {
  * Sin calendario elegido NO se escribe en «primary» por si acaso: el alta
  * quedó a medias y adivinar el destino es cómo un negocio acaba con sus citas
  * en la agenda personal de quien conectó la cuenta.
+ *
+ * IDEMPOTENTE: el id del evento sale de la cita (`cuerpoEvento`). Si ya
+ * existía —un reintento, una confirmación repetida—, Google responde 409 y
+ * aquí se lee como «hecho», devolviendo el mismo id.
  */
 export async function crearEventoCalendario(input: {
   companyId: string
+  /** La cita de la que es el evento: de ella sale su id en Google. */
+  citaId: string
   evento: EventoCita
 }): Promise<ResultadoEvento> {
-  const conexion = await conexionCalendario(input.companyId)
-  if (!conexion) return { ok: false, motivo: 'sin_conexion' }
+  const prep = await prepararEscritura(input.companyId)
+  if (!prep.ok) return prep
 
-  const calendarId = conexion.config.calendarId
-  if (typeof calendarId !== 'string' || !calendarId) {
-    return { ok: false, motivo: 'sin_configurar' }
+  // La casilla del alta desmarcada: la conexión está viva para otras cosas
+  // (o lo estará), pero las citas confirmadas no se llevan.
+  if (!sincronizaConfirmadas(prep.conexion.config)) {
+    return { ok: false, motivo: 'desactivado' }
   }
 
-  const token = await tokenDe(input.companyId, conexion.id)
-  if (!token.ok) return { ok: false, motivo: 'sin_token', detalle: token.motivo }
+  const eventoId = idEventoDeCita(input.citaId)
 
   try {
-    const resp = await fetch(`${API}/calendars/${encodeURIComponent(calendarId)}/events`, {
+    const resp = await fetch(`${API}/calendars/${encodeURIComponent(prep.calendarId)}/events`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token.token}`,
+        Authorization: `Bearer ${prep.token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        summary: input.evento.titulo,
-        description: input.evento.descripcion,
-        // `dateTime` + `timeZone`: sin la zona, Google interpreta la hora en
-        // la del calendario, y una cita de las 9:00 en Santo Domingo
-        // aparecería a otra hora para un calendario configurado en otro país.
-        start: {
-          dateTime: input.evento.inicio.toISOString(),
-          timeZone: input.evento.zonaHoraria,
-        },
-        end: { dateTime: input.evento.fin.toISOString(), timeZone: input.evento.zonaHoraria },
-      }),
+      body: JSON.stringify(cuerpoEvento(input.citaId, input.evento)),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
+
+    if (creacionYaHecha(resp.status)) {
+      // Ya estaba en la agenda con nuestro id: es el resultado que se quería.
+      await anotarSalud({
+        companyId: input.companyId,
+        conexionId: prep.conexion.id,
+        resultado: { ok: true },
+      })
+      return { ok: true, eventoId }
+    }
 
     if (!resp.ok) {
       const clase = claseDeGoogle(resp.status, await razonDe(resp))
       const detalle = `Google respondió ${resp.status}`
       await anotarSalud({
         companyId: input.companyId,
-        conexionId: conexion.id,
+        conexionId: prep.conexion.id,
         resultado: { ok: false, error: detalle, clase },
       })
       return { ok: false, motivo: 'proveedor', detalle }
@@ -360,15 +398,79 @@ export async function crearEventoCalendario(input: {
     const json = (await resp.json().catch(() => ({}))) as { id?: string }
     await anotarSalud({
       companyId: input.companyId,
-      conexionId: conexion.id,
+      conexionId: prep.conexion.id,
       resultado: { ok: true },
     })
-    return { ok: true, eventoId: json.id ?? null }
+    return { ok: true, eventoId: json.id ?? eventoId }
   } catch (e) {
     const detalle = e instanceof Error ? e.message : 'no se pudo contactar con Google'
     await anotarSalud({
       companyId: input.companyId,
-      conexionId: conexion.id,
+      conexionId: prep.conexion.id,
+      resultado: { ok: false, error: detalle, clase: claseDeFalloDeRed() },
+    })
+    return { ok: false, motivo: 'proveedor', detalle }
+  }
+}
+
+/**
+ * Borra el evento de una cita cancelada. Best-effort, como crear.
+ *
+ * `sendUpdates=none`: borrar un evento con invitados manda, por defecto, un
+ * correo de «evento cancelado» desde la cuenta del negocio. La cancelación ya
+ * se la contamos al cliente por MembeGo; Google no tiene que repetirla.
+ *
+ * 404 y 410 cuentan como hecho: el evento no está, que es lo que se quería.
+ */
+export type ResultadoBorrado =
+  | { ok: true }
+  | {
+      ok: false
+      motivo: 'sin_conexion' | 'sin_token' | 'sin_configurar' | 'proveedor'
+      detalle?: string
+    }
+
+export async function eliminarEventoCalendario(input: {
+  companyId: string
+  eventoId: string
+}): Promise<ResultadoBorrado> {
+  const prep = await prepararEscritura(input.companyId)
+  if (!prep.ok) return prep
+
+  try {
+    const resp = await fetch(
+      `${API}/calendars/${encodeURIComponent(prep.calendarId)}/events/${encodeURIComponent(
+        input.eventoId
+      )}?sendUpdates=none`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${prep.token}` },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      }
+    )
+
+    if (!resp.ok && !borradoYaHecho(resp.status)) {
+      const clase = claseDeGoogle(resp.status, await razonDe(resp))
+      const detalle = `Google respondió ${resp.status}`
+      await anotarSalud({
+        companyId: input.companyId,
+        conexionId: prep.conexion.id,
+        resultado: { ok: false, error: detalle, clase },
+      })
+      return { ok: false, motivo: 'proveedor', detalle }
+    }
+
+    await anotarSalud({
+      companyId: input.companyId,
+      conexionId: prep.conexion.id,
+      resultado: { ok: true },
+    })
+    return { ok: true }
+  } catch (e) {
+    const detalle = e instanceof Error ? e.message : 'no se pudo contactar con Google'
+    await anotarSalud({
+      companyId: input.companyId,
+      conexionId: prep.conexion.id,
       resultado: { ok: false, error: detalle, clase: claseDeFalloDeRed() },
     })
     return { ok: false, motivo: 'proveedor', detalle }

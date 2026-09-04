@@ -27,6 +27,78 @@ export interface CitaActionState {
   mensaje?: string
 }
 
+/**
+ * ─── Google Calendar ─────────────────────────────────────────────────────────
+ *
+ * Las dos operaciones del ciclo de vida del evento de una cita, en UN sitio:
+ * llevarla a la agenda al confirmarse —venga de donde venga la confirmación—
+ * y quitarla al cancelarse, la cancele quien la cancele. Best-effort las dos:
+ * la cita ya cambió de estado y está guardada; que Google esté caído no puede
+ * deshacerlo ni devolver un error a quien pulsó el botón — el fallo queda en
+ * la salud de la conexión, que es donde se mira.
+ *
+ * La importación es dinámica para no cargar el conector —y su cliente HTTP—
+ * en cada acción de citas que no lo necesita.
+ */
+interface CitaParaGoogle {
+  id: string
+  companyId: string
+  googleEventId: string | null
+  inicio: Date
+  duracionMin: number
+  servicio: string | null
+  clienteNombre: string | null
+  tz: string
+}
+
+async function llevarCitaAGoogle(cita: CitaParaGoogle): Promise<void> {
+  // Con id guardado no se vuelve a crear: primera línea de defensa contra el
+  // duplicado (la segunda es el id determinista, que Google rechaza con 409).
+  if (cita.googleEventId) return
+  const { tz } = cita
+  try {
+    const { crearEventoCalendario } = await import('@/modules/connect/googleCalendar')
+    const res = await crearEventoCalendario({
+      companyId: cita.companyId,
+      citaId: cita.id,
+      evento: {
+        titulo: `${cita.servicio ?? 'Cita'} · ${cita.clienteNombre ?? 'Cliente'}`,
+        descripcion: 'Cita confirmada desde MembeGo.',
+        inicio: cita.inicio,
+        fin: new Date(cita.inicio.getTime() + cita.duracionMin * 60_000),
+        zonaHoraria: tz,
+      },
+    })
+    if (!res.ok || !res.eventoId) return
+    const eventoId = res.eventoId
+    // El id se guarda para poder borrarlo al cancelar y no crearlo dos veces.
+    await conEmpresa(cita.companyId, (tx) =>
+      tx.cita.update({ where: { id: cita.id }, data: { googleEventId: eventoId } })
+    )
+  } catch (e) {
+    console.error('[citas] no se pudo crear el evento en Google:', e)
+  }
+}
+
+async function quitarCitaDeGoogle(
+  cita: Pick<CitaParaGoogle, 'id' | 'companyId' | 'googleEventId'>
+): Promise<void> {
+  if (!cita.googleEventId) return
+  try {
+    const { eliminarEventoCalendario } = await import('@/modules/connect/googleCalendar')
+    const res = await eliminarEventoCalendario({
+      companyId: cita.companyId,
+      eventoId: cita.googleEventId,
+    })
+    if (!res.ok) return
+    await conEmpresa(cita.companyId, (tx) =>
+      tx.cita.update({ where: { id: cita.id }, data: { googleEventId: null } })
+    )
+  } catch (e) {
+    console.error('[citas] no se pudo quitar el evento de Google:', e)
+  }
+}
+
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
 const HM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
 
@@ -188,6 +260,23 @@ export async function reservarCita(
       ).catch((e) => console.error('[citas] vincular compra:', e))
     }
 
+    // Con la agenda en autoconfirmación la cita nace CONFIRMADA y tiene que
+    // llegar a la agenda de Google igual que si la confirmara el negocio.
+    // Antes solo llegaban las confirmadas a mano: con autoconfirmación no
+    // llegaba ninguna.
+    if (resultado.cita.estado === 'CONFIRMADA') {
+      await llevarCitaAGoogle({
+        id: resultado.cita.id,
+        companyId,
+        googleEventId: null,
+        inicio: slot.inicio,
+        duracionMin: cfg.duracionMin,
+        servicio,
+        clienteNombre: cliente.nombre,
+        tz,
+      })
+    }
+
     const cuando = `${etiquetaDia(ymd, tz, cliente.company.idioma ?? undefined)} · ${hm}`
     await notificarAdmins(cliente.companyId, {
       tipo: 'CITA_NUEVA',
@@ -255,6 +344,12 @@ export async function cancelarCitaCliente(
         data: { estado: 'CANCELADA', canceladaPor: 'CLIENTE' },
       })
     )
+    // El evento no puede quedarse en la agenda de una cita que ya no existe.
+    await quitarCitaDeGoogle({
+      id: cita.id,
+      companyId: cita.companyId,
+      googleEventId: cita.googleEventId,
+    })
 
     const tz = cita.company.zonaHoraria
     await notificarAdmins(cita.companyId, {
@@ -320,26 +415,18 @@ export async function actualizarEstadoCita(
         mensaje: `Te esperamos el ${cuando}. ¡No faltes!`,
       }
 
-      /**
-       * Y a la agenda de Google del negocio, si la tiene conectada
-       * (Membego Connect · Fase 6).
-       *
-       * BEST-EFFORT Y SIN `await` QUE PUEDA ROMPER NADA: confirmar la cita ya
-       * ocurrió y está guardada. Que Google esté caído no puede deshacerla ni
-       * devolver un error a quien pulsó el botón — el fallo queda en la salud
-       * de la conexión, que es donde se mira.
-       */
-      const { crearEventoCalendario } = await import('@/modules/connect/googleCalendar')
-      await crearEventoCalendario({
+      // Y a la agenda de Google del negocio, si la tiene conectada (Membego
+      // Connect). Best-effort: ver `llevarCitaAGoogle`.
+      await llevarCitaAGoogle({
+        id: cita.id,
         companyId: cita.companyId,
-        evento: {
-          titulo: `${cita.servicio ?? 'Cita'} · ${cita.cliente?.nombre ?? 'Cliente'}`,
-          descripcion: 'Cita confirmada desde MembeGo.',
-          inicio: cita.inicio,
-          fin: new Date(cita.inicio.getTime() + cita.duracionMin * 60_000),
-          zonaHoraria: tz,
-        },
-      }).catch((e) => console.error('[citas] no se pudo crear el evento en Google:', e))
+        googleEventId: cita.googleEventId,
+        inicio: cita.inicio,
+        duracionMin: cita.duracionMin,
+        servicio: cita.servicio,
+        clienteNombre: cita.cliente?.nombre ?? null,
+        tz,
+      })
     } else if (accion === 'completar') {
       if (!activa) return { error: 'Esta cita no está activa.' }
       await conEmpresa(cita.companyId, (tx) =>
@@ -362,6 +449,12 @@ export async function actualizarEstadoCita(
           data: { estado: 'CANCELADA', canceladaPor: 'NEGOCIO', motivoCancelacion: motivo },
         })
       )
+      // El evento no puede quedarse en la agenda de una cita que ya no existe.
+      await quitarCitaDeGoogle({
+        id: cita.id,
+        companyId: cita.companyId,
+        googleEventId: cita.googleEventId,
+      })
       notifCliente = {
         tipo: 'CITA_CANCELADA',
         titulo: 'Tu cita fue cancelada',
