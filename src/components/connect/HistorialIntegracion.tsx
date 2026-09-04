@@ -3,7 +3,8 @@ import { textoNegocio } from '@/modules/connect/bitacoraNucleo'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 /**
- * HISTORIAL DE UNA INTEGRACIÓN · la vista de la dueña del negocio (Fase 11).
+ * HISTORIAL DE UNA INTEGRACIÓN · la vista de la dueña del negocio (Fase 11,
+ * rediseño «hub»: como línea de tiempo).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * MISMO REGISTRO, OTRO IDIOMA
@@ -19,6 +20,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
  *
  * Si tras filtrar no queda nada, el bloque entero desaparece: una tarjeta
  * vacía titulada «Historial» es peor que ninguna tarjeta.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LÍNEA DE TIEMPO
+ *
+ * Una línea vertical, un punto por apunte y la hora en su propia columna: se
+ * lee de arriba abajo como un relato, que es como se cuenta lo que pasó. Los
+ * puntos son todos del mismo color a propósito — el texto de negocio ya dice
+ * si fue bueno o malo, y colorearlo por nivel sería colar el nivel de log que
+ * esta vista se cuida de no enseñar.
  */
 export function HistorialIntegracion({
   registros,
@@ -34,25 +44,28 @@ export function HistorialIntegracion({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Historial</CardTitle>
+        <CardTitle className="text-h3">Historial de actividad</CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="divide-y divide-border/60">
+        <ol className="relative ml-1.5 space-y-6 border-l-2 border-border pl-6">
           {legibles.map((r) => (
-            <li
-              key={r.id}
-              className="flex flex-col gap-0.5 py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3"
-            >
-              <span className="text-sm">{r.texto}</span>
-              <time
-                dateTime={r.createdAt}
-                className="shrink-0 text-caption text-muted-foreground"
-              >
-                {formatDateTime(new Date(r.createdAt))}
-              </time>
+            <li key={r.id} className="relative">
+              <span
+                aria-hidden
+                className="absolute -left-[31px] top-1.5 h-3 w-3 rounded-full border-2 border-card bg-primary"
+              />
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-4">
+                <time
+                  dateTime={r.createdAt}
+                  className="w-36 shrink-0 text-caption font-medium text-muted-foreground"
+                >
+                  {formatDateTime(new Date(r.createdAt))}
+                </time>
+                <p className="text-sm text-foreground">{r.texto}</p>
+              </div>
             </li>
           ))}
-        </ul>
+        </ol>
       </CardContent>
     </Card>
   )
