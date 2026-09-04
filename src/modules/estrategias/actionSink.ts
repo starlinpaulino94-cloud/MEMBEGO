@@ -64,7 +64,11 @@ export class LiveActionSink implements ActionSink {
         case ACTION_TYPES.SAVE_EVIDENCE:
           return await this.registrarEvento(input)
         case ACTION_TYPES.SEND_WHATSAPP:
-          return await this.enviarWhatsapp(input)
+          return await this.enviarPorMensajeria('WHATSAPP', input)
+        case ACTION_TYPES.SEND_MESSENGER:
+          return await this.enviarPorMensajeria('MESSENGER', input)
+        case ACTION_TYPES.SEND_INSTAGRAM:
+          return await this.enviarPorMensajeria('INSTAGRAM', input)
         case ACTION_TYPES.SEND_WEBHOOK:
           return await this.invocarWebhook(input)
         case ACTION_TYPES.RUN_WORKFLOW:
@@ -127,31 +131,42 @@ export class LiveActionSink implements ActionSink {
    * verdad, y entonces el resultado —bueno o malo— queda en la auditoría del
    * run con su motivo.
    */
-  private async enviarWhatsapp(input: {
-    companyId: string
-    subjectId: string | null
-    params: Record<string, unknown>
-  }) {
-    const texto = String(input.params.body ?? input.params.message ?? '').trim()
-    if (!texto) return { ok: true, detail: { simulated: true, reason: 'sin texto' } }
+  /**
+   * Meta · Fase 7: los tres canales pasan por `modules/mensajeria`, que
+   * decide la conversación, respeta la ventana de 24 h y deja cada envío en
+   * su hilo. `template` + `templateParams` mandan una plantilla aprobada;
+   * `conversacionId` (p. ej. `{{mensaje.conversacionId}}`) responde en el
+   * hilo que disparó la regla. Sin canal conectado, intención simulada.
+   */
+  private async enviarPorMensajeria(
+    canal: 'WHATSAPP' | 'MESSENGER' | 'INSTAGRAM',
+    input: { companyId: string; subjectId: string | null; params: Record<string, unknown> }
+  ) {
+    const { leerParametrosDeEnvio, enviarDesdeAutomatizacion } = await import('@/modules/mensajeria/automatizaciones')
+    const leido = leerParametrosDeEnvio(input.params)
+    if (!leido.texto && !leido.plantilla) return { ok: true, detail: { simulated: true, reason: 'sin texto' } }
 
-    const destino = await this.telefonoDeCliente(input.subjectId)
-    if (!destino) {
-      return { ok: true, detail: { simulated: true, reason: 'cliente sin teléfono' } }
+    if (canal === 'WHATSAPP') {
+      const { whatsappDisponible } = await import('@/modules/connect/whatsapp')
+      if (!(await whatsappDisponible(input.companyId))) {
+        return { ok: true, detail: { simulated: true, reason: 'WhatsApp no conectado' } }
+      }
     }
 
-    const { whatsappDisponible, enviarWhatsapp } = await import('@/modules/connect/whatsapp')
-    if (!(await whatsappDisponible(input.companyId))) {
-      return { ok: true, detail: { simulated: true, reason: 'WhatsApp no conectado' } }
-    }
-
-    const res = await enviarWhatsapp({
+    const res = await enviarDesdeAutomatizacion({
       companyId: input.companyId,
-      telefono: destino,
-      texto,
+      canal,
+      subjectId: input.subjectId,
+      conversacionId: leido.conversacionId,
+      texto: leido.texto,
+      plantilla: leido.plantilla,
+      parametros: leido.parametros,
     })
-    if (!res.ok) return { ok: false, detail: { channel: 'whatsapp', motivo: res.motivo } }
-    return { ok: true, detail: { channel: 'whatsapp', mensajeId: res.mensajeId } }
+    // Sin Página o credencial viva por Messenger/Instagram: intención, no fallo.
+    if (!res.ok && (res.detail.motivo === 'sin_conexion' || res.detail.motivo === 'sin_credencial')) {
+      return { ok: true, detail: { simulated: true, reason: `${canal.toLowerCase()} no conectado` } }
+    }
+    return res
   }
 
   /**

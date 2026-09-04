@@ -103,7 +103,9 @@ test('automatizaciones: send_whatsapp envía de verdad y degrada si no hay conex
   // automatización publicada hace meses no puede empezar a fallar porque
   // hayamos añadido un canal.
   assert.match(src, /simulated: true, reason: 'WhatsApp no conectado'/)
-  assert.match(src, /simulated: true, reason: 'cliente sin teléfono'/)
+  // La decisión «cliente sin teléfono» vive ahora en modules/mensajeria
+  // (Meta · Fase 7), por donde pasan los tres canales.
+  assert.match(leer('src/modules/mensajeria/automatizaciones.ts'), /simulated: true, reason: 'cliente sin teléfono'/)
 })
 
 test('catálogo de acciones: WhatsApp ya no dice «arquitectura futura»', () => {

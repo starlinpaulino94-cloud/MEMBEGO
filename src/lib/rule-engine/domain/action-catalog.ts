@@ -76,6 +76,8 @@ export const ACTION_TYPES = {
   SEND_PUSH: 'send_push',
   SEND_SMS: 'send_sms',
   SEND_WHATSAPP: 'send_whatsapp',
+  SEND_MESSENGER: 'send_messenger',
+  SEND_INSTAGRAM: 'send_instagram',
   SEND_INTERNAL_NOTIFICATION: 'send_internal_notification',
   SEND_WEBHOOK: 'send_webhook',
   // Auditoría
@@ -138,7 +140,9 @@ export const ACTION_CATALOG: readonly ActionDefinition[] = [
   { id: ACTION_TYPES.SEND_EMAIL, category: 'NOTIFICACIONES', description: 'Enviar correo.' },
   { id: ACTION_TYPES.SEND_PUSH, category: 'NOTIFICACIONES', description: 'Enviar push.' },
   { id: ACTION_TYPES.SEND_SMS, category: 'NOTIFICACIONES', description: 'Enviar SMS (arquitectura).' },
-  { id: ACTION_TYPES.SEND_WHATSAPP, category: 'NOTIFICACIONES', description: 'Enviar WhatsApp (requiere el conector conectado).' },
+  { id: ACTION_TYPES.SEND_WHATSAPP, category: 'NOTIFICACIONES', description: 'Enviar WhatsApp (requiere el conector conectado). Con `template` (nombre de plantilla aprobada) y `templateParams` vale fuera de la ventana de 24 h; con `body`, solo dentro.' },
+  { id: ACTION_TYPES.SEND_MESSENGER, category: 'NOTIFICACIONES', description: 'Responder por Messenger en la conversación abierta (`conversacionId`, p. ej. {{mensaje.conversacionId}}); solo dentro de las 24 h.' },
+  { id: ACTION_TYPES.SEND_INSTAGRAM, category: 'NOTIFICACIONES', description: 'Responder por Instagram en la conversación abierta (`conversacionId`); solo dentro de las 24 h.' },
   { id: ACTION_TYPES.SEND_INTERNAL_NOTIFICATION, category: 'NOTIFICACIONES', description: 'Notificación interna.' },
   { id: ACTION_TYPES.SEND_WEBHOOK, category: 'NOTIFICACIONES', description: 'Avisar a tus webhooks suscritos.' },
   // Auditoría

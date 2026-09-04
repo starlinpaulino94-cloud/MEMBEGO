@@ -57,7 +57,7 @@ export async function registrarEntranteWhatsapp(ev: EventoMetaFila): Promise<str
     nombre: mensaje.nombre,
   })
 
-  return conEmpresa(ev.companyId, async (tx) => {
+  const hecho = await conEmpresa(ev.companyId, async (tx) => {
     const conversacion = await tx.conversacion.upsert({
       where: {
         companyId_activoId_contactoId: {
@@ -125,12 +125,29 @@ export async function registrarEntranteWhatsapp(ev: EventoMetaFila): Promise<str
           where: { id: conversacion.id },
           data: { noLeidos: { decrement: 1 } },
         })
-        return 'duplicado'
+        return { r: 'duplicado', conversacionId: conversacion.id }
       }
       throw e
     }
-    return `entrante ${mensaje.tipo}`
+    return { r: `entrante ${mensaje.tipo}`, conversacionId: conversacion.id }
   })
+
+  // Ya guardado: el prospecto y las automatizaciones (nunca lanza).
+  if (hecho.r.startsWith('entrante')) {
+    const { trasEntrante } = await import('@/modules/mensajeria/trasEntrante')
+    await trasEntrante({
+      companyId: ev.companyId,
+      canal: 'WHATSAPP',
+      conversacionId: hecho.conversacionId,
+      contacto,
+      nombre: mensaje.nombre ?? null,
+      telefono: mensaje.de,
+      tipo: mensaje.tipo,
+      texto: mensaje.texto,
+      timestamp: mensaje.timestamp,
+    })
+  }
+  return hecho.r
 }
 
 export async function aplicarEstadoWhatsapp(ev: EventoMetaFila): Promise<string> {

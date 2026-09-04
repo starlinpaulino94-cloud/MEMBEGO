@@ -131,7 +131,9 @@ export async function enviarTextoEnConversacion(input: {
   companyId: string
   conversacionId: string
   texto: string
-  enviadoPorId: string
+  /** Quién lo envió desde la bandeja; null si fue una automatización. */
+  enviadoPorId: string | null
+  origen?: 'bandeja' | 'automatizacion'
 }): Promise<ResultadoEnvioConversacion> {
   const c = await conversacionDe(input.companyId, input.conversacionId)
   if (!c) return { ok: false, motivo: 'no_existe' }
@@ -149,7 +151,7 @@ export async function enviarTextoEnConversacion(input: {
     companyId: input.companyId,
     telefono: c.contacto.idExterno,
     texto: input.texto,
-    registro: { enviadoPorId: input.enviadoPorId, origen: 'bandeja' },
+    registro: { enviadoPorId: input.enviadoPorId, origen: input.origen ?? 'bandeja' },
   })
   return r.ok ? { ok: true, mensajeId: r.mensajeId } : { ok: false, motivo: r.motivo, detalle: r.detalle }
 }
@@ -164,7 +166,8 @@ export async function enviarPlantillaEnConversacion(input: {
   conversacionId: string
   plantillaId: string
   parametros: string[]
-  enviadoPorId: string
+  enviadoPorId: string | null
+  origen?: 'bandeja' | 'automatizacion'
 }): Promise<ResultadoEnvioConversacion> {
   const c = await conversacionDe(input.companyId, input.conversacionId)
   if (!c) return { ok: false, motivo: 'no_existe' }
@@ -195,7 +198,7 @@ export async function enviarPlantillaEnConversacion(input: {
       texto: null,
       plantilla: { nombre: plantilla.nombre, idioma: plantilla.idioma, parametros: input.parametros },
       enviadoPorId: input.enviadoPorId,
-      origen: 'bandeja',
+      origen: input.origen ?? 'bandeja',
     },
   })
   return r.ok ? { ok: true, mensajeId: r.mensajeId } : { ok: false, motivo: r.motivo, detalle: r.detalle }

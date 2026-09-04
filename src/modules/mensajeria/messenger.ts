@@ -37,7 +37,7 @@ export async function registrarEntranteMensajeria(ev: EventoMetaFila): Promise<s
 
   const contacto = await resolverContacto({ companyId: ev.companyId, canal, idExterno: m.de })
 
-  return conEmpresa(ev.companyId, async (tx) => {
+  const hecho = await conEmpresa(ev.companyId, async (tx) => {
     const conversacion = await tx.conversacion.upsert({
       where: { companyId_activoId_contactoId: { companyId: ev.companyId, activoId: ev.activoId!, contactoId: contacto.id } },
       create: {
@@ -84,12 +84,30 @@ export async function registrarEntranteMensajeria(ev: EventoMetaFila): Promise<s
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         await tx.conversacion.update({ where: { id: conversacion.id }, data: { noLeidos: { decrement: 1 } } })
-        return 'duplicado'
+        return { r: 'duplicado', conversacionId: conversacion.id }
       }
       throw e
     }
-    return `entrante ${m.tipo}`
+    return { r: `entrante ${m.tipo}`, conversacionId: conversacion.id }
   })
+
+  // Ya guardado: el prospecto y las automatizaciones (nunca lanza). Meta no
+  // manda el nombre en `messaging`: el contacto se llama por su rótulo.
+  if (hecho.r.startsWith('entrante')) {
+    const { trasEntrante } = await import('@/modules/mensajeria/trasEntrante')
+    await trasEntrante({
+      companyId: ev.companyId,
+      canal,
+      conversacionId: hecho.conversacionId,
+      contacto,
+      nombre: null,
+      telefono: null,
+      tipo: m.tipo,
+      texto: m.texto,
+      timestamp: m.timestamp,
+    })
+  }
+  return hecho.r
 }
 
 /**
@@ -122,7 +140,9 @@ export async function enviarTextoMensajeria(input: {
   companyId: string
   conversacionId: string
   texto: string
-  enviadoPorId: string
+  /** Quién lo envió desde la bandeja; null si fue una automatización. */
+  enviadoPorId: string | null
+  origen?: 'bandeja' | 'automatizacion'
 }): Promise<ResultadoEnvioMensajeria> {
   const c = await conEmpresa(input.companyId, (tx) =>
     tx.conversacion.findFirst({
@@ -158,7 +178,7 @@ export async function enviarTextoMensajeria(input: {
         errorCodigo: r.ok ? null : r.respuesta.codigo,
         errorDetalle: r.ok ? null : r.respuesta.status === 0 ? 'no se pudo contactar con Meta' : `Meta respondió ${r.respuesta.status}`,
         enviadoPorId: input.enviadoPorId,
-        origen: 'bandeja',
+        origen: input.origen ?? 'bandeja',
         timestamp: ahora,
       },
     })
