@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ExternalLink, MessageCircle, TriangleAlert } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { empresaDelPanel } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, formatMoney } from '@/lib/format'
 import { clientesEnRiesgo, leerFiltroRiesgo } from '@/modules/riesgo'
@@ -66,7 +66,7 @@ export default async function RiesgoPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = empresaDelPanel(user)
   if (!companyId) return <SinEmpresaActiva seccion="los clientes en riesgo" />
 
   const sp = await searchParams

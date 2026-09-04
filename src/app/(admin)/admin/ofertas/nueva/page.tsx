@@ -3,7 +3,7 @@ import { conEmpresaOTodas } from '@/lib/tenant'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { empresaDelPanel } from '@/modules/admin/queries'
 import { CrearOfertaForm } from '@/components/ofertas/CrearOfertaForm'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
@@ -12,7 +12,7 @@ export const metadata = { title: 'Crear regalo VIP' }
 
 export default async function NuevaOfertaPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = empresaDelPanel(user)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="tus regalos VIP" />

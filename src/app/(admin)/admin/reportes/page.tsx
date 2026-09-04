@@ -1,7 +1,7 @@
 import { conEmpresaOTodas } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
+import { empresaDelPanel } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
@@ -31,7 +31,7 @@ export default async function ReportesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = empresaDelPanel(user)
   if (!companyId || companyId === '__none__') {
     return <SinEmpresaActiva seccion="tus reportes" />
   }
