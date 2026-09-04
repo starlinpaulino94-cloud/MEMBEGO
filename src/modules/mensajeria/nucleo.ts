@@ -354,3 +354,69 @@ export function cuerpoMensajePlantilla(
     },
   }
 }
+
+// ── LO QUE VE LA BANDEJA (Meta · Fase 5) ─────────────────────────────────────
+
+export const ETIQUETA_CANAL: Record<Canal, string> = {
+  WHATSAPP: 'WhatsApp',
+  MESSENGER: 'Messenger',
+  INSTAGRAM: 'Instagram',
+}
+
+/**
+ * Cómo se llama un contacto en pantalla. Con nombre, el nombre; por WhatsApp
+ * sin nombre, su número con «+»; por Messenger o Instagram sin nombre, un
+ * rótulo humano: Meta entrega ids de conversación (PSID / IGSID) que no
+ * identifican a nadie fuera de la Página, y un id de 16 dígitos en una lista
+ * es ruido.
+ */
+export function etiquetaContacto(c: {
+  nombre?: string | null
+  telefono?: string | null
+  idExterno: string
+  canal: string
+}): string {
+  const nombre = c.nombre?.trim()
+  if (nombre) return nombre
+  if (c.canal === 'WHATSAPP') return `+${(c.telefono ?? c.idExterno).replace(/^\+/, '')}`
+  return c.canal === 'INSTAGRAM' ? 'Cuenta de Instagram' : 'Persona de Messenger'
+}
+
+export const ETIQUETA_ESTADO_MENSAJE: Record<string, string> = {
+  RECIBIDO: 'Recibido',
+  ENVIANDO: 'Enviando',
+  ENVIADO: 'Enviado',
+  ENTREGADO: 'Entregado',
+  LEIDO: 'Leído',
+  FALLIDO: 'No se pudo enviar',
+  ELIMINADO: 'Eliminado',
+}
+
+export type MotivoEnvio =
+  | 'no_existe'
+  | 'canal'
+  | 'ventana_cerrada'
+  | 'sin_conexion'
+  | 'sin_credencial'
+  | 'telefono_invalido'
+  | 'proveedor'
+
+/** Por qué no salió un mensaje, dicho para quien atiende la bandeja. */
+export function explicarEnvio(motivo: MotivoEnvio, detalle?: string): string {
+  switch (motivo) {
+    case 'no_existe':
+      return 'Esta conversación ya no existe o no pertenece a tu negocio.'
+    case 'canal':
+      return 'Este canal no admite ese tipo de envío.'
+    case 'ventana_cerrada':
+      return 'Han pasado más de 24 horas desde el último mensaje del cliente. Por WhatsApp puedes enviarle una plantilla aprobada; por Messenger e Instagram hay que esperar a que vuelva a escribir.'
+    case 'sin_conexion':
+      return 'Este canal no está conectado. Revísalo en Integraciones.'
+    case 'sin_credencial':
+      return 'La conexión con Meta caducó o se retiró. Vuelve a conectar el canal en Integraciones.'
+    case 'telefono_invalido':
+      return 'El número de este contacto no es válido.'
+    case 'proveedor':
+      return detalle ? `Meta no aceptó el mensaje: ${detalle}.` : 'Meta no aceptó el mensaje.'
+  }
+}
