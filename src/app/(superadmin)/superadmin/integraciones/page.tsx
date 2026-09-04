@@ -34,7 +34,26 @@ export default async function IntegracionesPage() {
     trabajosMuertosPendientes(),
   ])
 
-  const atascados = sistemas.filter((s) => s.pendientes > 0)
+  /**
+   * UN SISTEMA RETIRADO NO ES UN SISTEMA CONECTADO.
+   *
+   * `RETIRED` significa que ese satélite ya no está en servicio, pero la fila
+   * se conserva: su historial de eventos es auditoría y su `slug` no debe
+   * reutilizarse. El problema era enseñarlo en la MISMA lista que los vivos,
+   * con los mismos botones —«Probar el webhook», «Reenviar ahora»— que contra
+   * un satélite retirado no pueden hacer otra cosa que fallar.
+   *
+   * El efecto medido: dos tarjetas de Car Wash, una apuntando a una URL de
+   * ejemplo, y nadie sabía cuál era la de verdad.
+   *
+   * Se separan. Los retirados siguen siendo visibles —esconderlos sería
+   * mentir sobre lo que hay en la base— pero como una línea, no como una
+   * tarjeta operable.
+   */
+  const vivos = sistemas.filter((s) => s.estado !== 'RETIRED')
+  const retirados = sistemas.filter((s) => s.estado === 'RETIRED')
+
+  const atascados = vivos.filter((s) => s.pendientes > 0)
 
   /**
    * LOS CUATRO NÚMEROS DE ARRIBA, Y DE DÓNDE SALE CADA UNO.
@@ -52,7 +71,7 @@ export default async function IntegracionesPage() {
   const despachados = enviados + fallidos
   const tasaEntrega =
     despachados > 0 ? `${((enviados / despachados) * 100).toFixed(1)}%` : '—'
-  const activos = sistemas.filter((x) => x.estado === 'ACTIVE').length
+  const activos = vivos.filter((x) => x.estado === 'ACTIVE').length
 
   return (
     <div className="space-y-6">
@@ -89,8 +108,8 @@ export default async function IntegracionesPage() {
         />
         <StatCard
           label="Sistemas conectados"
-          value={sistemas.length}
-          sub={`${activos} activos`}
+          value={vivos.length}
+          sub={plural(activos, 'activo', 'activos')}
           icon={Activity}
           accent="brand"
         />
@@ -128,7 +147,7 @@ export default async function IntegracionesPage() {
         </StatusBanner>
       )}
 
-      {sistemas.length === 0 ? (
+      {vivos.length === 0 ? (
         <EmptyState
           icon={<Plug className="h-6 w-6" aria-hidden />}
           title="No hay sistemas conectados"
@@ -136,9 +155,28 @@ export default async function IntegracionesPage() {
         />
       ) : (
         <div className="space-y-4">
-          {sistemas.map((s) => (
+          {vivos.map((s) => (
             <SistemaConectadoCard key={s.id} sistema={s} />
           ))}
+        </div>
+      )}
+
+      {retirados.length > 0 && (
+        <div className="rounded-xl border border-border bg-muted/30 p-4">
+          <p className="text-small font-medium text-foreground">
+            {plural(retirados.length, 'sistema retirado', 'sistemas retirados')}
+          </p>
+          <p className="mt-1 text-caption text-muted-foreground">
+            Fuera de servicio. Su fila se conserva por el historial y para que su identificador no
+            se reutilice, pero ya no recibe eventos.
+          </p>
+          <ul className="mt-3 space-y-1">
+            {retirados.map((s) => (
+              <li key={s.id} className="text-small text-muted-foreground">
+                {s.nombre} <span className="font-mono text-caption">({s.slug})</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
