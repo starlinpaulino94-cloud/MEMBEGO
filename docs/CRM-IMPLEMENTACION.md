@@ -38,20 +38,78 @@ captura rápida, vista Kanban, recordatorios automáticos.
 
 ---
 
+## Estado Actual
+
+> **Última actualización:** Septiembre 2026
+
+El módulo CRM está implementado y funcional. Incluye pipeline Kanban con
+drag & drop, CRUD completo de leads, notas de seguimiento, estadísticas
+y permisos por sección.
+
+### Lo que funciona
+
+- **Pipeline Kanban** con 7 columnas (Nuevo → Ganado/Perdido), drag & drop
+  nativo del navegador
+- **CRUD de leads**: crear, editar, eliminar (soft delete → DESCARTADO),
+  mover entre etapas, asignar responsable
+- **Notas de seguimiento**: crear y eliminar notas asociadas a un lead,
+  con timeline visible en el detalle
+- **Estadísticas**: total leads, nuevos hoy, seguimientos pendientes,
+  leads en pipeline
+- **Búsqueda y filtros**: por nombre, email, etapa, prioridad, estado,
+  fuente, canal
+- **Paginación**: server-side con 20 leads por página
+- **Detalle de lead**: Sheet lateral con tabs Info/Notas, edición inline,
+  movimiento de etapa, eliminación con confirmación
+- **Permisos**: guard por sección `leads`, acciones protegidas con
+  `requireSection`
+- **Multi-tenant**: todos los datos filtran por `companyId`
+
+### Lo que falta (pendiente)
+
+- Fase 3: Pipelines configurables por vertical (modelo `PipelineConfig`
+  creado pero sin UI de configuración)
+- Fase 4: Automatizaciones (recordatorios, lead frío, conversión)
+- Fase 5: Dashboard de métricas, importación/exportación CSV
+- Integración con motor de segmentación existente
+- Integración con motor de automatizaciones existente
+- Vista lista alternativa al Kanban
+- Scoring automático de leads
+
+### Capacidad CRM
+
+La capacidad `CRM` está registrada en el catálogo y controla el acceso
+al módulo:
+
+```ts
+// En src/modules/capacidades/catalogo.ts
+CRM: 'CRM: leads, seguimiento y pipeline comercial',
+```
+
+Secciones habilitadas: `leads`, `seguimiento`, `conversaciones`,
+`pipeline`, `configuracion`.
+
+---
+
 ## Arquitectura
 
 El CRM se integra con los módulos existentes de la plataforma sin crear
 islas de datos. Usa los mismos patrones probados: Server Actions para
-mutaciones, Prisma para queries, y el sistema de capacidades para
+mutaciones, Prisma para queries, y el sistema de secciones/permisos para
 encender/apagar por empresa.
 
 ### Capa de presentación
 
-- **Ruta:** `/admin/crm` dentro del shell de la app (bajo la capacidad
-  `CRM`, apagada por defecto).
-- **Componentes:** vista Kanban (tablero de pipeline), vista lista, detalle
-  de lead con timeline de seguimiento.
-- **Filtros:** por estado, etapa, prioridad, asignado, rango de fechas.
+- **Ruta:** `/admin/crm` dentro del shell de la app (bajo la sección
+  `leads`, controlada por la capacidad CRM).
+- **Layout:** `src/app/(admin)/admin/crm/layout.tsx` — guard con
+  `requireSection('leads')`, header con título y tabs de navegación.
+- **Server Component:** `page.tsx` — carga leads, stats y filtros,
+  renderiza el pipeline board.
+- **Client Component:** `pipeline-board.tsx` — tablero Kanban con drag &
+  drop, diálogos de creación/edición, sheet de detalle con tabs Info/Notas.
+- **Colores:** `paleta.ts` — constantes de colores para etapas y prioridades.
+- **Tabs:** `CrmTabs.tsx` — navegación entre secciones del CRM.
 
 ### Capa de lógica (Server Actions)
 
@@ -59,19 +117,21 @@ Ubicada en `src/modules/crm/` siguiendo el patrón existente:
 
 ```
 src/modules/crm/
-├── lead-actions.ts        # CRUD de leads
-├── seguimiento-actions.ts  # Notas, llamadas, emails
-├── queries.ts             # Queries Prisma
-└── types.ts               # Tipos compartidos
+├── lead-actions.ts    # createLead, updateLead, deleteLead, moveToStage, assignLead, fetchLeadDetails
+├── nota-actions.ts    # createNota, deleteNota
+├── queries.ts         # getLeads, getLeadById, getStats, getPipelineConfig
+└── types.ts           # Lead, NotaSeguimiento, CrmStats, PipelineConfig, filtros, paginación
 ```
 
-Cada acción valida: (1) el usuario tiene rol ADMIN_EMPRESA o superior, (2)
-el lead pertenece a su `companyId`, (3) la capacidad `CRM` está encendida.
+Cada acción valida: (1) el usuario tiene permiso de sección (`requireSection`),
+(2) el lead pertenece a su `companyId`, (3) la sección `leads` está habilitada.
 
 ### Capa de datos
 
-Prisma schema con modelos `Lead` y `NotaSeguimiento` (ver sección
-siguiente). Multi-tenant por `companyId` en todos los modelos.
+Prisma schema en `prisma/schema/crm.prisma` con modelos `Lead`,
+`NotaSeguimiento`, `Conversacion`, `Mensaje` y `PipelineConfig`.
+Multi-tenant por `companyId` en todos los modelos. Sin enums Prisma:
+valores controlados en código como tipos TypeScript string-literal.
 
 ### Diagrama de integración
 
@@ -97,6 +157,10 @@ siguiente). Multi-tenant por `companyId` en todos los modelos.
 
 ## Modelos de Datos
 
+> **Nota:** El schema Prisma real (`prisma/schema/crm.prisma`) no usa
+> enums Prisma. Todos los valores son strings controlados en código
+> TypeScript (tipos string-literal en `types.ts`).
+
 ### Lead
 
 Representa un prospecto o contacto potencial. No es un cliente: un lead se
@@ -106,32 +170,32 @@ convierte en cliente cuando completa registro y activa membresía.
 model Lead {
   id                String          @id @default(uuid())
   companyId         String
-  company           Company         @relation(fields: [companyId], references: [id])
   clienteId         String?
-  cliente           Cliente?        @relation(fields: [clienteId], references: [id])
 
   nombre            String
   email             String?
   telefono          String?
-  fuente            String          // ORGANICO, PAGADO, REFERENCIA, EVENTO, OTRO
-  canal             String          // WHATSAPP, INSTAGRAM, FACEBOOK, TELEFONO, PRESENCIAL, WEB
-  estado            String          @default("ACTIVO") // ACTIVO, INACTIVO, CONVERTIDO, DESCARTADO
-  etapa             String          @default("NUEVO")  // NUEVO, CONTACTADO, INTERESADO, PROPUESTA, NEGOCIACION, GANADO, PERDIDO
-  score             Int?            // 0-100, scoring automático
-  fechaSeguimiento  DateTime?       // próxima fecha de contacto
-  prioridad         String          @default("MEDIA") // BAJA, MEDIA, ALTA, URGENTE
-  asignadoA         String?         // userId del responsable
+  fuente            String          @default("ORGANICO")  // ORGANICO, PAGADO, REFERENCIA, EVENTO, OTRO
+  canal             String          @default("WEB")       // WHATSAPP, INSTAGRAM, FACEBOOK, TELEFONO, PRESENCIAL, WEB
+  estado            String          @default("ACTIVO")    // ACTIVO, INACTIVO, CONVERTIDO, DESCARTADO
+  etapa             String          @default("NUEVO")     // NUEVO, CONTACTADO, INTERESADO, PROPUESTA, NEGOCIACION, GANADO, PERDIDO
+  score             Int?
+  fechaSeguimiento  DateTime?
+  prioridad         String          @default("MEDIA")     // BAJA, MEDIA, ALTA, URGENTE
+  asignadoA         String?         // userId
   notas             String?
-  tags              String[]        // etiquetas libres
+  tags              String[]        @default([])
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
   notasSeguimiento  NotaSeguimiento[]
+  conversaciones    Conversacion[]
 
   @@index([companyId])
   @@index([companyId, estado])
   @@index([companyId, etapa])
   @@index([fechaSeguimiento])
+  @@index([asignadoA])
 }
 ```
 
@@ -158,10 +222,10 @@ model NotaSeguimiento {
   id              String      @id @default(uuid())
   leadId          String
   lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId          String      // quién registró
-  contenido       String      // texto de la nota
-  tipo            String      // NOTA, LLAMADA, EMAIL, WHATSAPP, REUNION
-  fechaProxima    DateTime?   // fecha sugerida para siguiente contacto
+  userId          String
+  contenido       String
+  tipo            String      @default("NOTA")  // NOTA, LLAMADA, EMAIL, WHATSAPP, REUNION
+  fechaProxima    DateTime?
   createdAt       DateTime    @default(now())
 
   @@index([leadId])
@@ -179,33 +243,91 @@ model NotaSeguimiento {
 | `WHATSAPP` | Mensaje de WhatsApp |
 | `REUNION` | Reunión presencial o virtual |
 
-### Enums Prisma
+### Conversacion
+
+Hilo de conversación con un lead por un canal específico. Modela
+conversaciones de WhatsApp, Instagram, etc. con soporte para mensajes
+entrantes y salientes.
 
 ```prisma
-enum LeadEstado {
-  ACTIVO
-  INACTIVO
-  CONVERTIDO
-  DESCARTADO
-}
+model Conversacion {
+  id            String      @id @default(uuid())
+  leadId        String
+  lead          Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  companyId     String
+  canal         String      // WHATSAPP, INSTAGRAM, MESSENGER, EMAIL
+  canalThreadId String?     // ID externo (wa_id, instagram_thread_id, etc.)
+  estado        String      @default("ABIERTA") // ABIERTA, CERRADA, ARCHIVADA
+  ultimoMensaje String?
+  ultimaFecha   DateTime?
+  noLeidos      Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-enum LeadEtapa {
-  NUEVO
-  CONTACTADO
-  INTERESADO
-  PROPUESTA
-  NEGOCIACION
-  GANADO
-  PERDIDO
-}
+  mensajes      Mensaje[]
 
-enum LeadPrioridad {
-  BAJA
-  MEDIA
-  ALTA
-  URGENTE
+  @@index([companyId])
+  @@index([leadId])
+  @@index([canal])
 }
 ```
+
+### Mensaje
+
+Mensaje individual dentro de una conversación. Registra dirección
+(entrante/saliente), tipo de contenido y metadata del proveedor.
+
+```prisma
+model Mensaje {
+  id              String      @id @default(uuid())
+  conversacionId  String
+  conversacion    Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  direccion       String      // ENTRANTE, SALIENTE
+  tipo            String      // TEXTO, IMAGEN, DOCUMENTO, AUDIO, UBICACION
+  contenido       String
+  metadata        Json?       // payload original del proveedor
+  proveedorMsgId  String?     // message_id de WhatsApp/Meta/etc.
+  estado          String      @default("ENVIADO") // ENVIADO, ENTREGADO, LEIDO, FALLIDO
+  creadoPor       String?     // userId si saliente
+  createdAt       DateTime    @default(now())
+
+  @@index([conversacionId, createdAt])
+}
+```
+
+### PipelineConfig
+
+Configuración del pipeline de ventas por empresa. Almacena etapas,
+campos personalizados y reglas de automatización en formato JSON.
+
+```prisma
+model PipelineConfig {
+  id              String      @id @default(uuid())
+  companyId       String      @unique
+  categoria       String      // CAR_WASH, BARBERIA, etc.
+  stages          Json        // [{id, nombre, color, orden, esObligatoria, reglasTransicion}]
+  camposCustom    Json        // [{key, label, tipo, opciones, obligatorio}]
+  automatizaciones Json       // {bienvenida:bool, recordatorioDias:int, cierre:bool, plantillas:{...}}
+  updatedAt       DateTime    @updatedAt
+}
+```
+
+### Tipos TypeScript
+
+Los enums de Prisma se reemplazan por tipos string-literal en
+`src/modules/crm/types.ts`:
+
+```ts
+type LeadFuente   = 'ORGANICO' | 'PAGADO' | 'REFERENCIA' | 'EVENTO' | 'OTRO'
+type LeadCanal    = 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'TELEFONO' | 'PRESENCIAL' | 'WEB'
+type LeadEstado   = 'ACTIVO' | 'INACTIVO' | 'CONVERTIDO' | 'DESCARTADO'
+type LeadEtapa    = 'NUEVO' | 'CONTACTADO' | 'INTERESADO' | 'PROPUESTA' | 'NEGOCIACION' | 'GANADO' | 'PERDIDO'
+type LeadPrioridad = 'BAJA' | 'MEDIA' | 'ALTA' | 'URGENTE'
+type NotaTipo     = 'NOTA' | 'LLAMADA' | 'EMAIL' | 'WHATSAPP' | 'REUNION'
+```
+
+Ventaja: sin migración de enums, los valores se controlan 100% en código
+y se pueden extender sin `ALTER TYPE`.
 
 ---
 
@@ -283,91 +405,112 @@ permite:
 
 ## Roadmap de Implementación
 
-### Fase 1: Fundamentos (Semanas 1-2)
+### Fase 1: Fundamentos ✅ Completada
 
 **Objetivo:** Modelo de datos funcional, CRUD básico, vista lista.
 
-| Tarea | Detalle |
+| Tarea | Estado |
 |---|---|
-| Migración Prisma | Crear tablas `Lead` y `NotaSeguimiento` con índices |
-| Server actions CRUD | Crear, leer, actualizar, eliminar leads |
-| Vista lista | Tabla con filtros básicos (estado, etapa, prioridad) |
-| Ficha de lead | Vista detalle con timeline de seguimiento |
-| Crear nota | Formulario para agregar notas de seguimiento |
-| Capacidad CRM | Agregar al catálogo, nace apagada |
+| Migración Prisma | ✅ `prisma/schema/crm.prisma` con Lead, NotaSeguimiento, Conversacion, Mensaje, PipelineConfig |
+| Server actions CRUD | ✅ `lead-actions.ts`: createLead, updateLead, deleteLead, moveToStage, assignLead |
+| Notas de seguimiento | ✅ `nota-actions.ts`: createNota, deleteNota |
+| Queries | ✅ `queries.ts`: getLeads, getLeadById, getStats, getPipelineConfig |
+| Tipos TypeScript | ✅ `types.ts`: interfaces y tipos string-literal (sin enums Prisma) |
+| Capacidad CRM | ✅ Registrada en catálogo con secciones: leads, seguimiento, conversaciones, pipeline, configuracion |
+| Permisos | ✅ Sección `leads` en permissions.ts, guard en layout.tsx |
 
-**Verificación:** CRUD completo funciona, leads se guardan con companyId
-correcto, notas aparecen en timeline.
-
-### Fase 2: Kanban Board (Semanas 3-4)
+### Fase 2: Kanban Board ✅ Completada
 
 **Objetivo:** Tablero visual tipo Trello para el pipeline de ventas.
 
-| Tarea | Detalle |
+| Tarea | Estado |
 |---|---|
-| Tablero Kanban | Columnas por etapa del pipeline |
-| Drag & drop | Mover leads entre etapas con mouse/touch |
-| Tarjeta de lead | Nombre, fuente, canal, score, prioridad, responsable |
-| Filtros avanzados | Por fuente, canal, asignado, rango de fechas |
-| Búsqueda | Buscar por nombre, email, teléfono |
+| Tablero Kanban | ✅ 7 columnas (Nuevo → Ganado/Perdido) con drag & drop nativo |
+| Tarjeta de lead | ✅ Nombre, email, teléfono, prioridad (con color), fecha de creación |
+| Crear lead | ✅ Diálogo modal con formulario (nombre, email, teléfono, prioridad, notas) |
+| Editar lead | ✅ Sheet lateral con tabs Info/Notas, edición inline |
+| Mover entre etapas | ✅ Drag & drop + selector en detalle |
+| Eliminar lead | ✅ Soft delete (estado → DESCARTADO) con AlertDialog de confirmación |
+| Detalle de lead | ✅ Sheet con info completa, tags, notas, movimiento de etapa |
+| Notas de seguimiento | ✅ Crear/eliminar notas en tab "Notas" del detalle |
+| Estadísticas | ✅ 4 cards: Total Leads, Nuevos Hoy, Seguimientos Pendientes, En Pipeline |
+| Búsqueda | ✅ Input de búsqueda por nombre/email en Server Component |
+| Filtros | ✅ Soporte para etapa, prioridad, estado, fuente, canal via searchParams |
+| Paginación | ✅ Server-side con navegación anterior/siguiente |
 
-**Verificación:** un lead se crea, aparece en Kanban, se mueve entre
-columnas, los filtros funcionan.
-
-### Fase 3: Pipelines por Vertical (Semanas 5-6)
+### Fase 3: Pipelines por Vertical ⏳ Pendiente
 
 **Objetivo:** configuración de pipeline según la categoría del negocio.
 
-| Tarea | Detalle |
+| Tarea | Estado |
 |---|---|
-| Configuración por vertical | Etapas default por categoría (Car Wash, Barbería, etc.) |
-| Campos personalizados | Campos extra que cada vertical necesita |
-| Reglas de transición | Qué etapas se pueden saltar, cuáles son obligatorias |
-| Labels/etiquetas | Tags predefinidos por vertical |
+| Modelo PipelineConfig | ✅ Creado en schema Prisma |
+| Configuración por vertical | ⏳ UI para configurar etapas por categoría |
+| Campos personalizados | ⏳ Renderizado de campos extra |
+| Reglas de transición | ⏳ Validación de movimientos |
+| Labels/etiquetas | ⏳ Tags predefinidos por vertical |
 
-**Verificación:** dos empresas de distintas categorías ven pipelines
-diferentes, las reglas se aplican.
-
-### Fase 4: Automatizaciones (Semanas 7-8)
+### Fase 4: Automatizaciones ⏳ Pendiente
 
 **Objetivo:** seguimiento automático y notificaciones multi-canal.
 
-| Tarea | Detalle |
+| Tarea | Estado |
 |---|---|
-| Recordatorios | Push/email cuando vence `fechaSeguimiento` |
-| Lead frío | Marcar inactivo después de N días sin contacto |
-| Conversión | Al pasar a CONVERTIDO, sugerir crear Cliente |
-| Plantillas | Mensajes predefinidos para WhatsApp, email |
-| Integración con Automation Engine | Triggers y actions del motor existente |
+| Recordatorios | ⏳ Push/email cuando vence `fechaSeguimiento` |
+| Lead frío | ⏳ Marcar inactivo después de N días sin contacto |
+| Conversión | ⏳ Al pasar a CONVERTIDO, sugerir crear Cliente |
+| Plantillas | ⏳ Mensajes predefinidos para WhatsApp, email |
+| Integración con Automation Engine | ⏳ Triggers y actions del motor existente |
 
-**Verificación:** un lead sin seguimiento genera alerta, la conversión crea
-el Cliente, las plantillas envían correctamente.
-
-### Fase 5: Dashboard (Semanas 9-10)
+### Fase 5: Dashboard ⏳ Pendiente
 
 **Objetivo:** métricas de ventas, reportes, importación/exportación.
 
-| Tarea | Detalle |
+| Tarea | Estado |
 |---|---|
-| Dashboard de ventas | Leads por etapa, tasa de conversión, tiempo promedio |
-| Reporte de conversión | De dónde vienen los leads que convierten |
-| Importación | CSV de contactos existentes |
-| Exportación | Descargar leads filtrados |
-| Métricas por canal | Qué canal genera mejores resultados |
+| Dashboard de ventas | ⏳ Leads por etapa, tasa de conversión, tiempo promedio |
+| Reporte de conversión | ⏳ De dónde vienen los leads que convierten |
+| Importación | ⏳ CSV de contactos existentes |
+| Exportación | ⏳ Descargar leads filtrados |
+| Métricas por canal | ⏳ Qué canal genera mejores resultados |
 
-**Verificación:** dashboard muestra datos reales, export CSV funciona,
-métricas son consistentes con los datos.
+---
+
+## Archivos del Módulo
+
+### Archivos creados
+
+| Archivo | Descripción |
+|---|---|
+| `prisma/schema/crm.prisma` | Schema Prisma: Lead, NotaSeguimiento, Conversacion, Mensaje, PipelineConfig |
+| `src/modules/crm/types.ts` | Interfaces TypeScript: Lead, NotaSeguimiento, CrmStats, PipelineConfig, filtros, paginación |
+| `src/modules/crm/queries.ts` | Queries: getLeads (con filtros/paginación), getLeadById, getStats, getPipelineConfig |
+| `src/modules/crm/lead-actions.ts` | Server Actions: createLead, updateLead, deleteLead, moveToStage, assignLead, fetchLeadDetails |
+| `src/modules/crm/nota-actions.ts` | Server Actions: createNota, deleteNota |
+| `src/app/(admin)/admin/crm/page.tsx` | Server Component: carga leads/stats, renderiza PipelineBoard, paginación |
+| `src/app/(admin)/admin/crm/pipeline-board.tsx` | Client Component: tablero Kanban, drag & drop, diálogos, sheet de detalle |
+| `src/app/(admin)/admin/crm/paleta.ts` | Constantes de colores para etapas (ETAPA_CHIP) y prioridades (PRIORIDAD_PUNTO) |
+| `src/components/crm/CrmTabs.tsx` | Componente de navegación por secciones del CRM |
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `src/modules/capacidades/catalogo.ts` | Agregada capacidad `CRM` con secciones: leads, seguimiento, conversaciones, pipeline, configuracion |
+| `src/lib/auth/permissions.ts` | Agregada sección `leads` al sistema de permisos |
+| `src/lib/auth/funciones.ts` | Agregada función `leads: 'Leads'` |
+| `src/app/(admin)/admin/crm/layout.tsx` | Layout con guard `requireSection('leads')`, header con CrmTabs |
 
 ---
 
 ## Decisiones de Diseño
 
-### 1. Extender SolicitudEmpresa, no reemplazar
+### 1. Sin enums Prisma
 
-El modelo `SolicitudEmpresa` ya existe para registros de empresa. El CRM
-trabaja con leads que pueden o no convertirse en empresas. Mantenemos
-separados los conceptos: un lead es un prospecto, una solicitud es una
-empresa en proceso de alta.
+El schema usa strings en lugar de enums Prisma. Ventajas:
+- Sin migración `ALTER TYPE` para agregar valores
+- Los tipos se controlan 100% en código TypeScript (string-literal types)
+- Más fácil de extender sin tocar la BD
 
 ### 2. Config-driven por vertical
 
@@ -408,10 +551,15 @@ adquisición, citas).
 
 ## Migración
 
-```sql
--- Crear tablas del CRM (correr antes del deploy)
--- La migración es idempotente: si las tablas ya existen, no falla.
+> **Nota:** La migración real se ejecuta con `bun run db:push` o
+> `bun run db:migrate`. El siguiente SQL es referencia del schema
+> generado por Prisma.
 
+```sql
+-- Tablas del CRM (generadas por Prisma schema)
+-- lead, nota_seguimiento, conversacion, mensaje, pipeline_config
+
+-- Lead
 CREATE TABLE IF NOT EXISTS "leads" (
   "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
   "companyId" TEXT NOT NULL,
@@ -431,10 +579,10 @@ CREATE TABLE IF NOT EXISTS "leads" (
   "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
-
   CONSTRAINT "leads_pkey" PRIMARY KEY ("id")
 );
 
+-- NotaSeguimiento
 CREATE TABLE IF NOT EXISTS "notas_seguimiento" (
   "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
   "leadId" TEXT NOT NULL,
@@ -443,8 +591,51 @@ CREATE TABLE IF NOT EXISTS "notas_seguimiento" (
   "tipo" TEXT NOT NULL DEFAULT 'NOTA',
   "fechaProxima" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
   CONSTRAINT "notas_seguimiento_pkey" PRIMARY KEY ("id")
+);
+
+-- Conversacion
+CREATE TABLE IF NOT EXISTS "conversaciones" (
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+  "leadId" TEXT NOT NULL,
+  "companyId" TEXT NOT NULL,
+  "canal" TEXT NOT NULL,
+  "canalThreadId" TEXT,
+  "estado" TEXT NOT NULL DEFAULT 'ABIERTA',
+  "ultimoMensaje" TEXT,
+  "ultimaFecha" TIMESTAMP(3),
+  "noLeidos" INTEGER NOT NULL DEFAULT 0,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "conversaciones_pkey" PRIMARY KEY ("id")
+);
+
+-- Mensaje
+CREATE TABLE IF NOT EXISTS "mensajes" (
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+  "conversacionId" TEXT NOT NULL,
+  "direccion" TEXT NOT NULL,
+  "tipo" TEXT NOT NULL,
+  "contenido" TEXT NOT NULL,
+  "metadata" JSONB,
+  "proveedorMsgId" TEXT,
+  "estado" TEXT NOT NULL DEFAULT 'ENVIADO',
+  "creadoPor" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "mensajes_pkey" PRIMARY KEY ("id")
+);
+
+-- PipelineConfig
+CREATE TABLE IF NOT EXISTS "pipeline_configs" (
+  "id" TEXT NOT NULL DEFAULT gen_random_uuid(),
+  "companyId" TEXT NOT NULL,
+  "categoria" TEXT NOT NULL,
+  "stages" JSONB NOT NULL,
+  "camposCustom" JSONB NOT NULL,
+  "automatizaciones" JSONB NOT NULL,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "pipeline_configs_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "pipeline_configs_companyId_key" UNIQUE ("companyId")
 );
 
 -- Índices
@@ -452,37 +643,43 @@ CREATE INDEX IF NOT EXISTS "leads_companyId_idx" ON "leads"("companyId");
 CREATE INDEX IF NOT EXISTS "leads_companyId_estado_idx" ON "leads"("companyId", "estado");
 CREATE INDEX IF NOT EXISTS "leads_companyId_etapa_idx" ON "leads"("companyId", "etapa");
 CREATE INDEX IF NOT EXISTS "leads_fechaSeguimiento_idx" ON "leads"("fechaSeguimiento");
+CREATE INDEX IF NOT EXISTS "leads_asignadoA_idx" ON "leads"("asignadoA");
 CREATE INDEX IF NOT EXISTS "notas_seguimiento_leadId_idx" ON "notas_seguimiento"("leadId");
 CREATE INDEX IF NOT EXISTS "notas_seguimiento_leadId_createdAt_idx" ON "notas_seguimiento"("leadId", "createdAt");
+CREATE INDEX IF NOT EXISTS "conversaciones_companyId_idx" ON "conversaciones"("companyId");
+CREATE INDEX IF NOT EXISTS "conversaciones_leadId_idx" ON "conversaciones"("leadId");
+CREATE INDEX IF NOT EXISTS "conversaciones_canal_idx" ON "conversaciones"("canal");
+CREATE INDEX IF NOT EXISTS "mensajes_conversacionId_createdAt_idx" ON "mensajes"("conversacionId", "createdAt");
 
 -- Foreign keys
 ALTER TABLE "leads" ADD CONSTRAINT "leads_companyId_fkey"
   FOREIGN KEY ("companyId") REFERENCES "companies"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
 ALTER TABLE "leads" ADD CONSTRAINT "leads_clienteId_fkey"
   FOREIGN KEY ("clienteId") REFERENCES "clientes"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
 ALTER TABLE "notas_seguimiento" ADD CONSTRAINT "notas_seguimiento_leadId_fkey"
   FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "conversaciones" ADD CONSTRAINT "conversaciones_leadId_fkey"
+  FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "mensajes" ADD CONSTRAINT "mensajes_conversacionId_fkey"
+  FOREIGN KEY ("conversacionId") REFERENCES "conversaciones"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ```
 
 ---
 
-## Prueba manual de Fase 1
+## Prueba manual
 
-1. **Sin capacidad CRM:** entrar a `/admin/crm` → no carga (fail-closed).
-2. **Encender CRM:** desde `/superadmin/capacidades`, activar la capacidad
-   para la empresa de prueba.
-3. **Crear lead:** formulario con nombre, email, teléfono, fuente, canal.
-   → aparece en la vista lista con estado ACTIVO y etapa NUEVO.
-4. **Editar lead:** cambiar etapa de NUEVO a CONTACTADO.
-   → se actualiza, el timestamp de modificación cambia.
-5. **Agregar nota:** escribir nota tipo LLAMADA.
-   → aparece en la timeline del lead, con fecha y autor.
-6. **Eliminar lead:** borrar un lead.
-   → desaparece de la lista, las notas se borran en cascada.
-7. **Filtrar:** buscar por nombre, filtrar por estado ACTIVO.
-   → solo muestran los que coinciden.
+### Flujo Kanban (implementado)
+
+1. **Sin permisos:** entrar a `/admin/crm` sin permiso `leads` → redirige a `/admin/dashboard`.
+2. **Con permisos:** entrar a `/admin/crm` → carga el tablero Kanban con 7 columnas.
+3. **Crear lead:** presionar `+` en cualquier columna → completar formulario → lead aparece en esa columna.
+4. **Mover lead:** arrastrar una tarjeta a otra columna → se actualiza la etapa.
+5. **Ver detalle:** hacer click en una tarjeta → se abre sheet lateral con tabs Info/Notas.
+6. **Editar lead:** en el detalle, presionar "Editar" → modificar campos → guardar.
+7. **Agregar nota:** en el tab "Notas", escribir y presionar `+` → nota aparece en la timeline.
+8. **Eliminar lead:** en el detalle, presionar "Eliminar" → confirmar → lead cambia a DESCARTADO.
+9. **Buscar:** escribir en el input de búsqueda → filtra por nombre/email.
+10. **Estadísticas:** las 4 cards muestran total, nuevos hoy, pendientes y en pipeline.
 
 ---
 
