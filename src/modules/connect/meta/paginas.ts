@@ -308,12 +308,20 @@ export async function elegirPaginas(input: {
   return { ok: true, paginas: elegidas.length, instagram, avisos }
 }
 
-/** El token de Página de un activo PAGE (o del padre de un IG_ACCOUNT). */
-export async function tokenDePagina(companyId: string, activoId: string): Promise<string | null> {
+/**
+ * LA PÁGINA CON LA QUE SE ENVÍA, y su token abierto. Para un activo PAGE es
+ * él mismo; para un IG_ACCOUNT es su Página padre: los DM de Instagram se
+ * mandan a `POST /{PAGE-ID}/messages` con el token de Página (documentado),
+ * no a la cuenta de Instagram. Nunca sale de servidor.
+ */
+export async function paginaParaEnviar(
+  companyId: string,
+  activoId: string
+): Promise<{ paginaIdExterno: string; token: string } | null> {
   const activo = await conEmpresa(companyId, (tx) =>
     tx.activoMeta.findFirst({
       where: { id: activoId, companyId },
-      select: { id: true, tipo: true, padreId: true, sellado: true, estado: true },
+      select: { id: true, tipo: true, idExterno: true, padreId: true, sellado: true, estado: true },
     })
   )
   if (!activo || activo.estado !== 'ACTIVE') return null
@@ -322,12 +330,15 @@ export async function tokenDePagina(companyId: string, activoId: string): Promis
       ? activo
       : activo.padreId
         ? await conEmpresa(companyId, (tx) =>
-            tx.activoMeta.findFirst({ where: { id: activo.padreId!, companyId }, select: { id: true, tipo: true, padreId: true, sellado: true, estado: true } })
+            tx.activoMeta.findFirst({
+              where: { id: activo.padreId!, companyId, tipo: 'PAGE' },
+              select: { id: true, tipo: true, idExterno: true, padreId: true, sellado: true, estado: true },
+            })
           )
         : null
-  if (!pagina?.sellado) return null
+  if (!pagina?.sellado || pagina.estado !== 'ACTIVE') return null
   const abierto = await abrirDeActivo(pagina.id, pagina.sellado)
-  return abierto.ok ? abierto.secreto : null
+  return abierto.ok ? { paginaIdExterno: pagina.idExterno, token: abierto.secreto } : null
 }
 
 // ─── Desconectar ─────────────────────────────────────────────────────────────

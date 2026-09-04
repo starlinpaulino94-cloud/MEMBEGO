@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { llamarGraph } from '@/modules/connect/meta/graph'
-import { tokenDePagina } from '@/modules/connect/meta/paginas'
+import { paginaParaEnviar } from '@/modules/connect/meta/paginas'
 import type { EventoMetaFila } from '@/modules/connect/meta/webhookDispatcher'
 import { resolverContacto } from '@/modules/mensajeria/contactos'
 import { leerEntranteMensajeria, ventanaAbierta, vistaPrevia, type Canal } from '@/modules/mensajeria/nucleo'
@@ -14,9 +14,10 @@ import { leerEntranteMensajeria, ventanaAbierta, vistaPrevia, type Canal } from 
  * Los dos usan el formato `messaging` de la Messenger Platform: `sender.id`
  * (PSID / IGSID), `recipient.id` (la Página / la cuenta IG), `timestamp`,
  * `message.mid`, `message.text`, `message.attachments`. Y los dos se envían
- * con el token de PÁGINA: Instagram por `/{ig-user-id}/messages` ⚠ y
- * Messenger por `/{page-id}/messages` (documentado), ambos con
- * `recipient.id`, `messaging_type: RESPONSE` y `message.text`.
+ * a `POST /{page-id}/messages` con el token de PÁGINA (documentado para
+ * Messenger y para los DM de Instagram, cuyo `recipient.id` es el IGSID),
+ * con `messaging_type: RESPONSE` y `message.text`. Para Instagram la Página
+ * es la que tiene enlazada la cuenta profesional.
  *
  * La ventana estándar de 24 h aplica igual que en WhatsApp.
  */
@@ -131,13 +132,13 @@ export async function enviarTextoMensajeria(input: {
   )
   if (!c) return { ok: false, motivo: 'no_existe' }
   if (!ventanaAbierta(c.ultimoEntranteAt)) return { ok: false, motivo: 'ventana_cerrada' }
-  const token = await tokenDePagina(input.companyId, c.activoId)
-  if (!token) return { ok: false, motivo: 'sin_token' }
+  const pagina = await paginaParaEnviar(input.companyId, c.activoId)
+  if (!pagina) return { ok: false, motivo: 'sin_token' }
 
   const r = await llamarGraph<{ recipient_id?: string; message_id?: string }>({
-    ruta: `/${encodeURIComponent(c.activo.idExterno)}/messages`,
+    ruta: `/${encodeURIComponent(pagina.paginaIdExterno)}/messages`,
     metodo: 'POST',
-    token,
+    token: pagina.token,
     cuerpo: { recipient: { id: c.contacto.idExterno }, messaging_type: 'RESPONSE', message: { text: input.texto } },
   })
 

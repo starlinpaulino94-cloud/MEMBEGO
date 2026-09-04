@@ -135,7 +135,10 @@ test('despacho: Messenger e Instagram tienen manejador y se envían con el token
   const d = codigo('src/modules/connect/meta/webhookDispatcher.ts')
   assert.match(d, /objeto === 'page' \|\| objeto === 'instagram'/)
   const ms = codigo('src/modules/mensajeria/messenger.ts')
-  assert.match(ms, /tokenDePagina\(input\.companyId, c\.activoId\)/)
+  // Messenger y los DM de Instagram se mandan a la PÁGINA (documentado), no a
+  // la cuenta de Instagram: para un IG_ACCOUNT se resuelve su Página padre.
+  assert.match(ms, /paginaParaEnviar\(input\.companyId, c\.activoId\)/)
+  assert.match(ms, /\/\$\{encodeURIComponent\(pagina\.paginaIdExterno\)\}\/messages/)
   assert.match(ms, /messaging_type: 'RESPONSE'/)
   assert.match(ms, /ventanaAbierta\(c\.ultimoEntranteAt\)/)
   // Entregas y lecturas: solo con ids; nunca se inventa.
