@@ -1,0 +1,155 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MENSAJERÍA · Meta · Fase 2
+//
+// Lo que una empresa habla con sus clientes por WhatsApp, Messenger e
+// Instagram, en UN solo sitio del que leen la bandeja, el CRM y las
+// automatizaciones. Cada fila lleva companyId: RLS la aísla como al resto.
+// Un contacto externo (wa_id, PSID, IGSID) se enlaza a un Cliente cuando se
+// puede identificar; nunca se adivina.
+// ──────────────────────────────────────────────────────────────────────────
+
+/// LA PERSONA AL OTRO LADO, por empresa y canal. `idExterno` es el wa_id de
+/// WhatsApp (E.164 sin «+»), el PSID de Messenger o el IGSID de Instagram —
+/// identificadores que Meta emite POR PÁGINA/APP, así que solo tienen
+/// sentido junto a la empresa y el canal.
+model ContactoMensajeria {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// WHATSAPP | MESSENGER | INSTAGRAM
+  canal     String
+  idExterno String
+
+  nombre   String?
+  /// Solo WhatsApp: el wa_id es un teléfono.
+  telefono String?
+  /// El Cliente de la empresa al que corresponde, si se pudo identificar.
+  clienteId String?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversaciones Conversacion[]
+
+  @@unique([companyId, canal, idExterno])
+  @@index([companyId, clienteId])
+  @@map("contactos_mensajeria")
+}
+
+/// UN HILO entre un activo de la empresa (su número, su Página, su cuenta
+/// de Instagram) y un contacto. `ultimoEntranteAt` es la base de la ventana
+/// de servicio de 24 h de Meta: fuera de ella, WhatsApp solo admite
+/// plantillas aprobadas.
+model Conversacion {
+  id        String @id @default(cuid())
+  companyId String
+
+  canal String
+
+  activoId String
+  /// Restrict: un activo con conversaciones no se borra; se retira.
+  activo   ActivoMeta @relation(fields: [activoId], references: [id], onDelete: Restrict)
+
+  contactoId String
+  contacto   ContactoMensajeria @relation(fields: [contactoId], references: [id], onDelete: Restrict)
+
+  /// ABIERTA | CERRADA | ARCHIVADA
+  estado      String  @default("ABIERTA")
+  asignadoAId String?
+
+  ultimoEntranteAt DateTime?
+  ultimoMensajeAt  DateTime?
+  /// Vista previa para la lista, ya recortada. Nunca el mensaje entero.
+  ultimoTexto      String?
+  noLeidos         Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mensajes Mensaje[]
+
+  @@unique([companyId, activoId, contactoId])
+  @@index([companyId, ultimoMensajeAt])
+  @@map("conversaciones")
+}
+
+/// UN MENSAJE, entrante o saliente. `idExterno` es el id que Meta le da
+/// (wamid, mid): UNIQUE con el canal, así un reintento del webhook o un
+/// reenvío no lo duplica. Los salientes nacen en ENVIANDO y avanzan con los
+/// estados del webhook: ENVIADO → ENTREGADO → LEIDO, o FALLIDO.
+model Mensaje {
+  id        String @id @default(cuid())
+  companyId String
+
+  conversacionId String
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  canal     String
+  /// ENTRANTE | SALIENTE
+  direccion String
+  idExterno String?
+
+  /// text | image | audio | video | document | sticker | location | contacts
+  /// | button | interactive | reaction | template | unsupported…
+  tipo     String
+  texto    String?
+  /// Lo que no es texto: ids de medios, coordenadas, botón pulsado… Nunca
+  /// el binario; los medios se descargan de Meta cuando se necesitan.
+  adjuntos Json?
+  /// SALIENTE de plantilla: nombre, idioma y parámetros con los que se envió.
+  plantilla Json?
+
+  /// RECIBIDO (entrante) · ENVIANDO | ENVIADO | ENTREGADO | LEIDO | FALLIDO | ELIMINADO (saliente)
+  estado       String  @default("RECIBIDO")
+  errorCodigo  Int?
+  errorDetalle String?
+
+  /// Quién lo envió desde la bandeja, o null si fue una automatización.
+  enviadoPorId String?
+  /// bandeja | automatizacion | sistema
+  origen       String?
+  /// El wamid/mid al que responde, si es una respuesta.
+  contextoIdExterno String?
+
+  /// El instante que Meta declara.
+  timestamp DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([canal, idExterno])
+  @@index([conversacionId, timestamp])
+  @@index([companyId, timestamp])
+  @@map("mensajes")
+}
+
+/// LAS PLANTILLAS APROBADAS DE UN WABA, sincronizadas desde Meta. Son lo
+/// único que WhatsApp deja enviar fuera de la ventana de 24 h. Se leen de
+/// `GET /{WABA_ID}/message_templates`; aquí solo se guarda lo que Meta dio.
+model PlantillaWhatsapp {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// El WABA (ActivoMeta).
+  activoId  String
+  /// Id de la plantilla en Meta.
+  idExterno String
+
+  nombre    String
+  idioma    String
+  /// UTILITY | MARKETING | AUTHENTICATION (y los históricos que Meta devuelva)
+  categoria String
+  /// APPROVED | PENDING | REJECTED | PAUSED | DISABLED…
+  estado    String
+  /// Los `components` tal cual los devuelve Meta (HEADER, BODY, FOOTER, BUTTONS).
+  componentes Json
+  /// Cuántos parámetros posicionales lleva el cuerpo ({{1}}, {{2}}…).
+  variables   Int @default(0)
+
+  sincronizadoAt DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([activoId, idExterno])
+  @@index([companyId, estado])
+  @@map("plantillas_whatsapp")
+}

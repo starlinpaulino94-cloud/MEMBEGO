@@ -485,6 +485,9 @@ model ActivoMeta {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Las conversaciones que entraron por este activo (Meta · Fase 2).
+  conversaciones Conversacion[]
+
   @@unique([tipo, idExterno])
   @@index([companyId, tipo])
   @@index([conexionId])

@@ -43,6 +43,7 @@ export const EVENTOS_CONECTOR = [
   'meta.suscripcion_anulada',
   'meta.suscripcion_no_anulada',
   'meta.activo_reasignado',
+  'whatsapp.plantillas_sincronizadas',
 ] as const
 
 export type EventoConector = (typeof EVENTOS_CONECTOR)[number]
@@ -72,6 +73,7 @@ const TECNICO: Record<EventoConector, string> = {
   'meta.suscripcion_no_anulada':
     'No se pudo anular la suscripción en Meta; la credencial se borró igualmente',
   'meta.activo_reasignado': 'Un activo de Meta retirado por otra empresa pasó a esta',
+  'whatsapp.plantillas_sincronizadas': 'Se sincronizaron las plantillas de WhatsApp con Meta',
 }
 
 /**
@@ -106,6 +108,7 @@ const NEGOCIO: Record<EventoConector, string | null> = {
   'meta.suscripcion_anulada': 'Le pedimos a Meta que deje de avisarnos sobre tu cuenta de WhatsApp',
   'meta.suscripcion_no_anulada': null,
   'meta.activo_reasignado': null,
+  'whatsapp.plantillas_sincronizadas': 'Actualizamos tus plantillas de WhatsApp',
 }
 
 function conocido(evento: string): evento is EventoConector {

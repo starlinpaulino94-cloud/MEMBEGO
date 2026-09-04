@@ -136,16 +136,20 @@ export interface EventoMetaFila {
 
 /**
  * Un manejador por (objeto, campo). Devuelve un texto corto para el
- * resultado del trabajo. Las fases siguientes registran aquí los suyos
- * (mensajes entrantes, estados, comentarios); la Fase 1 deja constancia de
- * que el evento llegó y a quién, sin contenido.
+ * resultado del trabajo. Se cargan con `import()` desde el módulo que los
+ * implementa (`mensajeria`), para que `connect` no dependa de él; lo que no
+ * tiene manejador deja constancia de que llegó y a quién, sin contenido.
  */
 export type ManejadorEvento = (evento: EventoMetaFila) => Promise<string | void>
 
-const MANEJADORES = new Map<string, ManejadorEvento>()
-
-export function registrarManejador(objeto: string, campo: string, manejador: ManejadorEvento): void {
-  MANEJADORES.set(`${objeto}:${campo}`, manejador)
+async function manejadorPara(objeto: string, campo: string): Promise<ManejadorEvento | null> {
+  if (objeto === 'whatsapp_business_account') {
+    const m = await import('@/modules/mensajeria/manejadoresMeta')
+    if (campo === 'messages') return m.entranteWhatsapp
+    if (campo === 'statuses') return m.estadoWhatsapp
+    if (campo === 'message_template_status_update') return m.plantillaActualizada
+  }
+  return null
 }
 
 async function anotarLlegada(evento: EventoMetaFila): Promise<string> {
@@ -200,7 +204,7 @@ export async function procesarEventoMeta(eventoId: string): Promise<ResultadoPro
     timestampMeta: ev.timestampMeta,
   }
 
-  const manejador = MANEJADORES.get(`${ev.objeto}:${ev.campo}`) ?? anotarLlegada
+  const manejador = (await manejadorPara(ev.objeto, ev.campo)) ?? anotarLlegada
   try {
     const detalle = (await manejador(fila)) ?? undefined
     await sinEmpresa('meta: cola — marcar el evento como procesado', (tx) =>

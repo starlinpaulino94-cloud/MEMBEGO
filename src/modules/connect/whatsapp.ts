@@ -1,5 +1,6 @@
 import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
+import { anotarFallo } from '@/lib/prisma-errors'
 import { guardarCredencial, leerCredencial } from '@/modules/connect/credenciales'
 import { anotarSalud } from '@/modules/connect/registro'
 import { anotarConector } from '@/modules/connect/bitacora'
@@ -15,7 +16,8 @@ import {
 
 /**
  * CONECTOR DE WHATSAPP · Meta Cloud API (Membego Connect · Fase 6; sobre el
- * cliente único de Graph desde Meta · Fase 1).
+ * cliente único de Graph desde Meta · Fase 1; con registro en la
+ * conversación desde Meta · Fase 2).
  *
  * Convierte en real la acción `send_whatsapp`, que el motor de
  * automatizaciones lleva desde su primer día registrando como intención
@@ -26,7 +28,7 @@ import {
  * (`credenciales.ts`) y no vuelve a salir de aquí.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * LO QUE LA FASE 1 DE META CAMBIÓ
+ * LO QUE LAS FASES DE META CAMBIARON
  *
  * Las llamadas pasan por `llamarGraph`: UNA versión de Graph para todo el
  * conector (antes v21 aquí y v25 en el alta), `appsecret_proof` en cada
@@ -34,6 +36,11 @@ import {
  * el cuerpo, que trae al destinatario y, en un eco de autorización, el
  * propio token. El número que se conecta a mano queda además reclamado como
  * activo de la empresa, con el mismo UNIQUE que el alta incrustada.
+ *
+ * Y TODO ENVÍO QUEDA EN SU CONVERSACIÓN: venga de la bandeja o de una
+ * automatización, el mensaje se registra en el hilo del contacto con quién
+ * lo mandó y de dónde (`mensajeria/salientes`). Best-effort: el envío ya
+ * ocurrió, y que el registro falle no lo deshace.
  */
 
 export type ResultadoEnvio =
@@ -65,6 +72,43 @@ async function conexionWhatsapp(companyId: string): Promise<string | null> {
  */
 export async function whatsappDisponible(companyId: string): Promise<boolean> {
   return (await conexionWhatsapp(companyId)) !== null
+}
+
+export interface CredencialWhatsappViva {
+  conexionId: string
+  phoneNumberId: string
+  /** Solo lo sabe el alta incrustada; el token manual no lo conoce. */
+  wabaId: string | null
+  token: string
+  numeroVisible: string | null
+}
+
+/**
+ * La credencial abierta de la conexión VIVA de WhatsApp de una empresa, para
+ * los módulos de servidor que llaman a Meta con ella (plantillas, marcar
+ * como leído). Nunca sale de servidor. Null si no hay conexión o no se pudo
+ * abrir el sello.
+ */
+export async function credencialWhatsappViva(companyId: string): Promise<CredencialWhatsappViva | null> {
+  const conexionId = await conexionWhatsapp(companyId)
+  if (!conexionId) return null
+  const guardada = await leerCredencial({ companyId, conexionId, tipo: 'API_KEY' })
+  if (!guardada.ok) return null
+  let c: unknown
+  try {
+    c = JSON.parse(guardada.secreto)
+  } catch {
+    return null
+  }
+  if (!esCredencialWhatsapp(c)) return null
+  const wabaId = (c as { wabaId?: unknown }).wabaId
+  return {
+    conexionId,
+    phoneNumberId: c.phoneNumberId,
+    wabaId: typeof wabaId === 'string' && wabaId ? wabaId : null,
+    token: c.token,
+    numeroVisible: c.numeroVisible ?? null,
+  }
 }
 
 /**
@@ -170,29 +214,66 @@ async function verificarNumero(
   return { ok: true, numeroVisible: r.datos.display_phone_number ?? null }
 }
 
-/**
- * ENVÍA un mensaje de texto. Best-effort desde fuera: devuelve el motivo en
- * vez de lanzar, porque quien llama es una automatización en vivo.
- *
- * OJO CON LA VENTANA DE 24 HORAS: Meta solo permite texto libre si el cliente
- * escribió al negocio en las últimas 24 h; fuera de esa ventana exige una
- * plantilla aprobada. Cuando eso ocurre, Meta responde con error y aquí queda
- * registrado tal cual — no se disfraza de éxito. (Las plantillas llegan en la
- * Fase 2 de Meta.)
- */
-export async function enviarWhatsapp(input: {
+// ─── Envío ───────────────────────────────────────────────────────────────────
+
+/** Lo que del envío se registra en la conversación del contacto. */
+export interface RegistroEnvio {
+  tipo: 'text' | 'template'
+  texto: string | null
+  plantilla?: Record<string, unknown> | null
+  enviadoPorId?: string | null
+  /** bandeja | automatizacion | sistema */
+  origen?: string | null
+}
+
+async function registrarEnConversacion(input: {
   companyId: string
-  telefono: string
-  texto: string
+  phoneNumberId: string
+  para: string
+  registro: RegistroEnvio
+  idExterno: string | null
+  estado: 'ENVIADO' | 'FALLIDO'
+  errorCodigo?: number | null
+  errorDetalle?: string | null
+}): Promise<void> {
+  const { registrarSalienteWhatsapp } = await import('@/modules/mensajeria/salientes')
+  await registrarSalienteWhatsapp({
+    companyId: input.companyId,
+    phoneNumberId: input.phoneNumberId,
+    para: input.para,
+    tipo: input.registro.tipo,
+    texto: input.registro.texto,
+    plantilla: input.registro.plantilla ?? null,
+    idExterno: input.idExterno,
+    estado: input.estado,
+    errorCodigo: input.errorCodigo ?? null,
+    errorDetalle: input.errorDetalle ?? null,
+    enviadoPorId: input.registro.enviadoPorId ?? null,
+    origen: input.registro.origen ?? null,
+  }).catch(anotarFallo('whatsapp:registrar-saliente'))
+}
+
+/**
+ * MANDA un cuerpo a `/{phone_number_id}/messages` con la credencial viva de
+ * la empresa. Es la única puerta de salida: `enviarWhatsapp` (texto), las
+ * plantillas y «marcar como leído» pasan por aquí. Best-effort desde fuera:
+ * devuelve el motivo en vez de lanzar, porque quien llama suele ser una
+ * automatización en vivo.
+ *
+ * Con `registro` y `para`, el resultado —bueno o malo— queda en la
+ * conversación del destinatario.
+ */
+export async function enviarCuerpoWhatsapp(input: {
+  companyId: string
+  /** El wa_id del destinatario, o null si el cuerpo no es un mensaje (marcar leído). */
+  para: string | null
+  cuerpo: Record<string, unknown>
+  registro: RegistroEnvio | null
 }): Promise<ResultadoEnvio> {
   const conexionId = await conexionWhatsapp(input.companyId)
   if (!conexionId) return { ok: false, motivo: 'sin_conexion' }
 
-  const guardada = await leerCredencial({
-    companyId: input.companyId,
-    conexionId,
-    tipo: 'API_KEY',
-  })
+  const guardada = await leerCredencial({ companyId: input.companyId, conexionId, tipo: 'API_KEY' })
   if (!guardada.ok) return { ok: false, motivo: 'sin_credencial' }
 
   let credencial: unknown
@@ -203,14 +284,11 @@ export async function enviarWhatsapp(input: {
   }
   if (!esCredencialWhatsapp(credencial)) return { ok: false, motivo: 'sin_credencial' }
 
-  const para = normalizarTelefonoWhatsapp(input.telefono)
-  if (!para) return { ok: false, motivo: 'telefono_invalido' }
-
   const r = await llamarGraph<{ messages?: { id?: string }[] }>({
     ruta: `/${encodeURIComponent(credencial.phoneNumberId)}/messages`,
     metodo: 'POST',
     token: credencial.token,
-    cuerpo: cuerpoMensajeTexto(para, recortarTexto(input.texto)),
+    cuerpo: input.cuerpo,
   })
 
   if (!r.ok) {
@@ -223,9 +301,66 @@ export async function enviarWhatsapp(input: {
       conexionId,
       resultado: { ok: false, error: detalle, clase: claseDeRespuestaGraph(resp) },
     })
+    if (input.registro && input.para) {
+      await registrarEnConversacion({
+        companyId: input.companyId,
+        phoneNumberId: credencial.phoneNumberId,
+        para: input.para,
+        registro: input.registro,
+        idExterno: null,
+        estado: 'FALLIDO',
+        errorCodigo: resp.codigo,
+        errorDetalle: detalle,
+      })
+    }
     return { ok: false, motivo: 'proveedor', detalle }
   }
 
   await anotarSalud({ companyId: input.companyId, conexionId, resultado: { ok: true } })
-  return { ok: true, mensajeId: r.datos.messages?.[0]?.id ?? null }
+  const mensajeId = r.datos.messages?.[0]?.id ?? null
+  if (input.registro && input.para) {
+    await registrarEnConversacion({
+      companyId: input.companyId,
+      phoneNumberId: credencial.phoneNumberId,
+      para: input.para,
+      registro: input.registro,
+      idExterno: mensajeId,
+      estado: 'ENVIADO',
+    })
+  }
+  return { ok: true, mensajeId }
+}
+
+/**
+ * ENVÍA un mensaje de texto. Best-effort desde fuera: devuelve el motivo en
+ * vez de lanzar, porque quien llama es una automatización en vivo.
+ *
+ * OJO CON LA VENTANA DE 24 HORAS: Meta solo permite texto libre si el cliente
+ * escribió al negocio en las últimas 24 h; fuera de esa ventana exige una
+ * plantilla aprobada (error 131047). La bandeja lo comprueba antes; una
+ * automatización que llegue aquí fuera de ventana recibe el error de Meta
+ * tal cual — no se disfraza de éxito.
+ */
+export async function enviarWhatsapp(input: {
+  companyId: string
+  telefono: string
+  texto: string
+  /** Quién y desde dónde, para la conversación. Sin esto: automatización. */
+  registro?: { enviadoPorId?: string | null; origen?: string | null }
+}): Promise<ResultadoEnvio> {
+  const para = normalizarTelefonoWhatsapp(input.telefono)
+  if (!para) return { ok: false, motivo: 'telefono_invalido' }
+  const texto = recortarTexto(input.texto)
+
+  return enviarCuerpoWhatsapp({
+    companyId: input.companyId,
+    para,
+    cuerpo: cuerpoMensajeTexto(para, texto),
+    registro: {
+      tipo: 'text',
+      texto,
+      enviadoPorId: input.registro?.enviadoPorId ?? null,
+      origen: input.registro?.origen ?? 'automatizacion',
+    },
+  })
 }
