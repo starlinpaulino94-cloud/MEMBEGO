@@ -109,6 +109,28 @@ export function metaConfigurado(
   return configMetaDesdeEntorno(entorno) !== null
 }
 
+/**
+ * LA VERSIÓN DE GRAPH, UNA PARA TODO. Antes el envío llevaba una fija (v21)
+ * y el alta otra configurable (v25): dos versiones son dos comportamientos y
+ * dos fechas de retirada que vigilar. Se lee aunque el alta incrustada no
+ * esté configurada, porque el envío con token manual también la usa.
+ */
+export function versionGraphDesdeEntorno(
+  entorno: Record<string, string | undefined> = process.env
+): string {
+  return entorno.META_GRAPH_VERSION?.trim() || VERSION_GRAPH_POR_DEFECTO
+}
+
+/**
+ * `appsecret_proof`: HMAC-SHA256 del token de acceso con el secreto de la
+ * app, en hexadecimal (Graph API · «Securing requests»). Va en cada llamada
+ * de servidor que lleve token: con él, un token robado no sirve desde ningún
+ * sitio que no tenga además el secreto, y Meta permite EXIGIRLO en el panel.
+ */
+export function pruebaDeSecreto(token: string, secreto: string): string {
+  return createHmac('sha256', secreto).update(token, 'utf8').digest('hex')
+}
+
 export function urlGraph(version: string, ruta: string): string {
   const limpia = ruta.startsWith('/') ? ruta : `/${ruta}`
   return `https://graph.facebook.com/${version}${limpia}`

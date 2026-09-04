@@ -8,10 +8,12 @@ import {
   PERMISOS_META,
   configMetaDesdeEntorno,
   generarPin,
+  pruebaDeSecreto,
   urlGraph,
   type ConfigMeta,
   type RespuestaAlta,
 } from '@/modules/connect/metaNucleo'
+import { reclamarActivo } from '@/modules/connect/meta/activos'
 import { claseDeEstadoHttp, claseDeFalloDeRed, type ClaseError } from '@/modules/connect/proveedores/tipos'
 
 /**
@@ -44,6 +46,18 @@ import { claseDeEstadoHttp, claseDeFalloDeRed, type ClaseError } from '@/modules
  */
 
 const TIMEOUT_MS = 10_000
+
+/**
+ * Con `appsecret_proof` (Fase 1): cada llamada con el token del cliente lleva
+ * el HMAC del token con nuestro secreto. Un token robado no sirve desde otro
+ * sitio, y Meta permite exigirlo en el panel («Require App Secret»).
+ */
+function conPrueba(url: string, token: string, config: ConfigMeta): string {
+  const secreto = process.env[config.appSecretEnv] ?? ''
+  const u = new URL(url)
+  u.searchParams.set('appsecret_proof', pruebaDeSecreto(token, secreto))
+  return u.toString()
+}
 
 /** Las fases, en orden. Se anotan una a una para poder ver dónde se cae. */
 export type FaseAlta =
@@ -250,7 +264,11 @@ async function numeroPerteneceAlWaba(
 > {
   try {
     const resp = await fetch(
-      `${urlGraph(config.versionGraph, `/${wabaId}/phone_numbers`)}?fields=id,display_phone_number&limit=100`,
+      conPrueba(
+        `${urlGraph(config.versionGraph, `/${wabaId}/phone_numbers`)}?fields=id,display_phone_number&limit=100`,
+        token,
+        config
+      ),
       { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(TIMEOUT_MS) }
     )
     if (!resp.ok) return { ok: false, respuesta: await leerRespuesta(resp) }
@@ -277,7 +295,7 @@ async function registrarNumero(
   pin: string
 ): Promise<{ ok: true } | { ok: false; respuesta: Respuesta }> {
   try {
-    const resp = await fetch(urlGraph(config.versionGraph, `/${phoneNumberId}/register`), {
+    const resp = await fetch(conPrueba(urlGraph(config.versionGraph, `/${phoneNumberId}/register`), token, config), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       // `pin` es OBLIGATORIO: es el de la verificación en dos pasos del número.
@@ -304,7 +322,7 @@ async function suscribirWebhooks(
   wabaId: string
 ): Promise<{ ok: true } | { ok: false; respuesta: Respuesta }> {
   try {
-    const resp = await fetch(urlGraph(config.versionGraph, `/${wabaId}/subscribed_apps`), {
+    const resp = await fetch(conPrueba(urlGraph(config.versionGraph, `/${wabaId}/subscribed_apps`), token, config), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -392,6 +410,37 @@ export async function completarAltaMeta(input: {
         ? 'Esa cuenta de WhatsApp ya está conectada a otro negocio en Membego. Desconéctala allí primero.'
         : 'No se pudo preparar la conexión.',
       duplicado ? 'CONFIGURATION' : 'UNKNOWN'
+    )
+  }
+
+  // 4b · Y EN ACTIVOS (Fase 1): el WABA y el número, con el mismo UNIQUE. Es
+  //      por donde resuelve el webhook a partir de ahora; la columna de la
+  //      conexión se conserva por compatibilidad con lo ya conectado.
+  const activoWaba = await reclamarActivo({ companyId, conexionId, tipo: 'WABA', idExterno: wabaId })
+  if (!activoWaba.ok) {
+    return fallo(
+      'reclamo',
+      activoWaba.motivo === 'otra_empresa'
+        ? 'Esa cuenta de WhatsApp ya está conectada a otro negocio en Membego. Desconéctala allí primero.'
+        : 'No se pudo preparar la conexión.',
+      'CONFIGURATION'
+    )
+  }
+  const activoNumero = await reclamarActivo({
+    companyId,
+    conexionId,
+    tipo: 'PHONE_NUMBER',
+    idExterno: phoneNumberId,
+    nombre: pertenencia.numeroVisible,
+    padreId: activoWaba.id,
+  })
+  if (!activoNumero.ok) {
+    return fallo(
+      'reclamo',
+      activoNumero.motivo === 'otra_empresa'
+        ? 'Ese número ya está conectado a otro negocio en Membego. Desconéctalo allí primero.'
+        : 'No se pudo preparar la conexión.',
+      'CONFIGURATION'
     )
   }
 

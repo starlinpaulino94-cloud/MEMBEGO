@@ -47,6 +47,11 @@ export async function ejecutarTrabajo(carga: CargaTrabajo): Promise<ResultadoTra
       return procesarRecompensas(carga)
     case 'campana-dirigida':
       return procesarLoteCampanaDirigida(carga)
+    case 'meta-evento': {
+      // Idempotente por construcción: un evento ya procesado no se toca.
+      const { procesarEventoMeta } = await import('@/modules/connect/meta/webhookDispatcher')
+      return procesarEventoMeta(carga.eventoId)
+    }
   }
 }
 

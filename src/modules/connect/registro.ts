@@ -220,11 +220,29 @@ export async function desconectarConexion(input: {
     slug: fila.conector.slug,
   }).catch(() => undefined)
 
+  // WHATSAPP (Meta · Fase 1): anular nuestra suscripción a los webhooks del
+  // WABA del cliente mientras todavía tenemos su token. Sin esto Meta seguía
+  // mandándonos sus eventos —sin dueño, pero llegando— de una integración que
+  // la empresa cree apagada. Best-effort, igual que la revocación OAuth.
+  if (fila.conector.slug === 'whatsapp') {
+    const { desconectarWhatsappEnMeta } = await import('@/modules/connect/meta/whatsappDesconexion')
+    await desconectarWhatsappEnMeta({ companyId: input.companyId, conexionId: fila.id }).catch(
+      () => undefined
+    )
+  }
+
   for (const tipo of ['OAUTH_TOKENS', 'API_KEY', 'SECRETO'] as const) {
     await eliminarCredencial({ companyId: input.companyId, conexionId: fila.id, tipo })
   }
   await conEmpresa(input.companyId, (tx) =>
     tx.conexionEmpresa.update({ where: { id: fila.id }, data: { estado: 'DISCONNECTED' } })
+  )
+
+  // Los activos de Meta se RETIRAN, no se borran: el historial se queda, y el
+  // webhook deja de atribuirles nada. Otro negocio podrá reclamarlos.
+  const { retirarActivosDeConexion } = await import('@/modules/connect/meta/activos')
+  await retirarActivosDeConexion({ companyId: input.companyId, conexionId: fila.id }).catch(
+    () => undefined
   )
   await anotarConector({
     companyId: input.companyId,

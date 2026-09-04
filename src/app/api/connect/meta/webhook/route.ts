@@ -1,17 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { anotarConector } from '@/modules/connect/bitacora'
 import { firmaWebhookValida, respuestaDeVerificacion } from '@/modules/connect/metaNucleo'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * WEBHOOK DE META (Connect · Fase 14).
+ * WEBHOOK DE META (Connect · Fase 14; despacho en cola desde Meta · Fase 1).
  *
- * Meta lo exige para el Alta Incrustada: es por donde avisa de que una empresa
- * terminó el alta (`account_update`) y por donde llegarán después los estados
- * de entrega y las respuestas de sus clientes.
+ * Una sola URL para los tres objetos —`whatsapp_business_account`, `page`,
+ * `instagram`—: es por donde Meta avisa de que una empresa terminó el alta
+ * (`account_update`), y por donde llegan los mensajes de sus clientes y los
+ * estados de entrega de los nuestros.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * PÚBLICA, Y POR ESO NO SE FÍA DE NADA
@@ -21,11 +20,17 @@ export const dynamic = 'force-dynamic'
  * cuerpo CRUDO: parsearlo y volver a serializarlo rompería la firma de un
  * aviso bueno por una coma de diferencia.
  *
- * Sin `META_APP_SECRET` la ruta responde 404 y no 500: si el alta incrustada
- * no está configurada aquí, este endpoint no existe para nadie.
+ * Sin `META_APP_SECRET` la ruta responde 404 y no 500: si la app de Meta no
+ * está configurada aquí, este endpoint no existe para nadie.
  *
- * NO SE HA PROBADO CONTRA META. Escrito contra la documentación pública
- * vigente, sin app con la que ejecutarlo.
+ * ────────────────────────────────────────────────────────────────────────────
+ * ESTA RUTA NO INTERPRETA NADA
+ *
+ * Firma, guarda cada item con su clave única, encola y responde 200. Meta
+ * reintenta durante 36 horas cualquier cosa que no sea 2xx y no garantiza
+ * orden ni ausencia de duplicados: el trabajo de verdad —a quién pertenece,
+ * qué significa— ocurre fuera de la petición, en `webhookDispatcher`, sobre
+ * un evento que ya es nuestro y se puede reprocesar desde la base.
  */
 
 /** El apretón de manos de alta de la URL. */
@@ -40,11 +45,6 @@ export async function GET(req: NextRequest) {
   })
 }
 
-interface CambioMeta {
-  field?: string
-  value?: Record<string, unknown>
-}
-
 export async function POST(req: NextRequest) {
   const secreto = process.env.META_APP_SECRET
   if (!secreto) return new NextResponse('Not found', { status: 404 })
@@ -56,76 +56,20 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Forbidden', { status: 403 })
   }
 
-  let cuerpo: { entry?: { id?: string; changes?: CambioMeta[] }[] }
+  let cuerpo: unknown
   try {
     cuerpo = JSON.parse(crudo)
   } catch {
-    // Firmado pero ilegible: se acepta para que Meta no reintente en bucle, y
-    // se anota. Devolver error aquí solo produciría más entregas iguales.
+    // Firmado pero ilegible: se acepta para que Meta no reintente en bucle.
+    // Devolver error aquí solo produciría más entregas iguales.
     return NextResponse.json({ ok: true })
   }
 
-  // El conector, una sola vez: la clave única es (conectorId, cuentaExterna).
-  const conector = await sinEmpresa('connect: webhook de Meta — resolver el conector', (tx) =>
-    tx.conector.findUnique({ where: { slug: 'whatsapp' }, select: { id: true } })
-  ).catch(anotarFallo('connect:webhook-meta-conector'))
-  if (!conector) return NextResponse.json({ ok: true })
-  const conectorWhatsapp = conector.id
+  // Guardar y encolar. Nunca lanza, y aunque algo fallara por dentro el 200
+  // sale igual: lo que no se pudo guardar queda anotado, y Meta no arregla
+  // nada reenviando lo mismo.
+  const { recibirNotificacion } = await import('@/modules/connect/meta/webhookDispatcher')
+  await recibirNotificacion(cuerpo).catch(anotarFallo('connect:webhook-meta'))
 
-  for (const entrada of cuerpo.entry ?? []) {
-    const wabaId = entrada.id
-    if (!wabaId) continue
-
-    // ────────────────────────────────────────────────────────────────────────
-    // A QUÉ EMPRESA PERTENECE (F14.1 · el fallo de aislamiento que la
-    // auditoría encontró).
-    //
-    // La Fase 14 buscaba con `findFirst` sobre los metadatos de las
-    // credenciales. Dos problemas, y el segundo es grave:
-    //
-    //   · sin unicidad garantizada, dos filas con el mismo valor hacen que
-    //     `findFirst` devuelva UNA CUALQUIERA — el aviso de una empresa
-    //     acabaría atribuido a otra;
-    //   · buscar por un campo de JSON sin índice ni restricción convierte una
-    //     frontera entre inquilinos en una convención.
-    //
-    // Ahora la cuenta vive en una COLUMNA de la conexión con UNIQUE por
-    // (conector, cuenta): `findUnique` no puede devolver la fila de otro,
-    // porque la base impide que exista.
-    //
-    // Cruzar empresas para averiguarlo es legítimo —el aviso llega sin sesión—
-    // y va declarado con su motivo.
-    const conexion = await sinEmpresa(
-      'connect: webhook de Meta — resolver la única conexión dueña de esta cuenta de WhatsApp',
-      (tx) =>
-        tx.conexionEmpresa.findUnique({
-          where: {
-            conectorId_cuentaExterna: { conectorId: conectorWhatsapp, cuentaExterna: wabaId },
-          },
-          select: { id: true, companyId: true },
-        })
-    ).catch(anotarFallo('connect:webhook-meta-resolver'))
-
-    // Sin dueño conocido no se anota nada. Pasa de verdad y no es un error:
-    // Meta puede avisar del alta ANTES de que el canje termine, y ese primer
-    // aviso no tiene dueño todavía. El alta deja su propio apunte.
-    if (!conexion) continue
-
-    for (const cambio of entrada.changes ?? []) {
-      await anotarConector({
-        companyId: conexion.companyId,
-        origen: 'CONEXION',
-        origenId: conexion.id,
-        evento: `meta.${cambio.field ?? 'desconocido'}`,
-        // Del contenido NADA: en `value` viaja el número de teléfono de
-        // clientes finales. Basta con saber que Meta avisó y de qué.
-        detalle: { wabaId },
-      })
-    }
-  }
-
-  // Meta reintenta ante cualquier respuesta que no sea 2xx. Se confirma
-  // siempre que la firma cuadre: lo que no sepamos procesar queda en la
-  // bitácora, no en una cola de reintentos infinita.
   return NextResponse.json({ ok: true })
 }

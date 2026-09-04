@@ -40,6 +40,9 @@ export const EVENTOS_CONECTOR = [
   'credencial.ilegible',
   'oauth.revocado',
   'oauth.revocacion_fallida',
+  'meta.suscripcion_anulada',
+  'meta.suscripcion_no_anulada',
+  'meta.activo_reasignado',
 ] as const
 
 export type EventoConector = (typeof EVENTOS_CONECTOR)[number]
@@ -65,6 +68,10 @@ const TECNICO: Record<EventoConector, string> = {
   'credencial.ilegible': 'Una credencial no se pudo descifrar',
   'oauth.revocado': 'Se revocó el acceso en el proveedor al desconectar',
   'oauth.revocacion_fallida': 'No se pudo revocar el acceso en el proveedor; se borró la copia local',
+  'meta.suscripcion_anulada': 'Se anuló la suscripción a los avisos de la cuenta de WhatsApp en Meta',
+  'meta.suscripcion_no_anulada':
+    'No se pudo anular la suscripción en Meta; la credencial se borró igualmente',
+  'meta.activo_reasignado': 'Un activo de Meta retirado por otra empresa pasó a esta',
 }
 
 /**
@@ -96,6 +103,9 @@ const NEGOCIO: Record<EventoConector, string | null> = {
   // Interno: la empresa ya ve «Desconectaste esta aplicación»; que el
   // proveedor no respondiera al revocar es cosa nuestra.
   'oauth.revocacion_fallida': null,
+  'meta.suscripcion_anulada': 'Le pedimos a Meta que deje de avisarnos sobre tu cuenta de WhatsApp',
+  'meta.suscripcion_no_anulada': null,
+  'meta.activo_reasignado': null,
 }
 
 function conocido(evento: string): evento is EventoConector {
