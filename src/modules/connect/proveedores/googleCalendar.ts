@@ -97,6 +97,11 @@ export function oauthGoogleCalendar(): ConfigOauthConector | null {
   return {
     urlAutorizacion: 'https://accounts.google.com/o/oauth2/v2/auth',
     urlToken: 'https://oauth2.googleapis.com/token',
+    // Al desconectar se revoca AQUÍ antes de borrar nuestra copia: si no, el
+    // refresh token sigue vivo en la cuenta del cliente, con permiso para
+    // crear eventos, y la app aparece en «Aplicaciones con acceso» de una
+    // integración que la empresa cree apagada.
+    urlRevocacion: 'https://oauth2.googleapis.com/revoke',
     clientId,
     clientSecretEnv: 'GOOGLE_OAUTH_CLIENT_SECRET',
     scopes: [
