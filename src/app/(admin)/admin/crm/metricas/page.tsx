@@ -1,5 +1,13 @@
-'use client'
-
+import { redirect } from 'next/navigation'
+import { requireSection } from '@/lib/auth/guards'
+import { companyFilter } from '@/modules/admin/queries'
+import {
+  getMetricas,
+  getLeadsPorFuente,
+  getTiempoPorEtapa,
+  getLeadsPorAsignado,
+  getLeadsAtencion,
+} from '@/modules/crm/queries'
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -10,57 +18,60 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 
-// ── Stat cards data ──────────────────────────────────────────────────────────
+export const dynamic = 'force-dynamic'
 
-const STATS = [
-  { label: 'Leads Hoy', value: '12', icon: Users, accent: 'text-primary' },
-  { label: 'En Pipeline', value: '24', icon: Clock, accent: 'text-warning' },
-  { label: 'Ganados Este Mes', value: '8', icon: TrendingUp, accent: 'text-success' },
-  { label: 'Tasa de Conversión', value: '32%', icon: BarChart3, accent: 'text-primary' },
-] as const
+const ETAPA_LABELS: Record<string, string> = {
+  NUEVO: 'Nuevo',
+  CONTACTADO: 'Contactado',
+  INTERESADO: 'Interesado',
+  PROPUESTA: 'Propuesta',
+  NEGOCIACION: 'Negociación',
+  GANADO: 'Ganado',
+  PERDIDO: 'Perdido',
+}
 
-// ── Leads por fuente ─────────────────────────────────────────────────────────
+const FUENTE_LABELS: Record<string, string> = {
+  ORGANICO: 'Orgánico',
+  PAGADO: 'Pagado',
+  REFERENCIA: 'Referencia',
+  EVENTO: 'Evento',
+  OTRO: 'Otro',
+}
 
-const FUENTES = [
-  { nombre: 'WhatsApp', pct: 45 },
-  { nombre: 'Instagram', pct: 25 },
-  { nombre: 'Referido', pct: 15 },
-  { nombre: 'Teléfono', pct: 8 },
-  { nombre: 'Otro', pct: 7 },
-]
+export default async function MetricasPage() {
+  const user = await requireSection('leads')
+  if (!user) redirect('/login')
 
-// ── Tiempo por etapa ─────────────────────────────────────────────────────────
+  const companyId = companyFilter(user)
+  if (!companyId) {
+    return (
+      <div className="space-y-5">
+        <p className="text-sm text-muted-foreground">
+          Selecciona una empresa desde el panel de superadmin para usar el CRM.
+        </p>
+      </div>
+    )
+  }
 
-const TIEMPO_ETAPA = [
-  { etapa: 'Nuevo → Contactado', dias: '1.2 días' },
-  { etapa: 'Contactado → Cotización', dias: '2.5 días' },
-  { etapa: 'Cotización → Negociación', dias: '3.1 días' },
-  { etapa: 'Negociación → Cerrado', dias: '2.8 días' },
-]
+  const [metricas, fuentes, tiempoPorEtapa, asignados, atencion] = await Promise.all([
+    getMetricas(companyId),
+    getLeadsPorFuente(companyId),
+    getTiempoPorEtapa(companyId),
+    getLeadsPorAsignado(companyId),
+    getLeadsAtencion(companyId),
+  ])
 
-const TOTAL_PIPELINE = '9.6 días'
+  const maxAsignados = Math.max(...asignados.map((a) => a.cantidad), 1)
+  const totalPipelineDias = tiempoPorEtapa.reduce((acc, t) => acc + t.dias, 0)
+  const totalPipelineFormateado = totalPipelineDias === 1 ? '1 día' : `${Math.round(totalPipelineDias * 10) / 10} días`
 
-// ── Leads por asignado ───────────────────────────────────────────────────────
+  const STATS = [
+    { label: 'Leads Hoy', value: String(metricas.leadsHoy), icon: Users, accent: 'text-primary' },
+    { label: 'En Pipeline', value: String(metricas.enPipeline), icon: Clock, accent: 'text-warning' },
+    { label: 'Ganados Este Mes', value: String(metricas.ganadosMes), icon: TrendingUp, accent: 'text-success' },
+    { label: 'Tasa de Conversión', value: `${metricas.tasaConversion}%`, icon: BarChart3, accent: 'text-primary' },
+  ] as const
 
-const ASIGNADOS = [
-  { nombre: 'María', leads: 5 },
-  { nombre: 'Pedro', leads: 3 },
-  { nombre: 'Ana', leads: 2 },
-]
-
-const MAX_LEADS = Math.max(...ASIGNADOS.map((a) => a.leads))
-
-// ── Requieren atención ──────────────────────────────────────────────────────
-
-const ATENCION = [
-  { lead: 'Juan P.', motivo: 'Sin seguimiento por 3 días' },
-  { lead: 'María L.', motivo: 'Oferta pendiente por 5 días' },
-  { lead: 'Carlos R.', motivo: 'En etapa "Cotización" por 7 días' },
-]
-
-// ── Page ────────────────────────────────────────────────────────────────────
-
-export default function MetricasPage() {
   return (
     <div className="space-y-5">
 
@@ -92,14 +103,17 @@ export default function MetricasPage() {
             <CardTitle className="text-h4">Leads por Fuente</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {FUENTES.map((f) => (
-              <div key={f.nombre}>
+            {fuentes.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sin datos aún.</p>
+            )}
+            {fuentes.map((f) => (
+              <div key={f.fuente}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-small text-foreground">{f.nombre}</span>
-                  <span className="text-caption text-muted-foreground tabular-nums">{f.pct}%</span>
+                  <span className="text-small text-foreground">{FUENTE_LABELS[f.fuente] ?? f.fuente}</span>
+                  <span className="text-caption text-muted-foreground tabular-nums">{f.porcentaje}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-primary/20">
-                  <div className="h-full rounded-full bg-primary" style={{ width: `${f.pct}%` }} />
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${f.porcentaje}%` }} />
                 </div>
               </div>
             ))}
@@ -113,15 +127,19 @@ export default function MetricasPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {TIEMPO_ETAPA.map((t) => (
+              {tiempoPorEtapa.map((t) => (
                 <div key={t.etapa} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                  <span className="text-small text-foreground">{t.etapa}</span>
-                  <span className="text-small font-medium text-muted-foreground tabular-nums">{t.dias}</span>
+                  <span className="text-small text-foreground">
+                    {ETAPA_LABELS[t.etapa] ?? t.etapa}
+                  </span>
+                  <span className="text-small font-medium text-muted-foreground tabular-nums">
+                    {t.diasFormateado}
+                  </span>
                 </div>
               ))}
               <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
                 <span className="text-small font-medium text-foreground">Total pipeline</span>
-                <span className="text-small font-semibold text-primary tabular-nums">{TOTAL_PIPELINE}</span>
+                <span className="text-small font-semibold text-primary tabular-nums">{totalPipelineFormateado}</span>
               </div>
             </div>
           </CardContent>
@@ -133,16 +151,19 @@ export default function MetricasPage() {
             <CardTitle className="text-h4">Leads por Asignado</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {ASIGNADOS.map((a) => (
-              <div key={a.nombre}>
+            {asignados.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sin leads asignados.</p>
+            )}
+            {asignados.map((a) => (
+              <div key={a.asignadoA}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-small text-foreground">{a.nombre}</span>
-                  <span className="text-caption text-muted-foreground tabular-nums">{a.leads} leads</span>
+                  <span className="text-small text-foreground">{a.asignadoA}</span>
+                  <span className="text-caption text-muted-foreground tabular-nums">{a.cantidad} leads</span>
                 </div>
                 <div className="h-2 rounded-full bg-primary/20">
                   <div
                     className="h-full rounded-full bg-primary"
-                    style={{ width: `${(a.leads / MAX_LEADS) * 100}%` }}
+                    style={{ width: `${(a.cantidad / maxAsignados) * 100}%` }}
                   />
                 </div>
               </div>
@@ -156,15 +177,20 @@ export default function MetricasPage() {
             <CardTitle className="text-h4">Requieren Atención</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {ATENCION.map((a) => (
+            {atencion.length === 0 && (
+              <p className="text-sm text-muted-foreground">No hay leads pendientes.</p>
+            )}
+            {atencion.map((a) => (
               <div
-                key={a.lead}
+                key={a.id}
                 className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5"
               >
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 <div>
-                  <p className="text-small font-medium text-foreground">{a.lead}</p>
-                  <p className="text-caption text-muted-foreground mt-0.5">{a.motivo}</p>
+                  <p className="text-small font-medium text-foreground">{a.nombre}</p>
+                  <p className="text-caption text-muted-foreground mt-0.5">
+                    {a.diasEspera} días sin atención · {ETAPA_LABELS[a.etapa] ?? a.etapa}
+                  </p>
                 </div>
               </div>
             ))}
