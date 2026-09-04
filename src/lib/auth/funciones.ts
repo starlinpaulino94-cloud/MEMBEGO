@@ -54,6 +54,10 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   personalizacion: 'Personalización',
   app: 'App Car Wash',
   excursiones: 'Excursiones',
+  leads: 'Leads',
+  conversaciones: 'Conversaciones',
+  pipeline: 'Pipeline comercial',
+  configuracion: 'Configuración CRM',
   integraciones: 'Integraciones',
 }
 

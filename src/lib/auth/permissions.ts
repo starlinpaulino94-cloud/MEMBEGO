@@ -54,6 +54,11 @@ export const ADMIN_SECTIONS = [
   // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
   // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
   'excursiones',
+  // CRM: gestión de leads, seguimiento y pipeline comercial.
+  'leads',
+  'conversaciones',
+  'pipeline',
+  'configuracion',
   // Membego Connect (Fase 4): claves de API, webhooks y actividad de las
   // integraciones de la empresa. Es una sección de CONFIGURACIÓN sensible —
   // una clave de API abre los datos de la empresa a un tercero— así que no
