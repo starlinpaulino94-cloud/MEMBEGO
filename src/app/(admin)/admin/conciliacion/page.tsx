@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, CheckCircle2, TriangleAlert } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { empresaDelPanel } from '@/modules/admin/queries'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney } from '@/lib/format'
 import { conciliar } from '@/modules/observabilidad/conciliacion'
@@ -30,7 +30,7 @@ export const metadata = {
  */
 export default async function ConciliacionPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = empresaDelPanel(user)
   if (!companyId) return <SinEmpresaActiva seccion="la conciliación" />
 
   const [r, prefs] = await Promise.all([conciliar(companyId), getRegionalPrefs(companyId)])

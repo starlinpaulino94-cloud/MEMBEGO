@@ -24,6 +24,31 @@ export function companyFilter(user: SessionUser): string | undefined {
   return user.metadata.companyId ?? '__none__'
 }
 
+/**
+ * LA EMPRESA QUE ESTÁ ABIERTA EN EL PANEL. No es lo mismo que `companyFilter`.
+ *
+ * `companyFilter` responde «¿sobre qué empresas consulto?» y para un superadmin
+ * dice `undefined`, que significa TODAS. Eso es correcto para un agregado de
+ * plataforma y es un desastre para una pantalla de una sola empresa: el
+ * superadmin elegía CARTOWN en el conmutador de arriba y la pantalla le
+ * respondía «elige una empresa en el conmutador de arriba». Un callejón sin
+ * salida — hiciera lo que hiciera, la respuesta no cambiaba.
+ *
+ * Esta función responde otra pregunta: «¿qué empresa tiene abierta?». El
+ * conmutador escribe esa elección en `User.companyId` para todo el mundo,
+ * superadmin incluido, así que el dato siempre estuvo ahí.
+ *
+ * Seis pantallas ya lo resolvían escribiendo a mano
+ * `companyFilter(user) ?? user.metadata.companyId ?? null`, y cuatro se
+ * quedaron sin ello. Un idioma que hay que recordar se olvida; uno con nombre,
+ * no. `'__none__'` —el centinela que `companyFilter` usa para no filtrar por
+ * nada— se traduce a `null`, que es lo que significa.
+ */
+export function empresaDelPanel(user: SessionUser): string | null {
+  const id = user.metadata.companyId
+  return id && id !== '__none__' ? id : null
+}
+
 /** Query de una empresa, o de todas si `companyId` es undefined (superadmin). */
 function scopeEmpresa<T>(
   companyId: string | undefined,

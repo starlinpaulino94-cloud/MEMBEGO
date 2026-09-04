@@ -3,7 +3,7 @@ import { conEmpresaOTodas } from '@/lib/tenant'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { empresaDelPanel } from '@/modules/admin/queries'
 import { getTiposVehiculo, getServicios, getBahias } from '@/modules/carwash/catalogo'
 import { CatalogoPanel } from '@/components/carwash/CatalogoPanel'
 import { PageHeader } from '@/components/ui/page-header'
@@ -21,7 +21,7 @@ export const metadata = { title: 'Catálogo · Car Wash' }
  */
 export default async function CatalogoCarWashPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = empresaDelPanel(user)
   if (!companyId) return <SinEmpresaActiva seccion="el catálogo de la pista" />
 
   // Los tres `getX` abren su PROPIA transacción con su contexto de empresa, así

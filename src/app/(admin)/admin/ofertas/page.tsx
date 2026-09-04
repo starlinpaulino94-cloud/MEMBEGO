@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { empresaDelPanel } from '@/modules/admin/queries'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
@@ -72,7 +72,7 @@ const TIPOS: TipoOferta[] = [
 
 export default async function OfertasHubPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = empresaDelPanel(user)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="tus ofertas" />
