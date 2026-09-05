@@ -98,13 +98,36 @@ export function parsearMensajeWhatsApp(entry: unknown): ResultadoParseo | null {
   return { wabaId, mensajes }
 }
 
-/**
- * Detecta si un mensaje de texto contiene intención de reservar excursiones/actividades.
- * Usa regex con word-boundary para evitar falsos positivos ("papel" no matchea "pase").
- */
-const KEYWORDS_EXCURSION = /\b(?:reserva|tour|actividad|excursi\w*|parque|cat[aá]logo|pase|boletos?|tickets?|disponibilidad|precio|horarios?)\b/i
+// ── Detección de intención de excursiones ──────────────────────────────────
 
+const PALABRAS_EXCURSION = [
+  'excursion',
+  'excursión',
+  'excursiones',
+  'tour',
+  'tours',
+  'actividad',
+  'actividades',
+  'parque',
+  'parques',
+  'reserva',
+  'reservar',
+  'catálogo',
+  'catalogo',
+  'combo',
+  'combos',
+] as const
+
+/**
+ * Detecta si un mensaje de texto contiene intención de consultar excursiones.
+ *
+ * Busca palabras clave case-insensitive en el texto normalizado.
+ * Simple y testeable: sin red ni estado, puro string matching.
+ */
 export function detectarIntencionExcursiones(texto: string): boolean {
-  if (!texto || typeof texto !== 'string') return false
-  return KEYWORDS_EXCURSION.test(texto)
+  const normalizado = texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  return PALABRAS_EXCURSION.some((p) => normalizado.includes(p))
 }

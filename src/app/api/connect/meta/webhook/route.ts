@@ -3,6 +3,9 @@ import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { anotarConector } from '@/modules/connect/bitacora'
 import { firmaWebhookValida, respuestaDeVerificacion } from '@/modules/connect/metaNucleo'
+import { parsearMensajeWhatsApp, detectarIntencionExcursiones } from '@/modules/connect/whatsappInboundNucleo'
+import { procesarMensajeEntrante } from '@/modules/connect/whatsappInbound'
+import { enviarWhatsapp } from '@/modules/connect/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,25 +79,6 @@ export async function POST(req: NextRequest) {
     const wabaId = entrada.id
     if (!wabaId) continue
 
-    // ────────────────────────────────────────────────────────────────────────
-    // A QUÉ EMPRESA PERTENECE (F14.1 · el fallo de aislamiento que la
-    // auditoría encontró).
-    //
-    // La Fase 14 buscaba con `findFirst` sobre los metadatos de las
-    // credenciales. Dos problemas, y el segundo es grave:
-    //
-    //   · sin unicidad garantizada, dos filas con el mismo valor hacen que
-    //     `findFirst` devuelva UNA CUALQUIERA — el aviso de una empresa
-    //     acabaría atribuido a otra;
-    //   · buscar por un campo de JSON sin índice ni restricción convierte una
-    //     frontera entre inquilinos en una convención.
-    //
-    // Ahora la cuenta vive en una COLUMNA de la conexión con UNIQUE por
-    // (conector, cuenta): `findUnique` no puede devolver la fila de otro,
-    // porque la base impide que exista.
-    //
-    // Cruzar empresas para averiguarlo es legítimo —el aviso llega sin sesión—
-    // y va declarado con su motivo.
     const conexion = await sinEmpresa(
       'connect: webhook de Meta — resolver la única conexión dueña de esta cuenta de WhatsApp',
       (tx) =>
@@ -106,9 +90,6 @@ export async function POST(req: NextRequest) {
         })
     ).catch(anotarFallo('connect:webhook-meta-resolver'))
 
-    // Sin dueño conocido no se anota nada. Pasa de verdad y no es un error:
-    // Meta puede avisar del alta ANTES de que el canje termine, y ese primer
-    // aviso no tiene dueño todavía. El alta deja su propio apunte.
     if (!conexion) continue
 
     for (const cambio of entrada.changes ?? []) {
@@ -117,10 +98,42 @@ export async function POST(req: NextRequest) {
         origen: 'CONEXION',
         origenId: conexion.id,
         evento: `meta.${cambio.field ?? 'desconocido'}`,
-        // Del contenido NADA: en `value` viaja el número de teléfono de
-        // clientes finales. Basta con saber que Meta avisó y de qué.
         detalle: { wabaId },
       })
+    }
+
+    const parseado = parsearMensajeWhatsApp(entrada)
+    if (parseado) {
+      for (const msg of parseado.mensajes) {
+        await procesarMensajeEntrante(conexion.companyId, msg.from, msg.texto, msg.msgId).catch((e) => {
+          console.error('[connect] webhook: procesarMensajeEntrante falló', e)
+        })
+
+        if (detectarIntencionExcursiones(msg.texto)) {
+          const empresa = await sinEmpresa(
+            'webhook: resolver slug de empresa para catálogo',
+            (tx) =>
+              tx.company.findUnique({
+                where: { id: conexion.companyId },
+                select: { slug: true },
+              })
+          ).catch(() => null)
+
+          if (empresa?.slug) {
+            const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+            const catalogUrl = `${urlBase}/empresas/${empresa.slug}/excursiones`
+            const mensajeCatalogo = `¡Hola! 🌴 Aquí tienes nuestro catálogo de actividades:\n${catalogUrl}\n\n¿Tienes alguna pregunta? Responde aquí y te ayudamos.`
+
+            await enviarWhatsapp({
+              companyId: conexion.companyId,
+              telefono: msg.from,
+              texto: mensajeCatalogo,
+            }).catch((e) => {
+              console.error('[connect] webhook: enviarWhatsapp auto-reply falló', e)
+            })
+          }
+        }
+      }
     }
   }
 
