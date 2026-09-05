@@ -39,6 +39,7 @@ import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { sendEmail } from '@/lib/email'
 import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaClienteState {
   error?: string
@@ -507,6 +508,28 @@ export async function reservarExcursion(
       }).then((html) =>
         sendEmail({ to: user.email!, subject: `Confirmación de reserva ${creada.numero} — ${excursion.nombre}`, html, companyId })
       ).catch((e) => console.error('[excursiones] Error enviando email confirmación en reservarExcursion:', e))
+    }
+
+    // WhatsApp confirmation (fire-and-safe)
+    const clienteTelefono = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { companyId, supabaseId: user.id },
+        select: { telefono: true },
+      })
+    ).catch(() => null)
+    if (clienteTelefono?.telefono) {
+      enviarConfirmacionReservaWhatsApp({
+        companyId,
+        telefono: clienteTelefono.telefono,
+        nombreCliente: user.email || 'Cliente',
+        numeroReserva: creada.numero,
+        nombreExcursion: excursion.nombre,
+        fecha: v.datos.fecha.toISOString().split('T')[0],
+        hora: v.datos.hora ?? '',
+        pasajeros: v.datos.adultos + v.datos.ninos,
+        total: Number(totales.total),
+        moneda: excursion.moneda,
+      }).catch((e) => console.error('[excursiones] WhatsApp confirmación falló en reservarExcursion:', e))
     }
 
     // Consumir cookie de atribución (un solo uso)

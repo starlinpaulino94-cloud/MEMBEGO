@@ -27,6 +27,7 @@ import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaVendedorState {
   error?: string
@@ -521,6 +522,28 @@ export async function crearReservaVendedor(
           sendEmail({ to: clienteEmail, subject: `Confirmación de reserva ${reserva.numero} — ${excursion.nombre}`, html, companyId })
         ).catch((e) => console.error('[excursiones] Error enviando email confirmación en crearReservaVendedor:', e))
       }
+    }
+
+    // WhatsApp confirmation (fire-and-safe)
+    const clienteTelefono = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { id: targetClienteId, companyId },
+        select: { telefono: true },
+      })
+    ).catch(() => null)
+    if (clienteTelefono?.telefono) {
+      enviarConfirmacionReservaWhatsApp({
+        companyId,
+        telefono: clienteTelefono.telefono,
+        nombreCliente: clienteNombre || clienteEmail || 'Cliente',
+        numeroReserva: reserva.numero,
+        nombreExcursion: excursion.nombre,
+        fecha: v.datos.fecha.toISOString().split('T')[0],
+        hora: v.datos.hora ?? '',
+        pasajeros: v.datos.adultos + v.datos.ninos,
+        total: Number(totales.total),
+        moneda: excursion.moneda,
+      }).catch((e) => console.error('[excursiones] WhatsApp confirmación falló en crearReservaVendedor:', e))
     }
 
     revalidatePath('/vendedor/reservas')

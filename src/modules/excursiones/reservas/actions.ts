@@ -60,6 +60,7 @@ import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { getExcursionesConfig } from '../config'
 import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaActionState {
   error?: string
@@ -650,6 +651,22 @@ export async function crearReserva(
       },
     }).catch((e) => console.error('[excursiones] Error emitiendo reserva.creada:', e))
 
+    // WhatsApp confirmation (fire-and-safe)
+    if (clienteTelefono) {
+      enviarConfirmacionReservaWhatsApp({
+        companyId,
+        telefono: clienteTelefono,
+        nombreCliente: clienteNombre || clienteEmail || 'Cliente',
+        numeroReserva: creada.numero,
+        nombreExcursion: excursion.nombre,
+        fecha: v.datos.fecha.toISOString().split('T')[0],
+        hora: v.datos.hora ?? '',
+        pasajeros: v.datos.adultos + v.datos.ninos,
+        total: Number(creada.total),
+        moneda: excursion.moneda,
+      }).catch((e) => console.error('[excursiones] WhatsApp confirmación falló en crearReserva:', e))
+    }
+
     revalidatePath('/admin/excursiones/reservas')
     return {
       success: `Reserva ${creada.numero} creada exitosamente.`,
@@ -709,6 +726,8 @@ export async function registrarPago(
         where: { id: reservaId, companyId },
         select: {
           id: true,
+          numero: true,
+          clienteId: true,
           estado: true,
           total: true,
           moneda: true,
@@ -761,6 +780,20 @@ export async function registrarPago(
         reserva.id,
         user.metadata.dbUserId ?? null
       ).catch(anotarFallo('excursiones:reservas:autoVentaComision'))
+
+      // Emitir evento de reserva pagada (fire-and-safe)
+      emitirEventoEstrategia({
+        companyId,
+        type: 'reserva.pagada',
+        subjectId: reserva.clienteId ?? null,
+        payload: {
+          reservaId: reserva.id,
+          numero: reserva.numero,
+          total: Number(reserva.total),
+          moneda: reserva.moneda,
+          metodo: v.datos.metodo,
+        },
+      }).catch((e) => console.error('[excursiones] Error emitiendo reserva.pagada:', e))
     }
 
     await auditar(companyId, user.metadata.dbUserId ?? null, reserva.id, {
