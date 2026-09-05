@@ -23,7 +23,6 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { generarCodigo } from '@/lib/codes'
 import {
   resolverVendedorAtribuido,
@@ -35,6 +34,7 @@ import { prisma } from '@/lib/prisma'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { randomBytes } from 'crypto'
 import {
   ESTADOS_RESERVA,
@@ -608,13 +608,13 @@ export async function crearReserva(
     }
 
     // Send confirmation email to client (non-blocking)
+    const reservaCompleta = await conEmpresa(companyId, (tx) =>
+      tx.reservaExc.findFirst({
+        where: { id: creada.id, companyId },
+        select: { checkinToken: true },
+      })
+    )
     if (clienteEmail) {
-      const reservaCompleta = await conEmpresa(companyId, (tx) =>
-        tx.reservaExc.findFirst({
-          where: { id: creada.id, companyId },
-          select: { checkinToken: true },
-        })
-      )
       const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
       if (reservaCompleta?.checkinToken) {
         correoConfirmacionReserva({
@@ -633,30 +633,12 @@ export async function crearReserva(
       }
     }
 
-    // Emitir evento de reserva creada (fire-and-safe)
-    emitirEventoEstrategia({
-      companyId,
-      type: 'reserva.creada',
-      subjectId: targetClienteId,
-      payload: {
-        reservaId: creada.id,
-        numero: creada.numero,
-        excursion: excursion.nombre,
-        total: Number(creada.total),
-        moneda: excursion.moneda,
-        fecha: v.datos.fecha.toISOString().split('T')[0],
-        adultos: v.datos.adultos,
-        ninos: v.datos.ninos,
-        canal: v.datos.canal,
-      },
-    }).catch((e) => console.error('[excursiones] Error emitiendo reserva.creada:', e))
-
-    // WhatsApp confirmation (fire-and-safe)
+    // Send WhatsApp confirmation to client (non-blocking)
     if (clienteTelefono) {
       enviarConfirmacionReservaWhatsApp({
         companyId,
         telefono: clienteTelefono,
-        nombreCliente: clienteNombre || clienteEmail || 'Cliente',
+        nombreCliente: clienteNombre || '',
         numeroReserva: creada.numero,
         nombreExcursion: excursion.nombre,
         fecha: v.datos.fecha.toISOString().split('T')[0],
@@ -664,7 +646,8 @@ export async function crearReserva(
         pasajeros: v.datos.adultos + v.datos.ninos,
         total: Number(creada.total),
         moneda: excursion.moneda,
-      }).catch((e) => console.error('[excursiones] WhatsApp confirmación falló en crearReserva:', e))
+        checkinToken: reservaCompleta?.checkinToken ?? undefined,
+      }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en crearReserva:', e))
     }
 
     revalidatePath('/admin/excursiones/reservas')
@@ -726,8 +709,6 @@ export async function registrarPago(
         where: { id: reservaId, companyId },
         select: {
           id: true,
-          numero: true,
-          clienteId: true,
           estado: true,
           total: true,
           moneda: true,
@@ -781,11 +762,10 @@ export async function registrarPago(
         user.metadata.dbUserId ?? null
       ).catch(anotarFallo('excursiones:reservas:autoVentaComision'))
 
-      // Emitir evento de reserva pagada (fire-and-safe)
       emitirEventoEstrategia({
         companyId,
         type: 'reserva.pagada',
-        subjectId: reserva.clienteId ?? null,
+        subjectId: reserva.id,
         payload: {
           reservaId: reserva.id,
           numero: reserva.numero,
@@ -793,7 +773,7 @@ export async function registrarPago(
           moneda: reserva.moneda,
           metodo: v.datos.metodo,
         },
-      }).catch((e) => console.error('[excursiones] Error emitiendo reserva.pagada:', e))
+      }).catch(anotarFallo('excursiones:reservas:eventoPagada'))
     }
 
     await auditar(companyId, user.metadata.dbUserId ?? null, reserva.id, {

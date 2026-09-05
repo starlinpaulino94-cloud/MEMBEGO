@@ -1,3 +1,4 @@
+import QRCode from 'qrcode'
 import { enviarWhatsapp, type ResultadoEnvio } from '@/modules/connect/whatsapp'
 
 type InputConfirmacion = {
@@ -11,6 +12,7 @@ type InputConfirmacion = {
   pasajeros: number
   total: number
   moneda: string
+  checkinToken?: string
 }
 
 function construirTextoConfirmacion(i: Omit<InputConfirmacion, 'companyId' | 'telefono' | 'nombreCliente'>): string {
@@ -36,12 +38,23 @@ export async function enviarConfirmacionReservaWhatsApp(input: InputConfirmacion
       moneda: input.moneda,
     })
 
+    let imagen: string | undefined
+    if (input.checkinToken) {
+      try {
+        const dataUri = await QRCode.toDataURL(input.checkinToken, { width: 300, margin: 2 })
+        imagen = dataUri
+      } catch {
+        // QR generation failure → send text only
+      }
+    }
+
     return await enviarWhatsapp({
       companyId: input.companyId,
       telefono: input.telefono,
       texto,
+      imagen,
     })
   } catch (e) {
-    return { ok: false, motivo: e instanceof Error ? e.message : 'error_desconocido' }
+    return { ok: false, motivo: 'proveedor', detalle: e instanceof Error ? e.message : 'error desconocido' }
   }
 }

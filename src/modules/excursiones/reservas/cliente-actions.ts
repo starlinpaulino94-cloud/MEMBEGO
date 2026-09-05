@@ -38,7 +38,6 @@ import { procesarVentaYComisionInterna } from '../ventas/actions'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { sendEmail } from '@/lib/email'
 import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
-import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaClienteState {
@@ -464,28 +463,6 @@ export async function reservarExcursion(
     revalidatePath('/cliente/mis-excursiones')
     revalidatePath('/cliente/excursiones')
 
-    // Emitir evento de reserva creada (fire-and-safe)
-    try {
-      await emitirEventoEstrategia({
-        companyId,
-        type: 'reserva.creada',
-        subjectId: clienteId,
-        payload: {
-          reservaId: creada.id,
-          numero: creada.numero,
-          excursionId,
-          excursionNombre: excursion.nombre,
-          fecha: v.datos.fecha.toISOString(),
-          hora: v.datos.hora,
-          adultos: v.datos.adultos,
-          ninos: v.datos.ninos,
-          canal: 'ONLINE',
-        },
-      })
-    } catch {
-      /* fire-and-safe: fallo del evento no rompe la reserva */
-    }
-
     // Sincronizar estado AGOTADA tras crear reserva
     await sincronizarEstadoAgotada(companyId, excursionId)
     for (const item of itemsComboAGuardar) {
@@ -510,26 +487,24 @@ export async function reservarExcursion(
       ).catch((e) => console.error('[excursiones] Error enviando email confirmación en reservarExcursion:', e))
     }
 
-    // WhatsApp confirmation (fire-and-safe)
-    const clienteTelefono = await conEmpresa(companyId, (tx) =>
-      tx.cliente.findFirst({
-        where: { companyId, supabaseId: user.id },
-        select: { telefono: true },
-      })
-    ).catch(() => null)
-    if (clienteTelefono?.telefono) {
-      enviarConfirmacionReservaWhatsApp({
-        companyId,
-        telefono: clienteTelefono.telefono,
-        nombreCliente: user.email || 'Cliente',
-        numeroReserva: creada.numero,
-        nombreExcursion: excursion.nombre,
-        fecha: v.datos.fecha.toISOString().split('T')[0],
-        hora: v.datos.hora ?? '',
-        pasajeros: v.datos.adultos + v.datos.ninos,
-        total: Number(totales.total),
-        moneda: excursion.moneda,
-      }).catch((e) => console.error('[excursiones] WhatsApp confirmación falló en reservarExcursion:', e))
+    // Send WhatsApp confirmation to client (non-blocking)
+    if (clienteId) {
+      const cliente = await prisma.cliente.findUnique({ where: { id: clienteId }, select: { telefono: true } }).catch(() => null)
+      if (cliente?.telefono) {
+        enviarConfirmacionReservaWhatsApp({
+          companyId,
+          telefono: cliente.telefono,
+          nombreCliente: user.email ?? '',
+          numeroReserva: creada.numero,
+          nombreExcursion: excursion.nombre,
+          fecha: v.datos.fecha.toISOString().split('T')[0],
+          hora: v.datos.hora ?? '',
+          pasajeros: v.datos.adultos + v.datos.ninos,
+          total: Number(totales.total),
+          moneda: excursion.moneda,
+          checkinToken,
+        }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en reservarExcursion:', e))
+      }
     }
 
     // Consumir cookie de atribución (un solo uso)

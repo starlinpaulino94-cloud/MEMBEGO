@@ -4,6 +4,7 @@ import { guardarCredencial, leerCredencial } from '@/modules/connect/credenciale
 import { anotarSalud } from '@/modules/connect/registro'
 import { anotarConector } from '@/modules/connect/bitacora'
 import {
+  cuerpoMensajeImagen,
   cuerpoMensajeTexto,
   esCredencialWhatsapp,
   normalizarTelefonoWhatsapp,
@@ -153,6 +154,7 @@ export async function enviarWhatsapp(input: {
   companyId: string
   telefono: string
   texto: string
+  imagen?: string
 }): Promise<ResultadoEnvio> {
   const conexionId = await conexionWhatsapp(input.companyId)
   if (!conexionId) return { ok: false, motivo: 'sin_conexion' }
@@ -174,6 +176,52 @@ export async function enviarWhatsapp(input: {
 
   const para = normalizarTelefonoWhatsapp(input.telefono)
   if (!para) return { ok: false, motivo: 'telefono_invalido' }
+
+  if (input.imagen) {
+    try {
+      const form = new FormData()
+      form.append('file', input.imagen, 'qr.png')
+      form.append('messaging_product', 'whatsapp')
+      form.append('type', 'image/png')
+
+      const uploadResp = await fetch(
+        `https://graph.facebook.com/${VERSION_GRAPH}/${encodeURIComponent(credencial.phoneNumberId)}/media`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${credencial.token}` },
+          body: form,
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        }
+      )
+
+      if (uploadResp.ok) {
+        const uploadData = (await uploadResp.json()) as { id?: string }
+        if (uploadData.id) {
+          const imgResp = await fetch(
+            `https://graph.facebook.com/${VERSION_GRAPH}/${encodeURIComponent(credencial.phoneNumberId)}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${credencial.token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(cuerpoMensajeImagen(para, uploadData.id)),
+              signal: AbortSignal.timeout(TIMEOUT_MS),
+            }
+          )
+          if (!imgResp.ok) {
+            await anotarSalud({
+              companyId: input.companyId,
+              conexionId,
+              resultado: { ok: false, error: `Meta respondió ${imgResp.status} (imagen)` },
+            })
+          }
+        }
+      }
+    } catch {
+      // ponytail: imagen fallida no bloquea el texto
+    }
+  }
 
   try {
     const resp = await fetch(

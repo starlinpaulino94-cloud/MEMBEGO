@@ -24,10 +24,9 @@ import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { correoAccesoCliente, correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 import { sendEmail } from '@/lib/email'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
-import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
-import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaVendedorState {
   error?: string
@@ -476,36 +475,19 @@ export async function crearReservaVendedor(
       })
     ).catch(anotarFallo('excursiones:crearReservaVendedor:auditLog'))
 
-    // 7. Evento de negocio
-    try {
-      await emitirEventoEstrategia({
-        companyId,
-        type: 'reserva.creada',
-        subjectId: targetClienteId,
-        payload: {
-          reservaId: reserva.id,
-          numero: reserva.numero,
-          canal: 'VENDEDOR',
-          vendedorId: vendedor.id,
-        },
-      })
-    } catch {
-      // fire-and-safe: fallo del bus no rompe el flujo
-    }
-
     await sincronizarEstadoAgotada(companyId, excursionId)
     for (const item of itemsComboAGuardar) {
       await sincronizarEstadoAgotada(companyId, item.actividadId)
     }
 
     // Send confirmation email to client (non-blocking)
+    const reservaCompleta = await conEmpresa(companyId, (tx) =>
+      tx.reservaExc.findFirst({
+        where: { id: reserva.id, companyId },
+        select: { checkinToken: true },
+      })
+    )
     if (clienteEmail) {
-      const reservaCompleta = await conEmpresa(companyId, (tx) =>
-        tx.reservaExc.findFirst({
-          where: { id: reserva.id, companyId },
-          select: { checkinToken: true },
-        })
-      )
       const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
       if (reservaCompleta?.checkinToken) {
         correoConfirmacionReserva({
@@ -524,26 +506,29 @@ export async function crearReservaVendedor(
       }
     }
 
-    // WhatsApp confirmation (fire-and-safe)
-    const clienteTelefono = await conEmpresa(companyId, (tx) =>
-      tx.cliente.findFirst({
-        where: { id: targetClienteId, companyId },
-        select: { telefono: true },
-      })
-    ).catch(() => null)
-    if (clienteTelefono?.telefono) {
-      enviarConfirmacionReservaWhatsApp({
-        companyId,
-        telefono: clienteTelefono.telefono,
-        nombreCliente: clienteNombre || clienteEmail || 'Cliente',
-        numeroReserva: reserva.numero,
-        nombreExcursion: excursion.nombre,
-        fecha: v.datos.fecha.toISOString().split('T')[0],
-        hora: v.datos.hora ?? '',
-        pasajeros: v.datos.adultos + v.datos.ninos,
-        total: Number(totales.total),
-        moneda: excursion.moneda,
-      }).catch((e) => console.error('[excursiones] WhatsApp confirmación falló en crearReservaVendedor:', e))
+    // Send WhatsApp confirmation to client (non-blocking)
+    {
+      const cliente = await conEmpresa(companyId, (tx) =>
+        tx.cliente.findUnique({
+          where: { id: targetClienteId },
+          select: { telefono: true },
+        })
+      )
+      if (cliente?.telefono) {
+        enviarConfirmacionReservaWhatsApp({
+          companyId,
+          telefono: cliente.telefono,
+          nombreCliente: clienteNombre || clienteEmail || '',
+          numeroReserva: reserva.numero,
+          nombreExcursion: excursion.nombre,
+          fecha: v.datos.fecha.toISOString().split('T')[0],
+          hora: v.datos.hora ?? '',
+          pasajeros: v.datos.adultos + v.datos.ninos,
+          total: Number(totales.total),
+          moneda: excursion.moneda,
+          checkinToken: reservaCompleta?.checkinToken ?? undefined,
+        }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en crearReservaVendedor:', e))
+      }
     }
 
     revalidatePath('/vendedor/reservas')
