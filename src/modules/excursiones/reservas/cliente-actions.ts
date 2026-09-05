@@ -38,6 +38,7 @@ import { procesarVentaYComisionInterna } from '../ventas/actions'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { sendEmail } from '@/lib/email'
 import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 
 export interface ReservaClienteState {
   error?: string
@@ -461,6 +462,28 @@ export async function reservarExcursion(
 
     revalidatePath('/cliente/mis-excursiones')
     revalidatePath('/cliente/excursiones')
+
+    // Emitir evento de reserva creada (fire-and-safe)
+    try {
+      await emitirEventoEstrategia({
+        companyId,
+        type: 'reserva.creada',
+        subjectId: clienteId,
+        payload: {
+          reservaId: creada.id,
+          numero: creada.numero,
+          excursionId,
+          excursionNombre: excursion.nombre,
+          fecha: v.datos.fecha.toISOString(),
+          hora: v.datos.hora,
+          adultos: v.datos.adultos,
+          ninos: v.datos.ninos,
+          canal: 'ONLINE',
+        },
+      })
+    } catch {
+      /* fire-and-safe: fallo del evento no rompe la reserva */
+    }
 
     // Sincronizar estado AGOTADA tras crear reserva
     await sincronizarEstadoAgotada(companyId, excursionId)

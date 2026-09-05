@@ -6,29 +6,30 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 model Lead {
-  id                String          @id @default(uuid())
-  companyId         String
-  clienteId         String?
+  id        String  @id @default(uuid())
+  companyId String
+  clienteId String?
 
-  nombre            String
-  email             String?
-  telefono          String?
-  fuente            String          @default("ORGANICO")  // ORGANICO, PAGADO, REFERENCIA, EVENTO, OTRO
-  canal             String          @default("WEB")       // WHATSAPP, INSTAGRAM, FACEBOOK, TELEFONO, PRESENCIAL, WEB
-  estado            String          @default("ACTIVO")    // ACTIVO, INACTIVO, CONVERTIDO, DESCARTADO
-  etapa             String          @default("NUEVO")     // NUEVO, CONTACTADO, INTERESADO, PROPUESTA, NEGOCIACION, GANADO, PERDIDO
-  score             Int?
-  fechaSeguimiento  DateTime?
-  prioridad         String          @default("MEDIA")     // BAJA, MEDIA, ALTA, URGENTE
-  asignadoA         String?         // userId
-  notas             String?
-  tags              String[]        @default([])
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  nombre           String
+  email            String?
+  telefono         String?
+  fuente           String    @default("ORGANICO") // ORGANICO, PAGADO, REFERENCIA, EVENTO, OTRO
+  canal            String    @default("WEB") // WHATSAPP, INSTAGRAM, FACEBOOK, TELEFONO, PRESENCIAL, WEB
+  estado           String    @default("ACTIVO") // ACTIVO, INACTIVO, CONVERTIDO, DESCARTADO
+  etapa            String    @default("NUEVO") // NUEVO, CONTACTADO, INTERESADO, PROPUESTA, NEGOCIACION, GANADO, PERDIDO
+  score            Int?
+  fechaSeguimiento DateTime?
+  prioridad        String    @default("MEDIA") // BAJA, MEDIA, ALTA, URGENTE
+  asignadoA        String? // userId
+  notas            String?
+  tags             String[]  @default([])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  notasSeguimiento  NotaSeguimiento[]
-  conversaciones    Conversacion[]
+  notasSeguimiento NotaSeguimiento[]
+  conversaciones   Conversacion[]
 
+  @@unique([companyId, telefono], name: "Lead_company_telefono")
   @@index([companyId])
   @@index([companyId, estado])
   @@index([companyId, etapa])
@@ -37,35 +38,35 @@ model Lead {
 }
 
 model NotaSeguimiento {
-  id              String      @id @default(uuid())
-  leadId          String
-  lead            Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId          String
-  contenido       String
-  tipo            String      @default("NOTA")  // NOTA, LLAMADA, EMAIL, WHATSAPP, REUNION
-  estado          String      @default("PENDIENTE") // PENDIENTE, COMPLETADA
-  fechaProxima    DateTime?
-  createdAt       DateTime    @default(now())
+  id           String    @id @default(uuid())
+  leadId       String
+  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId       String
+  contenido    String
+  tipo         String    @default("NOTA") // NOTA, LLAMADA, EMAIL, WHATSAPP, REUNION
+  estado       String    @default("PENDIENTE") // PENDIENTE, COMPLETADA
+  fechaProxima DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([leadId])
   @@index([leadId, createdAt])
 }
 
 model Conversacion {
-  id            String      @id @default(uuid())
+  id            String    @id @default(uuid())
   leadId        String
-  lead          Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   companyId     String
-  canal         String      // WHATSAPP, INSTAGRAM, MESSENGER, EMAIL
-  canalThreadId String?     // ID externo (wa_id, instagram_thread_id, etc.)
-  estado        String      @default("ABIERTA") // ABIERTA, CERRADA, ARCHIVADA
+  canal         String // WHATSAPP, INSTAGRAM, MESSENGER, EMAIL
+  canalThreadId String? // ID externo (wa_id, instagram_thread_id, etc.)
+  estado        String    @default("ABIERTA") // ABIERTA, CERRADA, ARCHIVADA
   ultimoMensaje String?
   ultimaFecha   DateTime?
-  noLeidos      Int         @default(0)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  noLeidos      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  mensajes      Mensaje[]
+  mensajes Mensaje[]
 
   @@index([companyId])
   @@index([leadId])
@@ -73,27 +74,27 @@ model Conversacion {
 }
 
 model Mensaje {
-  id              String      @id @default(uuid())
-  conversacionId  String
-  conversacion    Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
-  direccion       String      // ENTRANTE, SALIENTE
-  tipo            String      // TEXTO, IMAGEN, DOCUMENTO, AUDIO, UBICACION
-  contenido       String
-  metadata        Json?       // payload original del proveedor
-  proveedorMsgId  String?     // message_id de WhatsApp/Meta/etc.
-  estado          String      @default("ENVIADO") // ENVIADO, ENTREGADO, LEIDO, FALLIDO
-  creadoPor       String?     // userId si saliente
-  createdAt       DateTime    @default(now())
+  id             String       @id @default(uuid())
+  conversacionId String
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  direccion      String // ENTRANTE, SALIENTE
+  tipo           String // TEXTO, IMAGEN, DOCUMENTO, AUDIO, UBICACION
+  contenido      String
+  metadata       Json? // payload original del proveedor
+  proveedorMsgId String? // message_id de WhatsApp/Meta/etc.
+  estado         String       @default("ENVIADO") // ENVIADO, ENTREGADO, LEIDO, FALLIDO
+  creadoPor      String? // userId si saliente
+  createdAt      DateTime     @default(now())
 
   @@index([conversacionId, createdAt])
 }
 
 model PipelineConfig {
-  id            String      @id @default(uuid())
-  companyId     String      @unique
-  categoria     String      // CAR_WASH, BARBERIA, etc.
-  stages        Json        // [{id, nombre, color, orden, esObligatoria, reglasTransicion}]
-  camposCustom  Json        // [{key, label, tipo, opciones, obligatorio}]
-  automatizaciones Json     // {bienvenida:bool, recordatorioDias:int, cierre:bool, plantillas:{...}}
-  updatedAt     DateTime    @updatedAt
+  id               String   @id @default(uuid())
+  companyId        String   @unique
+  categoria        String // CAR_WASH, BARBERIA, etc.
+  stages           Json // [{id, nombre, color, orden, esObligatoria, reglasTransicion}]
+  camposCustom     Json // [{key, label, tipo, opciones, obligatorio}]
+  automatizaciones Json // {bienvenida:bool, recordatorioDias:int, cierre:bool, plantillas:{...}}
+  updatedAt        DateTime @updatedAt
 }

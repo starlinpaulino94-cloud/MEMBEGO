@@ -23,6 +23,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { generarCodigo } from '@/lib/codes'
 import {
   resolverVendedorAtribuido,
@@ -630,6 +631,24 @@ export async function crearReserva(
         ).catch((e) => console.error('[excursiones] Error enviando email confirmación en crearReserva:', e))
       }
     }
+
+    // Emitir evento de reserva creada (fire-and-safe)
+    emitirEventoEstrategia({
+      companyId,
+      type: 'reserva.creada',
+      subjectId: targetClienteId,
+      payload: {
+        reservaId: creada.id,
+        numero: creada.numero,
+        excursion: excursion.nombre,
+        total: Number(creada.total),
+        moneda: excursion.moneda,
+        fecha: v.datos.fecha.toISOString().split('T')[0],
+        adultos: v.datos.adultos,
+        ninos: v.datos.ninos,
+        canal: v.datos.canal,
+      },
+    }).catch((e) => console.error('[excursiones] Error emitiendo reserva.creada:', e))
 
     revalidatePath('/admin/excursiones/reservas')
     return {

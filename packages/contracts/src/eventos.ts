@@ -51,6 +51,9 @@ export const TIPO_V2: Record<string, string> = {
   'cliente.primera_compra': 'purchase.first_completed',
   'membresia.activada': 'membership.activated',
   'referido.convirtio': 'referral.converted',
+  'reserva.creada': 'reservation.created',
+  'reserva.pagada': 'reservation.paid',
+  'venta.generada': 'sale.created',
 }
 
 export const TIPO_INTERNO: Record<string, string> = Object.fromEntries(

@@ -26,6 +26,7 @@ import { correoAccesoCliente, correoConfirmacionReserva } from '@/lib/email/plan
 import { sendEmail } from '@/lib/email'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 
 export interface ReservaVendedorState {
   error?: string
@@ -473,6 +474,23 @@ export async function crearReservaVendedor(
         },
       })
     ).catch(anotarFallo('excursiones:crearReservaVendedor:auditLog'))
+
+    // 7. Evento de negocio
+    try {
+      await emitirEventoEstrategia({
+        companyId,
+        type: 'reserva.creada',
+        subjectId: targetClienteId,
+        payload: {
+          reservaId: reserva.id,
+          numero: reserva.numero,
+          canal: 'VENDEDOR',
+          vendedorId: vendedor.id,
+        },
+      })
+    } catch {
+      // fire-and-safe: fallo del bus no rompe el flujo
+    }
 
     await sincronizarEstadoAgotada(companyId, excursionId)
     for (const item of itemsComboAGuardar) {
