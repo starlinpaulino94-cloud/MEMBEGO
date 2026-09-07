@@ -16,6 +16,18 @@ export interface CompanyDTO {
   moneda: string
   zonaHoraria: string
   idioma: string
+  /** Datos de cabecera de comprobante: para que un satélite imprima su factura
+   *  con el mismo encabezado/pie que MembeGo. Todos opcionales (`null`). */
+  razonSocial: string | null
+  direccion: string | null
+  ciudad: string | null
+  telefono: string | null
+  website: string | null
+  whatsapp: string | null
+  instagram: string | null
+  facebook: string | null
+  horario: string | null
+  colorPrimario: string | null
 }
 
 export interface BranchDTO {

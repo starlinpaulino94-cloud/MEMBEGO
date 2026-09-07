@@ -41,6 +41,18 @@ export async function GET(req: NextRequest, ctxRuta: { params: Promise<{ id: str
         moneda: true,
         zonaHoraria: true,
         idioma: true,
+        // Cabecera de comprobante: para que un satélite imprima su factura con
+        // el mismo encabezado/pie que MembeGo.
+        razonSocial: true,
+        direccion: true,
+        ciudad: true,
+        telefono: true,
+        website: true,
+        whatsapp: true,
+        instagram: true,
+        facebook: true,
+        horario: true,
+        colorPrimario: true,
       },
     })
   ).catch(() => null)
