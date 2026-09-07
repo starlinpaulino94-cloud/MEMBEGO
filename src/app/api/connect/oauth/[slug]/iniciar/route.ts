@@ -66,8 +66,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
   })
 
   if (!res.ok) {
-    const estado = res.motivo === 'conexion_no_existe' ? 404 : 503
-    return NextResponse.json({ error: 'No se pudo iniciar la conexión.' }, { status: estado })
+    // El motivo real va al log del servidor: la pantalla no puede arreglarlo,
+    // y un 503 mudo obligaba a adivinar si faltaba la fila o la firma.
+    console.error('[connect] no se pudo iniciar OAuth:', { slug, motivo: res.motivo })
+    if (res.motivo === 'conexion_no_existe') {
+      return NextResponse.json({ error: 'No se pudo iniciar la conexión.' }, { status: 404 })
+    }
+    // `sin_secreto_firma`: es un fallo de ESTE despliegue, no de la empresa ni
+    // de Google. Se dice con nombre para que quien administre la plataforma
+    // sepa qué poner; el catálogo ya no ofrece el conector en este estado.
+    return NextResponse.json(
+      {
+        error:
+          'La plataforma no tiene configurada la firma de conexiones (PLATFORM_TOKEN_SECRET). Avisa al administrador de MembeGo.',
+      },
+      { status: 503 }
+    )
   }
 
   return NextResponse.redirect(res.url)

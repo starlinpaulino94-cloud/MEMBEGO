@@ -70,6 +70,10 @@ model Cita {
   /// 'CLIENTE' | 'NEGOCIO' cuando estado = CANCELADA.
   canceladaPor      String?
   motivoCancelacion String?
+  /// Id del evento en la agenda de Google del negocio cuando la cita
+  /// confirmada se llevó allí (Membego Connect). Null = no está en Google.
+  /// Con él se borra al cancelar y no se crea dos veces.
+  googleEventId     String?
   atendidaPorId     String?
   atendidaPor       User?           @relation("CitaAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: SetNull)
   /// Recompensa gratis que el cliente viene a canjear: su QR se habilita al

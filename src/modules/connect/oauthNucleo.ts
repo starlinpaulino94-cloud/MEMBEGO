@@ -117,6 +117,12 @@ export interface ProveedorOauth {
    * son particularidades de cada uno, no del protocolo.
    */
   extra?: Record<string, string>
+  /**
+   * Dónde se revoca un token al desconectar (`oauth2.googleapis.com/revoke`
+   * en Google). Opcional: un proveedor sin punto de revocación solo ve cómo
+   * borramos nuestra copia, y su token sigue vivo hasta que caduque.
+   */
+  urlRevocacion?: string
 }
 
 /**

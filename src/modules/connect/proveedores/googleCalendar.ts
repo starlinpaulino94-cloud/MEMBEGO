@@ -1,3 +1,4 @@
+import { faltantesConnectPlataforma } from '@/lib/env'
 import type { ConfigOauthConector } from '@/modules/connect/oauthNucleo'
 import { metadatosObligatorios } from '@/modules/connect/proveedores/metadatos'
 import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
@@ -58,9 +59,15 @@ export const GOOGLE_CALENDAR: DefinicionProveedor = {
   // Sube a 2 con la ampliación de permisos de la Fase 12: una conexión hecha
   // con la versión 1 no concedió el permiso de listar calendarios.
   versionAlta: 2,
+  // Dos condiciones, y las dos tienen que darse: la app OAuth de Google Y que
+  // la plataforma pueda firmar el `state` y sellar los tokens que vuelven.
+  // Sin lo segundo el catálogo ofrecía «Conectar» y el botón respondía 503,
+  // porque cada pieza comprobaba solo lo suyo.
   disponible: () =>
-    Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET),
-  queFalta: 'Faltan las variables GOOGLE_OAUTH_CLIENT_ID y GOOGLE_OAUTH_CLIENT_SECRET.',
+    Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) &&
+    faltantesConnectPlataforma().length === 0,
+  queFalta:
+    'Faltan las variables GOOGLE_OAUTH_CLIENT_ID y GOOGLE_OAUTH_CLIENT_SECRET, o las de la plataforma: PLATFORM_TOKEN_SECRET y CONNECT_CLAVES_MAESTRAS.',
   /**
    * Lo que sobrevive al alta. Nótese lo que NO pasa: ni el paso de
    * autorización ni el de validación dejan rastro aquí — eran trámites, no
@@ -97,6 +104,11 @@ export function oauthGoogleCalendar(): ConfigOauthConector | null {
   return {
     urlAutorizacion: 'https://accounts.google.com/o/oauth2/v2/auth',
     urlToken: 'https://oauth2.googleapis.com/token',
+    // Al desconectar se revoca AQUÍ antes de borrar nuestra copia: si no, el
+    // refresh token sigue vivo en la cuenta del cliente, con permiso para
+    // crear eventos, y la app aparece en «Aplicaciones con acceso» de una
+    // integración que la empresa cree apagada.
+    urlRevocacion: 'https://oauth2.googleapis.com/revoke',
     clientId,
     clientSecretEnv: 'GOOGLE_OAUTH_CLIENT_SECRET',
     scopes: [

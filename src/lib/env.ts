@@ -89,6 +89,23 @@ export function getConnectClavesMaestras(): string | null {
   return valor && valor.trim() ? valor.trim() : null
 }
 
+/**
+ * QUÉ LE FALTA A LA PLATAFORMA para completar un flujo OAuth de Connect: la
+ * firma del `state` (`PLATFORM_TOKEN_SECRET`) y la clave con la que se sellan
+ * los tokens que vuelven (`CONNECT_CLAVES_MAESTRAS`).
+ *
+ * Los conectores OAuth lo consultan en su `disponible()`. Antes cada pieza
+ * comprobaba solo lo suyo: el catálogo ofrecía «Conectar» con las variables de
+ * Google puestas, y el botón respondía 503 porque no había con qué firmar.
+ * La puerta se cierra donde se ve, y el catálogo dice qué falta.
+ */
+export function faltantesConnectPlataforma(): string[] {
+  const faltan: string[] = []
+  if (!getPlatformTokenSecret()) faltan.push('PLATFORM_TOKEN_SECRET')
+  if (!getConnectClavesMaestras()) faltan.push('CONNECT_CLAVES_MAESTRAS')
+  return faltan
+}
+
 /** Returns the list of missing required public env vars (for diagnostics). */
 export function missingPublicEnv(): string[] {
   return REQUIRED_PUBLIC.filter((k) => !process.env[k])

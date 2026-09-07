@@ -2,6 +2,7 @@ import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarConector } from '@/modules/connect/bitacora'
 import { eliminarCredencial } from '@/modules/connect/credenciales'
+import { revocarTokensOauth } from '@/modules/connect/revocacion'
 import { proveedorDe, slugsDisponibles } from '@/modules/connect/proveedores/indice'
 import { puedeTransicionar, type EstadoConexion } from '@/modules/connect/nucleo'
 import { CLASES_TRANSITORIAS, type ClaseError } from '@/modules/connect/proveedores/tipos'
@@ -203,10 +204,21 @@ export async function desconectarConexion(input: {
   const fila = await conEmpresa(input.companyId, (tx) =>
     tx.conexionEmpresa.findFirst({
       where: { id: input.conexionId, companyId: input.companyId },
-      select: { id: true, estado: true },
+      select: { id: true, estado: true, conector: { select: { slug: true } } },
     })
   )
   if (!fila || fila.estado === 'DISCONNECTED') return { ok: false }
+
+  // PRIMERO se revoca en el proveedor, mientras todavía tenemos el token:
+  // borrar nuestro sello sin esto deja un refresh token vivo en Google que la
+  // empresa cree apagado. Best-effort: si Google no responde, se desconecta
+  // igual — el remedio para un token que no se pudo revocar es borrar nuestra
+  // copia, que es justo lo que viene después.
+  await revocarTokensOauth({
+    companyId: input.companyId,
+    conexionId: fila.id,
+    slug: fila.conector.slug,
+  }).catch(() => undefined)
 
   for (const tipo of ['OAUTH_TOKENS', 'API_KEY', 'SECRETO'] as const) {
     await eliminarCredencial({ companyId: input.companyId, conexionId: fila.id, tipo })

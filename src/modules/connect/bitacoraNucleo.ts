@@ -38,6 +38,8 @@ export const EVENTOS_CONECTOR = [
   'credencial.guardada',
   'credencial.eliminada',
   'credencial.ilegible',
+  'oauth.revocado',
+  'oauth.revocacion_fallida',
 ] as const
 
 export type EventoConector = (typeof EVENTOS_CONECTOR)[number]
@@ -61,6 +63,8 @@ const TECNICO: Record<EventoConector, string> = {
   'credencial.guardada': 'Se guardó una credencial sellada',
   'credencial.eliminada': 'Se eliminó una credencial',
   'credencial.ilegible': 'Una credencial no se pudo descifrar',
+  'oauth.revocado': 'Se revocó el acceso en el proveedor al desconectar',
+  'oauth.revocacion_fallida': 'No se pudo revocar el acceso en el proveedor; se borró la copia local',
 }
 
 /**
@@ -88,6 +92,10 @@ const NEGOCIO: Record<EventoConector, string | null> = {
   'credencial.guardada': 'Se guardó tu acceso, cifrado',
   'credencial.eliminada': 'Se borró tu acceso guardado',
   'credencial.ilegible': 'Tu acceso guardado dejó de ser válido',
+  'oauth.revocado': 'Le quitamos a esta aplicación el acceso a tu cuenta',
+  // Interno: la empresa ya ve «Desconectaste esta aplicación»; que el
+  // proveedor no respondiera al revocar es cosa nuestra.
+  'oauth.revocacion_fallida': null,
 }
 
 function conocido(evento: string): evento is EventoConector {
