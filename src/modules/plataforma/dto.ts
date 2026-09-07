@@ -55,6 +55,16 @@ export function companyDTO(c: {
   moneda: string
   zonaHoraria: string
   idioma: string
+  razonSocial: string | null
+  direccion: string | null
+  ciudad: string | null
+  telefono: string | null
+  website: string | null
+  whatsapp: string | null
+  instagram: string | null
+  facebook: string | null
+  horario: string | null
+  colorPrimario: string | null
 }): CompanyDTO {
   return {
     id: c.id,
@@ -64,6 +74,16 @@ export function companyDTO(c: {
     moneda: c.moneda,
     zonaHoraria: c.zonaHoraria,
     idioma: c.idioma,
+    razonSocial: c.razonSocial,
+    direccion: c.direccion,
+    ciudad: c.ciudad,
+    telefono: c.telefono,
+    website: c.website,
+    whatsapp: c.whatsapp,
+    instagram: c.instagram,
+    facebook: c.facebook,
+    horario: c.horario,
+    colorPrimario: c.colorPrimario,
   }
 }
 
@@ -202,7 +222,11 @@ export function appointmentDTO(c: {
  * añada un campo tenga que declararlo aquí, que es donde se nota.
  */
 export const CAMPOS_DTO = {
-  Company: ['id', 'nombre', 'slug', 'logoUrl', 'moneda', 'zonaHoraria', 'idioma'],
+  Company: [
+    'id', 'nombre', 'slug', 'logoUrl', 'moneda', 'zonaHoraria', 'idioma',
+    'razonSocial', 'direccion', 'ciudad', 'telefono', 'website',
+    'whatsapp', 'instagram', 'facebook', 'horario', 'colorPrimario',
+  ],
   Branch: ['id', 'companyId', 'nombre', 'direccion', 'activa'],
   Customer: ['id', 'nombre', 'email', 'telefono'],
   MembershipSummary: ['id', 'customerId', 'companyId', 'planNombre', 'estado', 'vigenteHasta'],

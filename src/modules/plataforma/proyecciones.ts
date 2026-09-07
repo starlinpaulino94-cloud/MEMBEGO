@@ -62,7 +62,14 @@ export const PROYECCIONES: readonly ContratoProyeccion[] = [
     entidad: 'Company',
     autoridad: 'CORE',
     refresco: 'EVENTO',
-    campos: ['id', 'nombre', 'slug', 'logoUrl', 'moneda', 'zonaHoraria', 'idioma'],
+    // Los últimos siete son datos de CABECERA de comprobante: un satélite que
+    // imprime su factura los pone en el encabezado/pie igual que MembeGo. Es el
+    // uso que este contrato ya declaraba abajo ("comprobantes").
+    campos: [
+      'id', 'nombre', 'slug', 'logoUrl', 'moneda', 'zonaHoraria', 'idioma',
+      'razonSocial', 'direccion', 'ciudad', 'telefono', 'website',
+      'whatsapp', 'instagram', 'facebook', 'horario', 'colorPrimario',
+    ],
     eventos: ['company.updated'],
     usoPermitido: 'Cabeceras, comprobantes, formato de moneda y fecha.',
   },
