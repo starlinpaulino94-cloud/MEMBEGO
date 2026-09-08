@@ -246,3 +246,58 @@ contrato retail (wallet → bloque propio o `Mi QR`; motor de experiencias →
 bloque HERO derivado cuando no hay composición; el resto → Cuenta) y sustituir
 el respaldo por un Inicio retail por defecto, no por la pantalla vieja.
 Requiere aprobación porque cambia alcance.
+
+---
+
+## 11. F2d · D10 · Un solo Inicio (2026-09-08)
+
+**Decisión del usuario:** retirar la pantalla anterior en el mismo corte, no
+dejarla tras bandera. También confirmó que el proyecto Supabase de la
+configuración es desechable, así que §10.4 queda corregido: la corrida
+autenticada puede hacerse. La nota de `01-linea-base.md` §7 que describe esa
+cadena como «de producción» quedó desactualizada.
+
+**Lo que había.** Dos inicios. `InicioComercial` solo aparecía con composición
+publicada; el resto del tiempo se veía `InicioPrevio`, la app anterior íntegra.
+Sumado al fallo de segmentación del §10.2, el rediseño casi nunca se veía.
+
+**Arquitectura.** Un solo Inicio (`InicioRetail`) con dos mitades de dueños
+distintos:
+
+- **Comercial** — los 7 bloques que la empresa compone y publica. Sin
+  composición, su sitio lo ocupan las ofertas personalizadas: nadie se queda
+  sin nada que descubrir, y con composición no se repite el mismo contenido.
+- **Personal** — sale del estado de esa persona y no es configurable. Ningún
+  panel puede apagarle la wallet a nadie. Por eso las seis capacidades NO se
+  convirtieron en bloques del modelo de composición.
+
+El orden lo decide el contexto: con membresías la wallet va primero (la app se
+abre para enseñar el QR en el mostrador); sin ellas manda la mitad comercial.
+
+**Las seis capacidades, reubicadas.** Wallet → `RetailWallet`. Motor de
+experiencias → `RetailExperiencia`. Prueba social, onboarding y el popup →
+secciones retail reutilizando los componentes existentes, que ya leían tokens.
+Novedades e invitación → `RetailDescubreMas`. Gamificación → cabecera de la
+wallet, no en la barra superior: meterle otra insignia a la cabecera era
+recuperar la cabecera saturada que el rediseño retira.
+
+**Lo que no se perdió al reescribir el héroe.** El renderizador anterior traía
+degradados, brillo en bucle y botones de cristal —eso se va—, pero también
+llevaba datos: la cuenta atrás, el color y el arte de una campaña (que
+configura el administrador, no el sistema), los cupos restantes y cuánta gente
+la reclamó. Todo eso sigue, en lenguaje retail.
+
+**Retirados.** `InicioPrevio`, `ExperienciaHero`, `CampanaBanner`,
+`DescubreMas`, `BuscadorSimple` (este duplicaba el buscador de la cabecera).
+Los primitivos `PromoBanner`/`FlashPromotion`/`Shine` viven en `packages/ui` y
+quedan sin consumidor: su retirada es de F8. `BuscadorInicio`,
+`BuscadorUnificado` y `BuscadorExcursiones` ya estaban muertos antes del
+programa y los hereda F3.
+
+**Pruebas.** 4 conductuales nuevas en `cliente-retail.test.ts` (no vuelven a
+ser dos inicios; sin composición sigue siendo retail; las seis capacidades
+tienen casa; no se repite el buscador ni la barra de ubicación). La guardia del
+primer paso pasó a mirar el cargador y la wallet.
+
+**Verificación:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
+**suite 1966/1966** · `build` compilado.

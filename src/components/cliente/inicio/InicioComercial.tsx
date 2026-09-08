@@ -34,9 +34,16 @@ function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
   }
 }
 
+/**
+ * La mitad COMERCIAL del Inicio: los bloques que la empresa compone y publica.
+ *
+ * El ámbito `.retail` y el contenedor los pone `InicioRetail`, que es quien
+ * intercala esta mitad con la personal. Aquí solo van los bloques, para que
+ * anidar dos veces el mismo ámbito no duplique fondo ni tipografía.
+ */
 export function InicioComercial({ data }: { data: InicioVista }) {
   return (
-    <div className="retail min-w-0 overflow-x-hidden bg-background text-foreground">
+    <>
       {data.bloques.map((tipo) => (
         <Fragment key={tipo}>
           {tipo === 'DESTACADAS' && data.relampago ? (
@@ -45,6 +52,6 @@ export function InicioComercial({ data }: { data: InicioVista }) {
           {renderBlock(tipo, data)}
         </Fragment>
       ))}
-    </div>
+    </>
   )
 }

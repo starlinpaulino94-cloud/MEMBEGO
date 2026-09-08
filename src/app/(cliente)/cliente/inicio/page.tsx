@@ -1,14 +1,21 @@
 import { requireRole } from '@/lib/auth/guards'
+import { cargarPanelPersonal } from '@/modules/cliente/panelPersonal'
 import { getInicioPublicado } from '@/modules/home/lectura'
-import { InicioComercial } from '@/components/cliente/inicio/InicioComercial'
-import InicioPrevio from '@/components/cliente/inicio/InicioPrevio'
+import { InicioRetail } from '@/components/cliente/inicio/InicioRetail'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Inicio', description: 'Descubre beneficios cerca de ti y consulta tus membresías' }
+export const metadata = {
+  title: 'Inicio',
+  description: 'Descubre beneficios cerca de ti y consulta tus membresías',
+}
 
 export default async function InicioCliente() {
   const user = await requireRole('CLIENTE')
-  const data = await getInicioPublicado(user)
-  if (!data) return <InicioPrevio />
-  return <InicioComercial data={data} />
+  // Las dos mitades se piden a la vez: la comercial puede no existir y la
+  // personal nunca depende de ella.
+  const [comercial, personal] = await Promise.all([
+    getInicioPublicado(user).catch(() => null),
+    cargarPanelPersonal(user),
+  ])
+  return <InicioRetail comercial={comercial} personal={personal} />
 }

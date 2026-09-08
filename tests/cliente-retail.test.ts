@@ -104,3 +104,60 @@ test('el ámbito retail existe con tokens de una sola fuente', () => {
   assert.match(css, /\.retail-header/)
   assert.match(css, /--color-retail-blue: #0284c7/)
 })
+
+// ── D10 · un solo Inicio ─────────────────────────────────────────────────────
+//
+// Había dos: el retail solo aparecía si la empresa había publicado
+// composición, y el resto del tiempo se veía la pantalla anterior íntegra.
+// Estas guardias vigilan que no vuelvan a ser dos, y que las seis capacidades
+// que solo vivían en la vieja sigan teniendo casa.
+
+test('la pantalla anterior del Inicio ya no existe, ni nadie la nombra', () => {
+  assert.equal(
+    existsSync(join(RAIZ, 'src/components/cliente/inicio/InicioPrevio.tsx')),
+    false,
+    'InicioPrevio era el Inicio anterior completo; D10 lo retira.'
+  )
+  const page = leer('src/app/(cliente)/cliente/inicio/page.tsx')
+  assert.match(page, /InicioRetail/)
+  assert.doesNotMatch(
+    page,
+    /InicioPrevio/,
+    'El Inicio no puede volver a tener una pantalla de respaldo con el diseño viejo.'
+  )
+})
+
+test('sin composición publicada, el Inicio sigue siendo retail', () => {
+  const src = leer('src/components/cliente/inicio/InicioRetail.tsx')
+  // `comercial` puede ser null y aun así se pinta la franja personal y, en su
+  // sitio, las ofertas personalizadas. Nada cae a otra pantalla.
+  assert.match(src, /comercial: InicioVista \| null/)
+  assert.match(src, /RetailOfertas/, 'Sin composición, su sitio lo ocupan las ofertas.')
+  assert.match(src, /RetailWallet/, 'La wallet no depende de que la empresa publique.')
+})
+
+test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', () => {
+  const src = leer('src/components/cliente/inicio/InicioRetail.tsx')
+  for (const [capacidad, marca] of [
+    ['wallet', /RetailWallet/],
+    ['motor de experiencias', /RetailExperiencia/],
+    ['prueba social', /PruebaSocial/],
+    ['onboarding', /OnboardingClienteFirstVisit/],
+    ['novedades e invitación', /RetailDescubreMas/],
+  ] as const) {
+    assert.match(src, marca, `Se perdió la capacidad: ${capacidad}.`)
+  }
+  // La gamificación no tiene sección propia: viaja en la cabecera de la wallet.
+  assert.match(leer('src/components/cliente/inicio/RetailWallet.tsx'), /gamificacion/)
+})
+
+test('el Inicio no repite el buscador ni el saludo que ya da la carcasa', () => {
+  const src = leer('src/components/cliente/inicio/InicioRetail.tsx')
+  assert.doesNotMatch(src, /Buscador/, 'El buscador vive en CustomerShell; repetirlo es navegación duplicada.')
+  assert.doesNotMatch(src, /Cerca de m/, 'La barra de ubicación ya está en la carcasa.')
+  assert.equal(
+    existsSync(join(RAIZ, 'src/components/cliente/inicio/BuscadorSimple.tsx')),
+    false,
+    'El buscador del Inicio anterior duplicaba el de la cabecera.'
+  )
+})

@@ -173,15 +173,18 @@ test('cada primer paso se anuncia con la etiqueta de lo que va a encontrar', () 
   assert.equal(primerPaso({ companyId: 'c1', marcaUnica: true }).etiqueta, 'Ver planes')
 })
 
-test('la pantalla que pinta el estado vacío usa esa regla, no una copia suya', () => {
-  const src = leer('src/components/cliente/inicio/InicioPrevio.tsx')
-  assert.match(src, /primerPaso/, 'El estado vacío del Inicio consume `primerPaso`.')
-  assert.doesNotMatch(
-    src,
-    /'\/cliente\/planes'/,
-    'Si la pantalla vuelve a decidir el destino por su cuenta, la regla se ' +
-      'duplica y una de las dos copias se quedará atrás.'
-  )
+test('el Inicio resuelve el primer paso con esa regla, no con una copia suya', () => {
+  const carga = leer('src/modules/cliente/panelPersonal.ts')
+  const pantalla = leer('src/components/cliente/inicio/RetailWallet.tsx')
+  assert.match(carga, /primerPaso\(/, 'El Inicio resuelve el primer paso con la regla.')
+  for (const [nombre, src] of [['el cargador', carga], ['la wallet', pantalla]] as const) {
+    assert.doesNotMatch(
+      src,
+      /'\/cliente\/planes'/,
+      `Si ${nombre} vuelve a decidir el destino por su cuenta, la regla se ` +
+        'duplica y una de las dos copias se quedará atrás.'
+    )
+  }
 })
 
 test('el beneficio listo para usar es de la persona, no de la ficha activa', () => {
