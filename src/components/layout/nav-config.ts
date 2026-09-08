@@ -138,6 +138,11 @@ export const CLAVES_BADGE = [
   'platformIncidents',
   'solicitudes',
   'colaAtascada',
+  // Los del hub (contrato Stitch): conteos baratos, cacheados 60 s. Los caros
+  // —clientes en riesgo— siguen fuera a propósito: ver la nota de coste en
+  // modules/navegacion/badges.ts.
+  'planesActivos',
+  'canjesHoy',
 ] as const
 export type ClaveBadge = (typeof CLAVES_BADGE)[number]
 
@@ -158,6 +163,8 @@ export interface NavLink {
   tiposEmpresa?: readonly TipoEmpresaNav[]
   /** Contador real que se pinta al lado. Sin dato, no se pinta nada. */
   badge?: ClaveBadge
+  /** Tono del contador: ausente = informa (gris); peligro = avisa (rojo). */
+  badgeTono?: 'peligro'
   /** Etiqueta corta y estática: "Nuevo", "Beta". */
   etiqueta?: string
   /** Aterrizaje del espacio: a dónde va el riel al pulsar su icono. */
@@ -346,6 +353,7 @@ const G_OFERTA: NavGroup = {
     {
       href: '/admin/planes',
       label: 'Planes',
+      badge: 'planesActivos',
       icon: Package,
       description: 'Productos de membresía que vende la empresa.',
       principal: true,
@@ -456,6 +464,7 @@ const G_ATENCION: NavGroup = {
     {
       href: '/admin/scanner',
       label: 'Escanear QR',
+      badge: 'canjesHoy',
       icon: ScanLine,
       description: 'Validación de beneficios y membresías.',
       principal: true,

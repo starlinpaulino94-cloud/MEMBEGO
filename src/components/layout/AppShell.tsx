@@ -128,6 +128,7 @@ export function AppShell({
   sistemasExternos,
   nombreEmpresa,
   sedeEmpresa,
+  conmutadorEmpresa,
   children,
 }: {
   /**
@@ -150,6 +151,8 @@ export function AppShell({
   nombreEmpresa?: string | null
   /** Sede o ciudad de la empresa activa, para la tarjeta del menú. */
   sedeEmpresa?: string | null
+  /** AdminCompanySwitcher ya montado (solo con ≥2 empresas). */
+  conmutadorEmpresa?: React.ReactNode
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -202,6 +205,7 @@ export function AppShell({
           <AppSidebar
             ctx={ctx}
             empresa={nombreEmpresa ? { nombre: nombreEmpresa, sede: sedeEmpresa ?? null } : null}
+            conmutador={conmutadorEmpresa}
             badges={badges}
             compacto={compacto}
             onToggleCompacto={alternarCompacto}
@@ -232,6 +236,7 @@ export function AppShell({
             <AppSidebar
               ctx={ctx}
               empresa={nombreEmpresa ? { nombre: nombreEmpresa, sede: sedeEmpresa ?? null } : null}
+            conmutador={conmutadorEmpresa}
               badges={badges}
               variante="movil"
               userEmail={userEmail}

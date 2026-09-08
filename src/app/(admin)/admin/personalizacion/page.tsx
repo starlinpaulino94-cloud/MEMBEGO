@@ -3,6 +3,7 @@ import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { conEmpresa } from '@/lib/tenant'
 import { getEngagementConfig } from '@/modules/engagement/config'
+import { getCategoriesPublic } from '@/modules/marketplace/cached'
 import { getHomeBorrador, getHomePublicada } from '@/modules/home/composicion'
 import { leerSlidesEditor } from '@/modules/home/editor-contrato'
 import { TIPOS_BLOQUE } from '@/modules/home/esquema'
@@ -29,7 +30,7 @@ export default async function AdminPersonalizacionPage() {
     return <SinEmpresaActiva seccion="la personalización de tu experiencia" />
   }
 
-  const [config, trabajo, publicada, datos] = await Promise.all([
+  const [config, trabajo, publicada, datos, categorias] = await Promise.all([
     getEngagementConfig(companyId),
     getHomeBorrador(companyId),
     getHomePublicada(companyId),
@@ -64,6 +65,7 @@ export default async function AdminPersonalizacionPage() {
         }),
       ])
     ).catch(() => [null, [], [], []] as const),
+    getCategoriesPublic().catch(() => []),
   ])
 
   const [empresa, promos, planes, excursiones] = datos
@@ -129,6 +131,7 @@ export default async function AdminPersonalizacionPage() {
             : null
         }
         media={media}
+        previewCategorias={categorias.map((c) => c.name)}
         promociones={promos.map((p) => ({ id: p.id, titulo: p.titulo }))}
         planes={planes.map((p) => ({ id: p.id, titulo: p.nombre }))}
         excursiones={excursiones.map((e) => ({ id: e.id, titulo: e.nombre }))}

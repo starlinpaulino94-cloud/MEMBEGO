@@ -301,3 +301,38 @@ lo vigilan: los ocho grupos en orden, ningún módulo huérfano, ninguno duplica
 **Verificación:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
 **suite 1970/1970** · `build` compilado · E2E autenticado en verde, con el hub
 comprobando sus rótulos de grupo.
+
+---
+
+## 10. Corrección de rumbo: construir el diseño, no empujar lo que había (2026-09-08)
+
+El usuario señaló, con razón, que el hub construido era «muy distinto» al de
+Stitch. El fallo era de método: se estaban acercando los componentes
+existentes al diseño en vez de construir lo que el diseño dibuja. Este pase
+rehace la carcasa y el editor contra la captura, pieza por pieza:
+
+- **Columna**: marca «MEMBEGO / Admin Hub», tarjeta de empresa con sede (el
+  conmutador REAL cuando hay ≥2 empresas — se movió del cuerpo del contenido a
+  la columna), contadores junto a los módulos (`planesActivos`, `canjesHoy`:
+  conteos baratos cacheados 60 s; los caros siguen fuera por la regla de coste
+  de `badges.ts`), tono rojo reservado para avisos, y pie con la empresa y el
+  cierre de sesión.
+- **Cabecera**: buscador ancho en píldora, «Canje rápido», y la persona con su
+  nombre y su rol. La píldora de empresa se retiró: ya vive en la columna y
+  solo le robaba ancho al buscador.
+- **Editor de inicio**: misma lógica, mismos ids (los usa el E2E), pantalla
+  nueva. Tarjeta de territorio con sobretítulo; «Producción en Vivo ·
+  Sincronizado hace N min» del `updatedAt` real; píldoras Borrador / Programar
+  / Publicar en App; cada bloque del feed como fila con candado o asa, número,
+  chip de tipo (SISTEMA · EN EDICIÓN · PÍLDORAS · GEO N KM · MONETIZACIÓN ·
+  CANJE INMEDIATO · CATÁLOGO), resumen hecho de DATOS REALES (banners que hay,
+  categorías publicadas, planes con su precio, excursiones del catálogo) e
+  interruptor; el hero se edita una diapositiva a la vez con «Banner N de M»;
+  la segmentación son tres tarjetas con el valor grande; y la vista previa
+  vive dentro de un teléfono con bisel, con su dock.
+- Las métricas del diseño sin fuente (impresiones, CTR, «18.4%») **no se
+  pintan**: un número inventado en un panel es peor que ninguno.
+
+Verificación: `tsc` 0 · `eslint` 0 · suite **1970/1970** (la guardia de deuda
+de diseño obligó a expresar el bisel con el vocabulario de radios) · build ·
+E2E en verde sin cambiar un id.

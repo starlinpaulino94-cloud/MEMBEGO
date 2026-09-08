@@ -164,15 +164,24 @@ export default async function AdminLayout({
       sistemasExternos={sistemasExternos}
       nombreEmpresa={nombreEmpresaActiva}
       sedeEmpresa={sedeEmpresaActiva}
+      // El conmutador vive en la barra lateral, bajo la marca (contrato
+      // Stitch): sobre qué empresa trabajas se lee antes de decidir a dónde
+      // ir. Con una sola empresa no se monta y la columna pinta su tarjeta
+      // estática con el mismo aspecto.
+      conmutadorEmpresa={
+        empresas.length >= 2 ? (
+          <AdminCompanySwitcher
+            empresas={empresas}
+            activaId={user.metadata.companyId ?? null}
+            sede={sedeEmpresaActiva}
+          />
+        ) : undefined
+      }
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el
           primer vistazo y en todas las pantallas del panel. */}
       {demo && <BannerDemo nombreEmpresa={demo} />}
-      <AdminCompanySwitcher
-        empresas={empresas}
-        activaId={user.metadata.companyId ?? null}
-      />
       {children}
     </AppShell>
   )

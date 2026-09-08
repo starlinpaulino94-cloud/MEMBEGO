@@ -31,10 +31,17 @@ import type { ClaveBadge, EspacioVisible, NavLink } from '@/components/layout/na
 /** Contadores REALES, resueltos en el servidor. Sin dato, no se pinta nada. */
 export type BadgesNav = Partial<Record<ClaveBadge, number>>
 
-function Contador({ valor }: { valor: number }) {
+function Contador({ valor, tono }: { valor: number; tono?: 'peligro' }) {
   return (
     <span
-      className="ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-sidebar-selected px-1.5 py-0.5 text-[12px] font-semibold leading-none text-sidebar-selected-foreground"
+      className={cn(
+        'ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 py-0.5 text-[12px] font-semibold leading-none',
+        // El diseño distingue el contador que INFORMA (gris) del que AVISA
+        // (rojo, «En riesgo»). Todo azul, nada destaca.
+        tono === 'peligro'
+          ? 'bg-destructive/10 text-destructive'
+          : 'bg-sidebar-accent text-sidebar-accent-foreground'
+      )}
       // El número por sí solo no dice de qué es. En el menú se entiende por
       // contexto; para un lector de pantalla hay que decirlo.
       aria-label={`${valor} pendientes`}
@@ -102,7 +109,7 @@ export function ModuloNav({
         />
         <span className="truncate">{item.label}</span>
         {muestraContador ? (
-          <Contador valor={contador} />
+          <Contador valor={contador} tono={item.badgeTono} />
         ) : item.etiqueta ? (
           <Etiqueta texto={item.etiqueta} />
         ) : null}

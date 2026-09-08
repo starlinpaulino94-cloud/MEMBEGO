@@ -147,13 +147,18 @@ test('roles acotados ven sus secciones también con ámbito', () => {
   assert.ok(!supervisor.includes('/admin/campanas'))
 })
 
-test('las claves de contador son exactamente las cinco reales', () => {
+test('las claves de contador son exactamente las siete reales', () => {
+  // Las dos del hub (planes activos y canjes de hoy) entraron con el contrato
+  // Stitch: conteos baratos y cacheados. Las caras —clientes en riesgo— siguen
+  // fuera a propósito; ver la nota de coste en modules/navegacion/badges.ts.
   assert.deepEqual([...CLAVES_BADGE], [
     'platformOpenTickets',
     'companyOpenTickets',
     'platformIncidents',
     'solicitudes',
     'colaAtascada',
+    'planesActivos',
+    'canjesHoy',
   ])
 })
 
