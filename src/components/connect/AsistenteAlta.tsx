@@ -18,6 +18,8 @@ import { StatusBanner } from '@/components/ui/status-banner'
 import { Switch } from '@/components/ui/switch'
 import { AltaWhatsapp } from '@/components/connect/AltaWhatsapp'
 import { AltaMetaWhatsapp } from '@/components/connect/AltaMetaWhatsapp'
+import { AltaMetaPaginas } from '@/components/connect/AltaMetaPaginas'
+import { ElegirPaginasMeta } from '@/components/connect/ElegirPaginasMeta'
 import type { OpcionPaso } from '@/modules/connect/alta'
 
 /**
@@ -84,6 +86,8 @@ export interface AsistenteProps {
    * componente nunca llega a pedirla.
    */
   meta: { appId: string; configId: string; versionGraph: string } | null
+  /** La configuración de Login for Business para Páginas e Instagram (Meta · Fase 3). */
+  metaPaginas: { appId: string; configId: string; versionGraph: string } | null
 }
 
 type EstadoPaso = 'hecho' | 'actual' | 'pendiente'
@@ -441,8 +445,20 @@ export function AsistenteAlta(props: AsistenteProps) {
           versionGraph={props.meta.versionGraph}
         />
       )}
+      {paso.tipo === 'COMPONENTE' && paso.componente === 'AltaMetaPaginas' && props.metaPaginas && (
+        <AltaMetaPaginas
+          appId={props.metaPaginas.appId}
+          configId={props.metaPaginas.configId}
+          versionGraph={props.metaPaginas.versionGraph}
+        />
+      )}
+      {paso.tipo === 'COMPONENTE' && paso.componente === 'ElegirPaginasMeta' && (
+        <ElegirPaginasMeta slug={slug} />
+      )}
       {paso.tipo === 'COMPONENTE' &&
-        !['AltaWhatsapp', 'AltaMetaWhatsapp'].includes(paso.componente ?? '') && (
+        !['AltaWhatsapp', 'AltaMetaWhatsapp', 'AltaMetaPaginas', 'ElegirPaginasMeta'].includes(
+          paso.componente ?? ''
+        ) && (
           <StatusBanner variant="warning" title="Este paso todavía no está disponible">
             Estamos terminando esta parte. Escríbenos y lo conectamos contigo.
           </StatusBanner>

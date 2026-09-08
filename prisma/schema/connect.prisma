@@ -74,6 +74,9 @@ model ConexionEmpresa {
   /// silencio las conexiones (y credenciales) de las empresas.
   conector   Conector @relation(fields: [conectorId], references: [id], onDelete: Restrict)
 
+  /// Los activos de Meta que esta conexión autorizó (Meta · Fase 1).
+  activosMeta ActivoMeta[]
+
   /// PENDING (alta iniciada, sin credencial válida todavía) → CONNECTED →
   /// ERROR (credencial caducada/revocada por el proveedor; se reintenta o se
   /// reconecta) | DISCONNECTED (la empresa la apagó; conserva historial).
@@ -440,4 +443,87 @@ model EstadoOAuth {
   @@index([companyId])
   @@index([expiraAt])
   @@map("estados_oauth")
+}
+
+// ─── Meta · Fase 1 ───────────────────────────────────────────────────────────
+
+/// UN ACTIVO DE META DE UNA EMPRESA: una Página de Facebook, una cuenta
+/// profesional de Instagram, una cuenta de WhatsApp Business (WABA) o un
+/// número. El UNIQUE (tipo, idExterno) convierte «un activo pertenece a UNA
+/// empresa» en una regla de la base — la misma protección que ya tenía el
+/// WABA en `ConexionEmpresa.cuentaExterna`, generalizada a todo lo que Meta
+/// nos deje tocar. Los tokens de Página van SELLADOS aquí (AAD = el activo),
+/// porque cada Página tiene el suyo.
+model ActivoMeta {
+  id         String @id @default(cuid())
+  companyId  String
+  conexionId String
+  /// Restrict: una conexión con activos no se borra; se desconecta y los
+  /// activos se RETIRAN (estado REMOVED) conservando el historial.
+  conexion   ConexionEmpresa @relation(fields: [conexionId], references: [id], onDelete: Restrict)
+
+  /// PAGE | IG_ACCOUNT | WABA | PHONE_NUMBER
+  tipo      String
+  /// El id en Meta: page id, ig user id, waba id, phone_number_id.
+  idExterno String
+  nombre    String?
+  /// IG_ACCOUNT → su PAGE; PHONE_NUMBER → su WABA.
+  padreId   String?
+
+  /// Token de Página de larga duración, sellado (solo PAGE). Nunca en claro.
+  sellado    String?
+  keyVersion Int?
+  /// Lo que se puede enseñar sin abrir el sello: nombre de usuario de IG,
+  /// tareas sobre la Página, número visible…
+  metadata   Json?
+  /// Cuándo se suscribió la app a los webhooks de este activo.
+  suscritoAt DateTime?
+
+  /// ACTIVE | PAUSED | REMOVED
+  estado String @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Las conversaciones que entraron por este activo (Meta · Fase 2).
+  conversaciones Conversacion[]
+
+  @@unique([tipo, idExterno])
+  @@index([companyId, tipo])
+  @@index([conexionId])
+  @@map("activos_meta")
+}
+
+/// CADA NOTIFICACIÓN DE META, cruda y UNA sola vez. Meta reintenta durante 36
+/// horas sin garantizar orden ni ausencia de duplicados; el UNIQUE en
+/// `claveDedupe` hace inofensivo el reintento. Se procesa en cola.
+///
+/// `companyId` es opcional a propósito: un aviso puede llegar ANTES de que el
+/// alta que lo origina termine, y entonces todavía no tiene dueño. Se guarda,
+/// y la reconciliación o la retención deciden después.
+model EventoMeta {
+  id      String @id @default(cuid())
+  /// whatsapp_business_account | page | instagram
+  objeto  String
+  /// `entry[].id`: el WABA, la Página o la cuenta de Instagram.
+  entryId String
+  /// messages | statuses | account_update | message_deliveries | comments…
+  campo   String
+  /// Id del mensaje/estado cuando Meta lo da; hash del item cuando no.
+  claveDedupe String @unique
+
+  companyId  String?
+  activoId   String?
+  conexionId String?
+
+  payload       Json
+  /// El instante que Meta declara para el item, si lo declara.
+  timestampMeta DateTime?
+  recibidoAt    DateTime  @default(now())
+  procesadoAt   DateTime?
+  error         String?
+
+  @@index([companyId, recibidoAt])
+  @@index([procesadoAt])
+  @@map("eventos_meta")
 }

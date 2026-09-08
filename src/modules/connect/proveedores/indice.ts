@@ -2,6 +2,8 @@ import type { ConfigOauthConector } from '@/modules/connect/oauthNucleo'
 import { GOOGLE_CALENDAR, oauthGoogleCalendar } from '@/modules/connect/proveedores/googleCalendar'
 import { WHATSAPP } from '@/modules/connect/proveedores/whatsapp'
 import { CARDNET } from '@/modules/connect/proveedores/cardnet'
+import { FACEBOOK } from '@/modules/connect/proveedores/facebook'
+import { INSTAGRAM } from '@/modules/connect/proveedores/instagram'
 import { METADATOS_IMPLEMENTADOS, METADATOS_PREVISTOS } from '@/modules/connect/proveedores/metadatos'
 import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
 
@@ -15,7 +17,13 @@ import type { DefinicionProveedor } from '@/modules/connect/proveedores/tipos'
  * Este módulo es PURO (sin `server-only`): las pruebas lo cargan entero.
  */
 
-export const PROVEEDORES: readonly DefinicionProveedor[] = [GOOGLE_CALENDAR, WHATSAPP, CARDNET]
+export const PROVEEDORES: readonly DefinicionProveedor[] = [
+  GOOGLE_CALENDAR,
+  WHATSAPP,
+  CARDNET,
+  FACEBOOK,
+  INSTAGRAM,
+]
 
 export function proveedorDe(slug: string): DefinicionProveedor | null {
   return PROVEEDORES.find((p) => p.metadatos.slug === slug) ?? null
