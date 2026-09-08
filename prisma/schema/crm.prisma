@@ -98,3 +98,29 @@ model PipelineConfig {
   automatizaciones Json // {bienvenida:bool, recordatorioDias:int, cierre:bool, plantillas:{...}}
   updatedAt        DateTime @updatedAt
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// AUTO-REPLY — CONFIGURACIÓN DE RESPUESTAS AUTOMÁTICAS POR WHATSAPP
+//
+// Cada empresa define reglas de auto-reply para mensajes entrantes.
+// Las keywords se matchean contra el texto del inbound para decidir
+// qué plantilla enviar. Permite catálogos como attachment.
+// ──────────────────────────────────────────────────────────────────────────
+
+model AutoReplyConfig {
+  id            String   @id @default(cuid())
+  companyId     String
+  nombre        String // Nombre descriptivo de la regla, ej: "Saludo bienvenida"
+  keywords      String[] @default([]) // Palabras clave que activan esta respuesta
+  esBienvenida  Boolean  @default(false) // Si es el saludo automático de primer contacto
+  tipoRespuesta String   @default("TEXTO") // TEXTO, IMAGEN, DOCUMENTO, CATALOGO
+  contenido     String   // Texto o plantilla de la respuesta
+  catalogoPath  String?  // Ruta o URL del catálogo si tipoRespuesta = CATALOGO
+  activa        Boolean  @default(true) // Habilitada / deshabilitada
+  orden         Int      @default(0) // Prioridad de evaluación (menor = primero)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
+}
