@@ -28,6 +28,14 @@ export interface CompanyDTO {
   facebook: string | null
   horario: string | null
   colorPrimario: string | null
+  /**
+   * Personalización del comprobante que la empresa configuró en MembeGo
+   * (`ReceiptTemplateConfig`): ancho de papel, orden de bloques, campos
+   * visibles y textos del pie. `null` = la empresa no la ha tocado y vale el
+   * formato por defecto. Se manda tal cual para que el satélite imprima el
+   * MISMO ticket, no uno parecido.
+   */
+  receiptTemplate: Record<string, unknown> | null
 }
 
 export interface BranchDTO {

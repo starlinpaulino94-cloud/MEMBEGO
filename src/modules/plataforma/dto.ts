@@ -65,6 +65,7 @@ export function companyDTO(c: {
   facebook: string | null
   horario: string | null
   colorPrimario: string | null
+  receiptTemplate?: { config: unknown } | null
 }): CompanyDTO {
   return {
     id: c.id,
@@ -84,6 +85,10 @@ export function companyDTO(c: {
     facebook: c.facebook,
     horario: c.horario,
     colorPrimario: c.colorPrimario,
+    receiptTemplate:
+      c.receiptTemplate && typeof c.receiptTemplate.config === 'object'
+        ? (c.receiptTemplate.config as Record<string, unknown>)
+        : null,
   }
 }
 
@@ -226,6 +231,7 @@ export const CAMPOS_DTO = {
     'id', 'nombre', 'slug', 'logoUrl', 'moneda', 'zonaHoraria', 'idioma',
     'razonSocial', 'direccion', 'ciudad', 'telefono', 'website',
     'whatsapp', 'instagram', 'facebook', 'horario', 'colorPrimario',
+    'receiptTemplate',
   ],
   Branch: ['id', 'companyId', 'nombre', 'direccion', 'activa'],
   Customer: ['id', 'nombre', 'email', 'telefono'],
