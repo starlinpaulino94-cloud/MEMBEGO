@@ -301,3 +301,83 @@ primer paso pasó a mirar el cargador y la wallet.
 
 **Verificación:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
 **suite 1966/1966** · `build` compilado.
+
+---
+
+## 12. F2c cerrado con evidencia · y el estado real de la RLS (2026-09-08)
+
+El usuario confirmó que el proyecto Supabase de la configuración es
+desechable, así que por fin se pudo ejecutar lo que faltaba.
+
+### 12.1 Lo que la base tenía de verdad
+
+`prisma migrate status` desmintió la nota del §9 («no se aplicó ninguna
+migración»): `20260913_home_composicion` **y** `20260914_home_rls` ya estaban
+aplicadas. Es decir, las políticas a mano que el §10.3 declara equivocadas
+estaban vivas.
+
+La inspección de la base encontró, además, algo que el §4 daba por DESCONOCIDO
+y ahora es un hecho:
+
+- **La Capa 2 nunca se aplicó a esta base.** Las únicas tres tablas con
+  política `membego_inquilino` en todo `public` eran las del Home; el resto de
+  las ~140 no tiene ninguna. El aislamiento aquí es enteramente aplicativo
+  (`conEmpresa` fija `app.company_id`, pero ninguna política lo lee).
+- Las únicas tres tablas con `FORCE ROW LEVEL SECURITY` eran también esas, y
+  con políticas `TO public` en vez de `TO membego_app`.
+
+Nada se rompió porque el rol de conexión tiene BYPASSRLS, que gana incluso a
+FORCE: las políticas estaban puestas y eran inertes.
+
+### 12.2 Cómo se corrigió el historial
+
+No se borró el registro de `20260914_home_rls` a mano. Se restauró su archivo
+desde git —una migración aplicada no se edita ni se borra— y se añadió
+`20260915_home_rls_al_mecanismo_generico`, que retira sus políticas y su FORCE
+de forma idempotente. Las tres tablas quedan como las otras ~140: RLS activado
+por la Capa 1, sin política propia, esperando a que la Capa 2 deduzca la suya.
+
+Verificado contra la base: 0 tablas con `membego_inquilino`, 0 con FORCE, RLS
+activado en las tres, e índice parcial de sinónimos globales presente.
+
+### 12.3 El recorrido autenticado, ejecutado
+
+`scripts/verificar-home-e2e.mts` contra el build de producción, con sesiones
+reales de Supabase Auth:
+
+- Publicar desde `/admin/personalizacion` → **visible para el cliente**.
+- El sinónimo encuentra la promoción pública y **no** expone la empresa sin
+  publicar.
+- **Pausar retira la composición** del Inicio.
+- Capturas 390 / 768 / 1280 sin desbordamiento horizontal.
+
+Las capturas van a `.next-qa/capturas/` (fuera del repo). Antes apuntaban a la
+carpeta temporal de otra herramienta, cableada a mano.
+
+### 12.4 Dos defectos que solo se veían mirando las capturas
+
+1. **El microcopy no se podía recolorear.** `.text-caption` y `.text-overline`
+   fijaban `color: var(--muted-foreground)` dentro de `@layer utilities`, la
+   misma capa que `text-primary` o `text-white`, y se escribían después. Así
+   que `class="text-overline text-primary"` salía **gris**, en silencio, en
+   todas las pantallas. Sobre el banner azul del Inicio dejaba el sobretítulo
+   y el pie ilegibles: parecía un fallo de diseño y era de cascada. El color
+   por defecto se movió a `@layer components`, donde sigue aplicándose si
+   nadie pide otro y pierde ante cualquier `text-*` explícita.
+
+2. **El banner QR no llegaba a AA.** El degradado `retail-header` va de
+   #0284c7 a #06b6d4: con blanco encima da entre 4.10:1 y 2.45:1, por debajo
+   del 4.5:1 que WCAG AA pide para texto normal — y el texto además iba al
+   80 % y al 90 % de opacidad. Ahora es azul profundo sólido (#0369a1,
+   **5.93:1**) con blanco al 100 %. El degradado se queda en la cabecera de la
+   carcasa, donde no lleva texto encima.
+
+### 12.5 Tableta
+
+Entre 768 y 1023 px la app se pintaba en una columna de 448 px con márgenes
+vacíos a los lados: el `max-w-md` del móvil llegaba hasta `lg`. Se añadió un
+escalón `md:max-w-3xl` en la carcasa y en el dock.
+
+**Verificación final:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
+**suite 1966/1966** · `build` compilado · E2E autenticado en verde · migraciones
+al día.

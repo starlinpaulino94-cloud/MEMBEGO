@@ -478,6 +478,27 @@
   --sidebar-selected-foreground: oklch(0.99 0 0);
 }
 
+/* ── El color por defecto del microcopy ────────────────────────────────────
+   `.text-caption` y `.text-overline` llevan color gris por defecto, y eso está
+   bien: casi siempre son texto secundario sobre fondo claro.
+
+   Pero vivían en `@layer utilities`, la MISMA capa que `text-white` o
+   `text-primary`, y se escribían después. Resultado: `class="text-overline
+   text-primary"` salía gris, en silencio, y nadie podía darles otro color sin
+   `!important`. Sobre el banner azul del Inicio eso dejaba el sobretítulo y el
+   pie ilegibles — un fallo de contraste que parecía de diseño y era de
+   cascada.
+
+   En `@layer components` el valor sigue aplicándose donde nadie pide otro
+   color, y cualquier utilidad `text-*` explícita le gana, que es justo lo que
+   quien la escribe está pidiendo. */
+@layer components {
+  .text-caption,
+  .text-overline {
+    color: var(--muted-foreground);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -656,15 +677,15 @@
   .text-caption {          /* Microcopy · 12.5px — el suelo */
     font-size: 0.78125rem;
     line-height: 1.45;
-    color: var(--muted-foreground);
   }
   .text-overline {         /* Etiquetas de sección en mayúsculas · 12px */
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--muted-foreground);
   }
+  /* El color por defecto de estas dos vive en `@layer components` (más
+     abajo), NO aquí. Ver allí el porqué. */
 
   /* ── Elevaciones (alias semánticos de las sombras) ──────────────────
      elevation-1: reposo · elevation-2: hover/dropdown · elevation-3: modal

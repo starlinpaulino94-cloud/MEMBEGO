@@ -39,7 +39,7 @@ export function BottomNav() {
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <ul
-        className="mx-auto flex max-w-md items-stretch justify-around"
+        className="mx-auto flex max-w-md items-stretch justify-around md:max-w-3xl"
         style={{ minHeight: 'var(--dock-inferior)' }}
       >
         {DESTINOS_CLIENTE.map((d) => {

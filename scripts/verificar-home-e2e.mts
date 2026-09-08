@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
@@ -14,6 +16,9 @@ assert.equal(new URL(supabaseUrl).hostname, `${ref}.supabase.co`)
 assert.ok(new URL(direct).username.endsWith(`.${ref}`))
 assert.ok(serviceKey && anonKey)
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000'
+/** Dónde caen las capturas de fidelidad (390/768/1280). Fuera del repo. */
+const CAPTURAS = process.env.E2E_CAPTURAS ?? join(process.cwd(), '.next-qa', 'capturas')
+mkdirSync(CAPTURAS, { recursive: true })
 assert.ok(['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname))
 const db = new PrismaClient({ datasourceUrl: direct, log: [] })
 const auth = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -106,7 +111,7 @@ try {
   console.log('E2E: publicación desde editor visible para el cliente autorizado.')
   for (const width of [390, 768, 1280]) {
     await clientPage.setViewportSize({ width, height: 900 })
-    await clientPage.screenshot({ path: `C:/Users/starl/AppData/Local/Temp/opencode/home-f2c-${width}.png`, fullPage: true })
+    await clientPage.screenshot({ path: join(CAPTURAS, `inicio-${width}.png`), fullPage: true })
     assert.equal(await clientPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
   }
   await clientPage.goto(`${baseURL}/cliente/buscar?q=${query}`, { timeout: 180000 })
@@ -122,7 +127,7 @@ try {
   if (paginaDiagnostico) {
     console.error('URL observada:', paginaDiagnostico.url())
     console.error('Pantalla observada:', await paginaDiagnostico.locator('body').innerText())
-    await paginaDiagnostico.screenshot({ path: 'C:/Users/starl/AppData/Local/Temp/opencode/home-f2c-error.png', fullPage: true })
+    await paginaDiagnostico.screenshot({ path: join(CAPTURAS, 'error.png'), fullPage: true })
   }
   throw error
 } finally {

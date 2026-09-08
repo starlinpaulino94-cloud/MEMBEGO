@@ -37,7 +37,7 @@ export function CustomerShell({
     <>
       <div className="sticky top-0 z-30">
         <div className="retail-header px-4 pb-2 pt-3">
-          <div className="mx-auto flex w-full max-w-md items-center gap-2 lg:max-w-7xl">
+          <div className="mx-auto flex w-full max-w-md items-center gap-2 md:max-w-3xl lg:max-w-7xl">
             <form action="/cliente/buscar" role="search" className="relative min-w-0 flex-1">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -79,7 +79,7 @@ export function CustomerShell({
           href="/cliente/cerca"
           className="flex items-center gap-1.5 bg-retail-mist px-4 py-2 text-[13px] font-medium text-retail-deep outline-none transition hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         >
-          <span className="mx-auto flex w-full max-w-md items-center gap-1.5 lg:max-w-7xl">
+          <span className="mx-auto flex w-full max-w-md items-center gap-1.5 md:max-w-3xl lg:max-w-7xl">
             <MapPin className="h-4 w-4 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1 truncate">
               {zonaLabel ? `Explorar cerca de ${zonaLabel}` : 'Explorar cerca de ti'} · Actualizar ubicación
@@ -91,7 +91,7 @@ export function CustomerShell({
       </div>
 
       {demoNombre && <BannerDemo nombreEmpresa={demoNombre} />}
-      <main className="con-dock-inferior mx-auto w-full max-w-md px-4 py-4 lg:max-w-7xl lg:px-6">
+      <main className="con-dock-inferior mx-auto w-full max-w-md px-4 py-4 md:max-w-3xl lg:max-w-7xl lg:px-6">
         <ExcursionCarritoWrapper>{children}</ExcursionCarritoWrapper>
       </main>
 
