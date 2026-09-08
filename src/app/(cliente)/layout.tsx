@@ -1,19 +1,13 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { headers } from 'next/headers'
+import { Inter } from 'next/font/google'
 import { requireRole } from '@/lib/auth/guards'
-import { AppShell } from '@/components/layout/AppShell'
-import { SentryUserSync } from '@/components/SentryUserSync'
-import { getUnreadCount } from '@/modules/notificaciones/actions'
-import {
-  getClienteCompaniesCached,
-  getMembresiaActivaPrincipalId,
-} from '@/modules/cliente/queries'
-import { getNavOcultoClienteCached } from '@/modules/cliente/navDisponible'
-import { BannerDemo } from '@/components/system/BannerDemo'
+import { CustomerShell } from '@/components/layout/CustomerShell'
+import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { nombreSiEsDemo } from '@/modules/demo'
-import { ExcursionCarritoWrapper } from '@/components/excursiones/ExcursionCarritoWrapper'
-import { contextoDeNavegacion } from '@/modules/navegacion/contexto'
+
+const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
 
 export default async function ClienteLayout({
   children,
@@ -60,46 +54,27 @@ export default async function ClienteLayout({
   }
 
   const user = await requireRole('CLIENTE')
-  // Rendimiento: este layout corre en CADA clic. Lo cosmético (switcher de
-  // empresas, módulos ocultos del menú) va cacheado 5 min por usuario; solo
-  // el badge de notificaciones y el QR activo se consultan en vivo.
-  const [notifCount, clienteCompanies, membresiaQrId, hiddenNav, demo, capacidades] =
-    await Promise.all([
-    getUnreadCount().catch(() => 0),
-    getClienteCompaniesCached(user.supabaseId).catch(() => []),
-    getMembresiaActivaPrincipalId(user.supabaseId, user.metadata.clienteId),
-    getNavOcultoClienteCached(user.metadata.clienteId, user.metadata.companyId),
+  const [ubicacion, demo] = await Promise.all([
+    user.metadata.dbUserId
+      ? LocationService.primaria(user.metadata.dbUserId).catch(() => null)
+      : Promise.resolve(null),
     nombreSiEsDemo(user.metadata.companyId),
-    // El vertical decide, por ejemplo, si «Mis vehiculos» tiene sentido: solo
-    // un car wash le pide la placa a nadie.
-    contextoDeNavegacion({ role: 'CLIENTE', companyId: user.metadata.companyId }),
   ])
-  const companies = clienteCompanies.map((c) => ({
-    companyId: c.companyId,
-    name: c.company.name,
-    logoUrl: c.company.logoUrl,
-    active: c.companyId === user.metadata.companyId,
-  }))
+  const zona = ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
+
   return (
-    <AppShell
-      // El menu del cliente combina lo que su empresa tiene contratado con los
-      // modulos que todavia no tienen contenido para el (`hiddenNav`).
-      ctx={{ ...capacidades, ocultas: hiddenNav }}
-      title="MembeGo"
-      userEmail={user.email}
-      notifCount={notifCount}
-      companies={companies}
-      // Dock central "Mi QR" de la barra inferior (reemplaza al FAB flotante).
-      qrHref={membresiaQrId ? `/membresia/${membresiaQrId}` : null}
-    >
-      <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
-      {/* El cliente de práctica también tiene que saberlo: si el personal usa
-          un teléfono de prueba para enseñar el recorrido, quien mire la
-          pantalla ve que nada de eso es un cobro de verdad. */}
-      {demo && <BannerDemo nombreEmpresa={demo} />}
-      <ExcursionCarritoWrapper>
+    <div className={`${inter.variable} retail min-h-screen bg-background text-foreground`}>
+      <CustomerShell
+        iniciales={(user.email || '?').trim().slice(0, 1).toUpperCase()}
+        email={user.email}
+        dbUserId={user.metadata.dbUserId}
+        role={user.metadata.role}
+        companyId={user.metadata.companyId ?? null}
+        zonaLabel={zona}
+        demoNombre={demo ?? null}
+      >
         {children}
-      </ExcursionCarritoWrapper>
-    </AppShell>
+      </CustomerShell>
+    </div>
   )
 }

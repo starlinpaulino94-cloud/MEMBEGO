@@ -58,7 +58,9 @@ const PANTALLAS_CLIENTE = [
 ].flatMap(tsx)
 
 test('el hueco de la barra inferior sale del alto real, no de un número a ojo', () => {
-  const shell = leer('src/components/layout/AppShell.tsx')
+  // La carcasa del cliente es `CustomerShell` (contrato Stitch F1): AppShell
+  // quedó para el personal y ya no pinta dock inferior.
+  const shell = leer('src/components/layout/CustomerShell.tsx')
   assert.ok(
     !/\bpb-24\b/.test(shell),
     'Volvió `pb-24`: 96 px fijos no cubren la barra (56px) más el área segura ' +

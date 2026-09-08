@@ -140,6 +140,13 @@
 }
 
 @theme {
+  /* ── RETAIL · azules comerciales del contrato Stitch (una sola fuente: las
+     pantallas usan las utilidades, el ámbito .retail las referencias) ── */
+  --color-retail-blue: #0284c7;
+  --color-retail-deep: #0369a1;
+  --color-retail-cyan: #06b6d4;
+  --color-retail-mist: #f0f9ff;
+  --color-retail-star: #f59e0b;
   /* ── MMS · Motion tokens ────────────────────────────────────────────
      Duraciones y curvas oficiales del Membego Motion System. TODA
      animación DEBE consumir estos valores, nunca números sueltos.
@@ -1135,4 +1142,37 @@
     .skeleton-shimmer { animation: none; }
     .card-lift:hover { transform: none; }
   }
+}
+
+/* ── RETAIL · ámbito visual de la experiencia del cliente (contrato Stitch) ──
+   Inter + azules comerciales sobre lienzo claro, siempre en claro
+   (color-scheme: light) aunque el resto de la app use otro tema. Las
+   utilidades semánticas (bg-primary, text-muted…) siguen funcionando porque
+   leen estas mismas variables. */
+.retail {
+  color-scheme: light;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --background: #ffffff;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #4b5563;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: var(--color-retail-blue);
+  --primary: var(--color-retail-blue);
+  --primary-foreground: #ffffff;
+  --primary-hover: var(--color-retail-deep);
+  --primary-soft: #e0f2fe;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #111827;
+  --accent: #e0f2fe;
+  --accent-foreground: var(--color-retail-deep);
+  font-family: var(--font-sans);
+}
+
+.retail-header {
+  background: linear-gradient(90deg, var(--color-retail-blue) 0%, var(--color-retail-cyan) 100%);
 }
