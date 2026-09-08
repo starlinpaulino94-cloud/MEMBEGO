@@ -192,3 +192,64 @@ propio porque incluye emisión, validación y auditoría.
 
 **Verificación:** `tsc` 0 · `eslint` 0 errores · **suite 1966/1966** · `build`
 compilado · E2E autenticado en verde · capturas 390/768/1280 sin desbordamiento.
+
+---
+
+## 8. Cuenta y Mi QR · pase de fidelidad (2026-09-08)
+
+Ambas tenían la estructura correcta desde F1. La brecha era de forma y, sobre
+todo, dos fallos silenciosos que solo se ven mirando una captura.
+
+### 8.1 Cuenta (`/cliente/perfil`)
+
+- **23 tamaños escritos a mano** (`text-[18px]`, `text-[13px]`…) migrados a la
+  escala del sistema. Once radios `rounded-xl` bajados a 8px.
+- **Contraste**: el chip activo, «Ver QR y uso» y el banner comercial usaban
+  blanco sobre `#0284C7` — **4.10:1**, por debajo de AA. Ahora usan el azul
+  profundo (**5.93:1**), que además es el que el diseño pinta en esos tres
+  sitios: corregirlo fue a la vez más accesible y más fiel.
+- La campana y la píldora DO/ES siguen omitidas (D09 + D08): no hay centro de
+  notificaciones ni i18n reales, y un adorno sin función no es fidelidad.
+- «Usar de nuevo» solo aparece con historial de visitas; en la captura de QA no
+  sale porque la persona no tiene ninguna.
+
+### 8.2 Mi QR (`/cliente/qr`)
+
+El estado vacío se extrajo a `components/cliente/qr/QrSinBeneficio.tsx`:
+
+- Sello de descuento sobre la imagen, **desde `descuento` declarado**. El
+  precio anterior tachado del diseño NO se pinta: reconstruirlo desde el
+  porcentaje sería inventar un número que nunca se registró.
+- Barra de acento a la izquierda en el beneficio de bienvenida, insignia en el
+  icono del estado vacío, valoración con reseñas reutilizando `RetailSeccion`,
+  y la ciudad real en la bajada.
+- `<img>` crudo sustituido por `next/image`.
+- El pase activo (derivado, D01) adopta la misma escala y los mismos radios.
+
+### 8.3 Dos fallos silenciosos de estilo
+
+1. **`bg-primary-soft` no existe.** El tema registra ese color como
+   `--color-brand-primary-soft`, así que la clase corta compila, no avisa y no
+   pinta nada. El icono de Mi QR salió sin su fondo y **la franja de ofertas
+   relámpago del Inicio sin el suyo**. Lo mismo con `bg-primary-hover`, en
+   nueve sitios: el hover de todos los botones primarios del rediseño no hacía
+   nada. Corregido, y con guardia en `cliente-retail.test.ts` para que no
+   vuelva en silencio.
+
+2. **Las capturas salían a medio fundido.** `animate-fade-up` seguía corriendo
+   cuando Playwright disparaba, y la pantalla se veía descolorida. Ahora las
+   capturas van con `animations: 'disabled'`: una comparación de fidelidad no
+   puede depender de cuándo se apretó el botón.
+
+### 8.4 Una fixture que se quedaba puesta
+
+Visitar Cuenta le asigna a la persona su código corto de referido, y eso deja
+eventos colgando de `Cliente`. La limpieza del E2E moría con una clave foránea
+y **dejaba todas las fixtures en la base**. Corregido el orden de borrado; las
+que quedaron de esa corrida se retiraron.
+
+El E2E ahora captura **las tres pantallas** en los tres anchos, y comprueba el
+desbordamiento en cada combinación — no solo en el Inicio.
+
+**Verificación:** `tsc` 0 · `eslint` 0 errores · **suite 1967/1967** · `build`
+compilado · E2E autenticado en verde · 9 capturas sin desbordamiento.

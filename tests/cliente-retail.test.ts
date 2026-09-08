@@ -10,7 +10,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   DESTINOS_CLIENTE,
@@ -159,5 +159,42 @@ test('el Inicio no repite el buscador ni el saludo que ya da la carcasa', () => 
     existsSync(join(RAIZ, 'src/components/cliente/inicio/BuscadorSimple.tsx')),
     false,
     'El buscador del Inicio anterior duplicaba el de la cabecera.'
+  )
+})
+
+// ── Utilidades que no existen ────────────────────────────────────────────────
+//
+// `--primary-soft` y `--primary-hover` son variables CSS, pero el tema las
+// registra como colores con el prefijo `brand-`. Escribir `bg-primary-soft`
+// compila, no avisa y NO PINTA NADA: el icono de Mi QR salió sin su fondo y la
+// franja de ofertas relámpago sin el suyo, y solo se vio en una captura.
+//
+// Esta guardia mira el alias, no el estilo: si alguien añade un alias nuevo al
+// tema, aquí se añade su nombre y sigue valiendo.
+
+test('nadie usa el nombre corto de un color que el tema registra con prefijo', () => {
+  const alias = ['primary-soft', 'primary-hover']
+  const culpables: string[] = []
+  const revisar = (dir: string) => {
+    for (const entrada of readdirSync(join(RAIZ, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entrada.name}`
+      if (entrada.isDirectory()) revisar(rel)
+      else if (/\.tsx?$/.test(entrada.name)) {
+        const src = readFileSync(join(RAIZ, rel), 'utf8')
+        for (const a of alias) {
+          // El prefijo `brand-` delante es el uso correcto y no cuenta.
+          if (new RegExp(`(?<!brand-)\b(bg|text|border|ring)-${a}\b`).test(src)) {
+            culpables.push(`${rel} → ${a}`)
+          }
+        }
+      }
+    }
+  }
+  revisar('src')
+  assert.deepEqual(
+    culpables,
+    [],
+    'Estas clases no existen y fallan en silencio; usa el prefijo `brand-`:\n  ' +
+      culpables.join('\n  ')
   )
 })

@@ -73,7 +73,7 @@ export function RetailMembresias({
 
                   <Link
                     href={plan.href}
-                    className="mt-3 flex min-h-10 w-full items-center justify-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]"
+                    className="mt-3 flex min-h-10 w-full items-center justify-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]"
                   >
                     Unirme
                     <span className="sr-only"> a {plan.nombre} de {plan.empresa}</span>

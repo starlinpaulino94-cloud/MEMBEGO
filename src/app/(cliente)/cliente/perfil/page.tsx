@@ -169,7 +169,7 @@ export default async function PerfilPage({
         >
           {iniciales}
         </span>
-        <h1 className="min-w-0 flex-1 truncate text-[18px] font-bold text-foreground">
+        <h1 className="min-w-0 flex-1 truncate text-h2 text-foreground">
           Hola, {nombre}
         </h1>
         <Link
@@ -187,7 +187,7 @@ export default async function PerfilPage({
           <Link
             key={t.href + t.label}
             href={t.href}
-            className="flex min-h-14 items-center justify-center rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none transition hover:border-primary/30 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex min-h-14 items-center justify-center rounded-lg border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none transition hover:border-primary/30 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary"
           >
             {t.label}
           </Link>
@@ -206,8 +206,8 @@ export default async function PerfilPage({
               aria-current={activo ? 'page' : undefined}
               className={
                 activo
-                  ? 'inline-flex min-h-10 shrink-0 items-center rounded-full bg-primary px-4 text-[13px] font-bold text-primary-foreground transition active:scale-[0.97]'
-                  : 'inline-flex min-h-10 shrink-0 items-center rounded-full border border-border bg-card px-4 text-[13px] font-semibold text-muted-foreground transition hover:text-foreground active:scale-[0.97]'
+                  ? 'inline-flex min-h-10 shrink-0 items-center rounded-full bg-retail-deep px-4 text-label-lg text-white transition active:scale-[0.97]'
+                  : 'inline-flex min-h-10 shrink-0 items-center rounded-full border border-border bg-card px-4 text-label-lg text-muted-foreground transition hover:text-foreground active:scale-[0.97]'
               }
             >
               {t.label}
@@ -220,10 +220,10 @@ export default async function PerfilPage({
       {/* ── Tus membresías ─────────────────────────────────────────────── */}
       <section>
         <div className="flex items-baseline justify-between px-1">
-          <h2 className="text-[18px] font-bold tracking-tight text-foreground">Tus membresías</h2>
+          <h2 className="text-h2 text-foreground">Tus membresías</h2>
           <Link
             href="/mis-membresias"
-            className="shrink-0 text-[13px] font-semibold text-primary hover:underline"
+            className="shrink-0 text-label-lg text-primary hover:underline"
           >
             Ver todas ({memberships.length})
           </Link>
@@ -244,8 +244,8 @@ export default async function PerfilPage({
             {visibles.map((m) => {
               const ok = vigente(m)
               return (
-                <li key={m.id} className="rounded-xl border border-border bg-card p-4">
-                  <p className="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+                <li key={m.id} className="rounded-lg border border-border bg-card p-4">
+                  <p className="flex items-center gap-2 text-label-md font-medium text-muted-foreground">
                     <span
                       aria-hidden
                       className={
@@ -257,10 +257,10 @@ export default async function PerfilPage({
                       <span>· Renueva {fmtFechaCorta(m.fechaVencimiento)}</span>
                     )}
                   </p>
-                  <p className="mt-1 text-[16px] font-bold text-foreground">
+                  <p className="mt-1 text-body font-bold text-foreground">
                     {m.company.name}
                   </p>
-                  <p className="text-[13px] text-muted-foreground">
+                  <p className="text-caption text-muted-foreground">
                     Plan {m.plan.nombre} ·{' '}
                     {m.plan.esIlimitado
                       ? 'usos ilimitados'
@@ -268,7 +268,7 @@ export default async function PerfilPage({
                   </p>
                   <Link
                     href={`/cliente/qr?id=${m.id}`}
-                    className="mt-3 flex min-h-11 items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground transition hover:bg-primary-hover active:scale-[0.98]"
+                    className="mt-3 flex min-h-11 items-center justify-center gap-2 rounded-full bg-retail-deep px-4 text-label-lg text-white transition hover:opacity-95 active:scale-[0.98]"
                   >
                     <QrCode className="h-4 w-4" aria-hidden /> Ver QR y uso
                   </Link>
@@ -280,16 +280,16 @@ export default async function PerfilPage({
       </section>
 
       {/* ── Banner comercial ───────────────────────────────────────────── */}
-      <section className="rounded-xl bg-primary p-4 text-primary-foreground">
-        <p className="text-[16px] font-bold leading-snug">
+      <section className="rounded-lg bg-retail-deep p-4 text-white">
+        <p className="text-body font-bold leading-snug">
           Disfruta visitas y servicios sin límite
         </p>
-        <p className="mt-0.5 text-[13px] text-primary-foreground/85">
+        <p className="mt-0.5 text-caption text-white">
           Ahorra hasta un 40% en tus locales favoritos
         </p>
         <Link
           href="/cliente/planes"
-          className="mt-3 inline-flex min-h-10 items-center rounded-full bg-card px-4 text-[13px] font-bold text-primary transition active:scale-[0.97]"
+          className="mt-3 inline-flex min-h-10 items-center rounded-full bg-card px-4 text-caption font-bold text-primary transition active:scale-[0.97]"
         >
           Explorar planes
         </Link>
@@ -299,10 +299,10 @@ export default async function PerfilPage({
       {empresas.length > 0 && (
         <section>
           <div className="flex items-baseline justify-between px-1">
-            <h2 className="text-[18px] font-bold tracking-tight text-foreground">Usar de nuevo</h2>
+            <h2 className="text-h2 text-foreground">Usar de nuevo</h2>
             <Link
               href="/cliente/empresas"
-              className="shrink-0 text-[13px] font-semibold text-primary hover:underline"
+              className="shrink-0 text-label-lg text-primary hover:underline"
             >
               Visitar frecuentes
             </Link>
@@ -311,12 +311,12 @@ export default async function PerfilPage({
             {empresas.slice(0, 4).map((e) => {
               const esCarwash = e.type === 'carwash'
               return (
-                <li key={e.id} className="overflow-hidden rounded-xl border border-border bg-card">
+                <li key={e.id} className="overflow-hidden rounded-lg border border-border bg-card">
                   <div className="p-3">
-                    <p className="truncate text-[14px] font-semibold text-foreground">{e.name}</p>
+                    <p className="truncate text-label-lg text-foreground">{e.name}</p>
                     <Link
                       href={esCarwash ? '/cliente/citas' : `/cliente/empresas/${e.slug}`}
-                      className="mt-2 flex min-h-10 items-center justify-center rounded-full border border-primary px-3 text-[13px] font-bold text-primary transition hover:bg-primary/5 active:scale-[0.98]"
+                      className="mt-2 flex min-h-10 items-center justify-center rounded-full border border-primary px-3 text-caption font-bold text-primary transition hover:bg-primary/5 active:scale-[0.98]"
                     >
                       {esCarwash ? 'Pedir turno rápido' : 'Canjear descuento'}
                     </Link>
@@ -331,18 +331,18 @@ export default async function PerfilPage({
       {/* ── Tus beneficios y cupones ───────────────────────────────────── */}
       <section>
         <div className="flex items-baseline justify-between px-1">
-          <h2 className="text-[18px] font-bold tracking-tight text-foreground">
+          <h2 className="text-h2 text-foreground">
             Tus beneficios y cupones
           </h2>
           <Link
             href="/cliente/mis-promociones"
-            className="shrink-0 text-[13px] font-semibold text-primary hover:underline"
+            className="shrink-0 text-label-lg text-primary hover:underline"
           >
             Ver todos ({beneficiosCount})
           </Link>
         </div>
         {compras.length === 0 ? (
-          <p className="mt-2 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+          <p className="mt-2 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
             Sin beneficios activos por ahora.
           </p>
         ) : (
@@ -351,16 +351,16 @@ export default async function PerfilPage({
               <li key={c.id}>
                 <Link
                   href={`/cliente/mis-promociones/${c.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary"
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 outline-none transition hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <TicketPercent className="h-5 w-5" aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-foreground">
                       {c.promocion?.titulo ?? 'Beneficio'}
                     </span>
-                    <span className="block truncate text-[12px] text-muted-foreground">
+                    <span className="block truncate text-label-md text-muted-foreground">
                       {c.company.name}
                       {c.fechaVencimiento ? ` · Vence ${fmtFechaCorta(c.fechaVencimiento)}` : ' · Disponible'}
                     </span>
@@ -376,16 +376,16 @@ export default async function PerfilPage({
       {/* ── Invita y gana ──────────────────────────────────────────────── */}
       <Link
         href="/cliente/invita-y-gana"
-        className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary"
+        className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 outline-none transition hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Gift className="h-5 w-5" aria-hidden />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-foreground">
             Invita amigos y gana
           </span>
-          <span className="block truncate text-[12px] text-muted-foreground">
+          <span className="block truncate text-label-md text-muted-foreground">
             Recompensas por cada invitado que se une
           </span>
         </span>
@@ -394,7 +394,7 @@ export default async function PerfilPage({
 
       {/* ── Configuración y soporte ────────────────────────────────────── */}
       <section>
-        <h2 className="px-1 text-[18px] font-bold tracking-tight text-foreground">
+        <h2 className="px-1 text-h2 text-foreground">
           Configuración y soporte
         </h2>
         <ul className="mt-3 space-y-2">
@@ -406,12 +406,12 @@ export default async function PerfilPage({
             <li key={r.href + r.label}>
               <Link
                 href={r.href}
-                className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary"
+                className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 outline-none transition hover:border-primary/30 focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground">
                   <r.icon className="h-5 w-5" aria-hidden />
                 </span>
-                <span className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">
+                <span className="min-w-0 flex-1 text-h4 text-foreground">
                   {r.label}
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden />
@@ -421,12 +421,12 @@ export default async function PerfilPage({
           <li>
             <form
               action={logout}
-              className="flex items-center gap-3 rounded-xl border border-border bg-card p-4"
+              className="flex items-center gap-3 rounded-lg border border-border bg-card p-4"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
                 <LogOut className="h-5 w-5" aria-hidden />
               </span>
-              <span className="min-w-0 flex-1 text-[15px] font-semibold text-destructive">
+              <span className="min-w-0 flex-1 text-h4 text-destructive">
                 Cerrar sesión
               </span>
               <button
@@ -443,7 +443,7 @@ export default async function PerfilPage({
 
       {/* ── Configuración (formularios existentes, sin cambios de lógica) ── */}
       <section id="configuracion" className="scroll-mt-24 space-y-3">
-        <p className="px-1 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="px-1 text-label-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Configuración
         </p>
         {idMembego && <IdMembegoCard codigo={idMembego} />}

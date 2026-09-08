@@ -90,7 +90,7 @@ export function RetailWallet({
               </p>
               <Link
                 href={primerPaso.href}
-                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {primerPaso.etiqueta}
                 <ArrowRight className="size-4" aria-hidden />

@@ -131,7 +131,7 @@ export function RetailExperiencia({ exp }: { exp: ExperienciaHero }) {
             {exp.hasta ? <Cuenta hasta={exp.hasta} color={marca ?? undefined} /> : <span />}
             <Link
               href={exp.ctaHref}
-              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
               style={marca ? { backgroundColor: marca } : undefined}
             >
               {exp.ctaTexto}

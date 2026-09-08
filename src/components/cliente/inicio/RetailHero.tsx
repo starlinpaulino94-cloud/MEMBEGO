@@ -68,7 +68,7 @@ function HeroCard({ hero, priority }: { hero: Hero; priority: boolean }) {
         ) : (
           <span />
         )}
-        <span className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground transition-colors duration-fast group-hover:bg-primary-hover">
+        <span className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground transition-colors duration-fast group-hover:bg-brand-primary-hover">
           {hero.cta}
           <ArrowRight className="size-4" aria-hidden />
         </span>

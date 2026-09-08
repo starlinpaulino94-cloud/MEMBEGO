@@ -33,7 +33,7 @@ export function RetailRelampago({ relampago }: { relampago: Relampago }) {
   return (
     <Link
       href={relampago.href}
-      className="flex min-h-11 items-center justify-between gap-3 border-y border-border bg-primary-soft px-4 py-2 text-caption text-foreground md:px-6"
+      className="flex min-h-11 items-center justify-between gap-3 border-y border-border bg-brand-primary-soft px-4 py-2 text-caption text-foreground md:px-6"
     >
       <span className="inline-flex items-center gap-1.5 font-semibold">
         <Bolt className="size-4 text-primary" aria-hidden />

@@ -87,7 +87,7 @@ export function RetailExperiencias({
                     </div>
                     <Link
                       href={experiencia.href}
-                      className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]"
+                      className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]"
                     >
                       Reservar cupo
                       <span className="sr-only"> · {experiencia.nombre}</span>

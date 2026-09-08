@@ -109,11 +109,29 @@ try {
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
   await expect(clientPage.getByRole('heading', { name: title })).toBeVisible({ timeout: 120000 })
   console.log('E2E: publicación desde editor visible para el cliente autorizado.')
-  for (const width of [390, 768, 1280]) {
-    await clientPage.setViewportSize({ width, height: 900 })
-    await clientPage.screenshot({ path: join(CAPTURAS, `inicio-${width}.png`), fullPage: true })
-    assert.equal(await clientPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true)
+  // Fidelidad por captura: las tres pantallas del cliente que ya existen, en
+  // los tres anchos del criterio (§6 de 04-fidelidad-stitch.md). La aserción
+  // de desbordamiento corre en cada combinación, no solo en el Inicio: una
+  // tarjeta que se sale solo en tableta es exactamente lo que se escapa al
+  // mirar una sola captura.
+  for (const [pantalla, ruta] of [
+    ['inicio', '/cliente/inicio'],
+    ['cuenta', '/cliente/perfil'],
+    ['mi-qr', '/cliente/qr'],
+  ] as const) {
+    if (ruta !== '/cliente/inicio') await clientPage.goto(`${baseURL}${ruta}`, { timeout: 180000 })
+    for (const width of [390, 768, 1280]) {
+      await clientPage.setViewportSize({ width, height: 900 })
+      await clientPage.screenshot({ path: join(CAPTURAS, `${pantalla}-${width}.png`), fullPage: true, animations: 'disabled' })
+      assert.equal(
+        await clientPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        true,
+        `${pantalla} desborda horizontalmente a ${width}px`
+      )
+    }
   }
+  await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
+  await clientPage.setViewportSize({ width: 390, height: 900 })
   await clientPage.goto(`${baseURL}/cliente/buscar?q=${query}`, { timeout: 180000 })
   await expect(clientPage.getByText(`${equivalent} visible`, { exact: true })).toBeVisible({ timeout: 120000 })
   await expect(clientPage.getByText(`${equivalent} privada`, { exact: true })).toHaveCount(0)
@@ -138,6 +156,18 @@ try {
     await db.auditLog.deleteMany({ where: { companyId: { in: companies } } })
     await db.promocion.deleteMany({ where: { companyId: { in: companies } } })
     await db.plan.deleteMany({ where: { companyId: { in: companies } } })
+    // Visitar Cuenta le asigna a la persona su código corto de referido, y eso
+    // deja eventos colgando de `Cliente`. Sin borrarlos antes, la limpieza
+    // muere con una clave foránea y deja TODAS las fixtures puestas: el fallo
+    // no es el evento, es quedarse a medias.
+    const fichas = await db.cliente.findMany({
+      where: { companyId: { in: companies } },
+      select: { id: true },
+    })
+    if (fichas.length > 0) {
+      const ids = fichas.map((c) => c.id)
+      await db.referralEvent.deleteMany({ where: { clienteId: { in: ids } } })
+    }
     await db.cliente.deleteMany({ where: { companyId: { in: companies } } })
     await db.companyToCategory.deleteMany({ where: { companyId: { in: companies } } })
   }
