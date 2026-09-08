@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ChevronRight, ExternalLink, Menu, Search, X } from 'lucide-react'
+import { ChevronRight, ExternalLink, Menu, QrCode, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   ATERRIZAJE_EMPRESA,
@@ -11,6 +11,7 @@ import {
   breadcrumbs,
   buscarModulos,
   ofreceEntradaAEmpresa,
+  visibleWorkspaces,
   ofreceSalidaAPlataforma,
   type ContextoNav,
 } from '@/components/layout/nav-config'
@@ -113,6 +114,15 @@ export function AppHeader({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  // El mismo menú filtrado que pinta la barra lateral: si el escáner no está
+  // ahí para este rol, el atajo tampoco.
+  const puedeCanjear = useMemo(
+    () =>
+      visibleWorkspaces(ctx).some((w) =>
+        w.groups.some((g) => g.items.some((i) => i.href === '/admin/scanner'))
+      ),
+    [ctx]
+  )
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -317,6 +327,25 @@ export function AppHeader({
             <span className="hidden sm:inline">{s.nombre}</span>
           </a>
         ))}
+        {/* CANJE RÁPIDO — el atajo que el diseño pone en la barra superior.
+            Está ahí porque el mostrador lo usa decenas de veces al día y
+            llegar por el menú cuesta dos clics con un cliente delante.
+
+            Solo se ofrece a quien de verdad puede canjear: se comprueba contra
+            el MISMO menú filtrado que pinta la barra lateral, así que un rol
+            sin permiso sobre el escáner tampoco lo ve aquí. Ocultar un botón
+            no autoriza nada —el servidor sigue mandando—, pero ofrecer un
+            atajo a una pantalla prohibida es prometer algo que no se cumple. */}
+        {puedeCanjear && (
+          <Link
+            href="/admin/scanner"
+            className="mr-1 inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-3 text-label-lg text-primary-foreground transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <QrCode className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Canje rápido</span>
+            <span className="sr-only sm:hidden">Canje rápido</span>
+          </Link>
+        )}
         {companies && <CompanySwitcher companies={companies} />}
         <ThemeToggle />
         <NotificationBell initialCount={notifCount} />

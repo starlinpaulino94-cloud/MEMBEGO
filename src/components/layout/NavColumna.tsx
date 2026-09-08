@@ -1,5 +1,6 @@
 'use client'
 
+import { Store } from 'lucide-react'
 import { Logo } from '@/components/layout/Logo'
 import { NavPanel, type BadgesNav } from '@/components/layout/NavPanel'
 import { MenuUsuario } from '@/components/layout/MenuUsuario'
@@ -45,6 +46,7 @@ export function NavColumna({
   userEmail,
   userName,
   ayudaHref,
+  empresa,
 }: {
   espacio: EspacioVisible
   rutaActiva: string | null
@@ -54,6 +56,13 @@ export function NavColumna({
   userEmail: string
   userName?: string | null
   ayudaHref?: string | null
+  /**
+   * Sobre qué empresa se está trabajando. El diseño lo pone bajo la marca y
+   * encima del menú, y ahí es donde tiene que estar: quien administra dos
+   * negocios necesita verlo ANTES de tocar nada, no descubrirlo al guardar.
+   * Solo texto — no autoriza nada, el ámbito lo decide el servidor.
+   */
+  empresa?: { nombre: string; sede: string | null } | null
 }) {
   return (
     // 280 px: lo que suman riel (68) y panel (212) en el menú de dos niveles,
@@ -65,6 +74,22 @@ export function NavColumna({
           MembeGo
         </span>
       </div>
+
+      {empresa ? (
+        <div className="mx-2.5 mb-2 flex shrink-0 items-center gap-2.5 rounded-lg border border-sidebar-border px-3 py-2.5">
+          <Store className="size-4 shrink-0 text-sidebar-accent-foreground" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-label-lg text-sidebar-accent-foreground">
+              {empresa.nombre}
+            </span>
+            {empresa.sede ? (
+              <span className="block truncate text-label-md text-sidebar-foreground/70">
+                {empresa.sede}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
 
       {/* El panel trae la cabecera del espacio, los grupos rotulados y su
           propio scroll con `min-h-0`; aquí solo se le da el hueco. */}

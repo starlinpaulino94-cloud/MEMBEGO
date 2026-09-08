@@ -127,6 +127,7 @@ export function AppShell({
   companies,
   sistemasExternos,
   nombreEmpresa,
+  sedeEmpresa,
   children,
 }: {
   /**
@@ -147,6 +148,8 @@ export function AppShell({
   sistemasExternos?: { slug: string; nombre: string }[]
   /** Nombre de la empresa activa para la píldora de ámbito (solo texto). */
   nombreEmpresa?: string | null
+  /** Sede o ciudad de la empresa activa, para la tarjeta del menú. */
+  sedeEmpresa?: string | null
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -198,6 +201,7 @@ export function AppShell({
         >
           <AppSidebar
             ctx={ctx}
+            empresa={nombreEmpresa ? { nombre: nombreEmpresa, sede: sedeEmpresa ?? null } : null}
             badges={badges}
             compacto={compacto}
             onToggleCompacto={alternarCompacto}
@@ -227,6 +231,7 @@ export function AppShell({
                 lista de módulos que se quede atrás. */}
             <AppSidebar
               ctx={ctx}
+              empresa={nombreEmpresa ? { nombre: nombreEmpresa, sede: sedeEmpresa ?? null } : null}
               badges={badges}
               variante="movil"
               userEmail={userEmail}

@@ -253,3 +253,51 @@ desbordamiento en cada combinación — no solo en el Inicio.
 
 **Verificación:** `tsc` 0 · `eslint` 0 errores · **suite 1967/1967** · `build`
 compilado · E2E autenticado en verde · 9 capturas sin desbordamiento.
+
+---
+
+## 9. F3 · La carcasa del hub administrativo (2026-09-08)
+
+### 9.1 De nueve espacios a una columna con ocho grupos
+
+El panel de empresa era un riel de dos niveles con nueve espacios. Los diseños
+lo definen como **una columna** con ocho grupos rotulados. El riel no se
+retira: sigue siendo el mecanismo para quien tenga varios espacios, y el
+cliente lo conserva. Lo que cambia es que el ámbito de empresa pasa a tener uno
+solo, y `menuEnUnaColumna` ya sabía qué hacer con eso — la plataforma llevaba
+tiempo pintándose así.
+
+**El reparto era lo delicado, no la estructura.** La barra lateral del diseño
+enseña los ~20 módulos de la empresa que sirvió de ejemplo; MEMBEGO tiene 37.
+Adoptar esa lista al pie de la letra habría escondido 17 módulos que funcionan.
+Se adopta la ESTRUCTURA y cada módulo entra en su grupo. Tres guardias nuevas
+lo vigilan: los ocho grupos en orden, ningún módulo huérfano, ninguno duplicado.
+
+### 9.2 Del diseño, lo que sí existe
+
+- **Tarjeta de empresa** bajo la marca: nombre + «Sede <ciudad>». Sin ciudad
+  enseña solo el nombre; no se inventa una sede.
+- **«Canje rápido»** en la barra superior, comprobado contra el MISMO menú
+  filtrado: un rol sin permiso sobre el escáner tampoco ve el atajo.
+- **Tema claro por defecto.** Los doce diseños son claros y la app del cliente
+  ya forzaba claro en `.retail`; el oscuro solo sobrevivía en el panel, así que
+  había dos identidades según por qué puerta entraras. El toggle sigue y la
+  elección persiste: quien prefiera oscuro no lo pierde.
+- **Barra lateral clara.** Era navy profundo. Los tokens `--sidebar-*` del tema
+  claro se recalcularon: sobre superficie clara el azul de marca sí llega a AA
+  (4.6:1 contra blanco), así que el azul aclarado —que existía solo por el
+  navy— deja de hacer falta. El navy sigue intacto en el tema oscuro.
+
+### 9.3 Del diseño, lo que NO se pintó
+
+| Elemento | Por qué |
+|---|---|
+| Píldora «Higüey Online · Turno Diurno» | No hay dato de turno ni de estado en línea para el ámbito de empresa. Existe `/admin/app/carwash/turnos`, pero es de un vertical, no del hub. |
+| Contadores junto a los grupos (8, 14, 3, «Hot») | El mecanismo de insignias existe (`badgesDeNavegacion`) y hoy alimenta cinco claves reales. Las del diseño son otras; cada una necesita su consulta antes de pintarse. |
+| Navegación · Cerca de ti · Mi QR (empresa) | Módulos administrativos que no existen. Son capacidades nuevas, no enlaces. |
+| Servicios · Ingresos · Rendimiento | Ídem. |
+| Pie con razón social y RNC | El RNC no está en el modelo de empresa. |
+
+**Verificación:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
+**suite 1970/1970** · `build` compilado · E2E autenticado en verde, con el hub
+comprobando sus rótulos de grupo.

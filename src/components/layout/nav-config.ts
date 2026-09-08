@@ -33,7 +33,6 @@ import {
   Rocket,
   ScanLine,
   Scale,
-  Settings,
   Share2,
   SlidersHorizontal,
   Store,

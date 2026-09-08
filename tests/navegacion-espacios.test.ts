@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   canSeeItem,
-  canSeeWorkspace,
   rankOf,
   resolverRuta,
   visibleGroups,

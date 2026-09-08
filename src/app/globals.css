@@ -315,25 +315,30 @@
   --glass-border: oklch(1 0 0 / 45%);
   --glow-color: 59 130 246;
 
-  /* Sidebar — deep navy (matches logo background) */
-  --sidebar: oklch(0.14 0.035 260);
-  --sidebar-foreground: oklch(0.80 0.010 260);
-  /* DS 2.0 · NO es `--primary`: el azul de marca (L .55) sobre este navy
-     (L .14) se queda en ~3.4:1, por debajo de AA. Este azul aclarado
-     (L .72) da ~7:1 contra el navy y es el que marca la selección del
-     menú. Si se toca el navy, hay que recalcular este par. */
-  --sidebar-primary: oklch(0.72 0.15 255);
-  --sidebar-primary-foreground: oklch(0.16 0.03 255);
-  --sidebar-accent: oklch(0.20 0.035 260);
-  --sidebar-accent-foreground: oklch(0.92 0.008 260);
-  --sidebar-border: oklch(0.22 0.030 260);
-  --sidebar-ring: oklch(0.72 0.15 255);
-  /* DS 2.0 · Superficies de interacción del menú, antes escritas a mano
-     como `bg-white/[0.05]` y `bg-white/[0.08]` en cada enlace. */
-  --sidebar-hover: oklch(1 0 0 / 6%);
-  --sidebar-active: oklch(1 0 0 / 10%);
-  /* DS 3.0 - Riel de espacios: un escalon MAS oscuro que el panel. */
-  --sidebar-rail: oklch(0.105 0.030 260);
+  /* ── Barra lateral, tema CLARO ─────────────────────────────────────────
+     Era navy profundo, a juego con el fondo del logo. Los ocho diseños
+     administrativos de Stitch la pintan clara: superficie casi blanca, texto
+     oscuro, rótulos de grupo en gris y el módulo activo en azul de marca.
+
+     Con el navy, el panel quedaba partido en dos identidades —columna oscura,
+     contenido claro— que no está en ningún diseño. El navy sigue vivo en el
+     tema oscuro, unos bloques más abajo, para quien lo elija con el toggle. */
+  --sidebar: oklch(0.985 0.002 260);
+  --sidebar-foreground: oklch(0.42 0.012 260);
+  /* Sobre superficie clara, el azul de marca SÍ vale: da 4.6:1 contra
+     blanco. El aclarado de antes existía porque el fondo era navy. */
+  --sidebar-primary: oklch(0.55 0.22 255);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.955 0.006 260);
+  --sidebar-accent-foreground: oklch(0.22 0.02 260);
+  --sidebar-border: oklch(0.91 0.005 260);
+  --sidebar-ring: oklch(0.55 0.22 255);
+  /* Superficies de interacción del menú. En claro son sombras del texto, no
+     velos blancos: sobre casi-blanco, `white/6%` no se ve. */
+  --sidebar-hover: oklch(0.22 0.02 260 / 6%);
+  --sidebar-active: oklch(0.22 0.02 260 / 10%);
+  /* Riel de espacios: un escalón más OSCURO que el panel también en claro. */
+  --sidebar-rail: oklch(0.955 0.006 260);
   /* Seleccion del menu, relleno solido (el patron del rediseno). Toma los
      mismos valores que el boton principal, que ya esta auditado a 4.5:1:
      una pastilla azul con texto blanco no puede tener otro contraste que
