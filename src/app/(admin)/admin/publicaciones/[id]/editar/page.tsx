@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { PostForm } from '@/components/admin/PostForm'
 
 export const dynamic = 'force-dynamic'
@@ -13,19 +13,15 @@ export default async function EditarPublicacionPage({
   params: Promise<{ id: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const { id } = await params
 
-  const post = await conEmpresaOTodas(
-    companyId,
-    'publicaciones · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const post = await conEmpresa(companyId,
     (tx) => tx.companyPost.findUnique({ where: { id } })
   )
   if (!post) notFound()
 
-  const campanas = await conEmpresaOTodas(
-    companyId,
-    'publicaciones · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const campanas = await conEmpresa(companyId,
     (tx) => tx.campana.findMany({
       where: { companyId: post.companyId, activo: true },
       select: { id: true, nombre: true },
@@ -58,3 +54,4 @@ export default async function EditarPublicacionPage({
     </div>
   )
 }
+

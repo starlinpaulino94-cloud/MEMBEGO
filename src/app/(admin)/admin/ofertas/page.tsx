@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import {
   Megaphone,
   Sparkles,
@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
@@ -72,7 +72,7 @@ const TIPOS: TipoOferta[] = [
 
 export default async function OfertasHubPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = await requireCompanyContext(user)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="tus ofertas" />
@@ -80,9 +80,7 @@ export default async function OfertasHubPage() {
 
   // Conteos por tipo (total por empresa). Fail-open: si una query falla, se
   // muestra 0 y el hub sigue siendo navegable.
-  const [publicas, relampago, vip] = await conEmpresaOTodas(
-    companyId,
-    'ofertas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const [publicas, relampago, vip] = await conEmpresa(companyId,
     (tx) => Promise.all([
       tx.promocion.count({ where: { companyId, archivada: false } }).catch(() => 0),
       tx.marketingCampaign.count({ where: { companyId } }).catch(() => 0),
@@ -142,3 +140,4 @@ export default async function OfertasHubPage() {
     </div>
   )
 }
+

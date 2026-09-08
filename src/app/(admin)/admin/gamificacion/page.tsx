@@ -1,4 +1,4 @@
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -22,9 +22,7 @@ export default async function AdminGamificacionPage() {
   // que anidarlas agota el pool con el pooler por delante.
   const [premiosRaw, promociones] = await Promise.all([
     getRuletaPremiosAdmin(companyId),
-    conEmpresaOTodas(
-      companyId,
-      'gamificacion: sin empresa activa es el superadmin',
+    conEmpresa(companyId,
       (tx) =>
         tx.promocion.findMany({
           where: { companyId, activo: true, archivada: false },
@@ -56,3 +54,4 @@ export default async function AdminGamificacionPage() {
     </div>
   )
 }
+

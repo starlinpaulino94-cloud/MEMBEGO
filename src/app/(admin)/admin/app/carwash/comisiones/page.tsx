@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -70,9 +70,7 @@ export default async function ComisionesPage({
   // `getPanelComisiones` abre su propia transacción: fuera del envoltorio.
   const [panel, servicios] = await Promise.all([
     getPanelComisiones(companyId, inicio, fin),
-    conEmpresaOTodas(
-      companyId,
-      'app · carwash · comisiones: sin empresa activa es el superadmin',
+    conEmpresa(companyId,
       (tx) =>
         tx.servicio.findMany({
           where: { companyId, activo: true },
@@ -131,3 +129,4 @@ export default async function ComisionesPage({
     </div>
   )
 }
+

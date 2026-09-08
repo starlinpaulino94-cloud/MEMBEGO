@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -52,9 +52,7 @@ export default async function VehiculosPage({
       : {}),
   }
 
-  const [vehiculos, total] = await conEmpresaOTodas(
-    companyId,
-    'app · carwash · vehiculos: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const [vehiculos, total] = await conEmpresa(companyId,
     (tx) => Promise.all([
       tx.vehiculo.findMany({
       where,
@@ -161,3 +159,4 @@ export default async function VehiculosPage({
     </div>
   )
 }
+

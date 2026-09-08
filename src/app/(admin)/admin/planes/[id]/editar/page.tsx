@@ -1,10 +1,10 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { EditarPlanForm } from '@/components/admin/EditarPlanForm'
 
 export const dynamic = 'force-dynamic'
@@ -15,12 +15,10 @@ export default async function EditarPlanEmpresaPage({
   params: Promise<{ id: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const { id } = await params
 
-  const plan = await conEmpresaOTodas(
-    companyId,
-    'planes · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const plan = await conEmpresa(companyId,
     (tx) => tx.plan.findUnique({ where: { id } })
   )
   if (!plan) notFound()
@@ -42,3 +40,4 @@ export default async function EditarPlanEmpresaPage({
     </div>
   )
 }
+

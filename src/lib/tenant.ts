@@ -124,11 +124,10 @@ export async function sinEmpresa<T>(motivo: string, fn: (tx: Tx) => Promise<T>):
 /**
  * Ejecuta `fn` en UNA empresa, o en todas si no hay ninguna.
  *
- * Existe por una forma concreta del panel: `companyFilter(user)` devuelve
- * `undefined` cuando quien mira es el superadmin, porque su panel de empresa
- * cruza inquilinos a propósito. Sin este envoltorio, cada pantalla del panel
- * repetiría el mismo `companyId ? conEmpresa(...) : sinEmpresa(...)` —
- * cincuenta y siete veces, y la primera que se copiara mal sería un hueco.
+ * Existe por una forma concreta del panel de plataforma: el superadmin cruza
+ * inquilinos a propósito en /superadmin y el marketplace público. En las
+ * páginas de EMPRESA (/admin/*) está prohibido: allí la empresa la entrega
+ * `requireCompanyContext` y el envoltorio es siempre `conEmpresa`.
  *
  * El `motivo` es el de `sinEmpresa`: solo se usa cuando NO hay empresa, que es
  * justo el caso que hay que poder justificar leyendo la llamada.

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireSection } from '@/lib/auth/guards'
 import { getAuditoria, ACCION_LABEL } from '@/modules/auditoria/queries'
@@ -36,9 +36,7 @@ export default async function ActividadPage({
 
   const { accion, q, desde, hasta } = await searchParams
 
-  const empresa = await conEmpresaOTodas(
-    companyId,
-    'actividad: sin empresa activa es el superadmin',
+  const empresa = await conEmpresa(companyId,
     (tx) => tx.company
       .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
       .catch(() => null)
@@ -130,3 +128,4 @@ export default async function ActividadPage({
     </div>
   )
 }
+

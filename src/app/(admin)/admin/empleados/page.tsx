@@ -1,10 +1,10 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import { Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { puedeEditarPermisos } from '@/lib/auth/permissions'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { listInvitacionesPendientes } from '@/modules/admin/invitacionActions'
 import { Button } from '@/components/ui/button'
 import { EmpleadosTable, type EmpleadoRow } from '@/components/admin/EmpleadosTable'
@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function EmpleadosPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   // Solo los administradores plenos con empresa pueden invitar equipo.
   const puedeInvitar = !!user.metadata.companyId && FULL_ADMIN_ROLES.includes(user.metadata.role)
 
@@ -48,9 +48,7 @@ export default async function EmpleadosPage() {
       ? await listInvitacionesPendientes(user.metadata.companyId).catch(() => [])
       : []
 
-    const team = await conEmpresaOTodas(
-      companyId,
-      'empleados: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    const team = await conEmpresa(companyId,
       (tx) => tx.user.findMany({
         where: { role: { in: TEAM_ROLES }, ...(companyId ? { companyId } : {}) },
         orderBy: { createdAt: 'desc' },
@@ -152,3 +150,4 @@ export default async function EmpleadosPage() {
     </div>
   )
 }
+

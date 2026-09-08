@@ -12,7 +12,6 @@ import { revalidatePath } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { altaCliente } from '@/modules/plataforma/alta-cliente'
 import { normalizarPlaca } from './cuentas'
@@ -33,7 +32,7 @@ async function contexto(): Promise<{ companyId: string; userId: string | null } 
   if (!user || !(ADMIN_ROLES as readonly string[]).includes(user.metadata.role)) {
     return { error: 'No autorizado.' }
   }
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = user.metadata.companyId ?? null
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
   return { companyId, userId: user.metadata.dbUserId ?? null }
 }

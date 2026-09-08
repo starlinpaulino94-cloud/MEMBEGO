@@ -1,10 +1,10 @@
 import { ComprobantePreview } from '@/components/pagos/ComprobanteLink'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Link from 'next/link'
 import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { emitirQrMembresia } from '@/modules/admin/actions'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { RenovarMembresiaDialog } from '@/components/admin/RenovarMembresiaDialog'
@@ -73,12 +73,10 @@ export default async function ClienteDetailPage({
   const { id } = await params
   const { vista: vistaRaw } = await searchParams
   const vista: Vista = VISTAS.includes(vistaRaw as Vista) ? (vistaRaw as Vista) : 'resumen'
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   const fetchCliente = () =>
-    conEmpresaOTodas(
-      companyId,
-      'ficha del cliente: sin empresa activa es el superadmin',
+    conEmpresa(companyId,
       (tx) => tx.cliente.findUnique({
       where: { id },
       include: {
@@ -143,9 +141,7 @@ export default async function ClienteDetailPage({
 
   let planes: { id: string; nombre: string; precio: string }[] = []
   try {
-    const rows = await conEmpresaOTodas(
-      companyId,
-      'clientes · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    const rows = await conEmpresa(companyId,
       (tx) => tx.plan.findMany({
         where: { companyId: cliente.companyId, activo: true },
         orderBy: { precio: 'asc' },
@@ -557,3 +553,4 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+

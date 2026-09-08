@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
@@ -58,9 +58,7 @@ export default async function ColaPage() {
     )
   }
 
-  const empresa = await conEmpresaOTodas(
-    companyId,
-    'app · carwash · cola: sin empresa activa es el superadmin',
+  const empresa = await conEmpresa(companyId,
     (tx) => tx.company
       .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
       .catch(() => null)
@@ -98,9 +96,7 @@ export default async function ColaPage() {
   // Apagada, la tarjeta se ve exactamente como antes.
   const conComisiones = await tieneCapacidad(companyId, 'COMISIONES')
   const lavadores: LavadorOpcion[] = conComisiones
-    ? await conEmpresaOTodas(
-      companyId,
-      'app · carwash · cola: sin empresa activa es el superadmin',
+    ? await conEmpresa(companyId,
       (tx) => tx.user
           .findMany({
             // Solo el personal: los CLIENTE de la empresa no lavan carros.
@@ -243,3 +239,4 @@ function TarjetaCola({
     </li>
   )
 }
+

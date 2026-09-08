@@ -1,10 +1,10 @@
 import Form from 'next/form'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -60,7 +60,7 @@ export default async function ClientesPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const sp = await searchParams
 
   const busqueda = (sp.q ?? '').trim()
@@ -79,9 +79,7 @@ export default async function ClientesPage({
   let total = 0
   let fallo = false
   try {
-    const [filas, cuenta, tipos] = await conEmpresaOTodas(
-      companyId,
-      'clientes: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    const [filas, cuenta, tipos] = await conEmpresa(companyId,
       (tx) => Promise.all([
         tx.cliente.findMany({
           where,
@@ -258,3 +256,4 @@ function PaginaLink({
     </Link>
   )
 }
+

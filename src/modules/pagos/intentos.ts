@@ -109,9 +109,65 @@ export interface ResultadoVerificado {
   montoCobrado?: number | null
 }
 
+export type EntregaEstado = 'COMPLETADA' | 'PENDIENTE' | 'FALLIDA'
+
 export type ConfirmacionResultado =
-  | { ok: true; estado: 'APROBADO'; yaEstaba: boolean; compraId: string | null; membershipId: string | null }
+  | { ok: true; estado: 'APROBADO'; yaEstaba: boolean; entrega: EntregaEstado; compraId: string | null; membershipId: string | null }
   | { ok: false; estado: 'RECHAZADO' | 'ERROR'; motivo: string }
+
+type IntentoEntregable = {
+  id: string
+  companyId: string
+  compraId: string | null
+  membershipId: string | null
+  ipAddress: string | null
+  userAgent: string | null
+}
+
+/**
+ * Ejecuta la ENTREGA del producto (activación de compra o membresía).
+ *
+ * Separada del reclamo del cobro para poder reintentarse: `confirmarIntento`
+ * la llama tras ganar el candado de `activadoAt`, y `reintentarEntrega` la
+ * llama tras ganar el reclamo FALLIDA→PENDIENTE. Nunca recobra.
+ */
+async function entregarProducto(
+  intento: IntentoEntregable
+): Promise<{ completada: boolean; error?: string }> {
+  const meta = { ipAddress: intento.ipAddress, userAgent: intento.userAgent }
+
+  // userId null a propósito: no lo activó ningún administrador, lo activó el
+  // cobro. La bitácora lo registra como activación automática.
+  if (intento.compraId) {
+    const res = await activarCompraPromocion(intento.compraId, null, meta, {
+      motivo: `Pago aprobado por pasarela (intento ${intento.id})`,
+    })
+    if (!res.ok) return { completada: false, error: res.error }
+    return { completada: true }
+  }
+  if (intento.membershipId) {
+    const res = await activarMembresia(intento.membershipId, null, meta)
+    if (!res.ok) return { completada: false, error: res.error }
+    return { completada: true }
+  }
+  return { completada: false, error: 'Intento sin producto asociado.' }
+}
+
+export async function marcarEntrega(
+  companyId: string,
+  intentoId: string,
+  completada: boolean,
+  error?: string
+): Promise<void> {
+  await conEmpresa(companyId, (tx) =>
+    tx.pagoIntento.update({
+      where: { id: intentoId },
+      data: completada
+        ? { fulfillmentEstado: 'COMPLETADA', fulfillmentAt: new Date(), fulfillmentError: null }
+        : { fulfillmentEstado: 'FALLIDA', fulfillmentError: error ?? 'La entrega falló.' },
+    })
+  ).catch(anotarFallo('pagos:marcarEntrega', { intentoId }))
+}
 
 /**
  * Cierra el intento con un resultado YA VERIFICADO contra la pasarela y, si fue
@@ -170,10 +226,11 @@ export async function confirmarIntento(
     return { ok: false, estado: 'ERROR', motivo }
   }
 
-  // ── El candado de idempotencia ──────────────────────────────────────────
+  // ── El candado del COBRO ──────────────────────────────────────────────
   // updateMany con `activadoAt: null` en el WHERE es una operación atómica: la
-  // base de datos decide quién llega primero. `count === 0` = ya lo activó otro
-  // (webhook, recarga de la página, doble clic) y aquí no hay nada que hacer.
+  // base de datos decide quién llega primero. `count === 0` = ya lo reclamó
+  // otro (webhook, recarga de la página, doble clic). Este candado protege el
+  // CARGO, no la entrega: la entrega tiene su propio estado abajo.
   const marca = await conEmpresa(intento.companyId, (tx) =>
     tx.pagoIntento.updateMany({
       where: { id: intentoId, activadoAt: null },
@@ -187,53 +244,82 @@ export async function confirmarIntento(
   )
 
   if (marca.count === 0) {
+    const actual = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.findUnique({
+        where: { id: intentoId },
+        select: { fulfillmentEstado: true, compraId: true, membershipId: true },
+      })
+    ).catch(() => null)
     return {
       ok: true,
       estado: 'APROBADO',
       yaEstaba: true,
-      compraId: intento.compraId,
-      membershipId: intento.membershipId,
+      entrega: (actual?.fulfillmentEstado ?? 'PENDIENTE') as EntregaEstado,
+      compraId: actual?.compraId ?? intento.compraId,
+      membershipId: actual?.membershipId ?? intento.membershipId,
     }
   }
 
-  const meta = { ipAddress: intento.ipAddress, userAgent: intento.userAgent }
-
-  // userId null a propósito: no lo activó ningún administrador, lo activó el
-  // cobro. La bitácora lo registra como activación automática.
-  if (intento.compraId) {
-    const res = await activarCompraPromocion(intento.compraId, null, meta, {
-      motivo: `Pago aprobado por ${intento.proveedor}`,
-    })
-    if (!res.ok) {
-      // El cobro SÍ ocurrió: no se revierte `activadoAt` (eso abriría la puerta
-      // a un doble cobro en el reintento). Se deja constancia del fallo para
-      // que un administrador complete la entrega a mano.
-      await conEmpresa(intento.companyId, (tx) =>
-        tx.pagoIntento
-          .update({
-            where: { id: intentoId },
-            data: { motivoRechazo: `Cobrado, pero la activación falló: ${res.error}` },
-          })
-      ).catch(anotarFallo('pagos:confirmarIntento:activacionCompraFallo', { intentoId }))
-    }
-  } else if (intento.membershipId) {
-    const res = await activarMembresia(intento.membershipId, null, meta)
-    if (!res.ok) {
-      await conEmpresa(intento.companyId, (tx) =>
-        tx.pagoIntento
-          .update({
-            where: { id: intentoId },
-            data: { motivoRechazo: `Cobrado, pero la activación falló: ${res.error}` },
-          })
-      ).catch(anotarFallo('pagos:confirmarIntento:activacionMembresiaFallo', { intentoId }))
-    }
-  }
+  const entrega = await entregarProducto(intento)
+  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error)
 
   return {
     ok: true,
     estado: 'APROBADO',
     yaEstaba: false,
+    entrega: entrega.completada ? 'COMPLETADA' : 'FALLIDA',
     compraId: intento.compraId,
     membershipId: intento.membershipId,
+  }
+}
+
+/**
+ * Reintenta la entrega de un intento cobrado cuya entrega falló.
+ *
+ * Solo toca filas APROBADO + FALLIDA y gana un reclamo atómico
+ * (FALLIDA→PENDIENTE + contador): dos reintentos concurrentes no ejecutan la
+ * activación dos veces. Nunca recobra: no toca la pasarela.
+ */
+export async function reintentarEntrega(
+  intentoId: string
+): Promise<{ ok: boolean; entrega: EntregaEstado; error?: string }> {
+  const intento = await sinEmpresa(
+    'pagos: localizar intento al reintentar entrega (operación de conciliación)',
+    (tx) =>
+      tx.pagoIntento.findUnique({
+        where: { id: intentoId },
+        select: {
+          id: true,
+          companyId: true,
+          compraId: true,
+          membershipId: true,
+          ipAddress: true,
+          userAgent: true,
+          estado: true,
+          fulfillmentEstado: true,
+        },
+      })
+  )
+  if (!intento) return { ok: false, entrega: 'PENDIENTE', error: 'Intento no encontrado.' }
+  if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado !== 'FALLIDA') {
+    return { ok: true, entrega: intento.fulfillmentEstado as EntregaEstado }
+  }
+
+  const reclamo = await conEmpresa(intento.companyId, (tx) =>
+    tx.pagoIntento.updateMany({
+      where: { id: intentoId, fulfillmentEstado: 'FALLIDA' },
+      data: { fulfillmentEstado: 'PENDIENTE', fulfillmentIntentos: { increment: 1 } },
+    })
+  )
+  if (reclamo.count === 0) {
+    return { ok: true, entrega: 'PENDIENTE', error: 'Otro proceso tomó el reintento.' }
+  }
+
+  const entrega = await entregarProducto(intento)
+  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error)
+  return {
+    ok: entrega.completada,
+    entrega: entrega.completada ? 'COMPLETADA' : 'FALLIDA',
+    error: entrega.error,
   }
 }

@@ -12,7 +12,7 @@ import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { companyFilter } from '@/modules/admin/queries'
+import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getAppUrl } from '@/lib/site'
 import { crearGrowthLink } from './links'
 import { DURACION_HORAS_VALIDAS } from './config'
@@ -69,7 +69,7 @@ function boolFrom(formData: FormData, name: string): boolean {
 
 export async function guardarGrowthConfigAction(formData: FormData): Promise<void> {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? String(formData.get('companyId') ?? '')
+  const companyId = await resolveCompanyId(user, formData)
   if (!companyId) return
 
   const data = {
@@ -126,7 +126,7 @@ export async function crearGrowthRuleAction(
   formData: FormData
 ): Promise<ReglaState> {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? String(formData.get('companyId') ?? '')
+  const companyId = await resolveCompanyId(user, formData)
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
 
   const lectura = leerRegla(formData)
@@ -155,7 +155,7 @@ export async function actualizarGrowthRuleAction(
   formData: FormData
 ): Promise<ReglaState> {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await resolveCompanyId(user, formData)
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return { error: 'Falta la regla a editar.' }
 
@@ -191,7 +191,7 @@ export async function actualizarGrowthRuleAction(
 
 export async function toggleGrowthRuleAction(formData: FormData): Promise<void> {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await resolveCompanyId(user, formData)
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const rule = await sinEmpresa('growth: buscar regla por id (permiso de empresa se valida tras el lookup)', (tx) =>
@@ -208,7 +208,7 @@ export async function toggleGrowthRuleAction(formData: FormData): Promise<void> 
 
 export async function eliminarGrowthRuleAction(formData: FormData): Promise<void> {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await resolveCompanyId(user, formData)
   const id = String(formData.get('id') ?? '')
   if (!id) return
   const rule = await sinEmpresa('growth: buscar regla por id (permiso de empresa se valida tras el lookup)', (tx) =>

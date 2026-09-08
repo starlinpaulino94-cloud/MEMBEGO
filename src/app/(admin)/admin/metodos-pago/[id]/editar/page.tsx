@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { MetodoPagoForm } from '@/components/admin/MetodoPagoForm'
 
 export default async function EditarMetodoPagoPage({
@@ -13,10 +13,8 @@ export default async function EditarMetodoPagoPage({
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
 
-  const companyId = companyFilter(user)
-  const method = await conEmpresaOTodas(
-    companyId,
-    'metodos-pago · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const companyId = await requireCompanyContext(user)
+  const method = await conEmpresa(companyId,
     (tx) => tx.metodoPago.findUnique({ where: { id } })
   )
   if (!method) return notFound()
@@ -44,3 +42,4 @@ export default async function EditarMetodoPagoPage({
     </div>
   )
 }
+

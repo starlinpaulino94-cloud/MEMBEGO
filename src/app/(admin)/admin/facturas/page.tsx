@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { ADMIN_ROLES } from '@/types'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -79,7 +80,7 @@ export default async function FacturasPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = user.metadata.companyId as string | undefined
+  const companyId = await requireCompanyContext(user)
   const sp = await searchParams
   const { q = '', ver = '' } = sp
   const paginacion = leerPaginacion(sp)
@@ -107,9 +108,7 @@ export default async function FacturasPage({
 
   // Paginación real: el historial de comprobantes es permanente y crece sin
   // límite; con un tope fijo las reimpresiones viejas eran inalcanzables.
-  const [facturas, totalFacturas] = await conEmpresaOTodas(
-    companyId,
-    'facturas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const [facturas, totalFacturas] = await conEmpresa(companyId,
     (tx) => Promise.all([
       tx.transaction.findMany({
         where,
@@ -269,3 +268,4 @@ export default async function FacturasPage({
     </div>
   )
 }
+

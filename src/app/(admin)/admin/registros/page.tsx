@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import Form from 'next/form'
 import { PageHeader } from '@/components/ui/page-header'
@@ -53,9 +53,7 @@ export default async function RegistrosPage({
   const sp = await searchParams
 
   const empresa = companyId
-    ? await conEmpresaOTodas(
-      companyId,
-      'registros: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    ? await conEmpresa(companyId,
       (tx) => tx.company.findUnique({
           where: { id: companyId },
           select: { name: true, zonaHoraria: true },
@@ -320,3 +318,4 @@ export default async function RegistrosPage({
     </div>
   )
 }
+

@@ -49,9 +49,20 @@ model PagoIntento {
   /// Payload crudo del retorno. Evidencia ante disputas.
   respuesta         Json?
 
-  /// Se llena cuando la activación del producto YA se ejecutó. Es el guardia
-  /// de idempotencia: si tiene fecha, una notificación repetida no hace nada.
+  /// Se llena cuando el PROCESADOR confirmó el cobro. Es el reclamo de
+  /// idempotencia del CARGO: si tiene fecha, una notificación repetida no
+  /// vuelve a contar el mismo cobro. NO significa producto entregado (ver
+  /// `fulfillmentEstado`).
   activadoAt DateTime?
+
+  /// CUMPLIMIENTO separado del cobro (P1B). 'PENDIENTE' = cobrado sin
+  /// entregar · 'COMPLETADA' = producto activo + fulfillmentAt ·
+  /// 'FALLIDA' = cobrado con entrega fallida (+ fulfillmentError) → caso de
+  /// conciliación y reintento, nunca éxito para el cliente.
+  fulfillmentEstado   String    @default("PENDIENTE")
+  fulfillmentAt       DateTime?
+  fulfillmentError    String?
+  fulfillmentIntentos Int       @default(0)
 
   ipAddress String?
   userAgent String?

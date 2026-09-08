@@ -79,15 +79,18 @@ export async function usuarioPuedeFuncion(
 ): Promise<boolean> {
   const role = user.metadata.role
   if (ROLES_EXENTOS_PERMISOS.includes(role)) return true
-  let permisos: PermisosUsuario | null = null
-  if (user.metadata.dbUserId) {
+  if (!user.metadata.dbUserId) return false
+  try {
     const { prisma } = await import('@/lib/prisma')
-    const fila = await prisma.user
-      .findUnique({ where: { id: user.metadata.dbUserId }, select: { permisos: true } })
-      .catch(() => null)
-    permisos = resolverPermisosUsuario(fila?.permisos)
+    const fila = await prisma.user.findUnique({
+      where: { id: user.metadata.dbUserId },
+      select: { permisos: true },
+    })
+    if (!fila) return false
+    return funcionPermitida(role, section, funcion, resolverPermisosUsuario(fila.permisos))
+  } catch {
+    return false
   }
-  return funcionPermitida(role, section, funcion, permisos)
 }
 
 export async function requireSection(
@@ -108,11 +111,17 @@ export async function requireSection(
   // sigue siendo el rol; el ajuste concede o niega encima.
   let permisos: PermisosUsuario | null = null
   if (!ROLES_EXENTOS_PERMISOS.includes(role) && user.metadata.dbUserId) {
-    const { prisma } = await import('@/lib/prisma')
-    const fila = await prisma.user
-      .findUnique({ where: { id: user.metadata.dbUserId }, select: { permisos: true } })
-      .catch(() => null)
-    permisos = resolverPermisosUsuario(fila?.permisos)
+    try {
+      const { prisma } = await import('@/lib/prisma')
+      const fila = await prisma.user.findUnique({
+        where: { id: user.metadata.dbUserId },
+        select: { permisos: true },
+      })
+      if (!fila) return null
+      permisos = resolverPermisosUsuario(fila.permisos)
+    } catch {
+      return null
+    }
   }
   if (!seccionPermitida(role, section, permisos)) return null
   if (funcion && !funcionPermitida(role, section, funcion, permisos)) return null

@@ -1,10 +1,10 @@
 import Form from 'next/form'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import {
   ESTADOS_MEMBRESIA,
   USOS_OPCIONES,
@@ -61,7 +61,7 @@ export default async function MembresiasPage({
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const sp = await searchParams
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const pag = leerPaginacion(sp, POR_PAGINA)
   const busqueda = (sp.q ?? '').trim()
 
@@ -77,9 +77,7 @@ export default async function MembresiasPage({
   let total = 0
   let fallo = false
   try {
-    const [data, planesData, cuenta, tipos] = await conEmpresaOTodas(
-      companyId,
-      'membresias: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    const [data, planesData, cuenta, tipos] = await conEmpresa(companyId,
       (tx) => Promise.all([
         tx.membership.findMany({
           where,
@@ -236,3 +234,4 @@ export default async function MembresiasPage({
     </div>
   )
 }
+

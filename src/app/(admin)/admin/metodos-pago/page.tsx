@@ -1,8 +1,8 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function MetodosPagoPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   let metodos: {
     id: string; nombre: string; tipo: string; titular: string | null;
@@ -27,9 +27,7 @@ export default async function MetodosPagoPage() {
     company: { name: string }
   }[] = []
   try {
-    metodos = await conEmpresaOTodas(
-      companyId,
-      'metodos-pago: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    metodos = await conEmpresa(companyId,
       (tx) => tx.metodoPago.findMany({
         where: companyId ? { companyId } : {},
         include: { company: true },
@@ -155,3 +153,4 @@ export default async function MetodosPagoPage() {
     </div>
   )
 }
+

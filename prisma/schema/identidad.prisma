@@ -152,6 +152,14 @@ enum AuditAccion {
   COLA_REENCOLADA
   /// Se descartó definitivamente un trabajo difunto.
   COLA_DESCARTADA
+  /// Home comercial (F2): se guardó un borrador de la composición del Inicio.
+  COMPOSICION_GUARDADA
+  /// Se publicó (o programó) la composición del Inicio.
+  COMPOSICION_PUBLICADA
+  /// Se pausó la composición publicada: el Inicio vuelve al contenido base.
+  COMPOSICION_PAUSADA
+  /// Se archivó una revisión (historial, sin efecto visible).
+  COMPOSICION_ARCHIVADA
   // Membego Connect (Fase 9): lo que el superadmin concede y administra.
   // Conceder claves de API a una empresa le abre sus datos a terceros: es una
   // decisión comercial con consecuencias de seguridad y no puede quedar sin
@@ -463,6 +471,9 @@ model Company {
   // Módulo de Citas.
   agendaConfig   AgendaConfig?
   citas          Cita[]
+  // Home comercial (F2): revisiones de composición y sinónimos de búsqueda.
+  homeRevisiones   HomeRevision[]
+  busquedaSinonimos BusquedaSinonimo[]
   ofertaPrivadas OfertaPrivada[]
   regalos        Regalo[]
   giftCards      GiftCard[]
@@ -584,8 +595,14 @@ model Notificacion {
   href      String? // ruta a la que lleva al hacer clic
   leida     Boolean   @default(false)
   createdAt DateTime  @default(now())
+  /// Identidad estable del evento de origen (P1B): `origen:compañía:tipo:lote`.
+  /// Con ella `skipDuplicates` sí deduplica reintentos; sin unicidad no hacía
+  /// nada. NULL = histórico previo a la deduplicación (Postgres permite
+  /// varios NULL en índice único: no se altera el pasado).
+  dedupeKey String?
 
   @@index([userId, leida])
   @@index([userId, createdAt])
+  @@unique([userId, dedupeKey])
   @@map("notificaciones")
 }

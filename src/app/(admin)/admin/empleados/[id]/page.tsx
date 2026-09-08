@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { prisma } from '@/lib/prisma'
 import { formatDateTime } from '@/lib/format'
 import { EliminarEmpleadoForm } from '@/components/admin/EmpleadoForms'
@@ -23,13 +23,11 @@ export default async function EmpleadoDetailPage({
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   let empleado: Awaited<ReturnType<typeof prisma.user.findUnique>> = null
   try {
-    empleado = await conEmpresaOTodas(
-      companyId,
-      'empleados · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    empleado = await conEmpresa(companyId,
       (tx) => tx.user.findUnique({ where: { id } })
     )
   } catch (e) {
@@ -89,3 +87,4 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+

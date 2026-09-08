@@ -1,5 +1,5 @@
 import { ADMIN_ROLES } from '@/types'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { contarSegmentos, type ConteoSegmentos } from '@/modules/admin/segmentos'
 import { NotifSegmentForm } from '@/components/admin/NotifSegmentForm'
@@ -32,9 +32,7 @@ export default async function NotificacionesEmpresaPage() {
     // `contarSegmentos` abre su propia transacción: fuera del envoltorio.
     ;[conteos, planes] = await Promise.all([
       contarSegmentos(companyId),
-      conEmpresaOTodas(
-        companyId,
-        'notificaciones: sin empresa activa es el superadmin',
+      conEmpresa(companyId,
         (tx) =>
           tx.plan.findMany({
             where: { companyId, activo: true },
@@ -73,3 +71,4 @@ export default async function NotificacionesEmpresaPage() {
     </div>
   )
 }
+

@@ -1,9 +1,8 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { redirect } from 'next/navigation'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
 import {
-  Users,
   UserPlus,
   CheckCircle2,
   Clock,
@@ -19,7 +18,7 @@ import {
   Share2,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { adminMetrics } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { OnboardingChecklist } from '@/components/admin/OnboardingChecklist'
@@ -60,28 +59,9 @@ function fmtHora(d: Date) {
 
 export default async function AdminDashboard() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = user.metadata.companyId
-
-  // Superadmin sin empresa: mantiene la vista simple previa.
-  if (!companyId) {
-    const metrics = await adminMetrics(user).catch(() => ({
-      totalClientes: 0,
-      activas: 0,
-      pendientes: 0,
-      visitasHoy: 0,
-    }))
-    return (
-      <div className="space-y-8 animate-fade-up">
-        <h1 className="text-h1">Todas las empresas</h1>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Clientes" value={<AnimatedCounter value={metrics.totalClientes} />} icon={Users} accent="brand" />
-          <StatCard label="Membresías activas" value={<AnimatedCounter value={metrics.activas} />} icon={CheckCircle2} accent="success" />
-          <StatCard label="Pagos pendientes" value={<AnimatedCounter value={metrics.pendientes} />} icon={Clock} accent="warning" />
-          <StatCard label="Visitas hoy" value={<AnimatedCounter value={metrics.visitasHoy} />} icon={CalendarCheck} accent="brand" />
-        </div>
-      </div>
-    )
-  }
+  // ÁMBITO EMPRESA: sin empresa activa no hay vista global aquí — el
+  // superadmin elige empresa en plataforma y el staff ve /admin/sin-empresa.
+  const companyId = await requireCompanyContext(user)
 
   // Onboarding PRIMERO: mientras la empresa no esté publicada, el asistente es
   // su "home" (evita caer al panel vacío). Se resuelve antes de cargar el
@@ -102,10 +82,8 @@ export default async function AdminDashboard() {
   try {
     // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy», y
     // las métricas no pueden calcularse sin ella (ver `dashboardQueries`).
-    company = await conEmpresaOTodas(
-      companyId,
-      'dashboard: sin empresa activa es el superadmin, que cruza empresas a propósito',
-      (tx) => tx.company.findUnique({
+    company = await conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({
         where: { id: companyId },
         select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
       })

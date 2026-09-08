@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
-import { conEmpresa, conEmpresaOTodas } from '@/lib/tenant'
-import { companyFilter } from '@/modules/admin/queries'
+import { conEmpresa } from '@/lib/tenant'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { rutaPublicaPromo } from '@/modules/promociones/slug'
@@ -17,10 +17,8 @@ export default async function EditarPromocionPage({
 
   // Con el contexto del administrador: además de preparar RLS, impide abrir la
   // promoción de otra empresa acertando el identificador.
-  const companyId = companyFilter(user)
-  const promo = await conEmpresaOTodas(
-    companyId,
-    'promociones · editar: sin empresa activa es el superadmin',
+  const companyId = await requireCompanyContext(user)
+  const promo = await conEmpresa(companyId,
     (tx) => tx.promocion.findUnique({ where: { id } })
   )
   if (!promo) notFound()
@@ -55,9 +53,9 @@ export default async function EditarPromocionPage({
       <PromocionForm
         existing={{ ...promo, precio: promo.precio != null ? Number(promo.precio) : null }}
         campanas={campanas}
-        // La empresa de la PROMOCIÓN, no la de la sesión: `companyFilter`
-        // devuelve undefined para el superadmin, y aquí hace falta un id real
-        // para construir la ruta de la imagen.
+        // La empresa de la PROMOCIÓN, no la de la sesión: el ámbito de la
+        // página ya viene garantizado por `requireCompanyContext`, y aquí hace
+        // falta un id real para construir la ruta de la imagen.
         companyId={promo.companyId}
       />
 
@@ -76,3 +74,4 @@ export default async function EditarPromocionPage({
     </div>
   )
 }
+

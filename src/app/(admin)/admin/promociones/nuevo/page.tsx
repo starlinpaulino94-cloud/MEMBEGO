@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -25,9 +25,7 @@ export default async function NuevaPromocionPage({
   const prefill = plantilla ? promocionPrefill(plantilla) : null
 
   const campanas = companyId
-    ? await conEmpresaOTodas(
-      companyId,
-      'promociones · nuevo: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    ? await conEmpresa(companyId,
       (tx) => tx.campana.findMany({
           where: { companyId, activo: true },
           select: { id: true, nombre: true },
@@ -67,3 +65,4 @@ export default async function NuevaPromocionPage({
     </div>
   )
 }
+

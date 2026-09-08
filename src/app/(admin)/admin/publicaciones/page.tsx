@@ -1,8 +1,8 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -44,11 +44,11 @@ function fmtFecha(d: Date | null) {
 
 export default async function PublicacionesPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   let posts: Awaited<ReturnType<typeof query>> = []
   async function query() {
-    return conEmpresaOTodas(companyId, 'publicaciones: sin empresa activa es el superadmin', (tx) =>
+    return conEmpresa(companyId, (tx) =>
       tx.companyPost.findMany({
       where: companyId ? { companyId } : {},
       include: { company: { select: { name: true, slug: true } } },
@@ -162,3 +162,4 @@ export default async function PublicacionesPage() {
     </div>
   )
 }
+

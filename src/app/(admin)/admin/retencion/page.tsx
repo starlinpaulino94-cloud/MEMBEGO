@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, formatMoney } from '@/lib/format'
 import { getRetencion } from '@/modules/riesgo/retencion'
@@ -46,7 +46,7 @@ const ENLACE_TRAMO: Record<string, string | null> = {
  */
 export default async function RetencionPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   if (!companyId) return <SinEmpresaActiva seccion="el reporte de retención" />
 
   const [r, prefs, umbrales] = await Promise.all([
@@ -232,3 +232,4 @@ export default async function RetencionPage() {
     </ReporteImprimible>
   )
 }
+

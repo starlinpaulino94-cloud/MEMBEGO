@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import type { CompraEstado } from '@prisma/client'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { PROMO_TIPO_LABEL } from '@/lib/promociones'
 import { formatDate, formatMoney } from '@/lib/format'
@@ -38,10 +38,10 @@ const ETIQUETA_ESTADO: Record<EstadoPromo, string> = {
   borradores: 'Borradores',
 }
 
-async function fetchPromos(companyId: string | null) {
-  return conEmpresaOTodas(companyId, 'promociones: sin empresa activa es el superadmin', (tx) =>
+async function fetchPromos(companyId: string) {
+  return conEmpresa(companyId, (tx) =>
     tx.promocion.findMany({
-    where: companyId ? { companyId } : {},
+      where: { companyId },
     include: {
       company: { select: { name: true } },
       _count: { select: { guardadaPor: true } },
@@ -158,12 +158,10 @@ function PromoCard({ p, showCompany }: { p: PromoRow; showCompany: boolean }) {
  * desde el dato real (ProductoCompra) — sin estimaciones:
  *   ventas · conversión · abandonos · QR usados · clientes nuevos/recurrentes.
  */
-async function fetchVentas(companyId: string | null) {
-  const where = companyId ? { companyId } : {}
+async function fetchVentas(companyId: string) {
+  const where = { companyId }
   const activadas: CompraEstado[] = ['ACTIVA', 'CONSUMIDA', 'EXPIRADA']
-  const [porEstado, ingresos, usos, porCliente] = await conEmpresaOTodas(
-    companyId,
-    'promociones: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const [porEstado, ingresos, usos, porCliente] = await conEmpresa(companyId,
     (tx) => Promise.all([
       tx.productoCompra.groupBy({ by: ['estado'], where, _count: { _all: true } }),
       tx.productoCompra.aggregate({
@@ -215,7 +213,7 @@ export default async function PromocionesPage({
   searchParams: Promise<{ estado?: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   const { estado: estadoRaw } = await searchParams
   const estadoActivo: EstadoPromo = ESTADOS_PROMO.includes(estadoRaw as EstadoPromo)
@@ -418,3 +416,4 @@ export default async function PromocionesPage({
     </div>
   )
 }
+

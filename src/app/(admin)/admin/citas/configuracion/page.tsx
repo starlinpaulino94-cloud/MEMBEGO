@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getAgendaConfig } from '@/modules/citas/queries'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
@@ -13,7 +13,7 @@ export const metadata = { title: 'Configuración de citas' }
 
 export default async function ConfiguracionCitasPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = await requireCompanyContext(user)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="la agenda de citas" />
@@ -39,3 +39,4 @@ export default async function ConfiguracionCitasPage() {
     </div>
   )
 }
+
