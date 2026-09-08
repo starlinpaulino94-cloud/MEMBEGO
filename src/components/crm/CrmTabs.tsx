@@ -10,6 +10,7 @@ const TABS = [
   { href: '/admin/crm/metricas', label: 'Métricas', exacto: false },
   { href: '/admin/crm/seguimientos', label: 'Seguimientos', exacto: false },
   { href: '/admin/crm/configuracion', label: 'Configuración', exacto: false },
+  { href: '/admin/crm/configuracion/auto-reply', label: 'Auto-Reply', exacto: false },
 ]
 
 export function CrmTabs() {
