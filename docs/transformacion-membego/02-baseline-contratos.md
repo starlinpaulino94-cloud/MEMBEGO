@@ -181,17 +181,54 @@ reescritura del Inicio dejó en rojo `tests/cliente-sin-empresa.test.ts`.
    que consumen el dock móvil y las pestañas: la misma navegación en dos
    formatos ya no puede separarse.
 
-### 10.3 Pendiente antes de dar F2c por cerrado
+### 10.3 La RLS del Home estaba planteada al revés
 
-- **RLS de la migración `20260913` sin aplicar.** `20260914_home_rls`
-  está escrita (políticas por inquilino, revocación a `anon`/`authenticated`,
-  único parcial para sinónimos globales) pero **no ejecutada** contra ninguna
-  base. Hasta entonces, las tres tablas nuevas viven sin RLS.
-- **`scripts/verificar-home-rls.mts` y `verificar-home-e2e.mts` no se han
-  ejecutado.** Ambos apuntan al proyecto Supabase `ybzhvfmybyyomwpjpaud` y
-  crean empresas, usuarios de Auth, promociones y planes. El de RLS revierte
-  por `ROLLBACK`; el E2E limpia al final, pero escribe de verdad mientras
-  corre. **No se ejecutan sin decisión explícita sobre qué base es esa.**
+`20260914_home_rls` escribía a mano políticas `membego_inquilino` para las tres
+tablas de `20260913`. Sobraba, y además rompía:
+
+- **Chocaba de nombre.** La Capa 2 ya crea `membego_inquilino` en cada tabla
+  que cubre. `CREATE POLICY` no es idempotente, así que en una base donde la
+  Capa 2 ya hubiera corrido, la migración abortaba entera — y vive en
+  `prisma/migrations/`, o sea que `migrate deploy` la habría ejecutado sola.
+  Eso es justo lo que `2026-07-rls-capa2-aislamiento.sql` dice en su cabecera
+  que no debe pasar: la RLS no se aplica sola en un despliegue.
+- **Añadía `FORCE ROW LEVEL SECURITY`**, que la Capa 2 evita a propósito
+  (§ del archivo): FORCE alcanza también al DUEÑO de las tablas, que es quien
+  ejecuta las migraciones y los caminos omniscientes.
+- **Creaba las políticas sin `TO membego_app`**, aplicándolas a todos los
+  roles en vez de solo al de la aplicación.
+
+Y no hacía falta: el aislamiento **no se escribe tabla por tabla**. La Capa 1
+recorre `pg_tables` (y deja `ALTER DEFAULT PRIVILEGES` puesto, así que una
+tabla nueva nace sin permisos para `anon`/`authenticated`), y la Capa 2 deduce
+la política del esquema. `home_revisiones` y `busqueda_sinonimos` entran por
+Nivel 0 —tienen `companyId`—; `home_bloques` entra por Nivel N a través de su
+clave foránea NOT NULL `revisionId`.
+
+Lo que sí hacía falta se conserva: `20260914_sinonimos_globales_unicos`, un
+índice único parcial para `companyId IS NULL`. El `@@unique` de Prisma no lo
+cubre porque en PostgreSQL dos NULL no son iguales, y `guardarSinonimo`
+resuelve el alta con `findFirst` + `create`: dos altas simultáneas del mismo
+término global creaban dos filas.
+
+`scripts/verificar-home-rls.mts` se retira. Duplicaba `scripts/probar-rls.mjs`
+—que ya siembra dos empresas y comprueba el aislamiento de verdad—, apuntaba
+al proyecto Supabase `ybzhvfmybyyomwpjpaud` y hacía `GRANT … TO authenticated`
+sobre él. La cobertura se movió a `probar-rls.mjs` como caso 7: lectura de la
+composición, herencia del bloque por su revisión, y rechazo de colgar un
+bloque de una revisión ajena. Ese arnés se niega a arrancar contra Supabase.
+
+### 10.4 Pendiente antes de dar F2c por cerrado
+
+- **`npm run rls:probar` no se ha ejecutado**: necesita un PostgreSQL de
+  usar y tirar con la Capa 2 aplicada. Hay un PostgreSQL 16 local corriendo en
+  el 5432, pero el proyecto no está cableado a él y no se conocen sus
+  credenciales; no se intentó adivinarlas. En CI este arnés ya corre contra la
+  base sombra, así que el caso 7 se validará solo al abrir el PR.
+- **`scripts/verificar-home-e2e.mts` no se ha ejecutado.** Apunta al mismo
+  proyecto Supabase y crea empresas, usuarios de Auth, promociones y planes.
+  Limpia al final, pero escribe de verdad mientras corre. **No se ejecuta sin
+  decisión explícita sobre qué base es esa.**
 - Sin esa corrida no hay evidencia de fidelidad visual por captura
   (390/768/1280) ni del recorrido publicar → ver → pausar.
 
