@@ -77,6 +77,13 @@ function relativeTime(date: Date): string {
   return `Hace ${days}d`
 }
 
+// Renders relative time without hydration mismatch: empty on server, populated after mount
+function RelativeTime({ date }: { date: Date }) {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => setText(relativeTime(date)), [date])
+  return <>{text}</>
+}
+
 function formatTime(date: Date): string {
   return new Intl.DateTimeFormat('es-DO', { hour: '2-digit', minute: '2-digit' }).format(date)
 }
@@ -212,7 +219,7 @@ export function ChatPanel({
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-small font-medium truncate">{conv.lead?.nombre ?? 'Sin nombre'}</p>
                       <span className="text-caption text-muted-foreground shrink-0">
-                        {conv.ultimaFecha ? relativeTime(new Date(conv.ultimaFecha)) : ''}
+                        {conv.ultimaFecha ? <RelativeTime date={new Date(conv.ultimaFecha)} /> : ''}
                       </span>
                     </div>
                     <p className="text-caption text-muted-foreground mt-0.5 truncate">{conv.ultimoMensaje ?? ''}</p>
