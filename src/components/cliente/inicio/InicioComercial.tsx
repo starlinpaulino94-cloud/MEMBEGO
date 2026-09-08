@@ -22,13 +22,13 @@ function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
     case 'CATEGORIAS':
       return <RetailCategorias categorias={data.categorias} />
     case 'DESTACADAS':
-      return <RetailDestacadas empresas={data.empresas} />
+      return <RetailDestacadas empresas={data.empresas} total={data.empresasTotal} />
     case 'MEMBRESIAS':
-      return <RetailMembresias planes={data.planes} />
+      return <RetailMembresias planes={data.planes} total={data.planesTotal} />
     case 'BANNER_QR':
       return <RetailQrBanner />
     case 'EXPERIENCIAS':
-      return <RetailExperiencias excursiones={data.excursiones} />
+      return <RetailExperiencias experiencias={data.experiencias} />
     default:
       return assertNever(tipo)
   }

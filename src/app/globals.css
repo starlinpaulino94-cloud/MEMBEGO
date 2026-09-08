@@ -687,6 +687,44 @@
   /* El color por defecto de estas dos vive en `@layer components` (más
      abajo), NO aquí. Ver allí el porqué. */
 
+  /* ── Escala de etiqueta y precio (contrato Stitch) ──────────────────
+     El DESIGN.md de Stitch define `label-*` y `price-*` además de los
+     roles de arriba. Las etiquetas son el texto funcional de las fichas
+     —sobretítulos de empresa, sellos, botones—, y el precio es su propio
+     rol porque en una app comercial el número manda sobre el título.
+
+     DESVIACIÓN DELIBERADA: Stitch pone `label-sm` en 11px. Aquí es 12px.
+     El suelo de 12px de este sistema salió de una auditoría de 218 tamaños
+     escritos a mano por debajo de ese valor, y bajarlo ahora reabre
+     exactamente lo que esa decisión cerró. Un píxel no cambia la
+     composición; sí cambia quién puede leerla. */
+  .text-label-lg {         /* Etiqueta de acción · 14px */
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+  }
+  .text-label-md {         /* Metadato · 12px */
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1rem;
+  }
+  .text-label-sm {         /* Sello · 12px (Stitch dice 11px; ver arriba) */
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 0.875rem;
+  }
+  .text-price-lg {         /* El número que decide · 20px */
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.5rem;
+    letter-spacing: -0.01em;
+  }
+  .text-price-sm {         /* Precio secundario · 13px */
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1rem;
+  }
+
   /* ── Elevaciones (alias semánticos de las sombras) ──────────────────
      elevation-1: reposo · elevation-2: hover/dropdown · elevation-3: modal
 

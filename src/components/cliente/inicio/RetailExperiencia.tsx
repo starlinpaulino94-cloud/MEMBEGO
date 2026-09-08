@@ -80,7 +80,7 @@ export function RetailExperiencia({ exp }: { exp: ExperienciaHero }) {
     <section className="bg-background px-4 py-4 md:px-6 md:py-5" aria-labelledby="retail-experiencia">
       <div
         data-experiencia={exp.tipo}
-        className={`mx-auto flex max-w-6xl flex-col overflow-hidden rounded-xl border bg-card elevation-1 ${
+        className={`mx-auto flex max-w-6xl flex-col overflow-hidden rounded-lg border bg-card elevation-1 ${
           destacada && !marca ? 'border-primary' : 'border-border'
         }`}
         style={marca ? { borderColor: marca } : undefined}
@@ -131,7 +131,7 @@ export function RetailExperiencia({ exp }: { exp: ExperienciaHero }) {
             {exp.hasta ? <Cuenta hasta={exp.hasta} color={marca ?? undefined} /> : <span />}
             <Link
               href={exp.ctaHref}
-              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-primary px-5 text-small font-semibold text-primary-foreground outline-none transition-colors duration-fast hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
               style={marca ? { backgroundColor: marca } : undefined}
             >
               {exp.ctaTexto}

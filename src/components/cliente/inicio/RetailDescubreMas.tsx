@@ -33,7 +33,7 @@ export function RetailDescubreMas({
         {mostrarInvitaYGana ? (
           <Link
             href="/cliente/invita-y-gana"
-            className="mt-3 flex min-h-14 items-center gap-3 rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]"
+            className="mt-3 flex min-h-14 items-center gap-3 rounded-lg border border-border bg-card p-4 outline-none transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]"
           >
             <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
               <Gift className="size-5" aria-hidden />

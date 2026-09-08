@@ -1,42 +1,74 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, MapPin } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { InicioVista } from '@/modules/home/vista'
 import { RetailEmptyState } from './RetailEmptyState'
 
-type HeroInicio = InicioVista['heroes'][number]
+type Hero = InicioVista['heroes'][number]
 
-function RetailHeroCard({ hero, priority }: { hero: HeroInicio; priority: boolean }) {
+/**
+ * Carrusel hero — la tarjeta que abre el Inicio.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * Tres cosas del diseño que faltaban:
+ *
+ *  · La ciudad como sello junto al sobretítulo: quien mira necesita saber si
+ *    esa oferta le queda cerca antes de leerla entera.
+ *  · La fila «Planes desde …» bajo el texto. Es el gancho comercial de la
+ *    tarjeta, y sale del plan más barato de esa empresa.
+ *  · Que la siguiente tarjeta ASOME por el borde. No es un adorno: es lo que
+ *    dice que hay más de una y que se desliza. Sin eso, un carrusel de tres
+ *    banners se lee como uno solo.
+ *
+ * El ancho de la tarjeta (85 %) es lo que deja ese asomo en móvil. En pantalla
+ * grande el asomo deja de hacer falta y las tarjetas se reparten la fila: con
+ * una sola diapositiva, un ancho fijo dejaba dos tercios de pantalla vacíos,
+ * que es lo que el rediseño vino a quitar.
+ */
+function HeroCard({ hero, priority }: { hero: Hero; priority: boolean }) {
   return (
     <Link
       href={hero.href}
-      className="group flex w-5/6 max-w-sm shrink-0 snap-center flex-col overflow-hidden rounded-xl border border-border bg-card elevation-1 md:w-88"
+      className="group flex w-[85%] shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 outline-none transition-colors duration-fast hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary sm:w-96 lg:w-auto lg:min-w-0 lg:flex-1"
     >
-      <div className="flex flex-1 flex-col p-4">
-        <span className="text-overline text-primary">Beneficio destacado</span>
-        <h2 className="mt-2 text-h2 text-foreground">{hero.titulo}</h2>
-        <p className="mt-1 text-small font-semibold text-primary">{hero.empresa}</p>
+      <div className="flex flex-col gap-1 p-4 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-overline text-primary">Beneficio destacado</span>
+          {hero.ciudad ? (
+            <span className="inline-flex items-center gap-1 text-label-md text-muted-foreground">
+              <MapPin className="size-3.5 text-primary" aria-hidden />
+              {hero.ciudad}
+            </span>
+          ) : null}
+        </div>
+
+        <h2 className="text-h2 text-balance text-foreground">{hero.titulo}</h2>
+        <p className="text-label-lg text-primary">{hero.empresa}</p>
         {hero.subtitulo ? (
-          <p className="mt-1 line-clamp-2 text-small text-muted-foreground">{hero.subtitulo}</p>
+          <p className="line-clamp-2 text-caption text-muted-foreground">{hero.subtitulo}</p>
         ) : null}
       </div>
 
       {hero.imagen ? (
-        <div className="relative aspect-video overflow-hidden bg-muted">
+        <div className="relative aspect-video bg-muted">
           <Image
             src={hero.imagen}
-            alt={hero.titulo}
+            alt=""
             fill
             priority={priority}
-            sizes="(min-width: 768px) 22rem, 84vw"
+            sizes="(min-width: 640px) 24rem, 85vw"
             className="object-cover transition-transform duration-base group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-foreground/30 to-transparent" />
         </div>
       ) : null}
 
-      <div className="flex min-h-14 items-center justify-end border-t border-border px-4 py-2">
-        <span className="inline-flex min-h-9 items-center gap-2 rounded-full bg-primary px-4 text-small font-semibold text-primary-foreground transition-colors duration-fast group-hover:bg-brand-primary-hover">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 pt-3">
+        {hero.planDesde ? (
+          <span className="min-w-0 text-label-lg text-foreground">{hero.planDesde}</span>
+        ) : (
+          <span />
+        )}
+        <span className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground transition-colors duration-fast group-hover:bg-primary-hover">
           {hero.cta}
           <ArrowRight className="size-4" aria-hidden />
         </span>
@@ -57,9 +89,9 @@ export function RetailHero({ heroes }: { heroes: InicioVista['heroes'] }) {
 
   return (
     <section className="bg-muted py-4 md:py-5" aria-label="Beneficios destacados">
-      <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:mx-auto md:max-w-6xl md:px-6">
+      <div className="no-scrollbar mx-auto flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:px-6">
         {heroes.map((hero, index) => (
-          <RetailHeroCard key={`${hero.href}-${hero.titulo}`} hero={hero} priority={index === 0} />
+          <HeroCard key={`${hero.href}-${hero.titulo}`} hero={hero} priority={index === 0} />
         ))}
       </div>
     </section>

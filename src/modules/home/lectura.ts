@@ -11,7 +11,8 @@ import { getHomePublicada } from './composicion'
 import { HeroSlide, Segmentacion, TIPOS_BLOQUE } from './esquema'
 import { admiteAudienciaHome } from './audiencia'
 import { heroPublico } from './hero-publico'
-import type { InicioVista, TarjetaInicio } from './vista'
+import { duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
+import type { EmpresaInicio, ExperienciaInicio, InicioVista, PlanInicio } from './vista'
 
 export async function getInicioPublicado(user: SessionUser): Promise<InicioVista | null> {
   const companyId = user.metadata.companyId
@@ -41,28 +42,42 @@ export async function getInicioPublicado(user: SessionUser): Promise<InicioVista
   const tipos = z.enum(TIPOS_BLOQUE).array().parse(revision.bloques.filter((b) => b.activo).map((b) => b.tipo))
   const hero = revision.bloques.find((b) => b.tipo === 'HERO' && b.activo)
   const slides = hero ? z.object({ slides: HeroSlide.array().max(3) }).parse(hero.config).slides : []
-  const [heroes, categorias, empresas, planes, excursiones, promociones] = await Promise.all([
+  const [heroes, categorias, empresas, planes, excursiones, promociones, totales] = await Promise.all([
     Promise.all(slides.map((slide) => heroPublico(companyId, slide))),
     tipos.includes('CATEGORIAS') ? getCategoriesPublic() : Promise.resolve([]),
     tipos.includes('DESTACADAS') ? getFeaturedCompanies(6) : Promise.resolve([]),
     tipos.includes('MEMBRESIAS') ? getPlanesPublic({ limit: 6 }) : Promise.resolve([]),
     tipos.includes('EXPERIENCIAS') ? excursionesDestacadas(4) : Promise.resolve([]),
     tipos.includes('DESTACADAS') ? getFeaturedPromotions(6) : Promise.resolve([]),
+    totalesVitrina(),
   ])
+  // Las reseñas y los planes de cada empresa se piden en un solo lote, y solo
+  // para las que se van a pintar.
+  const hechos = await hechosDeEmpresas(empresas.map((e) => e.id))
   const vigente = promociones.find((p) => p.venta && !p.venta.agotada && p.vigenciaHasta && p.vigenciaHasta > new Date())
   return {
     revisionId: revision.id, territorio: revision.territorio, bloques: tipos,
     heroes: heroes.filter((h) => h !== null), categorias,
-    empresas: empresas.map((e): TarjetaInicio => ({ id: e.id, titulo: e.name, empresa: e.name,
-      descripcion: e.description, imagen: e.bannerUrl ?? e.logoUrl, href: `/cliente/empresas/${e.slug}`,
-      precio: null, rating: e.averageRating })),
-    planes: planes.map((p): TarjetaInicio => ({ id: p.id, titulo: p.nombre, empresa: p.company.name,
-      descripcion: p.descripcion, imagen: p.company.logoUrl, href: `/plan/${p.id}`,
-      precio: `${formatMoney(p.precio, p.company)} / ${p.vigenciaDias} días`, rating: null })),
-    excursiones: excursiones.flatMap((e): TarjetaInicio[] => e.company ? [{
-      id: e.id, titulo: e.nombre, empresa: e.company.name, descripcion: e.descripcion,
+    empresasTotal: totales.empresas,
+    planesTotal: totales.planes,
+    empresas: empresas.map((e): EmpresaInicio => ({
+      id: e.id, nombre: e.name, rubro: e.description, ciudad: e.ciudad,
+      imagen: e.bannerUrl ?? e.logoUrl, href: `/cliente/empresas/${e.slug}`,
+      valoracion: e.averageRating,
+      resenas: hechos.get(e.id)?.resenas ?? 0,
+      planes: hechos.get(e.id)?.planes ?? 0,
+      planDesde: e.desdePlan?.nombre ?? null,
+    })),
+    planes: planes.map((p): PlanInicio => ({
+      id: p.id, nombre: p.nombre, empresa: p.company.name, descripcion: p.descripcion,
+      imagen: p.company.logoUrl, href: `/plan/${p.id}`,
+      precio: formatMoney(p.precio, p.company), periodo: `/ ${p.vigenciaDias} días`,
+    })),
+    experiencias: excursiones.flatMap((e): ExperienciaInicio[] => e.company ? [{
+      id: e.id, nombre: e.nombre, empresa: e.company.name, descripcion: e.descripcion,
       imagen: e.portadaUrl, href: `/empresas/${e.company.slug}/excursiones/${e.slug}`,
-      precio: e.variantes.length === 0 ? null : formatMoney(Math.min(...e.variantes.map((v) => v.precioAdulto)), { moneda: e.moneda }), rating: null,
+      precio: e.variantes.length === 0 ? null : formatMoney(Math.min(...e.variantes.map((v) => v.precioAdulto)), { moneda: e.moneda }),
+      duracion: duracionLegible(e.duracionMin),
     }] : []),
     relampago: vigente?.vigenciaHasta ? { hasta: vigente.vigenciaHasta.toISOString(), href: `/cliente/promociones/${vigente.id}` } : null,
   }

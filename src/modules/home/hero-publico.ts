@@ -1,4 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
+import { formatMoney } from '@/lib/format'
 import type { HeroSlide } from './esquema'
 import type { HeroInicio } from './vista'
 
@@ -7,10 +8,26 @@ export async function heroPublico(companyId: string, slide: HeroSlide): Promise<
   return conEmpresa(companyId, async (tx) => {
     const empresa = await tx.company.findFirst({
       where: { id: companyId, isActive: true, isPublished: true, esDemo: false },
-      select: { name: true, slug: true, bannerUrl: true, logoUrl: true, galleryImages: true },
+      select: {
+        name: true, slug: true, bannerUrl: true, logoUrl: true, galleryImages: true,
+        // El diseño pone la ciudad como sello sobre el hero y una fila
+        // «Planes desde …» bajo el texto. Las dos salen de aquí.
+        ciudad: true, moneda: true, idioma: true,
+      },
     })
     if (!empresa) return null
-    const base = { titulo: slide.titulo, subtitulo: slide.subtitulo, empresa: empresa.name, cta: slide.ctaTexto }
+    const barato = await tx.plan.findFirst({
+      where: { companyId, activo: true },
+      orderBy: { precio: 'asc' },
+      select: { precio: true, vigenciaDias: true },
+    })
+    const planDesde = barato
+      ? `Planes desde ${formatMoney(Number(barato.precio), empresa)} / ${barato.vigenciaDias} días`
+      : null
+    const base = {
+      titulo: slide.titulo, subtitulo: slide.subtitulo, empresa: empresa.name,
+      ciudad: empresa.ciudad, cta: slide.ctaTexto, planDesde,
+    }
     let href: string
     let imagen: string | null
     const propias = [empresa.bannerUrl, empresa.logoUrl, ...empresa.galleryImages]

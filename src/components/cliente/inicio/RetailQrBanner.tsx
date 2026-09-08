@@ -18,7 +18,7 @@ export function RetailQrBanner() {
     <section className="bg-background px-4 py-3 md:px-6" aria-label="Canje con código QR">
       <Link
         href="/cliente/qr"
-        className="mx-auto flex max-w-6xl items-center justify-between gap-4 rounded-xl bg-retail-deep p-4 text-white elevation-1 outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        className="mx-auto flex max-w-6xl items-center justify-between gap-4 rounded-lg bg-retail-deep p-4 text-white elevation-1 outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       >
         <div className="min-w-0">
           <p className="text-overline text-white">Canje inmediato</p>
@@ -27,7 +27,7 @@ export function RetailQrBanner() {
             Muestra tu código QR en caja para aplicar tus beneficios.
           </p>
         </div>
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-card text-primary elevation-1">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-card text-primary elevation-1">
           <QrCode className="size-7" aria-hidden />
         </span>
       </Link>

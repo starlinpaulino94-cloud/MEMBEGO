@@ -64,7 +64,7 @@ export function RetailWallet({
 
         <div className="mt-3">
           {walletError ? (
-            <div className="rounded-xl border border-border bg-muted p-4">
+            <div className="rounded-lg border border-border bg-muted p-4">
               <p className="flex items-center gap-2 text-small font-semibold text-foreground">
                 <AlertCircle className="size-4 shrink-0 text-destructive" aria-hidden />
                 No pudimos cargar tus membresías
@@ -80,7 +80,7 @@ export function RetailWallet({
               </Link>
             </div>
           ) : wallet.length === 0 ? (
-            <div className="rounded-xl border border-border bg-muted p-4">
+            <div className="rounded-lg border border-border bg-muted p-4">
               <p className="flex items-center gap-2 text-small font-semibold text-foreground">
                 <WalletCards className="size-4 shrink-0 text-primary" aria-hidden />
                 Tu wallet está lista
@@ -90,7 +90,7 @@ export function RetailWallet({
               </p>
               <Link
                 href={primerPaso.href}
-                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 text-small font-semibold text-primary-foreground outline-none transition hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {primerPaso.etiqueta}
                 <ArrowRight className="size-4" aria-hidden />

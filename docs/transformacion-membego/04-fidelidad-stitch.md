@@ -116,3 +116,79 @@ Por pantalla, y en los tres anchos (**390 / 768 / 1280**):
    accesibilidad se anota aquí con su medición.
 5. Ningún elemento con dato inventado: si no hay fuente, no se pinta.
 6. Captura comparada contra `stitch/<pantalla>/screen.png` antes de cerrar.
+
+---
+
+## 7. Pase de fidelidad del Inicio · ejecutado (2026-09-08)
+
+### 7.1 Forma
+
+- **Radio de tarjeta a 8px** en todo el Inicio (`rounded-lg`), como manda §3.
+  Los `rounded-xl` que quedan viven en los tres buscadores muertos que hereda
+  F3.
+- **Botones primarios en píldora** (`rounded-full`, alto 40–44px): «Unirme»,
+  «Reservar cupo», «Ver oferta», el CTA de la experiencia y el del estado
+  vacío de la wallet.
+- **Escala `label-*` y `price-*`** añadida a `globals.css`. Una desviación
+  anotada: Stitch pone `label-sm` en 11px y aquí es 12px, porque el suelo de
+  12px de este sistema salió de una auditoría de 218 tamaños a mano y bajarlo
+  reabre lo que esa decisión cerró.
+- **`RetailSeccion`**: cabecera de sección con «Ver todas ›», pie de sección a
+  todo el ancho y la valoración con reseñas. El patrón se repetía en cinco
+  sitios.
+
+### 7.2 Bloques rehechos
+
+| Bloque | Qué cambió |
+|---|---|
+| Categorías | Fila de píldoras con icono en cuadro de 8px y etiqueta debajo, scroll horizontal y píldora «Todos» al cierre. |
+| Hero | Sello de ciudad, fila «Planes desde …» (del plan más barato de esa empresa), CTA en píldora, y la siguiente tarjeta **asoma** al 85 % del ancho. En escritorio las tarjetas se reparten la fila en vez de dejar dos tercios vacíos. |
+| Empresas destacadas | «Ver todas ›», sello de ciudad, sello «N planes», **valoración con número de reseñas**, chip del plan más barato, y pie «Explorar más de N empresas asociadas». |
+| Membresías | Botón **«Unirme» en píldora a todo el ancho**, precio en `price-lg` con su periodo, pie «Ver todas las N membresías activas». Sin arte no se reserva el hueco de la imagen. |
+| Experiencias | **Lista vertical** con miniatura, **sello de duración**, precio con «Precio socio Membego» y píldora «Reservar cupo». |
+
+### 7.3 Los datos que faltaban, y de dónde salieron
+
+`modules/home/vitrina.ts`:
+
+- **Reseñas**: existía `CompanyRating` y nadie lo contaba. Un `groupBy` por
+  lote, solo para las empresas que se pintan.
+- **Planes por empresa**: otro `groupBy` del mismo lote.
+- **Totales de la vitrina**: `count` de empresas publicadas y planes activos,
+  cacheados 10 min con la etiqueta del marketplace. Los números de los botones
+  son reales.
+- **Duración legible**: de `duracionMin`, que ya existía. A partir de 7 h dice
+  «Full Day», como lo vende el negocio.
+
+No se amplió `getCompaniesPublic`: su forma la comparten marketplace,
+explorador y landing, y va cacheada; dos agregados más ahí los pagarían todas
+esas pantallas sin enseñarlos.
+
+### 7.4 Un defecto de modelado que salió al separar los tipos
+
+Había una sola `TarjetaInicio` para empresas, planes y excursiones. En la
+tarjeta de empresa `titulo` y `empresa` eran el mismo nombre, y la pantalla lo
+pintaba **dos veces** —sobretítulo y título— porque el tipo no distinguía «de
+quién es esto» de «qué es esto». Ahora hay `EmpresaInicio`, `PlanInicio` y
+`ExperienciaInicio`, cada una con los hechos que su tarjeta enseña.
+
+### 7.5 Lo que sigue faltando, y por qué no es CSS
+
+Cinco elementos del diseño necesitan un dato que **no existe**. Ninguno se
+pinta inventado (D08):
+
+| Elemento | Qué falta | Decisión pendiente |
+|---|---|---|
+| «Abierto ahora» | `Company.horario` es texto libre («Lun-Vie 8:00-18:00 · Sáb…»). No se puede saber si está abierto. | Modelar horarios por día, o retirar el sello del diseño. |
+| «Popular» / «VIP Gastronómico» | `Plan` no tiene distintivo. | Campo de distintivo administrable, o derivarlo de suscripciones. |
+| Precio anterior tachado | `Plan` no tiene precio anterior. | Campo `precioAnterior` con vigencia, atado a promociones. |
+| «Hasta 40% ahorro» sobre el hero | El slide del hero no tiene ese campo. | Añadirlo al esquema del hero y al editor. |
+| «¿Tienes un código de comercio?» | Capacidad inexistente: canjear un PIN de tienda para afiliarse. | Recorrido nuevo completo (modelo, acción, pantalla admin que emite el PIN). |
+
+Los cinco son trabajo de modelo y de pantalla administrativa, no de estilos.
+Se abordan con su dominio: los tres primeros en **F4** (membresías y planes),
+el del hero en **F3** junto al editor, y el código de comercio como corte
+propio porque incluye emisión, validación y auditoría.
+
+**Verificación:** `tsc` 0 · `eslint` 0 errores · **suite 1966/1966** · `build`
+compilado · E2E autenticado en verde · capturas 390/768/1280 sin desbordamiento.
