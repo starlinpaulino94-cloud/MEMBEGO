@@ -14,6 +14,7 @@ import { Prisma } from '@prisma/client'
 export interface ResultadoInbound {
   leadId: string
   conversacionId: string
+  esNuevaConversacion: boolean
 }
 
 /**
@@ -58,7 +59,10 @@ export async function procesarMensajeEntrante(
     })
   ).catch(() => null)
 
+  let esNuevaConversacion = false
+
   if (!conv) {
+    esNuevaConversacion = true
     conv = await conEmpresa(companyId, (tx) =>
       tx.conversacion.create({
         data: {
@@ -80,7 +84,9 @@ export async function procesarMensajeEntrante(
       select: { id: true },
     })
   ).catch(() => null)
-  if (existente) return { leadId: lead.id, conversacionId: conv.id }
+  if (existente) {
+    return { leadId: lead.id, conversacionId: conv.id, esNuevaConversacion }
+  }
 
   // 4. Crear mensaje ENTRANTE
   await conEmpresa(companyId, (tx) =>
@@ -109,5 +115,5 @@ export async function procesarMensajeEntrante(
     })
   ).catch(() => null)
 
-  return { leadId: lead.id, conversacionId: conv.id }
+  return { leadId: lead.id, conversacionId: conv.id, esNuevaConversacion }
 }

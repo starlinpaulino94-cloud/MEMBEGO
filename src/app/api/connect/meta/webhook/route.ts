@@ -4,6 +4,7 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { anotarConector } from '@/modules/connect/bitacora'
 import { firmaWebhookValida, respuestaDeVerificacion } from '@/modules/connect/metaNucleo'
 import { parsearMensajeWhatsApp, detectarIntencionExcursiones } from '@/modules/connect/whatsappInboundNucleo'
+import { buscarAutoReply, buscarBienvenida, enviarAutoReply, resolverUrlCatalogo } from '@/modules/connect/autoReply'
 import { procesarMensajeEntrante } from '@/modules/connect/whatsappInbound'
 import { enviarWhatsapp } from '@/modules/connect/whatsapp'
 
@@ -105,23 +106,61 @@ export async function POST(req: NextRequest) {
     const parseado = parsearMensajeWhatsApp(entrada)
     if (parseado) {
       for (const msg of parseado.mensajes) {
-        await procesarMensajeEntrante(conexion.companyId, msg.from, msg.texto, msg.msgId).catch((e) => {
+        const inbound = await procesarMensajeEntrante(
+          conexion.companyId,
+          msg.from,
+          msg.texto,
+          msg.msgId
+        ).catch((e) => {
           console.error('[connect] webhook: procesarMensajeEntrante falló', e)
+          return null
         })
 
-        if (detectarIntencionExcursiones(msg.texto)) {
-          const empresa = await sinEmpresa(
-            'webhook: resolver slug de empresa para catálogo',
-            (tx) =>
-              tx.company.findUnique({
-                where: { id: conexion.companyId },
-                select: { slug: true },
-              })
-          ).catch(() => null)
+        const autoReply = await buscarAutoReply(conexion.companyId, msg.texto)
+        if (autoReply && inbound) {
+          await enviarAutoReply(
+            conexion.companyId,
+            msg.from,
+            autoReply.config,
+            inbound.conversacionId
+          ).catch((e) => {
+            console.error('[connect] webhook: enviarAutoReply falló', e)
+          })
+        } else if (inbound?.esNuevaConversacion) {
+          const bienvenida = await buscarBienvenida(conexion.companyId)
+          if (bienvenida) {
+            await enviarAutoReply(
+              conexion.companyId,
+              msg.from,
+              bienvenida.config,
+              inbound.conversacionId
+            ).catch((e) => {
+              console.error('[connect] webhook: enviarAutoReply (bienvenida) falló', e)
+            })
+          }
+        } else if (detectarIntencionExcursiones(msg.texto)) {
+          const urlCatalogo = await resolverUrlCatalogo(conexion.companyId)
+          const urlBase =
+            process.env.NEXT_PUBLIC_APP_URL ??
+            process.env.NEXT_PUBLIC_SITE_URL ??
+            'http://127.0.0.1:3000'
 
-          if (empresa?.slug) {
-            const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
-            const catalogUrl = `${urlBase}/empresas/${empresa.slug}/excursiones`
+          let catalogUrl = urlCatalogo
+          if (!catalogUrl) {
+            const empresa = await sinEmpresa(
+              'webhook: resolver slug de empresa para catálogo',
+              (tx) =>
+                tx.company.findUnique({
+                  where: { id: conexion.companyId },
+                  select: { slug: true },
+                })
+            ).catch(() => null)
+            if (empresa?.slug) {
+              catalogUrl = `${urlBase}/empresas/${empresa.slug}/excursiones`
+            }
+          }
+
+          if (catalogUrl) {
             const mensajeCatalogo = `¡Hola! 🌴 Aquí tienes nuestro catálogo de actividades:\n${catalogUrl}\n\n¿Tienes alguna pregunta? Responde aquí y te ayudamos.`
 
             await enviarWhatsapp({
