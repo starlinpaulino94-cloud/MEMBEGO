@@ -1,0 +1,722 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>MEMBEGO Panel Administrativo</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {"darkMode": "class", "theme": {"extend": {"colors": {"surface-container-lowest": "#ffffff", "outline-variant": "#bfc7d2", "secondary-container": "#57dffe", "tertiary-fixed-dim": "#94ccff", "error-container": "#ffdad6", "on-secondary-fixed-variant": "#004e5c", "outline": "#707881", "on-secondary-fixed": "#001f26", "on-surface": "#141b2b", "primary-container": "#007bb9", "on-primary-fixed-variant": "#004b73", "tertiary-container": "#287ab3", "on-primary": "#ffffff", "primary-fixed": "#cce5ff", "secondary-fixed-dim": "#4cd7f6", "on-background": "#141b2b", "on-surface-variant": "#3f4850", "on-tertiary-container": "#fdfcff", "on-tertiary": "#ffffff", "inverse-surface": "#293040", "background": "#f9f9ff", "surface-tint": "#006398", "inverse-on-surface": "#edf0ff", "on-primary-container": "#fdfcff", "primary": "#006194", "secondary": "#00687a", "on-secondary-container": "#006172", "surface-container-high": "#e1e8fd", "surface-container-low": "#f1f3ff", "error": "#ba1a1a", "surface-container-highest": "#dce2f7", "tertiary-fixed": "#cde5ff", "on-error-container": "#93000a", "surface-container": "#e9edff", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#004b74", "inverse-primary": "#93ccff", "on-error": "#ffffff", "surface": "#f9f9ff", "on-tertiary-fixed": "#001d32", "secondary-fixed": "#acedff", "primary-fixed-dim": "#93ccff", "on-primary-fixed": "#001d31", "surface-dim": "#d3daef", "surface-variant": "#dce2f7", "surface-bright": "#f9f9ff", "tertiary": "#006195"}, "borderRadius": {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"}, "spacing": {"space-md": "0.75rem", "header-search-height": "2.75rem", "gutter-card": "0.75rem", "space-xs": "0.25rem", "screen-edge-padding": "1rem", "space-sm": "0.5rem", "space-base": "1rem", "space-2xl": "2rem", "space-lg": "1.25rem", "header-location-height": "2.25rem", "space-xl": "1.5rem", "bottom-nav-height": "3.5rem", "gutter-compact": "0.5rem", "space-2xs": "0.125rem"}, "fontFamily": {"body-lg": ["Inter"], "label-lg": ["Inter"], "body-md": ["Inter"], "price-sm": ["Inter"], "label-sm": ["Inter"], "price-lg": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"], "body-sm": ["Inter"], "headline-lg": ["Inter"], "headline-sm": ["Inter"]}, "fontSize": {"body-lg": ["16px", {"lineHeight": "22px", "fontWeight": "400"}], "label-lg": ["14px", {"lineHeight": "18px", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}], "price-sm": ["13px", {"lineHeight": "16px", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}], "price-lg": ["20px", {"lineHeight": "24px", "fontWeight": "700"}], "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "label-md": ["12px", {"lineHeight": "16px", "fontWeight": "500"}], "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}], "headline-lg": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "headline-sm": ["16px", {"lineHeight": "22px", "fontWeight": "600"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-base flex items-center justify-between bg-surface-container-lowest"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary-container flex items-center justify-center text-on-primary font-headline-md text-headline-md shadow-sm">M</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface leading-none">MEMBEGO</span><span class="font-label-sm text-label-sm text-on-surface-variant font-medium tracking-wider uppercase mt-0.5">Admin Hub</span></div></div><div class="w-2 h-2 rounded-full bg-secondary-container" title="Sistema Operativo Activo"></div></div><div class="px-space-base py-space-xs"><div class="p-space-sm bg-surface-container-low rounded-xl flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[18px]">store</span><div class="flex-1 min-w-0"><p class="font-label-sm text-label-sm text-on-surface truncate">CARTOWN Wash</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate">Sede Higüey 23000</p></div><span class="material-symbols-outlined text-on-surface-variant text-[16px]">unfold_more</span></div></div><nav class="flex-1 px-space-sm py-space-xs overflow-y-auto space-y-space-md" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-xl"><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Principal</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="resumen" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">Resumen</span></div></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Experiencia Cliente</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="editor-de-inicio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_quilt</span><span class="font-body-md text-body-md">Editor de Inicio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="navegacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">navigation</span><span class="font-body-md text-body-md">Navegación</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="cerca-de-ti" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">location_on</span><span class="font-body-md text-body-md">Cerca de ti</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="mi-qr" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">qr_code_2</span><span class="font-body-md text-body-md">Mi QR</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Catálogo</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="membresias" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">card_membership</span><span class="font-body-md text-body-md">Membresías</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">8</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="beneficios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">stars</span><span class="font-body-md text-body-md">Beneficios</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ofertas" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">local_offer</span><span class="font-body-md text-body-md">Ofertas</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-semibold">Hot</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="servicios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">handyman</span><span class="font-body-md text-body-md">Servicios</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="excursiones" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">travel_explore</span><span class="font-body-md text-body-md">Excursiones</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Operaciones</p><a aria-current="page" class="flex items-center justify-between px-space-sm py-space-xs transition-colors bg-primary-container text-on-primary-container font-semibold rounded-xl" data-path="canjes-y-qr" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">check_circle</span><span class="font-body-md text-body-md">Canjes y QR</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface">14</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="reservas-y-citas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">calendar_today</span><span class="font-body-md text-body-md">Reservas y Citas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="pagos-y-facturacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">receipt_long</span><span class="font-body-md text-body-md">Pagos &amp; Facturación</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Clientes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="directorio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">group</span><span class="font-body-md text-body-md">Directorio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="segmentos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">pie_chart</span><span class="font-body-md text-body-md">Segmentos</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="en-riesgo" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-error text-[18px]">warning</span><span class="font-body-md text-body-md">En Riesgo</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container font-medium">3</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Marketing</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="campanas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">campaign</span><span class="font-body-md text-body-md">Campañas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="banners" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_carousel</span><span class="font-body-md text-body-md">Banners</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="fidelizacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">loyalty</span><span class="font-body-md text-body-md">Fidelización</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Analítica</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="metricas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">insights</span><span class="font-body-md text-body-md">Métricas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ingresos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">payments</span><span class="font-body-md text-body-md">Ingresos</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="rendimiento" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">speed</span><span class="font-body-md text-body-md">Rendimiento</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Ajustes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="empresa" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">business</span><span class="font-body-md text-body-md">Empresa</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="sucursales" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">storefront</span><span class="font-body-md text-body-md">Sucursales</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="roles-y-permisos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">admin_panel_settings</span><span class="font-body-md text-body-md">Roles y Permisos</span></a></div></nav><div class="p-space-base bg-surface-container-low flex items-center justify-between"><div class="flex items-center gap-space-sm min-w-0"><div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant"><span class="material-symbols-outlined text-[18px]">domain</span></div><div class="truncate"><p class="font-label-sm text-label-sm text-on-surface truncate font-semibold">CARTOWN RD</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">RNC 131-98765-2</p></div></div><button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded-lg" title="Cerrar sesión" type="button"><span class="material-symbols-outlined text-[20px]">logout</span></button></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center gap-space-lg flex-1 max-w-2xl"><div class="relative w-full max-w-md"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-10 pl-9 pr-10 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" placeholder="Buscar socios, folios de canje o membresías..." type="text"><kbd class="absolute right-3 top-1/2 -translate-y-1/2 font-label-sm text-label-sm bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant border border-outline-variant/30">/</kbd></div><div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed text-[12px] font-label-md"><span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span><span>Higüey Online · Turno Diurno</span></div></div><div class="flex items-center gap-space-md"><button class="flex items-center gap-space-xs px-space-md h-9 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-sm text-label-sm shadow-sm transition-all" type="button"><span class="material-symbols-outlined text-[18px]">qr_code_scanner</span><span>Canje Rápido</span></button><button class="relative p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Notificaciones de Canjes" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest"></span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right hidden sm:block"><p class="font-label-sm text-label-sm text-on-surface leading-tight">Starlin Paulino</p><p class="font-body-sm text-body-sm text-[11px] text-on-surface-variant leading-tight">Administrador</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-background min-h-screen w-full px-space-xl py-space-xl"><div class="flex flex-col w-full gap-space-xl">
+<!-- 1. Breadcrumbs & Top Notification Strip -->
+<div class="flex flex-wrap items-center justify-between gap-space-md">
+<nav class="flex items-center gap-space-xs font-label-sm text-label-sm text-on-surface-variant">
+<span class="hover:text-primary transition-colors cursor-pointer">Marketing</span>
+<span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span>
+<span class="hover:text-primary transition-colors cursor-pointer">Fidelización</span>
+<span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span>
+<span class="font-semibold text-primary">Crecimiento y Gamificación</span>
+</nav>
+<div class="flex items-center gap-space-sm px-space-md py-1 rounded-full bg-secondary-fixed/50 text-on-secondary-fixed font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-secondary">verified</span>
+<span>Motor de Gamificación v3.4 · Modo En Vivo Higüey</span>
+</div>
+</div>
+<!-- 2. Header & Action Row -->
+<div class="flex flex-col xl:flex-row xl:items-end justify-between gap-space-lg">
+<div class="space-y-space-2xs max-w-3xl">
+<div class="flex items-center gap-space-sm">
+<div class="w-2.5 h-2.5 rounded-full bg-primary animate-ping"></div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-bold">Motor de Viralidad y Recompensas</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Programa de Fidelización y Gamificación</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">
+        Configura las mecánicas para que tus clientes inviten amigos, transfieran lavados y jueguen la ruleta de premios con sus puntos acumulados.
+      </p>
+</div>
+<div class="flex items-center gap-space-sm self-start xl:self-auto">
+<button class="flex items-center gap-space-xs px-space-base h-10 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-xl font-label-md text-label-md transition-all shadow-sm" onclick="previewMobileModal(true)" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">smartphone</span>
+<span>Simular Juego en App</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-lg h-10 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-md text-label-md shadow-md transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">save</span>
+<span>Guardar Configuración</span>
+</button>
+</div>
+</div>
+<!-- Submodule Navigation Tabs -->
+<div class="flex items-center gap-space-xs p-1 bg-surface-container-low rounded-xl overflow-x-auto">
+<button class="flex items-center gap-space-xs px-space-base py-2 rounded-lg bg-surface-container-lowest font-label-md text-label-md text-primary font-semibold shadow-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">group_add</span>
+<span>Invita y Gana (Referidos)</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-base py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">casino</span>
+<span>Ruleta de Premios (Gamificación)</span>
+<span class="w-2 h-2 rounded-full bg-secondary-container"></span>
+</button>
+<button class="flex items-center gap-space-xs px-space-base py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">redeem</span>
+<span>Regalos P2P entre Socios</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-base py-2 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+<span>Reglas de Puntos y Recompensas</span>
+</button>
+</div>
+<!-- 3. MÓDULO 1: INVITA Y GANA (REFERIDOS) -->
+<section class="flex flex-col gap-space-base">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[20px]">share</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Crecimiento &amp; Enlaces de Referidos</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Atribución multi-canal, premios automáticos por registro y membresía</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm px-space-md py-1 bg-surface-container-high text-on-surface rounded-full">Sincronizado con QR CARTOWN</span>
+</div>
+<!-- KPIs Bar -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Campañas Activas</span>
+<span class="material-symbols-outlined text-[18px] text-primary">campaign</span>
+</div>
+<div class="mt-space-sm flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-on-surface">2</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Higüey &amp; Punta Cana</span>
+</div>
+<p class="mt-1 font-body-sm text-body-sm text-on-surface-variant text-[11px]">Enlace dinámico corto /memb.go</p>
+</div>
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Eventos de Invitación</span>
+<span class="material-symbols-outlined text-[18px] text-secondary">send</span>
+</div>
+<div class="mt-space-sm flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-on-surface">171</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">+24 esta semana</span>
+</div>
+<p class="mt-1 font-body-sm text-body-sm text-on-surface-variant text-[11px]">Compartidos por WhatsApp y enlace</p>
+</div>
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Membresías Convertidas</span>
+<span class="material-symbols-outlined text-[18px] text-primary-container">card_membership</span>
+</div>
+<div class="mt-space-sm flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-on-surface">14</span>
+<span class="font-label-sm text-label-sm text-on-primary-fixed-variant bg-primary-fixed px-1.5 py-0.5 rounded">Silver &amp; Gold</span>
+</div>
+<p class="mt-1 font-body-sm text-body-sm text-on-surface-variant text-[11px]">RD$ 41,800 facturación atribuida</p>
+</div>
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between text-on-surface-variant">
+<span class="font-label-sm text-label-sm uppercase tracking-wider">Tasa de Conversión</span>
+<span class="material-symbols-outlined text-[18px] text-tertiary">trending_up</span>
+</div>
+<div class="mt-space-sm flex items-baseline gap-2">
+<span class="font-headline-lg text-headline-lg text-on-surface">8.2%</span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">+1.8% vs mes previo</span>
+</div>
+<div class="mt-1 w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 82%"></div>
+</div>
+</div>
+</div>
+<!-- Reglas del Enlace & Visual Asset Block -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<div class="lg:col-span-8 p-space-lg bg-surface-container-lowest rounded-xl shadow-sm flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Mecánica del Enlace de Invitación</h3>
+<span class="font-label-sm text-label-sm text-outline">Atribución instantánea por Cookie / UserID</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">
+            Los clientes afiliados generan su enlace desde la app móvil. Define qué beneficios desbloquean tanto el padrino como el invitado.
+          </p>
+<div class="mt-space-lg space-y-space-md">
+<!-- Checkbox 1 -->
+<label class="flex items-start gap-space-sm p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="mt-0.5 h-4 w-4 rounded text-primary focus:ring-primary" type="checkbox">
+<div class="flex-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Mostrar landing personalizada antes del registro</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">
+                  El invitado visualiza la foto de perfil y mensaje del socio: "Tu amigo Starlin te regala ventajas en CARTOWN".
+                </p>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-semibold px-2 py-0.5 rounded bg-surface-container-lowest">Recomendado</span>
+</label>
+<!-- Checkbox 2 -->
+<label class="flex items-start gap-space-sm p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="mt-0.5 h-4 w-4 rounded text-primary focus:ring-primary" type="checkbox">
+<div class="flex-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Premiar registro del invitado (+50 puntos Membego)</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">
+                  Acredita puntos de bienvenida automáticamente tras validar el número telefónico por SMS.
+                </p>
+</div>
+<span class="font-price-sm text-price-sm text-secondary font-bold">+50 PTS</span>
+</label>
+<!-- Checkbox 3 -->
+<label class="flex items-start gap-space-sm p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input checked="" class="mt-0.5 h-4 w-4 rounded text-primary focus:ring-primary" type="checkbox">
+<div class="flex-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Premiar compra de primera membresía (RD$ 500 de saldo para el padrino)</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">
+                  Se deposita como crédito consumible en el monedero digital CARTOWN al completar la primera mensualidad.
+                </p>
+</div>
+<span class="font-price-sm text-price-sm text-primary-container font-bold">RD$ 500</span>
+</label>
+<!-- Checkbox 4 -->
+<label class="flex items-start gap-space-sm p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container cursor-pointer transition-colors">
+<input class="mt-0.5 h-4 w-4 rounded text-primary focus:ring-primary" type="checkbox">
+<div class="flex-1">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Premiar cada renovación recurrente del ahijado</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">
+                  Comisión recurrente en puntos mientras el socio invitado mantenga su suscripción activa.
+                </p>
+</div>
+<span class="font-label-sm text-label-sm text-outline">Inactivo</span>
+</label>
+</div>
+</div>
+<div class="mt-space-lg pt-space-md flex flex-wrap items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">timer</span>
+<span class="font-label-md text-label-md text-on-surface font-medium">Vigencia por defecto del enlace generado:</span>
+<select class="px-space-sm py-1.5 bg-surface-container rounded-lg font-label-md text-label-md text-on-surface focus:outline-none focus:ring-1 focus:ring-primary">
+<option>24 horas</option>
+<option selected="">7 días (Recomendado)</option>
+<option>30 días</option>
+</select>
+</div>
+<div class="flex items-center gap-2 text-outline font-body-sm text-body-sm text-[12px]">
+<span class="material-symbols-outlined text-[16px] text-secondary">security</span>
+<span>Protección anti-fraude por fingerprint y red local</span>
+</div>
+</div>
+</div>
+<!-- Live Mock Card Visual -->
+<div class="lg:col-span-4 p-space-lg bg-surface-container-low rounded-xl flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Vista Previa Invitación</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-label-sm font-semibold">WhatsApp &amp; Story</span>
+</div>
+<div class="rounded-xl overflow-hidden bg-surface-container-lowest shadow-sm p-space-base space-y-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-secondary-container flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">
+                S
+              </div>
+<div>
+<p class="font-label-md text-label-md text-on-surface font-semibold">Starlin Paulino te invitó</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">Socio VIP CARTOWN Higüey</p>
+</div>
+</div>
+<div class="p-space-sm bg-surface-container-high rounded-lg text-center">
+<p class="font-label-sm text-label-sm text-on-surface-variant">Bono de bienvenida otorgado</p>
+<p class="font-price-lg text-price-lg text-primary font-bold">1 Lavado Premium Gratis</p>
+<p class="font-body-sm text-body-sm text-[11px] text-outline mt-0.5">+ 50 Pts para canjear en la Ruleta</p>
+</div>
+<div class="w-full h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm font-semibold shadow-sm">
+              Activar Mi Invitación Ahora
+            </div>
+</div>
+</div>
+<div class="mt-space-md p-space-sm bg-surface-container-lowest rounded-lg flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">qr_code_2</span>
+<div class="min-w-0 flex-1">
+<p class="font-label-sm text-label-sm text-on-surface truncate font-semibold">memb.go/invita/cartown-star</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[10px]">Atribución directa con UTM tracking</p>
+</div>
+<button class="p-1 text-outline hover:text-primary" title="Copiar URL" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. MÓDULO 2: RULETA DE PREMIOS (GAMIFICACIÓN) -->
+<section class="flex flex-col gap-space-base mt-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px]">casino</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Ruleta de la Suerte (Gamificación de Puntos)</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Fomenta la recurrencia canjeando puntos por tiradas directas en el app móvil</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Motor Aleatorio Criptográfico</span>
+<span class="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- Columna Izquierda: Configuración de Pesos y Premios -->
+<div class="lg:col-span-7 flex flex-col gap-space-md p-space-lg bg-surface-container-lowest rounded-xl shadow-sm">
+<div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-sm">
+<div class="space-y-space-2xs">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Configuración de Premios &amp; Probabilidades</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">Define el costo por giro y el peso proporcional de cada gajo.</p>
+</div>
+<!-- Costo por giro input -->
+<div class="flex items-center gap-space-xs px-space-md py-1.5 rounded-xl bg-surface-container-low">
+<span class="material-symbols-outlined text-primary text-[18px]">toll</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Costo por giro:</span>
+<span class="font-label-md text-label-md text-primary font-bold">500 PTS</span>
+<button class="text-outline hover:text-on-surface ml-1" title="Editar costo" type="button">
+<span class="material-symbols-outlined text-[14px]">edit</span>
+</button>
+</div>
+</div>
+<!-- Tabla de Premios -->
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead>
+<tr class="font-label-sm text-label-sm text-outline uppercase tracking-wider bg-surface-container-low">
+<th class="p-space-sm rounded-l-lg">Premio / Segmento</th>
+<th class="p-space-sm">Tipo / Alianza</th>
+<th class="p-space-sm text-center">Color</th>
+<th class="p-space-sm text-center">Probabilidad</th>
+<th class="p-space-sm text-center">Estado</th>
+<th class="p-space-sm rounded-r-lg text-right">Acción</th>
+</tr>
+</thead>
+<tbody class="space-y-1">
+<!-- Item 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="p-space-sm font-label-md text-label-md text-on-surface font-semibold">
+<div class="flex items-center gap-space-xs">
+<span class="w-3 h-3 rounded-full bg-[#0284c7]"></span>
+<span>Lavado Exterior Gratis</span>
+</div>
+</td>
+<td class="p-space-sm text-on-surface-variant text-[12px]">Cupón CARTOWN</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-primary/10 text-primary">#0284c7</span>
+</td>
+<td class="p-space-sm text-center font-label-md text-label-md font-bold text-on-surface">15%</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-label-sm font-semibold">Activo</span>
+</td>
+<td class="p-space-sm text-right">
+<button class="text-outline hover:text-primary p-1" type="button"><span class="material-symbols-outlined text-[18px]">tune</span></button>
+</td>
+</tr>
+<!-- Item 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="p-space-sm font-label-md text-label-md text-on-surface font-semibold">
+<div class="flex items-center gap-space-xs">
+<span class="w-3 h-3 rounded-full bg-[#06b6d4]"></span>
+<span>Descuento 25% en Detailing</span>
+</div>
+</td>
+<td class="p-space-sm text-on-surface-variant text-[12px]">Servicio Express</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-secondary/10 text-secondary">#06b6d4</span>
+</td>
+<td class="p-space-sm text-center font-label-md text-label-md font-bold text-on-surface">25%</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-label-sm font-semibold">Activo</span>
+</td>
+<td class="p-space-sm text-right">
+<button class="text-outline hover:text-primary p-1" type="button"><span class="material-symbols-outlined text-[18px]">tune</span></button>
+</td>
+</tr>
+<!-- Item 3 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="p-space-sm font-label-md text-label-md text-on-surface font-semibold">
+<div class="flex items-center gap-space-xs">
+<span class="w-3 h-3 rounded-full bg-[#8b5cf6]"></span>
+<span>Bebida cortesía en Mestizo</span>
+</div>
+</td>
+<td class="p-space-sm text-on-surface-variant text-[12px]">Alianza Gastronómica</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-surface-container-high text-on-surface-variant">#8b5cf6</span>
+</td>
+<td class="p-space-sm text-center font-label-md text-label-md font-bold text-on-surface">30%</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-label-sm font-semibold">Activo</span>
+</td>
+<td class="p-space-sm text-right">
+<button class="text-outline hover:text-primary p-1" type="button"><span class="material-symbols-outlined text-[18px]">tune</span></button>
+</td>
+</tr>
+<!-- Item 4 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="p-space-sm font-label-md text-label-md text-on-surface font-semibold">
+<div class="flex items-center gap-space-xs">
+<span class="w-3 h-3 rounded-full bg-[#94a3b8]"></span>
+<span>Sigue intentando (+10 pts consuelo)</span>
+</div>
+</td>
+<td class="p-space-sm text-on-surface-variant text-[12px]">Gamificación</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-surface-container text-outline">#94a3b8</span>
+</td>
+<td class="p-space-sm text-center font-label-md text-label-md font-bold text-on-surface">30%</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant text-[11px] font-label-sm font-medium">Activo</span>
+</td>
+<td class="p-space-sm text-right">
+<button class="text-outline hover:text-primary p-1" type="button"><span class="material-symbols-outlined text-[18px]">tune</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Barra de Probabilidad 100% -->
+<div class="mt-space-xs p-space-sm bg-surface-container-low rounded-xl flex flex-col gap-1.5">
+<div class="flex items-center justify-between font-label-sm text-label-sm">
+<span class="text-on-surface-variant">Distribución del disco ruleta:</span>
+<span class="font-bold text-primary">100% Configurado</span>
+</div>
+<div class="w-full h-3 bg-surface-container rounded-full flex overflow-hidden">
+<div class="h-full bg-[#0284c7]" style="width: 15%" title="Lavado Exterior (15%)"></div>
+<div class="h-full bg-[#06b6d4]" style="width: 25%" title="Detailing (25%)"></div>
+<div class="h-full bg-[#8b5cf6]" style="width: 30%" title="Mestizo Bebida (30%)"></div>
+<div class="h-full bg-[#94a3b8]" style="width: 30%" title="Sigue intentando (30%)"></div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs">
+<button class="flex items-center gap-space-xs px-space-md py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>Agregar Premio a la Ruleta</span>
+</button>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">Máximo recomendado: 8 segmentos</span>
+</div>
+</div>
+<!-- Columna Derecha: Previsualización de la Ruleta Móvil del Cliente -->
+<div class="lg:col-span-5 p-space-lg bg-surface-container-lowest rounded-xl shadow-sm flex flex-col items-center justify-between">
+<div class="w-full flex items-center justify-between mb-space-sm">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Simulación App Cliente</span>
+<p class="font-label-md text-label-md text-on-surface font-semibold">Sección 'Fidelización / Ruleta'</p>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] font-label-sm font-bold">En Línea</span>
+</div>
+<!-- Contenedor del Móvil Interactivo con SVG de la Ruleta -->
+<div class="relative w-72 p-space-md bg-surface-container-lowest rounded-2xl shadow-xl flex flex-col items-center">
+<!-- Top bar de la app móvil -->
+<div class="w-full flex items-center justify-between text-on-surface-variant text-[11px] mb-space-sm px-1">
+<span class="font-bold">10:42 AM</span>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">signal_cellular_alt</span>
+<span class="material-symbols-outlined text-[13px]">battery_full</span>
+</div>
+</div>
+<div class="text-center mb-space-sm">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-bold">¡Gira y Gana!</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Tienes 1,250 Puntos</h4>
+</div>
+<!-- Ruleta SVG Giratoria Interactiva -->
+<div class="relative w-52 h-52 my-space-xs flex items-center justify-center">
+<!-- Puntero superior de la ruleta -->
+<div class="absolute -top-1.5 z-20 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[16px] border-t-error filter drop-shadow"></div>
+<!-- Disco Ruleta SVG -->
+<svg class="w-full h-full transform transition-transform duration-[4000ms] cubic-bezier(0.2, 0.8, 0.2, 1)" id="roulette-wheel" viewBox="0 0 200 200">
+<!-- Segmento 1: #0284c7 (15% = 54 deg) -->
+<path d="M 100 100 L 100 0 A 100 100 0 0 1 180.9 41.2 Z" fill="#0284c7"></path>
+<!-- Segmento 2: #06b6d4 (25% = 90 deg) -->
+<path d="M 100 100 L 180.9 41.2 A 100 100 0 0 1 158.8 180.9 Z" fill="#06b6d4"></path>
+<!-- Segmento 3: #8b5cf6 (30% = 108 deg) -->
+<path d="M 100 100 L 158.8 180.9 A 100 100 0 0 1 4.9 130.9 Z" fill="#8b5cf6"></path>
+<!-- Segmento 4: #94a3b8 (30% = 108 deg) -->
+<path d="M 100 100 L 4.9 130.9 A 100 100 0 0 1 100 0 Z" fill="#94a3b8"></path>
+<!-- Texto y Gráficos dentro del SVG -->
+<circle cx="100" cy="100" fill="none" r="88" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"></circle>
+<!-- Eje Central -->
+<circle class="filter drop-shadow-md" cx="100" cy="100" fill="#ffffff" r="28"></circle>
+<circle cx="100" cy="100" fill="#006194" r="22"></circle>
+<text fill="#ffffff" font-family="Inter" font-size="9" font-weight="700" text-anchor="middle" x="100" y="104">GIRAR</text>
+</svg>
+</div>
+<!-- Botón de Giro Interactivo de Prueba -->
+<button class="w-full mt-space-sm h-10 bg-primary hover:bg-primary-container text-on-primary rounded-full font-label-md text-label-md font-bold shadow-md transition-all flex items-center justify-center gap-space-xs" id="spin-btn" onclick="spinRoulette()" type="button">
+<span class="material-symbols-outlined text-[18px]">rotate_right</span>
+<span>Girar por 500 pts</span>
+</button>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px] text-center mt-2" id="spin-result">
+            Presiona para probar la animación y física aleatoria.
+          </p>
+</div>
+<div class="w-full mt-space-md pt-space-sm flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm text-[12px]">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">bolt</span>
+            Redención inmediata en QR
+          </span>
+<span class="text-outline">Copia app id: #MGB-WHEEL-104</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. MÓDULO 3: REGALOS P2P ENTRE SOCIOS (TRANSFERENCIAS) -->
+<section class="flex flex-col gap-space-base mt-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed">
+<span class="material-symbols-outlined text-[20px]">featured_seasonal_and_gifts</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Regalos P2P entre Socios (Peer-to-Peer)</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Monitorea y audita los lavados y servicios transferidos de un usuario a un amigo</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="flex items-center gap-1 text-primary hover:underline font-label-sm text-label-sm" type="button">
+<span class="material-symbols-outlined text-[16px]">file_download</span>
+<span>Descargar Reporte P2P</span>
+</button>
+</div>
+</div>
+<!-- Mini KPIs P2P -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-space-md">
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Regalos Totales Generados</span>
+<p class="font-headline-lg text-headline-lg text-on-surface mt-1">2</p>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">swap_horiz</span>
+</div>
+</div>
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Pendientes de Reclamar</span>
+<p class="font-headline-lg text-headline-lg text-on-surface mt-1">0</p>
+</div>
+<div class="w-10 h-10 rounded-full bg-secondary-fixed/50 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[22px]">schedule</span>
+</div>
+</div>
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Aceptados en Sucursal</span>
+<p class="font-headline-lg text-headline-lg text-primary mt-1">2</p>
+</div>
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant">
+<span class="material-symbols-outlined text-[22px]">check_circle</span>
+</div>
+</div>
+</div>
+<!-- Tabla de Transferencias Recientes -->
+<div class="p-space-lg bg-surface-container-lowest rounded-xl shadow-sm space-y-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Historial de Transferencias P2P Recientes</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Cada regalo cuenta con token de 72 horas para cobro único en el cajero de Higüey</p>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="font-label-sm text-label-sm text-outline">Filtro:</span>
+<select class="px-space-sm py-1 bg-surface-container-low rounded-lg font-label-sm text-label-sm text-on-surface focus:outline-none">
+<option>Todas las sucursales</option>
+<option>Higüey 23000</option>
+<option>Verón - Punta Cana</option>
+</select>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead>
+<tr class="font-label-sm text-label-sm text-outline uppercase tracking-wider bg-surface-container-low">
+<th class="p-space-sm rounded-l-lg">ID / Fecha</th>
+<th class="p-space-sm">Regalo / Servicio Transferido</th>
+<th class="p-space-sm">Remitente (Socio Emisor)</th>
+<th class="p-space-sm">Destinatario</th>
+<th class="p-space-sm text-center">Vigencia Token</th>
+<th class="p-space-sm text-center">Estado</th>
+<th class="p-space-sm rounded-r-lg text-right">Comprobante</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 space-y-1">
+<!-- Fila 1 (Modernización captura 106) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="p-space-sm">
+<div class="flex flex-col">
+<span class="font-mono font-semibold text-on-surface">#P2P-9812</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">04 Mar 2025 · 16:20</span>
+</div>
+</td>
+<td class="p-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px]">local_car_wash</span>
+</div>
+<div>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Membresía Silver (1 Lavado Express de prueba)</span>
+<p class="font-body-sm text-body-sm text-outline text-[11px]">Descontado de cupo mensual CARTOWN</p>
+</div>
+</div>
+</td>
+<td class="p-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-[10px] font-bold">J</div>
+<span class="font-label-md text-label-md text-on-surface">Juan Elías Tejada</span>
+</div>
+</td>
+<td class="p-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed text-[10px] font-bold">S</div>
+<div>
+<span class="font-label-md text-label-md text-on-surface">starlin prueba</span>
+<span class="block text-[11px] text-outline">829-***-4011</span>
+</div>
+</div>
+</td>
+<td class="p-space-sm text-center">
+<span class="font-label-sm text-label-sm text-on-surface font-mono">72 horas (Canjeado en 4h)</span>
+</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] font-label-sm font-bold tracking-wider">
+                  ACEPTADO
+                </span>
+</td>
+<td class="p-space-sm text-right">
+<button class="p-1 rounded-lg text-outline hover:text-primary" title="Ver detalle" type="button">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</td>
+</tr>
+<!-- Fila 2 (Modernización captura 106) -->
+<tr class="hover:bg-surface-container-low/40 transition-colors">
+<td class="p-space-sm">
+<div class="flex flex-col">
+<span class="font-mono font-semibold text-on-surface">#P2P-9740</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">01 Mar 2025 · 11:15</span>
+</div>
+</td>
+<td class="p-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-7 h-7 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[16px]">local_car_wash</span>
+</div>
+<div>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Lavado Espuma Activa + Aspirado</span>
+<p class="font-body-sm text-body-sm text-outline text-[11px]">Cupón de cortesía socio Fundador</p>
+</div>
+</div>
+</td>
+<td class="p-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-[10px] font-bold">J</div>
+<span class="font-label-md text-label-md text-on-surface">Juan Elías Tejada</span>
+</div>
+</td>
+<td class="p-space-sm">
+<div class="flex items-center gap-space-xs">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface text-[10px] font-bold">E</div>
+<div>
+<span class="font-label-md text-label-md text-on-surface">Elizabeth R.</span>
+<span class="block text-[11px] text-outline">809-***-2299</span>
+</div>
+</div>
+</td>
+<td class="p-space-sm text-center">
+<span class="font-label-sm text-label-sm text-on-surface font-mono">72 horas (Canjeado en 18h)</span>
+</td>
+<td class="p-space-sm text-center">
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] font-label-sm font-bold tracking-wider">
+                  ACEPTADO
+                </span>
+</td>
+<td class="p-space-sm text-right">
+<button class="p-1 rounded-lg text-outline hover:text-primary" title="Ver detalle" type="button">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Políticas de Regalo P2P -->
+<div class="p-space-base bg-surface-container-low rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-secondary text-[22px] mt-0.5">policy</span>
+<div>
+<h4 class="font-label-md text-label-md text-on-surface font-semibold">Regla de Fricción Cero en Regalos</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">
+              El amigo destinatario no requiere tarjeta de crédito para canjear su primer regalo. Al llegar a la sucursal de Higüey, el operador escanea el QR temporal y activa la invitación como nuevo prospecto calificado.
+            </p>
+</div>
+</div>
+<button class="whitespace-nowrap px-space-md py-2 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-label-sm text-label-sm rounded-xl transition-all shadow-sm" type="button">
+          Editar Restricciones de Transferencia
+        </button>
+</div>
+</div>
+</section>
+<!-- Modal de Simulación Móvil en App (Oculto por defecto, activable con botón Simular Juego) -->
+<div class="hidden fixed inset-0 z-50 bg-inverse-surface/40 backdrop-blur-sm flex items-center justify-center p-space-base" id="mobile-sim-modal">
+<div class="relative w-full max-w-sm bg-surface-container-lowest rounded-2xl shadow-2xl p-space-lg flex flex-col items-center">
+<button class="absolute top-4 right-4 text-outline hover:text-on-surface" onclick="previewMobileModal(false)" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+<div class="w-12 h-1.5 bg-surface-container rounded-full mb-space-md"></div>
+<div class="text-center space-y-1">
+<span class="font-label-sm text-label-sm text-primary font-bold uppercase tracking-wider">Simulación en Vivo</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Experiencia del Cliente</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">
+          Así interactúa el socio desde la pantalla 'Fidelización' en iOS y Android.
+        </p>
+</div>
+<div class="w-full mt-space-lg p-space-md bg-surface-container-low rounded-xl space-y-space-sm">
+<div class="flex items-center justify-between text-on-surface">
+<span class="font-label-md text-label-md font-semibold">Saldo de Puntos:</span>
+<span class="font-price-sm text-price-sm text-primary">1,250 Pts</span>
+</div>
+<div class="flex items-center justify-between text-on-surface">
+<span class="font-label-md text-label-md font-semibold">Premios reclamados este mes:</span>
+<span class="font-label-md text-label-md">3 recompensas</span>
+</div>
+<div class="flex items-center justify-between text-on-surface">
+<span class="font-label-md text-label-md font-semibold">Lavados transferidos a amigos:</span>
+<span class="font-label-md text-label-md text-secondary">2 usos</span>
+</div>
+</div>
+<button class="w-full mt-space-lg h-10 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-md text-label-md font-semibold shadow-sm" onclick="previewMobileModal(false)" type="button">
+        Cerrar Simulador
+      </button>
+</div>
+</div>
+<script>
+    let currentWheelRotation = 0;
+    function spinRoulette() {
+      const wheel = document.getElementById('roulette-wheel');
+      const resultText = document.getElementById('spin-result');
+      const spinBtn = document.getElementById('spin-btn');
+
+      if (!wheel || !spinBtn) return;
+
+      spinBtn.disabled = true;
+      resultText.innerText = "Girando la ruleta con 500 puntos...";
+
+      // Generar giro aleatorio (entre 1440 y 2880 grados)
+      const randomExtra = Math.floor(Math.random() * 360) + 1440;
+      currentWheelRotation += randomExtra;
+      wheel.style.transform = `rotate(${currentWheelRotation}deg)`;
+
+      setTimeout(() => {
+        spinBtn.disabled = false;
+        const prizeList = [
+          "¡Ganaste: Lavado Exterior Gratis en CARTOWN!",
+          "¡Ganaste: Descuento 25% en Detailing Express!",
+          "¡Ganaste: Bebida de cortesía en Restaurante Mestizo!",
+          "¡Sigue intentando! Te devolvemos 10 puntos de consuelo."
+        ];
+        const randomPrize = prizeList[Math.floor(Math.random() * prizeList.length)];
+        resultText.innerHTML = `<span class="text-primary font-bold">${randomPrize}</span> (Token QR generado)`;
+      }, 4000);
+    }
+
+    function previewMobileModal(open) {
+      const modal = document.getElementById('mobile-sim-modal');
+      if (!modal) return;
+      if (open) {
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+  </script>
+</div></main></div></body></html>

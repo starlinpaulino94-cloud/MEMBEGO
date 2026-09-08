@@ -1,0 +1,530 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>MEMBEGO Panel Administrativo</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {"darkMode": "class", "theme": {"extend": {"colors": {"surface-container-lowest": "#ffffff", "outline-variant": "#bfc7d2", "secondary-container": "#57dffe", "tertiary-fixed-dim": "#94ccff", "error-container": "#ffdad6", "on-secondary-fixed-variant": "#004e5c", "outline": "#707881", "on-secondary-fixed": "#001f26", "on-surface": "#141b2b", "primary-container": "#007bb9", "on-primary-fixed-variant": "#004b73", "tertiary-container": "#287ab3", "on-primary": "#ffffff", "primary-fixed": "#cce5ff", "secondary-fixed-dim": "#4cd7f6", "on-background": "#141b2b", "on-surface-variant": "#3f4850", "on-tertiary-container": "#fdfcff", "on-tertiary": "#ffffff", "inverse-surface": "#293040", "background": "#f9f9ff", "surface-tint": "#006398", "inverse-on-surface": "#edf0ff", "on-primary-container": "#fdfcff", "primary": "#006194", "secondary": "#00687a", "on-secondary-container": "#006172", "surface-container-high": "#e1e8fd", "surface-container-low": "#f1f3ff", "error": "#ba1a1a", "surface-container-highest": "#dce2f7", "tertiary-fixed": "#cde5ff", "on-error-container": "#93000a", "surface-container": "#e9edff", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#004b74", "inverse-primary": "#93ccff", "on-error": "#ffffff", "surface": "#f9f9ff", "on-tertiary-fixed": "#001d32", "secondary-fixed": "#acedff", "primary-fixed-dim": "#93ccff", "on-primary-fixed": "#001d31", "surface-dim": "#d3daef", "surface-variant": "#dce2f7", "surface-bright": "#f9f9ff", "tertiary": "#006195"}, "borderRadius": {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"}, "spacing": {"space-md": "0.75rem", "header-search-height": "2.75rem", "gutter-card": "0.75rem", "space-xs": "0.25rem", "screen-edge-padding": "1rem", "space-sm": "0.5rem", "space-base": "1rem", "space-2xl": "2rem", "space-lg": "1.25rem", "header-location-height": "2.25rem", "space-xl": "1.5rem", "bottom-nav-height": "3.5rem", "gutter-compact": "0.5rem", "space-2xs": "0.125rem"}, "fontFamily": {"body-lg": ["Inter"], "label-lg": ["Inter"], "body-md": ["Inter"], "price-sm": ["Inter"], "label-sm": ["Inter"], "price-lg": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"], "body-sm": ["Inter"], "headline-lg": ["Inter"], "headline-sm": ["Inter"]}, "fontSize": {"body-lg": ["16px", {"lineHeight": "22px", "fontWeight": "400"}], "label-lg": ["14px", {"lineHeight": "18px", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}], "price-sm": ["13px", {"lineHeight": "16px", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}], "price-lg": ["20px", {"lineHeight": "24px", "fontWeight": "700"}], "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "label-md": ["12px", {"lineHeight": "16px", "fontWeight": "500"}], "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}], "headline-lg": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "headline-sm": ["16px", {"lineHeight": "22px", "fontWeight": "600"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-base flex items-center justify-between bg-surface-container-lowest"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary-container flex items-center justify-center text-on-primary font-headline-md text-headline-md shadow-sm">M</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface leading-none">MEMBEGO</span><span class="font-label-sm text-label-sm text-on-surface-variant font-medium tracking-wider uppercase mt-0.5">Admin Hub</span></div></div><div class="w-2 h-2 rounded-full bg-secondary-container" title="Sistema Operativo Activo"></div></div><div class="px-space-base py-space-xs"><div class="p-space-sm bg-surface-container-low rounded-xl flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[18px]">store</span><div class="flex-1 min-w-0"><p class="font-label-sm text-label-sm text-on-surface truncate">CARTOWN Wash</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate">Sede Higüey 23000</p></div><span class="material-symbols-outlined text-on-surface-variant text-[16px]">unfold_more</span></div></div><nav class="flex-1 px-space-sm py-space-xs overflow-y-auto space-y-space-md" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-xl"><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Principal</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="resumen" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">Resumen</span></div></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Experiencia Cliente</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="editor-de-inicio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_quilt</span><span class="font-body-md text-body-md">Editor de Inicio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="navegacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">navigation</span><span class="font-body-md text-body-md">Navegación</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="cerca-de-ti" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">location_on</span><span class="font-body-md text-body-md">Cerca de ti</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="mi-qr" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">qr_code_2</span><span class="font-body-md text-body-md">Mi QR</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Catálogo</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="membresias" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">card_membership</span><span class="font-body-md text-body-md">Membresías</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">8</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="beneficios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">stars</span><span class="font-body-md text-body-md">Beneficios</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ofertas" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">local_offer</span><span class="font-body-md text-body-md">Ofertas</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-semibold">Hot</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="servicios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">handyman</span><span class="font-body-md text-body-md">Servicios</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="excursiones" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">travel_explore</span><span class="font-body-md text-body-md">Excursiones</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Operaciones</p><a aria-current="page" class="flex items-center justify-between px-space-sm py-space-xs transition-colors bg-primary-container text-on-primary-container font-semibold rounded-xl" data-path="canjes-y-qr" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">check_circle</span><span class="font-body-md text-body-md">Canjes y QR</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface">14</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="reservas-y-citas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">calendar_today</span><span class="font-body-md text-body-md">Reservas y Citas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="pagos-y-facturacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">receipt_long</span><span class="font-body-md text-body-md">Pagos &amp; Facturación</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Clientes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="directorio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">group</span><span class="font-body-md text-body-md">Directorio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="segmentos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">pie_chart</span><span class="font-body-md text-body-md">Segmentos</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="en-riesgo" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-error text-[18px]">warning</span><span class="font-body-md text-body-md">En Riesgo</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container font-medium">3</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Marketing</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="campanas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">campaign</span><span class="font-body-md text-body-md">Campañas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="banners" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_carousel</span><span class="font-body-md text-body-md">Banners</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="fidelizacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">loyalty</span><span class="font-body-md text-body-md">Fidelización</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Analítica</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="metricas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">insights</span><span class="font-body-md text-body-md">Métricas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ingresos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">payments</span><span class="font-body-md text-body-md">Ingresos</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="rendimiento" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">speed</span><span class="font-body-md text-body-md">Rendimiento</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Ajustes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="empresa" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">business</span><span class="font-body-md text-body-md">Empresa</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="sucursales" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">storefront</span><span class="font-body-md text-body-md">Sucursales</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="roles-y-permisos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">admin_panel_settings</span><span class="font-body-md text-body-md">Roles y Permisos</span></a></div></nav><div class="p-space-base bg-surface-container-low flex items-center justify-between"><div class="flex items-center gap-space-sm min-w-0"><div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant"><span class="material-symbols-outlined text-[18px]">domain</span></div><div class="truncate"><p class="font-label-sm text-label-sm text-on-surface truncate font-semibold">CARTOWN RD</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">RNC 131-98765-2</p></div></div><button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded-lg" title="Cerrar sesión" type="button"><span class="material-symbols-outlined text-[20px]">logout</span></button></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center gap-space-lg flex-1 max-w-2xl"><div class="relative w-full max-w-md"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-10 pl-9 pr-10 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" placeholder="Buscar socios, folios de canje o membresías..." type="text"><kbd class="absolute right-3 top-1/2 -translate-y-1/2 font-label-sm text-label-sm bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant border border-outline-variant/30">/</kbd></div><div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed text-[12px] font-label-md"><span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span><span>Higüey Online · Turno Diurno</span></div></div><div class="flex items-center gap-space-md"><button class="flex items-center gap-space-xs px-space-md h-9 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-sm text-label-sm shadow-sm transition-all" type="button"><span class="material-symbols-outlined text-[18px]">qr_code_scanner</span><span>Canje Rápido</span></button><button class="relative p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Notificaciones de Canjes" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest"></span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right hidden sm:block"><p class="font-label-sm text-label-sm text-on-surface leading-tight">Starlin Paulino</p><p class="font-body-sm text-body-sm text-[11px] text-on-surface-variant leading-tight">Administrador</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-background min-h-screen w-full px-space-xl py-space-xl"><div class="flex flex-col w-full gap-space-xl">
+<!-- Operational Hub Header & Status Strip -->
+<section class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg bg-surface-container-lowest p-space-xl rounded-xl shadow-sm">
+<div class="space-y-space-xs">
+<div class="flex items-center gap-space-sm flex-wrap">
+<span class="px-space-sm py-0.5 rounded-full bg-secondary-fixed/50 text-on-secondary-fixed font-label-sm text-label-sm uppercase tracking-wider font-semibold flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary animate-ping"></span>
+          Terminal de Punto de Venta • Higüey 01
+        </span>
+<span class="text-outline-variant">•</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[15px] text-secondary">wifi_tethering</span>
+          Sincronización Cloud Activa
+        </span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Centro de Canjes y Validación QR</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Sucursal: <span class="font-semibold text-on-surface">CARTOWN Wash &amp; Detailing • Sede Higüey</span> • Turno: <span class="font-semibold text-on-surface">Starlin P. (Cajero / Operaciones)</span>
+</p>
+</div>
+<!-- Quick Stats Ticker -->
+<div class="grid grid-cols-3 gap-space-sm bg-surface-container-low p-space-sm rounded-xl">
+<div class="bg-surface-container-lowest px-space-md py-space-xs rounded-lg shadow-sm flex flex-col items-center sm:items-start">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Canjes Hoy</span>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-price-lg text-price-lg text-primary">34</span>
+<span class="font-label-sm text-label-sm text-secondary font-medium">+12%</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest px-space-md py-space-xs rounded-lg shadow-sm flex flex-col items-center sm:items-start">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Valor Entregado</span>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-price-lg text-price-lg text-on-surface">RD$ 15.3k</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest px-space-md py-space-xs rounded-lg shadow-sm flex flex-col items-center sm:items-start">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Incidencias</span>
+<div class="flex items-baseline gap-1 mt-0.5">
+<span class="font-price-lg text-price-lg text-secondary">0</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Óptimo</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Core Scanning & Verification Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-space-xl items-start">
+<!-- LEFT: Fast Capture Module (5 cols) -->
+<section class="xl:col-span-5 flex flex-col gap-space-lg">
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm flex flex-col gap-space-lg">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Lector Óptico &amp; Scanner USB</h2>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-primary font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+            Listo para lectura
+          </span>
+</div>
+<!-- Scanner Viewfinder Simulator -->
+<div class="relative bg-inverse-surface rounded-xl p-space-lg overflow-hidden flex flex-col items-center justify-center min-h-[260px] text-inverse-on-surface shadow-inner">
+<!-- Ambient scan animation background -->
+<div class="absolute inset-0 opacity-15 bg-[radial-gradient(#57dffe_1px,transparent_1px)] [background-size:16px_16px]"></div>
+<!-- Scan sweep bar -->
+<div class="absolute inset-x-8 top-12 h-1 bg-gradient-to-r from-transparent via-secondary-container to-transparent blur-[1px] animate-[bounce_2.5s_infinite]"></div>
+<!-- Crosshairs -->
+<div class="relative z-10 w-48 h-48 rounded-xl bg-inverse-surface/40 flex flex-col items-center justify-center p-space-md backdrop-blur-sm">
+<!-- Simulated target frame -->
+<div class="absolute -top-1 -left-1 w-6 h-6 border-t-2 border-l-2 border-secondary-container rounded-tl-lg"></div>
+<div class="absolute -top-1 -right-1 w-6 h-6 border-t-2 border-r-2 border-secondary-container rounded-tr-lg"></div>
+<div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-2 border-l-2 border-secondary-container rounded-bl-lg"></div>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-2 border-r-2 border-secondary-container rounded-br-lg"></div>
+<span class="material-symbols-outlined text-[48px] text-secondary-container/80 mb-2">center_focus_strong</span>
+<p class="font-label-sm text-label-sm text-center text-inverse-on-surface/80">
+              Alinee el código QR del socio o pistola láser conectada
+            </p>
+</div>
+<div class="relative z-10 mt-space-md flex items-center gap-space-sm font-label-sm text-label-sm text-inverse-on-surface/70">
+<span class="material-symbols-outlined text-[16px] text-secondary-container">keyboard</span>
+<span>Atajo: Presione <kbd class="px-1.5 py-0.5 rounded bg-surface-variant/30 text-inverse-on-surface text-[10px]">F2</kbd> para forzar re-lectura</span>
+</div>
+</div>
+<!-- Manual Lookup Form -->
+<div class="flex flex-col gap-space-xs pt-space-xs">
+<label class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider font-semibold" for="manual-search-input">
+            Búsqueda Manual Alternativa
+          </label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[20px]">badge</span>
+<input class="w-full h-11 pl-10 pr-24 rounded-xl bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary shadow-inner" id="manual-search-input" placeholder="Buscar por @ID de cliente, cédula o teléfono..." type="text" value="@Q6W3D4">
+<button class="absolute right-1.5 px-3 py-1.5 bg-surface-container-highest hover:bg-surface-container-high text-on-surface rounded-lg font-label-sm text-label-sm transition-colors flex items-center gap-1" type="button">
+<span>Buscar</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px] px-1">
+            Ejemplos: <button class="text-primary hover:underline font-semibold" onclick="document.getElementById('manual-search-input').value='@Q6W3D4'" type="button">@Q6W3D4</button>, <button class="text-primary hover:underline font-semibold" onclick="document.getElementById('manual-search-input').value='028-0091823-1'" type="button">028-0091823-1</button>, <button class="text-primary hover:underline font-semibold" onclick="document.getElementById('manual-search-input').value='809-554-1020'" type="button">809-554-1020</button>
+</p>
+</div>
+<button class="w-full h-12 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-lg text-label-lg shadow-sm flex items-center justify-center gap-space-sm transition-all active:scale-[0.99]" type="button">
+<span class="material-symbols-outlined text-[20px]">document_scanner</span>
+<span>Validar Código y Cargar Folio</span>
+</button>
+</div>
+<!-- Quick Tips Card -->
+<div class="bg-surface-container-low p-space-lg rounded-xl flex items-start gap-space-md">
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed shrink-0">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+</div>
+<div class="space-y-0.5">
+<p class="font-label-sm text-label-sm font-semibold text-on-surface">Protocolo Antifraude CARTOWN</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Los códigos QR de la App MEMBEGO rotan criptográficamente cada 10 minutos. No se admiten capturas de pantalla estáticas.
+          </p>
+</div>
+</div>
+</section>
+<!-- RIGHT: Live Validation Panel / Staged Redemption Card (7 cols) -->
+<section class="xl:col-span-7 flex flex-col gap-space-lg">
+<div class="bg-surface-container-lowest p-space-xl rounded-xl shadow-md flex flex-col gap-space-lg relative overflow-hidden">
+<!-- Live Status Bar Ribbon -->
+<div class="flex items-center justify-between pb-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="w-3 h-3 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold">Folio de Canje Activo #CJ-8902</span>
+</div>
+<span class="font-label-sm text-label-sm px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-bold">
+            Código QR Verificado • Hace 4 min
+          </span>
+</div>
+<!-- Member Profile Block -->
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md bg-surface-container-low p-space-md rounded-xl">
+<div class="flex items-center gap-space-md">
+<div class="relative">
+<img class="w-16 h-16 rounded-xl object-cover shadow-sm bg-surface-container" data-alt="Close up modern business headshot portrait of Perez Starlin Paulino, a confident 30-year old Dominican entrepreneur with warm natural lighting and corporate clean aesthetic wearing smart casual apparel" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWyre1LWG3PY8E-uMxmzrmLcQE0z_o0F8k6DHh8g4R2stPNroTiox9sSqzgKgEfbu0nmPihvvrH1_mdc9MhrkG7EK80cbrLZ4HhuSy6LVFOwrs2_KPqQ3-GxzQXN0sY7YjE5az-36-xJZaDhyFQYW__-hJ7E5KTULVQ3BniZGHFHxl_aB-272Di3jHpJFrHtbamCNjOUO-r28EjeAJCeZ5cpVyBW1ltSZCA0Kotd9RgxQ_odukpPhy">
+<div class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center shadow-xs">
+<span class="material-symbols-outlined text-[12px] font-bold">check</span>
+</div>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">PEREZ STARLIN PAULINO</h3>
+<span class="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-label-sm text-label-sm font-bold">Socio Activo</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-mono">ID: @Q6W3D4 • Céd: 028-0114920-5</p>
+<p class="font-body-sm text-body-sm text-outline text-[12px]">Vehículo Registrado: Honda CR-V Blanca • Placa G492102</p>
+</div>
+</div>
+<div class="self-end sm:self-center">
+<span class="px-3 py-1.5 rounded-lg bg-surface-container-highest text-on-surface font-label-sm text-label-sm font-semibold flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary">history</span>
+              8 Canjes Históricos
+            </span>
+</div>
+</div>
+<!-- Membership Details & Quota Meter -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<!-- Quota Card -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl bg-gradient-to-br from-surface-container-low to-surface-container flex flex-col justify-between">
+<div>
+<div class="flex items-center justify-between text-on-surface">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Membresía Activa</span>
+<span class="material-symbols-outlined text-primary text-[20px]">stars</span>
+</div>
+<p class="font-headline-sm text-headline-sm text-on-surface mt-1">PLAN SILVER (SUV PEQ)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Ciclo mensual • Vence en 22 días</p>
+</div>
+<div class="mt-space-md">
+<div class="flex items-center justify-between font-label-sm text-label-sm mb-1.5">
+<span class="text-on-surface font-semibold">Lavados Disponibles</span>
+<span class="text-primary font-bold">3 de 4 restantes</span>
+</div>
+<!-- Segmented Progress Bar -->
+<div class="grid grid-cols-4 gap-1.5 h-2.5 w-full">
+<div class="bg-primary rounded-full" title="Lavado 1: Canjeado el 02 Oct"></div>
+<div class="bg-primary-container rounded-full animate-pulse" title="Lavado 2: Por canjear hoy"></div>
+<div class="bg-surface-container-highest rounded-full" title="Lavado 3: Disponible"></div>
+<div class="bg-surface-container-highest rounded-full" title="Lavado 4: Disponible"></div>
+</div>
+</div>
+</div>
+<!-- Fraud / Security Clearance Checklist -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl bg-gradient-to-br from-surface-container-low to-surface-container flex flex-col justify-between">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Verificación de Integridad</span>
+<span class="material-symbols-outlined text-secondary text-[20px]">security</span>
+</div>
+<ul class="mt-space-sm space-y-2 font-body-sm text-body-sm text-on-surface-variant">
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[16px]">check_circle</span>
+<span>Firma criptográfica válida (App v2.4.1)</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[16px]">check_circle</span>
+<span>Sin canjes duplicados registrados hoy</span>
+</li>
+<li class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[16px]">check_circle</span>
+<span>Sede Higüey autorizada en contrato</span>
+</li>
+</ul>
+<div class="mt-2 pt-2 text-[11px] font-mono text-outline flex items-center justify-between">
+<span>HASH: 8F2A-91BC-0041</span>
+<span class="text-secondary font-semibold">APROBADO</span>
+</div>
+</div>
+</div>
+<!-- Service Redemption Selector Form -->
+<div class="bg-surface-container-low p-space-lg rounded-xl space-y-space-md">
+<div class="flex items-center justify-between">
+<h4 class="font-label-lg text-label-lg text-on-surface font-bold">Servicio a Aplicar en este Canje</h4>
+<span class="font-label-sm text-label-sm text-outline">Paso obligatorio</span>
+</div>
+<div class="space-y-space-sm">
+<!-- Selected Option (Covered) -->
+<label class="flex items-start gap-space-md p-space-md rounded-xl bg-surface-container-lowest shadow-sm cursor-pointer hover:bg-surface-bright transition-colors">
+<input checked="" class="mt-1 w-5 h-5 rounded text-primary focus:ring-primary accent-primary" type="checkbox">
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm text-on-surface">Lavado Básico Exterior + Cera Express</span>
+<span class="font-price-sm text-price-sm px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed">Cubierto 100%</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                  Espumado de carrocería, secado con microfibra, aspirado express de tapetes y cera líquida protectora.
+                </p>
+<div class="flex items-center gap-space-md mt-2 font-label-sm text-label-sm text-outline">
+<span>Valor Comercial: <s class="text-on-surface-variant font-medium">RD$ 450.00</s></span>
+<span class="text-secondary font-bold">Costo al socio: RD$ 0.00</span>
+<span>Tiempo est: ~25 min</span>
+</div>
+</div>
+</label>
+<!-- Upsell / Addon Option -->
+<label class="flex items-start gap-space-md p-space-md rounded-xl bg-surface-container-lowest/60 hover:bg-surface-container-lowest shadow-xs cursor-pointer transition-colors">
+<input class="mt-1 w-5 h-5 rounded text-primary focus:ring-primary accent-primary" type="checkbox">
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-label-lg text-label-lg text-on-surface">Add-On: Limpieza &amp; Acondicionado de Viniles</span>
+<span class="font-price-sm text-price-sm text-primary font-bold">+ RD$ 200.00</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                  Protector UV hidrofóbico en tablero y puertas laterales. Tarifa especial con membresía Silver.
+                </p>
+</div>
+</label>
+</div>
+<!-- Bay or Washer Assignment selector -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md pt-space-xs">
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant mb-1 block" for="bay-selector">Bahía de Trabajo</label>
+<select class="w-full h-10 px-space-sm rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary" id="bay-selector">
+<option selected="">Bahía 2 (Túnel Express)</option>
+<option>Bahía 1 (Lavado a Mano)</option>
+<option>Bahía 3 (Detailing &amp; Cera)</option>
+</select>
+</div>
+<div>
+<label class="font-label-sm text-label-sm text-on-surface-variant mb-1 block" for="technician-selector">Operador / Lavador Asignado</label>
+<select class="w-full h-10 px-space-sm rounded-lg bg-surface-container-lowest font-body-sm text-body-sm text-on-surface focus:outline-none focus:ring-1 focus:ring-primary" id="technician-selector">
+<option selected="">Maikol Santana (Equipo A)</option>
+<option>Jose Rodriguez (Equipo B)</option>
+<option>Manuel Valdez (Equipo A)</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Action Confirmation Bar -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-md pt-space-xs">
+<button class="w-full sm:w-auto px-space-lg h-11 bg-surface-container-high hover:bg-error-container hover:text-on-error-container text-on-surface-variant rounded-xl font-label-md text-label-md transition-colors flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">cancel</span>
+<span>Rechazar con Motivo</span>
+</button>
+<div class="flex items-center gap-space-md w-full sm:w-auto">
+<button class="w-full sm:w-auto px-space-md h-11 bg-surface-container hover:bg-surface-container-high text-on-surface rounded-xl font-label-md text-label-md transition-colors flex items-center justify-center gap-1" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+<span>Imprimir Ticket</span>
+</button>
+<button class="w-full sm:w-auto flex-1 px-space-xl h-12 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-lg text-label-lg shadow-md flex items-center justify-center gap-space-sm transition-all active:scale-[0.99]" type="button">
+<span class="material-symbols-outlined text-[20px]">check_circle</span>
+<span>Confirmar Canje &amp; Asignar Turno #04</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Real-Time Activity Log / Today's Ledger -->
+<section class="bg-surface-container-lowest p-space-xl rounded-xl shadow-sm space-y-space-lg">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
+<div>
+<div class="flex items-center gap-space-sm">
+<h2 class="font-headline-md text-headline-md text-on-surface">Registro de Canjes de la Jornada</h2>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-label-sm text-label-sm font-semibold">Turno Hoy: 34 registros</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Monitoreo auditado de canjes efectuados en caja y validados por terminal</p>
+</div>
+<!-- Quick Filter Pills -->
+<div class="flex items-center gap-space-xs overflow-x-auto pb-1 sm:pb-0">
+<button class="px-3 py-1.5 rounded-full bg-primary text-on-primary font-label-sm text-label-sm font-semibold shadow-xs" type="button">Todos (34)</button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm transition-colors" type="button">Exitosos (32)</button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container text-error font-label-sm text-label-sm transition-colors" type="button">Rechazados (2)</button>
+<div class="h-6 w-px bg-outline-variant/40 mx-1"></div>
+<button class="p-1.5 rounded-lg text-on-surface-variant hover:bg-surface-container-low" title="Exportar reporte CSV" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+</button>
+</div>
+</div>
+<!-- Tabular Grid (Amazon-like High-Density Clean Structured Rows) -->
+<div class="overflow-x-auto">
+<table class="w-full text-left font-body-sm text-body-sm">
+<thead>
+<tr class="bg-surface-container-low text-on-surface-variant font-label-sm text-label-sm uppercase tracking-wider">
+<th class="py-space-sm px-space-md rounded-l-lg">Hora / Folio</th>
+<th class="py-space-sm px-space-md">Cliente • Socio</th>
+<th class="py-space-sm px-space-md">Membresía / Plan</th>
+<th class="py-space-sm px-space-md">Servicio Aplicado</th>
+<th class="py-space-sm px-space-md">Atendido Por</th>
+<th class="py-space-sm px-space-md">Estado</th>
+<th class="py-space-sm px-space-md text-right rounded-r-lg">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y-0">
+<!-- Row 1: Gian Carlos -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-space-md px-space-md font-mono text-on-surface">
+<span class="font-bold">16:24</span>
+<span class="text-[11px] text-outline block">#CJ-8898</span>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center font-bold text-primary text-[11px]">GC</div>
+<div>
+<span class="font-semibold text-on-surface block">Gian Carlos Rosario</span>
+<span class="font-mono text-outline text-[11px]">@G2C901 • Kia Sorento</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">Plan Gold</span>
+<span class="text-[11px] text-outline-variant block mt-0.5">Uso 2 de 6</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface">
+<span>Lavado Completo SUV + Cera Graffeno</span>
+<span class="text-outline text-[11px] block">Bahía 1 • RD$ 850 cubierto</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface-variant">
+<span>Starlin P.</span>
+<span class="text-outline text-[11px] block">Higüey 01</span>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-fixed/60 text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Exitoso
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container" title="Ver comprobante digital" type="button">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-error hover:bg-surface-container" title="Revertir canje con clave" type="button">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: Cesar Lugo -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-space-md px-space-md font-mono text-on-surface">
+<span class="font-bold">15:48</span>
+<span class="text-[11px] text-outline block">#CJ-8891</span>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-secondary-fixed flex items-center justify-center font-bold text-secondary text-[11px]">CL</div>
+<div>
+<span class="font-semibold text-on-surface block">Cesar Lugo</span>
+<span class="font-mono text-outline text-[11px]">@CL8812 • Toyota Corolla</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-semibold">Plan Silver</span>
+<span class="text-[11px] text-outline-variant block mt-0.5">Uso 1 de 4</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface">
+<span>Lavado Express Exterior</span>
+<span class="text-outline text-[11px] block">Bahía 2 • RD$ 350 cubierto</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface-variant">
+<span>Starlin P.</span>
+<span class="text-outline text-[11px] block">Higüey 01</span>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-fixed/60 text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Exitoso
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container" title="Ver comprobante digital" type="button">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-error hover:bg-surface-container" title="Revertir canje con clave" type="button">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3: Melquis Simono -->
+<tr class="hover:bg-surface-container-low/60 transition-colors">
+<td class="py-space-md px-space-md font-mono text-on-surface">
+<span class="font-bold">14:12</span>
+<span class="text-[11px] text-outline block">#CJ-8884</span>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center font-bold text-primary text-[11px]">MS</div>
+<div>
+<span class="font-semibold text-on-surface block">Melquis Simono</span>
+<span class="font-mono text-outline text-[11px]">@MS0421 • Hyundai Sonata</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-semibold">Plan Silver</span>
+<span class="text-[11px] text-outline-variant block mt-0.5">Uso 4 de 4 (Final)</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface">
+<span>Lavado Express Exterior</span>
+<span class="text-outline text-[11px] block">Bahía 3 • RD$ 350 cubierto</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface-variant">
+<span>Starlin P.</span>
+<span class="text-outline text-[11px] block">Higüey 01</span>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-fixed/60 text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                Exitoso
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container" title="Ver comprobante digital" type="button">
+<span class="material-symbols-outlined text-[18px]">receipt</span>
+</button>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-error hover:bg-surface-container" title="Revertir canje con clave" type="button">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4: Edgar Gomez (Rejected) -->
+<tr class="hover:bg-surface-container-low/60 transition-colors bg-error-container/20">
+<td class="py-space-md px-space-md font-mono text-on-surface">
+<span class="font-bold">12:30</span>
+<span class="text-[11px] text-outline block">#CJ-8871</span>
+</td>
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-7 h-7 rounded-full bg-error-container flex items-center justify-center font-bold text-on-error-container text-[11px]">EG</div>
+<div>
+<span class="font-semibold text-on-surface block">Edgar Gomez</span>
+<span class="font-mono text-outline text-[11px]">@EG9104 • Jeep Grand Cherokee</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md">
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-surface-container-highest text-on-surface font-semibold">Plan Silver</span>
+<span class="text-[11px] text-error font-medium block mt-0.5">Límite 4/4 agotado</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface">
+<span class="line-through text-outline">Lavado Básico Exterior</span>
+<span class="text-error font-label-sm text-label-sm block">Cupo de ciclo excedido</span>
+</td>
+<td class="py-space-md px-space-md text-on-surface-variant">
+<span>Starlin P.</span>
+<span class="text-outline text-[11px] block">Higüey 01</span>
+</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">block</span>
+                Rechazado
+              </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:bg-surface-container" title="Detalles del motivo de rechazo" type="button">
+<span class="material-symbols-outlined text-[18px]">info</span>
+</button>
+<button class="px-2 py-0.5 rounded bg-primary text-on-primary text-[11px] font-label-sm font-medium" title="Ofrecer renovación o upgrade" type="button">
+                  Upgrade
+                </button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination / Footer Note -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-sm pt-space-xs text-on-surface-variant font-label-sm text-label-sm">
+<span>Mostrando las últimas 4 operaciones de 34 registradas hoy</span>
+<div class="flex items-center gap-space-xs">
+<button class="px-3 py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface transition-colors" disabled="" type="button">Anterior</button>
+<span class="px-2 py-1 font-semibold text-on-surface">1</span>
+<button class="px-3 py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface transition-colors" type="button">2</button>
+<button class="px-3 py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface transition-colors" type="button">3</button>
+<button class="px-3 py-1 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface transition-colors" type="button">Siguiente</button>
+</div>
+</div>
+</section>
+</div>
+<script>
+  // Fast keyboard listener simulation for scanning guns (e.g., F2 to clear/focus search)
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'F2') {
+      event.preventDefault();
+      const input = document.getElementById('manual-search-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  });
+</script></main></div></body></html>
