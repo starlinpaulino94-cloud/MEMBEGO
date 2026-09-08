@@ -13,6 +13,8 @@ import {
   workspacesForRole,
   buscarModulos,
   CLAVES_BADGE,
+  ENLACES_ADMIN,
+  GRUPOS_HUB_ADMIN,
   type CapacidadNav,
   type ContextoNav,
   type TipoEmpresaNav,
@@ -125,13 +127,16 @@ test('sin capacidades legibles NO se filtra nada (fail-open)', () => {
   assert.ok(rutas.includes('/admin/seguimiento'))
 })
 
-test('el espacio entero desaparece cuando su capacidad está apagada', () => {
-  const con = visibleWorkspaces(ctx({ capacidades: ['EXCURSIONES'] })).map((w) => w.id)
-  const sin = visibleWorkspaces(ctx({ capacidades: [] })).map((w) => w.id)
-  assert.ok(con.includes('tours'))
+test('el módulo desaparece del menú cuando su capacidad está apagada', () => {
+  // El hub es UNA columna, así que la capacidad ya no oculta un espacio entero
+  // del riel: oculta el módulo dentro de su grupo. La regla no cambió —lo que
+  // la empresa no tiene contratado no se ofrece—, cambió dónde se aplica.
+  const con = rutasDe(ctx({ capacidades: ['EXCURSIONES'] }))
+  const sin = rutasDe(ctx({ capacidades: [] }))
+  assert.ok(con.includes('/admin/excursiones'))
   assert.ok(
-    !sin.includes('tours'),
-    'Un icono en el riel que abre un panel vacío se lee como una aplicación rota.'
+    !sin.includes('/admin/excursiones'),
+    'Ofrecer un módulo que la empresa no tiene contratado lleva a una pantalla vacía.'
   )
 })
 
@@ -166,14 +171,18 @@ test('un rol acotado solo ve sus secciones', () => {
   assert.ok(!supervisor.includes('/admin/campanas'))
 })
 
-test('un espacio sin ni un módulo visible no se pinta', () => {
+test('un grupo sin ni un módulo visible no se pinta', () => {
   // A Marketing no le corresponde ninguna sección del dominio «Empresa», así
-  // que su espacio de Configuración no debe aparecer en el riel.
-  const espacios = visibleWorkspaces({ role: 'MARKETING' })
-  const empresa = workspacesForRole('MARKETING').find((w) => w.id === 'administracion')!
-  assert.equal(visibleGroups(empresa, { role: 'MARKETING' }).length, 0)
-  assert.ok(!espacios.some((w) => w.id === 'administracion'))
-  assert.equal(canSeeWorkspace(empresa, { role: 'MARKETING' }), false)
+  // que el grupo Ajustes no debe salir en su menú. Antes esto ocultaba un
+  // espacio entero del riel; con una sola columna, oculta el grupo — que es la
+  // misma regla: un encabezado sin nada debajo se lee como algo roto.
+  const empresa = workspacesForRole('MARKETING')[0]!
+  const grupos = visibleGroups(empresa, { role: 'MARKETING' }).map((g) => g.id)
+  assert.ok(!grupos.includes('ajustes'))
+  assert.ok(grupos.length > 0, 'Marketing sí ve sus propios grupos.')
+  for (const g of visibleGroups(empresa, { role: 'MARKETING' })) {
+    assert.ok(g.items.length > 0, `El grupo ${g.id} se pinta vacío.`)
+  }
 })
 
 test('los ajustes por empleado quitan el módulo del menú', () => {
@@ -215,10 +224,14 @@ test('canSeeItem no depende del orden en que se pregunte', () => {
 test('el espacio de una ruta se resuelve por el prefijo más largo', () => {
   const c = ctx()
   // /admin/audiencia/segmentos casa con DOS módulos: «Audiencia» (Analítica)
-  // y «Segmentos» (Clientes). Gana el prefijo largo, y con él su espacio.
-  assert.equal(workspaceOf('/admin/audiencia', c), 'analitica')
-  assert.equal(workspaceOf('/admin/audiencia/segmentos', c), 'clientes')
+  // y «Segmentos» (Clientes). Gana el prefijo largo.
+  //
+  // Con el hub en una sola columna las dos viven en el MISMO espacio, así que
+  // lo que hay que comprobar ya no es a qué espacio van sino a qué módulo
+  // resuelven — que es lo que decide qué fila se marca activa.
+  assert.equal(resolverRuta('/admin/audiencia', c)?.href, '/admin/audiencia')
   assert.equal(resolverRuta('/admin/audiencia/segmentos', c)?.href, '/admin/audiencia/segmentos')
+  assert.equal(workspaceOf('/admin/audiencia/segmentos', c), 'empresa')
 })
 
 test('un enlace profundo conserva su módulo activo', () => {
@@ -269,16 +282,19 @@ test('cada espacio visible tiene un aterrizaje que su dueño puede abrir', () =>
 
 test('el aterrizaje es el módulo marcado como principal', () => {
   const c = ctx()
-  const operaciones = visibleWorkspaces(c).find((w) => w.id === 'operacion')!
-  assert.equal(workspaceLanding(operaciones, c), '/admin/scanner')
+  const empresa = visibleWorkspaces(c)[0]!
+  assert.equal(workspaceLanding(empresa, c), '/admin/dashboard')
 })
 
 test('sin el principal, el aterrizaje cae al primer módulo que quede', () => {
-  // A un supervisor «Escanear QR» sí se le ofrece; a Marketing, el espacio de
-  // Operación no le queda con nada. Se prueba con una negación puntual.
-  const c = ctx({ permisos: { v: 1 as const, secciones: { scanner: false } } })
-  const operaciones = visibleWorkspaces(c).find((w) => w.id === 'operacion')!
-  assert.equal(workspaceLanding(operaciones, c), '/admin/pagos')
+  // Se le niega el Resumen —el módulo marcado como principal— y el aterrizaje
+  // tiene que seguir cayendo en algo real, no en una ruta prohibida.
+  const c = ctx({ permisos: { v: 1 as const, secciones: { dashboard: false } } })
+  const empresa = visibleWorkspaces(c)[0]!
+  const destino = workspaceLanding(empresa, c)
+  assert.notEqual(destino, '/admin/dashboard')
+  assert.ok(destino?.startsWith('/admin/'), `Aterrizaje inválido: ${destino}`)
+  assert.ok(rutasDe(c).includes(destino!), 'Aterriza en un módulo que sí se le ofrece.')
 })
 
 // ── Buscador ────────────────────────────────────────────────────────────────
@@ -287,8 +303,9 @@ test('el buscador entiende lo que la gente escribe, no solo la etiqueta', () => 
   const c = ctx()
   // «canjear» no aparece en ninguna etiqueta del menú.
   assert.equal(buscarModulos('canjear', c)[0]?.item.href, '/admin/scanner')
-  // Y las tildes no pueden ser un requisito para encontrar nada.
-  assert.equal(buscarModulos('analitica', c)[0]?.workspace.id, 'analitica')
+  // Y las tildes no pueden ser un requisito para encontrar nada: «origen» es
+  // la etiqueta de /admin/adquisicion, y «analitica» sin tilde su grupo.
+  assert.equal(buscarModulos('origen', c)[0]?.item.href, '/admin/adquisicion')
 })
 
 test('el buscador nunca ofrece lo que el menú esconde', () => {
@@ -507,4 +524,49 @@ test('el conmutador de ámbito vive en la cabecera y lo deciden los helpers', ()
     header.includes('ATERRIZAJE_EMPRESA') && header.includes('ATERRIZAJE_PLATAFORMA'),
     'los destinos del conmutador se declaran en nav-config, no a mano en el header'
   )
+})
+
+// ── El hub administrativo (contrato Stitch) ──────────────────────────────────
+//
+// La reagrupación a los ocho grupos del diseño es donde más fácil se pierde un
+// módulo: basta olvidar una ruta al repartir treinta y siete. Estas guardias
+// vigilan las dos mitades — que no falte ninguno, y que ninguno esté dos veces.
+
+test('el hub administrativo son los ocho grupos del diseño, en su orden', () => {
+  assert.deepEqual(
+    GRUPOS_HUB_ADMIN.map((g) => g.id),
+    [
+      'principal',
+      'experiencia-cliente',
+      'catalogo',
+      'operaciones',
+      'clientes',
+      'marketing',
+      'analitica',
+      'ajustes',
+    ]
+  )
+})
+
+test('ningún módulo de administración se queda fuera del hub', () => {
+  const enHub = new Set(GRUPOS_HUB_ADMIN.flatMap((g) => g.items.map((i) => i.href)))
+  const huerfanos = ENLACES_ADMIN.map((i) => i.href).filter((h) => !enHub.has(h))
+  assert.deepEqual(
+    huerfanos,
+    [],
+    'Estos módulos existen y no aparecen en ninguna parte del menú:\n  ' + huerfanos.join('\n  ')
+  )
+})
+
+test('ningún módulo aparece en dos grupos del hub', () => {
+  const vistos = new Map<string, string[]>()
+  for (const grupo of GRUPOS_HUB_ADMIN) {
+    for (const item of grupo.items) {
+      vistos.set(item.href, [...(vistos.get(item.href) ?? []), grupo.id])
+    }
+  }
+  const repetidos = [...vistos.entries()]
+    .filter(([, grupos]) => grupos.length > 1)
+    .map(([href, grupos]) => `${href} → ${grupos.join(', ')}`)
+  assert.deepEqual(repetidos, [], 'Duplicados en el menú:\n  ' + repetidos.join('\n  '))
 })

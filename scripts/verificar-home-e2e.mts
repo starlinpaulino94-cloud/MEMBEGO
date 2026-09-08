@@ -109,6 +109,15 @@ try {
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
   await expect(clientPage.getByRole('heading', { name: title })).toBeVisible({ timeout: 120000 })
   console.log('E2E: publicación desde editor visible para el cliente autorizado.')
+
+  // El hub administrativo: una columna con los ocho grupos del diseño. Se
+  // comprueba que los rótulos estén, no solo que la página cargue — un menú
+  // que pierde un grupo no da error, simplemente deja de ofrecerlo.
+  for (const grupo of ['Principal', 'Catálogo', 'Operaciones', 'Ajustes']) {
+    await expect(adminPage.getByText(grupo, { exact: true }).first()).toBeVisible({ timeout: 60000 })
+  }
+  await adminPage.screenshot({ path: join(CAPTURAS, 'admin-hub-1280.png'), fullPage: false, animations: 'disabled' })
+  console.log('E2E: el hub administrativo rotula sus grupos.')
   // Fidelidad por captura: las tres pantallas del cliente que ya existen, en
   // los tres anchos del criterio (§6 de 04-fidelidad-stitch.md). La aserción
   // de desbordamiento corre en cada combinación, no solo en el Inicio: una

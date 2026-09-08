@@ -652,95 +652,125 @@ const GRUPOS_ADMIN: NavGroup[] = [
 
 // ── Espacios del panel de empresa ───────────────────────────────────────────
 
+// ── El hub administrativo (contrato Stitch) ─────────────────────────────────
+//
+// Los diseños definen UNA columna con ocho grupos rotulados, no un riel de dos
+// niveles. La agrupación no se inventó aquí: sale del `code.html` del resumen
+// administrativo, y coincide casi literalmente con la que el encargo proponía.
+//
+// ────────────────────────────────────────────────────────────────────────────
+// POR QUÉ LOS GRUPOS SON EL CONTRATO Y LA LISTA DE ENLACES NO
+//
+// La barra lateral del diseño enseña los módulos de LA EMPRESA que sirvió de
+// ejemplo: unos veinte. MEMBEGO tiene treinta y siete. Adoptar esa lista al pie
+// de la letra escondería diecisiete módulos que funcionan —prospectos,
+// automatizaciones, conciliación, tickets…— y eso es perder funciones sin
+// decirlo, que es justo lo que el encargo prohíbe.
+//
+// Así que se adopta la ESTRUCTURA —los ocho grupos, en su orden— y cada módulo
+// existente entra en el grupo que le corresponde. Al revés también: lo que el
+// diseño nombra y aquí no existe (Navegación, Cerca de ti, Mi QR de empresa,
+// Servicios, Ingresos, Rendimiento) NO se pinta como enlace muerto; queda
+// anotado en `docs/transformacion-membego/04-fidelidad-stitch.md`.
+//
+// `deAdmin` falla ruidosamente si una ruta desaparece del catálogo, y
+// `tests/navegacion-espacios.test.ts` comprueba que ningún módulo se quede sin
+// grupo. Un enlace que se pierde en una reagrupación no vuelve a aparecer solo.
+
+const CATALOGO_ADMIN: readonly NavGroup[] = [
+  G_INICIO, G_CLI_GESTION, G_CLI_RELACION, G_EXCURSIONES, G_OFERTA,
+  G_FIDELIZACION, G_MKT_CONTENIDO, G_MKT_AUTO, G_ATENCION, G_ORGANIZACION,
+  G_ANA_RESULTADOS, G_ANA_CONOCIMIENTO, G_ADM_EMPRESA, G_ADM_CONEXIONES,
+  G_SOPORTE,
+]
+
+/** Todos los enlaces de administración, sin duplicados, en su orden de origen. */
+export const ENLACES_ADMIN: readonly NavLink[] = CATALOGO_ADMIN.flatMap((g) => g.items)
+
+/** Toma enlaces por ruta conservando sus permisos, capacidades y palabras clave. */
+function deAdmin(...hrefs: readonly string[]): NavLink[] {
+  return hrefs.map((href) => {
+    const enlace = ENLACES_ADMIN.find((i) => i.href === href)
+    if (!enlace) {
+      throw new Error(`Navegación: no existe el módulo ${href}. Si se retiró, sácalo del hub.`)
+    }
+    return enlace
+  })
+}
+
+const HUB_PRINCIPAL: NavGroup = {
+  id: 'principal',
+  label: 'Principal',
+  items: deAdmin('/admin/dashboard'),
+}
+
+const HUB_EXPERIENCIA: NavGroup = {
+  id: 'experiencia-cliente',
+  label: 'Experiencia cliente',
+  items: deAdmin('/admin/personalizacion'),
+}
+
+const HUB_CATALOGO: NavGroup = {
+  id: 'catalogo',
+  label: 'Catálogo',
+  items: deAdmin('/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+}
+
+const HUB_OPERACIONES: NavGroup = {
+  id: 'operaciones',
+  label: 'Operaciones',
+  items: deAdmin(
+    '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturas',
+    '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
+  ),
+}
+
+const HUB_CLIENTES: NavGroup = {
+  id: 'clientes',
+  label: 'Clientes',
+  items: deAdmin(
+    '/admin/clientes', '/admin/membresias', '/admin/audiencia/segmentos', '/admin/riesgo',
+    '/admin/retencion', '/admin/seguimiento', '/admin/crm', '/admin/tickets',
+    '/admin/comunicacion'
+  ),
+}
+
+const HUB_MARKETING: NavGroup = {
+  id: 'marketing',
+  label: 'Marketing',
+  items: deAdmin(
+    '/admin/campanas', '/admin/publicaciones', '/admin/notificaciones',
+    '/admin/automatizaciones', '/admin/gamificacion', '/admin/invitaciones',
+    '/admin/crecimiento', '/admin/regalos'
+  ),
+}
+
+const HUB_ANALITICA: NavGroup = {
+  id: 'analitica',
+  label: 'Analítica',
+  items: deAdmin('/admin/reportes', '/admin/audiencia', '/admin/adquisicion'),
+}
+
+const HUB_AJUSTES: NavGroup = {
+  id: 'ajustes',
+  label: 'Ajustes',
+  items: deAdmin('/admin/perfil', '/admin/sucursales', '/admin/empleados', '/admin/integraciones'),
+}
+
+export const GRUPOS_HUB_ADMIN: readonly NavGroup[] = [
+  HUB_PRINCIPAL, HUB_EXPERIENCIA, HUB_CATALOGO, HUB_OPERACIONES,
+  HUB_CLIENTES, HUB_MARKETING, HUB_ANALITICA, HUB_AJUSTES,
+]
+
 const ESPACIOS_ADMIN: Workspace[] = [
   {
-    id: 'inicio',
-    label: 'Inicio',
-    short: 'Inicio',
-    icon: LayoutDashboard,
-    description: 'Panel principal de la empresa.',
+    id: 'empresa',
+    label: 'Empresa',
+    short: 'Empresa',
+    icon: Building2,
+    description: 'Todo lo que esta empresa opera y publica.',
     scope: 'COMPANY',
-    groups: [G_INICIO],
-  },
-  {
-    id: 'clientes',
-    label: 'Clientes',
-    short: 'Clientes',
-    icon: Users,
-    description: 'Directorio, relación y actividad.',
-    scope: 'COMPANY',
-    groups: [G_CLI_GESTION, G_CLI_RELACION],
-  },
-  {
-    // Un espacio entero para el vertical de excursiones: cuando la capacidad
-    // está apagada desaparece del riel sin dejar hueco ni grupo vacío.
-    id: 'tours',
-    label: 'Parques y Tours',
-    short: 'Tours',
-    icon: Compass,
-    description: 'Ventas, vendedores y comisiones de excursiones.',
-    scope: 'COMPANY',
-    capacidad: 'EXCURSIONES',
-    groups: [G_EXCURSIONES],
-  },
-  {
-    id: 'beneficios',
-    label: 'Beneficios',
-    short: 'Beneficios',
-    icon: Gift,
-    description: 'Oferta comercial y fidelización.',
-    scope: 'COMPANY',
-    groups: [G_OFERTA, G_FIDELIZACION],
-  },
-  {
-    id: 'marketing',
-    label: 'Marketing',
-    short: 'Marketing',
-    icon: Megaphone,
-    description: 'Contenido y comunicación automática.',
-    scope: 'COMPANY',
-    groups: [G_MKT_CONTENIDO, G_MKT_AUTO],
-  },
-  {
-    id: 'operacion',
-    label: 'Operación',
-    short: 'Operación',
-    icon: ClipboardList,
-    description: 'Atención diaria y organización.',
-    scope: 'COMPANY',
-    groups: [G_ATENCION, G_ORGANIZACION],
-  },
-  {
-    id: 'analitica',
-    label: 'Analítica',
-    short: 'Análisis',
-    icon: BarChart3,
-    description: 'Resultados y conocimiento del cliente.',
-    scope: 'COMPANY',
-    groups: [G_ANA_RESULTADOS, G_ANA_CONOCIMIENTO],
-  },
-  {
-    // ANCLADO al pie: se entra poco y desde cualquier sitio. Si flotara según
-    // cuántos espacios tenga el rol delante, habría que buscarlo cada vez.
-    id: 'administracion',
-    label: 'Administración',
-    short: 'Ajustes',
-    icon: Settings,
-    description: 'Empresa, equipo y conexiones.',
-    scope: 'COMPANY',
-    anclado: true,
-    groups: [G_ADM_EMPRESA, G_ADM_CONEXIONES],
-  },
-  {
-    // ANCLADO al pie, junto a Administración.
-    id: 'soporte',
-    label: 'Soporte',
-    short: 'Soporte',
-    icon: LifeBuoy,
-    description: 'Casos y conversaciones de soporte.',
-    scope: 'COMPANY',
-    anclado: true,
-    groups: [G_SOPORTE],
+    groups: [...GRUPOS_HUB_ADMIN],
   },
 ]
 

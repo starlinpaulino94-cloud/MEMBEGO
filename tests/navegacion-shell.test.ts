@@ -7,6 +7,7 @@ import {
   visibleWorkspaces,
   allLinks,
   breadcrumbs,
+  ENLACES_ADMIN,
   type ContextoNav,
 } from '../src/components/layout/nav-config'
 import type { AppRole } from '../src/types'
@@ -139,17 +140,19 @@ test('cada grupo tiene al menos un enlace', () => {
   }
 })
 
-test('el panel de administrador siguen siendo quince dominios', () => {
-  // Esta prueba existía antes de los espacios y NO se relaja: es justamente la
-  // garantía de que reagrupar dominios en espacios no movió módulos ni cambió
-  // el inventario. Los dominios siguen siendo los mismos y en el mismo orden;
-  // lo único nuevo es cómo se reparten en el riel.
+test('el panel de administrador son los ocho grupos del hub, sin perder módulos', () => {
+  // Esta prueba viene de antes de los espacios y NO se relaja: garantiza que
+  // reagrupar no movió módulos fuera del menú. Lo que cambia es la agrupación
+  // —quince dominios pasan a los ocho grupos del diseño de Stitch—, no el
+  // inventario, y eso es exactamente lo que se sigue comprobando debajo.
   const grupos = navForRole('ADMINISTRADOR')
-  assert.equal(grupos.length, 15)
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Inicio', 'Gestión', 'Relación', 'Parques y Tours', 'Oferta comercial', 'Fidelización', 'Contenido', 'Comunicación automática', 'Atención diaria', 'Organización', 'Resultados', 'Conocimiento del cliente', 'Empresa', 'Conexiones', 'Soporte']
+    ['Principal', 'Experiencia cliente', 'Catálogo', 'Operaciones', 'Clientes', 'Marketing', 'Analítica', 'Ajustes']
   )
+  const enMenu = new Set(allLinks(grupos).map((l) => l.href))
+  const faltan = ENLACES_ADMIN.map((i) => i.href).filter((h) => !enMenu.has(h))
+  assert.deepEqual(faltan, [], 'Módulos que existen y el menú ya no ofrece:\n  ' + faltan.join('\n  '))
 })
 
 test('los espacios cubren toda la navegación de su rol', () => {
@@ -175,11 +178,11 @@ test('las migas nombran el espacio, no solo la página', () => {
   const m = breadcrumbs('/admin/ofertas', ctxDe('ADMINISTRADOR'))
   assert.deepEqual(
     m.map((x) => x.label),
-    ['Beneficios', 'Oferta comercial', 'Ofertas']
+    ['Empresa', 'Catálogo', 'Ofertas']
   )
-  // La primera miga es un enlace al aterrizaje del espacio: volver deja de
-  // exigir un viaje por el menú.
-  assert.equal(m[0].href, '/admin/planes')
+  // La primera miga es un enlace al aterrizaje del hub: volver deja de exigir
+  // un viaje por el menú.
+  assert.equal(m[0].href, '/admin/dashboard')
   // La última es la página actual: no se enlaza a sí misma.
   assert.equal(m[m.length - 1].href, undefined)
 })
@@ -198,7 +201,7 @@ test('una subvista fuera del menú hereda la miga de su sección', () => {
   const m = breadcrumbs('/admin/audiencia/campanas', ctxDe('ADMINISTRADOR'))
   const etiquetas = m.map((x) => x.label)
   assert.ok(etiquetas.includes('Audiencia'), `no menciona Audiencia: ${etiquetas.join(' / ')}`)
-  assert.equal(etiquetas[0], 'Analítica')
+  assert.equal(etiquetas[0], 'Empresa')
 })
 
 test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {
