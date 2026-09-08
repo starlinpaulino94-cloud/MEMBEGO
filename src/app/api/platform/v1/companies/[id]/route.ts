@@ -53,6 +53,8 @@ export async function GET(req: NextRequest, ctxRuta: { params: Promise<{ id: str
         facebook: true,
         horario: true,
         colorPrimario: true,
+        // La personalización del ticket, para imprimir igual en los dos lados.
+        receiptTemplate: { select: { config: true } },
       },
     })
   ).catch(() => null)

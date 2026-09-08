@@ -69,6 +69,10 @@ export const PROYECCIONES: readonly ContratoProyeccion[] = [
       'id', 'nombre', 'slug', 'logoUrl', 'moneda', 'zonaHoraria', 'idioma',
       'razonSocial', 'direccion', 'ciudad', 'telefono', 'website',
       'whatsapp', 'instagram', 'facebook', 'horario', 'colorPrimario',
+      // La plantilla del comprobante: para que un satélite imprima el MISMO
+      // ticket que MembeGo, con la personalización que la empresa ya configuró
+      // una sola vez. Sin esto cada vertical inventa su formato.
+      'receiptTemplate',
     ],
     eventos: ['company.updated'],
     usoPermitido: 'Cabeceras, comprobantes, formato de moneda y fecha.',
