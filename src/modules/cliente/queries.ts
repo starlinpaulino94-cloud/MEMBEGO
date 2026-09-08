@@ -48,7 +48,7 @@ export async function getClienteAllMemberships(
         include: {
           plan: true,
           company: {
-            select: { id: true, name: true, logoUrl: true, type: true, colorPrimario: true },
+            select: { id: true, name: true, slug: true, logoUrl: true, type: true, colorPrimario: true },
           },
         },
         orderBy: [{ estado: 'asc' }, { fechaVencimiento: 'desc' }],

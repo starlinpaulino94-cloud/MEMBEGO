@@ -53,7 +53,7 @@ export interface ResultadoBusqueda {
 async function empresasVisibles(): Promise<string[]> {
   const rows = await sinEmpresa('excursiones: vitrina pública (empresas visibles)', (tx) =>
     tx.company.findMany({
-      where: { isActive: true, esDemo: false },
+      where: { isActive: true, isPublished: true, esDemo: false },
       select: { id: true },
     })
   )
@@ -307,7 +307,7 @@ export async function sugerenciasExcursiones(texto: string, limite = 5): Promise
 /**
  * Excursiones destacadas para homepage / landing.
  */
-export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublica[]> {
+export async function excursionesDestacadas(limite = 6) {
   const visibles = await empresasVisibles()
   const rows = await sinEmpresa('excursiones: vitrina pública', (tx) =>
     tx.excursion.findMany({
@@ -394,11 +394,11 @@ export async function excursionesDestacadas(limite = 6): Promise<ExcursionPublic
         exc.comboItems as ChildActividadParaCombo[]
       )
       const company = companyMap.get(exc.companyId)
-      return mapRow({
+      return { ...mapRow({
         ...exc,
         ...disponibilidad,
         company: company ? { id: company.id, slug: company.slug, name: company.name, logoUrl: company.logoUrl } : null,
-      })
+      }), company: company ?? null }
     })
   )
 

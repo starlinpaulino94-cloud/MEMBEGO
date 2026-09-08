@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { primerPaso } from '../src/modules/cliente/primerPaso'
 
 /**
  * UN CLIENTE PUEDE EXISTIR SIN NINGUNA EMPRESA.
@@ -140,20 +141,46 @@ test('el estado vacío ofrece a dónde ir', () => {
  *
  * Las OFERTAS sí son globales, y reclamar una da de alta a la persona en esa
  * empresa. Ese es el único primer paso que de verdad avanza.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ YA NO SE BUSCA TEXTO EN LA PANTALLA
+ *
+ * Esta guardia miraba dentro de `cliente/inicio/page.tsx`. El rediseño retail
+ * (F2c) partió esa pantalla en dos y la regla se mudó de archivo: la prueba
+ * pasó a rojo sin que la CONDUCTA hubiera cambiado, que es exactamente lo que
+ * una prueba no debe hacer. Ahora se ejercita la decisión, no su ubicación.
  */
 test('el inicio no manda a un catálogo vacío a quien no tiene empresa', () => {
-  const src = leer('src/app/(cliente)/cliente/inicio/page.tsx')
-  assert.match(
-    src,
-    /const sinEmpresa = !companyId/,
-    'El inicio tiene que saber si la persona todavía no es cliente de nadie.'
-  )
-  assert.match(
-    src,
-    /sinEmpresa\s*\n?\s*\?\s*'\/cliente\/promociones'/,
+  assert.equal(
+    primerPaso({ companyId: null, marcaUnica: false }).href,
+    '/cliente/promociones',
     'Sin empresa, el primer paso son las OFERTAS: son globales y reclamar una ' +
       'crea su primera ficha. Mandarlo a `/cliente/planes` —el catálogo de la ' +
       'empresa activa— es un callejón sin salida de dos pantallas.'
+  )
+  assert.equal(primerPaso({ companyId: null, marcaUnica: true }).href, '/cliente/promociones')
+})
+
+test('con empresa, el primer paso depende de si hay marketplace que explorar', () => {
+  // Marca única: `/cliente/explorar` redirige a planes, así que no es destino.
+  assert.equal(primerPaso({ companyId: 'c1', marcaUnica: true }).href, '/cliente/planes')
+  assert.equal(primerPaso({ companyId: 'c1', marcaUnica: false }).href, '/cliente/explorar')
+})
+
+test('cada primer paso se anuncia con la etiqueta de lo que va a encontrar', () => {
+  assert.equal(primerPaso({ companyId: null, marcaUnica: false }).etiqueta, 'Ver ofertas')
+  assert.equal(primerPaso({ companyId: 'c1', marcaUnica: false }).etiqueta, 'Explorar empresas')
+  assert.equal(primerPaso({ companyId: 'c1', marcaUnica: true }).etiqueta, 'Ver planes')
+})
+
+test('la pantalla que pinta el estado vacío usa esa regla, no una copia suya', () => {
+  const src = leer('src/components/cliente/inicio/InicioPrevio.tsx')
+  assert.match(src, /primerPaso/, 'El estado vacío del Inicio consume `primerPaso`.')
+  assert.doesNotMatch(
+    src,
+    /'\/cliente\/planes'/,
+    'Si la pantalla vuelve a decidir el destino por su cuenta, la regla se ' +
+      'duplica y una de las dos copias se quedará atrás.'
   )
 })
 
