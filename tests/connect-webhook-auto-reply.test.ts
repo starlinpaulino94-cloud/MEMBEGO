@@ -145,6 +145,8 @@ mockModule('@/modules/mensajeria/autoReply', {
   responderAutoReply: mockResponderAutoReply,
 })
 
+mockModule('server-only', {})
+
 // Import DESPUÉS de registrar los mocks.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { registrarEntranteWhatsapp } = require('../src/modules/mensajeria/entrantes')

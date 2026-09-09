@@ -84,6 +84,8 @@ mockModule('@/lib/tenant', {
   conUsuario: async (_userId: string, fn: (tx: any) => Promise<any>) => fn({}),
 })
 
+mockModule('server-only', {})
+
 mockModule('@/modules/connect/whatsapp', {
   enviarWhatsapp: mockEnviarWhatsapp,
   enviarCuerpoWhatsapp: mockEnviarWhatsapp,
