@@ -72,6 +72,9 @@ export const FUNCIONES_EMPRESA = [
   // por decisión de producto (no es un satélite) y cualquier empresa puede
   // encenderlo desde el panel de capacidades, no solo las de su categoría.
   'EXCURSIONES',
+  // CRM (leads, seguimiento y pipeline comercial): misma razón que
+  // EXCURSIONES — vive en el Core, se enciende por empresa.
+  'CRM',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]

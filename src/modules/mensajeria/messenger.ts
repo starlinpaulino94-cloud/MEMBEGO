@@ -142,7 +142,7 @@ export async function enviarTextoMensajeria(input: {
   texto: string
   /** Quién lo envió desde la bandeja; null si fue una automatización. */
   enviadoPorId: string | null
-  origen?: 'bandeja' | 'automatizacion'
+  origen?: 'bandeja' | 'automatizacion' | 'auto-reply'
 }): Promise<ResultadoEnvioMensajeria> {
   const c = await conEmpresa(input.companyId, (tx) =>
     tx.conversacion.findFirst({

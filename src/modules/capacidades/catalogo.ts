@@ -152,6 +152,8 @@ export const CAPACIDADES = [
   // serie SOLO en la categoría EXCURSIONES; cualquier otra empresa la
   // enciende por override desde el panel de capacidades.
   'EXCURSIONES',
+  // CRM: gestión de leads, seguimiento y pipeline comercial.
+  'CRM',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -175,6 +177,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   ACTIVOS: 'Equipos y mantenimiento',
   TURNOS: 'Turnos y asistencia',
   EXCURSIONES: 'Excursiones: ventas, vendedores y comisiones',
+  CRM: 'CRM: leads, seguimiento y pipeline comercial',
 }
 
 /**
@@ -187,6 +190,10 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   SEGUIMIENTO: ['seguimiento'],
   RULETA: ['gamificacion'],
   EXCURSIONES: ['excursiones'],
+  // 'seguimiento' sigue siendo de SEGUIMIENTO (beneficios); las secciones del
+  // CRM son las que esta capacidad controla de verdad (todo /admin/crm cuelga
+  // de la sección 'leads').
+  CRM: ['leads', 'conversaciones', 'pipeline', 'configuracion'],
 }
 
 /** Índice inverso sección → capacidad que la controla (o undefined). */
@@ -208,6 +215,10 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   citas: 'Citas',
   seguimiento: 'Seguimiento de beneficios',
   gamificacion: 'Ruleta y gamificación',
+  leads: 'Leads',
+  conversaciones: 'Conversaciones',
+  pipeline: 'Pipeline comercial',
+  configuracion: 'Configuración CRM',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */
@@ -222,12 +233,12 @@ export function seccionesQueApaga(cap: Capacidad): string[] {
  * (NAVEGACION_V2, INVENTARIO, COLA, EVIDENCIA) nace apagado.
  */
 export const CAPACIDADES_BASE: Record<CategoriaNegocio, Capacidad[]> = {
-  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA'],
-  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
-  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
-  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA'],
+  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA', 'CRM'],
+  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'CRM'],
+  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'CRM'],
+  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'CRM'],
   // El módulo de Excursiones viene ENCENDIDO de serie en su categoría.
-  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES'],
+  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES', 'CRM'],
 }
 
 // ── Configuración guardada (companies.capacidades) ───────────────────────────

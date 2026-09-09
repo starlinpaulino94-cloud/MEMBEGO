@@ -122,12 +122,19 @@ export function clienteLocal(companyId: string, sistemaSlug = 'carwash'): Client
     },
 
     async company(id: string): Promise<CompanyDTO> {
+      // Los mismos campos que GET /companies/{id}: el DTO de Company incluye la
+      // cabecera de comprobante y el ticket, y el vertical debe devolver la
+      // misma proyección que la API (main gana el modelo).
       const empresa = await conEmpresa(mismaEmpresa(id), (tx) =>
         tx.company.findUnique({
           where: { id: companyId },
           select: {
             id: true, name: true, slug: true, logoUrl: true,
             moneda: true, zonaHoraria: true, idioma: true,
+            razonSocial: true, direccion: true, ciudad: true, telefono: true,
+            website: true, whatsapp: true, instagram: true, facebook: true,
+            horario: true, colorPrimario: true,
+            receiptTemplate: { select: { config: true } },
           },
         })
       ).catch(() => null)

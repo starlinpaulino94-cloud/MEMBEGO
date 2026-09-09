@@ -38,6 +38,7 @@ import { procesarVentaYComisionInterna } from '../ventas/actions'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { sendEmail } from '@/lib/email'
 import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaClienteState {
   error?: string
@@ -484,6 +485,25 @@ export async function reservarExcursion(
       }).then((html) =>
         sendEmail({ to: user.email!, subject: `Confirmación de reserva ${creada.numero} — ${excursion.nombre}`, html, companyId })
       ).catch((e) => console.error('[excursiones] Error enviando email confirmación en reservarExcursion:', e))
+    }
+
+    // Send WhatsApp confirmation to client (non-blocking)
+    if (clienteId) {
+      const cliente = await prisma.cliente.findUnique({ where: { id: clienteId }, select: { telefono: true } }).catch(() => null)
+      if (cliente?.telefono) {
+        enviarConfirmacionReservaWhatsApp({
+          companyId,
+          clienteId,
+          telefono: cliente.telefono,
+          numeroReserva: creada.numero,
+          nombreExcursion: excursion.nombre,
+          fecha: v.datos.fecha.toISOString().split('T')[0],
+          hora: v.datos.hora ?? '',
+          pasajeros: v.datos.adultos + v.datos.ninos,
+          total: Number(totales.total),
+          moneda: excursion.moneda,
+        }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en reservarExcursion:', e))
+      }
     }
 
     // Consumir cookie de atribución (un solo uso)
