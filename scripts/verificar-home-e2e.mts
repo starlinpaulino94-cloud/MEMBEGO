@@ -145,6 +145,8 @@ try {
     ['inicio', '/cliente/inicio'],
     ['cuenta', '/cliente/perfil'],
     ['mi-qr', '/cliente/qr'],
+    ['promociones', '/cliente/promociones'],
+    ['explorar', '/cliente/explorar'],
   ] as const) {
     if (ruta !== '/cliente/inicio') await clientPage.goto(`${baseURL}${ruta}`, { timeout: 180000 })
     for (const width of [390, 768, 1280]) {

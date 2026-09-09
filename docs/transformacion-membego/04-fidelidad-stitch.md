@@ -479,3 +479,40 @@ motivo de que existan. Aceptable SOLO porque la base es desechable.
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde
 sobre el marketplace sembrado.
+
+---
+
+## 14. F3 · Descubrimiento, primera mitad (2026-09-09)
+
+Sin pantalla de Stitch propia, estas se DERIVAN del lenguaje que el Inicio
+estableció (la misma regla que D04 en admin). Decisión de arquitectura: no se
+crearon tarjetas paralelas — se restilizaron las COMPARTIDAS conservando su
+API, y el retail se propagó a todas las pantallas que ya las usaban (catálogo,
+buscador, explorador y landing pública de una vez).
+
+- **`PromotionCard`**: era un anuncio estilo Temu (degradados de relleno, CTA
+  gigante «Aprovechar ahora» por tarjeta). Ahora: arte 1:1, tarjeta entera
+  enlace, sellos funcionales (descuento, Destacada, Por vencer, Agotada,
+  Expirada), contador en vivo <72 h, código y precio. Sin botón: el
+  compromiso se pide en el perfil, que ya tiene con qué.
+- **`BusinessCard`**: guiada por imagen como la tarjeta del Inicio — banner
+  16/10 con ciudad y Destacada, logo, valoración, stats y el chip del plan más
+  barato. «Ver membresías» se retira; el slot de seguir sigue clicable por
+  encima de la capa-enlace.
+- **Catálogo `/cliente/promociones`**: rejilla densa 2→4 columnas, chips con
+  activo en azul profundo (AA), carriles `relative`. Toda la lógica intacta:
+  feed curado, búsqueda con privadas de mis empresas, guardadas.
+- **Explorar `/cliente/explorar`**: mismos chips y tarjetas; seguir intacto.
+- **Corregido**: los enlaces «Ver todas / Explorar más» del Inicio apuntaban a
+  `/cliente/empresas` (MIS empresas) en vez de al directorio `/cliente/explorar`.
+- **`/cliente/cerca`**: sus márgenes negativos replicaban el AppShell del
+  personal (`px-8/py-8`); desde F1 el cliente vive en CustomerShell
+  (`px-4 py-4 lg:px-6`) y el mapa quedaba descuadrado. Sincronizados.
+- El E2E captura y vigila desbordamiento también en promociones y explorar.
+
+**Pendiente de F3**: `/cliente/buscar` (las tarjetas ya son retail vía los
+componentes compartidos; falta su carcasa/filtros), el perfil de empresa
+(`CompanyProfile`, 864 líneas — funcionalmente completo, lenguaje viejo) y la
+pantalla de sinónimos.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde.

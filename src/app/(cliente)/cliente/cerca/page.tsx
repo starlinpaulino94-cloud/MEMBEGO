@@ -16,17 +16,20 @@ export const metadata = {
  * lista, sin que ninguna de las dos sirviera bien. Ahora el mapa ocupa todo y
  * los resultados llegan en una hoja inferior.
  *
- * Los márgenes negativos cancelan el padding que pone `AppShell`. Es la ÚNICA
- * excepción a la regla de "una pantalla no declara su propio contenedor", y
- * está justificada: una experiencia a sangre necesita el ancho completo. Los
- * valores replican exactamente los del shell (`px-4 md:px-6 lg:px-8`, `py-8`),
- * así que si allí cambian, aquí también hay que cambiarlos.
+ * Los márgenes negativos cancelan el padding del shell. Es la ÚNICA excepción
+ * a la regla de "una pantalla no declara su propio contenedor", y está
+ * justificada: una experiencia a sangre necesita el ancho completo.
+ *
+ * OJO: los valores replican los de `CustomerShell` (`px-4 py-4 lg:px-6`) —
+ * los anteriores replicaban el AppShell del personal (`px-8`, `py-8`) y desde
+ * que el cliente vive en su propia carcasa el mapa quedaba descuadrado: se
+ * pasaba de ancho en escritorio y se comía la cabecera en móvil.
  */
 export default async function CercaPage() {
   const user = await requireRole('CLIENTE')
 
   return (
-    <div className="-mx-4 -mt-8 mb-[-6rem] md:-mx-6 lg:-mx-8 lg:mb-[-2rem]">
+    <div className="-mx-4 -my-4 lg:-mx-6">
       <h1 className="sr-only">Cerca de mí</h1>
       <MapaCercaDeMi userId={user.metadata.dbUserId} />
     </div>

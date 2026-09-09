@@ -43,7 +43,7 @@ export function RetailDestacadas({
           id="retail-destacadas"
           titulo="Empresas destacadas"
           bajada="Negocios verificados con membresía Membego"
-          enlace={{ href: '/cliente/empresas', texto: 'Ver todas' }}
+          enlace={{ href: '/cliente/explorar', texto: 'Ver todas' }}
         />
       </div>
 
@@ -96,7 +96,7 @@ export function RetailDestacadas({
 
       {restantes > 0 ? (
         <div className="mx-auto max-w-6xl px-4 md:px-6">
-          <RetailSeccionPie href="/cliente/empresas">
+          <RetailSeccionPie href="/cliente/explorar">
             Explorar más de {restantes} empresas asociadas
           </RetailSeccionPie>
         </div>

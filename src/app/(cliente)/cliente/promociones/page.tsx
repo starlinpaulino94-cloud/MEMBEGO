@@ -46,7 +46,7 @@ function PromoGridConGuardar({
   guardadasIds: Set<string>
 }) {
   return (
-    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {promociones.map((p) => (
         <div key={p.id} className="relative">
           <PromotionCard promotion={p} hrefBase="/cliente/promociones" />
@@ -239,7 +239,7 @@ export default async function PromocionesDisponiblesPage({
           Quien busca «barbería» busca ofertas de barberías. */}
       {categorias.length > 0 && (
         <nav aria-label="Categorías" className="mt-4">
-          <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <ul className="relative no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
               const activa = cat.slug === (categoria || null)
               return (
@@ -250,7 +250,7 @@ export default async function PromocionesDisponiblesPage({
                     className={cn(
                       'inline-flex min-h-11 items-center rounded-full px-4 text-small font-semibold transition-colors',
                       activa
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'bg-retail-deep text-white'
                         : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     )}
                   >
