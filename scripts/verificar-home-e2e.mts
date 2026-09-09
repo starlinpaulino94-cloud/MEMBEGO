@@ -118,6 +118,17 @@ try {
   }
   await adminPage.screenshot({ path: join(CAPTURAS, 'admin-hub-1280.png'), fullPage: false, animations: 'disabled' })
   console.log('E2E: el hub administrativo rotula sus grupos.')
+
+  // El Resumen Operativo tiene que reflejar la publicación que acaba de
+  // ocurrir: la tarjeta «Estado en App Móvil» dice «Público Ahora» y enseña el
+  // titular real del hero. Es el circuito completo editor → dashboard.
+  await adminPage.goto(`${baseURL}/admin/dashboard`, { timeout: 180000 })
+  await expect(adminPage.getByText('Resumen Operativo', { exact: true })).toBeVisible({ timeout: 120000 })
+  await expect(adminPage.getByText('Público Ahora', { exact: true })).toBeVisible({ timeout: 60000 })
+  await expect(adminPage.getByText(title).first()).toBeVisible({ timeout: 60000 })
+  await adminPage.screenshot({ path: join(CAPTURAS, 'admin-resumen-1280.png'), fullPage: true, animations: 'disabled' })
+  console.log('E2E: el resumen refleja la publicación (Público Ahora + titular del hero).')
+  await adminPage.goto(`${baseURL}/admin/personalizacion`, { timeout: 180000 })
   // Fidelidad por captura: las tres pantallas del cliente que ya existen, en
   // los tres anchos del criterio (§6 de 04-fidelidad-stitch.md). La aserción
   // de desbordamiento corre en cada combinación, no solo en el Inicio: una
