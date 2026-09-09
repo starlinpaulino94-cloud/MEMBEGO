@@ -2,7 +2,7 @@
 
 ## Estado y alcance
 
-Harness implementado y probado; **aceptacion de la aplicacion BLOQUEADA**. Ningun resultado de este documento aprueba fidelidad Stitch ni marca la tarea 2 del plan como terminada.
+Harness implementado y probado; **R0 acredita preparacion y baseline de discrepancias, no un rediseno R1 terminado**. La fidelidad de la aplicacion no se aprueba automaticamente. Un fallo honesto de dimensiones/pixeles no impide comenzar R1. Ver el contrato medido en [07-geometria-referencias.md](07-geometria-referencias.md).
 
 Se reutilizan Node y tsx del proyecto, sharp, Zod y Playwright ya instalados. No se requiere Bun. `.github/workflows/ci.yml` instala Node 22 y usa npm ci/npm test; los subprocesses usan `process.execPath` y `createRequire(import.meta.url).resolve('tsx/cli')`, nunca un runtime buscado en PATH. No se agregan dependencias ni se modifica `package.json`, `tsconfig.json`, el manifiesto o `src/`. Tampoco se modifica ni ejecuta `scripts/verificar-home-e2e.mts`: contiene trabajo dirty del usuario y su integracion queda pendiente de un entorno autorizado.
 
@@ -120,18 +120,18 @@ Resultados del navegador Chromium 151.0.7922.34, DPR 1, locale en-US, timezone U
 
 Tolerancia 0 en las seis comparaciones. **Estas son pruebas del tooling, no pantallas de MEMBEGO**. No hay una captura autenticada nueva ni una aprobacion visual independiente.
 
-## Integracion futura bloqueada
+## Integracion por etapas
 
-1. Disponer de entorno y fixtures locales de Auth aprobados conforme a los prerrequisitos de la tarea 3, sin reutilizar sesiones personales ni apuntar a datos reales.
+1. El usuario autorizo fixtures Supabase TEST y otro lane es propietario exclusivo de su provision y de las capturas autenticadas. Este lane solo mide referencias; no duplica servidor, login, API ni BD.
 2. Capturar las doce pantallas y sus estados/rutas contratados con revision de codigo, revision de datos, rol/ambito y metadatos medidos, en un directorio nuevo de evidencia. Revisar datos sensibles antes de conservar o compartir imagenes.
-3. Resolver viewport CSS, DPR y escala de las referencias con el propietario del diseno. **390 pixeles CSS no equivalen al PNG de Inicio de 269 x 1600**. Una imagen de distinto tamano debe seguir fallando, no estirarse ni recortarse.
+3. Aplicar las muestras y la separacion de evidencias de docs07: cliente 390 x 884 CSS, admin 1280 x 1024 CSS, tablet derivada 768 x 1024, DPR 1. **390 pixeles CSS no equivalen al PNG de Inicio de 269 x 1600**. Una imagen de distinto tamano debe seguir fallando; registrar ese resultado como baseline, sin esperar a terminar R1 ni deformar referencias.
 4. Integrar el comparador despues de la captura en `scripts/verificar-home-e2e.mts` solo cuando se autorice modificar ese archivo dirty. El subprocess debe propagar exit 1/2, nunca actualizar referencias ante fallos. El siguiente comando es el contrato exacto futuro, no una captura existente ni una ejecucion aprobada:
 
 ```powershell
 node node_modules/tsx/dist/cli.mjs scripts/visual/compare.ts --screen inicio_membego --actual .omo/start-work/r0-visual/app-inicio-390.png --metadata .omo/start-work/r0-visual/app-inicio-390.json --out .omo/start-work/r0-visual/app-inicio-comparison-01
 ```
 
-El comando requiere esos archivos autenticados reales y un destino nuevo. Con una captura 390 y la referencia 269, debe terminar en `DIMENSION_MISMATCH`; corregir el contrato de escala antes de pretender aceptacion. Ni un exit 0 posterior es aprobacion automatica.
+El comando requiere esos archivos autenticados reales y un destino nuevo. Con una captura 390 y la referencia 269, debe terminar en `DIMENSION_MISMATCH`; este resultado es evidencia valida de preparacion R0, no aprobacion ni defecto del comparador. La calibracion de presentacion y sus limites estan en docs07. Ni un exit 0 posterior es aprobacion automatica.
 
 Para revalidar tambien una exportacion externa, agregar `--source-root "C:\ruta\exportacion-stitch"` al comando anterior. Esa ruta debe contener los directorios de pantalla y `retail_commercial_mobile/DESIGN.md`; si falta, el comando falla. No es necesario ni apropiado provisionar la carpeta personal original en CI.
 

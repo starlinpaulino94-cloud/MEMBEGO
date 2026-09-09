@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { sinEmpresa } from '@/lib/tenant'
+import { formatMoney } from '@/lib/format'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 
 /**
@@ -104,3 +105,49 @@ export const totalesVitrina = unstable_cache(
   ['home-totales-vitrina'],
   { revalidate: 600, tags: [MARKETPLACE_TAG] }
 )
+
+/**
+ * Ciudad y «Planes desde …» para el hero POR DEFECTO.
+ *
+ * Cuando la empresa no ha compuesto su Inicio, el hero sale de las
+ * promociones destacadas del marketplace — y el diseño le pone a cada
+ * diapositiva la ciudad del negocio y el gancho de su plan más barato.
+ * `PromotionPublic` no trae ninguna de las dos, así que se piden aquí en un
+ * solo lote para las empresas que se van a pintar (tres como mucho).
+ */
+export async function contextoHeroPorDefecto(
+  ids: readonly string[]
+): Promise<Map<string, { ciudad: string | null; planDesde: string | null }>> {
+  const mapa = new Map<string, { ciudad: string | null; planDesde: string | null }>()
+  if (ids.length === 0) return mapa
+  const unicos = [...new Set(ids)]
+  const [empresas, baratos] = await sinEmpresa(
+    'inicio: ciudad y plan más barato para el hero por defecto',
+    (tx) =>
+      Promise.all([
+        tx.company.findMany({
+          where: { id: { in: unicos } },
+          select: { id: true, ciudad: true, moneda: true, idioma: true },
+        }),
+        // `distinct` tras ordenar por precio: la primera fila de cada empresa
+        // es su plan activo más barato.
+        tx.plan.findMany({
+          where: { companyId: { in: unicos }, activo: true },
+          orderBy: { precio: 'asc' },
+          distinct: ['companyId'],
+          select: { companyId: true, precio: true, vigenciaDias: true },
+        }),
+      ])
+  ).catch(() => [[], []] as const)
+
+  for (const e of empresas) {
+    const barato = baratos.find((b) => b.companyId === e.id)
+    mapa.set(e.id, {
+      ciudad: e.ciudad,
+      planDesde: barato
+        ? `Planes desde ${formatMoney(Number(barato.precio), e)} / ${barato.vigenciaDias} días`
+        : null,
+    })
+  }
+  return mapa
+}

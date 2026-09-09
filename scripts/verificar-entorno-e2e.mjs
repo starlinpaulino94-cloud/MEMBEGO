@@ -67,6 +67,11 @@ export function verificarEntornoE2E(input) {
     issues.push({ variable: 'E2E_BASE_URL', code: 'LOCAL_ORIGIN_REQUIRED' })
   }
   const direct = env.E2E_TEST_DIRECT_URL ?? env.E2E_TEST_DATABASE_URL
+  const localTargets = [env.E2E_TEST_DATABASE_URL, direct].map((value) =>
+    ['localhost', '127.0.0.1', '[::1]'].includes(URL.parse(value)?.hostname ?? ''))
+  if (localTargets.some(Boolean) && !localTargets.every(Boolean)) {
+    issues.push({ variable: 'E2E_TEST_DIRECT_URL', code: 'MIXED_DATABASE_TARGETS' })
+  }
   for (const variable of ['E2E_TEST_DATABASE_URL', 'E2E_TEST_DIRECT_URL']) {
     const value = variable === 'E2E_TEST_DATABASE_URL' ? env.E2E_TEST_DATABASE_URL : direct
     const url = URL.parse(value)

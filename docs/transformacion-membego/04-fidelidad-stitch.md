@@ -366,3 +366,31 @@ pagos y notificaciones, y los avisos que solo hablan cuando hay algo (>0).
 
 **Verificación:** `tsc` 0 · **suite 2028/2028** (incluye el arnés visual
 nuevo) · `build` compilado · E2E autenticado en verde con la aserción nueva.
+
+---
+
+## 11. El Inicio del diseño pasa a ser el estado por defecto (2026-09-09)
+
+**El usuario tenía razón otra vez, y era de arquitectura.** El Inicio de Stitch
+solo aparecía si la empresa activa tenía una composición PUBLICADA que además
+admitiera a la persona. En su base real —donde ninguna empresa ha publicado—
+el diseño no lo veía nadie: todo el mundo caía al respaldo de ofertas, que era
+la pantalla vieja con otro nombre. El rediseño quedaba condicionado a un acto
+administrativo que quizá nunca ocurre.
+
+**Corrección (segunda de D10):** `getInicioVista` SIEMPRE devuelve los siete
+bloques del contrato. Por defecto se arman con el marketplace —cada sección de
+su consulta real, y el hero desde las promociones destacadas, enriquecido con
+la ciudad y el plan más barato de su negocio—. La composición publicada no
+habilita el diseño: **lo cura** (qué bloques, en qué orden, con qué banners
+propios, para qué audiencia). Si la segmentación no admite a la persona, cae
+al defecto, no a la nada.
+
+**Retirados:** `RetailOfertas` y `OfertasParaTi` (el respaldo). El feed
+personalizado que servían sigue viviendo en `/cliente/promociones`, que es su
+pantalla. `PanelPersonal` deja de cargar `getPromoFeed` en cada visita.
+
+**Evidencia:** el E2E ahora pausa la composición y comprueba que el cliente
+siga viendo «Membresías recomendadas» y «Empresas destacadas» — el fallo
+exacto que el usuario vio no puede volver sin ponerse en rojo. Captura:
+`inicio-defecto-390.png`. Suite 2046/2046 · `tsc` 0 · build compilado.

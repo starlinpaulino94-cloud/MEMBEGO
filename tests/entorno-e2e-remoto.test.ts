@@ -37,6 +37,7 @@ const rejected = [
   { E2E_TEST_DATABASE_URL: database.replace('pooler.supabase.com', 'pooler.supabase.com.evil.invalid'), DATABASE_URL: database.replace('pooler.supabase.com', 'pooler.supabase.com.evil.invalid') },
   { E2E_TEST_DIRECT_URL: `${direct}?host=remote.invalid`, DIRECT_URL: `${direct}?host=remote.invalid` },
   { E2E_TEST_DIRECT_URL: `${direct}?sslmode=disable`, DIRECT_URL: `${direct}?sslmode=disable` },
+  { E2E_TEST_DIRECT_URL: 'postgresql://test:synthetic@localhost:5432/test', DIRECT_URL: 'postgresql://test:synthetic@localhost:5432/test' },
   { E2E_SUPABASE_SERVICE_ROLE_KEY: jwt('zyxwvutsrqponmlkjihgf'), SUPABASE_SERVICE_ROLE_KEY: jwt('zyxwvutsrqponmlkjihgf') },
   { E2E_SUPABASE_SERVICE_ROLE_KEY: jwt(project, 'anon'), SUPABASE_SERVICE_ROLE_KEY: jwt(project, 'anon') },
   { E2E_SUPABASE_SERVICE_ROLE_KEY: 'eyJ.invalid.invalid', SUPABASE_SERVICE_ROLE_KEY: 'eyJ.invalid.invalid' },

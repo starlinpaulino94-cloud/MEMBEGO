@@ -8,13 +8,38 @@ import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-que
 import { formatMoney } from '@/lib/format'
 import type { SessionUser } from '@/types'
 import { getHomePublicada } from './composicion'
-import { HeroSlide, Segmentacion, TIPOS_BLOQUE } from './esquema'
+import { HeroSlide, Segmentacion, TIPOS_BLOQUE, type TipoBloque } from './esquema'
 import { admiteAudienciaHome } from './audiencia'
 import { heroPublico } from './hero-publico'
-import { duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
-import type { EmpresaInicio, ExperienciaInicio, InicioVista, PlanInicio } from './vista'
+import { contextoHeroPorDefecto, duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
+import type { EmpresaInicio, ExperienciaInicio, HeroInicio, InicioVista, PlanInicio } from './vista'
 
-export async function getInicioPublicado(user: SessionUser): Promise<InicioVista | null> {
+/**
+ * EL INICIO DEL DISEÑO ES EL ESTADO POR DEFECTO, NO UN PREMIO POR PUBLICAR.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LO QUE PASABA
+ *
+ * Esta lectura devolvía `null` salvo que la empresa activa tuviera una
+ * composición PUBLICADA que además admitiera a la persona. Con una base real
+ * donde ninguna empresa ha publicado, eso significaba que el Inicio de Stitch
+ * no lo veía NADIE: todo el mundo caía al respaldo de ofertas, que era la
+ * pantalla vieja con otro nombre. El rediseño quedaba condicionado a un acto
+ * administrativo que quizá nunca ocurre.
+ *
+ * Ahora la vista SIEMPRE existe. Sin composición, los siete bloques del
+ * contrato se arman con los datos del marketplace que ya alimentan cada
+ * sección —empresas destacadas, planes, categorías, excursiones— y el hero
+ * sale de las promociones destacadas, que son contenido real publicado por
+ * los negocios. La composición publicada no habilita el diseño: LO CURA — qué
+ * bloques, en qué orden, con qué banners propios y para qué audiencia.
+ *
+ * Si la segmentación de la composición no admite a la persona, cae al defecto,
+ * no a la nada: excluir de una campaña no puede ser excluir de la app.
+ */
+
+/** La composición publicada, solo si existe Y admite a esta persona. */
+async function composicionAdmitida(user: SessionUser) {
   const companyId = user.metadata.companyId
   if (!companyId) return null
   const revision = await getHomePublicada(companyId)
@@ -42,22 +67,59 @@ export async function getInicioPublicado(user: SessionUser): Promise<InicioVista
   const tipos = z.enum(TIPOS_BLOQUE).array().parse(revision.bloques.filter((b) => b.activo).map((b) => b.tipo))
   const hero = revision.bloques.find((b) => b.tipo === 'HERO' && b.activo)
   const slides = hero ? z.object({ slides: HeroSlide.array().max(3) }).parse(hero.config).slides : []
-  const [heroes, categorias, empresas, planes, excursiones, promociones, totales] = await Promise.all([
-    Promise.all(slides.map((slide) => heroPublico(companyId, slide))),
+  return { revision, tipos, slides, companyId }
+}
+
+/** El hero por defecto: las promociones destacadas del marketplace, con la
+ *  ciudad y el plan más barato de su negocio. Contenido real, no maqueta. */
+async function heroesPorDefecto(
+  promociones: Awaited<ReturnType<typeof getFeaturedPromotions>>
+): Promise<HeroInicio[]> {
+  const primeras = promociones.filter((p) => p.imagenUrl).slice(0, 3)
+  const contexto = await contextoHeroPorDefecto(primeras.map((p) => p.company.id))
+  return primeras.map((p) => ({
+    titulo: p.titulo,
+    subtitulo: p.descripcion,
+    empresa: p.company.name,
+    ciudad: contexto.get(p.company.id)?.ciudad ?? null,
+    imagen: p.imagenUrl,
+    href: `/cliente/promociones/${p.id}`,
+    cta: 'Ver beneficios',
+    planDesde: contexto.get(p.company.id)?.planDesde ?? null,
+  }))
+}
+
+export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
+  const publicada = await composicionAdmitida(user).catch(() => null)
+  const tipos: readonly TipoBloque[] = publicada?.tipos ?? TIPOS_BLOQUE
+
+  const [categorias, empresas, planes, excursiones, promociones, totales] = await Promise.all([
     tipos.includes('CATEGORIAS') ? getCategoriesPublic() : Promise.resolve([]),
     tipos.includes('DESTACADAS') ? getFeaturedCompanies(6) : Promise.resolve([]),
     tipos.includes('MEMBRESIAS') ? getPlanesPublic({ limit: 6 }) : Promise.resolve([]),
     tipos.includes('EXPERIENCIAS') ? excursionesDestacadas(4) : Promise.resolve([]),
-    tipos.includes('DESTACADAS') ? getFeaturedPromotions(6) : Promise.resolve([]),
+    // Las promociones alimentan el relámpago siempre, y el hero cuando no hay
+    // composición: se piden una vez (van cacheadas 120 s).
+    getFeaturedPromotions(6),
     totalesVitrina(),
   ])
+
+  const heroes = publicada
+    ? (await Promise.all(publicada.slides.map((slide) => heroPublico(publicada.companyId, slide)))).filter(
+        (h): h is HeroInicio => h !== null
+      )
+    : await heroesPorDefecto(promociones)
+
   // Las reseñas y los planes de cada empresa se piden en un solo lote, y solo
   // para las que se van a pintar.
   const hechos = await hechosDeEmpresas(empresas.map((e) => e.id))
   const vigente = promociones.find((p) => p.venta && !p.venta.agotada && p.vigenciaHasta && p.vigenciaHasta > new Date())
   return {
-    revisionId: revision.id, territorio: revision.territorio, bloques: tipos,
-    heroes: heroes.filter((h) => h !== null), categorias,
+    revisionId: publicada?.revision.id ?? null,
+    territorio: publicada?.revision.territorio ?? null,
+    bloques: [...tipos],
+    heroes,
+    categorias,
     empresasTotal: totales.empresas,
     planesTotal: totales.planes,
     empresas: empresas.map((e): EmpresaInicio => ({

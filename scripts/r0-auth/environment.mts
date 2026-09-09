@@ -39,17 +39,17 @@ export function approvedEnvironment(root: string) {
     E2E_BASE_URL: 'http://127.0.0.1:3217', NEXT_PUBLIC_APP_URL: 'http://127.0.0.1:3217',
   }
   const result = verificarEntornoE2E(env)
-  console.log(JSON.stringify({ ...result, project: approval.project }))
+  process.stdout.write(`${JSON.stringify({ ...result, project: approval.project })}\n`)
   return result.status === 'PREREQUISITES_OK' ? env : null
 }
 
 if (process.argv.includes('--identify-only')) {
   const parsed = credentialsSchema.safeParse(configuredEnvironment(process.cwd()))
   if (!parsed.success) {
-    console.log(JSON.stringify({ status: 'BLOCKED', variables: parsed.error.issues.map((i) => i.path[0]) }))
+    process.stdout.write(`${JSON.stringify({ status: 'BLOCKED', variables: parsed.error.issues.map((i) => i.path[0]) })}\n`)
     process.exitCode = 1
   } else {
     const match = /^https:\/\/([a-z]{20})\.supabase\.co\/?$/.exec(parsed.data.NEXT_PUBLIC_SUPABASE_URL)
-    console.log(JSON.stringify({ status: match ? 'IDENTIFIED_NOT_APPROVED' : 'BLOCKED', project: match?.[1] ?? null }))
+    process.stdout.write(`${JSON.stringify({ status: match ? 'IDENTIFIED_NOT_APPROVED' : 'BLOCKED', project: match?.[1] ?? null })}\n`)
   }
 }

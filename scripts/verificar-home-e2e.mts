@@ -160,7 +160,18 @@ try {
   await expect(adminPage.getByText('Sin publicación', { exact: true })).toBeVisible({ timeout: 120000 })
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
   await expect(clientPage.getByRole('heading', { name: title })).toHaveCount(0)
-  console.log('E2E: pausa retira la composición; capturas 390/768/1280 guardadas sin overflow.')
+  // Sin composición, el cliente NO cae a un respaldo: ve el diseño por defecto
+  // con los bloques del marketplace. Este es exactamente el fallo que el
+  // usuario vio en su base real —donde nadie ha publicado— y no puede volver.
+  await expect(
+    clientPage.getByRole('heading', { name: 'Membresías recomendadas' })
+  ).toBeVisible({ timeout: 60000 })
+  await expect(
+    clientPage.getByRole('heading', { name: 'Empresas destacadas' })
+  ).toBeVisible({ timeout: 60000 })
+  await clientPage.setViewportSize({ width: 390, height: 900 })
+  await clientPage.screenshot({ path: join(CAPTURAS, 'inicio-defecto-390.png'), fullPage: true, animations: 'disabled' })
+  console.log('E2E: pausada la composición, el Inicio sigue siendo el del diseño (por defecto).')
 } catch (error) {
   if (paginaDiagnostico) {
     console.error('URL observada:', paginaDiagnostico.url())

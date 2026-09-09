@@ -7,29 +7,26 @@ import type { InicioVista } from '@/modules/home/vista'
 import { InicioComercial } from './InicioComercial'
 import { RetailDescubreMas } from './RetailDescubreMas'
 import { RetailExperiencia } from './RetailExperiencia'
-import { RetailOfertas } from './RetailOfertas'
 import { RetailWallet } from './RetailWallet'
 
 /**
  * EL INICIO DEL CLIENTE — una sola pantalla, dos mitades con dueños distintos.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * LO QUE HABÍA ANTES (D10)
+ * LA MITAD COMERCIAL SIEMPRE ESTÁ (segunda corrección de D10)
  *
- * Existían DOS inicios. El retail solo aparecía si la empresa había publicado
- * composición; el resto del tiempo se veía la pantalla anterior íntegra, con
- * su cabecera saturada, su buscador duplicado y sus degradados. Es decir: el
- * rediseño casi nunca se veía, y las seis capacidades que solo vivían allí
- * —wallet, motor de experiencias, prueba social, gamificación, onboarding y
- * novedades— eran la razón de no poder borrarla.
+ * La primera versión de D10 dejó UN solo Inicio, pero la mitad comercial —los
+ * siete bloques del diseño— solo aparecía si la empresa había publicado
+ * composición; sin ella, su sitio lo ocupaba un carril de ofertas que era la
+ * pantalla vieja con otro nombre. En una base real donde nadie ha publicado,
+ * el diseño no lo veía nadie. El usuario lo vio de inmediato.
  *
- * Ahora hay un solo Inicio, siempre retail, con dos mitades:
+ * Ahora `getInicioVista` SIEMPRE devuelve los bloques: por defecto salen del
+ * marketplace (hero desde las promociones destacadas, y cada sección de su
+ * consulta real), y la composición publicada los CURA en vez de habilitarlos.
+ * Aquí ya no hay respaldo que elegir.
  *
- *   COMERCIAL — la compone y publica la empresa (los 7 bloques de F2a/F2b).
- *               Si no hay composición publicada, su sitio lo ocupan las
- *               ofertas personalizadas: nadie se queda sin nada que descubrir,
- *               y cuando sí la hay no se repite el mismo contenido dos veces.
- *
+ *   COMERCIAL — los 7 bloques del contrato, curados por la empresa si publicó.
  *   PERSONAL  — sale del estado de esa persona y no es configurable. Ningún
  *               panel puede apagarle la wallet a nadie.
  *
@@ -48,16 +45,12 @@ export function InicioRetail({
   comercial,
   personal,
 }: {
-  comercial: InicioVista | null
+  comercial: InicioVista
   personal: PanelPersonal
 }) {
   const tieneMembresias = !personal.walletError && personal.wallet.length > 0
 
-  const mitadComercial = comercial ? (
-    <InicioComercial data={comercial} />
-  ) : personal.hayOfertas ? (
-    <RetailOfertas feed={personal.ofertas} />
-  ) : null
+  const mitadComercial = <InicioComercial data={comercial} />
 
   const mitadPersonal = (
     <RetailWallet

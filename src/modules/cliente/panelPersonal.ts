@@ -5,9 +5,7 @@ import { primerPaso, type PrimerPaso } from '@/modules/cliente/primerPaso'
 import {
   getNovedadesInicio,
   getOnboardingCliente,
-  getPromoFeed,
   type NovedadInicio,
-  type PromoFeed,
 } from '@/modules/social/queries'
 import { getMomentosVivos, type MomentosVivos } from '@/modules/engagement/momentos'
 import { getCampanasVivas, type CampanaViva } from '@/modules/engagement/campanas'
@@ -45,15 +43,6 @@ import type { SessionUser } from '@/types'
  * propio valor vacío: una novedad que no carga no puede tumbar la wallet.
  */
 
-const FEED_VACIO: PromoFeed = {
-  misEmpresas: [],
-  destacadas: [],
-  nuevas: [],
-  expiranPronto: [],
-  recomendadas: [],
-  empresasRecomendadas: [],
-}
-
 export interface PanelPersonal {
   /** La acción protagonista que eligió el motor de experiencias, si hay. */
   readonly experiencia: ExperienciaHero | null
@@ -62,8 +51,6 @@ export interface PanelPersonal {
   readonly wallet: readonly WalletStackItem[]
   /** La lectura de membresías falló: se dice, no se finge una wallet vacía. */
   readonly walletError: boolean
-  readonly ofertas: PromoFeed
-  readonly hayOfertas: boolean
   readonly novedades: readonly NovedadInicio[]
   readonly onboarding: Awaited<ReturnType<typeof getOnboardingCliente>> | null
   readonly pruebaSocial: PruebaSocial | null
@@ -88,7 +75,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
     engagement,
     novedades,
     onboarding,
-    ofertas,
     marcaUnica,
   ] = await Promise.all([
     // La PERSONA, no la ficha activa: un beneficio reclamado en otro negocio
@@ -115,7 +101,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
     dbUserId && !onboardingVisto
       ? getOnboardingCliente(dbUserId, user.supabaseId).catch(() => null)
       : Promise.resolve(null),
-    dbUserId ? getPromoFeed(dbUserId).catch(() => FEED_VACIO) : Promise.resolve(FEED_VACIO),
     esMarcaUnica().catch(() => true),
   ])
 
@@ -171,13 +156,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
     }
   })
 
-  const hayOfertas =
-    ofertas.misEmpresas.length +
-      ofertas.destacadas.length +
-      ofertas.nuevas.length +
-      ofertas.expiranPronto.length +
-      ofertas.recomendadas.length >
-    0
 
   // Prueba social solo con masa suficiente: «1 miembro» resta credibilidad en
   // vez de darla.
@@ -191,8 +169,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
     popup: experiencias[1] ?? null,
     wallet,
     walletError,
-    ofertas,
-    hayOfertas,
     novedades,
     onboarding,
     pruebaSocial: walletError ? null : social,

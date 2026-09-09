@@ -127,13 +127,38 @@ test('la pantalla anterior del Inicio ya no existe, ni nadie la nombra', () => {
   )
 })
 
-test('sin composición publicada, el Inicio sigue siendo retail', () => {
-  const src = leer('src/components/cliente/inicio/InicioRetail.tsx')
-  // `comercial` puede ser null y aun así se pinta la franja personal y, en su
-  // sitio, las ofertas personalizadas. Nada cae a otra pantalla.
-  assert.match(src, /comercial: InicioVista \| null/)
-  assert.match(src, /RetailOfertas/, 'Sin composición, su sitio lo ocupan las ofertas.')
-  assert.match(src, /RetailWallet/, 'La wallet no depende de que la empresa publique.')
+test('el diseño del Inicio es el estado por defecto, no un premio por publicar', () => {
+  // Segunda corrección de D10. La primera dejó un solo Inicio, pero los siete
+  // bloques solo se veían con composición publicada; sin ella caía a un carril
+  // de ofertas que era la pantalla vieja con otro nombre — y en una base donde
+  // nadie ha publicado, el diseño no lo veía NADIE.
+  const pantalla = leer('src/components/cliente/inicio/InicioRetail.tsx')
+  assert.match(
+    pantalla,
+    /comercial: InicioVista\n/,
+    'La mitad comercial ya no es opcional: la vista siempre existe.'
+  )
+  assert.doesNotMatch(
+    pantalla,
+    /RetailOfertas/,
+    'El respaldo de ofertas era la pantalla vieja con otro nombre.'
+  )
+  assert.equal(
+    existsSync(join(RAIZ, 'src/components/cliente/inicio/RetailOfertas.tsx')),
+    false
+  )
+  const lectura = leer('src/modules/home/lectura.ts')
+  assert.match(
+    lectura,
+    /publicada\?\.tipos \?\? TIPOS_BLOQUE/,
+    'Sin composición, los bloques son los siete del contrato con datos del marketplace.'
+  )
+  assert.match(
+    lectura,
+    /heroesPorDefecto/,
+    'El hero por defecto sale de las promociones destacadas: contenido real.'
+  )
+  assert.match(pantalla, /RetailWallet/, 'La wallet no depende de que la empresa publique.')
 })
 
 test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', () => {
