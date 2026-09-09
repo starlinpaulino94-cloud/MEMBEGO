@@ -47,7 +47,7 @@ export function RetailDestacadas({
         />
       </div>
 
-      <ul className="no-scrollbar mx-auto mt-3 flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:px-6">
+      <ul className="relative no-scrollbar mx-auto mt-3 flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:px-6">
         {empresas.map((empresa) => (
           <li key={empresa.id} className="w-64 shrink-0 snap-start md:w-72">
             <Link

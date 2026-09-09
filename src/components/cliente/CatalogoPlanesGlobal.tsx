@@ -113,7 +113,7 @@ export function CatalogoPlanesGlobal({
 
       {categorias.length > 0 && (
         <nav aria-label="Categorías" className="mt-4">
-          <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <ul className="relative no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
               const activa = cat.slug === (categoria || null)
               return (

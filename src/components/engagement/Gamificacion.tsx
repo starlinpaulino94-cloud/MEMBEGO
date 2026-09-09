@@ -118,7 +118,7 @@ export function Gamificacion({ data, color }: { data: GamificacionData; color?: 
             {logros.filter((l) => l.desbloqueado).length}/{logros.length}
           </span>
         </div>
-        <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
+        <div className="relative flex gap-3 overflow-x-auto pb-1 no-scrollbar">
           {logros.map((l) => (
             <LogroBadge key={l.id} logro={l} />
           ))}

@@ -438,3 +438,44 @@ propio perfil (galería, descripción, reseñas).
 **Evidencia**: el E2E entra al perfil desde el hero y comprueba galería
 (3 miniaturas), estrellas y el comentario real del cliente QA. Captura
 `promo-perfil-390.png`. Suite 2048/2048 · `tsc` 0 · build compilado.
+
+---
+
+## 13. Cinco empresas demo con todo lleno (2026-09-09)
+
+`scripts/sembrar-demo.mts` siembra el marketplace de presentación que el
+usuario pidió: AquaShine Car Spa, La Braza Grill House, Caribe Aventura Tours,
+Bella Vita Spa y Fade Masters Barbershop. Cada una con perfil público completo
+(ningún campo visible vacío), 3 membresías, 5 promociones con galería, 1
+relámpago con vigencia corta, 5 reseñas con comentario, y 108 imágenes PNG
+generadas con `sharp` desde SVG con la paleta de cada negocio (en
+`public/demo/`). El de tours trae 3 excursiones con variantes. Idempotente;
+`--limpiar` lo retira todo por el prefijo `demo-`.
+
+`esDemo: false` a propósito: la vitrina excluye las demo y verlas es el único
+motivo de que existan. Aceptable SOLO porque la base es desechable.
+
+### Lo que la siembra destapó (tres fallos reales)
+
+1. **Decimal fuera del borde.** `getCompaniesPublic` devolvía `averageRating`
+   como Decimal de Prisma bajo un cast que juraba `number`. Crudo tiene
+   `.toFixed`; tras `unstable_cache` se vuelve string y **el Inicio entero
+   caía al límite de error** — solo con empresas valoradas (desde la siembra) y
+   solo en cargas cacheadas: intermitente puro. Normalizado en la fuente
+   (lista y detalle) y `RetailValoracion` endurecido: formatear jamás tumba la
+   pantalla que enseña la cifra.
+
+2. **Los `sr-only` escapaban del recorte.** `position:absolute` no lo recorta
+   un ancestro `overflow-hidden` sin posicionar, y el `template` del cliente
+   (animado, con transform) era su contenedor: los sr-only de las tarjetas
+   desplazadas del carrusel anclaban a x≈1400 y **ensanchaban la página** — a
+   partir de 6 tarjetas, o sea, desde la siembra. Todos los carriles con
+   scroll horizontal son ahora `relative`: cualquier absoluto ancla dentro de
+   su recorte. La sonda del E2E aprendió a nombrar culpables (rects, cadena de
+   propagación y flotantes que escapan).
+
+3. El paso del perfil en el E2E asumía que la promo QA encabezaba el hero; con
+   un marketplace lleno el orden es del marketplace. Ahora va directo por id.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde
+sobre el marketplace sembrado.

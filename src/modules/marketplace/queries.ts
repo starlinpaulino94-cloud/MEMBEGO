@@ -107,6 +107,11 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
 
     return companies.map((c) => ({
       ...c,
+      // Decimal fuera del borde: crudo tiene .toFixed, pero tras el viaje por
+      // unstable_cache se vuelve string y revienta en la primera pantalla que
+      // formatee. Por eso el fallo era intermitente: la carga sin caché
+      // pasaba y la cacheada no.
+      averageRating: c.averageRating != null ? Number(c.averageRating) : null,
       categories: c.categories.map((cc) => cc.category.slug),
       desdePlan: c.plans[0]
         ? { nombre: c.plans[0].nombre, precio: Number(c.plans[0].precio) }
@@ -170,6 +175,8 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
 
     return {
       ...company,
+      // Mismo borde que en la lista: nunca un Decimal hacia la caché.
+      averageRating: company.averageRating != null ? Number(company.averageRating) : null,
       categories: company.categories.map((c) => c.category.slug),
     } as CompanyPublic
   } catch (error) {

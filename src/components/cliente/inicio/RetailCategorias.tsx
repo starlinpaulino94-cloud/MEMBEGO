@@ -106,7 +106,7 @@ export function RetailCategorias({ categorias }: { categorias: InicioVista['cate
 
   return (
     <section className="border-b border-border bg-card py-3" aria-label="Categorías">
-      <ul className="no-scrollbar mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 md:px-6">
+      <ul className="relative no-scrollbar mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 md:px-6">
         {categorias.map((categoria) => (
           <li key={categoria.id} className="shrink-0">
             <Pildora

@@ -95,7 +95,7 @@ export function RetailHero({ heroes }: { heroes: InicioVista['heroes'] }) {
 
   return (
     <section className="bg-retail-mist py-4 md:py-5" aria-label="Beneficios destacados">
-      <div className="no-scrollbar mx-auto flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:px-6">
+      <div className="relative no-scrollbar mx-auto flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:px-6">
         {heroes.map((hero, index) => (
           <HeroCard key={`${hero.href}-${hero.titulo}`} hero={hero} priority={index === 0} />
         ))}

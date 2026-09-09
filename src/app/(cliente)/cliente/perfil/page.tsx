@@ -195,7 +195,7 @@ export default async function PerfilPage({
       </section>
 
       {/* ── Pestañas con conteos reales ────────────────────────────────── */}
-      <nav aria-label="Filtrar membresías" className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      <nav aria-label="Filtrar membresías" className="relative no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {TABS.map((t) => {
           const activo = t.id === 'todas' ? tab === 'todas' : tab === t.id
           const n = t.id === 'todas' ? null : conteos[t.id]

@@ -27,7 +27,7 @@ export function MobilePlanTabs({
     <div
       role="tablist"
       aria-label="Planes disponibles"
-      className="no-scrollbar mb-5 flex gap-1.5 overflow-x-auto rounded-2xl bg-muted/60 p-1.5 md:hidden"
+      className="relative no-scrollbar mb-5 flex gap-1.5 overflow-x-auto rounded-2xl bg-muted/60 p-1.5 md:hidden"
     >
       {tabs.map((tab) => {
         const active = tab.id === activeId

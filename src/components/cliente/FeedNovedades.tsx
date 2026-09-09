@@ -85,7 +85,7 @@ export function FeedNovedades({ novedades }: { novedades: NovedadInicio[] }) {
         </Link>
       </div>
 
-      <div className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-2">
+      <div className="relative no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-2">
         {novedades.map((n) => {
           const meta = TIPO_META[n.tipo] ?? TIPO_META.NOTICIA
           const Icon = meta.icon

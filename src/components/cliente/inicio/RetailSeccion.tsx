@@ -75,12 +75,16 @@ export function RetailValoracion({
   resenas: number
 }) {
   if (valoracion === null) return null
+  // Number() por si la cifra llega serializada (Decimal → string tras una
+  // caché): formatear jamás puede tumbar la pantalla que la enseña.
+  const media = Number(valoracion)
+  if (!Number.isFinite(media)) return null
   return (
     <span className="inline-flex items-center gap-1 text-caption text-muted-foreground">
       <span aria-hidden className="text-retail-star">
         ★
       </span>
-      <span className="font-semibold text-foreground">{valoracion.toFixed(1)}</span>
+      <span className="font-semibold text-foreground">{media.toFixed(1)}</span>
       <span className="sr-only">de 5</span>
       {resenas > 0 ? (
         <span>

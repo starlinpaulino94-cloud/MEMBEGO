@@ -59,14 +59,16 @@ try {
   const query = `alias${suffix}`
   const equivalent = `catalogo${suffix}`
   await db.busquedaSinonimo.create({ data: { companyId, termino: query, equivalencia: equivalent } })
+  let promoVisibleId = ''
   for (const id of companies) {
-    await db.promocion.create({ data: {
+    const promoCreada = await db.promocion.create({ data: {
       companyId: id, titulo: `${equivalent} ${id === companyId ? 'visible' : 'privada'}`, descripcion: 'QA de publicación',
       activo: true, isFeatured: true, visibilidad: 'publica', publicadaEn: new Date('2020-01-01'),
       vigenciaDesde: new Date('2020-01-01'), vigenciaHasta: new Date('2099-01-01'),
       esComprable: true, precio: 0, imagenUrl: '/icon-512.png',
       imagenes: ['/og-image.png', '/icon-192.png'],
     } })
+    if (id === companyId) promoVisibleId = promoCreada.id
   }
   for (const role of ['ADMIN_EMPRESA', 'CLIENTE'] as const) {
     const email = `qa-home-${role.toLowerCase()}-${suffix}@example.com`
@@ -148,10 +150,77 @@ try {
     for (const width of [390, 768, 1280]) {
       await clientPage.setViewportSize({ width, height: 900 })
       await clientPage.screenshot({ path: join(CAPTURAS, `${pantalla}-${width}.png`), fullPage: true, animations: 'disabled' })
+      const desborde = await clientPage.evaluate(() => {
+        if (document.documentElement.scrollWidth <= window.innerWidth) return null
+        // Nombrar al culpable DE VERDAD: un hijo de carrusel también tiene un
+        // rect fuera del viewport, pero su contenedor lo recorta y no ensancha
+        // el documento. Solo cuenta quien no tiene ningún ancestro que recorte
+        // en X entre él y el body.
+        // Sin funciones internas: tsx las decora con un helper (`__name`) que
+        // no existe dentro de la página y `evaluate` revienta al serializar.
+        const anchos: string[] = []
+        for (const el of Array.from(document.querySelectorAll('body *'))) {
+          const r = el.getBoundingClientRect()
+          if (r.right <= window.innerWidth + 1 && r.left >= -1) continue
+          let p = el.parentElement
+          let recortado = false
+          while (p && p !== document.body) {
+            const o = getComputedStyle(p).overflowX
+            if (o === 'hidden' || o === 'auto' || o === 'scroll' || o === 'clip') {
+              recortado = true
+              break
+            }
+            p = p.parentElement
+          }
+          if (recortado) continue
+          const clases = (el.className && typeof el.className === 'string')
+            ? '.' + el.className.split(/\s+/).slice(0, 4).join('.')
+            : ''
+          anchos.push(`${el.tagName.toLowerCase()}${clases} [${Math.round(r.left)}..${Math.round(r.right)}]`)
+          if (anchos.length >= 10) break
+        }
+        // Segunda pasada: si ningún rect sobresale, el ancho se propaga por
+        // una cadena de contenedores SIN recorte cuyo contenido desborda.
+        // Se listan esos eslabones (scrollWidth > clientWidth y overflow
+        // visible): el más profundo es el origen.
+        const cadena: string[] = []
+        for (const el of Array.from(document.querySelectorAll('html, body, body *'))) {
+          const o = getComputedStyle(el).overflowX
+          const clip = o === 'hidden' || o === 'auto' || o === 'scroll' || o === 'clip'
+          if (!clip && el.scrollWidth > el.clientWidth + 1) {
+            const clases = (el.className && typeof el.className === 'string')
+              ? '.' + el.className.split(/\s+/).slice(0, 4).join('.')
+              : ''
+            cadena.push(`${el.tagName.toLowerCase()}${clases} {client:${el.clientWidth} scroll:${el.scrollWidth}}`)
+          }
+          if (cadena.length >= 14) break
+        }
+        // Tercera pasada: los `position:absolute/fixed` ESCAPAN del recorte de
+        // un ancestro overflow-hidden no posicionado — el clásico que las dos
+        // pasadas anteriores no ven. Se listan los que sobresalen, con su
+        // offsetParent para saber contra qué se están posicionando.
+        const flotantes: string[] = []
+        for (const el of Array.from(document.querySelectorAll('body *'))) {
+          const pos = getComputedStyle(el).position
+          if (pos !== 'absolute' && pos !== 'fixed') continue
+          const r = el.getBoundingClientRect()
+          if (r.right <= window.innerWidth + 1 && r.left >= -1) continue
+          const clases = (el.className && typeof el.className === 'string')
+            ? '.' + el.className.split(/\s+/).slice(0, 4).join('.')
+            : ''
+          const padre = (el as HTMLElement).offsetParent
+          const clasesPadre = padre && typeof (padre as HTMLElement).className === 'string'
+            ? '.' + (padre as HTMLElement).className.split(/\s+/).slice(0, 3).join('.')
+            : String(padre?.tagName ?? 'null')
+          flotantes.push(`${el.tagName.toLowerCase()}${clases} [${Math.round(r.left)}..${Math.round(r.right)}] sobre ${clasesPadre}`)
+          if (flotantes.length >= 8) break
+        }
+        return { scrollWidth: document.documentElement.scrollWidth, culpables: anchos, cadena, flotantes }
+      })
       assert.equal(
-        await clientPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-        true,
-        `${pantalla} desborda horizontalmente a ${width}px`
+        desborde,
+        null,
+        `${pantalla} desborda horizontalmente a ${width}px:\n${JSON.stringify(desborde, null, 2)}`
       )
     }
   }
@@ -181,9 +250,15 @@ try {
   // El perfil de la promoción: galería con miniaturas, estrellas junto a la
   // empresa y la sección de reseñas con el comentario real del cliente.
   await clientPage.getByRole('heading', { name: 'Beneficios y membresías' }).waitFor({ timeout: 60000 }).catch(() => null)
+  await clientPage.setViewportSize({ width: 390, height: 900 })
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
-  const heroLink = clientPage.locator(`a[href*="/cliente/promociones/"]`).first()
-  await heroLink.click()
+  // :visible — el popup del motor renderiza un enlace a promoción que vive
+  // oculto en el DOM; sin el filtro, .first() lo elige y espera para siempre.
+  paginaDiagnostico = clientPage
+  // Directo al perfil de la promo QA por su id: el hero por defecto ordena por
+  // destacadas de TODO el marketplace, así que con datos demo sembrados la
+  // primera tarjeta puede ser de otra empresa — y eso está bien.
+  await clientPage.goto(`${baseURL}/cliente/promociones/${promoVisibleId}`, { timeout: 180000 })
   await expect(clientPage.getByText(`Reseñas de clientes de QA Home a ${suffix}`)).toBeVisible({ timeout: 120000 })
   await expect(clientPage.getByText('Excelente servicio, el equipo es muy profesional.')).toBeVisible({ timeout: 60000 })
   await expect(clientPage.getByRole('tab', { name: 'Imagen 2 de 3' })).toBeVisible({ timeout: 60000 })
