@@ -25,7 +25,6 @@ export async function guardarPersonalizacion(
     {
       color: String(fd.get('color') ?? '').trim(),
       gamificacion: fd.get('gamificacion') === 'on',
-      pruebaSocial: fd.get('pruebaSocial') === 'on',
       campanas: fd.get('campanas') === 'on',
       carruseles: fd.get('carruseles') === 'on',
       popups: fd.get('popups') === 'on',

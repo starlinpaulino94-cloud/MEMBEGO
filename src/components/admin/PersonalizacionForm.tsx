@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Trophy, Users, Megaphone, LayoutGrid, Bell } from 'lucide-react'
+import { Loader2, Trophy, Megaphone, LayoutGrid, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   guardarPersonalizacion,
@@ -22,12 +22,8 @@ const MODULOS = [
     titulo: 'Gamificación y ruleta',
     desc: 'Nivel, puntos, logros y ruleta de premios en el inicio del cliente.',
   },
-  {
-    key: 'pruebaSocial' as const,
-    icon: Users,
-    titulo: 'Prueba social',
-    desc: 'Miembros, registros de la semana y actividad reciente “en vivo”.',
-  },
+  // «Prueba social» se retiró del Inicio del cliente (2026-09-09): un
+  // interruptor sin sección detrás es un mando muerto, así que también se va.
   {
     key: 'campanas' as const,
     icon: Megaphone,

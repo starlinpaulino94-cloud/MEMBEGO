@@ -9,7 +9,6 @@ import {
 } from '@/modules/social/queries'
 import { getMomentosVivos, type MomentosVivos } from '@/modules/engagement/momentos'
 import { getCampanasVivas, type CampanaViva } from '@/modules/engagement/campanas'
-import { getPruebaSocial, type PruebaSocial } from '@/modules/engagement/pruebaSocial'
 import { getGamificacion, type GamificacionData } from '@/modules/engagement/gamificacion'
 import { getEngagementConfig } from '@/modules/engagement/config'
 import { normalizeEngagementConfig, type EngagementConfig } from '@/lib/engagementConfig'
@@ -53,7 +52,6 @@ export interface PanelPersonal {
   readonly walletError: boolean
   readonly novedades: readonly NovedadInicio[]
   readonly onboarding: Awaited<ReturnType<typeof getOnboardingCliente>> | null
-  readonly pruebaSocial: PruebaSocial | null
   readonly gamificacion: GamificacionData | null
   readonly engagement: EngagementConfig
   readonly primerPaso: PrimerPaso
@@ -70,7 +68,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
     membresias,
     momentos,
     campanas,
-    pruebaSocial,
     gamificacion,
     engagement,
     novedades,
@@ -90,7 +87,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
         )
       : Promise.resolve({ nombre: null, momentos: [] } as MomentosVivos),
     companyId ? getCampanasVivas(companyId).catch(() => []) : Promise.resolve([] as CampanaViva[]),
-    companyId ? getPruebaSocial(companyId).catch(() => null) : Promise.resolve(null),
     clienteId && companyId
       ? getGamificacion(clienteId, companyId).catch(() => null)
       : Promise.resolve(null),
@@ -157,13 +153,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
   })
 
 
-  // Prueba social solo con masa suficiente: «1 miembro» resta credibilidad en
-  // vez de darla.
-  const social =
-    pruebaSocial && (pruebaSocial.totalMiembros >= 3 || pruebaSocial.recientes.length >= 2)
-      ? pruebaSocial
-      : null
-
   return {
     experiencia: experiencias[0] ?? null,
     popup: experiencias[1] ?? null,
@@ -171,7 +160,6 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
     walletError,
     novedades,
     onboarding,
-    pruebaSocial: walletError ? null : social,
     gamificacion,
     engagement,
     primerPaso: primerPaso({ companyId, marcaUnica }),

@@ -1,7 +1,6 @@
 import { CelebracionBienvenida } from '@/components/cliente/CelebracionBienvenida'
 import { OnboardingClienteFirstVisit } from '@/components/cliente/OnboardingClienteFirstVisit'
 import { PopupInteligente } from '@/components/engagement/PopupInteligente'
-import { PruebaSocial } from '@/components/engagement/PruebaSocial'
 import type { PanelPersonal } from '@/modules/cliente/panelPersonal'
 import type { InicioVista } from '@/modules/home/vista'
 import { InicioComercial } from './InicioComercial'
@@ -85,13 +84,10 @@ export function InicioRetail({
         </>
       )}
 
-      {personal.pruebaSocial && personal.engagement.pruebaSocial ? (
-        <section className="bg-background px-4 py-5 md:px-6 md:py-6" aria-label="Actividad de la comunidad">
-          <div className="mx-auto max-w-6xl">
-            <PruebaSocial data={personal.pruebaSocial} color={personal.engagement.color} />
-          </div>
-        </section>
-      ) : null}
+      {/* La «prueba social» (EN VIVO) se retiró del Inicio por decisión del
+          usuario (2026-09-09): competía con la wallet sin aportarle nada a la
+          persona. Los números de comunidad viven en el perfil de cada empresa,
+          donde sí son un argumento. */}
 
       {/* Después de la wallet: una tarjeta real le gana la primera mirada a un
           recordatorio de configuración. */}

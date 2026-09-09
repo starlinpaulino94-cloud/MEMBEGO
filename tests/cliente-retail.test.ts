@@ -166,12 +166,18 @@ test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', ()
   for (const [capacidad, marca] of [
     ['wallet', /RetailWallet/],
     ['motor de experiencias', /RetailExperiencia/],
-    ['prueba social', /PruebaSocial/],
     ['onboarding', /OnboardingClienteFirstVisit/],
     ['novedades e invitación', /RetailDescubreMas/],
   ] as const) {
     assert.match(src, marca, `Se perdió la capacidad: ${capacidad}.`)
   }
+  // La prueba social (EN VIVO) NO está en la lista: se retiró del Inicio por
+  // decisión del usuario (2026-09-09). Que no vuelva por accidente.
+  assert.equal(
+    existsSync(join(RAIZ, 'src/components/engagement/PruebaSocial.tsx')),
+    false,
+    'La sección EN VIVO se retiró del Inicio; su componente no debe volver.'
+  )
   // La gamificación no tiene sección propia: viaja en la cabecera de la wallet.
   assert.match(leer('src/components/cliente/inicio/RetailWallet.tsx'), /gamificacion/)
 })
