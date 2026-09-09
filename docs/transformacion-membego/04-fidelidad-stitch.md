@@ -336,3 +336,33 @@ rehace la carcasa y el editor contra la captura, pieza por pieza:
 Verificación: `tsc` 0 · `eslint` 0 · suite **1970/1970** (la guardia de deuda
 de diseño obligó a expresar el bisel con el vocabulario de radios) · build ·
 E2E en verde sin cambiar un id.
+
+---
+
+## 10. F3 · Resumen Operativo (2026-09-09)
+
+`/admin/dashboard` se rehizo contra `stitch/resumen_administrativo_membego`.
+Cada cifra tiene consulta; del mockup no se copió ningún número.
+
+**Datos añadidos a `getDashboardEjecutivo`** (no a la pantalla): cobrado del
+mes anterior completo (base del «% vs mes anterior», que antes no existía),
+top 2 de planes por membresías vigentes, monto declarado y última de las
+transferencias por validar (con `whereTransferencias`, el criterio
+centralizado), nombres de quienes vencen en 7 días (pila de avatares) y citas
+de hoy en el calendario del negocio.
+
+**«Estado en App Móvil» es real**: enseña la revisión PUBLICADA —estado,
+territorio, titular del hero sobre el degradado del cliente— y sin composición
+lleva al editor. El E2E cierra el circuito editor → dashboard: publica y
+comprueba «Público Ahora» con el titular recién publicado, y captura
+`admin-resumen-1280.png`.
+
+**No se pintó** (sin fuente): capacidad de bahía, tiempo promedio de servicio
+y tasa de conversión del pie del gráfico — su lugar lo ocupan las referencias
+reales del período. La píldora «Pico: <día>» sí, porque se deriva de la serie.
+
+**Conservado**: checklist de perfil, recomendaciones del sistema, atajos de
+pagos y notificaciones, y los avisos que solo hablan cuando hay algo (>0).
+
+**Verificación:** `tsc` 0 · **suite 2028/2028** (incluye el arnés visual
+nuevo) · `build` compilado · E2E autenticado en verde con la aserción nueva.
