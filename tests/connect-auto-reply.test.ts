@@ -9,15 +9,25 @@
  * de respuesta. El envío real pasa por `mensajeria/salientes.ts` y se captura
  * al llegar al conector (donde `registro.origen === 'auto-reply'`).
  *
- * Ejecutar: bun test tests/connect-auto-reply.test.ts
+ * Ejecutar: npm test tests/connect-auto-reply.test.ts
  */
 
-import { test, mock, beforeEach } from 'bun:test'
+import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 
 // ── Mocks (se registran ANTES de importar el motor) ─────────────────────────
 
-mock.module('server-only', () => ({}))
+function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
+  const resolvedPath = require.resolve(modulePath)
+  require.cache[resolvedPath] = {
+    id: resolvedPath,
+    filename: resolvedPath,
+    loaded: true,
+    exports: mockExports,
+    parent: null,
+    children: [],
+  } as unknown as NodeJS.Module
+}
 
 /** Envíos capturados al llegar al conector (mock de @/modules/connect/whatsapp). */
 interface EnvioCapturado {
@@ -28,31 +38,42 @@ interface EnvioCapturado {
 }
 
 let envios: EnvioCapturado[] = []
+let dbActual: any
+let conEmpresaErrorOnce: Error | null = null
+let enviarWhatsappOverrideOnce: ((input: any) => Promise<any>) | null = null
 
-const mockEnviarWhatsapp = mock(
-  async (input: {
-    companyId: string
-    telefono: string
-    texto: string
-    registro?: { origen?: string }
-  }): Promise<{ ok: true; mensajeId: string }> => {
-    envios.push({
-      companyId: input.companyId,
-      telefono: input.telefono,
-      texto: input.texto,
-      origen: input.registro?.origen ?? null,
-    })
-    return { ok: true, mensajeId: 'wamid.mock.' + envios.length }
+const mockEnviarWhatsapp = async (input: {
+  companyId: string
+  telefono: string
+  texto: string
+  registro?: { origen?: string }
+}): Promise<{ ok: boolean; mensajeId?: string; motivo?: string; detalle?: string }> => {
+  if (enviarWhatsappOverrideOnce) {
+    const fn = enviarWhatsappOverrideOnce
+    enviarWhatsappOverrideOnce = null
+    return fn(input)
   }
-)
+  envios.push({
+    companyId: input.companyId,
+    telefono: input.telefono,
+    texto: input.texto,
+    origen: input.registro?.origen ?? null,
+  })
+  return { ok: true, mensajeId: 'wamid.mock.' + envios.length }
+}
 
 // El tenant se mockea completo: todos los nombres que usa la cadena real
 // (`conEmpresa`, `sinEmpresa`, ...) para que los import estáticos resuelvan.
-let dbActual: any
-const mockConEmpresa = mock((_companyId: string, fn: (tx: any) => any): any =>
-  fn(dbActual)
-)
-mock.module('@/lib/tenant', () => ({
+const mockConEmpresa = async (_companyId: string, fn: (tx: any) => any): Promise<any> => {
+  if (conEmpresaErrorOnce) {
+    const err = conEmpresaErrorOnce
+    conEmpresaErrorOnce = null
+    throw err
+  }
+  return fn(dbActual)
+}
+
+mockModule('@/lib/tenant', {
   conEmpresa: mockConEmpresa,
   sinEmpresa: async (_motivo: string, fn: (tx: any) => Promise<any>) => fn({}),
   conEmpresaOTodas: async (
@@ -61,20 +82,22 @@ mock.module('@/lib/tenant', () => ({
     fn: (tx: any) => Promise<any>
   ) => fn({}),
   conUsuario: async (_userId: string, fn: (tx: any) => Promise<any>) => fn({}),
-}))
+})
 
-mock.module('@/modules/connect/whatsapp', () => ({
+mockModule('@/modules/connect/whatsapp', {
   enviarWhatsapp: mockEnviarWhatsapp,
   enviarCuerpoWhatsapp: mockEnviarWhatsapp,
-}))
+})
 
 // Import DESPUÉS de registrar los mocks para que resuelvan correctamente.
+/* eslint-disable @typescript-eslint/no-require-imports */
 const {
   buscarAutoReply,
   buscarBienvenida,
   resolverUrlCatalogo,
   responderAutoReply,
-} = await import('../src/modules/mensajeria/autoReply')
+} = require('../src/modules/mensajeria/autoReply')
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -168,6 +191,8 @@ async function conBaseUrl(base: string, fn: () => Promise<void>) {
 beforeEach(() => {
   dbActual = conDb()
   envios = []
+  conEmpresaErrorOnce = null
+  enviarWhatsappOverrideOnce = null
 })
 
 // ── Tests: buscarAutoReply ───────────────────────────────────────────────────
@@ -279,9 +304,7 @@ test('buscarAutoReply: sin configs activas retorna null', async () => {
 })
 
 test('buscarAutoReply: error en DB retorna null (fire-and-safe)', async () => {
-  mockConEmpresa.mockImplementationOnce(async () => {
-    throw new Error('DB connection lost')
-  })
+  conEmpresaErrorOnce = new Error('DB connection lost')
 
   const result = await buscarAutoReply(COMPANY_ID, 'hola')
   assert.equal(result, null, 'no debería lanzar, retorna null')
@@ -575,9 +598,9 @@ test('responderAutoReply: error en el envío no se propaga (fire-and-safe)', asy
   dbActual = conDb({
     configs: [filaConfig({ ...CONFIG_TEXTO, keywords: ['horario'] })],
   })
-  mockEnviarWhatsapp.mockImplementationOnce(async () => {
+  enviarWhatsappOverrideOnce = async () => {
     return { ok: false, motivo: 'proveedor' } as never
-  })
+  }
 
   await assert.doesNotReject(async () => {
     await responderAutoReply({

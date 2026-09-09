@@ -1,4 +1,4 @@
-import { test, mock, beforeEach } from 'bun:test'
+import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Prisma } from '@prisma/client'
 
@@ -31,7 +31,17 @@ const TELEFONO = FROM
 
 // ── Mocks (se registran ANTES de importar entrantes/trasEntrante) ───────────
 
-mock.module('server-only', () => ({}))
+function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
+  const resolvedPath = require.resolve(modulePath)
+  require.cache[resolvedPath] = {
+    id: resolvedPath,
+    filename: resolvedPath,
+    loaded: true,
+    exports: mockExports,
+    parent: null,
+    children: [],
+  } as unknown as NodeJS.Module
+}
 
 // TX mockeada: el upsert de conversación devuelve un id; `mensaje.create`
 // registra y (si `duplicadoSiguiente`) lanza P2002, como haría el UNIQUE
@@ -68,10 +78,10 @@ const txMensajeria = {
   },
 }
 
-const mockConEmpresa = mock((_companyId: string, fn: (tx: any) => any): any =>
+const mockConEmpresa = async (_companyId: string, fn: (tx: any) => any): Promise<any> =>
   fn(txMensajeria)
-)
-mock.module('@/lib/tenant', () => ({
+
+mockModule('@/lib/tenant', {
   conEmpresa: mockConEmpresa,
   sinEmpresa: async (_motivo: string, fn: (tx: any) => Promise<any>) => fn({}),
   conEmpresaOTodas: async (
@@ -80,44 +90,44 @@ mock.module('@/lib/tenant', () => ({
     fn: (tx: any) => Promise<any>
   ) => fn({}),
   conUsuario: async (_userId: string, fn: (tx: any) => Promise<any>) => fn({}),
-}))
+})
 
 // El contacto nuevo/existente: fuente de `esNueva` para el auto-reply.
 let contactoNuevo = true
-const mockResolverContacto = mock(async () => ({
+const mockResolverContacto = async () => ({
   id: CONTACTO_ID,
   clienteId: null,
   nuevo: contactoNuevo,
-}))
-mock.module('@/modules/mensajeria/contactos', () => ({
+})
+mockModule('@/modules/mensajeria/contactos', {
   resolverContacto: mockResolverContacto,
-}))
+})
 
 // Lado CRM/eventos/auto-reply: se aíslan para observar el orden del hook.
 const orden: string[] = []
 let prospectoFalla = false
-const mockRegistrarProspecto = mock(async () => {
+const mockRegistrarProspecto = async () => {
   if (prospectoFalla) {
     prospectoFalla = false
     throw new Error('CRM caído')
   }
   orden.push('prospecto')
   return { creado: true, id: 'prospecto-001' }
-})
-mock.module('@/modules/crm/prospectos', () => ({
+}
+mockModule('@/modules/crm/prospectos', {
   registrarProspectoDesdeEntrante: mockRegistrarProspecto,
-}))
+})
 
-const mockEmitirRecibido = mock(async () => {
+const mockEmitirRecibido = async () => {
   orden.push('mensajeRecibido')
-})
-const mockEmitirProspectoCreado = mock(async () => {
+}
+const mockEmitirProspectoCreado = async () => {
   orden.push('prospectoCreado')
-})
-mock.module('@/modules/mensajeria/eventos', () => ({
+}
+mockModule('@/modules/mensajeria/eventos', {
   emitirMensajeRecibido: mockEmitirRecibido,
   emitirProspectoCreado: mockEmitirProspectoCreado,
-}))
+})
 
 interface LlamadaAutoReply {
   companyId: string
@@ -127,17 +137,19 @@ interface LlamadaAutoReply {
   esNueva: boolean
 }
 const llamadasAutoReply: LlamadaAutoReply[] = []
-const mockResponderAutoReply = mock(async (input: LlamadaAutoReply) => {
+const mockResponderAutoReply = async (input: LlamadaAutoReply) => {
   orden.push('auto-reply')
   llamadasAutoReply.push(input)
-})
-mock.module('@/modules/mensajeria/autoReply', () => ({
+}
+mockModule('@/modules/mensajeria/autoReply', {
   responderAutoReply: mockResponderAutoReply,
-}))
+})
 
 // Import DESPUÉS de registrar los mocks.
-const { registrarEntranteWhatsapp } = await import('../src/modules/mensajeria/entrantes')
-const { trasEntrante } = await import('../src/modules/mensajeria/trasEntrante')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { registrarEntranteWhatsapp } = require('../src/modules/mensajeria/entrantes')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { trasEntrante } = require('../src/modules/mensajeria/trasEntrante')
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
