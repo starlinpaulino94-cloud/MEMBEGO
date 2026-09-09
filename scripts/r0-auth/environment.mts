@@ -21,6 +21,8 @@ export const credentialsSchema = z.object({
 })
 
 export function approvedEnvironment(root: string) {
+  if (!process.argv.includes('--approve-scoped-fixtures')
+    || !process.argv.some((arg) => /^--project=[a-z]{20}$/.test(arg))) return null
   const approval = z.object({ project: z.string().regex(/^[a-z]{20}$/),
     approval: z.literal('es exclusivamente de pruebas puedes proseder'),
     scope: z.literal('run-owned-fixtures-only') }).parse(

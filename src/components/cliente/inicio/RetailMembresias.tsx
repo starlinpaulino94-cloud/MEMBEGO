@@ -29,7 +29,7 @@ export function RetailMembresias({
   }
 
   return (
-    <section className="bg-muted py-5 md:py-6" aria-labelledby="retail-membresias">
+    <section className="bg-retail-mist py-5 md:py-6" aria-labelledby="retail-membresias">
       <div className="mx-auto max-w-6xl px-4 md:px-6">
         <RetailSeccionHeader
           id="retail-membresias"
@@ -40,7 +40,14 @@ export function RetailMembresias({
         <ul className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {planes.map((plan) => (
             <li key={plan.id} className="flex">
-              <div className="flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1">
+              {/* La tarjeta ENTERA es el enlace, como en Amazon: la imagen y
+                  el precio invitan, y el detalle —con su descripción completa
+                  y sus reseñas— es el perfil del plan. Un botón «Unirme» en
+                  cada tarjeta pedía compromiso antes de dar información. */}
+              <Link
+                href={plan.href}
+                className="group flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 outline-none transition-colors duration-fast hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
+              >
                 {/* Sin arte no se reserva el hueco: un cuadro gris vacío ocupa
                     la mitad de la tarjeta y no dice nada. */}
                 {plan.imagen ? (
@@ -50,7 +57,7 @@ export function RetailMembresias({
                       alt=""
                       fill
                       sizes="(min-width: 1024px) 16rem, (min-width: 768px) 33vw, 50vw"
-                      className="object-cover"
+                      className="object-cover transition-transform duration-base group-hover:scale-105"
                     />
                   </div>
                 ) : null}
@@ -66,20 +73,12 @@ export function RetailMembresias({
                     </p>
                   ) : null}
 
-                  <p className="mt-2 flex flex-wrap items-baseline gap-1">
+                  <p className="mt-auto flex flex-wrap items-baseline gap-1 pt-2">
                     <span className="text-price-lg text-foreground">{plan.precio}</span>
                     <span className="text-caption text-muted-foreground">{plan.periodo}</span>
                   </p>
-
-                  <Link
-                    href={plan.href}
-                    className="mt-3 flex min-h-10 w-full items-center justify-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]"
-                  >
-                    Unirme
-                    <span className="sr-only"> a {plan.nombre} de {plan.empresa}</span>
-                  </Link>
                 </div>
-              </div>
+              </Link>
             </li>
           ))}
         </ul>

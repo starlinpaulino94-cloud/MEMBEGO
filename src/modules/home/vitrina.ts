@@ -117,8 +117,8 @@ export const totalesVitrina = unstable_cache(
  */
 export async function contextoHeroPorDefecto(
   ids: readonly string[]
-): Promise<Map<string, { ciudad: string | null; planDesde: string | null }>> {
-  const mapa = new Map<string, { ciudad: string | null; planDesde: string | null }>()
+): Promise<Map<string, { ciudad: string | null; planDesde: string | null; color: string | null }>> {
+  const mapa = new Map<string, { ciudad: string | null; planDesde: string | null; color: string | null }>()
   if (ids.length === 0) return mapa
   const unicos = [...new Set(ids)]
   const [empresas, baratos] = await sinEmpresa(
@@ -127,7 +127,7 @@ export async function contextoHeroPorDefecto(
       Promise.all([
         tx.company.findMany({
           where: { id: { in: unicos } },
-          select: { id: true, ciudad: true, moneda: true, idioma: true },
+          select: { id: true, ciudad: true, moneda: true, idioma: true, colorPrimario: true },
         }),
         // `distinct` tras ordenar por precio: la primera fila de cada empresa
         // es su plan activo más barato.
@@ -144,6 +144,7 @@ export async function contextoHeroPorDefecto(
     const barato = baratos.find((b) => b.companyId === e.id)
     mapa.set(e.id, {
       ciudad: e.ciudad,
+      color: e.colorPrimario && /^#[0-9a-fA-F]{6}$/.test(e.colorPrimario) ? e.colorPrimario : null,
       planDesde: barato
         ? `Planes desde ${formatMoney(Number(barato.precio), e)} / ${barato.vigenciaDias} días`
         : null,

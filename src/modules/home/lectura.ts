@@ -86,6 +86,7 @@ async function heroesPorDefecto(
     href: `/cliente/promociones/${p.id}`,
     cta: 'Ver beneficios',
     planDesde: contexto.get(p.company.id)?.planDesde ?? null,
+    color: contexto.get(p.company.id)?.color ?? null,
   }))
 }
 

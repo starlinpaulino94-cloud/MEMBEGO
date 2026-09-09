@@ -65,6 +65,7 @@ try {
       activo: true, isFeatured: true, visibilidad: 'publica', publicadaEn: new Date('2020-01-01'),
       vigenciaDesde: new Date('2020-01-01'), vigenciaHasta: new Date('2099-01-01'),
       esComprable: true, precio: 0, imagenUrl: '/icon-512.png',
+      imagenes: ['/og-image.png', '/icon-192.png'],
     } })
   }
   for (const role of ['ADMIN_EMPRESA', 'CLIENTE'] as const) {
@@ -78,6 +79,10 @@ try {
     assert.ok(account)
     account.localId = local.id
     const cliente = role === 'CLIENTE' ? await db.cliente.create({ data: { companyId, supabaseId: identity, nombre: 'QA Home', email } }) : null
+    if (cliente) {
+      await db.companyRating.create({ data: { companyId, clienteId: cliente.id, rating: 5,
+        comment: 'Excelente servicio, el equipo es muy profesional.' } })
+    }
     const metadata = { role, dbUserId: local.id, companyId, clienteId: cliente?.id ?? null }
     const synced = await auth.auth.admin.updateUserById(identity, { app_metadata: metadata })
     if (synced.error) throw new Error('No se pudo asignar contexto QA')
@@ -172,6 +177,23 @@ try {
   await clientPage.setViewportSize({ width: 390, height: 900 })
   await clientPage.screenshot({ path: join(CAPTURAS, 'inicio-defecto-390.png'), fullPage: true, animations: 'disabled' })
   console.log('E2E: pausada la composición, el Inicio sigue siendo el del diseño (por defecto).')
+
+  // El perfil de la promoción: galería con miniaturas, estrellas junto a la
+  // empresa y la sección de reseñas con el comentario real del cliente.
+  await clientPage.getByRole('heading', { name: 'Beneficios y membresías' }).waitFor({ timeout: 60000 }).catch(() => null)
+  await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
+  const heroLink = clientPage.locator(`a[href*="/cliente/promociones/"]`).first()
+  await heroLink.click()
+  await expect(clientPage.getByText(`Reseñas de clientes de QA Home a ${suffix}`)).toBeVisible({ timeout: 120000 })
+  await expect(clientPage.getByText('Excelente servicio, el equipo es muy profesional.')).toBeVisible({ timeout: 60000 })
+  await expect(clientPage.getByRole('tab', { name: 'Imagen 2 de 3' })).toBeVisible({ timeout: 60000 })
+  assert.equal(
+    await clientPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    true,
+    'el perfil de la promoción desborda horizontalmente a 390px'
+  )
+  await clientPage.screenshot({ path: join(CAPTURAS, 'promo-perfil-390.png'), fullPage: true, animations: 'disabled' })
+  console.log('E2E: el perfil de la promoción enseña galería, estrellas y reseñas reales.')
 } catch (error) {
   if (paginaDiagnostico) {
     console.error('URL observada:', paginaDiagnostico.url())

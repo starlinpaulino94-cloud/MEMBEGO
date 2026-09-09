@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { spawnSync } from 'node:child_process'
 import { verificarEntornoE2E } from '../scripts/verificar-entorno-e2e.mjs'
 
 const project = 'abcdefghijklmnopqrst'
@@ -61,4 +62,16 @@ test('accepts an explicitly approved session pooler direct URL', () => {
   const result = verificarEntornoE2E({ ...valid, E2E_TEST_DIRECT_URL: session, DIRECT_URL: session })
   // Then
   assert.equal(result.status, 'PREREQUISITES_OK')
+})
+
+test('attestation stays offline when the explicit execution flags are absent', () => {
+  // Given / When
+  const result = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/r0-auth/attest.mts'], {
+    env: { NODE_ENV: 'test', NEXT_PUBLIC_SUPABASE_URL: valid.NEXT_PUBLIC_SUPABASE_URL },
+    encoding: 'utf8', timeout: 15_000,
+  })
+  // Then
+  assert.equal(result.status, 1)
+  assert.match(result.stdout, /EXPLICIT_APPROVAL_OR_CONFIGURATION_REQUIRED/)
+  assert.equal(result.stderr, '')
 })

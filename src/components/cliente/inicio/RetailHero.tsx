@@ -31,7 +31,13 @@ function HeroCard({ hero, priority }: { hero: Hero; priority: boolean }) {
       href={hero.href}
       className="group flex w-[85%] shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 outline-none transition-colors duration-fast hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary sm:w-96 lg:w-auto lg:min-w-0 lg:flex-1"
     >
-      <div className="flex flex-col gap-1 p-4 pb-3">
+      {/* El tinte sale del color de marca del negocio, como Amazon tiñe cada
+          campaña con su arte: dato real, 9% de opacidad para no comerse el
+          texto. Sin color declarado, la tarjeta queda blanca. */}
+      <div
+        className="flex flex-col gap-1 p-4 pb-3"
+        style={hero.color ? { backgroundColor: `${hero.color}17` } : undefined}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-overline text-primary">Beneficio destacado</span>
           {hero.ciudad ? (
@@ -88,7 +94,7 @@ export function RetailHero({ heroes }: { heroes: InicioVista['heroes'] }) {
   }
 
   return (
-    <section className="bg-muted py-4 md:py-5" aria-label="Beneficios destacados">
+    <section className="bg-retail-mist py-4 md:py-5" aria-label="Beneficios destacados">
       <div className="no-scrollbar mx-auto flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:px-6">
         {heroes.map((hero, index) => (
           <HeroCard key={`${hero.href}-${hero.titulo}`} hero={hero} priority={index === 0} />

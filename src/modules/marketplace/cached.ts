@@ -145,6 +145,15 @@ export const getPlatformStats = unstable_cache(
   { revalidate: 600, tags: [MARKETPLACE_TAG] }
 )
 
+export async function getResenasEmpresa(companyId: string) {
+  const fn = unstable_cache(
+    () => q.getResenasEmpresa(companyId),
+    ['mk-resenas', companyId],
+    { revalidate: 300, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}
+
 export async function getCompanyStats(companySlug: string) {
   const fn = unstable_cache(
     () => q.getCompanyStats(companySlug),

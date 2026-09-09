@@ -394,3 +394,47 @@ pantalla. `PanelPersonal` deja de cargar `getPromoFeed` en cada visita.
 siga viendo «Membresías recomendadas» y «Empresas destacadas» — el fallo
 exacto que el usuario vio no puede volver sin ponerse en rojo. Captura:
 `inicio-defecto-390.png`. Suite 2046/2046 · `tsc` 0 · build compilado.
+
+---
+
+## 12. Vida (sin gris) y el perfil de la promoción (2026-09-09)
+
+Dirección nueva del usuario, con Amazon como referencia: fuera el gris de
+fondo, la imagen manda sobre el botón, y cada promoción o membresía con su
+propio perfil (galería, descripción, reseñas).
+
+### 12.1 Vida
+
+- Bandas de sección `bg-muted` (gris) → `bg-retail-mist` (#F0F9FF, el tinte de
+  marca que ya definía el DESIGN.md para la barra de ubicación).
+- **El hero se tiñe con el color de marca del negocio** (`colorPrimario`, dato
+  real, al 9 % de opacidad) — el equivalente honesto de cómo Amazon tiñe cada
+  campaña con su arte. Sin color declarado, tarjeta blanca. Vale para el hero
+  por defecto y para el compuesto.
+- Estados vacíos y placeholders: blanco con borde o tinte de marca, no gris.
+
+### 12.2 La imagen manda
+
+- Tarjetas de membresías y del catálogo de Mi QR: **la tarjeta entera es el
+  enlace** y los botones «Unirme» / «Ver beneficio» se retiran. Un botón por
+  tarjeta pedía compromiso antes de dar información; el detalle es quien pide.
+- El hero conserva su CTA: es el único banner y el diseño lo trae.
+
+### 12.3 El perfil de la promoción
+
+- **Galería**: `Promocion.imagenes` existía en el modelo y ninguna pantalla lo
+  enseñaba. `GaleriaPromocion` (imagen grande + miniaturas) aparece con 2+
+  imágenes; con una, la portada de siempre.
+- **Reseñas**: `getResenasEmpresa` — promedio y total de `CompanyRating`
+  visibles, y los últimos 5 comentarios con nombre de pila + inicial. La
+  sección se titula «Reseñas de clientes de {empresa}» a propósito: reseñas
+  POR PLAN no existen todavía, y etiquetarlas como si lo fueran sería
+  inventar una fuente. El modelo por plan queda para F4.
+- Estrellas junto al nombre de la empresa en la cabecera del perfil.
+- Corregido de paso: un título con una palabra más ancha que el móvil
+  desbordaba la página entera (`break-words`), y el E2E ahora afirma la
+  ausencia de desbordamiento también en el perfil.
+
+**Evidencia**: el E2E entra al perfil desde el hero y comprueba galería
+(3 miniaturas), estrellas y el comentario real del cliente QA. Captura
+`promo-perfil-390.png`. Suite 2048/2048 · `tsc` 0 · build compilado.

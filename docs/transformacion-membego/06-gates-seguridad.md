@@ -1,7 +1,8 @@
 # R0: gates de seguridad
 
-Fecha: 2026-09-09. Alcance: prerrequisitos seguros, no cambio de autorizacion.
-**Auth/RLS conductual: BLOCKED.** Un preflight verde solo valida configuracion;
+Fecha: 2026-09-09. Alcance: prerrequisitos y verificacion remota TEST autorizada,
+sin cambio de semantica de autorizacion. **Auth HTTP: 4/5, FAIL; RLS: BLOCKED.**
+Un preflight verde solo valida configuracion;
 no autentica, no verifica claves con Supabase, no certifica fixtures ni politicas.
 La tarea 3 del plan permanece pendiente.
 
@@ -27,16 +28,22 @@ Contrato explicito, sin derivar aprobacion de `NEXT_PUBLIC_*`:
 | `SUPABASE_SERVICE_ROLE_KEY` | Igual a la clave service TEST |
 | `E2E_BASE_URL` | Origen HTTP(S) de localhost, 127.0.0.1 o ::1, sin usuario, ruta, query ni fragmento |
 | `NEXT_PUBLIC_APP_URL` | Igual al origen del navegador |
-| `E2E_TEST_DATABASE_URL` | URL PostgreSQL local allowlisted, con nombre de BD, sin query ni fragmento |
-| `DATABASE_URL`, `DIRECT_URL` | Ambas iguales a la URL local TEST aprobada |
+| `E2E_TEST_DATABASE_URL` | URL exacta de BD TEST allowlisted; localhost sin query o proveedor Supabase del proyecto aprobado |
+| `E2E_TEST_DIRECT_URL` | URL directa/session pooler exacta allowlisted, obligatoria para remoto; local conserva fallback a E2E_TEST_DATABASE_URL |
+| `DATABASE_URL`, `DIRECT_URL` | Iguales a sus respectivas URLs TEST aprobadas, comparacion exacta |
+| `E2E_REMOTE_APPROVED` | Literal `si` adicional para cualquier destino remoto; no mezclar BD local y remota |
 
-Este contrato conservador admite Auth de un proyecto alojado explicitamente
-aprobado y BD local; **no admite BD remota, poolers, ni Supabase Auth local**.
-Ampliarlo para Auth local requiere una identidad/origen local aprobado y pruebas,
-no relajar la comprobacion ni inferir permisos por estar en localhost.
+Remoto: host directo `db.<project>.supabase.co:5432` o pooler
+`aws-<numero>-<region>.pooler.supabase.com:5432/6543` con usuario terminado en
+`.<project>`. Base `/postgres`, password presente, sin fragmentos. Query acotada a
+pgbouncer, connection_limit, connect_timeout, pool_timeout, sslmode, schema y
+statement_cache_size; no duplicados, schema solo public y SSL nunca disable.
+No se admiten overrides host/options ni sufijos de dominio arbitrarios.
+Auth local sigue fuera de este contrato.
 Una variable de aprobacion es una declaracion del operador, no una prueba de que
-el proyecto sea desechable. Claves opacas: solo presencia/coherencia, no firma,
-rol o pertenencia comprobados. No se imprimen ni siquiera errores Zod crudos.
+el proyecto sea desechable. Si la clave service tiene formato JWT se comprueban
+los claims ref y role=service_role; **no se verifica firma en el parser**. Claves
+opacas: solo presencia/coherencia. No se imprimen errores Zod crudos ni claves.
 
 ## Gate autenticado dedicado
 
@@ -67,8 +74,8 @@ trazas/cookies. Limpiar al terminar solo artefactos propios del run.
 Los comandos directos antiguos `npm run e2e`/`playwright test` conservan sus skips
 por ausencia de `E2E_SUPABASE_URL`: **no son el gate autenticado dedicado**.
 `e2e.yml` y el recorrido publico permanecen intactos y no requieren proyecto TEST.
-No se agrega workflow manual: sin entorno/fixtures aprobados no hay uno util que
-ejecute Auth honestamente sin provisionamiento. El CI existente incorpora las
+No se agrega workflow: la autorizacion manual de este proyecto no configura los
+secretos/fixtures ni permisos de CI. El CI existente incorpora las
 pruebas puras nuevas mediante `npm test`, sin secretos ni cambios de workflow.
 
 ## Matriz actual
@@ -157,7 +164,7 @@ estas barreras por empresa no lo acreditan automaticamente.
 | RLS conductual | `npm run rls:probar` | Escribe fixtures y limpia; SOLO BD de prueba aprobada |
 
 En Windows usar sufijo `.cmd` para los ejecutables de `node_modules/.bin`.
-No se ejecutaron en esta tarea los comandos que requieren BD ni el gate Auth valido.
+La primera entrega no conecto BD/Auth; la reanudacion autorizada se detalla abajo.
 
 `scripts/probar-rls.mjs` exige DATABASE_URL, psql y rol membego_app sin BYPASSRLS.
 Prueba lectura directa/hija, insercion y update cruzados, omnisciente, ausencia de
@@ -168,7 +175,7 @@ No activar esa excepcion. CI tambien comprueba cero grants de tablas public a
 anon/authenticated tras la capa 1. Esto no demuestra politicas de cada sucursal,
 Auth real ni que una instalacion desplegada use el rol restringido.
 
-## Evidencia y bloqueos
+## Evidencia inicial (historica)
 
 - TDD: stub permisivo produjo 23 fallos de 24; parser implementado paso 24/24;
   stub de gate Auth produjo el fallo 25; gate corregido paso 25/25, sin skips.
@@ -202,3 +209,73 @@ Auth real ni que una instalacion desplegada use el rol restringido.
   este documento, dos scripts, tests/entorno-e2e.test.ts y append de issues/learnings
   en .omo (ignorado). `git diff --check` pasa. No se crean sesiones ni artefactos
   de navegador/DB; procesos de prueba terminados, sin limpieza de datos ajenos.
+
+## Reanudacion autorizada
+
+Autorizacion exacta: **'es exclusivamente de pruebas puedes proseder'**.
+Proyecto identificado en memoria y fijado manualmente: `ybzhvfmybyyomwpjpaud`.
+Plan actualizado sin marcar tarea 3. Registro local en
+`.omo/start-work/r0-auth-approval.json`, sin URLs de BD ni credenciales.
+El runner exige ademas `--project=<identidad>` y `--approve-scoped-fixtures`;
+sin flags no lee credenciales ni conecta, aunque existan NEXT_PUBLIC_*.
+Solo fixtures propias; prohibidos reset, migraciones, grants/politicas/roles,
+pagos/envios y cambios de autorizacion. Loader `.env`/`.env.local` en memoria,
+sin Read/cat ni salida de contenidos; preflight compara conexiones y claim JWT.
+
+```text
+node_modules/.bin/tsx scripts/r0-auth/attest.mts --project=ybzhvfmybyyomwpjpaud --approve-scoped-fixtures
+node_modules/.bin/tsx scripts/r0-auth/live.mts --project=ybzhvfmybyyomwpjpaud --approve-scoped-fixtures
+```
+
+El segundo comando usa copia de src/packages/public/config en Temp/opencode,
+sin copiar .env, y servidor propio Next dev --webpack con MEMBEGO_QA=1
+(`next.config.ts`: salida .next-qa). No es build de produccion ni despliegue.
+Puerto 127.0.0.1:3217 reservado antes del arranque; no reutiliza servidores.
+Claves solo en memoria/entorno hijo; stdout/stderr del servidor descartados,
+Sentry y telemetria desactivados. No se ejecuto el harness dirty de Home ni
+los harnesses antiguos con prefijos compartidos de limpieza.
+
+### Evidencia real
+
+Raiz `.omo/start-work/r0-auth/`:
+
+- `attest-854898ba-00d0-4502-a127-799998ead8f8`: transaccion READ ONLY, timeout SQL
+  10 s. Conexion postgres, BYPASSRLS=true, superuser=false; membego_app ausente.
+  Las siete tablas companies/users/clientes/plans/memberships/home_revisiones/
+  home_bloques tienen RLS habilitado, sin FORCE y **cero politicas** observadas.
+  Esto no prueba aislamiento: no existe camino con rol restringido que verificar.
+- `live-a1f3b091-bff4-47ee-b178-31839edaca09`: 4 PASS/1 FAIL; primera expectativa
+  usaba el not-found global, no el del panel. Conservado, no presentado como PASS.
+- `live-b1451a9c-4490-4209-8b6a-2c6516e5a870`: 4 PASS/1 FAIL; tampoco aparece el
+  not-found del panel. Sin nombre del cliente B ni placeholder de error observado.
+- `live-9dad1afc-53e5-4e3e-af6f-41b207efda66`: 4 PASS/1 FAIL tras espera acotada
+  adicional de 15 s. Captura abierta directamente: shell con esqueleto de carga,
+  no contenido de B. **No acredita denegacion completa ni demuestra filtracion**.
+
+En cada run: dos empresas privadas, dos clientes y tres usuarios de aplicacion
+vinculados a tres identidades Auth nuevas (ADMIN_EMPRESA, CLIENTE, MARKETING).
+Sin seed credentials, membresias activas, QR secretos ni pagos. Pass reales:
+anonimo -> login 307; admin A ve su cliente (200 + contenido propio); CLIENTE
+-> su home 307 al pedir /admin; MARKETING -> dashboard 307 al pedir empleados.
+El acceso al cliente B devuelve HTTP 200 y queda en carga, sin estado de denegacion
+completo: criterio FAIL. No cambiar guards para hacer verde el harness.
+
+Capturas finales: `live-9dad1afc-53e5-4e3e-af6f-41b207efda66/admin-own-client-1280.png`
+y `company-b-observed-1280.png` en el mismo directorio. Chromium headless
+151.0.7922.34, viewport CSS 1280x900, DPR 1, es-DO, America/Santo_Domingo.
+Son fixtures reales temporales, no fidelidad Stitch aprobada. No authState/trazas.
+
+Cada run conserva baseline.json/after.json de hashes de codigo de autorizacion
+y archivos dirty, catalog.json, rls.json, ownership/fixtures.json, auth.json y
+cleanup.json. Los tres recibos prueban cero filas/identidades propias restantes;
+se cerraron navegador, conexiones DB y procesos propios (30908, 37008, 36124).
+Snapshots eliminados; el primero tiene recibo adicional snapshot-cleanup.json.
+Totales de fixtures: nueve identidades Auth y 21 filas principales retiradas;
+limpieza de dependencias acotada por IDs propios. No borrados por prefijo compartido.
+
+Estado pendiente: RLS conductual BLOCKED (rol/politicas faltantes), UI negativa
+de empresa B FAIL, sucursal y matriz completa no ejecutadas. Una futura prueba
+con rol restringido requiere aprobacion separada para su provisionamiento seguro.
+El resultado general sale no-cero; ninguno de estos bloqueos se convierte en skip.
+Typecheck global y lint focalizado pasan en esta reanudacion; el TS5097 historico
+del carril visual ya no bloquea. Pruebas puras remotas/locales separadas de lo vivo.

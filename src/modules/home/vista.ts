@@ -66,6 +66,9 @@ export interface HeroInicio {
   readonly cta: string
   /** «Planes desde RD$1,850 / mes». Null si la empresa no tiene planes. */
   readonly planDesde: string | null
+  /** Color de marca del negocio (#rrggbb): tiñe suave la tarjeta, como hace
+   *  Amazon con el arte de cada campaña. Null = sin tinte. */
+  readonly color: string | null
 }
 
 export interface CategoriaInicio {

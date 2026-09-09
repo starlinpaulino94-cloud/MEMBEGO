@@ -418,6 +418,9 @@ export async function getPromotionDetail(
           slug: true,
           descripcion: true,
           imagenUrl: true,
+          // El perfil de la promoción enseña su galería completa: el arte
+          // adicional que la empresa subió, no solo la portada.
+          imagenes: true,
           tipo: true,
           descuento: true,
           codigo: true,
@@ -1058,5 +1061,75 @@ export async function getCompanyPostsPublic(
   } catch (error) {
     console.error('[getCompanyPostsPublic] Error:', error)
     return empty
+  }
+}
+
+// ── Reseñas públicas de una empresa ─────────────────────────────────────────
+
+export interface ResenasEmpresa {
+  /** Promedio real (1–5) sobre las valoraciones visibles, o null sin datos. */
+  promedio: number | null
+  total: number
+  /** Las últimas con comentario: lo que un cliente escribió, con su nombre de
+   *  pila. Sin comentario no se lista — una fila de solo estrellas no cuenta
+   *  nada que el promedio no diga ya. */
+  comentarios: { id: string; rating: number; comentario: string; autor: string; fecha: Date }[]
+}
+
+/**
+ * El perfil de una promoción o membresía enseña las reseñas de los clientes
+ * del negocio. Son las de `CompanyRating` —valoración por cliente, única por
+ * empresa— porque eso es lo que hoy existe: reseñas POR PLAN no hay todavía,
+ * y etiquetarlas como si lo fueran sería inventar. La sección se titula con
+ * el nombre de la empresa por esa razón.
+ */
+export async function getResenasEmpresa(companyId: string): Promise<ResenasEmpresa> {
+  try {
+    return await sinEmpresa('marketplace: reseñas públicas de la empresa', async (tx) => {
+      const [agregado, filas] = await Promise.all([
+        tx.companyRating.aggregate({
+          where: { companyId, visible: true },
+          _avg: { rating: true },
+          _count: { _all: true },
+        }),
+        tx.companyRating.findMany({
+          where: { companyId, visible: true, comment: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            rating: true,
+            comment: true,
+            createdAt: true,
+            cliente: { select: { nombre: true } },
+          },
+        }),
+      ])
+      return {
+        promedio: agregado._avg.rating != null ? Number(agregado._avg.rating) : null,
+        total: agregado._count._all,
+        comentarios: filas.flatMap((f) =>
+          f.comment
+            ? [{
+                id: f.id,
+                rating: f.rating,
+                comentario: f.comment,
+                // Nombre de pila + inicial: identifica sin exponer el nombre
+                // completo de un cliente en una pantalla pública.
+                autor: (() => {
+                  const partes = f.cliente.nombre.trim().split(/\s+/)
+                  const pila = partes[0] ?? 'Cliente'
+                  const inicial = partes[1]?.[0]
+                  return inicial ? `${pila} ${inicial}.` : pila
+                })(),
+                fecha: f.createdAt,
+              }]
+            : []
+        ),
+      }
+    })
+  } catch (error) {
+    console.error('[getResenasEmpresa] Error:', error)
+    return { promedio: null, total: 0, comentarios: [] }
   }
 }

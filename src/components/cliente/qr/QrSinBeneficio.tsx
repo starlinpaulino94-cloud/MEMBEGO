@@ -85,10 +85,14 @@ export function QrSinBeneficio({
 
           <ul className="mt-3 grid grid-cols-2 gap-3">
             {destacadas.map(({ promo, valoracion, resenas }) => (
-              <li
-                key={promo.id}
-                className="flex flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1"
-              >
+              <li key={promo.id} className="flex">
+                {/* La tarjeta entera es el enlace: la imagen invita y el
+                    detalle es el perfil de la promoción, con su galería,
+                    descripción y reseñas. */}
+                <Link
+                  href={`/cliente/promociones/${promo.id}`}
+                  className="group flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 outline-none transition-colors duration-fast hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
+                >
                 <div className="relative aspect-square bg-muted">
                   {promo.imagenUrl ? (
                     <Image
@@ -99,7 +103,7 @@ export function QrSinBeneficio({
                       className="object-cover"
                     />
                   ) : (
-                    <span className="flex size-full items-center justify-center text-h1 text-muted-foreground">
+                    <span className="flex size-full items-center justify-center bg-brand-primary-soft text-h1 text-primary">
                       {promo.titulo.slice(0, 1)}
                     </span>
                   )}
@@ -120,18 +124,12 @@ export function QrSinBeneficio({
                     <RetailValoracion valoracion={valoracion} resenas={resenas} />
                   </div>
                   {promo.venta ? (
-                    <p className="mt-1 text-price-lg text-foreground">
+                    <p className="mt-auto pt-1 text-price-lg text-foreground">
                       {formatMoney(promo.venta.precio)}
                     </p>
                   ) : null}
-                  <Link
-                    href={`/cliente/promociones/${promo.id}`}
-                    className="mt-3 flex min-h-10 items-center justify-center rounded-full bg-primary px-3 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
-                  >
-                    Ver beneficio
-                    <span className="sr-only"> · {promo.titulo}</span>
-                  </Link>
                 </div>
+                </Link>
               </li>
             ))}
           </ul>

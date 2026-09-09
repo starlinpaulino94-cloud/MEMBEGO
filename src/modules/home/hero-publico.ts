@@ -12,7 +12,7 @@ export async function heroPublico(companyId: string, slide: HeroSlide): Promise<
         name: true, slug: true, bannerUrl: true, logoUrl: true, galleryImages: true,
         // El diseño pone la ciudad como sello sobre el hero y una fila
         // «Planes desde …» bajo el texto. Las dos salen de aquí.
-        ciudad: true, moneda: true, idioma: true,
+        ciudad: true, moneda: true, idioma: true, colorPrimario: true,
       },
     })
     if (!empresa) return null
@@ -27,6 +27,7 @@ export async function heroPublico(companyId: string, slide: HeroSlide): Promise<
     const base = {
       titulo: slide.titulo, subtitulo: slide.subtitulo, empresa: empresa.name,
       ciudad: empresa.ciudad, cta: slide.ctaTexto, planDesde,
+      color: empresa.colorPrimario && /^#[0-9a-fA-F]{6}$/.test(empresa.colorPrimario) ? empresa.colorPrimario : null,
     }
     let href: string
     let imagen: string | null

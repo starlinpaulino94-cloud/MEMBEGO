@@ -2,8 +2,29 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
 import { PromotionViewTracker } from '@/components/marketplace/PromotionViewTracker'
+import { GaleriaPromocion } from '@/components/marketplace/GaleriaPromocion'
+import { getResenasEmpresa } from '@/modules/marketplace/cached'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
+
+/** «★★★★☆ 4.6 (120)» con estrellas de verdad, no un número seco. */
+function Estrellas({ promedio, total }: { promedio: number; total: number }) {
+  const llenas = Math.round(promedio)
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden className="text-retail-star tracking-tight">
+        {'★'.repeat(llenas)}
+        <span className="text-border">{'★'.repeat(5 - llenas)}</span>
+      </span>
+      <span className="text-label-lg text-foreground">{promedio.toFixed(1)}</span>
+      <span className="sr-only">de 5, </span>
+      <span className="text-caption">
+        ({total.toLocaleString('es-DO')}
+        <span className="sr-only"> reseñas</span>)
+      </span>
+    </span>
+  )
+}
 
 export interface PromotionDetailProps {
   /**
@@ -22,10 +43,20 @@ export interface PromotionDetailProps {
   retorno?: string
 }
 
-export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: PromotionDetailProps) {
+export async function PromotionDetail({ mode, promotion, comprarSlot, retorno }: PromotionDetailProps) {
   const isApp = mode === 'app'
   const isExpired =
     promotion.vigenciaHasta && new Date(promotion.vigenciaHasta) < new Date()
+
+  // El perfil enseña lo que los clientes del negocio opinan. Van cacheadas
+  // 5 min; si la lectura falla, la sección simplemente no se pinta.
+  const resenas = await getResenasEmpresa(promotion.company.id)
+
+  // La galería: portada + arte adicional, sin duplicados y sin huecos.
+  const galeria = [
+    ...(promotion.imagenUrl ? [promotion.imagenUrl] : []),
+    ...(promotion.imagenes ?? []),
+  ].filter((src, i, todas) => todas.indexOf(src) === i)
 
   const backHref = retorno ?? (isApp ? '/cliente/promociones' : '/promociones')
   const empresaHref = isApp
@@ -48,8 +79,13 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
 
         {/* Main Card */}
         <div className="mt-8 overflow-hidden rounded-2xl border border-border/80 shadow-premium">
-          {/* Image */}
-          {promotion.imagenUrl && (
+          {/* Galería (2+ imágenes) o portada simple. El campo `imagenes`
+              existía en el modelo desde el principio; esta es la primera
+              pantalla que lo enseña. */}
+          {galeria.length > 1 ? (
+            <GaleriaPromocion imagenes={galeria} alt={promotion.titulo} />
+          ) : null}
+          {galeria.length <= 1 && promotion.imagenUrl && (
             // LA IMAGEN SE MUESTRA A SU PROPORCIÓN REAL, a todo el ancho.
             //
             // El historial de esta caja, para no repetirlo: altura fija +
@@ -80,7 +116,9 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div className="flex-1">
-                <h1 className="text-4xl font-bold text-foreground">
+                {/* `break-words`: un título con una palabra más ancha que el
+                    móvil (un código, una URL) desbordaba la página entera. */}
+                <h1 className="break-words text-4xl font-bold text-foreground">
                   {promotion.titulo}
                 </h1>
 
@@ -97,15 +135,20 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
                     </div>
                   )}
                   <div>
-                    <p className="font-semibold text-foreground">
+                    <p className="break-words font-semibold text-foreground">
                       {promotion.company.name}
                     </p>
-                    <Link
-                      href={empresaHref}
-                      className="text-primary hover:underline text-sm"
-                    >
-                      Ver empresa
-                    </Link>
+                    <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {resenas.promedio !== null && resenas.total > 0 ? (
+                        <Estrellas promedio={resenas.promedio} total={resenas.total} />
+                      ) : null}
+                      <Link
+                        href={empresaHref}
+                        className="text-primary hover:underline text-sm"
+                      >
+                        Ver empresa
+                      </Link>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -258,9 +301,61 @@ export function PromotionDetail({ mode, promotion, comprarSlot, retorno }: Promo
           </div>
         </div>
 
+        {/* Reseñas de clientes — el patrón Amazon: lo que otra gente dice es
+            lo que decide. Son las reseñas del NEGOCIO (CompanyRating, lo que
+            hoy existe), y la sección lo dice con su nombre: etiquetarlas como
+            reseñas «del plan» sería inventar una fuente que no hay. */}
+        {resenas.total > 0 ? (
+          <section className="mt-8 rounded-lg border border-border bg-card p-6" aria-labelledby="resenas-titulo">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="resenas-titulo" className="min-w-0 break-words text-h3 text-foreground">
+                Reseñas de clientes de {promotion.company.name}
+              </h2>
+              {resenas.promedio !== null ? (
+                <Estrellas promedio={resenas.promedio} total={resenas.total} />
+              ) : null}
+            </div>
+
+            {resenas.comentarios.length === 0 ? (
+              <p className="mt-3 text-small text-muted-foreground">
+                {resenas.total.toLocaleString('es-DO')}{' '}
+                {resenas.total === 1 ? 'cliente ha valorado' : 'clientes han valorado'} este
+                negocio, todavía sin comentarios escritos.
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-4">
+                {resenas.comentarios.map((r) => (
+                  <li key={r.id} className="border-t border-border pt-4 first:border-t-0 first:pt-0">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="flex size-8 items-center justify-center rounded-full bg-brand-primary-soft text-label-sm font-semibold text-primary" aria-hidden>
+                        {r.autor.slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="text-label-lg text-foreground">{r.autor}</span>
+                      <span aria-hidden className="text-caption text-retail-star">
+                        {'★'.repeat(r.rating)}
+                      </span>
+                      <span className="sr-only">{r.rating} de 5 estrellas</span>
+                      <span className="text-label-sm text-muted-foreground">
+                        {new Date(r.fecha).toLocaleDateString('es-DO', {
+                          timeZone: 'America/Santo_Domingo',
+                          year: 'numeric',
+                          month: 'long',
+                        })}
+                      </span>
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-small leading-relaxed text-foreground">
+                      {r.comentario}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+
         {/* Related Company Info */}
-        <div className="mt-12 rounded-2xl bg-muted p-6">
-          <h2 className="text-2xl font-bold text-foreground mb-4">
+        <div className="mt-8 rounded-lg border border-border bg-brand-primary-soft p-6">
+          <h2 className="break-words text-2xl font-bold text-foreground mb-4">
             Más sobre {promotion.company.name}
           </h2>
           <p className="text-foreground mb-4">
