@@ -320,8 +320,13 @@ test('webhook: sin secreto configurado la ruta no existe, y la firma va ANTES de
 })
 
 test('webhook: del contenido de Meta no se guarda nada identificable', () => {
-  const src = codigo('src/app/api/connect/meta/webhook/route.ts')
-  // En `value` viaja el número de teléfono de clientes finales.
-  assert.ok(!/detalle: \{[^}]*value/.test(src))
-  assert.match(src, /detalle: \{ wabaId \}/)
+  // La ruta ya no interpreta nada: firma, guarda crudo, encola (Meta · Fase 1).
+  const ruta = codigo('src/app/api/connect/meta/webhook/route.ts')
+  assert.ok(!/detalle:/.test(ruta), 'la ruta volvió a anotar contenido')
+  assert.match(ruta, /recibirNotificacion\(cuerpo\)/)
+  // Quien anota es el despachador, y en `value`/`payload` viaja el número de
+  // teléfono de clientes finales: a la bitácora solo van identificadores.
+  const despacho = codigo('src/modules/connect/meta/webhookDispatcher.ts')
+  assert.ok(!/detalle:\s*\{[^}]*(value|payload)/.test(despacho))
+  assert.match(despacho, /detalle:\s*[\s\S]{0,80}\{ wabaId \}/)
 })

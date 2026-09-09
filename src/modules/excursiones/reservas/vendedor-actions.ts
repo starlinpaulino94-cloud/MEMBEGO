@@ -517,8 +517,8 @@ export async function crearReservaVendedor(
       if (cliente?.telefono) {
         enviarConfirmacionReservaWhatsApp({
           companyId,
+          clienteId: targetClienteId,
           telefono: cliente.telefono,
-          nombreCliente: clienteNombre || clienteEmail || '',
           numeroReserva: reserva.numero,
           nombreExcursion: excursion.nombre,
           fecha: v.datos.fecha.toISOString().split('T')[0],
@@ -526,7 +526,6 @@ export async function crearReservaVendedor(
           pasajeros: v.datos.adultos + v.datos.ninos,
           total: Number(totales.total),
           moneda: excursion.moneda,
-          checkinToken: reservaCompleta?.checkinToken ?? undefined,
         }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en crearReservaVendedor:', e))
       }
     }

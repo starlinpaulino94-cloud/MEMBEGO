@@ -190,7 +190,10 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   SEGUIMIENTO: ['seguimiento'],
   RULETA: ['gamificacion'],
   EXCURSIONES: ['excursiones'],
-  CRM: ['leads', 'seguimiento', 'conversaciones', 'pipeline', 'configuracion'],
+  // 'seguimiento' sigue siendo de SEGUIMIENTO (beneficios); las secciones del
+  // CRM son las que esta capacidad controla de verdad (todo /admin/crm cuelga
+  // de la sección 'leads').
+  CRM: ['leads', 'conversaciones', 'pipeline', 'configuracion'],
 }
 
 /** Índice inverso sección → capacidad que la controla (o undefined). */

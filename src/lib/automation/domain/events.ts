@@ -5,6 +5,10 @@
  */
 
 export const AUTOMATION_EVENTS = {
+  // Mensajería (Meta · Fase 7): alguien escribió por WhatsApp, Messenger o
+  // Instagram, y de ese primer mensaje nació un prospecto.
+  MESSAGE_RECEIVED: 'mensaje.recibido',
+  PROSPECT_CREATED: 'prospecto.creado',
   CLIENT_REGISTERED: 'cliente.registrado',
   CLIENT_VISIT: 'cliente.visita',
   CLIENT_RENEWED: 'cliente.renovo',
@@ -123,6 +127,8 @@ export interface AutomationEventDef {
 }
 
 export const AUTOMATION_EVENT_CATALOG: readonly AutomationEventDef[] = [
+  { id: AUTOMATION_EVENTS.MESSAGE_RECEIVED, name: 'Mensaje recibido', description: 'Alguien escribió al negocio por WhatsApp, Messenger o Instagram. Variables: mensaje.canal, mensaje.texto, mensaje.conversacionId, mensaje.primero, contacto.nombre, contacto.telefono.' },
+  { id: AUTOMATION_EVENTS.PROSPECT_CREATED, name: 'Prospecto creado', description: 'Del primer mensaje de alguien que no es cliente nació un prospecto. Variables: prospecto.id, prospecto.canal, contacto.nombre, contacto.telefono.' },
   { id: AUTOMATION_EVENTS.CLIENT_REGISTERED, name: 'Cliente registrado', description: 'Un cliente creó su cuenta.' },
   { id: AUTOMATION_EVENTS.CLIENT_VISIT, name: 'Cliente realizó visita', description: 'El cliente usó el servicio.' },
   { id: AUTOMATION_EVENTS.CLIENT_RENEWED, name: 'Cliente renovó', description: 'El cliente renovó su membresía.' },

@@ -1,5 +1,83 @@
 // ──────────────────────────────────────────────────────────────────────────
-// CRM — LEADS, SEGUIMIENTO, CONVERSACIONES Y PIPELINE
+// CRM — PROSPECTOS, LEADS, SEGUIMIENTO Y PIPELINE
+//
+// Multi-tenant por companyId en todos los modelos.
+// Sin enums Prisma: valores controlados en código (String).
+//
+// Prospectos (main, Fase 6) y Leads (branch) conviven: los prospectos nacen de
+// la mensajería entrante; los leads son el pipeline de ventas clásico. Las
+// conversaciones viven en mensajeria.prisma, no aquí.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─── Prospectos y seguimientos ─────────────────────────────────────────────
+//
+// Un prospecto NACE SOLO: de la primera conversación entrante de un contacto
+// que todavía no es cliente de la empresa. Uno por contacto (UNIQUE): si la
+// misma persona escribe por dos canales son dos contactos y dos prospectos, y
+// al convertir uno en cliente el otro se enlaza al mismo cliente por teléfono.
+// Un cliente conocido que escribe no genera prospecto: ya es cliente.
+
+model Prospecto {
+  id        String @id @default(cuid())
+  companyId String
+
+  contactoId     String             @unique
+  contacto       ContactoMensajeria @relation(fields: [contactoId], references: [id], onDelete: Restrict)
+  /// La conversación por la que llegó.
+  conversacionId String?
+  /// WHATSAPP | MESSENGER | INSTAGRAM: el canal de origen.
+  canal          String
+
+  /// nuevo | contactado | cotizacion | negociacion | cerrado | perdido
+  etapa           String   @default("nuevo")
+  etapaCambiadaAt DateTime @default(now())
+
+  nombre      String?
+  telefono    String?
+  notas       String?
+  /// El Cliente en que se convirtió, si se convirtió.
+  clienteId   String?
+  asignadoAId String?
+
+  primerMensajeAt   DateTime
+  ultimaActividadAt DateTime
+  cerradoAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seguimientos SeguimientoProspecto[]
+
+  @@index([companyId, etapa])
+  @@index([companyId, ultimaActividadAt])
+  @@map("prospectos")
+}
+
+model SeguimientoProspecto {
+  id        String @id @default(cuid())
+  companyId String
+
+  prospectoId String
+  prospecto   Prospecto @relation(fields: [prospectoId], references: [id], onDelete: Cascade)
+
+  /// Llamada | Email | WhatsApp | Visita | Reunión
+  tipo         String
+  nota         String
+  /// Cuándo toca hacerlo; null = sin fecha.
+  programadoAt DateTime?
+  /// Cuándo se hizo; null = pendiente.
+  hechoAt      DateTime?
+  creadoPorId  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, hechoAt, programadoAt])
+  @@index([prospectoId, createdAt])
+  @@map("seguimientos_prospecto")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// CRM — LEADS, SEGUIMIENTO Y PIPELINE
 //
 // Multi-tenant por companyId en todos los modelos.
 // Sin enums Prisma: valores controlados en código (String).
@@ -27,7 +105,6 @@ model Lead {
   updatedAt        DateTime  @updatedAt
 
   notasSeguimiento NotaSeguimiento[]
-  conversaciones   Conversacion[]
 
   @@unique([companyId, telefono], name: "Lead_company_telefono")
   @@index([companyId])
@@ -50,43 +127,6 @@ model NotaSeguimiento {
 
   @@index([leadId])
   @@index([leadId, createdAt])
-}
-
-model Conversacion {
-  id            String    @id @default(uuid())
-  leadId        String
-  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  companyId     String
-  canal         String // WHATSAPP, INSTAGRAM, MESSENGER, EMAIL
-  canalThreadId String? // ID externo (wa_id, instagram_thread_id, etc.)
-  estado        String    @default("ABIERTA") // ABIERTA, CERRADA, ARCHIVADA
-  ultimoMensaje String?
-  ultimaFecha   DateTime?
-  noLeidos      Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  mensajes Mensaje[]
-
-  @@index([companyId])
-  @@index([leadId])
-  @@index([canal])
-}
-
-model Mensaje {
-  id             String       @id @default(uuid())
-  conversacionId String
-  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
-  direccion      String // ENTRANTE, SALIENTE
-  tipo           String // TEXTO, IMAGEN, DOCUMENTO, AUDIO, UBICACION
-  contenido      String
-  metadata       Json? // payload original del proveedor
-  proveedorMsgId String? // message_id de WhatsApp/Meta/etc.
-  estado         String       @default("ENVIADO") // ENVIADO, ENTREGADO, LEIDO, FALLIDO
-  creadoPor      String? // userId si saliente
-  createdAt      DateTime     @default(now())
-
-  @@index([conversacionId, createdAt])
 }
 
 model PipelineConfig {
@@ -114,8 +154,8 @@ model AutoReplyConfig {
   keywords      String[] @default([]) // Palabras clave que activan esta respuesta
   esBienvenida  Boolean  @default(false) // Si es el saludo automático de primer contacto
   tipoRespuesta String   @default("TEXTO") // TEXTO, IMAGEN, DOCUMENTO, CATALOGO
-  contenido     String   // Texto o plantilla de la respuesta
-  catalogoPath  String?  // Ruta o URL del catálogo si tipoRespuesta = CATALOGO
+  contenido     String // Texto o plantilla de la respuesta
+  catalogoPath  String? // Ruta o URL del catálogo si tipoRespuesta = CATALOGO
   activa        Boolean  @default(true) // Habilitada / deshabilitada
   orden         Int      @default(0) // Prioridad de evaluación (menor = primero)
   createdAt     DateTime @default(now())

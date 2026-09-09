@@ -58,8 +58,31 @@ async function estadoCardnet(companyId: string): Promise<EstadoAdaptado> {
   return { estado: 'CONECTADA', detalle: 'Cobrando con tarjeta.' }
 }
 
+/**
+ * INSTAGRAM (Meta · Fase 3). Su verdad son los activos IG_ACCOUNT que dejó la
+ * conexión «Facebook e Instagram»: si hay alguno vivo, está conectado; si no,
+ * se conecta desde allí. No hay fila propia ni credencial propia.
+ */
+async function estadoInstagram(companyId: string): Promise<EstadoAdaptado> {
+  const { metaPaginasConfigurado } = await import('@/modules/connect/metaNucleo')
+  if (!metaPaginasConfigurado()) {
+    return { estado: 'NO_DISPONIBLE', detalle: 'La conexión con Meta no está configurada en esta plataforma.' }
+  }
+  const { activosDeEmpresaPorTipo } = await import('@/modules/connect/meta/activos')
+  const cuentas = await activosDeEmpresaPorTipo(companyId, 'IG_ACCOUNT').catch(() => [])
+  if (cuentas.length > 0) {
+    const nombres = cuentas.map((c) => (c.nombre ? `@${c.nombre}` : c.idExterno)).join(', ')
+    return { estado: 'CONECTADA', detalle: `Conectado: ${nombres}.` }
+  }
+  return {
+    estado: 'DISPONIBLE',
+    detalle: 'Se conecta desde «Facebook e Instagram»: elige una Página con Instagram enlazado.',
+  }
+}
+
 const ADAPTADORES: Record<string, (companyId: string) => Promise<EstadoAdaptado>> = {
   cardnet: estadoCardnet,
+  instagram: estadoInstagram,
 }
 
 /**

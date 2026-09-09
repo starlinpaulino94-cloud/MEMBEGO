@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
+import { anotarFallo } from '@/lib/prisma-errors'
 import { conEmpresa } from '@/lib/tenant'
 import { createNota, deleteNota } from './nota-actions'
 import type { NotaActionState } from './nota-actions'
@@ -27,7 +28,7 @@ export async function createActividad(
           where: { id: result.notaId },
           data: { estado },
         })
-      ).catch(() => {})
+      ).catch(anotarFallo('crm:createActividad.estado'))
     }
   }
 

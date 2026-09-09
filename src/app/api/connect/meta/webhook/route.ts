@@ -1,21 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { anotarConector } from '@/modules/connect/bitacora'
 import { firmaWebhookValida, respuestaDeVerificacion } from '@/modules/connect/metaNucleo'
-import { parsearMensajeWhatsApp, detectarIntencionExcursiones } from '@/modules/connect/whatsappInboundNucleo'
-import { buscarAutoReply, buscarBienvenida, enviarAutoReply, resolverUrlCatalogo } from '@/modules/connect/autoReply'
-import { procesarMensajeEntrante } from '@/modules/connect/whatsappInbound'
-import { enviarWhatsapp } from '@/modules/connect/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * WEBHOOK DE META (Connect · Fase 14).
+ * WEBHOOK DE META (Connect · Fase 14; despacho en cola desde Meta · Fase 1).
  *
- * Meta lo exige para el Alta Incrustada: es por donde avisa de que una empresa
- * terminó el alta (`account_update`) y por donde llegarán después los estados
- * de entrega y las respuestas de sus clientes.
+ * Una sola URL para los tres objetos —`whatsapp_business_account`, `page`,
+ * `instagram`—: es por donde Meta avisa de que una empresa terminó el alta
+ * (`account_update`), y por donde llegan los mensajes de sus clientes y los
+ * estados de entrega de los nuestros.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * PÚBLICA, Y POR ESO NO SE FÍA DE NADA
@@ -25,11 +20,17 @@ export const dynamic = 'force-dynamic'
  * cuerpo CRUDO: parsearlo y volver a serializarlo rompería la firma de un
  * aviso bueno por una coma de diferencia.
  *
- * Sin `META_APP_SECRET` la ruta responde 404 y no 500: si el alta incrustada
- * no está configurada aquí, este endpoint no existe para nadie.
+ * Sin `META_APP_SECRET` la ruta responde 404 y no 500: si la app de Meta no
+ * está configurada aquí, este endpoint no existe para nadie.
  *
- * NO SE HA PROBADO CONTRA META. Escrito contra la documentación pública
- * vigente, sin app con la que ejecutarlo.
+ * ────────────────────────────────────────────────────────────────────────────
+ * ESTA RUTA NO INTERPRETA NADA
+ *
+ * Firma, guarda cada item con su clave única, encola y responde 200. Meta
+ * reintenta durante 36 horas cualquier cosa que no sea 2xx y no garantiza
+ * orden ni ausencia de duplicados: el trabajo de verdad —a quién pertenece,
+ * qué significa— ocurre fuera de la petición, en `webhookDispatcher`, sobre
+ * un evento que ya es nuestro y se puede reprocesar desde la base.
  */
 
 /** El apretón de manos de alta de la URL. */
@@ -44,11 +45,6 @@ export async function GET(req: NextRequest) {
   })
 }
 
-interface CambioMeta {
-  field?: string
-  value?: Record<string, unknown>
-}
-
 export async function POST(req: NextRequest) {
   const secreto = process.env.META_APP_SECRET
   if (!secreto) return new NextResponse('Not found', { status: 404 })
@@ -60,124 +56,20 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Forbidden', { status: 403 })
   }
 
-  let cuerpo: { entry?: { id?: string; changes?: CambioMeta[] }[] }
+  let cuerpo: unknown
   try {
     cuerpo = JSON.parse(crudo)
   } catch {
-    // Firmado pero ilegible: se acepta para que Meta no reintente en bucle, y
-    // se anota. Devolver error aquí solo produciría más entregas iguales.
+    // Firmado pero ilegible: se acepta para que Meta no reintente en bucle.
+    // Devolver error aquí solo produciría más entregas iguales.
     return NextResponse.json({ ok: true })
   }
 
-  // El conector, una sola vez: la clave única es (conectorId, cuentaExterna).
-  const conector = await sinEmpresa('connect: webhook de Meta — resolver el conector', (tx) =>
-    tx.conector.findUnique({ where: { slug: 'whatsapp' }, select: { id: true } })
-  ).catch(anotarFallo('connect:webhook-meta-conector'))
-  if (!conector) return NextResponse.json({ ok: true })
-  const conectorWhatsapp = conector.id
+  // Guardar y encolar. Nunca lanza, y aunque algo fallara por dentro el 200
+  // sale igual: lo que no se pudo guardar queda anotado, y Meta no arregla
+  // nada reenviando lo mismo.
+  const { recibirNotificacion } = await import('@/modules/connect/meta/webhookDispatcher')
+  await recibirNotificacion(cuerpo).catch(anotarFallo('connect:webhook-meta'))
 
-  for (const entrada of cuerpo.entry ?? []) {
-    const wabaId = entrada.id
-    if (!wabaId) continue
-
-    const conexion = await sinEmpresa(
-      'connect: webhook de Meta — resolver la única conexión dueña de esta cuenta de WhatsApp',
-      (tx) =>
-        tx.conexionEmpresa.findUnique({
-          where: {
-            conectorId_cuentaExterna: { conectorId: conectorWhatsapp, cuentaExterna: wabaId },
-          },
-          select: { id: true, companyId: true },
-        })
-    ).catch(anotarFallo('connect:webhook-meta-resolver'))
-
-    if (!conexion) continue
-
-    for (const cambio of entrada.changes ?? []) {
-      await anotarConector({
-        companyId: conexion.companyId,
-        origen: 'CONEXION',
-        origenId: conexion.id,
-        evento: `meta.${cambio.field ?? 'desconocido'}`,
-        detalle: { wabaId },
-      })
-    }
-
-    const parseado = parsearMensajeWhatsApp(entrada)
-    if (parseado) {
-      for (const msg of parseado.mensajes) {
-        const inbound = await procesarMensajeEntrante(
-          conexion.companyId,
-          msg.from,
-          msg.texto,
-          msg.msgId
-        ).catch((e) => {
-          console.error('[connect] webhook: procesarMensajeEntrante falló', e)
-          return null
-        })
-
-        const autoReply = await buscarAutoReply(conexion.companyId, msg.texto)
-        if (autoReply && inbound) {
-          await enviarAutoReply(
-            conexion.companyId,
-            msg.from,
-            autoReply.config,
-            inbound.conversacionId
-          ).catch((e) => {
-            console.error('[connect] webhook: enviarAutoReply falló', e)
-          })
-        } else if (inbound?.esNuevaConversacion) {
-          const bienvenida = await buscarBienvenida(conexion.companyId)
-          if (bienvenida) {
-            await enviarAutoReply(
-              conexion.companyId,
-              msg.from,
-              bienvenida.config,
-              inbound.conversacionId
-            ).catch((e) => {
-              console.error('[connect] webhook: enviarAutoReply (bienvenida) falló', e)
-            })
-          }
-        } else if (detectarIntencionExcursiones(msg.texto)) {
-          const urlCatalogo = await resolverUrlCatalogo(conexion.companyId)
-          const urlBase =
-            process.env.NEXT_PUBLIC_APP_URL ??
-            process.env.NEXT_PUBLIC_SITE_URL ??
-            'http://127.0.0.1:3000'
-
-          let catalogUrl = urlCatalogo
-          if (!catalogUrl) {
-            const empresa = await sinEmpresa(
-              'webhook: resolver slug de empresa para catálogo',
-              (tx) =>
-                tx.company.findUnique({
-                  where: { id: conexion.companyId },
-                  select: { slug: true },
-                })
-            ).catch(() => null)
-            if (empresa?.slug) {
-              catalogUrl = `${urlBase}/empresas/${empresa.slug}/excursiones`
-            }
-          }
-
-          if (catalogUrl) {
-            const mensajeCatalogo = `¡Hola! 🌴 Aquí tienes nuestro catálogo de actividades:\n${catalogUrl}\n\n¿Tienes alguna pregunta? Responde aquí y te ayudamos.`
-
-            await enviarWhatsapp({
-              companyId: conexion.companyId,
-              telefono: msg.from,
-              texto: mensajeCatalogo,
-            }).catch((e) => {
-              console.error('[connect] webhook: enviarWhatsapp auto-reply falló', e)
-            })
-          }
-        }
-      }
-    }
-  }
-
-  // Meta reintenta ante cualquier respuesta que no sea 2xx. Se confirma
-  // siempre que la firma cuadre: lo que no sepamos procesar queda en la
-  // bitácora, no en una cola de reintentos infinita.
   return NextResponse.json({ ok: true })
 }
