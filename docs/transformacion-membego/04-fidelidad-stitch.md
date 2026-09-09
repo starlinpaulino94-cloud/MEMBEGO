@@ -516,3 +516,62 @@ componentes compartidos; falta su carcasa/filtros), el perfil de empresa
 pantalla de sinónimos.
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde.
+
+---
+
+## 15. F3 · Perfil de empresa en retail (2026-09-09)
+
+`CompanyProfile` (ambos modos: landing pública y `/cliente/empresas/[slug]`)
+pasa al lenguaje retail conservando la API completa y toda la funcionalidad
+(sucursales con activa, elegibilidad de planes, `ctaSlot`/`relacionSlot`,
+seguir/compartir, posts, actividades, galería, reseñas + formulario).
+
+- **Banner**: fuera el degradado esmeralda/pizarra oscuro; la imagen de la
+  empresa se enseña tal cual con un velo solo abajo, donde apoya la tarjeta.
+  Sin banner, degradado de marca (`retail-deep → primary`). Píldora de volver
+  clara (`bg-card/90`), no cristal blanco sobre oscuro.
+- **Tarjeta de cabecera**: radio 8px + `elevation`, logo con borde `border-card`
+  y respaldo `brand-primary-soft` (adiós `from-primary to-teal-500`), chips de
+  datos NEUTROS con icono en color de marca (antes rojo/azul/ámbar cada uno
+  gritando lo suyo), estrella `retail-star`, CTAs en píldora con
+  `hover:bg-brand-primary-hover`.
+- **Nav de secciones**: `bg-card/95` por token (era `bg-white/90` a mano),
+  carril `relative`, hover `brand-primary-soft`.
+- **Planes**: tarjeta 8px, precio `text-price-lg`, caja de usos en
+  `retail-mist` (era gris), «Más popular» sobre `retail-deep` sin
+  `shadow-glow`, CTA píldora (secundario = borde, no gris).
+- **Beneficios/eventos/noticias/actividades/galería/información**: radios 8px,
+  escala tipográfica del sistema, tile de fecha en `brand-primary-soft`.
+- **CTA final**: `bg-retail-deep` plano (AA) en vez del degradado
+  azul→índigo; botones píldora.
+- **Piezas satélite** al mismo idioma: `SucursalesSection` (ficha 8px, activa
+  con anillo primario), `ResenasSection` (estrellas `retail-star`, avatar
+  `brand-primary-soft`, promedio blindado contra Decimal serializado),
+  `FollowButton` y `ShareButton` (píldoras; favorita en `retail-star`).
+
+Tres desbordes reales que la sonda del E2E destapó al añadir el paso del
+perfil:
+
+1. **`grid` sin plantilla base.** Sin `grid-cols-1`, la pista implícita es
+   `auto` y respeta el min-content de la tarjeta más ancha: a 390px la rejilla
+   de explorar medía 516px. `grid-cols-N` compila a `minmax(0,1fr)`, que
+   recorta. Explicitado en explorar, planes, beneficios, eventos,
+   actividades, información y sucursales.
+2. **`flex-1` sin `min-w-0`** en la cabecera: a 768px el nombre imparable del
+   fixture fijaba el ancho de la fila.
+3. **Títulos sin `break-words`** (h1 y CTA final) con nombres largos.
+
+La guardia del tema oscuro vetó `bg-white` sólido en el CTA final → `bg-card
+text-primary`, que se adapta. El trinquete de deuda obligó a bajar el techo de
+color crudo: **170 → 159** (el perfil devolvió 11 clases al vocabulario).
+
+El E2E gana el paso `empresa-perfil` (capturas 390/768/1280 con sonda de
+desbordamiento + cabecera, planes y la reseña real visibles; `exact: true`
+porque el CTA «¿Te gusta…?» también contiene el nombre, y `.first()` porque el
+formulario de reseña precarga el mismo comentario).
+
+**Pendiente de F3**: carcasa/filtros de `/cliente/buscar` y la pantalla de
+sinónimos.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo (8 pasos)
+en verde · perfil público demo revisado a 375px en navegador.

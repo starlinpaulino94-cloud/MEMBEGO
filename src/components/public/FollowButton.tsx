@@ -49,9 +49,9 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
     return (
       <button
         disabled
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-3 font-semibold text-muted-foreground sm:w-auto"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-card px-5 py-3 text-label-lg text-muted-foreground sm:w-auto"
       >
-        <Loader2 className="h-4 w-4 animate-spin" /> Seguir
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Seguir
       </button>
     )
   }
@@ -62,9 +62,9 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
         onClick={() =>
           router.push(`/login?redirect=${encodeURIComponent(redirectTo)}`)
         }
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-card px-5 py-3 font-semibold text-primary transition hover:bg-primary/10 sm:w-auto"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-primary/30 bg-card px-5 py-3 text-label-lg text-primary transition-colors duration-fast hover:bg-brand-primary-soft sm:w-auto"
       >
-        <Plus className="h-4 w-4" /> Seguir empresa
+        <Plus className="h-4 w-4" aria-hidden /> Seguir empresa
       </button>
     )
   }
@@ -118,10 +118,10 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
       <button
         onClick={handleFollow}
         disabled={pending}
-        className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold transition disabled:opacity-60 sm:flex-none ${
+        className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-5 py-3 text-label-lg transition-colors duration-fast disabled:opacity-60 sm:flex-none ${
           following
-            ? 'border border-border bg-muted text-foreground hover:bg-muted'
-            : 'border border-primary/30 bg-card text-primary hover:bg-primary/10'
+            ? 'border border-border bg-card text-foreground hover:border-primary/40'
+            : 'border border-primary/30 bg-card text-primary hover:bg-brand-primary-soft'
         }`}
       >
         {pending ? (
@@ -140,13 +140,13 @@ export function FollowButton({ companyId, redirectTo }: FollowButtonProps) {
           disabled={pending}
           aria-label={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
           title={esFavorita ? 'Quitar de favoritas' : 'Marcar favorita'}
-          className={`inline-flex items-center justify-center rounded-xl border p-3 transition disabled:opacity-60 ${
+          className={`inline-flex items-center justify-center rounded-full border p-3 transition-colors duration-fast disabled:opacity-60 ${
             esFavorita
-              ? 'border-warning/30 bg-warning/15 text-warning'
-              : 'border-border bg-card text-muted-foreground hover:text-warning'
+              ? 'border-retail-star/40 bg-retail-star/15 text-retail-star'
+              : 'border-border bg-card text-muted-foreground hover:text-retail-star'
           }`}
         >
-          <Star className={`h-4 w-4 ${esFavorita ? 'fill-amber-400' : ''}`} />
+          <Star className={`h-4 w-4 ${esFavorita ? 'fill-retail-star' : ''}`} aria-hidden />
         </button>
       )}
     </div>

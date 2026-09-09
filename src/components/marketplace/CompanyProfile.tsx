@@ -194,8 +194,10 @@ export function CompanyProfile({
 
   return (
     <div className={isApp ? 'bg-card' : 'min-h-screen bg-card'}>
-      {/* Hero / Banner */}
-      <section className="relative h-56 w-full overflow-hidden bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950 sm:h-72">
+      {/* Hero / Banner: la imagen de la empresa manda. El velo solo existe
+          abajo, donde apoya la tarjeta; el resto del banner se enseña tal
+          cual. Sin banner, degradado de marca en vez del esmeralda oscuro. */}
+      <section className="relative h-56 w-full overflow-hidden sm:h-72">
         {company.bannerUrl ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -204,59 +206,56 @@ export function CompanyProfile({
               alt=""
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/20 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-retail-deep/35 to-transparent" />
           </>
         ) : (
-          <>
-            <div className="absolute inset-0 bg-grid-light mask-fade" />
-            <div className="absolute -top-10 right-16 h-56 w-56 rounded-full bg-primary/25 blur-3xl" />
-          </>
+          <div className="absolute inset-0 bg-gradient-to-br from-retail-deep to-primary" />
         )}
         <div className="absolute left-0 top-0 p-4 sm:p-6">
           <Link
             href={backHrefFinal}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-3.5 py-1.5 text-sm font-medium text-white backdrop-blur transition-colors hover:bg-white/25"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/90 px-3.5 py-1.5 text-label-md text-foreground backdrop-blur transition-colors duration-fast hover:bg-card"
           >
-            <ArrowLeft className="h-4 w-4" /> {backLabelFinal}
+            <ArrowLeft className="h-4 w-4" aria-hidden /> {backLabelFinal}
           </Link>
         </div>
       </section>
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Header card */}
-        <div className="relative -mt-16 animate-slide-up rounded-2xl border border-border/80 bg-card p-6 shadow-premium-lg sm:p-8">
+        <div className="relative -mt-16 animate-slide-up rounded-lg border border-border bg-card p-5 elevation-2 sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
             {/* Logo */}
             <div className="-mt-16 shrink-0 sm:-mt-20">
               {company.logoUrl ? (
-                <div className="relative h-28 w-28 overflow-hidden rounded-2xl border-4 border-white bg-card shadow-md sm:h-32 sm:w-32">
+                <div className="relative h-28 w-28 overflow-hidden rounded-lg border-4 border-card bg-card elevation-1 sm:h-32 sm:w-32">
                   <Image src={company.logoUrl} alt={company.name} fill className="object-cover" />
                 </div>
               ) : (
-                <div className="flex h-28 w-28 items-center justify-center rounded-2xl border-4 border-white bg-gradient-to-br from-primary to-teal-500 text-3xl font-bold text-white shadow-md sm:h-32 sm:w-32">
+                <div className="flex h-28 w-28 items-center justify-center rounded-lg border-4 border-card bg-brand-primary-soft text-h1 text-primary elevation-1 sm:h-32 sm:w-32">
                   {initials}
                 </div>
               )}
             </div>
 
-            <div className="flex-1">
+            {/* `min-w-0`: sin él, el min-content del nombre (una palabra
+                imparable) fija el ancho del ítem flex y revienta la fila. */}
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-info/10 px-2.5 py-0.5 text-xs font-semibold text-info">
+                <span className="rounded-full bg-brand-primary-soft px-2.5 py-0.5 text-label-sm font-semibold text-primary">
                   {TIPO_LABEL[company.type] ?? company.type}
                 </span>
                 {company.isFeatured && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-0.5 text-xs font-semibold text-warning">
-                    <Star className="h-3 w-3 fill-amber-500 text-warning" /> Destacada
+                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-0.5 text-label-sm font-semibold text-foreground">
+                    <Star className="h-3 w-3 fill-retail-star text-retail-star" aria-hidden /> Destacada
                   </span>
                 )}
               </div>
 
-              <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-                {company.name}
-              </h1>
+              <h1 className="mt-2 break-words text-h1 text-foreground">{company.name}</h1>
 
               {(location || company.horario) && (
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-small text-muted-foreground">
                   {location && (
                     <span className="inline-flex items-center gap-1.5">
                       <MapPin className="h-4 w-4" /> {location}
@@ -278,23 +277,26 @@ export function CompanyProfile({
                 <p className="mt-3 max-w-2xl text-muted-foreground">{company.description}</p>
               )}
 
-              {/* Chips de datos reales (solo si aportan) */}
+              {/* Chips de datos reales (solo si aportan). Neutros con el icono
+                  en color de marca: los datos informan, no gritan. */}
               <div className="mt-4 flex flex-wrap gap-2">
                 {stats && stats.activePromotions > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1 text-sm font-medium text-destructive">
-                    <Gift className="h-4 w-4" /> {stats.activePromotions} promociones
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-label-md text-foreground">
+                    <Gift className="h-4 w-4 text-primary" aria-hidden /> {stats.activePromotions} promociones
                   </span>
                 )}
                 {stats && stats.totalMembers > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-info/10 px-3 py-1 text-sm font-medium text-info">
-                    <Users className="h-4 w-4" /> {stats.totalMembers} miembros
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-label-md text-foreground">
+                    <Users className="h-4 w-4 text-primary" aria-hidden /> {stats.totalMembers} miembros
                   </span>
                 )}
-                {stats && stats.averageRating != null && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1 text-sm font-medium text-warning">
-                    <Star className="h-4 w-4 fill-amber-500 text-warning" />
-                    {stats.averageRating.toFixed(1)}
-                    <span className="text-warning/70">({stats.totalRatings})</span>
+                {stats && stats.averageRating != null && Number.isFinite(Number(stats.averageRating)) && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-label-md text-foreground">
+                    <Star className="h-4 w-4 fill-retail-star text-retail-star" aria-hidden />
+                    <span className="font-semibold tabular-nums">
+                      {Number(stats.averageRating).toFixed(1)}
+                    </span>
+                    <span className="text-muted-foreground">({stats.totalRatings})</span>
                   </span>
                 )}
               </div>
@@ -309,17 +311,17 @@ export function CompanyProfile({
                   ((planesCta?.href || planesHref) && (
                     <Link
                       href={planesCta?.href ?? planesHref!}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-sm transition hover:bg-primary sm:w-auto"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-label-lg text-primary-foreground transition-colors duration-fast hover:bg-brand-primary-hover sm:w-auto"
                     >
-                      {planesCta?.label ?? 'Ver planes'} <ArrowRight className="h-4 w-4" />
+                      {planesCta?.label ?? 'Ver planes'} <ArrowRight className="h-4 w-4" aria-hidden />
                     </Link>
                   )))
               ) : (
                 <Link
                   href={registroHref}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-sm transition hover:bg-primary sm:w-auto"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-label-lg text-primary-foreground transition-colors duration-fast hover:bg-brand-primary-hover sm:w-auto"
                 >
-                  Quiero una membresía <ArrowRight className="h-4 w-4" />
+                  Quiero una membresía <ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
               )}
               <FollowButton companyId={company.id} redirectTo={followRedirect} />
@@ -340,7 +342,7 @@ export function CompanyProfile({
                   href={c.href}
                   target={c.href.startsWith('http') ? '_blank' : undefined}
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-primary"
+                  className="inline-flex items-center gap-1.5 text-small text-muted-foreground transition-colors duration-fast hover:text-primary"
                 >
                   <c.icon className="h-4 w-4" /> {c.label}
                 </a>
@@ -351,7 +353,7 @@ export function CompanyProfile({
                   href={s.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-primary"
+                  className="inline-flex items-center gap-1.5 text-small text-muted-foreground transition-colors duration-fast hover:text-primary"
                 >
                   <s.icon className="h-4 w-4" /> {s.label}
                 </a>
@@ -367,15 +369,18 @@ export function CompanyProfile({
           </div>
         )}
 
-        {/* Navegación de secciones (mini web) */}
+        {/* Navegación de secciones (mini web). `relative` para que nada
+            absoluto de dentro escape del carril (los ancestros con overflow
+            solo recortan si son containing block; ver la sonda del E2E).
+            `bg-card/95` en vez de blanco a mano: el fondo lo decide el token. */}
         {seccionesNav.length > 1 && (
-          <nav className="sticky top-16 z-30 mt-6 -mx-4 overflow-x-auto border-b border-border bg-white/90 px-4 backdrop-blur sm:mx-0 sm:rounded-full sm:border sm:px-2">
+          <nav className="relative sticky top-16 z-30 mt-6 -mx-4 overflow-x-auto border-b border-border bg-card/95 px-4 backdrop-blur sm:mx-0 sm:rounded-full sm:border sm:px-2">
             <div className="flex gap-1 py-2">
               {seccionesNav.map((s) => (
                 <a
                   key={s.id}
                   href={`#${s.id}`}
-                  className="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                  className="whitespace-nowrap rounded-full px-4 py-1.5 text-label-md text-muted-foreground transition-colors duration-fast hover:bg-brand-primary-soft hover:text-primary"
                 >
                   {s.label}
                 </a>
@@ -388,7 +393,7 @@ export function CompanyProfile({
         {planes.length > 0 && (
           <section id="membresias" className="mt-14 scroll-mt-32">
             <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              <h2 className="text-h2 text-foreground">
                 Planes de membresía
               </h2>
               <p className="mt-2 text-muted-foreground">
@@ -396,13 +401,15 @@ export function CompanyProfile({
                 digital con QR.
               </p>
               {sucursalActiva && (
-                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-label-sm font-semibold text-success">
                   <Check className="h-3.5 w-3.5" /> Canjeable en {sucursalActiva.nombre}
                 </p>
               )}
             </div>
 
-            <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {/* `grid-cols-1` explícito: la pista implícita `auto` respeta el
+                min-content de la tarjeta y a 390px desborda el documento. */}
+            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {planes.map((plan, i) => {
                 const featured = planes.length > 1 && i === Math.floor(planes.length / 2)
                 // CTA del plan según contexto: público -> registro; app -> plan
@@ -414,56 +421,52 @@ export function CompanyProfile({
                 return (
                   <div
                     key={plan.id}
-                    className={`card-interactive relative flex flex-col rounded-2xl border bg-card p-6 ${
-                      featured
-                        ? 'border-primary/40 shadow-premium ring-1 ring-info/30'
-                        : 'border-border/80 shadow-card'
+                    className={`card-interactive relative flex flex-col rounded-lg border bg-card p-6 elevation-1 ${
+                      featured ? 'border-primary ring-1 ring-primary/25' : 'border-border'
                     }`}
                   >
                     {featured && (
-                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3.5 py-1 text-xs font-semibold text-primary-foreground shadow-glow">
+                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-retail-deep px-3.5 py-1 text-label-sm font-semibold text-white">
                         Más popular
                       </span>
                     )}
 
                     <div className="flex items-center gap-2">
                       {plan.esIlimitado ? (
-                        <Crown className="h-5 w-5 text-warning" />
+                        <Crown className="h-5 w-5 text-retail-star" aria-hidden />
                       ) : (
-                        <Sparkles className="h-5 w-5 text-primary" />
+                        <Sparkles className="h-5 w-5 text-primary" aria-hidden />
                       )}
-                      <h3 className="font-semibold text-foreground">{plan.nombre}</h3>
+                      <h3 className="min-w-0 break-words text-h4 text-foreground">{plan.nombre}</h3>
                       {plan.esIlimitado && (
-                        <span className="ml-auto rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
+                        <span className="ml-auto rounded-full border border-border bg-card px-2 py-0.5 text-label-sm font-semibold text-foreground">
                           Ilimitado
                         </span>
                       )}
                     </div>
 
-                    <p className="mt-4 text-3xl font-extrabold text-foreground">
+                    <p className="mt-4 text-price-lg tabular-nums text-foreground">
                       {formatMoney(plan.precio, prefs)}
-                      <span className="text-base font-normal text-muted-foreground">/mes</span>
+                      <span className="text-small font-normal text-muted-foreground">/mes</span>
                     </p>
                     {plan.descripcion && (
-                      <p className="mt-2 text-sm text-muted-foreground">{plan.descripcion}</p>
+                      <p className="mt-2 text-small text-muted-foreground">{plan.descripcion}</p>
                     )}
 
-                    <div className="mt-4 rounded-lg bg-muted p-3 text-sm">
-                      <p className="font-medium text-foreground">
+                    <div className="mt-4 rounded-lg bg-retail-mist p-3">
+                      <p className="text-label-md text-foreground">
                         {plan.esIlimitado
                           ? 'Usos ilimitados'
                           : `${plan.lavadosIncluidos} usos incluidos`}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        Vigencia: {plan.vigenciaDias} días
-                      </p>
+                      <p className="text-caption">Vigencia: {plan.vigenciaDias} días</p>
                     </div>
 
                     {plan.beneficios.length > 0 && (
                       <ul className="mt-4 space-y-2">
                         {plan.beneficios.map((b) => (
-                          <li key={b} className="flex items-start gap-2 text-sm text-muted-foreground">
-                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                          <li key={b} className="flex items-start gap-2 text-small text-muted-foreground">
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
                             {b}
                           </li>
                         ))}
@@ -473,22 +476,22 @@ export function CompanyProfile({
                     {planCtaHref && (
                       <Link
                         href={planCtaHref}
-                        className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold transition ${
+                        className={`mt-6 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-label-lg transition-colors duration-fast ${
                           featured
-                            ? 'bg-primary text-primary-foreground hover:bg-primary'
-                            : 'bg-muted text-foreground hover:bg-muted'
+                            ? 'bg-primary text-primary-foreground hover:bg-brand-primary-hover'
+                            : 'border border-border bg-card text-foreground hover:border-primary/40'
                         }`}
                         >
-                          {planCtaLabel} <ArrowRight className="h-4 w-4" />
+                          {planCtaLabel} <ArrowRight className="h-4 w-4" aria-hidden />
                         </Link>
                     )}
 
                     {/* Fase E8: página pública y compartible del plan */}
                     <Link
                       href={`/plan/${plan.id}`}
-                      className="mt-2 inline-flex items-center justify-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                      className="mt-2 inline-flex items-center justify-center gap-1.5 text-small font-semibold text-primary hover:underline"
                     >
-                      Ver y compartir plan <ArrowRight className="h-3.5 w-3.5" />
+                      Ver y compartir plan <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                     </Link>
                   </div>
                 )
@@ -500,14 +503,14 @@ export function CompanyProfile({
         {/* Promociones */}
         {promotions && promotions.length > 0 && (
           <section id="promociones" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Promociones vigentes
             </h2>
             <p className="mt-2 text-muted-foreground">
               Beneficios exclusivos disponibles ahora mismo.
             </p>
             {sucursalActiva && (
-              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success">
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-label-sm font-semibold text-success">
                 <Check className="h-3.5 w-3.5" /> Canjeable en {sucursalActiva.nombre}
               </p>
             )}
@@ -527,23 +530,23 @@ export function CompanyProfile({
         {/* Beneficios para miembros */}
         {posts.beneficios.length > 0 && (
           <section id="beneficios" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Beneficios para miembros
             </h2>
             <p className="mt-2 text-muted-foreground">
               Ventajas permanentes por ser miembro de {company.name}.
             </p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {posts.beneficios.map((b) => (
                 <div
                   key={b.id}
-                  className="rounded-2xl border border-success/20 bg-success/10 p-5"
+                  className="rounded-lg border border-success/20 bg-success/10 p-5"
                 >
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-semibold text-success">
-                    <BadgeCheck className="h-3.5 w-3.5" /> Beneficio
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-label-sm font-semibold text-success">
+                    <BadgeCheck className="h-3.5 w-3.5" aria-hidden /> Beneficio
                   </span>
-                  <h3 className="mt-3 font-semibold text-foreground">{b.titulo}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{b.contenido}</p>
+                  <h3 className="mt-3 text-h4 text-foreground">{b.titulo}</h3>
+                  <p className="mt-1 text-small text-muted-foreground">{b.contenido}</p>
                 </div>
               ))}
             </div>
@@ -553,20 +556,20 @@ export function CompanyProfile({
         {/* Eventos */}
         {posts.eventos.length > 0 && (
           <section id="eventos" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Próximos eventos
             </h2>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {posts.eventos.map((e) => (
                 <div
                   key={e.id}
-                  className="flex gap-4 rounded-2xl border border-border bg-card p-5"
+                  className="flex gap-4 rounded-lg border border-border bg-card p-5 elevation-1"
                 >
-                  <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <span className="text-lg font-bold leading-none">
+                  <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
+                    <span className="text-h3 leading-none">
                       {e.fechaEvento ? new Date(e.fechaEvento).getDate() : '—'}
                     </span>
-                    <span className="text-xs font-semibold uppercase">
+                    <span className="text-overline text-primary">
                       {e.fechaEvento
                         ? new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', month: 'short' }).format(
                             new Date(e.fechaEvento)
@@ -575,11 +578,11 @@ export function CompanyProfile({
                     </span>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground">{e.titulo}</h3>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                    <h3 className="text-h4 text-foreground">{e.titulo}</h3>
+                    <p className="mt-1 line-clamp-2 text-small text-muted-foreground">
                       {e.contenido}
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-caption">
                       {e.fechaEvento && (
                         <span className="inline-flex items-center gap-1">
                           <CalendarDays className="h-3.5 w-3.5" />
@@ -605,23 +608,23 @@ export function CompanyProfile({
         {/* Noticias */}
         {posts.noticias.length > 0 && (
           <section id="noticias" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Noticias
             </h2>
             <div className="mt-6 space-y-4">
               {posts.noticias.map((n) => (
                 <article
                   key={n.id}
-                  className="rounded-2xl border border-border bg-card p-5"
+                  className="rounded-lg border border-border bg-card p-5 elevation-1"
                 >
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Newspaper className="h-3.5 w-3.5" />
+                  <div className="flex items-center gap-2 text-caption">
+                    <Newspaper className="h-3.5 w-3.5" aria-hidden />
                     {new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'long' }).format(
                       new Date(n.publicadaEn)
                     )}
                   </div>
-                  <h3 className="mt-2 font-semibold text-foreground">{n.titulo}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{n.contenido}</p>
+                  <h3 className="mt-2 text-h4 text-foreground">{n.titulo}</h3>
+                  <p className="mt-1 text-small text-muted-foreground">{n.contenido}</p>
                 </article>
               ))}
             </div>
@@ -631,13 +634,13 @@ export function CompanyProfile({
         {/* Actividades */}
         {excursiones.length > 0 && (
           <section id="excursiones" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Actividades
             </h2>
             <p className="mt-2 text-muted-foreground">
               Experiencias, parques y tours disponibles.
             </p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {excursiones
                 .filter((exc) => !exc.todasFechasPasadas)
                 .map((exc) => {
@@ -647,7 +650,7 @@ export function CompanyProfile({
                     <Link
                       key={exc.id}
                       href={`/empresas/${company.slug}/excursiones/${exc.slug}`}
-                      className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
+                      className={`group overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40 ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
                     >
                       <div className="relative aspect-[16/10] bg-muted">
                         {exc.portadaUrl ? (
@@ -664,21 +667,21 @@ export function CompanyProfile({
                           </div>
                         )}
                         {exc.categoria && (
-                          <span className="absolute left-3 top-3 rounded-full bg-background/80 px-2.5 py-0.5 text-xs font-medium backdrop-blur">
+                          <span className="absolute left-3 top-3 rounded-full bg-card/95 px-2.5 py-0.5 text-label-sm font-semibold text-foreground">
                             {exc.categoria}
                           </span>
                         )}
                         {(isAgotada || isFinalizada) && (
-                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                            <span className="rounded-full bg-background/90 px-3 py-1 text-sm font-semibold text-destructive flex items-center gap-1.5">
+                          <div className="absolute inset-0 flex items-center justify-center bg-foreground/55">
+                            <span className="flex items-center gap-1.5 rounded-full border border-white/60 px-4 py-1.5 text-label-lg text-white">
                               {isFinalizada ? (
                                 <>
-                                  <X className="h-4 w-4" />
+                                  <X className="h-4 w-4" aria-hidden />
                                   Finalizada
                                 </>
                               ) : (
                                 <>
-                                  <AlertCircle className="h-4 w-4" />
+                                  <AlertCircle className="h-4 w-4" aria-hidden />
                                   Agotada
                                 </>
                               )}
@@ -687,10 +690,8 @@ export function CompanyProfile({
                         )}
                       </div>
                       <div className="p-4">
-                        <h3 className="font-semibold group-hover:text-primary">
-                          {exc.nombre}
-                        </h3>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <h3 className="text-label-lg text-foreground">{exc.nombre}</h3>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3 text-caption">
                           {exc.duracionMin && (
                             <span className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
@@ -705,7 +706,7 @@ export function CompanyProfile({
                           )}
                         </div>
                         {exc.precioDesde != null && (
-                          <p className="mt-2 text-sm font-semibold text-primary">
+                          <p className="mt-2 text-price-sm tabular-nums text-foreground">
                             Desde {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
                           </p>
                         )}
@@ -720,14 +721,14 @@ export function CompanyProfile({
         {/* Galería */}
         {company.galleryImages && company.galleryImages.length > 0 && (
           <section id="galeria" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Galería
             </h2>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {company.galleryImages.map((image, idx) => (
                 <div
                   key={idx}
-                  className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted"
+                  className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted"
                 >
                   <Image
                     src={image}
@@ -744,7 +745,7 @@ export function CompanyProfile({
         {/* Reseñas de clientes */}
         {hayResenas && resenas && (
           <section id="resenas" className="mt-14 scroll-mt-32">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-h2 text-foreground">
               Reseñas
             </h2>
             <div className="mt-6">
@@ -755,30 +756,30 @@ export function CompanyProfile({
 
         {/* Información */}
         <section id="informacion" className="mt-14 scroll-mt-32">
-          <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <h2 className="text-h2 text-foreground">
             Información
           </h2>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {company.horario && (
-              <div className="rounded-2xl border border-border bg-card p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <Clock className="h-4 w-4 text-primary" /> Horario de atención
+              <div className="rounded-lg border border-border bg-card p-5 elevation-1">
+                <h3 className="flex items-center gap-2 text-h4 text-foreground">
+                  <Clock className="h-4 w-4 text-primary" aria-hidden /> Horario de atención
                 </h3>
-                <p className="mt-2 text-sm text-muted-foreground">{company.horario}</p>
+                <p className="mt-2 text-small text-muted-foreground">{company.horario}</p>
               </div>
             )}
             {location && (
-              <div className="rounded-2xl border border-border bg-card p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <MapPin className="h-4 w-4 text-primary" /> Ubicación
+              <div className="rounded-lg border border-border bg-card p-5 elevation-1">
+                <h3 className="flex items-center gap-2 text-h4 text-foreground">
+                  <MapPin className="h-4 w-4 text-primary" aria-hidden /> Ubicación
                 </h3>
-                <p className="mt-2 text-sm text-muted-foreground">{location}</p>
+                <p className="mt-2 text-small text-muted-foreground">{location}</p>
                 {company.googleMapsUrl && (
                   <a
                     href={company.googleMapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-primary transition hover:bg-muted"
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-small font-semibold text-primary transition-colors duration-fast hover:border-primary/40"
                   >
                     Ver en Google Maps
                   </a>
@@ -786,9 +787,9 @@ export function CompanyProfile({
               </div>
             )}
             {contactLinks.length > 0 && (
-              <div className="rounded-2xl border border-border bg-card p-5">
-                <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                  <Phone className="h-4 w-4 text-primary" /> Contacto
+              <div className="rounded-lg border border-border bg-card p-5 elevation-1">
+                <h3 className="flex items-center gap-2 text-h4 text-foreground">
+                  <Phone className="h-4 w-4 text-primary" aria-hidden /> Contacto
                 </h3>
                 <div className="mt-2 space-y-2">
                   {contactLinks.map((c) => (
@@ -797,9 +798,9 @@ export function CompanyProfile({
                       href={c.href}
                       target={c.href.startsWith('http') ? '_blank' : undefined}
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-muted-foreground transition hover:text-primary"
+                      className="flex items-center gap-2 text-small text-muted-foreground transition-colors duration-fast hover:text-primary"
                     >
-                      <c.icon className="h-4 w-4" /> {c.label}
+                      <c.icon className="h-4 w-4" aria-hidden /> {c.label}
                     </a>
                   ))}
                 </div>
@@ -809,49 +810,46 @@ export function CompanyProfile({
         </section>
       </div>
 
-      {/* CTA final */}
+      {/* CTA final: azul profundo de la paleta (AA sobre blanco del texto),
+          no el degradado azul→índigo de la versión anterior. */}
       {isApp ? (
-        <section className="mt-16 rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-800 py-14 text-center text-white">
+        <section className="mt-16 rounded-lg bg-retail-deep py-14 text-center text-white">
           <div className="mx-auto max-w-2xl px-4">
-            <Sparkles className="mx-auto h-10 w-10 text-white" />
-            <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
-              ¿Te gusta {company.name}?
-            </h2>
-            <p className="mt-3 text-white/80">
+            <Sparkles className="mx-auto h-10 w-10 text-white" aria-hidden />
+            <h2 className="mt-4 break-words text-h2">¿Te gusta {company.name}?</h2>
+            <p className="mt-3 text-white/85">
               Síguela para recibir sus promociones y novedades, o descubre más
               empresas dentro de MembeGo.
             </p>
             <div className="mt-8 flex justify-center">
               <Link
                 href={discoverHref}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-primary transition hover:bg-primary/10"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-card px-6 py-3 text-label-lg text-primary transition-colors duration-fast hover:bg-brand-primary-soft"
               >
-                Descubrir empresas <ArrowRight className="h-4 w-4" />
+                Descubrir empresas <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>
           </div>
         </section>
       ) : (
-        <section className="mt-16 bg-gradient-to-br from-blue-700 to-indigo-800 py-14 text-center text-white">
+        <section className="mt-16 bg-retail-deep py-14 text-center text-white">
           <div className="mx-auto max-w-2xl px-4">
-            <QrCode className="mx-auto h-10 w-10 text-primary" />
-            <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
-              Activa tu membresía en {company.name}
-            </h2>
-            <p className="mt-3 text-white/80">
+            <QrCode className="mx-auto h-10 w-10 text-white" aria-hidden />
+            <h2 className="mt-4 break-words text-h2">Activa tu membresía en {company.name}</h2>
+            <p className="mt-3 text-white/85">
               Regístrate, elige tu plan y recibe tu membresía digital con QR en
               minutos.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href={registroHref}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-primary transition hover:bg-primary/10"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-card px-6 py-3 text-label-lg text-primary transition-colors duration-fast hover:bg-brand-primary-soft"
               >
-                Registrarme <ArrowRight className="h-4 w-4" />
+                Registrarme <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
               <Link
                 href={discoverHref}
-                className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20"
+                className="inline-flex items-center justify-center rounded-full border border-white/40 px-6 py-3 text-label-lg text-white transition-colors duration-fast hover:bg-white/10"
               >
                 Ver otras empresas
               </Link>

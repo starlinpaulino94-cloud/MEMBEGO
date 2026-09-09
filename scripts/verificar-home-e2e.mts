@@ -147,6 +147,7 @@ try {
     ['mi-qr', '/cliente/qr'],
     ['promociones', '/cliente/promociones'],
     ['explorar', '/cliente/explorar'],
+    ['empresa-perfil', `/cliente/empresas/qa-home-a-${suffix}`],
   ] as const) {
     if (ruta !== '/cliente/inicio') await clientPage.goto(`${baseURL}${ruta}`, { timeout: 180000 })
     for (const width of [390, 768, 1280]) {
@@ -226,6 +227,23 @@ try {
       )
     }
   }
+  // El perfil de empresa retail: no basta con que cargue sin desbordar —
+  // cabecera, planes y la reseña real tienen que estar.
+  paginaDiagnostico = clientPage
+  await clientPage.setViewportSize({ width: 390, height: 900 })
+  await clientPage.goto(`${baseURL}/cliente/empresas/qa-home-a-${suffix}`, { timeout: 180000 })
+  await expect(
+    clientPage.getByRole('heading', { name: `QA Home a ${suffix}`, exact: true })
+  ).toBeVisible({ timeout: 120000 })
+  await expect(
+    clientPage.getByRole('heading', { name: 'Planes de membresía' })
+  ).toBeVisible({ timeout: 60000 })
+  // `.first()`: el comentario vive dos veces en el perfil — el formulario
+  // «Actualiza tu reseña» lo precarga y la lista de opiniones lo enseña.
+  await expect(
+    clientPage.getByText('Excelente servicio, el equipo es muy profesional.').first()
+  ).toBeVisible({ timeout: 60000 })
+  console.log('E2E: el perfil de empresa enseña cabecera, planes y reseñas reales.')
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
   await clientPage.setViewportSize({ width: 390, height: 900 })
   await clientPage.goto(`${baseURL}/cliente/buscar?q=${query}`, { timeout: 180000 })
