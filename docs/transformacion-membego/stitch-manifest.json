@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "baseline_observed_at": "2026-09-09T09:18:39.0969429-04:00",
+  "head": "afd6262126203bec37934c2463924031890cb9eb",
+  "source_root": "C:/Users/starl/OneDrive/Desktop/stitch_membego_mobile_e_commerce_experience (1)/stitch_membego_mobile_e_commerce_experience",
+  "source_selection": "Only immediate screen directories under source_root; nested docs/transformacion-membego/stitch (nine duplicate screens) excluded.",
+  "path_semantics": "png.path and html.path are repository-relative versioned files. Source paths are source_root + id + /screen.png or /code.html. Recorded sha256 applies independently to both copies, compared equal by SHA256.",
+  "route_mapping_basis": "docs/transformacion-membego/04-fidelidad-stitch.md section 1; page existence checked locally. Routes are coverage targets, not runtime or fidelity certification.",
+  "coverage_status": "12 references present and directly opened; 4 client mobile compositions and 8 admin desktop compositions. Current application fidelity not tested.",
+  "capture_metadata": {
+    "css_viewport": null,
+    "device_pixel_ratio": null,
+    "export_scale": null,
+    "reason": "PNG IHDR dimensions are bitmap pixels, not CSS viewport sizes. HTML width=device-width and initial-scale=1.0 do not establish capture viewport, DPR or export scale. Embedded mobile previews do not supply independent responsive references."
+  },
+  "missing_designs": ["Client desktop/tablet variants", "Admin mobile/tablet variants", "Platform/superadmin screens", "Other route-specific states, including active client QR"],
+  "derived_design_status": "Not approved; missing variants and states require explicit visual validation.",
+  "version_conflict_policy": "If any source/repository digest differs on recheck, preserve both and block the affected fidelity gate until the reference version is resolved.",
+  "design": {
+    "path": "docs/transformacion-membego/stitch/retail_commercial_mobile/DESIGN.md",
+    "source_relative_path": "retail_commercial_mobile/DESIGN.md",
+    "sha256": "55eb43cbd72524cf39840992bff5457718ca89be1c8b2f9ae0d25918253ebff1",
+    "source_matches_repo": true,
+    "note": "Read in full. Frontmatter primary #006194 differs from prose primary #0284C7; do not silently resolve that internal specification inconsistency."
+  },
+  "screens": [
+    {
+      "id": "inicio_membego", "screen": "Inicio", "audience": "client", "composition": "mobile",
+      "routes": ["/cliente/inicio"], "mapping": "one-to-one", "coverage": "reference-present; fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/inicio_membego/screen.png", "sha256": "4ee9f2980fa68b28e93f0e3ff5e4b3130f40ab9543076b21b4bfa488df57c574", "width": 269, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/inicio_membego/code.html", "sha256": "6b88f2ffa8962634cd608e435185b42292e15c71563202a441cf2732248e0838", "title": null},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "cuenta_membego", "screen": "Cuenta", "audience": "client", "composition": "mobile",
+      "routes": ["/cliente/perfil"], "mapping": "one-to-one", "coverage": "reference-present; fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/cuenta_membego/screen.png", "sha256": "5346dbbe9efdbb895e250a24b3113b0a6778a01db29bf86342b00114a0207626", "width": 429, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/cuenta_membego/code.html", "sha256": "85641a80d64d7ab70c52a101d0e79dcf1abc1c7e9ab2af4ccbfe29acd178af4c", "title": null},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "men_membego", "screen": "Explora Membego / Menu", "audience": "client", "composition": "mobile",
+      "routes": ["/cliente/menu"], "mapping": "one-to-one", "coverage": "reference-present; fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/men_membego/screen.png", "sha256": "0266c1453ff0db3be925ee838cf3095801450e5fc47c37e216c27d6aa71c0406", "width": 706, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/men_membego/code.html", "sha256": "c971debfc5e96b9a66d2a4037d96a87d0b471b3684caba1cef3451ec5374fe54", "title": null},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "mi_qr_sin_beneficio_membego", "screen": "Mi QR sin beneficios activos", "audience": "client", "composition": "mobile",
+      "routes": ["/cliente/qr"], "mapping": "one-to-one", "coverage": "empty-state-reference-only; active-state-derived-unapproved",
+      "png": {"path": "docs/transformacion-membego/stitch/mi_qr_sin_beneficio_membego/screen.png", "sha256": "0767813887dcfc55aafe22b7412ed204b670a308c82b59097dcee7532a347dd6", "width": 464, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/mi_qr_sin_beneficio_membego/code.html", "sha256": "1644d2b149704383c7f15a444d382839514bd5325dae8c780217f45247b45ea3", "title": null},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "editor_de_inicio_de_la_app_membego", "screen": "Editor de Inicio / Arquitectura del Feed Movil", "audience": "admin", "composition": "desktop-with-mobile-preview",
+      "routes": ["/admin/personalizacion"], "mapping": "one-to-one", "coverage": "reference-present; fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/editor_de_inicio_de_la_app_membego/screen.png", "sha256": "7d97e0394298b4a95dfd16f95b2550257377698d2d2016a4eee302b9aa97b20a", "width": 1578, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/editor_de_inicio_de_la_app_membego/code.html", "sha256": "9d0488256c83962760cbc4038e3f9fcee91bbc3203678f5e5d307982cfa2ba1c", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "resumen_administrativo_membego", "screen": "Resumen Operativo", "audience": "admin", "composition": "desktop",
+      "routes": ["/admin/dashboard"], "mapping": "one-to-one", "coverage": "reference-present; fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/resumen_administrativo_membego/screen.png", "sha256": "469fde6168b6385f8c42d84f07ee5fb2d012caeaa471a470a734e81e67589509", "width": 1600, "height": 1590},
+      "html": {"path": "docs/transformacion-membego/stitch/resumen_administrativo_membego/code.html", "sha256": "8c65c0b23bfc07fea6163419ace3a2191e1145c0fda0ac56bda81783f8ff3ed6", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "gesti_n_de_membres_as_y_planes_membego", "screen": "Planes y Membresias", "audience": "admin", "composition": "desktop",
+      "routes": ["/admin/planes", "/admin/membresias"], "mapping": "one-to-many", "coverage": "shared-reference; per-route-fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/gesti_n_de_membres_as_y_planes_membego/screen.png", "sha256": "6d837038a9895146222ef608e0664ea101fb863ead90675e311d2c63a5bba158", "width": 1228, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/gesti_n_de_membres_as_y_planes_membego/code.html", "sha256": "d53294ff8b93ee701ee8f9cd12f704b1216fc1ece05af0c9c7b10901ebf73772", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "centro_de_canjes_y_validaci_n_qr_membego", "screen": "Centro de Canjes y Validacion QR", "audience": "admin", "composition": "desktop",
+      "routes": ["/admin/scanner"], "mapping": "one-to-one", "coverage": "reference-present; fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/centro_de_canjes_y_validaci_n_qr_membego/screen.png", "sha256": "e4c6d15085c53f95369375d296ea935fb5669d189e084050505240de64f77651", "width": 1215, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/centro_de_canjes_y_validaci_n_qr_membego/code.html", "sha256": "108d959f0f188b98a48eaad73e8ad2c4a492d44dfdea25046ec8acd77ce226b8", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "pagos_y_comprobantes_membego", "screen": "Pagos, Comprobantes y Conciliacion", "audience": "admin", "composition": "desktop",
+      "routes": ["/admin/pagos", "/admin/conciliacion"], "mapping": "one-to-many", "coverage": "shared-reference; per-route-fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/pagos_y_comprobantes_membego/screen.png", "sha256": "861fc6247de3306eaa8322e8e143eca2ef8c1649712cff01c485e01a33eb45bc", "width": 1329, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/pagos_y_comprobantes_membego/code.html", "sha256": "54c443eb2112d69872b45d4041b14edb560258392a10eb49f5f372ce0cf6ff24", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "marketing_y_notificaciones_membego", "screen": "Campanas y Comunicacion con Clientes", "audience": "admin", "composition": "desktop-with-mobile-preview",
+      "routes": ["/admin/campanas", "/admin/notificaciones"], "mapping": "one-to-many", "coverage": "shared-reference; per-route-fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/marketing_y_notificaciones_membego/screen.png", "sha256": "230a4ad242ac6723fdd9b63b882c4acd766291ad7db783226817c0ecdc0038ac", "width": 1206, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/marketing_y_notificaciones_membego/code.html", "sha256": "3a84953dbf4d73ee7445262ce1b204cf3e5aca79572704944c9651d9cf9e20d3", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "prospectos_y_crm_membego", "screen": "Gestion de Clientes y Pipeline Comercial", "audience": "admin", "composition": "desktop",
+      "routes": ["/admin/crm", "/admin/clientes"], "mapping": "one-to-many", "coverage": "shared-reference; per-route-fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/prospectos_y_crm_membego/screen.png", "sha256": "1108d8ea10e78414bc4962321e967486685470035adb540e24164286220e0c74", "width": 1600, "height": 1760},
+      "html": {"path": "docs/transformacion-membego/stitch/prospectos_y_crm_membego/code.html", "sha256": "cb700c6c21e8caa0c5daa26b333cab584a991fa7830fe240b08fb4cc27711af3", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    },
+    {
+      "id": "fidelizaci_n_y_crecimiento_membego", "screen": "Programa de Fidelizacion y Gamificacion", "audience": "admin", "composition": "desktop-with-mobile-preview",
+      "routes": ["/admin/gamificacion", "/admin/referidos", "/admin/regalos"], "mapping": "one-to-many", "coverage": "shared-reference; per-route-fidelity-unverified",
+      "png": {"path": "docs/transformacion-membego/stitch/fidelizaci_n_y_crecimiento_membego/screen.png", "sha256": "11ba5cb319d708624790c1da409dc51a00df894d9e2cf0c1134c07cf2cb49c4c", "width": 879, "height": 1600},
+      "html": {"path": "docs/transformacion-membego/stitch/fidelizaci_n_y_crecimiento_membego/code.html", "sha256": "b7667ed5b6a690911f80e98ab4c7cd54f26fb349c5fdda780e9d7ba0acc44193", "title": "MEMBEGO Panel Administrativo"},
+      "source_matches_repo": {"png": true, "html": true}, "png_opened_directly": true
+    }
+  ]
+}
