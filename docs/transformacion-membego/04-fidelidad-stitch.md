@@ -616,3 +616,35 @@ El trinquete de deuda bajó dos veces en el día: 170 → 159 (perfil) → 147
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde ·
 captura del Inicio (wallet vacía + novedades) revisada.
+
+---
+
+## 17. F3 · Cuenta y Configuración, pantallas separadas (2026-09-10)
+
+Decisión del usuario: la Cuenta no debe cargar con las secciones de
+configuración — el engranaje lleva a una pantalla propia. La captura de
+Stitch (S02) enseña filas de «Configuración y soporte» al pie de Cuenta;
+la instrucción del usuario manda sobre la captura en ese punto.
+
+- **`/cliente/perfil` (Cuenta)** queda con lo que la persona USA: saludo con
+  engranaje → `/cliente/ajustes`, teselas suaves (`retail-mist`, sin borde,
+  como el diseño), pestañas con conteos, «Tus membresías» con la tarjeta del
+  contrato (estado con punto, tesela de icono a la derecha y la fila del
+  pase «Pase digital listo · Ver QR y uso» sobre azul niebla), banner azul
+  profundo con el CTA a la derecha, «Usar de nuevo» guiado por imagen
+  (logo o inicial sobre tinte), beneficios con teselas de marca, e «Invita
+  amigos y gana» como banda suave.
+- **`/cliente/ajustes` (Configuración, NUEVA)**: cabecera con volver, filas
+  de soporte (servicio 24/7, métodos de pago, términos legales), Mi ID
+  MembeGo, y los formularios movidos tal cual (Perfil, Seguridad, Mi
+  ubicación, Mis vehículos, Privacidad) con «Cerrar sesión» en rojo al
+  fondo. `ensureCodigoCorto` viaja con la tarjeta del ID.
+- Migas y avisos actualizados: `/cliente/vehiculos` vuelve a Configuración,
+  y la nota del Menú apunta a `/cliente/ajustes`.
+- El E2E gana dos cosas: `ajustes` en el bucle de capturas (390/768/1280 +
+  sonda de desbordamiento) y el paso que VIGILA la separación — en Cuenta no
+  existen «Configuración y soporte» ni «Cerrar sesión», y en Configuración
+  sí están el título y la sesión.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo (10
+pasos) en verde · capturas de Cuenta y Configuración revisadas a 390px.

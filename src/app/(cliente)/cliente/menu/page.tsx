@@ -138,12 +138,12 @@ export default async function MenuPage() {
       <p className="flex items-start gap-2 rounded-xl bg-muted/60 p-4 text-[13px] text-muted-foreground">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
         <span>
-          ¿Buscas la configuración de tu cuenta y datos personales? Se movió a{' '}
+          ¿Buscas la configuración de tu cuenta y datos personales? Vive en{' '}
           <Link
-            href="/cliente/perfil"
+            href="/cliente/ajustes"
             className="font-semibold text-primary hover:underline"
           >
-            Cuenta &gt; Configuración
+            Configuración
           </Link>
         </span>
       </p>

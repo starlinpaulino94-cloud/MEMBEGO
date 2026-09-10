@@ -48,8 +48,8 @@ export default async function VehiculosPage() {
     <div>
       <PageHeader
         eyebrow={
-          <Link href="/cliente/perfil" className="hover:underline">
-            Perfil
+          <Link href="/cliente/ajustes" className="hover:underline">
+            Configuración
           </Link>
         }
         title="Mis vehículos"

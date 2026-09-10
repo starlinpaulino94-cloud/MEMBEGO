@@ -162,6 +162,7 @@ try {
     ['mi-qr', '/cliente/qr'],
     ['promociones', '/cliente/promociones'],
     ['explorar', '/cliente/explorar'],
+    ['ajustes', '/cliente/ajustes'],
     ['empresa-perfil', `/cliente/empresas/qa-home-a-${suffix}`],
   ] as const) {
     if (ruta !== '/cliente/inicio') await clientPage.goto(`${baseURL}${ruta}`, { timeout: 180000 })
@@ -259,6 +260,18 @@ try {
     clientPage.getByText('Excelente servicio, el equipo es muy profesional.').first()
   ).toBeVisible({ timeout: 60000 })
   console.log('E2E: el perfil de empresa enseña cabecera, planes y reseñas reales.')
+
+  // Cuenta y Configuración son pantallas SEPARADAS (decisión del usuario):
+  // el engranaje de Cuenta lleva a /cliente/ajustes, y en Cuenta no queda
+  // ninguna sección de configuración.
+  await clientPage.goto(`${baseURL}/cliente/perfil`, { timeout: 180000 })
+  await expect(clientPage.getByRole('link', { name: 'Configuración de la cuenta' })).toBeVisible({ timeout: 60000 })
+  await expect(clientPage.getByText('Configuración y soporte')).toHaveCount(0)
+  await expect(clientPage.getByText('Cerrar sesión')).toHaveCount(0)
+  await clientPage.goto(`${baseURL}/cliente/ajustes`, { timeout: 180000 })
+  await expect(clientPage.getByRole('heading', { name: 'Configuración' })).toBeVisible({ timeout: 60000 })
+  await expect(clientPage.getByText('Cerrar sesión')).toBeVisible({ timeout: 60000 })
+  console.log('E2E: Cuenta y Configuración viven separadas; el engranaje conecta las dos.')
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
   await clientPage.setViewportSize({ width: 390, height: 900 })
   await clientPage.goto(`${baseURL}/cliente/buscar?q=${query}`, { timeout: 180000 })
@@ -319,7 +332,8 @@ try {
     await db.auditLog.deleteMany({ where: { companyId: { in: companies } } })
     await db.promocion.deleteMany({ where: { companyId: { in: companies } } })
     await db.plan.deleteMany({ where: { companyId: { in: companies } } })
-    // Visitar Cuenta le asigna a la persona su código corto de referido, y eso
+    // Visitar Configuración (/cliente/ajustes) le asigna su código corto de
+    // referido a la persona, y eso
     // deja eventos colgando de `Cliente`. Sin borrarlos antes, la limpieza
     // muere con una clave foránea y deja TODAS las fixtures puestas: el fallo
     // no es el evento, es quedarse a medias.
