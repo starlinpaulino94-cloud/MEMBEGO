@@ -165,7 +165,9 @@ test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', ()
   const src = leer('src/components/cliente/inicio/InicioRetail.tsx')
   for (const [capacidad, marca] of [
     ['wallet', /RetailWallet/],
-    ['motor de experiencias', /RetailExperiencia/],
+    // El motor de experiencias habla por el POPUP: su héroe se retiró del
+    // Inicio por decisión del usuario (2026-09-10).
+    ['motor de experiencias (aviso)', /PopupInteligente/],
     ['onboarding', /OnboardingClienteFirstVisit/],
     ['novedades e invitación', /RetailDescubreMas/],
   ] as const) {
@@ -177,6 +179,11 @@ test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', ()
     existsSync(join(RAIZ, 'src/components/engagement/PruebaSocial.tsx')),
     false,
     'La sección EN VIVO se retiró del Inicio; su componente no debe volver.'
+  )
+  assert.equal(
+    existsSync(join(RAIZ, 'src/components/cliente/inicio/RetailExperiencia.tsx')),
+    false,
+    'El héroe del motor se retiró del Inicio (el popup basta); no debe volver.'
   )
   // La gamificación no tiene sección propia: viaja en la cabecera de la wallet.
   assert.match(leer('src/components/cliente/inicio/RetailWallet.tsx'), /gamificacion/)

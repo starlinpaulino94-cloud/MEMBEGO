@@ -781,3 +781,28 @@ la wallet y — lo importante — poder VERLA con datos:
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde
 · capturas de wallet, Cuenta y vitrina revisadas.
+
+---
+
+## 22. El héroe del motor de experiencias sale del Inicio (2026-09-10)
+
+El usuario lo vio con su membresía pendiente real: la tarjeta «UN PASO PARA
+ACTIVAR / Tu plan te espera» arriba del todo «se ve muy feo y rompe el
+diseño». Fuera por decisión directa:
+
+- El motor de experiencias habla SOLO por el **popup inteligente** (máx. 1
+  al día): el protagonista pasa a ser `experiencias[0]` del motor, que
+  antes alimentaba el héroe. Sus estados también viven donde se actúa —
+  la wallet enseña «Pendiente», y Planes y el detalle de membresía llevan
+  el «Completar pago».
+- `RetailExperiencia` se borra y la guardia de capacidades vigila que no
+  vuelva (la del motor ahora exige `PopupInteligente`). `RetailExperiencias`
+  —plural, el bloque comercial de excursiones— no tiene nada que ver y se
+  queda.
+- De paso, la cabecera de «Mis membresías» recupera `flex-wrap`: en
+  pantallas más angostas que 390 los chips bajan de línea en vez de
+  estrujar el título en una columna (lo segundo que enseñaba la captura
+  del usuario).
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde
+· Inicio capturado abriendo directo con la wallet.

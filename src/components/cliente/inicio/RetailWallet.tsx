@@ -29,10 +29,10 @@ export function RetailWallet({
   return (
     <section className="bg-background px-4 py-5 md:px-6 md:py-6" aria-labelledby="retail-wallet">
       <div className="mx-auto max-w-6xl">
-        {/* Sin `flex-wrap`: el chip de puntos vive en la línea del título
-            (como en el mockup aprobado); si el espacio aprieta, el que se
-            parte en dos líneas es el título, no la fila. */}
-        <div className="flex items-start justify-between gap-3">
+        {/* `flex-wrap`: a 390px los chips caben en la línea del título (el
+            mockup aprobado); en pantallas más angostas BAJAN de línea — sin
+            esto, el título quedaba estrujado en una columna de tres líneas. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <div className="min-w-0">
             <h2 id="retail-wallet" className="text-h2 text-foreground">
               Mis membresías

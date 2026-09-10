@@ -43,9 +43,12 @@ import type { SessionUser } from '@/types'
  */
 
 export interface PanelPersonal {
-  /** La acción protagonista que eligió el motor de experiencias, si hay. */
-  readonly experiencia: ExperienciaHero | null
-  /** El aviso #2 del motor: nunca repite al protagonista. */
+  /**
+   * La acción elegida por el motor de experiencias, como POPUP (máx. 1/día).
+   * El héroe que la pintaba arriba del Inicio se retiró por decisión del
+   * usuario (2026-09-10): rompía el diseño retail. El aviso discreto basta —
+   * los estados también viven donde se actúa (wallet, planes, detalle).
+   */
   readonly popup: ExperienciaHero | null
   readonly wallet: readonly WalletStackItem[]
   /** La lectura de membresías falló: se dice, no se finge una wallet vacía. */
@@ -154,8 +157,7 @@ export async function cargarPanelPersonal(user: SessionUser): Promise<PanelPerso
 
 
   return {
-    experiencia: experiencias[0] ?? null,
-    popup: experiencias[1] ?? null,
+    popup: experiencias[0] ?? null,
     wallet,
     walletError,
     novedades,

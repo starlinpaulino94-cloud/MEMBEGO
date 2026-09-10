@@ -5,7 +5,6 @@ import type { PanelPersonal } from '@/modules/cliente/panelPersonal'
 import type { InicioVista } from '@/modules/home/vista'
 import { InicioComercial } from './InicioComercial'
 import { RetailDescubreMas } from './RetailDescubreMas'
-import { RetailExperiencia } from './RetailExperiencia'
 import { RetailWallet } from './RetailWallet'
 
 /**
@@ -65,12 +64,13 @@ export function InicioRetail({
       {/* Felicitación por encima de la app tras registrarse. */}
       <CelebracionBienvenida />
 
-      {/* El aviso #2 del motor: el #1 ya es la experiencia protagonista. */}
+      {/* El motor de experiencias habla SOLO por el popup (máx. 1 al día).
+          El héroe que lo pintaba arriba se retiró por decisión del usuario
+          (2026-09-10): rompía el diseño; sus estados también viven donde se
+          actúa (wallet, planes, detalle de membresía). */}
       {!personal.walletError && personal.engagement.popups ? (
         <PopupInteligente candidato={personal.popup} color={personal.engagement.color} />
       ) : null}
-
-      {personal.experiencia ? <RetailExperiencia exp={personal.experiencia} /> : null}
 
       {tieneMembresias ? (
         <>
@@ -102,7 +102,7 @@ export function InicioRetail({
       {!personal.walletError ? (
         <RetailDescubreMas
           novedades={personal.novedades}
-          mostrarInvitaYGana={personal.experiencia?.tipo !== 'REFERIDOS'}
+          mostrarInvitaYGana={personal.popup?.tipo !== 'REFERIDOS'}
         />
       ) : null}
     </div>
