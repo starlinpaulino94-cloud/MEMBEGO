@@ -352,6 +352,8 @@ async function limpiar() {
   // referencian promos/empresas — caen ANTES que ellas.
   await db.productoCompra.deleteMany({ where: { companyId: { in: ids } } })
   await db.companyPost.deleteMany({ where: { companyId: { in: ids } } })
+  await db.cita.deleteMany({ where: { companyId: { in: ids } } })
+  await db.agendaConfig.deleteMany({ where: { companyId: { in: ids } } })
   await db.sucursal.deleteMany({ where: { companyId: { in: ids } } })
   await db.companyFollow.deleteMany({ where: { companyId: { in: ids } } })
   await db.cliente.deleteMany({ where: { companyId: { in: ids }, supabaseId: { startsWith: 'demo-persona-' } } })
@@ -466,6 +468,7 @@ async function sembrar() {
     await db.companyRating.deleteMany({ where: { companyId: empresa.id } })
     await db.productoCompra.deleteMany({ where: { companyId: empresa.id } })
     await db.companyPost.deleteMany({ where: { companyId: empresa.id } })
+    await db.cita.deleteMany({ where: { companyId: empresa.id } })
     await db.sucursal.deleteMany({ where: { companyId: empresa.id } })
     await db.companyFollow.deleteMany({ where: { companyId: empresa.id } })
     await db.cliente.deleteMany({ where: { companyId: empresa.id, supabaseId: { startsWith: 'demo-persona-' } } })
@@ -637,6 +640,22 @@ async function sembrar() {
       })
     }
 
+    // 4d) Agenda de citas: el módulo se enciende con horarios del rubro.
+    // Horario semanal { "dia": [{desde,hasta}] } — 0=domingo … 6=sábado.
+    const AGENDA: Record<string, { duracionMin: number; horarios: Record<string, { desde: string; hasta: string }[]> }> = {
+      'demo-aquashine': { duracionMin: 45, horarios: { '1': [{ desde: '08:00', hasta: '18:00' }], '2': [{ desde: '08:00', hasta: '18:00' }], '3': [{ desde: '08:00', hasta: '18:00' }], '4': [{ desde: '08:00', hasta: '18:00' }], '5': [{ desde: '08:00', hasta: '18:00' }], '6': [{ desde: '08:00', hasta: '17:00' }] } },
+      'demo-labraza': { duracionMin: 60, horarios: { '0': [{ desde: '12:00', hasta: '22:00' }], '2': [{ desde: '12:00', hasta: '22:00' }], '3': [{ desde: '12:00', hasta: '22:00' }], '4': [{ desde: '12:00', hasta: '22:00' }], '5': [{ desde: '12:00', hasta: '23:00' }], '6': [{ desde: '12:00', hasta: '23:00' }] } },
+      'demo-caribeaventura': { duracionMin: 30, horarios: { '1': [{ desde: '08:00', hasta: '16:00' }], '2': [{ desde: '08:00', hasta: '16:00' }], '3': [{ desde: '08:00', hasta: '16:00' }], '4': [{ desde: '08:00', hasta: '16:00' }], '5': [{ desde: '08:00', hasta: '16:00' }], '6': [{ desde: '08:00', hasta: '13:00' }] } },
+      'demo-bellavita': { duracionMin: 60, horarios: { '1': [{ desde: '09:00', hasta: '19:00' }], '2': [{ desde: '09:00', hasta: '19:00' }], '3': [{ desde: '09:00', hasta: '19:00' }], '4': [{ desde: '09:00', hasta: '19:00' }], '5': [{ desde: '09:00', hasta: '19:00' }], '6': [{ desde: '09:00', hasta: '18:00' }] } },
+      'demo-fademasters': { duracionMin: 30, horarios: { '0': [{ desde: '10:00', hasta: '15:00' }], '2': [{ desde: '09:00', hasta: '20:00' }], '3': [{ desde: '09:00', hasta: '20:00' }], '4': [{ desde: '09:00', hasta: '20:00' }], '5': [{ desde: '09:00', hasta: '21:00' }], '6': [{ desde: '09:00', hasta: '21:00' }] } },
+    }
+    const agenda = AGENDA[e.slug]!
+    await db.agendaConfig.upsert({
+      where: { companyId: empresa.id },
+      update: { activa: true, duracionMin: agenda.duracionMin, maxPorSlot: 2, maxPorDia: 0, anticipacionHoras: 2, ventanaDias: 14, autoConfirmar: true, notas: 'Llega 10 minutos antes con tu QR listo.', horarios: agenda.horarios },
+      create: { companyId: empresa.id, activa: true, duracionMin: agenda.duracionMin, maxPorSlot: 2, maxPorDia: 0, anticipacionHoras: 2, ventanaDias: 14, autoConfirmar: true, notas: 'Llega 10 minutos antes con tu QR listo.', horarios: agenda.horarios },
+    })
+
     if (e.slug === 'demo-caribeaventura') {
       for (const x of EXCURSIONES) {
         const arte = await generarJuego({
@@ -698,9 +717,45 @@ async function sembrar() {
   // su QR — llenan «Tus beneficios y cupones» y /cliente/mis-promociones —
   // y, si el cliente tiene usuario, seguimiento a su empresa y a dos demo
   // más, para que /cliente/novedades tenga materia.
-  const demoIds = (
-    await db.company.findMany({ where: { slug: { startsWith: 'demo-' } }, select: { id: true } })
-  ).map((c) => c.id)
+  const demoEmpresas = await db.company.findMany({
+    where: { slug: { startsWith: 'demo-' } },
+    select: { id: true, slug: true },
+  })
+  const demoIds = demoEmpresas.map((c) => c.id)
+  const slugDe = new Map(demoEmpresas.map((c) => [c.id, c.slug]))
+  const sucursalDe = new Map(
+    (
+      await db.sucursal.findMany({
+        where: { companyId: { in: demoIds }, activa: true },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, companyId: true },
+      })
+    )
+      .reverse()
+      .map((su) => [su.companyId, su.id])
+  )
+  const agendaDe = new Map(
+    (
+      await db.agendaConfig.findMany({
+        where: { companyId: { in: demoIds } },
+        select: { companyId: true, duracionMin: true },
+      })
+    ).map((a) => [a.companyId, a.duracionMin])
+  )
+  // Servicio típico del rubro para el texto de la cita.
+  const SERVICIO: Record<string, string> = {
+    'demo-aquashine': 'Lavado completo con cera',
+    'demo-labraza': 'Mesa para dos · parrillada',
+    'demo-caribeaventura': 'Asesoría de reserva de excursión',
+    'demo-bellavita': 'Masaje descontracturante',
+    'demo-fademasters': 'Corte fade + perfilado de barba',
+  }
+  // 10:00 y 15:00 de Santo Domingo (UTC−4) = 14:00 y 19:00 UTC.
+  const enHoraUtc = (d: Date, hora: number) => {
+    const copia = new Date(d)
+    copia.setUTCHours(hora, 0, 0, 0)
+    return copia
+  }
   const clientes = await db.cliente.findMany({
     where: { companyId: { in: demoIds } },
     select: { id: true, companyId: true, supabaseId: true },
@@ -712,6 +767,7 @@ async function sembrar() {
   })
   let compras = 0
   let seguimientos = 0
+  let citas = 0
   for (const cliente of clientes) {
     const suyas = comprables.filter((p) => p.companyId === cliente.companyId).slice(0, 2)
     for (const [i, promo] of suyas.entries()) {
@@ -756,8 +812,36 @@ async function sembrar() {
         seguimientos++
       }
     }
+    // Citas: una próxima confirmada (el módulo con vida) y una completada
+    // en el historial. Horas dentro del horario sembrado del negocio.
+    const duracion = agendaDe.get(cliente.companyId) ?? 45
+    const servicio = SERVICIO[slugDe.get(cliente.companyId) ?? ''] ?? 'Visita de socio'
+    await db.cita.create({
+      data: {
+        companyId: cliente.companyId,
+        clienteId: cliente.id,
+        sucursalId: sucursalDe.get(cliente.companyId) ?? null,
+        inicio: enHoraUtc(dias(2), 14),
+        duracionMin: duracion,
+        servicio,
+        estado: 'CONFIRMADA',
+        notaCliente: 'Reserva de demostración.',
+      },
+    })
+    await db.cita.create({
+      data: {
+        companyId: cliente.companyId,
+        clienteId: cliente.id,
+        sucursalId: sucursalDe.get(cliente.companyId) ?? null,
+        inicio: enHoraUtc(dias(-6), 19),
+        duracionMin: duracion,
+        servicio,
+        estado: 'COMPLETADA',
+      },
+    })
+    citas += 2
   }
-  console.log(`✓ ${compras} beneficios activos con QR y ${seguimientos} clientes reales siguiendo empresas demo`)
+  console.log(`✓ ${compras} beneficios activos con QR, ${citas} citas y ${seguimientos} clientes reales siguiendo empresas demo`)
 }
 
 try {

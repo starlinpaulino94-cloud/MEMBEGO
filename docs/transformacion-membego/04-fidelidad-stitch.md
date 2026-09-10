@@ -910,3 +910,25 @@ de la membresía real del usuario, que no se toca).
 **Verificación:** siembra en verde (52 compras+QR, 30 posts, 10
 sucursales, 3 seguimientos del usuario real) · suite 2048/2048 · E2E 10/10
 · perfil demo revisado con Eventos y Noticias vivos.
+
+---
+
+## 25. La agenda de citas también se siembra (2026-09-10)
+
+Cierre del pendiente anotado en el corte 24, por instrucción directa:
+
+- **AgendaConfig por empresa** (upsert): módulo ACTIVO con horarios
+  semanales del rubro (el restaurante abre mar-dom 12:00-23:00, la barbería
+  hasta las 21:00, el car wash desde las 7...), duración del turno acorde
+  (30-60 min), 2 por slot, ventana de 14 días y autoconfirmación. Con esto
+  el calendario de reserva de /cliente/citas enseña días y turnos reales.
+- **Dos citas por cliente** de las empresas demo (52 en total): una PRÓXIMA
+  CONFIRMADA (en dos días, a las 10:00 de Santo Domingo, dentro del horario
+  sembrado, con su sucursal y el servicio típico del rubro) y una COMPLETADA
+  la semana pasada para el historial.
+- También se comprometieron los dos cambios de auth hechos fuera de la
+  sesión (conservar el rol existente en el onboarding de Google), por
+  instrucción del usuario.
+
+**Verificación:** siembra en verde (5 agendas activas, 26 próximas + 26
+completadas) · suite 2048/2048 · E2E 10/10.
