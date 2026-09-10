@@ -55,7 +55,9 @@ try {
   const category = await db.businessCategory.create({ data: { name: 'Servicios QA', slug: `qa-${suffix}`, active: true } })
   categoryId = category.id
   await db.companyToCategory.create({ data: { companyId, categoryId } })
-  await db.plan.create({ data: { companyId, nombre: `Plan QA ${suffix}`, precio: 1200, activo: true, descripcion: 'Plan de pruebas sin cobro' } })
+  // Ilimitado: la tarjeta de la wallet enseña «Ilimitados» sin depender de
+  // contadores de usos que este fixture no administra.
+  const planQa = await db.plan.create({ data: { companyId, nombre: `Plan QA ${suffix}`, precio: 1200, activo: true, esIlimitado: true, descripcion: 'Plan de pruebas sin cobro' } })
   const query = `alias${suffix}`
   const equivalent = `catalogo${suffix}`
   await db.busquedaSinonimo.create({ data: { companyId, termino: query, equivalencia: equivalent } })
@@ -98,6 +100,17 @@ try {
       // Sigue a la empresa QA: las novedades del Inicio salen de las empresas
       // seguidas, y sin esto la sección no existe y no se puede aseverar.
       await db.companyFollow.create({ data: { userId: local.id, companyId } })
+      // Membresía ACTIVA con su QR: sin ella, la wallet (Inicio, Cuenta y
+      // /mis-membresias) solo se puede capturar vacía.
+      const membresia = await db.membership.create({ data: {
+        clienteId: cliente.id, companyId, planId: planQa.id, estado: 'ACTIVA',
+        fechaInicio: new Date(), fechaVencimiento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        pagoConfirmado: true,
+      } })
+      await db.qrToken.create({ data: {
+        clienteId: cliente.id, membresiaId: membresia.id,
+        token: `qa-${randomUUID().replaceAll('-', '')}`, activo: true,
+      } })
     }
   }
   browser = await chromium.launch({ channel: 'msedge', headless: true })
@@ -167,6 +180,7 @@ try {
     // tiene vehículo → asistente de requisitos) y el catálogo global.
     ['planes', '/cliente/planes'],
     ['planes-catalogo', '/cliente/planes?todos=1'],
+    ['mis-membresias', '/mis-membresias'],
     // Con el término del sinónimo QA: captura el buscador CON resultados
     // (rejilla + panel de filtros), no solo su estado vacío.
     ['buscar', `/cliente/buscar?q=${query}`],
@@ -348,6 +362,9 @@ try {
     await db.busquedaSinonimo.deleteMany({ where: { companyId: { in: companies } } })
     await db.auditLog.deleteMany({ where: { companyId: { in: companies } } })
     await db.promocion.deleteMany({ where: { companyId: { in: companies } } })
+    // Las membresías referencian el plan (sin cascada): caen antes que él.
+    // Sus QrToken sí caen en cascada con cada membresía.
+    await db.membership.deleteMany({ where: { companyId: { in: companies } } })
     await db.plan.deleteMany({ where: { companyId: { in: companies } } })
     // Visitar Configuración (/cliente/ajustes) le asigna su código corto de
     // referido a la persona, y eso

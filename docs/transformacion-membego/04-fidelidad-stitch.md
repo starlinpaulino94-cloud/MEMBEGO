@@ -752,3 +752,32 @@ anidado dentro del que ya pone el CustomerShell.
   exigiría fixture de vehículo compatible; anotado.
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde.
+
+---
+
+## 21. F4 · Llevar el pase: la wallet en verificación real (2026-09-10)
+
+`/mis-membresias` ya era DS 2.0 (PageHeader, StatCard, WalletStack, grupos
+excluyentes §40): esta vez el corte fue quitar los últimos colores crudos de
+la wallet y — lo importante — poder VERLA con datos:
+
+- **`WalletStack`**: el botón «Ver detalle» del reverso QR deja
+  `bg-slate-900` por `retail-deep`; el cierre pasa a `retail-mist`.
+  **`UsageMeter`**: los shimmer `via-sky-200/500` pasan al token
+  `retail-cyan`. La tarjeta física (color de marca del negocio, mono para el
+  plan, reverso blanco funcional del QR) se queda tal cual: es una pieza
+  deliberada y el blanco del QR está declarado en la guardia del tema.
+- **El fixture QA gana una membresía ACTIVA con su QR** (plan ilimitado,
+  vence en 30 días). Con ella, por primera vez el E2E captura la wallet DE
+  VERDAD: `/mis-membresias` con vistazo + tarjeta, la Cuenta con la ficha
+  del contrato («● ACTIVO · Renueva …», tesela, «Pase digital listo · Ver
+  QR y uso»), el Inicio con la wallet primero, y Planes en modo vitrina
+  (las tarjetas de PlanesGrid que el corte 20 no pudo capturar). La
+  limpieza borra las membresías ANTES que los planes (la FK no es en
+  cascada); los QrToken sí caen en cascada.
+- Anotado: `AnimatedCounter` arranca en 0 en las capturas (anima por rAF);
+  el valor real aparece al instante en uso. Cosmético de captura, no de
+  pantalla.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde
+· capturas de wallet, Cuenta y vitrina revisadas.

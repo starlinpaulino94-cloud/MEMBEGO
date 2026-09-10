@@ -40,8 +40,8 @@ export function UsageMeter({
           className={cn(
             'animate-shimmer bg-clip-text text-sm font-semibold text-transparent [background-size:200%_auto]',
             dark
-              ? 'bg-gradient-to-r from-white via-sky-200 to-white'
-              : 'bg-gradient-to-r from-primary via-sky-500 to-primary'
+              ? 'bg-gradient-to-r from-white via-retail-cyan to-white'
+              : 'bg-gradient-to-r from-primary via-retail-cyan to-primary'
           )}
         >
           Usos ilimitados

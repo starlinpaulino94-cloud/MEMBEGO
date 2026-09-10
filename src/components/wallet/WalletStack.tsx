@@ -137,7 +137,7 @@ function FlippableCard({
             type="button"
             onClick={onToggle}
             aria-label="Volver a la tarjeta"
-            className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition hover:bg-muted"
+            className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-retail-mist text-muted-foreground transition-colors duration-fast hover:text-foreground"
           >
             <RotateCcw className="h-4 w-4" aria-hidden />
           </button>
@@ -158,7 +158,7 @@ function FlippableCard({
           </p>
           <Link
             href={`/membresia/${item.id}`}
-            className="inline-flex min-h-9 items-center gap-1 rounded-full bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800"
+            className="inline-flex min-h-9 items-center gap-1 rounded-full bg-retail-deep px-4 text-xs font-semibold text-white transition hover:opacity-90"
           >
             Ver detalles <ChevronRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
