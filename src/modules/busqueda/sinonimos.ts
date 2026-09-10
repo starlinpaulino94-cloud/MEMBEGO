@@ -66,6 +66,56 @@ export async function terminosBusqueda(
   return expandirConsulta(consulta, eq)
 }
 
+/** Fila administrable de un sinónimo. */
+export interface SinonimoFila {
+  id: string
+  termino: string
+  equivalencia: string
+  idioma: string
+}
+
+/**
+ * Sinónimos de un ámbito: `null` = globales de la plataforma; un companyId =
+ * los de esa empresa. Cada ámbito administra SOLO los suyos — la mezcla
+ * (empresa manda sobre global) ocurre al buscar, no aquí.
+ */
+export async function listarSinonimos(
+  alcance: string | null,
+  idioma = 'es-DO'
+): Promise<SinonimoFila[]> {
+  const op = (tx: Tx) =>
+    tx.busquedaSinonimo.findMany({
+      where: { companyId: alcance, idioma },
+      select: { id: true, termino: true, equivalencia: true, idioma: true },
+      orderBy: { termino: 'asc' },
+    })
+  return alcance
+    ? conEmpresa(alcance, op)
+    : sinEmpresa('búsqueda: sinónimos globales (administración)', op)
+}
+
+/**
+ * Borra un sinónimo verificando que pertenezca al ámbito que lo pide: una
+ * empresa no puede borrar globales ni los de otra, y viceversa.
+ */
+export async function eliminarSinonimo(id: string, alcance: string | null): Promise<void> {
+  const op = async (tx: Tx) => {
+    const fila = await tx.busquedaSinonimo.findUnique({
+      where: { id },
+      select: { companyId: true },
+    })
+    if (!fila || fila.companyId !== alcance) {
+      throw new Error('Sinónimo no encontrado en este ámbito.')
+    }
+    await tx.busquedaSinonimo.delete({ where: { id } })
+  }
+  if (alcance) {
+    await conEmpresa(alcance, op)
+  } else {
+    await sinEmpresa('búsqueda: borrar sinónimo global', op)
+  }
+}
+
 /** Alta/actualización de un sinónimo (la administra la plataforma). */
 export async function guardarSinonimo(input: {
   termino: string

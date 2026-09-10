@@ -281,6 +281,16 @@ try {
   await expect(clientPage.getByText(`${equivalent} visible`, { exact: true })).toBeVisible({ timeout: 120000 })
   await expect(clientPage.getByText(`${equivalent} privada`, { exact: true })).toHaveCount(0)
   console.log('E2E: sinónimo encuentra promoción pública y no expone empresa sin publicar.')
+  // La pantalla de administración de sinónimos enseña la fila sembrada
+  // (término → equivalencia) — es la misma tabla que acaba de responder la
+  // búsqueda de arriba.
+  await adminPage.goto(`${baseURL}/admin/sinonimos`, { timeout: 180000 })
+  await expect(adminPage.getByText(query, { exact: true })).toBeVisible({ timeout: 120000 })
+  await expect(adminPage.getByText(equivalent, { exact: true })).toBeVisible({ timeout: 60000 })
+  await adminPage.screenshot({ path: join(CAPTURAS, 'admin-sinonimos-1280.png'), fullPage: true, animations: 'disabled' })
+  console.log('E2E: la pantalla de sinónimos de la empresa enseña sus equivalencias.')
+  // De vuelta al editor: el paso siguiente pulsa su botón «Pausar».
+  await adminPage.goto(`${baseURL}/admin/personalizacion`, { timeout: 180000 })
   await adminPage.getByRole('button', { name: 'Pausar', exact: true }).click()
   await expect(adminPage.getByText('Sin publicación', { exact: true })).toBeVisible({ timeout: 120000 })
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })

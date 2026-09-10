@@ -681,3 +681,35 @@ con los del CustomerShell.
   fallo: el h1 sin `break-words`.
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde.
+
+---
+
+## 19. F3 · Sinónimos de búsqueda: la tabla gana pantalla (2026-09-10)
+
+La tabla `busqueda_sinonimos` ya decidía búsquedas (el E2E la ejercita desde
+el principio) pero solo se podía alimentar por SQL. Ahora tiene sus dos
+pantallas, según la decisión del usuario — ámbitos separados con dueños
+separados:
+
+- **`/superadmin/busqueda`** (plataforma): sinónimos GLOBALES. Ítem
+  «Búsqueda» en el grupo Operación del panel de plataforma.
+- **`/admin/sinonimos`** (empresa): los suyos, que MANDAN sobre los
+  globales para sus clientes (esa precedencia ya vivía en
+  `equivalenciasPara`; aquí solo se administra). Ítem «Sinónimos de
+  búsqueda» junto a Personalización (grupo Empresa y hub Experiencia
+  cliente).
+- Un solo panel (`SinonimosPanel`) para ambos: alta «Cuando busquen →
+  Encuentra también» con la nota honesta de que el modelo guarda UNA
+  equivalencia por término (guardar reemplaza), y la lista término →
+  equivalencia con borrar. Las acciones llegan por props: la guardia de rol
+  (SUPERADMIN / ADMIN_ROLES + companyId) vive en las server actions, y
+  `eliminarSinonimo` verifica el ámbito de la fila antes de borrar.
+- El E2E gana el paso: `/admin/sinonimos` enseña la fila QA sembrada — la
+  misma que acaba de responder la búsqueda del cliente — y se captura a
+  1280. (El ámbito global no se ejercita: el E2E no tiene identidad
+  SUPERADMIN; queda anotado.) El paso devuelve el adminPage al editor,
+  porque el paso siguiente pulsa su «Pausar» — primer intento en rojo por
+  asumirlo.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo (10
+pasos) en verde · captura revisada.

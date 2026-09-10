@@ -35,6 +35,7 @@ import {
   Scale,
   Share2,
   SlidersHorizontal,
+  TextSearch,
   Store,
   Tag,
   Ticket,
@@ -586,6 +587,13 @@ const G_ADM_EMPRESA: NavGroup = {
       keywords: ['personalizacion', 'marca', 'colores', 'logo', 'tema'],
     },
     {
+      href: '/admin/sinonimos',
+      label: 'Sinónimos de búsqueda',
+      icon: TextSearch,
+      description: 'Cómo te encuentran tus clientes al buscar.',
+      keywords: ['sinonimos', 'busqueda', 'buscador', 'equivalencias', 'terminos'],
+    },
+    {
       href: '/admin/empleados',
       label: 'Empleados',
       icon: UserCog,
@@ -715,7 +723,7 @@ const HUB_PRINCIPAL: NavGroup = {
 const HUB_EXPERIENCIA: NavGroup = {
   id: 'experiencia-cliente',
   label: 'Experiencia cliente',
-  items: deAdmin('/admin/personalizacion'),
+  items: deAdmin('/admin/personalizacion', '/admin/sinonimos'),
 }
 
 const HUB_CATALOGO: NavGroup = {
@@ -1094,6 +1102,13 @@ const G_SA_OPERACION: NavGroup = {
       icon: SlidersHorizontal,
       description: 'Funciones concedidas a cada empresa.',
       keywords: ['capacidades', 'modulos', 'verticales', 'interruptores'],
+    },
+    {
+      href: '/superadmin/busqueda',
+      label: 'Búsqueda',
+      icon: TextSearch,
+      description: 'Sinónimos globales del buscador.',
+      keywords: ['busqueda', 'sinonimos', 'buscador', 'equivalencias'],
     },
     {
       href: '/superadmin/integraciones',
