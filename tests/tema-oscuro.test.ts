@@ -47,7 +47,8 @@ const DECLARADOS = new Map<string, string>([
   ['src/components/admin/CompanyQRRegistro.tsx', 'fondo del QR'],
   ['src/components/wallet/WalletStack.tsx', 'reverso de la tarjeta con el QR'],
   // Superficie sobre un degradado de marca, que siempre es oscuro.
-  ['src/components/cliente/FeedNovedades.tsx', 'CTA sobre degradado de marca'],
+  // (FeedNovedades salió de aquí en F3: sus filas densas ya no llevan
+  // degradado ni blanco fijo.)
   ['src/components/engagement/MarketingCampaignForm.tsx', 'vista previa sobre degradado'],
   ['src/components/engagement/Gamificacion.tsx', 'barra de progreso sobre degradado'],
   // PromotionCard salió de aquí en la Fase 4: sus chips pasaron de `bg-white/90`

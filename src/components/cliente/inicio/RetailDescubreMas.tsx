@@ -1,14 +1,19 @@
 import Link from 'next/link'
-import { ArrowRight, Gift } from 'lucide-react'
+import { Gift } from 'lucide-react'
 import { FeedNovedades } from '@/components/cliente/FeedNovedades'
 import type { NovedadInicio } from '@/modules/social/queries'
 
 /**
- * El cierre del Inicio: invitar y enterarse.
+ * El cierre del Inicio: enterarse e invitar.
  *
- * Va al final a propósito. Antes era un `PromoBanner` con degradado de
- * celebración; en retail es una fila fina, porque compite con la wallet y las
- * ofertas y no debe ganarles la mirada.
+ * La cabecera «Descubre más» se retiró (2026-09-09): solo titulaba la
+ * invitación, y un título para una sola fila es ruido. Quedan las dos piezas
+ * con las recetas del Inicio de Stitch:
+ *
+ *   NOVEDADES — filas densas sobre la banda azul niebla (FeedNovedades trae
+ *   su propia cabecera de sección con «Ver todas ›»).
+ *   INVITA Y GANA — la fila clara de «¿Tienes un código de comercio?»: banda
+ *   azul niebla, texto en azul profundo y la píldora azul de acción.
  *
  * `mostrarInvitaYGana` llega en falso cuando el motor de experiencias YA eligió
  * los referidos como protagonista de la pantalla: la misma invitación dos
@@ -24,38 +29,41 @@ export function RetailDescubreMas({
   if (!mostrarInvitaYGana && novedades.length === 0) return null
 
   return (
-    <section className="bg-background px-4 py-5 md:px-6 md:py-6" aria-labelledby="retail-descubre">
-      <div className="mx-auto max-w-6xl">
-        <h2 id="retail-descubre" className="text-h2 text-foreground">
-          Descubre más
-        </h2>
-
-        {mostrarInvitaYGana ? (
-          <Link
-            href="/cliente/invita-y-gana"
-            className="mt-3 flex min-h-14 items-center gap-3 rounded-lg border border-border bg-card p-4 outline-none transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]"
-          >
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-primary">
-              <Gift className="size-5" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-small font-semibold text-foreground">
-                Regala beneficios, gana premios
-              </span>
-              <span className="mt-0.5 block text-caption text-muted-foreground">
-                Comparte tu enlace: tus amigos reciben un regalo y tú acumulas recompensas.
-              </span>
-            </span>
-            <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          </Link>
-        ) : null}
-
-        {novedades.length > 0 ? (
-          <div className="mt-4">
+    <>
+      {novedades.length > 0 ? (
+        <section
+          className="bg-retail-mist px-4 py-5 md:px-6 md:py-6"
+          aria-labelledby="retail-novedades"
+        >
+          <div className="mx-auto max-w-6xl">
             <FeedNovedades novedades={[...novedades]} />
           </div>
-        ) : null}
-      </div>
-    </section>
+        </section>
+      ) : null}
+
+      {mostrarInvitaYGana ? (
+        <section className="bg-background px-4 py-5 md:px-6 md:py-6" aria-label="Invita y gana">
+          <div className="mx-auto max-w-6xl">
+            <Link
+              href="/cliente/invita-y-gana"
+              className="flex min-h-14 items-center gap-3 rounded-xl bg-retail-mist p-4 outline-none transition-colors duration-fast hover:bg-brand-primary-soft focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]"
+            >
+              <Gift className="size-5 shrink-0 text-primary" aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block text-small font-bold text-retail-deep">
+                  Regala beneficios, gana premios
+                </span>
+                <span className="mt-0.5 block text-caption text-retail-deep/75">
+                  Tus amigos reciben un regalo y tú acumulas puntos.
+                </span>
+              </span>
+              <span className="shrink-0 rounded-full bg-primary px-4 py-2 text-label-md font-semibold text-primary-foreground">
+                Compartir
+              </span>
+            </Link>
+          </div>
+        </section>
+      ) : null}
+    </>
   )
 }

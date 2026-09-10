@@ -63,7 +63,10 @@ try {
   for (const id of companies) {
     const promoCreada = await db.promocion.create({ data: {
       companyId: id, titulo: `${equivalent} ${id === companyId ? 'visible' : 'privada'}`, descripcion: 'QA de publicación',
-      activo: true, isFeatured: true, visibilidad: 'publica', publicadaEn: new Date('2020-01-01'),
+      // La visible se publica HOY: así entra en la ventana de 14 días de las
+      // novedades del Inicio y el paso de abajo puede aseverar su fila.
+      activo: true, isFeatured: true, visibilidad: 'publica',
+      publicadaEn: id === companyId ? new Date() : new Date('2020-01-01'),
       vigenciaDesde: new Date('2020-01-01'), vigenciaHasta: new Date('2099-01-01'),
       esComprable: true, precio: 0, imagenUrl: '/icon-512.png',
       imagenes: ['/og-image.png', '/icon-192.png'],
@@ -92,6 +95,9 @@ try {
       await db.customerLocation.create({ data: { userId: local.id, isPrimary: true, source: 'MAP_SELECTION',
         latitud: 18.6, longitud: -68.7, consentForPersonalization: true } })
       await db.geoConsent.create({ data: { userId: local.id, tipo: 'MARKETING_GEO', estado: 'ACTIVE', version: 'QA', canal: 'qa-home' } })
+      // Sigue a la empresa QA: las novedades del Inicio salen de las empresas
+      // seguidas, y sin esto la sección no existe y no se puede aseverar.
+      await db.companyFollow.create({ data: { userId: local.id, companyId } })
     }
   }
   browser = await chromium.launch({ channel: 'msedge', headless: true })
@@ -116,6 +122,15 @@ try {
   await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
   await expect(clientPage.getByRole('heading', { name: title })).toBeVisible({ timeout: 120000 })
   console.log('E2E: publicación desde editor visible para el cliente autorizado.')
+
+  // Novedades en filas densas (contrato Stitch): el cliente sigue a la
+  // empresa QA y su promoción se publicó hoy, así que la sección existe con
+  // la fila de la promo y su píldora de acción.
+  await expect(
+    clientPage.getByRole('heading', { name: 'Novedades de tus empresas' })
+  ).toBeVisible({ timeout: 60000 })
+  await expect(clientPage.getByText('Ver oferta').first()).toBeVisible({ timeout: 60000 })
+  console.log('E2E: las novedades del Inicio enseñan la fila densa de la promoción.')
 
   // El hub administrativo: una columna con los ocho grupos del diseño. Se
   // comprueba que los rótulos estén, no solo que la página cargue — un menú
@@ -317,6 +332,7 @@ try {
       await db.referralEvent.deleteMany({ where: { clienteId: { in: ids } } })
     }
     await db.cliente.deleteMany({ where: { companyId: { in: companies } } })
+    await db.companyFollow.deleteMany({ where: { companyId: { in: companies } } })
     await db.companyToCategory.deleteMany({ where: { companyId: { in: companies } } })
   }
   for (const account of accounts) {

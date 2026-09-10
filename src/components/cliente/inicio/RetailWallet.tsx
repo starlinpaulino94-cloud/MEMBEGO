@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AlertCircle, ArrowRight, Trophy, WalletCards } from 'lucide-react'
+import { AlertCircle, ArrowRight, QrCode, Trophy } from 'lucide-react'
 import { WalletStack } from '@/components/wallet/WalletStack'
 import type { PanelPersonal } from '@/modules/cliente/panelPersonal'
 
@@ -29,7 +29,10 @@ export function RetailWallet({
   return (
     <section className="bg-background px-4 py-5 md:px-6 md:py-6" aria-labelledby="retail-wallet">
       <div className="mx-auto max-w-6xl">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {/* Sin `flex-wrap`: el chip de puntos vive en la línea del título
+            (como en el mockup aprobado); si el espacio aprieta, el que se
+            parte en dos líneas es el título, no la fila. */}
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 id="retail-wallet" className="text-h2 text-foreground">
               Mis membresías
@@ -38,7 +41,7 @@ export function RetailWallet({
               Toca una tarjeta para mostrar su QR.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="mt-0.5 flex shrink-0 items-center gap-2">
             {gamificacion ? (
               <Link
                 href="/cliente/ruleta"
@@ -64,7 +67,7 @@ export function RetailWallet({
 
         <div className="mt-3">
           {walletError ? (
-            <div className="rounded-lg border border-border bg-muted p-4">
+            <div className="rounded-lg border border-border bg-card p-4 elevation-1">
               <p className="flex items-center gap-2 text-small font-semibold text-foreground">
                 <AlertCircle className="size-4 shrink-0 text-destructive" aria-hidden />
                 No pudimos cargar tus membresías
@@ -80,22 +83,35 @@ export function RetailWallet({
               </Link>
             </div>
           ) : wallet.length === 0 ? (
-            <div className="rounded-lg border border-border bg-muted p-4">
-              <p className="flex items-center gap-2 text-small font-semibold text-foreground">
-                <WalletCards className="size-4 shrink-0 text-primary" aria-hidden />
-                Tu wallet está lista
-              </p>
-              <p className="mt-1 text-caption text-muted-foreground">
-                Cuando actives tu primera membresía, su QR vivirá aquí para usarlo en el mostrador.
-              </p>
-              <Link
-                href={primerPaso.href}
-                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-primary px-5 text-label-lg text-primary-foreground outline-none transition hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+            // Estado vacío = el banner comercial de Stitch («Canje inmediato»):
+            // degradado azul→verde azulado, sobretítulo en mayúsculas, título
+            // blanco y el disco con el QR. La tarjeta entera es el enlace; la
+            // píldora dentro es visual. `bg-card`/`text-primary` en las piezas
+            // claras: en tema oscuro siguen legibles sin blanco fijo.
+            <Link
+              href={primerPaso.href}
+              className="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-retail-blue to-retail-lagoon p-4 outline-none elevation-1 transition-transform duration-fast focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.99]"
+            >
+              <span className="min-w-0">
+                <span className="block text-overline text-retail-mist/90">Tu wallet</span>
+                <span className="mt-0.5 block text-h3 text-white">
+                  Activa tu primera membresía
+                </span>
+                <span className="mt-0.5 block text-caption text-retail-mist/85">
+                  Su QR vivirá aquí para aplicar tus beneficios en caja sin trámites.
+                </span>
+                <span className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-full bg-card px-4 text-label-md font-semibold text-primary">
+                  {primerPaso.etiqueta}
+                  <ArrowRight className="size-4" aria-hidden />
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className="flex size-12 shrink-0 items-center justify-center rounded-full bg-card elevation-1"
               >
-                {primerPaso.etiqueta}
-                <ArrowRight className="size-4" aria-hidden />
-              </Link>
-            </div>
+                <QrCode className="size-6 text-primary" />
+              </span>
+            </Link>
           ) : (
             <WalletStack items={[...wallet]} />
           )}

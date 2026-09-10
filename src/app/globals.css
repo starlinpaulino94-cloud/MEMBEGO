@@ -147,6 +147,10 @@
   --color-retail-cyan: #06b6d4;
   --color-retail-mist: #f0f9ff;
   --color-retail-star: #f59e0b;
+  /* El verde azulado del banner comercial de Stitch (su `secondary`): el
+     degradado retail-blue → retail-lagoon es la receta de la tarjeta
+     «Canje inmediato» del Inicio. */
+  --color-retail-lagoon: #00687a;
   /* ── MMS · Motion tokens ────────────────────────────────────────────
      Duraciones y curvas oficiales del Membego Motion System. TODA
      animación DEBE consumir estos valores, nunca números sueltos.

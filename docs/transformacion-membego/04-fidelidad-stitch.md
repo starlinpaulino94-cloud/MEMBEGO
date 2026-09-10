@@ -575,3 +575,44 @@ sinónimos.
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo (8 pasos)
 en verde · perfil público demo revisado a 375px en navegador.
+
+---
+
+## 16. F3 · El cierre del Inicio, calcado de Stitch (2026-09-09)
+
+El usuario señaló que las secciones inferiores del Inicio «se ven mal
+estructuradas»; se le enseñaron dos mockups (el primero, rechazado por no
+seguir la línea de Stitch) y aprobó el segundo, calcado de las recetas de la
+pantalla `inicio_membego`. Dos movimientos:
+
+**Fuera «EN VIVO» (prueba social)** — por instrucción directa. Se retiró
+completa: la sección del Inicio, la consulta del panel personal, el
+componente, el módulo y el interruptor del panel de personalización del admin
+(un mando sin sección detrás es un mando muerto). La clave `pruebaSocial` que
+quede en JSON guardado se ignora; la guardia de capacidades ahora vigila que
+el componente NO vuelva.
+
+**El cierre del Inicio con las recetas de Stitch:**
+
+- **Wallet vacía** → el banner comercial («Canje inmediato»): degradado
+  `retail-blue → retail-lagoon` (token nuevo: el `secondary` #00687a de
+  Stitch), sobretítulo en mayúsculas, título blanco, disco con el QR y
+  píldora `bg-card text-primary` (nada de blanco fijo: en oscuro sigue
+  legible). La tarjeta entera es el enlace. El error de wallet dejó el gris.
+- **Novedades** → filas densas de «Experiencias y Excursiones»: miniatura de
+  88px con el tipo en pastilla oscura, sobretítulo de la EMPRESA en
+  mayúsculas (`text-overline text-retail-deep`), título de una línea, bajada,
+  y la fila de dato (descuento formateado + «hasta el…», fecha-hora del
+  evento, «Publicada el…») con la píldora clara de acción. Las promociones
+  traen su arte real (`getNovedadesInicio` ahora selecciona imagen,
+  descripción, descuento y vigencia); los posts llevan tesela con icono.
+  Cabecera y pie con los patrones compartidos (`RetailSeccionHeader/Pie`).
+- **«Descubre más» desaparece como cabecera**: queda la fila de «Regala
+  beneficios, gana premios» con la receta de «¿Tienes un código de
+  comercio?» — banda azul niebla, texto azul profundo, píldora «Compartir».
+
+El trinquete de deuda bajó dos veces en el día: 170 → 159 (perfil) → 147
+(fuera los degradados naranja/violeta de las tarjetas viejas de novedades).
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde ·
+captura del Inicio (wallet vacía + novedades) revisada.
