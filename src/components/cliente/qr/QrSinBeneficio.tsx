@@ -38,9 +38,9 @@ export function QrSinBeneficio({
   return (
     <div className="animate-fade-up space-y-5">
       <section className="flex flex-col items-center px-4 pt-6 text-center">
-        <span className="relative flex size-28 items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
+        <span className="relative flex size-28 items-center justify-center rounded-xl bg-vibe-niebla text-vibe-violet">
           <QrCode className="size-14" aria-hidden />
-          <span className="absolute -right-2 -top-2 flex size-8 items-center justify-center rounded-full border border-border bg-card text-primary">
+          <span className="absolute -right-2 -top-2 flex size-8 items-center justify-center rounded-full border border-vibe-chip bg-card text-vibe-violet">
             <Frown className="size-5" aria-hidden />
           </span>
         </span>
@@ -50,7 +50,7 @@ export function QrSinBeneficio({
         </p>
         <Link
           href="/cliente/explorar"
-          className="mt-3 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-label-lg text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary"
+          className="mt-3 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-label-lg text-vibe-violet outline-none hover:underline focus-visible:ring-2 focus-visible:ring-vibe-violet"
         >
           Continuar explorando negocios locales
           <ArrowRight className="size-4" aria-hidden />
@@ -58,15 +58,15 @@ export function QrSinBeneficio({
       </section>
 
       {bienvenida ? (
-        <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <section className="overflow-hidden rounded-xl border border-vibe-borde bg-card elevation-1">
           <div className="border-l-4 border-retail-cyan p-4">
-            <p className="inline-block rounded-full bg-brand-primary-soft px-2.5 py-1 text-label-sm uppercase tracking-wide text-primary">
+            <p className="inline-block rounded-full bg-vibe-niebla px-2.5 py-1 text-label-sm font-bold uppercase tracking-wide text-vibe-ink">
               Beneficio exclusivo
             </p>
             <p className="mt-2 text-h4 text-foreground">{bienvenida}</p>
             <Link
               href="/cliente/planes"
-              className="mt-3 flex min-h-11 items-center justify-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
+              className="grad-vibe-cta mt-3 flex min-h-11 items-center justify-center rounded-full px-4 text-label-lg font-bold text-white outline-none transition-transform duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-[0.98]"
             >
               Ver membresías disponibles
             </Link>
@@ -136,8 +136,8 @@ export function QrSinBeneficio({
         </section>
       ) : null}
 
-      <section className="flex items-start gap-3 rounded-lg bg-brand-primary-soft p-4">
-        <CircleHelp className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+      <section className="flex items-start gap-3 rounded-xl bg-vibe-lavanda p-4">
+        <CircleHelp className="mt-0.5 size-5 shrink-0 text-vibe-violet" aria-hidden />
         <div>
           <p className="text-label-lg text-foreground">¿Cómo funciona Mi QR?</p>
           <p className="mt-0.5 text-caption text-muted-foreground">

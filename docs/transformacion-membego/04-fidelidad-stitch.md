@@ -932,3 +932,27 @@ Cierre del pendiente anotado en el corte 24, por instrucción directa:
 
 **Verificación:** siembra en verde (5 agendas activas, 26 próximas + 26
 completadas) · suite 2048/2048 · E2E 10/10.
+
+---
+
+## 26. Mi QR entra a la identidad violeta (2026-09-10)
+
+La pantalla ya seguía la estructura de su captura de Stitch (S04) desde el
+corte anterior; este corte la alinea con el rediseño violeta del Inicio,
+sin tocar componentes compartidos ni una línea de lógica:
+
+- **Estado con pase**: tarjeta a `rounded-xl` con borde lila y elevación,
+  marco del QR con el mismo borde (el código sigue negro sobre blanco: la
+  escaneabilidad no se negocia), y el CTA «Ver detalle y movimientos» en el
+  degradado violeta→cobalto→cian. La lista «Tus pases» marca el activo con
+  borde violeta. `break-words` en el nombre del plan — el fixture QA
+  destapó que un nombre imparable se recortaba bajo el `overflow-hidden`.
+- **Estado sin beneficio** (la captura): tesela del QR y enlace de explorar
+  en violeta, chip «BENEFICIO EXCLUSIVO» sobre niebla violeta con la barra
+  cian de acento, CTA de membresías en el degradado, y la caja «¿Cómo
+  funciona Mi QR?» sobre lavanda. Las tarjetas de populares siguen usando
+  las piezas compartidas (valoración ámbar del marketplace incluida): los
+  compartidos migran de identidad en su propio corte, no de contrabando.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E 10/10 con Mi QR
+capturado en los tres anchos · captura revisada.

@@ -106,17 +106,17 @@ export default async function MiQrPage({
 
   return (
     <div className="animate-fade-up space-y-4">
-      <section className="overflow-hidden rounded-lg border border-border bg-card p-5 text-center elevation-1">
+      <section className="overflow-hidden rounded-xl border border-vibe-borde bg-card p-5 text-center elevation-2">
         <p className="text-label-md text-muted-foreground">{usable.company.name}</p>
-        <h1 className="mt-0.5 text-h2 text-foreground">{usable.plan.nombre}</h1>
-        <div className="mx-auto mt-4 w-fit rounded-lg border border-border bg-card p-4">
+        <h1 className="mt-0.5 break-words text-h2 text-foreground">{usable.plan.nombre}</h1>
+        <div className="mx-auto mt-4 w-fit rounded-lg border border-vibe-borde bg-card p-4">
           <QRDisplay token={usable.qrToken!.token} size={220} />
         </div>
         <p className="mt-3 text-label-lg text-foreground">{usos}</p>
         {vencimiento ? <p className="text-caption text-muted-foreground">{vencimiento}</p> : null}
         <Link
           href={`/membresia/${usable.id}`}
-          className="mt-4 flex min-h-11 items-center justify-center rounded-full bg-primary px-4 text-label-lg text-primary-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
+          className="grad-vibe-cta mt-4 flex min-h-11 items-center justify-center rounded-full px-4 text-label-lg font-bold text-white outline-none transition-transform duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-[0.98]"
         >
           Ver detalle y movimientos
         </Link>
@@ -134,8 +134,8 @@ export default async function MiQrPage({
                   href={`/cliente/qr?id=${m.id}`}
                   aria-current={m.id === usable.id ? 'page' : undefined}
                   className={cn(
-                    'flex items-center justify-between gap-3 rounded-lg border bg-card p-4 outline-none transition focus-visible:ring-2 focus-visible:ring-primary',
-                    m.id === usable.id ? 'border-primary' : 'border-border'
+                    'flex items-center justify-between gap-3 rounded-xl border bg-card p-4 elevation-1 outline-none transition focus-visible:ring-2 focus-visible:ring-vibe-violet',
+                    m.id === usable.id ? 'border-vibe-violet' : 'border-vibe-borde'
                   )}
                 >
                   <span className="min-w-0">
