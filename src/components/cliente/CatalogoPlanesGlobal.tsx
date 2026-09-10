@@ -65,25 +65,26 @@ export function CatalogoPlanesGlobal({
   }
 
   return (
-    <main className="container max-w-5xl py-8">
-      <header className="animate-fade-up mb-6">
-        <div className="flex items-start justify-between gap-4">
-          {/* `text-caption` (12.5px) y no el `text-xs` de la pantalla de
-              al lado: 11px está por debajo del suelo del sistema de diseño y
-              la guardia de deuda lo cuenta. Esta app se usa de pie. */}
-          <p className="text-caption font-bold uppercase tracking-[0.22em] text-primary">
-            Membresías
-          </p>
+    // Sin `main` ni contenedor: los pone el CustomerShell.
+    <div className="space-y-5 animate-fade-up">
+      <header>
+        {/* `flex-wrap` + truncado: el nombre de la empresa es texto ajeno y
+            no puede decidir el ancho del documento a 390px. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-overline text-primary">Membresías</p>
           {volverAMiEmpresa && (
-            <Button asChild variant="ghost" size="sm" className="-mt-1 shrink-0 text-muted-foreground">
-              <Link href="/cliente/planes">Planes de {volverAMiEmpresa}</Link>
-            </Button>
+            <Link
+              href="/cliente/planes"
+              className="inline-flex min-h-9 max-w-full items-center rounded-full border border-border bg-card px-3 text-label-md font-semibold text-muted-foreground outline-none transition-colors duration-fast hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span className="truncate">Planes de {volverAMiEmpresa}</span>
+            </Link>
           )}
         </div>
-        <h1 className="mt-2 max-w-2xl text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+        <h1 className="mt-2 max-w-2xl text-h2 text-foreground">
           Membresías de todos los negocios
         </h1>
-        <p className="mt-2 max-w-xl text-muted-foreground">
+        <p className="mt-1 max-w-xl text-small text-muted-foreground">
           Paga menos por lo que ya haces. Elige el negocio y mira sus planes con
           todos los detalles.
         </p>
@@ -105,7 +106,7 @@ export function CatalogoPlanesGlobal({
               defaultValue={q}
               aria-label="Buscar membresías"
               placeholder="Buscar por plan o por negocio…"
-              className="h-12 w-full rounded-xl border border-border bg-card pl-12 pr-4 text-base text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+              className="h-12 w-full rounded-lg border border-border bg-card pl-12 pr-4 text-body text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
             />
           </div>
         </form>
@@ -179,46 +180,44 @@ export function CatalogoPlanesGlobal({
                       alt=""
                       width={40}
                       height={40}
-                      className="h-10 w-10 shrink-0 rounded-xl object-cover"
+                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
                     />
                   ) : (
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
                       <Store className="h-5 w-5" aria-hidden />
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <h2 className="truncate font-bold text-foreground">{empresa.name}</h2>
+                    <h2 className="truncate text-h4 text-foreground">{empresa.name}</h2>
                     {empresa.ciudad && (
-                      <p className="truncate text-xs text-muted-foreground">{empresa.ciudad}</p>
+                      <p className="truncate text-caption">{empresa.ciudad}</p>
                     )}
                   </div>
-                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                  <Button asChild variant="outline" size="sm" className="shrink-0 rounded-full">
                     <Link href={`/cliente/empresas/${empresa.slug}`}>Ver negocio</Link>
                   </Button>
                 </div>
 
-                <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {suyos.map((p) => (
                     <li key={p.id} className="flex">
                       <Link
                         href={`/cliente/empresas/${empresa.slug}`}
-                        className="flex w-full flex-col rounded-2xl border border-border/70 bg-card p-4 transition hover:border-primary/40 hover:shadow-card"
+                        className="flex w-full flex-col rounded-lg border border-border bg-card p-4 elevation-1 transition-colors duration-fast hover:border-primary/40"
                       >
-                        <p className="font-bold text-foreground">{p.nombre}</p>
-                        <p className="mt-1 text-2xl font-extrabold tracking-tight text-foreground">
-                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            desde{' '}
-                          </span>
+                        <p className="text-h4 text-foreground">{p.nombre}</p>
+                        <p className="mt-1 text-price-lg tabular-nums text-foreground">
+                          <span className="text-overline">desde </span>
                           {formatMoney(p.precio, {
                             moneda: empresa.moneda,
                             idioma: empresa.idioma,
                           })}
-                          <span className="text-sm font-medium text-muted-foreground">
+                          <span className="text-small font-normal text-muted-foreground">
                             {' '}
                             / {p.vigenciaDias} días
                           </span>
                         </p>
-                        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <p className="mt-2 flex items-center gap-1.5 text-small text-muted-foreground">
                           {p.esIlimitado ? (
                             <>
                               <InfinityIcon className="h-4 w-4 text-primary" aria-hidden />
@@ -232,7 +231,7 @@ export function CatalogoPlanesGlobal({
                           )}
                         </p>
                         {p.descripcion && (
-                          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                          <p className="mt-2 line-clamp-2 text-small text-muted-foreground">
                             {p.descripcion}
                           </p>
                         )}
@@ -245,6 +244,6 @@ export function CatalogoPlanesGlobal({
           </div>
         </>
       )}
-    </main>
+    </div>
   )
 }

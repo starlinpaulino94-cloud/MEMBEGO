@@ -163,6 +163,10 @@ try {
     ['promociones', '/cliente/promociones'],
     ['explorar', '/cliente/explorar'],
     ['ajustes', '/cliente/ajustes'],
+    // Las dos caras de Planes: la de la empresa activa (el cliente QA no
+    // tiene vehículo → asistente de requisitos) y el catálogo global.
+    ['planes', '/cliente/planes'],
+    ['planes-catalogo', '/cliente/planes?todos=1'],
     // Con el término del sinónimo QA: captura el buscador CON resultados
     // (rejilla + panel de filtros), no solo su estado vacío.
     ['buscar', `/cliente/buscar?q=${query}`],

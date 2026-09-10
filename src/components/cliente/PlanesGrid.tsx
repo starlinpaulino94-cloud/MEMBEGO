@@ -199,13 +199,13 @@ export function PlanesGrid({
     <div>
       {/* Contexto inteligente: para qué vehículo estamos recomendando */}
       {vehiculo && (
-        <div className="animate-fade-up mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        <div className="animate-fade-up mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-muted-foreground">
           <span>Planes para tu</span>
           <VehicleSelector
             vehiculos={vehiculos}
             selectedId={vehiculoId}
             onSelect={elegirVehiculo}
-            className="text-sm"
+            className="text-small"
           />
           {recomendadoId ? (
             <span>· te sugerimos el plan compatible</span>
@@ -256,30 +256,30 @@ export function PlanesGrid({
             <div
               key={plan.id}
               className={cn(
-                'group relative flex-col overflow-hidden rounded-2xl border bg-card shadow-card transition-all duration-slow',
+                'group relative flex-col overflow-hidden rounded-lg border bg-card elevation-1 transition-all duration-slow',
                 'animate-fade-up',
                 DELAYS[idx % DELAYS.length],
                 // Tabs móviles: solo la tarjeta activa es visible en teléfono.
                 tabId === plan.id ? 'flex' : 'hidden md:flex',
                 isCurrent
-                  ? 'border-foreground/25 ring-1 ring-foreground/10'
+                  ? 'border-primary ring-1 ring-primary/25'
                   : isRecommended
-                    ? 'z-10 border-foreground/20 shadow-premium ring-1 ring-foreground/15 lg:-translate-y-1.5'
-                    : 'border-border/70 hover:-translate-y-1 hover:shadow-premium',
+                    ? 'z-10 border-primary ring-1 ring-primary/25 lg:-translate-y-1.5'
+                    : 'border-border hover:-translate-y-1 hover:border-primary/40',
                 isDimmed && 'opacity-70 hover:opacity-100'
               )}
             >
               {/* Badges de estado — monocromos, sin gritar */}
               {isCurrent && (
                 <div className="absolute right-4 top-4 z-20">
-                  <Badge variant="outline" className="gap-1 border-foreground/20 bg-card text-foreground">
+                  <Badge variant="outline" className="gap-1 rounded-full border-primary/40 bg-card text-primary">
                     <Check className="h-3 w-3" /> Tu plan
                   </Badge>
                 </div>
               )}
               {isRecommended && (
                 <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2">
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-b-xl bg-foreground px-4 py-1.5 text-[12px] font-bold uppercase tracking-wider text-background">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-b-lg bg-retail-deep px-4 py-1.5 text-label-sm font-bold uppercase tracking-wider text-white">
                     <Sparkles className="h-3 w-3" />
                     {vehiculo && recomendadoId
                       ? `Para tu ${titleCase(vehiculo.modelo)}`
@@ -292,16 +292,14 @@ export function PlanesGrid({
                 {/* 1 · Cabecera: nombre + variante + precio */}
                 <div className="mb-6">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-extrabold leading-tight tracking-tight text-foreground">
-                      {base}
-                    </h3>
+                    <h3 className="text-h3 text-foreground">{base}</h3>
                     {variante && (
-                      <span className="inline-flex rounded-lg bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="inline-flex rounded-full border border-border bg-card px-2 py-0.5 text-label-sm font-semibold text-muted-foreground">
                         {variante}
                       </span>
                     )}
                     {plan.esIlimitado && (
-                      <span className="inline-flex rounded-lg bg-muted px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <span className="inline-flex rounded-full border border-border bg-card px-2 py-0.5 text-label-sm font-semibold text-muted-foreground">
                         Ilimitado
                       </span>
                     )}
@@ -309,29 +307,29 @@ export function PlanesGrid({
 
                   <div className="mt-3">
                     {descuento > 0 && (
-                      <p className="text-sm text-muted-foreground line-through">
+                      <p className="text-small text-muted-foreground line-through">
                         {formatMoney(plan.precio, prefs)}
                       </p>
                     )}
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-[2.5rem] font-extrabold leading-none tracking-tight text-foreground">
+                      <span className="text-h1 leading-none tabular-nums text-foreground">
                         {formatMoney(precioFinal, prefs)}
                       </span>
-                      <span className="text-sm font-medium text-muted-foreground">/mes</span>
+                      <span className="text-small font-medium text-muted-foreground">/mes</span>
                     </div>
                     {precioPorUso != null && (
-                      <p className="mt-1.5 text-xs font-medium text-muted-foreground">
+                      <p className="mt-1.5 text-caption">
                         Equivale a {formatMoney(precioPorUso, prefs)} por uso
                       </p>
                     )}
                     {plan.precioDeCategoria && vehiculo && (
-                      <p className="mt-1 text-xs font-medium text-foreground/70">
+                      <p className="mt-1 text-caption text-primary">
                         Precio para tu {titleCase(vehiculo.modelo)}
                       </p>
                     )}
                     {descuento > 0 && (
-                      <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1 text-xs font-semibold text-foreground">
-                        <Gift className="h-3.5 w-3.5" />
+                      <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-primary-soft px-2.5 py-1 text-label-sm font-semibold text-primary">
+                        <Gift className="h-3.5 w-3.5" aria-hidden />
                         −{formatMoney(descuento, prefs)} de bienvenida
                       </div>
                     )}
@@ -339,27 +337,27 @@ export function PlanesGrid({
                 </div>
 
                 {/* 2 · Incluye: usos y vigencia, en limpio */}
-                <div className="mb-6 grid grid-cols-2 gap-2 border-y border-border/50 py-4">
+                <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-retail-mist p-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/70">
-                      <Zap className="h-4 w-4 text-foreground/70" />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-card">
+                      <Zap className="h-4 w-4 text-primary" aria-hidden />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold leading-tight text-foreground">
+                      <p className="text-small font-bold leading-tight text-foreground">
                         {plan.esIlimitado ? 'Ilimitados' : plan.lavadosIncluidos}
                       </p>
-                      <p className="text-[12px] text-muted-foreground">usos incluidos</p>
+                      <p className="text-caption">usos incluidos</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/70">
-                      <Calendar className="h-4 w-4 text-foreground/70" />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-card">
+                      <Calendar className="h-4 w-4 text-primary" aria-hidden />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold leading-tight text-foreground">
+                      <p className="text-small font-bold leading-tight text-foreground">
                         {plan.vigenciaDias} días
                       </p>
-                      <p className="text-[12px] text-muted-foreground">de vigencia</p>
+                      <p className="text-caption">de vigencia</p>
                     </div>
                   </div>
                 </div>
@@ -368,7 +366,7 @@ export function PlanesGrid({
                 {plan.descripcion && (
                   <div className="mb-6">
                     <SectionLabel>Descripción</SectionLabel>
-                    <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/75">
+                    <p className="whitespace-pre-line text-small leading-relaxed text-foreground/75">
                       {plan.descripcion}
                     </p>
                   </div>
@@ -380,10 +378,8 @@ export function PlanesGrid({
                     <SectionLabel>Beneficios</SectionLabel>
                     <ul className="space-y-2.5">
                       {beneficios.map((b) => (
-                        <li key={b} className="flex items-start gap-2.5 text-sm leading-relaxed text-foreground/80">
-                          <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border border-foreground/15">
-                            <Check className="h-2.5 w-2.5 text-foreground/70" />
-                          </span>
+                        <li key={b} className="flex items-start gap-2.5 text-small leading-relaxed text-foreground/80">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
                           {b}
                         </li>
                       ))}
@@ -395,7 +391,7 @@ export function PlanesGrid({
                 {plan.condiciones && (
                   <div className="mb-6">
                     <SectionLabel>Condiciones</SectionLabel>
-                    <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                    <p className="whitespace-pre-line text-caption leading-relaxed">
                       {plan.condiciones}
                     </p>
                   </div>
@@ -404,7 +400,7 @@ export function PlanesGrid({
                 {/* Aviso explícito de compatibilidad (a11y: visible y legible,
                     la tarjeta sigue siendo comprable) */}
                 {isDimmed && (
-                  <p className="mb-3 text-[12px] font-medium text-muted-foreground">
+                  <p className="mb-3 text-label-sm font-medium text-muted-foreground">
                     Pensado para otro tamaño de vehículo — también puedes elegirlo.
                   </p>
                 )}
@@ -412,14 +408,14 @@ export function PlanesGrid({
                 {/* CTA — anclado abajo, targets ≥48px */}
                 <div className="mt-auto pt-1">
                   {isCurrent ? (
-                    <Button disabled variant="outline" className="min-h-12 w-full">
+                    <Button disabled variant="outline" className="min-h-12 w-full rounded-full">
                       <Check className="mr-2 h-4 w-4" />
                       Este es tu plan
                     </Button>
                   ) : isRequested ? (
                     <Button
                       variant="outline"
-                      className="min-h-12 w-full border-warning/30 text-warning"
+                      className="min-h-12 w-full rounded-full border-warning/30 text-warning"
                       onClick={() =>
                         activeMembershipId && router.push(`/membresia/${activeMembershipId}`)
                       }
@@ -431,12 +427,12 @@ export function PlanesGrid({
                        realiza ÚNICAMENTE el negocio desde su panel. Aquí el
                        plan se muestra informativo, sin acción de cambio. */
                     <div className="space-y-1.5">
-                      <Button disabled variant="outline" className="min-h-12 w-full">
+                      <Button disabled variant="outline" className="min-h-12 w-full rounded-full">
                         {isUpgrade && <ArrowUpCircle className="mr-2 h-4 w-4" />}
                         {isDowngrade && <ArrowDownCircle className="mr-2 h-4 w-4" />}
                         Disponible en el negocio
                       </Button>
-                      <p className="text-center text-[12px] text-muted-foreground">
+                      <p className="text-center text-label-sm text-muted-foreground">
                         Para cambiar a este plan, solicítalo en el local: el equipo lo aplica por ti.
                       </p>
                     </div>
@@ -444,12 +440,12 @@ export function PlanesGrid({
                     /* Vitrina (miembro sin vehículo): la compra en línea pide
                        registrar el vehículo — el precio exacto depende de él. */
                     <div className="space-y-1.5">
-                      <Button asChild variant="outline" className="min-h-12 w-full">
+                      <Button asChild variant="outline" className="min-h-12 w-full rounded-full">
                         <a href={vehiculoNext}>
                           Registra tu vehículo para comprar
                         </a>
                       </Button>
-                      <p className="text-center text-[12px] text-muted-foreground">
+                      <p className="text-center text-label-sm text-muted-foreground">
                         Precio base referencial: con tu vehículo verás el de tu categoría.
                       </p>
                     </div>
@@ -457,10 +453,10 @@ export function PlanesGrid({
                     /* §12: nivel superior — se explica y se ofrecen salidas,
                        nunca un botón muerto sin motivo. */
                     <div className="space-y-1.5">
-                      <Button disabled variant="outline" className="min-h-12 w-full">
+                      <Button disabled variant="outline" className="min-h-12 w-full rounded-full">
                         Para vehículos de otra categoría
                       </Button>
-                      <p className="text-center text-[12px] text-muted-foreground">
+                      <p className="text-center text-label-sm text-muted-foreground">
                         Tu vehículo excede este plan. Elige un plan de tu categoría o
                         consulta en el local para actualizarlo.
                       </p>
@@ -472,10 +468,10 @@ export function PlanesGrid({
                       <SubmitButton
                         variant={isRecommended ? 'default' : 'outline'}
                         className={cn(
-                          'min-h-12 w-full font-bold transition hover:opacity-95',
+                          'min-h-12 w-full rounded-full text-label-lg transition-colors duration-fast',
                           isRecommended
-                            ? 'bg-foreground text-background shadow-md hover:bg-foreground'
-                            : 'border-foreground/25 text-foreground'
+                            ? 'bg-primary text-primary-foreground hover:bg-brand-primary-hover'
+                            : 'border-primary/40 text-primary hover:bg-brand-primary-soft'
                         )}
                       >
                         Seleccionar este plan

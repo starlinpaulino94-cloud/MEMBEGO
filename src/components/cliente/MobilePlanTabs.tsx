@@ -27,7 +27,7 @@ export function MobilePlanTabs({
     <div
       role="tablist"
       aria-label="Planes disponibles"
-      className="relative no-scrollbar mb-5 flex gap-1.5 overflow-x-auto rounded-2xl bg-muted/60 p-1.5 md:hidden"
+      className="relative no-scrollbar mb-5 flex gap-1.5 overflow-x-auto rounded-lg bg-retail-mist p-1.5 md:hidden"
     >
       {tabs.map((tab) => {
         const active = tab.id === activeId
@@ -38,7 +38,7 @@ export function MobilePlanTabs({
             aria-selected={active}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'min-h-10 flex-1 whitespace-nowrap rounded-xl px-3 text-xs font-semibold transition-all duration-base',
+              'min-h-10 flex-1 whitespace-nowrap rounded-lg px-3 text-label-md font-semibold transition-all duration-base',
               active
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'

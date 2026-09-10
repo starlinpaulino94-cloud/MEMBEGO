@@ -713,3 +713,42 @@ separados:
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo (10
 pasos) en verde · captura revisada.
+
+---
+
+## 20. F4 · Planes entra al lenguaje retail (2026-09-10)
+
+Arranca la F4 (membresías, pase y canje) por el primer paso del recorrido:
+elegir plan. `/cliente/planes` hablaba el idioma «premium monocromo»
+anterior a Stitch (foreground como único acento, radios de 16px, precio de
+2.5rem a mano) y traía `<main class="container">` propio — un segundo main
+anidado dentro del que ya pone el CustomerShell.
+
+- **Página**: fuera el main/contenedor; cabecera con sobretítulo del
+  sistema, título `text-h2` y las salidas («Otros negocios», «Mis
+  membresías») en píldoras fantasma. Banderas de estado (pago pendiente,
+  cambio solicitado, vitrina sin vehículo) a 8px con teselas de icono en
+  tinte. TODA la lógica intacta: elegibilidad §9/§10, vitrina, bienvenida,
+  retorno del mapa.
+- **`PlanesGrid`**: tarjetas a 8px con `elevation-1`; recomendado y «Tu
+  plan» con anillo primario (adiós `shadow-premium` y el negro); sello
+  «Para tu {vehículo}» sobre azul profundo; precio `text-h1 tabular-nums`;
+  caja usos/vigencia en `retail-mist` con iconos de marca; beneficios con
+  check verde; CTAs en píldora (primario azul, secundarios con borde). La
+  recomendación por vehículo, el atenuado y los cinco estados del CTA se
+  conservan tal cual.
+- **`CatalogoPlanesGlobal`**: mismo tratamiento (agrupado por negocio, mini
+  tarjetas con «desde» en `text-price-lg`); el chip «Planes de {empresa}»
+  ahora TRUNCA — el nombre es texto ajeno y no decide el ancho del
+  documento. `MobilePlanTabs` y `VehicleSelector` al vocabulario.
+- La sonda del E2E pescó dos desbordes a 390 en las cabeceras (filas de
+  acciones sin `flex-wrap` con textos imparables) — ambos corregidos. Los
+  «flotantes» del EmptyState que la sonda listó estaban recortados por su
+  `overflow-hidden`: la tercera pasada no comprueba recorte y puede dar
+  falsos positivos; el ancho real lo dicen `scrollWidth` y los culpables.
+- El E2E captura las DOS caras: la de la empresa (cliente QA sin vehículo →
+  asistente de requisitos) y el catálogo global con las cinco demo. La
+  rejilla completa de PlanesGrid (con planes y vehículo) no queda capturada:
+  exigiría fixture de vehículo compatible; anotado.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde.
