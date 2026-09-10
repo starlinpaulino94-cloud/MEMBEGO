@@ -1,11 +1,13 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { CreditCard, AlertCircle, WalletCards, Gauge, CalendarClock } from 'lucide-react'
+import { CreditCard, AlertCircle, WalletCards, Gauge, CalendarClock, Trophy } from 'lucide-react'
 import { differenceInDays } from 'date-fns'
 import { getUser } from '@/lib/auth'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { getClienteAllMemberships } from '@/modules/cliente/queries'
+import { getGamificacion } from '@/modules/engagement/gamificacion'
 import { esMarcaUnica } from '@/modules/marketplace/marcaUnica'
+import { primerPaso } from '@/modules/cliente/primerPaso'
 import { WalletStack, type WalletStackItem } from '@/components/wallet/WalletStack'
 import { AnimatedCounter } from '@/components/system/AnimatedCounter'
 import { EmptyState } from '@/components/system/EmptyState'
@@ -35,7 +37,17 @@ export default async function MisMembresias() {
 
   // Marca única: la wallet vacía invita a los planes del negocio, no a
   // "explorar empresas" (ese lenguaje vuelve cuando haya más de una).
-  const marcaUnica = await esMarcaUnica().catch(() => false)
+  // Gamificación: los puntos viajaban en la cabecera de la wallet del Inicio;
+  // con el rediseño violeta (2026-09-10) la wallet vive aquí y el chip con
+  // ellos también.
+  const { clienteId, companyId } = user.metadata
+  const [marcaUnica, gamificacion] = await Promise.all([
+    esMarcaUnica().catch(() => false),
+    clienteId && companyId
+      ? getGamificacion(clienteId, companyId).catch(() => null)
+      : Promise.resolve(null),
+  ])
+  const paso = primerPaso({ companyId: companyId ?? null, marcaUnica })
 
   let memberships: Awaited<ReturnType<typeof getClienteAllMemberships>> = []
   let loadError = false
@@ -122,6 +134,19 @@ export default async function MisMembresias() {
       <PageHeader
         title="Mis membresías"
         description="Tus tarjetas y sus QR. Toca una para girarla y mostrar tu llave de acceso."
+        action={
+          gamificacion ? (
+            <Link
+              href="/cliente/ruleta"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-caption font-semibold text-foreground outline-none transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <Trophy className="size-4 text-primary" aria-hidden />
+              {gamificacion.puntos.toLocaleString('es-DO')}
+              <span className="sr-only"> puntos acumulados</span>
+              <span aria-hidden> pts</span>
+            </Link>
+          ) : undefined
+        }
       />
 
       {loadError ? (
@@ -136,6 +161,8 @@ export default async function MisMembresias() {
           }
         />
       ) : memberships.length === 0 ? (
+        // El destino del primer paso lo decide LA REGLA (primerPaso), no una
+        // copia local: aquí solo se pinta lo que la regla resolvió.
         <EmptyState
           icon={CreditCard}
           title="Tu wallet está lista"
@@ -147,11 +174,7 @@ export default async function MisMembresias() {
           action={
             <>
               <Button asChild size="lg">
-                {marcaUnica ? (
-                  <Link href="/cliente/planes">Ver membresías</Link>
-                ) : (
-                  <Link href="/cliente/explorar">Explorar empresas</Link>
-                )}
+                <Link href={paso.href}>{paso.etiqueta}</Link>
               </Button>
               <Button asChild size="lg" variant="outline">
                 <Link href="/cliente/promociones">Ver ofertas</Link>

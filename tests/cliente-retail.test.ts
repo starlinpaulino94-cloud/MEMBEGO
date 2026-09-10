@@ -158,21 +158,34 @@ test('el diseño del Inicio es el estado por defecto, no un premio por publicar'
     /heroesPorDefecto/,
     'El hero por defecto sale de las promociones destacadas: contenido real.'
   )
-  assert.match(pantalla, /RetailWallet/, 'La wallet no depende de que la empresa publique.')
+  // Rediseño violeta (2026-09-10): la wallet salió del Inicio — su pantalla
+  // es /mis-membresias. Que la vista comercial siempre exista sigue vigente.
+  assert.match(pantalla, /InicioComercial/, 'La mitad comercial es la pantalla.')
 })
 
-test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', () => {
+test('las capacidades del Inicio anterior siguen teniendo dónde vivir', () => {
   const src = leer('src/components/cliente/inicio/InicioRetail.tsx')
   for (const [capacidad, marca] of [
-    ['wallet', /RetailWallet/],
     // El motor de experiencias habla por el POPUP: su héroe se retiró del
     // Inicio por decisión del usuario (2026-09-10).
     ['motor de experiencias (aviso)', /PopupInteligente/],
     ['onboarding', /OnboardingClienteFirstVisit/],
-    ['novedades e invitación', /RetailDescubreMas/],
+    ['invitación (referidos)', /VibeReferidos/],
   ] as const) {
     assert.match(src, marca, `Se perdió la capacidad: ${capacidad}.`)
   }
+  // La WALLET vive en su pantalla (rediseño violeta: el Inicio ya no la trae).
+  assert.match(
+    leer('src/app/(cliente)/mis-membresias/page.tsx'),
+    /WalletStack/,
+    'La wallet perdió su pantalla.'
+  )
+  // Las NOVEDADES de empresas seguidas tienen pantalla propia (la campana).
+  assert.match(
+    leer('src/app/(cliente)/cliente/novedades/page.tsx'),
+    /FeedNovedades/,
+    'El feed de novedades perdió su pantalla.'
+  )
   // La prueba social (EN VIVO) NO está en la lista: se retiró del Inicio por
   // decisión del usuario (2026-09-09). Que no vuelva por accidente.
   assert.equal(
@@ -185,8 +198,9 @@ test('las seis capacidades del Inicio anterior siguen teniendo dónde vivir', ()
     false,
     'El héroe del motor se retiró del Inicio (el popup basta); no debe volver.'
   )
-  // La gamificación no tiene sección propia: viaja en la cabecera de la wallet.
-  assert.match(leer('src/components/cliente/inicio/RetailWallet.tsx'), /gamificacion/)
+  // La gamificación no tiene sección propia: su chip de puntos viaja en la
+  // cabecera de la pantalla de la wallet.
+  assert.match(leer('src/app/(cliente)/mis-membresias/page.tsx'), /gamificacion/)
 })
 
 test('el Inicio no repite el buscador ni el saludo que ya da la carcasa', () => {

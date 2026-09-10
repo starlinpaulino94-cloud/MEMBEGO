@@ -4,40 +4,24 @@ import { PopupInteligente } from '@/components/engagement/PopupInteligente'
 import type { PanelPersonal } from '@/modules/cliente/panelPersonal'
 import type { InicioVista } from '@/modules/home/vista'
 import { InicioComercial } from './InicioComercial'
-import { RetailDescubreMas } from './RetailDescubreMas'
-import { RetailWallet } from './RetailWallet'
+import { VibeReferidos } from './VibeReferidos'
 
 /**
- * EL INICIO DEL CLIENTE — una sola pantalla, dos mitades con dueños distintos.
+ * EL INICIO DEL CLIENTE — rediseño violeta (Stitch «amazon style», aprobado
+ * 2026-09-10). La pantalla es la vitrina comercial del diseño: héroe,
+ * categorías, «Relacionado», relámpago y el banner de referidos al cierre.
  *
- * ────────────────────────────────────────────────────────────────────────────
- * LA MITAD COMERCIAL SIEMPRE ESTÁ (segunda corrección de D10)
+ * LO QUE YA NO VIVE AQUÍ (decisiones acumuladas del usuario):
+ * - La WALLET: el diseño nuevo no la trae en el Inicio; vive en
+ *   /mis-membresias (y la Cuenta enseña la ficha del contrato). Con ella se
+ *   fue el orden condicional wallet-primero.
+ * - Las NOVEDADES de empresas seguidas: tienen su pantalla en
+ *   /cliente/novedades (campana de la cabecera).
+ * - EN VIVO (2026-09-09) y el héroe del motor (2026-09-10): retirados; el
+ *   motor de experiencias habla solo por el popup.
  *
- * La primera versión de D10 dejó UN solo Inicio, pero la mitad comercial —los
- * siete bloques del diseño— solo aparecía si la empresa había publicado
- * composición; sin ella, su sitio lo ocupaba un carril de ofertas que era la
- * pantalla vieja con otro nombre. En una base real donde nadie ha publicado,
- * el diseño no lo veía nadie. El usuario lo vio de inmediato.
- *
- * Ahora `getInicioVista` SIEMPRE devuelve los bloques: por defecto salen del
- * marketplace (hero desde las promociones destacadas, y cada sección de su
- * consulta real), y la composición publicada los CURA en vez de habilitarlos.
- * Aquí ya no hay respaldo que elegir.
- *
- *   COMERCIAL — los 7 bloques del contrato, curados por la empresa si publicó.
- *   PERSONAL  — sale del estado de esa persona y no es configurable. Ningún
- *               panel puede apagarle la wallet a nadie.
- *
- * ────────────────────────────────────────────────────────────────────────────
- * EL ORDEN LO DECIDE EL CONTEXTO
- *
- * Con membresías, la app se abre por una razón concreta: enseñar el QR en el
- * mostrador. Enterrar la wallet bajo los carriles comerciales hace más lento
- * justo el gesto más frecuente, así que va primero.
- *
- * Sin membresías, la wallet no tiene nada que enseñar y lo accionable es
- * descubrir: entonces manda la mitad comercial y la wallet baja a ofrecer el
- * primer paso.
+ * El onboarding de primera visita se conserva al fondo: es condicional (una
+ * cookie lo apaga) y perderlo sería perder una capacidad, no un adorno.
  */
 export function InicioRetail({
   comercial,
@@ -46,65 +30,34 @@ export function InicioRetail({
   comercial: InicioVista
   personal: PanelPersonal
 }) {
-  const tieneMembresias = !personal.walletError && personal.wallet.length > 0
-
-  const mitadComercial = <InicioComercial data={comercial} />
-
-  const mitadPersonal = (
-    <RetailWallet
-      wallet={personal.wallet}
-      walletError={personal.walletError}
-      gamificacion={personal.gamificacion}
-      primerPaso={personal.primerPaso}
-    />
-  )
-
   return (
-    <div className="retail min-w-0 overflow-x-hidden bg-background text-foreground">
+    // Margen negativo espejo del CustomerShell (`px-4 py-4 lg:px-6`): el
+    // rediseño es a sangre — el héroe se asoma por el borde y las bandas
+    // pintan de lado a lado. Segunda excepción legítima junto a /cliente/cerca.
+    // En escritorio la columna se centra a ancho de teléfono grande: el
+    // diseño es móvil y estirarlo a 7xl lo rompería.
+    <div className="retail -mx-4 -my-4 min-w-0 overflow-x-hidden bg-vibe-fondo pb-8 pt-4 text-foreground lg:-mx-6">
       {/* Felicitación por encima de la app tras registrarse. */}
       <CelebracionBienvenida />
 
-      {/* El motor de experiencias habla SOLO por el popup (máx. 1 al día).
-          El héroe que lo pintaba arriba se retiró por decisión del usuario
-          (2026-09-10): rompía el diseño; sus estados también viven donde se
-          actúa (wallet, planes, detalle de membresía). */}
+      {/* El motor de experiencias habla SOLO por el popup (máx. 1 al día). */}
       {!personal.walletError && personal.engagement.popups ? (
         <PopupInteligente candidato={personal.popup} color={personal.engagement.color} />
       ) : null}
 
-      {tieneMembresias ? (
-        <>
-          {mitadPersonal}
-          {mitadComercial}
-        </>
-      ) : (
-        <>
-          {mitadComercial}
-          {mitadPersonal}
-        </>
-      )}
+      <div className="mx-auto w-full max-w-md md:max-w-xl">
+        <InicioComercial data={comercial} />
 
-      {/* La «prueba social» (EN VIVO) se retiró del Inicio por decisión del
-          usuario (2026-09-09): competía con la wallet sin aportarle nada a la
-          persona. Los números de comunidad viven en el perfil de cada empresa,
-          donde sí son un argumento. */}
+        {/* El banner de referidos cierra la pantalla, salvo que el popup del
+            motor ya sea la invitación: la misma dos veces se lee como error. */}
+        {personal.popup?.tipo !== 'REFERIDOS' ? <VibeReferidos /> : null}
 
-      {/* Después de la wallet: una tarjeta real le gana la primera mirada a un
-          recordatorio de configuración. */}
-      {personal.onboarding ? (
-        <section className="bg-background px-4 pb-5 md:px-6" aria-label="Primeros pasos">
-          <div className="mx-auto max-w-6xl">
+        {personal.onboarding ? (
+          <section className="mt-6 px-4" aria-label="Primeros pasos">
             <OnboardingClienteFirstVisit onboarding={personal.onboarding} />
-          </div>
-        </section>
-      ) : null}
-
-      {!personal.walletError ? (
-        <RetailDescubreMas
-          novedades={personal.novedades}
-          mostrarInvitaYGana={personal.popup?.tipo !== 'REFERIDOS'}
-        />
-      ) : null}
+          </section>
+        ) : null}
+      </div>
     </div>
   )
 }

@@ -173,11 +173,12 @@ test('cada primer paso se anuncia con la etiqueta de lo que va a encontrar', () 
   assert.equal(primerPaso({ companyId: 'c1', marcaUnica: true }).etiqueta, 'Ver planes')
 })
 
-test('el Inicio resuelve el primer paso con esa regla, no con una copia suya', () => {
-  const carga = leer('src/modules/cliente/panelPersonal.ts')
-  const pantalla = leer('src/components/cliente/inicio/RetailWallet.tsx')
-  assert.match(carga, /primerPaso\(/, 'El Inicio resuelve el primer paso con la regla.')
-  for (const [nombre, src] of [['el cargador', carga], ['la wallet', pantalla]] as const) {
+test('la wallet resuelve el primer paso con esa regla, no con una copia suya', () => {
+  // Rediseño violeta (2026-09-10): la wallet vive en /mis-membresias; la
+  // regla del primer paso viaja con ella.
+  const pantalla = leer('src/app/(cliente)/mis-membresias/page.tsx')
+  assert.match(pantalla, /primerPaso\(/, 'La wallet resuelve el primer paso con la regla.')
+  for (const [nombre, src] of [['la wallet', pantalla]] as const) {
     assert.doesNotMatch(
       src,
       /'\/cliente\/planes'/,

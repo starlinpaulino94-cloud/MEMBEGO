@@ -6,6 +6,7 @@ import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { getCategoriesPublic, getFeaturedCompanies, getPlanesPublic, getFeaturedPromotions } from '@/modules/marketplace/cached'
 import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-queries'
 import { formatMoney } from '@/lib/format'
+import { formatDescuento } from '@/lib/promociones'
 import type { SessionUser } from '@/types'
 import { getHomePublicada } from './composicion'
 import { HeroSlide, Segmentacion, TIPOS_BLOQUE, type TipoBloque } from './esquema'
@@ -87,6 +88,7 @@ async function heroesPorDefecto(
     cta: 'Ver beneficios',
     planDesde: contexto.get(p.company.id)?.planDesde ?? null,
     color: contexto.get(p.company.id)?.color ?? null,
+    valoracion: contexto.get(p.company.id)?.valoracion ?? null,
   }))
 }
 
@@ -112,9 +114,24 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     : await heroesPorDefecto(promociones)
 
   // Las reseñas y los planes de cada empresa se piden en un solo lote, y solo
-  // para las que se van a pintar.
-  const hechos = await hechosDeEmpresas(empresas.map((e) => e.id))
-  const vigente = promociones.find((p) => p.venta && !p.venta.agotada && p.vigenciaHasta && p.vigenciaHasta > new Date())
+  // para las que se van a pintar (empresas destacadas + las de los planes:
+  // las estrellas del bloque «Relacionado» son de la empresa del plan).
+  const hechos = await hechosDeEmpresas([
+    ...empresas.map((e) => e.id),
+    ...planes.map((p) => p.company.id),
+  ])
+
+  // Tarjeta relámpago del rediseño: las promociones comprables y vigentes,
+  // ordenadas por la que vence antes. El countdown global es el de la más
+  // urgente; cada fila lleva su propio vencimiento.
+  // new Date() en la comparación: tras `unstable_cache` la fecha llega como
+  // STRING y `string > Date` compara texto — el bloque desaparecía solo en
+  // cargas cacheadas (la familia del Decimal de siempre).
+  const ahora = new Date()
+  const urgentes = promociones
+    .filter((p) => p.venta && !p.venta.agotada && p.vigenciaHasta && new Date(p.vigenciaHasta) > ahora)
+    .sort((a, b) => new Date(a.vigenciaHasta!).getTime() - new Date(b.vigenciaHasta!).getTime())
+    .slice(0, 2)
   return {
     revisionId: publicada?.revision.id ?? null,
     territorio: publicada?.revision.territorio ?? null,
@@ -135,6 +152,8 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
       id: p.id, nombre: p.nombre, empresa: p.company.name, descripcion: p.descripcion,
       imagen: p.company.logoUrl, href: `/plan/${p.id}`,
       precio: formatMoney(p.precio, p.company), periodo: `/ ${p.vigenciaDias} días`,
+      valoracion: p.company.averageRating,
+      resenas: hechos.get(p.company.id)?.resenas ?? 0,
     })),
     experiencias: excursiones.flatMap((e): ExperienciaInicio[] => e.company ? [{
       id: e.id, nombre: e.nombre, empresa: e.company.name, descripcion: e.descripcion,
@@ -142,6 +161,20 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
       precio: e.variantes.length === 0 ? null : formatMoney(Math.min(...e.variantes.map((v) => v.precioAdulto)), { moneda: e.moneda }),
       duracion: duracionLegible(e.duracionMin),
     }] : []),
-    relampago: vigente?.vigenciaHasta ? { hasta: vigente.vigenciaHasta.toISOString(), href: `/cliente/promociones/${vigente.id}` } : null,
+    relampago: urgentes.length > 0 && urgentes[0].vigenciaHasta
+      ? {
+          hasta: new Date(urgentes[0].vigenciaHasta).toISOString(),
+          promos: urgentes.map((p) => ({
+            id: p.id,
+            titulo: p.titulo,
+            empresa: p.company.name,
+            imagen: p.imagenUrl,
+            href: `/cliente/promociones/${p.id}`,
+            precio: p.venta ? formatMoney(p.venta.precio) : null,
+            descuento: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
+            hasta: new Date(p.vigenciaHasta!).toISOString(),
+          })),
+        }
+      : null,
   }
 }

@@ -136,14 +136,16 @@ try {
   await expect(clientPage.getByRole('heading', { name: title })).toBeVisible({ timeout: 120000 })
   console.log('E2E: publicación desde editor visible para el cliente autorizado.')
 
-  // Novedades en filas densas (contrato Stitch): el cliente sigue a la
-  // empresa QA y su promoción se publicó hoy, así que la sección existe con
-  // la fila de la promo y su píldora de acción.
+  // Novedades en filas densas: con el rediseño violeta viven en su pantalla
+  // (/cliente/novedades, la campana). El cliente sigue a la empresa QA y su
+  // promoción se publicó hoy, así que la fila existe con su píldora.
+  await clientPage.goto(`${baseURL}/cliente/novedades`, { timeout: 180000 })
   await expect(
     clientPage.getByRole('heading', { name: 'Novedades de tus empresas' })
-  ).toBeVisible({ timeout: 60000 })
+  ).toBeVisible({ timeout: 120000 })
   await expect(clientPage.getByText('Ver oferta').first()).toBeVisible({ timeout: 60000 })
-  console.log('E2E: las novedades del Inicio enseñan la fila densa de la promoción.')
+  await clientPage.goto(`${baseURL}/cliente/inicio`, { timeout: 180000 })
+  console.log('E2E: las novedades enseñan la fila densa de la promoción en su pantalla.')
 
   // El hub administrativo: una columna con los ocho grupos del diseño. Se
   // comprueba que los rótulos estén, no solo que la página cargue — un menú
@@ -176,6 +178,7 @@ try {
     ['promociones', '/cliente/promociones'],
     ['explorar', '/cliente/explorar'],
     ['ajustes', '/cliente/ajustes'],
+    ['novedades', '/cliente/novedades'],
     // Las dos caras de Planes: la de la empresa activa (el cliente QA no
     // tiene vehículo → asistente de requisitos) y el catálogo global.
     ['planes', '/cliente/planes'],
@@ -316,11 +319,13 @@ try {
   // Sin composición, el cliente NO cae a un respaldo: ve el diseño por defecto
   // con los bloques del marketplace. Este es exactamente el fallo que el
   // usuario vio en su base real —donde nadie ha publicado— y no puede volver.
+  // Los bloques del rediseño violeta: «Relacionado…» (membresías del
+  // marketplace) y la tarjeta relámpago (la promo QA es comprable y vigente).
   await expect(
-    clientPage.getByRole('heading', { name: 'Membresías recomendadas' })
+    clientPage.getByRole('heading', { name: 'Relacionado con los artículos que viste' })
   ).toBeVisible({ timeout: 60000 })
   await expect(
-    clientPage.getByRole('heading', { name: 'Empresas destacadas' })
+    clientPage.getByRole('heading', { name: 'Ofertas Relámpago' })
   ).toBeVisible({ timeout: 60000 })
   await clientPage.setViewportSize({ width: 390, height: 900 })
   await clientPage.screenshot({ path: join(CAPTURAS, 'inicio-defecto-390.png'), fullPage: true, animations: 'disabled' })

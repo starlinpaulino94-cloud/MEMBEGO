@@ -376,6 +376,17 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
           tags: true,
           isFeatured: true,
           createdAt: true,
+          // Venta directa: sin estos campos ninguna destacada podía ser
+          // «relámpago» en el Inicio — `venta` llegaba siempre undefined y el
+          // filtro no encontraba nada (bug latente desde la tira anterior).
+          esComprable: true,
+          precio: true,
+          usosPorCompra: true,
+          beneficioVigenciaDias: true,
+          beneficioVigenciaHasta: true,
+          limitePorCliente: true,
+          maxCanjes: true,
+          canjes: true,
           company: {
             select: {
               id: true,
@@ -393,7 +404,23 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
       })
     )
 
-    return promotions as PromotionPublic[]
+    return promotions.map((p) => {
+      const { esComprable, precio, usosPorCompra, beneficioVigenciaDias,
+        beneficioVigenciaHasta, limitePorCliente, maxCanjes, canjes, ...resto } = p
+      return {
+        ...resto,
+        venta: esComprable
+          ? {
+              precio: Number(precio ?? 0),
+              usosPorCompra,
+              agotada: maxCanjes != null && canjes >= maxCanjes,
+              beneficioVigenciaDias,
+              beneficioVigenciaHasta,
+              limitePorCliente,
+            }
+          : null,
+      }
+    }) as PromotionPublic[]
   } catch (error) {
     console.error('[getFeaturedPromotions] Error:', error)
     return []
@@ -836,6 +863,8 @@ export interface PlanConEmpresa extends PlanPublic {
      */
     moneda: string | null
     idioma: string | null
+    /** Ya normalizada a number (Decimal en el borde). Null = sin reseñas. */
+    averageRating: number | null
   }
 }
 
@@ -892,7 +921,7 @@ export async function getPlanesPublic(
           company: {
             select: {
               id: true, name: true, slug: true, logoUrl: true, ciudad: true,
-              moneda: true, idioma: true,
+              moneda: true, idioma: true, averageRating: true,
             },
           },
         },
@@ -907,7 +936,8 @@ export async function getPlanesPublic(
       descripcion: p.descripcion,
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
-      company: p.company,
+      // Number() en el borde: Decimal serializado tras unstable_cache es string.
+      company: { ...p.company, averageRating: p.company.averageRating != null ? Number(p.company.averageRating) : null },
     }))
   } catch (error) {
     console.error('[getPlanesPublic] Error:', error)

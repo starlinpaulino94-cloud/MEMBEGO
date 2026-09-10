@@ -806,3 +806,70 @@ diseño». Fuera por decisión directa:
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo en verde
 · Inicio capturado abriendo directo con la wallet.
+
+---
+
+## 23. El Inicio se rehace al 100% con el export violeta (2026-09-10)
+
+El usuario entregó un export nuevo de Stitch («amazon style», identidad
+violeta #630ED4/#7C3AED con degradados violeta→cobalto→cian) y pidió
+implementarlo AL 100% en el Inicio, con una excepción explícita a mitad de
+turno: **la barra inferior se queda exactamente como está** (Inicio · Cuenta
+· Mi QR · Menú) — la nav de 5 destinos con «Escanear» central del export NO
+se implementa.
+
+**Lo construido (estructura y estilos 1:1 con `code.html`):**
+- Tokens `vibe-*` + clases `grad-vibe-*` con las recetas exactas de los
+  degradados (los hex viven en globals, no en la interfaz).
+- **Cabecera del shell** en el degradado de cuatro paradas: buscador en
+  píldora translúcida (micrófono decorativo — dictar no existe), escáner,
+  CAMPANA (destino nuevo: /cliente/novedades) y avatar; debajo, la píldora
+  oscura de ubicación con «Cambiar» en aqua.
+- **Héroe** de tarjetas 86vw×380 a foto completa con velo nocturno, sello
+  «NOVEDAD DESTACADA», titular display, tarjeta interior blanca (empresa,
+  «desde», valoración con estrella violeta) y CTA en degradado; asomo +
+  puntos. El titular sigue siendo el del slide del editor (h2: el E2E lo
+  asevera).
+- **Chips de categoría**: «Todos» violeta sólido (el único activo honesto) y
+  las reales en píldora con borde lila e icono en los tres acentos.
+- **«Relacionado con los artículos que viste»**: rejilla 2×N con las
+  membresías del marketplace — imagen, «Empresa · Plan», cinco estrellas
+  violetas de la empresa con conteo real, precio/periodo y «Aprovechar».
+  Sin tachados ni sellos que el dato no respalde.
+- **«Experiencias y excursiones ›» + tarjeta lavanda «Ofertas Relámpago»**:
+  countdown de la más urgente y filas de promociones COMPRABLES vigentes
+  (sello de descuento real, «Hasta el {fecha}» en el lugar de la «duración»
+  de la maqueta, precio violeta, «Canjear»).
+- **«INVITA Y GANA»**: tarjeta en el degradado con copy del programa real
+  (sin el «1 semana gratis / 100 puntos» de la maqueta) y regalo de marca
+  de agua.
+
+**Lo que se movió, con sus guardias actualizadas:**
+- La WALLET sale del Inicio → /mis-membresias, y con ella el chip de puntos
+  de gamificación (a la cabecera de esa pantalla) y la regla `primerPaso`,
+  que la pantalla ahora CONSUME en su estado vacío (la guardia que evitaba
+  la copia local apunta allí y encontró una copia real que se eliminó).
+- Las NOVEDADES → pantalla propia /cliente/novedades (campana + E2E).
+- DESTACADAS y BANNER_QR se apagan en el mapa de bloques: el export no los
+  trae; no se inventa dónde ponerlos.
+- Nueve componentes del Inicio anterior borrados (RetailHero, Wallet,
+  Membresias, Destacadas, QrBanner, Relampago, Experiencias, Categorias,
+  DescubreMas).
+
+**Dos bugs reales pescados por el E2E en el camino:**
+1. `vigenciaHasta > ahora` comparaba STRING contra Date tras
+   `unstable_cache` (la familia del Decimal): el relámpago desaparecía solo
+   en cargas cacheadas. `new Date()` en la comparación.
+2. `getFeaturedPromotions` nunca seleccionaba los campos de venta: `venta`
+   llegaba `undefined` y NINGUNA destacada podía ser relámpago — bug
+   latente desde la tira anterior. Ahora arma `venta` como el resto de
+   consultas.
+
+**Desviaciones honestas anotadas:** tipografía display propia (no Plus
+Jakarta), sin punto falso en la campana, textos de 10–11px de la maqueta al
+suelo de 12px, puntos del carrusel estáticos, «Relacionado…» alimentado por
+membresías recomendadas (historial de navegación no existe).
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo (10
+pasos) en verde, incluida la pantalla nueva de novedades y los encabezados
+del rediseño en el estado por defecto · capturas revisadas.

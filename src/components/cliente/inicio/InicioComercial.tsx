@@ -1,56 +1,59 @@
 import { Fragment, type ReactNode } from 'react'
 import type { TipoBloque } from '@/modules/home/esquema'
 import type { InicioVista } from '@/modules/home/vista'
-import { RetailCategorias } from './RetailCategorias'
-import { RetailDestacadas } from './RetailDestacadas'
-import { RetailExperiencias } from './RetailExperiencias'
-import { RetailHero } from './RetailHero'
-import { RetailMembresias } from './RetailMembresias'
-import { RetailQrBanner } from './RetailQrBanner'
-import { RetailRelampago } from './RetailRelampago'
+import { VibeCategorias } from './VibeCategorias'
+import { VibeHero } from './VibeHero'
+import { VibeRelacionado } from './VibeRelacionado'
+import { VibeRelampago } from './VibeRelampago'
 
 function assertNever(value: never): never {
   throw new TypeError(`Bloque de inicio no soportado: ${String(value)}`)
 }
 
+/**
+ * REDISEÑO VIOLETA (Stitch «amazon style», aprobado 2026-09-10): los tipos
+ * del contrato se mapean a los bloques del nuevo diseño.
+ *
+ * - HERO → héroe a foto completa con asomo.
+ * - CATEGORIAS → chips violeta.
+ * - MEMBRESIAS → «Relacionado con los artículos que viste».
+ * - EXPERIENCIAS → cabecera de excursiones + tarjeta «Ofertas Relámpago»
+ *   (las filas son las promociones comprables vigentes).
+ * - DESTACADAS y BANNER_QR → el diseño nuevo NO los trae: se apagan aquí,
+ *   no se inventa dónde ponerlos. Las empresas viven en Explorar y el QR en
+ *   su pestaña del dock. La curación publicada sigue decidiendo qué bloques
+ *   y en qué orden, sobre este mapa.
+ */
 function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
   switch (tipo) {
     case 'CABECERA':
       return null
     case 'HERO':
-      return <RetailHero heroes={data.heroes} />
+      return <VibeHero heroes={data.heroes} />
     case 'CATEGORIAS':
-      return <RetailCategorias categorias={data.categorias} />
+      return <VibeCategorias categorias={data.categorias} />
     case 'DESTACADAS':
-      return <RetailDestacadas empresas={data.empresas} total={data.empresasTotal} />
+      return null
     case 'MEMBRESIAS':
-      return <RetailMembresias planes={data.planes} total={data.planesTotal} />
+      return <VibeRelacionado planes={data.planes} total={data.planesTotal} />
     case 'BANNER_QR':
-      return <RetailQrBanner />
+      return null
     case 'EXPERIENCIAS':
-      return <RetailExperiencias experiencias={data.experiencias} />
+      return <VibeRelampago relampago={data.relampago} />
     default:
       return assertNever(tipo)
   }
 }
 
 /**
- * La mitad COMERCIAL del Inicio: los bloques que la empresa compone y publica.
- *
- * El ámbito `.retail` y el contenedor los pone `InicioRetail`, que es quien
- * intercala esta mitad con la personal. Aquí solo van los bloques, para que
- * anidar dos veces el mismo ámbito no duplique fondo ni tipografía.
+ * La mitad COMERCIAL del Inicio: los bloques que la empresa compone y
+ * publica, en el mapa del rediseño violeta.
  */
 export function InicioComercial({ data }: { data: InicioVista }) {
   return (
     <>
       {data.bloques.map((tipo) => (
-        <Fragment key={tipo}>
-          {tipo === 'DESTACADAS' && data.relampago ? (
-            <RetailRelampago relampago={data.relampago} />
-          ) : null}
-          {renderBlock(tipo, data)}
-        </Fragment>
+        <Fragment key={tipo}>{renderBlock(tipo, data)}</Fragment>
       ))}
     </>
   )

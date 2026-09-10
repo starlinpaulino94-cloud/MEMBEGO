@@ -42,6 +42,9 @@ export interface PlanInicio {
   readonly precio: string
   /** «/mes», «/30 días». */
   readonly periodo: string
+  /** Valoración de la empresa (las estrellas del diseño). Null = sin dato. */
+  readonly valoracion: number | null
+  readonly resenas: number
 }
 
 export interface ExperienciaInicio {
@@ -69,6 +72,23 @@ export interface HeroInicio {
   /** Color de marca del negocio (#rrggbb): tiñe suave la tarjeta, como hace
    *  Amazon con el arte de cada campaña. Null = sin tinte. */
   readonly color: string | null
+  /** Valoración de la empresa para el sello del héroe. Null = no se pinta. */
+  readonly valoracion: number | null
+}
+
+/** Fila de la tarjeta «Ofertas Relámpago» del rediseño violeta. */
+export interface RelampagoInicio {
+  readonly id: string
+  readonly titulo: string
+  readonly empresa: string
+  readonly imagen: string | null
+  readonly href: string
+  /** Ya formateado: «RD$2,900». Null = sin venta en línea. */
+  readonly precio: string | null
+  /** Sello ya formateado («−31%», «2×1»). Null = sin descuento declarado. */
+  readonly descuento: string | null
+  /** Fin de vigencia de ESTA oferta (ISO). */
+  readonly hasta: string
 }
 
 export interface CategoriaInicio {
@@ -91,5 +111,6 @@ export interface InicioVista {
   /** Total de planes activos, para «Ver todas las N membresías». */
   readonly planesTotal: number
   readonly experiencias: readonly ExperienciaInicio[]
-  readonly relampago: { readonly hasta: string; readonly href: string } | null
+  /** La tarjeta relámpago: countdown global (la que vence antes) + filas. */
+  readonly relampago: { readonly hasta: string; readonly promos: readonly RelampagoInicio[] } | null
 }

@@ -151,6 +151,22 @@
      degradado retail-blue → retail-lagoon es la receta de la tarjeta
      «Canje inmediato» del Inicio. */
   --color-retail-lagoon: #00687a;
+  /* ── VIBE · Rediseño violeta del Inicio (Stitch «amazon style», aprobado
+     2026-09-10). Los degradados viven como clases `grad-vibe-*` más abajo;
+     aquí, los sólidos. El cian del contrato es `retail-cyan` (#06b6d4): no
+     se duplica. */
+  --color-vibe-violet: #7c3aed;
+  --color-vibe-deep: #5b21b6;
+  --color-vibe-ink: #630ed4;
+  --color-vibe-cobalt: #2563eb;
+  --color-vibe-lavanda: #dce9ff;
+  --color-vibe-niebla: #e5eeff;
+  --color-vibe-borde: #e0e7ff;
+  --color-vibe-chip: #ddd6fe;
+  --color-vibe-fondo: #f8f9ff;
+  --color-vibe-celeste: #c7d2fe;
+  --color-vibe-sky: #38bdf8;
+  --color-vibe-aqua: #67e8f9;
   /* ── MMS · Motion tokens ────────────────────────────────────────────
      Duraciones y curvas oficiales del Membego Motion System. TODA
      animación DEBE consumir estos valores, nunca números sueltos.
@@ -760,6 +776,26 @@
       0 2px 4px rgb(15 23 42 / 0.04),
       0 8px 24px -4px rgb(15 23 42 / 0.08),
       0 24px 56px -12px rgb(15 23 42 / 0.14);
+  }
+
+  /* ── VIBE · degradados del rediseño violeta del Inicio (recetas EXACTAS
+     del export de Stitch, aprobado 2026-09-10). Como clases y no como hex
+     inline: la guardia de deuda cuenta hex en la interfaz, y un degradado
+     repetido a mano en seis sitios es como se desincroniza un diseño. */
+  .grad-vibe-header {
+    background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 35%, #2563eb 70%, #06b6d4 100%);
+  }
+  .grad-vibe {
+    background: linear-gradient(90deg, #7c3aed 0%, #2563eb 100%);
+  }
+  .grad-vibe-cta {
+    background: linear-gradient(90deg, #7c3aed 0%, #2563eb 60%, #06b6d4 100%);
+  }
+  .grad-vibe-cyan {
+    background: linear-gradient(90deg, #06b6d4 0%, #2563eb 100%);
+  }
+  .grad-vibe-noche {
+    background: linear-gradient(to top, #0b0f19 0%, rgb(30 27 75 / 0.5) 50%, transparent 100%);
   }
 
   /* Skeleton con shimmer (en vez de spinners) */
