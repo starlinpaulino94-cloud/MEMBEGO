@@ -648,3 +648,36 @@ la instrucción del usuario manda sobre la captura en ese punto.
 
 **Verificación:** suite 2048/2048 · build compilado · E2E completo (10
 pasos) en verde · capturas de Cuenta y Configuración revisadas a 390px.
+
+---
+
+## 18. F3 · Buscar entra al lenguaje retail (2026-09-10)
+
+Sin captura propia de Stitch: derivada del Inicio, con una regla ya conocida
+aplicada de nuevo — **el buscador vive en la carcasa**. La página traía su
+propia barra de «Volver al inicio», un hero con OTRO buscador (el de la
+cabecera ya envía a `/cliente/buscar`) y contenedores `max-w-7xl` peleándose
+con los del CustomerShell.
+
+- La página ahora pone solo lo suyo: título con el conteo (`break-words`: el
+  término de búsqueda es texto ajeno), **chips rápidos** de categoría y
+  «Solo con cupos» (enlaces que conservan el resto de parámetros, activo en
+  azul profundo como el catálogo), el panel de **filtros avanzados**
+  (tarjeta 8px, rótulos en sobretítulo, hover azul niebla; plegable en
+  móvil) y las tres secciones con las tarjetas compartidas — empresas y
+  excursiones a 1→2→3 columnas, promociones densas a 2→3→4.
+- **Dos vacíos distintos**: buscó y no hubo (se dice qué falló) ≠ aún no
+  buscó (se invita al buscador de arriba); antes ambos decían «no hay
+  contenido publicado», que era mentira. Sin materia que filtrar, el panel
+  no se enseña.
+- **`PromotionCard.esquinaLibre`**: el corazón de guardar (buscar y
+  catálogo) tapaba el sello «Destacada» — ambos vivían arriba-derecha. Con
+  la prop, los sellos bajan cuando la pantalla superpone la acción; el
+  corazón pasa a tokens (`bg-card/95`, `fill-destructive`).
+- Toda la lógica intacta: q/cat/emp/fd/fh/stock, excursiones vigentes,
+  guardadas, «Ver todas» con contexto.
+- El E2E captura buscar CON resultados (término del sinónimo QA) en los
+  tres anchos con la sonda de desbordamiento — que ya pescó el primer
+  fallo: el h1 sin `break-words`.
+
+**Verificación:** suite 2048/2048 · build compilado · E2E completo en verde.

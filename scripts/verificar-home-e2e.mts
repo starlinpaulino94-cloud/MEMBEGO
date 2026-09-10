@@ -163,6 +163,9 @@ try {
     ['promociones', '/cliente/promociones'],
     ['explorar', '/cliente/explorar'],
     ['ajustes', '/cliente/ajustes'],
+    // Con el término del sinónimo QA: captura el buscador CON resultados
+    // (rejilla + panel de filtros), no solo su estado vacío.
+    ['buscar', `/cliente/buscar?q=${query}`],
     ['empresa-perfil', `/cliente/empresas/qa-home-a-${suffix}`],
   ] as const) {
     if (ruta !== '/cliente/inicio') await clientPage.goto(`${baseURL}${ruta}`, { timeout: 180000 })

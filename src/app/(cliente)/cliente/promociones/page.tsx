@@ -49,7 +49,7 @@ function PromoGridConGuardar({
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {promociones.map((p) => (
         <div key={p.id} className="relative">
-          <PromotionCard promotion={p} hrefBase="/cliente/promociones" />
+          <PromotionCard promotion={p} hrefBase="/cliente/promociones" esquinaLibre />
           <SavePromoButton promocionId={p.id} guardada={guardadasIds.has(p.id)} />
         </div>
       ))}

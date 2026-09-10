@@ -37,6 +37,11 @@ interface PromotionCardProps {
   hrefBase?: string
   /** Ruta a la que volver desde el detalle (se añade como `?retorno=`). */
   retorno?: string
+  /**
+   * La pantalla superpone una acción en la esquina superior derecha (el
+   * corazón de guardar): los sellos bajan para no quedar tapados.
+   */
+  esquinaLibre?: boolean
 }
 
 function fechaCorta(d: string | Date) {
@@ -56,11 +61,13 @@ function Arte({
   isExpired,
   porVencer,
   agotada,
+  esquinaLibre,
 }: {
   promotion: PromotionPublic
   isExpired: boolean
   porVencer: boolean
   agotada: boolean
+  esquinaLibre?: boolean
 }) {
   return (
     <div className="relative aspect-square w-full bg-muted">
@@ -84,7 +91,9 @@ function Arte({
         </span>
       ) : null}
 
-      <span className="absolute right-2 top-2 flex flex-col items-end gap-1">
+      <span
+        className={`absolute right-2 flex flex-col items-end gap-1 ${esquinaLibre ? 'top-12' : 'top-2'}`}
+      >
         {promotion.isFeatured && !isExpired ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-card/95 px-2 py-0.5 text-label-sm font-semibold text-foreground">
             <Star className="size-3 fill-retail-star text-retail-star" aria-hidden /> Destacada
@@ -118,6 +127,7 @@ export function PromotionCard({
   variant = 'default',
   hrefBase = '/promocion',
   retorno,
+  esquinaLibre = false,
 }: PromotionCardProps) {
   const isExpired = Boolean(
     promotion.vigenciaHasta && new Date(promotion.vigenciaHasta) < new Date()
@@ -174,7 +184,13 @@ export function PromotionCard({
       className="group block h-full outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast group-hover:border-primary/40">
-        <Arte promotion={promotion} isExpired={isExpired} porVencer={porVencer} agotada={agotada} />
+        <Arte
+          promotion={promotion}
+          isExpired={isExpired}
+          porVencer={porVencer}
+          agotada={agotada}
+          esquinaLibre={esquinaLibre}
+        />
 
         <div className="flex flex-1 flex-col p-3">
           <h3 className="line-clamp-2 text-label-lg text-foreground">{promotion.titulo}</h3>

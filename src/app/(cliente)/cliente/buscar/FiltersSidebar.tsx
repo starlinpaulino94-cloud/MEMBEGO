@@ -9,6 +9,12 @@ export interface FiltersSidebarProps {
   empresas: { id: string; slug: string; name: string; logoUrl?: string | null }[]
 }
 
+/**
+ * Filtros avanzados del buscador (empresa, fechas, cupos). La categoría y
+ * los cupos también viven como chips rápidos en la página; aquí están
+ * completos para quien quiere afinar. Lenguaje retail: tarjeta a 8px,
+ * rótulos en sobretítulo y estados de foco del sistema.
+ */
 export function FiltersSidebar({
   categorias = [],
   empresas = [],
@@ -54,57 +60,62 @@ export function FiltersSidebar({
     }
   }
 
+  const filaOpcion =
+    'flex cursor-pointer items-center gap-2.5 rounded-lg p-1.5 transition-colors duration-fast hover:bg-retail-mist'
+
   return (
     <div className="w-full">
-      {/* Mobile Toggle Button */}
-      <div className="lg:hidden mb-4">
+      {/* Interruptor móvil */}
+      <div className="mb-3 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-border bg-card text-foreground font-semibold shadow-sm active:bg-muted transition-colors"
+          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-card px-4 py-3 elevation-1 outline-none transition-colors duration-fast hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <span className="flex items-center gap-2 text-sm">
-            <Filter className="h-4 w-4 text-primary" />
+          <span className="flex items-center gap-2 text-label-lg text-foreground">
+            <Filter className="h-4 w-4 text-primary" aria-hidden />
             Filtros avanzados
             {hayFiltros && (
-              <span className="ml-1 rounded-full bg-primary text-primary-foreground text-xs px-2 py-0.5 font-bold">
+              <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-label-sm font-bold text-primary-foreground tabular-nums">
                 {activeFiltersCount}
               </span>
             )}
           </span>
-          {mobileOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          {mobileOpen ? (
+            <ChevronUp className="h-4 w-4" aria-hidden />
+          ) : (
+            <ChevronDown className="h-4 w-4" aria-hidden />
+          )}
         </button>
       </div>
 
-      {/* Sidebar Content (Always visible on lg, toggled on mobile) */}
+      {/* Panel (siempre visible en lg; plegable en móvil) */}
       <div
         className={`${
           mobileOpen ? 'block' : 'hidden'
-        } lg:block sticky top-20 space-y-6 p-4 sm:p-5 rounded-2xl border border-border bg-card shadow-sm`}
+        } sticky top-20 space-y-5 rounded-lg border border-border bg-card p-4 elevation-1 lg:block`}
       >
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-foreground text-sm sm:text-base flex items-center gap-2">
-            <Filter className="h-4 w-4 text-primary" />
+          <h3 className="flex items-center gap-2 text-h4 text-foreground">
+            <Filter className="h-4 w-4 text-primary" aria-hidden />
             Filtros
           </h3>
           {hayFiltros && (
             <button
               type="button"
               onClick={handleClearFilters}
-              className="text-xs font-semibold text-destructive hover:underline flex items-center gap-1"
+              className="flex items-center gap-1 text-label-md font-semibold text-destructive hover:underline"
             >
-              <X className="h-3.5 w-3.5" /> Limpiar todo
+              <X className="h-3.5 w-3.5" aria-hidden /> Limpiar todo
             </button>
           )}
         </div>
 
         {categorias.length > 0 && (
-          <fieldset className="border-t border-border/60 pt-4">
-            <legend className="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Categoría
-            </legend>
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
-              <label className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+          <fieldset className="border-t border-border pt-4">
+            <legend className="mb-2.5 text-overline">Categoría</legend>
+            <div className="scrollbar-thin max-h-48 space-y-1.5 overflow-y-auto pr-1">
+              <label className={filaOpcion}>
                 <input
                   type="radio"
                   name="sidebar-cat"
@@ -113,13 +124,10 @@ export function FiltersSidebar({
                   onChange={() => handleFilterChange('cat', '')}
                   className="h-4 w-4 rounded-full border-input text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-medium">Todas</span>
+                <span className="text-small font-medium">Todas</span>
               </label>
               {categorias.map((cat) => (
-                <label
-                  key={cat}
-                  className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                >
+                <label key={cat} className={filaOpcion}>
                   <input
                     type="radio"
                     name="sidebar-cat"
@@ -128,7 +136,7 @@ export function FiltersSidebar({
                     onChange={() => handleFilterChange('cat', cat)}
                     className="h-4 w-4 rounded-full border-input text-primary focus:ring-primary"
                   />
-                  <span className="text-sm font-medium">{cat}</span>
+                  <span className="text-small font-medium">{cat}</span>
                 </label>
               ))}
             </div>
@@ -136,12 +144,10 @@ export function FiltersSidebar({
         )}
 
         {empresas.length > 0 && (
-          <fieldset className="border-t border-border/60 pt-4">
-            <legend className="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Empresa
-            </legend>
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
-              <label className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+          <fieldset className="border-t border-border pt-4">
+            <legend className="mb-2.5 text-overline">Empresa</legend>
+            <div className="scrollbar-thin max-h-48 space-y-1.5 overflow-y-auto pr-1">
+              <label className={filaOpcion}>
                 <input
                   type="radio"
                   name="sidebar-emp"
@@ -150,13 +156,10 @@ export function FiltersSidebar({
                   onChange={() => handleFilterChange('emp', '')}
                   className="h-4 w-4 rounded-full border-input text-primary focus:ring-primary"
                 />
-                <span className="text-sm font-medium">Todas</span>
+                <span className="text-small font-medium">Todas</span>
               </label>
               {empresas.map((emp) => (
-                <label
-                  key={emp.id}
-                  className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                >
+                <label key={emp.id} className={filaOpcion}>
                   <input
                     type="radio"
                     name="sidebar-emp"
@@ -165,53 +168,49 @@ export function FiltersSidebar({
                     onChange={() => handleFilterChange('emp', emp.id)}
                     className="h-4 w-4 rounded-full border-input text-primary focus:ring-primary"
                   />
-                  <span className="text-sm font-medium truncate">{emp.name}</span>
+                  <span className="truncate text-small font-medium">{emp.name}</span>
                 </label>
               ))}
             </div>
           </fieldset>
         )}
 
-        <fieldset className="border-t border-border/60 pt-4">
-          <legend className="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Fechas
-          </legend>
+        <fieldset className="border-t border-border pt-4">
+          <legend className="mb-2.5 text-overline">Fechas</legend>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Desde</label>
+              <label className="mb-1 block text-caption">Desde</label>
               <input
                 type="date"
                 value={activeFechaDesde}
                 onChange={(e) => handleFilterChange('fd', e.target.value)}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-primary outline-none"
+                className="h-11 w-full rounded-lg border border-input bg-background px-3 text-small outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Hasta</label>
+              <label className="mb-1 block text-caption">Hasta</label>
               <input
                 type="date"
                 value={activeFechaHasta}
                 onChange={(e) => handleFilterChange('fh', e.target.value)}
                 min={activeFechaDesde || new Date().toISOString().split('T')[0]}
-                className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm focus:ring-2 focus:ring-primary outline-none"
+                className="h-11 w-full rounded-lg border border-input bg-background px-3 text-small outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
         </fieldset>
 
-        <fieldset className="border-t border-border/60 pt-4">
-          <legend className="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Disponibilidad
-          </legend>
-          <label className="flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+        <fieldset className="border-t border-border pt-4">
+          <legend className="mb-2.5 text-overline">Disponibilidad</legend>
+          <label className={filaOpcion}>
             <input
               type="checkbox"
               checked={activeSoloConStock}
               onChange={(e) => handleFilterChange('stock', e.target.checked ? '1' : '')}
               className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
             />
-            <span className="text-sm font-medium">Solo con cupos disponibles</span>
+            <span className="text-small font-medium">Solo con cupos disponibles</span>
           </label>
         </fieldset>
       </div>
