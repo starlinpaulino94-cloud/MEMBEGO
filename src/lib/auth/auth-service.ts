@@ -46,11 +46,12 @@ interface AuthUserLike {
 
 function toSessionUser(user: AuthUserLike): SessionUser {
   const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
+  const role = metadata.role ?? 'CLIENTE'
   return {
     supabaseId: user.id,
     email: user.email ?? '',
     metadata: {
-      role: metadata.role ?? 'CLIENTE',
+      role,
       dbUserId: metadata.dbUserId ?? '',
       clienteId: metadata.clienteId ?? null,
       companyId: metadata.companyId ?? null,

@@ -52,9 +52,11 @@ async function fijarAppMetadata(
   companyId: string
 ) {
   const admin = createAdminClient()
+  const { data: userData } = await admin.auth.admin.getUserById(supabaseId)
+  const existingRole = userData.user?.app_metadata?.role
   await admin.auth.admin.updateUserById(supabaseId, {
     app_metadata: {
-      role: 'CLIENTE',
+      role: existingRole ?? 'CLIENTE',
       dbUserId,
       clienteId,
       companyId,
