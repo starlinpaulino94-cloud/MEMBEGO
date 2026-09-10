@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { generarJuego } from './demo/imagenes.mjs'
@@ -346,6 +347,13 @@ async function limpiar() {
     return
   }
   await db.companyRating.deleteMany({ where: { companyId: { in: ids } } })
+  // Compras (sus QR y transiciones caen en cascada), publicaciones,
+  // sucursales y seguimientos: nacieron en la auditoría de datos demo y
+  // referencian promos/empresas — caen ANTES que ellas.
+  await db.productoCompra.deleteMany({ where: { companyId: { in: ids } } })
+  await db.companyPost.deleteMany({ where: { companyId: { in: ids } } })
+  await db.sucursal.deleteMany({ where: { companyId: { in: ids } } })
+  await db.companyFollow.deleteMany({ where: { companyId: { in: ids } } })
   await db.cliente.deleteMany({ where: { companyId: { in: ids }, supabaseId: { startsWith: 'demo-persona-' } } })
   await db.promocion.deleteMany({ where: { companyId: { in: ids } } })
   await db.plan.deleteMany({ where: { companyId: { in: ids } } })
@@ -456,29 +464,40 @@ async function sembrar() {
 
     // 3) Hijos: se recrean de cero para que la corrida sea reproducible.
     await db.companyRating.deleteMany({ where: { companyId: empresa.id } })
+    await db.productoCompra.deleteMany({ where: { companyId: empresa.id } })
+    await db.companyPost.deleteMany({ where: { companyId: empresa.id } })
+    await db.sucursal.deleteMany({ where: { companyId: empresa.id } })
+    await db.companyFollow.deleteMany({ where: { companyId: empresa.id } })
     await db.cliente.deleteMany({ where: { companyId: empresa.id, supabaseId: { startsWith: 'demo-persona-' } } })
     await db.promocion.deleteMany({ where: { companyId: empresa.id } })
-    await db.plan.deleteMany({ where: { companyId: empresa.id } })
+    // Los planes NO se recrean: las membresías reales que el equipo activa al
+    // probar los referencian (FK) y borrarlos revienta la corrida. Se
+    // actualizan por nombre, conservando el id.
     await db.excursionVariante.deleteMany({ where: { companyId: empresa.id } })
     await db.excursion.deleteMany({ where: { companyId: empresa.id } })
 
     for (const [i, plan] of e.planes.entries()) {
-      await db.plan.create({
-        data: {
-          companyId: empresa.id,
-          nombre: plan.nombre,
-          precio: plan.precio,
-          descripcion: plan.descripcion,
-          beneficios: plan.beneficios,
-          esIlimitado: plan.esIlimitado,
-          lavadosIncluidos: plan.lavadosIncluidos,
-          vigenciaDias: plan.vigenciaDias,
-          condiciones: plan.condiciones,
-          color: plan.color,
-          orden: i,
-          activo: true,
-        },
+      const datosPlan = {
+        precio: plan.precio,
+        descripcion: plan.descripcion,
+        beneficios: plan.beneficios,
+        esIlimitado: plan.esIlimitado,
+        lavadosIncluidos: plan.lavadosIncluidos,
+        vigenciaDias: plan.vigenciaDias,
+        condiciones: plan.condiciones,
+        color: plan.color,
+        orden: i,
+        activo: true,
+      }
+      const previo = await db.plan.findFirst({
+        where: { companyId: empresa.id, nombre: plan.nombre },
+        select: { id: true },
       })
+      if (previo) {
+        await db.plan.update({ where: { id: previo.id }, data: datosPlan })
+      } else {
+        await db.plan.create({ data: { companyId: empresa.id, nombre: plan.nombre, ...datosPlan } })
+      }
     }
 
     for (const [i, p] of e.promos.entries()) {
@@ -577,6 +596,47 @@ async function sembrar() {
       })
     }
 
+    // 4b) Publicaciones del negocio: llenan Beneficios, Eventos y Noticias
+    // del perfil y alimentan las Novedades. Plantillas con los datos reales
+    // de cada empresa — nada de lorem.
+    const artesGaleria = artes.galeria
+    const posts = [
+      { tipo: 'BENEFICIO' as const, titulo: 'Prioridad de turno para miembros', contenido: `En ${e.nombre}, tu membresía te da paso preferente: enseña tu QR al llegar y el equipo te atiende antes que la fila general.`, publicadaEn: dias(-2), imagenUrl: artesGaleria[0] ?? null },
+      { tipo: 'BENEFICIO' as const, titulo: 'Precio de socio todo el año', contenido: `Cada visita a ${e.nombre} con membresía activa aplica la tarifa de socio automáticamente. Sin cupones ni trámites: el QR lo hace todo.`, publicadaEn: dias(-6), imagenUrl: artesGaleria[1] ?? null },
+      { tipo: 'EVENTO' as const, titulo: `Jornada de puertas abiertas en ${e.ciudad}`, contenido: `Ven a conocer ${e.nombre} por dentro: recorrido guiado, demostraciones del equipo y una sorpresa para quien active su membresía ese día.`, fechaEvento: dias(4), lugar: e.direccion, publicadaEn: dias(-3), imagenUrl: artesGaleria[2] ?? null },
+      { tipo: 'EVENTO' as const, titulo: 'Noche exclusiva de socios', contenido: `Solo con membresía: una velada privada en ${e.nombre} con atención personalizada y beneficios que no publicamos en ningún otro lado.`, fechaEvento: dias(11), lugar: `${e.nombre}, ${e.ciudad}`, publicadaEn: dias(-1), imagenUrl: artesGaleria[3] ?? null },
+      { tipo: 'NOTICIA' as const, titulo: 'Ampliamos horario los fines de semana', contenido: `Por la demanda de nuestros socios, ${e.nombre} extiende su horario: ${e.horario}. Reserva tu espacio con tiempo.`, publicadaEn: dias(-4), imagenUrl: null },
+      { tipo: 'NOTICIA' as const, titulo: 'Nuevo equipo y mejores instalaciones', contenido: `Renovamos ${e.nombre} para atenderte mejor: instalaciones actualizadas y personal certificado en ${e.rubro.toLowerCase()}.`, publicadaEn: dias(-9), imagenUrl: null },
+    ]
+    for (const post of posts) {
+      await db.companyPost.create({ data: { companyId: empresa.id, activo: true, ...post } })
+    }
+
+    // 4c) Sucursales: la principal (las coordenadas del perfil) y una
+    // segunda en la misma zona. Llenan la sección Sucursales del perfil y
+    // las fichas del mapa «cerca de mí».
+    const sucursales = [
+      { nombre: `${e.nombre} — Centro`, direccion: e.direccion, lat: e.lat, lng: e.lng },
+      { nombre: `${e.nombre} — Plaza ${e.ciudad}`, direccion: `Plaza comercial de ${e.ciudad}, local 2B`, lat: e.lat + 0.012, lng: e.lng - 0.009 },
+    ]
+    for (const su of sucursales) {
+      await db.sucursal.create({
+        data: {
+          companyId: empresa.id,
+          nombre: su.nombre,
+          direccion: su.direccion,
+          telefono: e.telefono,
+          activa: true,
+          ciudadTexto: e.ciudad,
+          sectorTexto: 'Centro',
+          latitud: su.lat,
+          longitud: su.lng,
+          mostrarEnMapa: true,
+          radioServicioKm: 10,
+        },
+      })
+    }
+
     if (e.slug === 'demo-caribeaventura') {
       for (const x of EXCURSIONES) {
         const arte = await generarJuego({
@@ -631,6 +691,73 @@ async function sembrar() {
 
     console.log(`✓ ${e.nombre} — 3 planes, ${e.promos.length}+1 promos, ${e.resenas.length} reseñas`)
   }
+
+  // ── Beneficios activos y seguimientos ─────────────────────────────────
+  // Para CADA cliente de las empresas demo (los demo-persona y también los
+  // clientes reales que el equipo cree al probar): dos compras ACTIVAS con
+  // su QR — llenan «Tus beneficios y cupones» y /cliente/mis-promociones —
+  // y, si el cliente tiene usuario, seguimiento a su empresa y a dos demo
+  // más, para que /cliente/novedades tenga materia.
+  const demoIds = (
+    await db.company.findMany({ where: { slug: { startsWith: 'demo-' } }, select: { id: true } })
+  ).map((c) => c.id)
+  const clientes = await db.cliente.findMany({
+    where: { companyId: { in: demoIds } },
+    select: { id: true, companyId: true, supabaseId: true },
+  })
+  const comprables = await db.promocion.findMany({
+    where: { companyId: { in: demoIds }, esComprable: true, activo: true },
+    orderBy: { prioridad: 'asc' },
+    select: { id: true, companyId: true, precio: true, usosPorCompra: true },
+  })
+  let compras = 0
+  let seguimientos = 0
+  for (const cliente of clientes) {
+    const suyas = comprables.filter((p) => p.companyId === cliente.companyId).slice(0, 2)
+    for (const [i, promo] of suyas.entries()) {
+      const compra = await db.productoCompra.create({
+        data: {
+          tipo: 'PROMOCION',
+          estado: 'ACTIVA',
+          companyId: cliente.companyId,
+          clienteId: cliente.id,
+          promocionId: promo.id,
+          precioCongelado: promo.precio ?? 0,
+          montoPagado: promo.precio ?? 0,
+          pagoConfirmado: true,
+          usosIncluidos: promo.usosPorCompra,
+          usosRestantes: promo.usosPorCompra,
+          fechaActivacion: dias(-1 - i),
+          fechaVencimiento: dias(21 + i * 7),
+        },
+      })
+      await db.qrToken.create({
+        data: {
+          clienteId: cliente.id,
+          compraId: compra.id,
+          token: `demo-${randomUUID().replaceAll('-', '')}`,
+          activo: true,
+          expiraAt: dias(21 + i * 7),
+        },
+      })
+      compras++
+    }
+    if (!cliente.supabaseId.startsWith('demo-persona-')) {
+      const usuario = await db.user.findUnique({
+        where: { supabaseId: cliente.supabaseId },
+        select: { id: true },
+      })
+      if (usuario) {
+        const otras = demoIds.filter((id) => id !== cliente.companyId).slice(0, 2)
+        await db.companyFollow.createMany({
+          data: [cliente.companyId, ...otras].map((companyId) => ({ userId: usuario.id, companyId })),
+          skipDuplicates: true,
+        })
+        seguimientos++
+      }
+    }
+  }
+  console.log(`✓ ${compras} beneficios activos con QR y ${seguimientos} clientes reales siguiendo empresas demo`)
 }
 
 try {

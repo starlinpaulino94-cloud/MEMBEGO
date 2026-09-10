@@ -873,3 +873,40 @@ membresías recomendadas (historial de navegación no existe).
 **Verificación:** suite 2048/2048 · build compilado · E2E completo (10
 pasos) en verde, incluida la pantalla nueva de novedades y los encabezados
 del rediseño en el estado por defecto · capturas revisadas.
+
+---
+
+## 24. Auditoría de datos demo: ninguna sección vacía (2026-09-10)
+
+El usuario, probando con su propia cuenta de cliente en La Braza, encontró
+secciones vacías («Tus beneficios y cupones: 0»). Auditoría de qué módulos
+carecían de datos demo, y el sembrador crece para cubrirlos:
+
+**Huecos encontrados y sembrados:**
+- **CompanyPost** (0 filas) → 6 publicaciones por empresa (2 beneficios,
+  2 eventos FUTUROS con fecha y lugar, 2 noticias) con plantillas sobre los
+  datos reales de cada negocio. Llenan Beneficios/Eventos/Noticias del
+  perfil y alimentan las Novedades.
+- **Sucursal** (0) → 2 por empresa (la principal con las coordenadas del
+  perfil + una segunda en la zona), con dirección, teléfono, ciudad/sector
+  y `mostrarEnMapa`: llenan la sección Sucursales y las fichas del mapa.
+- **ProductoCompra + QrToken** (0) → 2 beneficios ACTIVOS con su QR para
+  CADA cliente de las empresas demo — los demo-persona Y los clientes
+  reales del equipo (52 en total). «Tus beneficios y cupones» y
+  /cliente/mis-promociones dejan de estar vacíos también para la cuenta
+  del usuario.
+- **CompanyFollow** (0 para usuarios reales) → cada cliente real sigue a su
+  empresa y a dos demo más: /cliente/novedades con materia.
+
+**Lección del camino:** el sembrador recreaba los planes de cero y la
+membresía REAL del usuario (Plan Club Foodie) los referencia — la corrida
+reventaba por FK. Los planes pasan a upsert por nombre: conservan su id y
+las membresías vivas no estorban la resiembra.
+
+**Fuera de alcance, anotado:** citas (exigen la maquinaria de
+disponibilidad del vertical carwash) y pagos/facturas del cliente (colgarían
+de la membresía real del usuario, que no se toca).
+
+**Verificación:** siembra en verde (52 compras+QR, 30 posts, 10
+sucursales, 3 seguimientos del usuario real) · suite 2048/2048 · E2E 10/10
+· perfil demo revisado con Eventos y Noticias vivos.
