@@ -33,6 +33,8 @@
     "verificar:cuenta-y-ayuda": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cuenta-y-ayuda.mts",
     "verificar:cerca-de-mi": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cerca-de-mi.mts",
     "verificar:rls-cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-rls-cliente-global.mts",
+    "verificar:meta-fase0": "node --env-file=.env.local --import tsx scripts/verificar-meta-fase0.mts",
+    "meta:tunel": "node scripts/meta-tunel.mjs",
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
     "rls:preflight": "node scripts/rls-capa2-preflight.mjs",

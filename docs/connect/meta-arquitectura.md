@@ -367,3 +367,66 @@ Las siete fases de código están en la rama `claude/meta-integracion` (PR #453)
 - La comprobación **contra Meta** de cada fase (alta incrustada real, un mensaje real por cada canal, un webhook real).
 - Tres puntos marcados ⚠ en el código porque la documentación no pudo confirmarlos: el cuerpo de envío de plantilla (`cuerpoMensajePlantilla`, verificar con la colección de Postman antes del primer envío real), la forma de `delivery`/`read` de Messenger (solo se aplican con `mids`), y los `extras` del Embedded Signup v4.
 - Tras desplegar: `bun run db:migrate:deploy` y reaplicar `prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql` (hay seis tablas nuevas con `companyId`); el superadmin debe publicar los conectores `facebook` e `instagram` en el catálogo.
+
+---
+
+## 13. Fase 0 · herramientas y lo verificado el 11 de septiembre de 2026
+
+La fase 0 no se puede escribir en código: son pantallas del panel de Meta. Lo
+que sí se puede escribir es **la comprobación** de que lo configurado ahí es
+justo lo que este sistema espera — porque un panel de Meta se ve verde cuando
+está mal. Un token de verificación con un espacio de más, un campo sin
+suscribir o el secreto de otra app dan «Complete» en los tres casos.
+
+### 13.1 Las dos herramientas
+
+| Comando | Qué hace |
+|---|---|
+| `npm run meta:tunel` | Abre un túnel de Cloudflare hacia el `next start` local y publica una URL `https` real. Deja la URL en `.next-qa/meta-tunel.txt` e imprime, ya formados, los cuatro valores que se pegan en el panel. |
+| `npm run verificar:meta-fase0` | Hace exactamente lo que hará Meta —el GET del apretón de manos y el POST firmado con `X-Hub-Signature-256` sobre el cuerpo crudo— y comprueba la respuesta. Encuentra sola la URL del túnel. |
+
+**Por qué un túnel y no `localhost`:** Meta da de alta la URL llamándola él.
+Un `localhost` no existe para Meta, así que el alta falla antes de empezar —
+y sin URL dada de alta no llega `account_update`, que es requisito del alta
+incrustada de WhatsApp. Cloudflare y no otro proveedor: los túneles gratuitos
+más comunes interponen un aviso HTML en la primera visita, y Meta recibiría ese
+HTML en vez del `hub.challenge`.
+
+**Cada comprobación trae su control.** Un endpoint que acepta todo pasa
+cualquier prueba escrita solo con lo que sí debe aceptar, así que junto al
+token bueno se prueba uno equivocado, y junto a la firma buena se prueban la
+ausencia de firma y un cuerpo alterado con firma válida para otro contenido.
+
+**De las variables privadas solo se imprime si existen**, nunca el valor. Lo
+único que sale entero a pantalla es lo ya público: el id de la app, los
+`config_id` y la URL del webhook.
+
+### 13.2 Lo verificado, por primera vez, fuera de las pruebas unitarias
+
+Contra `next start` publicado por el túnel, con un secreto y un token de
+verificación **temporales** (los reales todavía no existen), toda la mitad
+receptora quedó demostrada de punta a punta:
+
+| Comprobación | Resultado |
+|---|---|
+| GET del apretón de manos | 200 y el reto EXACTO, en texto plano |
+| GET con el token equivocado | 403 |
+| POST firmado | 200 |
+| POST sin firma | 403 |
+| POST con cuerpo alterado y firma buena | 403 |
+| El evento llegó a `EventoMeta` | sí, con su clave de deduplicación |
+| El evento quedó sin `companyId` | sí, y es lo correcto: ninguna empresa ha dado de alta ese WABA |
+
+Es decir: firma → ruta → despachador → base funciona. Lo que queda por probar
+es la mitad que depende de Meta, y esa empieza cuando existan las credenciales.
+
+### 13.3 Corrección sobre el estado de `.env.local`
+
+Las cinco variables de Meta **existen en `.env.local` pero con el valor
+vacío** (`NEXT_PUBLIC_META_APP_ID=""`, etc.): son las líneas de ejemplo que
+dejó la fase 14, nunca rellenadas. Una búsqueda por nombre de variable las da
+por presentes; solo cargarlas de verdad revela que no valen nada. Se añadió
+`NEXT_PUBLIC_META_CONFIG_ID_PAGES` al mismo bloque, también vacía, para que
+las seis estén a la vista.
+
+Ninguna credencial de Meta existe todavía. La fase 0 está entera por delante.
