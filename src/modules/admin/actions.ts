@@ -524,9 +524,18 @@ export async function cancelarMembresia(
 
     const meta = await getRequestMeta()
     await conEmpresa(membership.cliente.companyId, async (tx) => {
-      await tx.membership.update({
+        /**
+         * CANCELAR ES «DEJA DE COBRARME». También apaga la tarjeta.
+         *
+         * Se ponía solo el estado. `autoRenovar` seguía en true y la tarjeta
+         * atada, así que bastaba con que la membresía volviera a ACTIVA —el
+         * cliente la readquiere, un administrador la reactiva— para que el
+         * cron de renovación la recogiera y cobrara sin que nadie lo pidiera.
+         * Una cancelación que no corta el cobro no es una cancelación.
+         */
+        await tx.membership.update({
         where: { id: membership.id },
-        data: { estado: 'CANCELADA' },
+        data: { estado: 'CANCELADA', autoRenovar: false },
       })
       await tx.auditLog.create({
         data: {

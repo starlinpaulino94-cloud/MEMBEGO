@@ -52,7 +52,7 @@ export async function getHistorialCliente(
 ): Promise<EventoCliente[]> {
   try {
     return await conEmpresa(companyId, async (tx) => {
-      const [cliente, visitas, membresias, compras, citas, notas, notificaciones] =
+      const [cliente, visitas, membresias, compras, citas, notas, notificaciones, cancelaciones] =
         await Promise.all([
           tx.cliente.findUnique({
             where: { id: clienteId },
@@ -142,6 +142,41 @@ export async function getHistorialCliente(
                 : []
             )
             .catch(() => []),
+          /**
+           * QUIÉN CANCELÓ, Y CUÁNDO.
+           *
+           * La membresía guarda su estado, no su historia: mirándola solo se
+           * sabe que está CANCELADA, nunca que alguien la canceló ni quién.
+           * Otro administrador abría la ficha, no veía nada que lo explicara,
+           * y no sabía si podía volver a venderle el plan al cliente.
+           *
+           * El dato ya se escribía en la bitácora desde siempre —la acción, el
+           * autor y la fecha—; lo que faltaba era traerlo aquí, que es donde se
+           * mira. Va por `entidadId` contra las membresías de este cliente: la
+           * bitácora es de toda la empresa y no puede filtrarse por cliente.
+           */
+          tx.membership
+            .findMany({ where: { clienteId }, select: { id: true } })
+            .then((ms) =>
+              ms.length === 0
+                ? []
+                : tx.auditLog.findMany({
+                    where: {
+                      accion: 'MEMBRESIA_CANCELADA',
+                      entidadTipo: 'Membership',
+                      entidadId: { in: ms.map((m) => m.id) },
+                    },
+                    select: {
+                      id: true,
+                      createdAt: true,
+                      entidadId: true,
+                      user: { select: { name: true } },
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: POR_FUENTE,
+                  })
+            )
+            .catch(() => []),
         ])
 
       const eventos: EventoCliente[] = []
@@ -170,6 +205,24 @@ export async function getHistorialCliente(
           detalle: [v.servicio, veh].filter(Boolean).join(' · ') || null,
           monto: null,
           autor: null,
+        })
+      }
+
+      // El nombre del plan, para poder decir CUÁL se canceló y no solo «una
+      // membresía»: un cliente puede haber tenido varias.
+      const planDe = new Map(membresias.map((m) => [m.id, m.plan.nombre]))
+      for (const c of cancelaciones) {
+        const plan = planDe.get(c.entidadId)
+        eventos.push({
+          id: `cancelacion-${c.id}`,
+          tipo: 'MEMBRESIA',
+          fecha: c.createdAt,
+          titulo: plan ? `Canceló el plan ${plan}` : 'Canceló la membresía',
+          detalle: 'El cliente puede volver a adquirirla.',
+          monto: null,
+          // Si no hay usuario, la canceló un proceso, no una persona. Decir
+          // «alguien del equipo» sería inventarlo.
+          autor: c.user?.name ?? null,
         })
       }
 

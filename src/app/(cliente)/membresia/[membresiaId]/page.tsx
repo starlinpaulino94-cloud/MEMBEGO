@@ -232,7 +232,9 @@ export default async function MembershipDetail({
       ]))
     : [[], []]
 
-  const estadoLabel = membresiaEstadoUi(membership.estado).label
+  // `labelCliente`, no `label`: esta pantalla es del cliente. Usar la etiqueta
+  // de administración aquí anulaba el motivo de que existan las dos.
+  const estadoLabel = membresiaEstadoUi(membership.estado).labelCliente
   const company = membership.cliente.company
 
   // Tono del chip de estado en la cabecera.

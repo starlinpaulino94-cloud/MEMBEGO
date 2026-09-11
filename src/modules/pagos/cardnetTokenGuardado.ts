@@ -113,8 +113,24 @@ export type RenovacionResultado =
   | { estado: 'rechazada'; motivo: string }
   | { estado: 'error'; motivo: string }
 
-// Margen: se renueva cuando faltan <= 1 día para vencer (o ya venció).
+// Margen: se renueva cuando faltan <= 1 día para vencer.
 const MARGEN_MS = 24 * 60 * 60 * 1000
+
+/**
+ * CUÁNTO ATRÁS SE PUEDE MIRAR. El suelo que faltaba.
+ *
+ * La selección pedía `fechaVencimiento <= ahora + 1 día` y nada más. Sin suelo,
+ * eso no significa «vence mañana»: significa «vence mañana O venció en
+ * cualquier momento del pasado». Una membresía que caducó en marzo y seguía
+ * diciendo ACTIVA —porque el job diario que las vence no había pasado— entraba
+ * en la tanda y se le COBRABA LA TARJETA meses después.
+ *
+ * El cron corre a diario, así que tres días cubren de sobra que un día falle,
+ * se retrase o la cola se atasque. Lo que queda fuera es justo lo que nadie
+ * quiere: resucitar cobrando algo que el cliente dio por terminado hace
+ * semanas. Ésa renueva por el camino normal, con el cliente delante.
+ */
+const GRACIA_VENCIDA_MS = 3 * 24 * 60 * 60 * 1000
 // Anti doble-cobro: no reintentar si ya hubo un intento en las últimas 12h.
 const VENTANA_ANTIDUPLICADO_MS = 12 * 60 * 60 * 1000
 
@@ -324,7 +340,9 @@ export async function renovarMembresiaPorTarjeta(
 
 /** Membresías que toca renovar ahora (activas, con tarjeta, por vencer). */
 export async function membresiasARenovar(limite = 200): Promise<string[]> {
-  const corte = new Date(Date.now() + MARGEN_MS)
+  const ahora = Date.now()
+  const corte = new Date(ahora + MARGEN_MS)
+  const suelo = new Date(ahora - GRACIA_VENCIDA_MS)
   const filas = await sinEmpresa(
     'pagos: el cron de renovación selecciona membresías por vencer de todas las empresas',
     (tx) =>
@@ -334,7 +352,9 @@ export async function membresiasARenovar(limite = 200): Promise<string[]> {
           autoRenovar: true,
           tarjetaTokenizadaId: { not: null },
           tarjetaTokenizada: { activa: true },
-          fechaVencimiento: { not: null, lte: corte },
+          // Una ventana, no una media recta: entre «venció hace poco» y
+          // «vence mañana». Ver `GRACIA_VENCIDA_MS`.
+          fechaVencimiento: { not: null, gte: suelo, lte: corte },
         },
         select: { id: true },
         take: limite,
