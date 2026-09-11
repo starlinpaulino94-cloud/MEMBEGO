@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useActionState } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -56,11 +56,6 @@ import {
   Pencil,
   Trash2,
   ArrowRight,
-  MessageSquare,
-  Clock,
-  CheckCircle2,
-  Circle,
-  FileText,
 } from 'lucide-react'
 import {
   createLead,
@@ -106,6 +101,13 @@ const PRIORITY_LABEL: Record<string, string> = {
   media: 'Media',
   baja: 'Baja',
 }
+/**
+ * Estado previo que piden las acciones por firma (`(prev, formData)`). No se
+ * lee: existe porque así las escribe React para `useActionState`.
+ */
+const VACIO_LEAD: LeadActionState = {}
+const VACIO_NOTA: NotaActionState = {}
+
 const ETAPA_LABEL: Record<string, string> = {
   NUEVO: 'Nuevo',
   CONTACTADO: 'Contactado',
@@ -114,12 +116,6 @@ const ETAPA_LABEL: Record<string, string> = {
   NEGOCIACION: 'Negociación',
   GANADO: 'Ganado',
   PERDIDO: 'Perdido',
-}
-
-const ACTIVIDAD_ICONS: Record<string, typeof Clock> = {
-  LLAMADA: Phone,
-  WHATSAPP: MessageSquare,
-  EMAIL: Mail,
 }
 
 const fmtFecha = (f: string | Date) =>
@@ -236,17 +232,11 @@ function LeadForm({
 export function PipelineBoard({
   leads,
   stats,
-  total,
-  pagina,
-  totalPaginas,
   filters,
   columnMeta,
 }: {
   leads: Lead[]
   stats: CrmStats
-  total: number
-  pagina: number
-  totalPaginas: number
   filters: Filters
   columnMeta: readonly ColumnMetaItem[]
 }) {
@@ -261,13 +251,17 @@ export function PipelineBoard({
   const [editing, setEditing] = useState(false)
 
   const [notaText, setNotaText] = useState('')
-  const [notaState, createNotaAction] = useActionState(createNota, {} as NotaActionState)
-  const [delNotaState, deleteNotaAction] = useActionState(deleteNota, {} as NotaActionState)
 
-  const [leadState, createLeadAction] = useActionState(createLead, {} as LeadActionState)
-  const [updState, updateLeadAction] = useActionState(updateLead, {} as LeadActionState)
-  const [delState, deleteLeadAction] = useActionState(deleteLead, {} as LeadActionState)
-  const [moveState, moveToStageAction] = useActionState(moveToStage, {} as LeadActionState)
+  /**
+   * Las acciones se llaman DIRECTAMENTE, no por `useActionState`.
+   *
+   * No es cuestión de estilo. `useActionState` deja el resultado en un estado
+   * que solo se ve en el render siguiente, así que un `await accion(fd)`
+   * seguido de `toast.success(...)` canta éxito pase lo que pase: el servidor
+   * podía haber devuelto «no autorizado» o «lead no encontrado» y la pantalla
+   * decía «Lead creado». Llamándolas así el error llega en la misma línea y se
+   * puede mostrar.
+   */
 
   const leadsByCol = useCallback(
     (col: LeadEtapa): Lead[] => {
@@ -292,14 +286,18 @@ export function PipelineBoard({
         const fd = new FormData()
         fd.set('leadId', draggedId)
         fd.set('etapa', col)
-        await moveToStageAction(fd)
-        toast.success(`Lead movido a "${ETAPA_LABEL[col] ?? col}"`)
-        router.refresh()
+        const r = await moveToStage(VACIO_LEAD, fd)
+        if (r.error) {
+          toast.error(r.error)
+        } else {
+          toast.success(`Lead movido a "${ETAPA_LABEL[col] ?? col}"`)
+          router.refresh()
+        }
       }
       setDraggedId(null)
       setOverColumn(null)
     },
-    [draggedId, moveToStageAction, router],
+    [draggedId, router],
   )
 
   const handleCreateLead = useCallback(
@@ -310,12 +308,16 @@ export function PipelineBoard({
       fd.set('telefono', values.telefono)
       fd.set('notas', values.notas)
       fd.set('prioridad', values.prioridad)
-      await createLeadAction(fd)
+      const r = await createLead(VACIO_LEAD, fd)
+      if (r.error) {
+        toast.error(r.error)
+        return
+      }
       setNewLeadOpen(false)
       toast.success(`Lead "${values.nombre}" creado`)
       router.refresh()
     },
-    [createLeadAction, router],
+    [router],
   )
 
   const handleUpdateLead = useCallback(
@@ -327,24 +329,32 @@ export function PipelineBoard({
       fd.set('telefono', values.telefono)
       fd.set('notas', values.notas)
       fd.set('prioridad', values.prioridad)
-      await updateLeadAction(fd)
+      const r = await updateLead(VACIO_LEAD, fd)
+      if (r.error) {
+        toast.error(r.error)
+        return
+      }
       setEditing(false)
       toast.success('Lead actualizado')
       router.refresh()
     },
-    [updateLeadAction, router],
+    [router],
   )
 
   const handleDeleteLead = useCallback(
     async (id: string) => {
       const fd = new FormData()
       fd.set('leadId', id)
-      await deleteLeadAction(fd)
+      const r = await deleteLead(VACIO_LEAD, fd)
+      if (r.error) {
+        toast.error(r.error)
+        return
+      }
       setDetailLead(null)
       toast.success('Lead eliminado')
       router.refresh()
     },
-    [deleteLeadAction, router],
+    [router],
   )
 
   const handleMoveLead = useCallback(
@@ -352,11 +362,15 @@ export function PipelineBoard({
       const fd = new FormData()
       fd.set('leadId', id)
       fd.set('etapa', etapa)
-      await moveToStageAction(fd)
+      const r = await moveToStage(VACIO_LEAD, fd)
+      if (r.error) {
+        toast.error(r.error)
+        return
+      }
       toast.success(`Movido a "${ETAPA_LABEL[etapa] ?? etapa}"`)
       router.refresh()
     },
-    [moveToStageAction, router],
+    [router],
   )
 
   const handleAddNota = useCallback(async () => {
@@ -364,21 +378,29 @@ export function PipelineBoard({
     const fd = new FormData()
     fd.set('leadId', detailLead.id)
     fd.set('contenido', notaText.trim())
-    await createNotaAction(fd)
+    const r = await createNota(VACIO_NOTA, fd)
+    if (r.error) {
+      toast.error(r.error)
+      return
+    }
     setNotaText('')
     toast.success('Nota agregada')
     router.refresh()
-  }, [notaText, detailLead, createNotaAction, router])
+  }, [notaText, detailLead, router])
 
   const handleDeleteNota = useCallback(
     async (notaId: string) => {
       const fd = new FormData()
       fd.set('notaId', notaId)
-      await deleteNotaAction(fd)
+      const r = await deleteNota(VACIO_NOTA, fd)
+      if (r.error) {
+        toast.error(r.error)
+        return
+      }
       toast.success('Nota eliminada')
       router.refresh()
     },
-    [deleteNotaAction, router],
+    [router],
   )
 
   return (

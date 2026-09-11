@@ -17,13 +17,22 @@ import assert from 'node:assert/strict'
 
 // ── Mocks (se registran ANTES de importar el motor) ─────────────────────────
 
+/**
+ * Sustituye un módulo por un doble, metiéndolo en la caché de `require`.
+ *
+ * El `__esModule: true` no es adorno. La cadena real llega al conector por
+ * `await import('@/modules/connect/whatsapp')`, y un `import()` dinámico de un
+ * módulo CommonJS solo expone nombres sueltos si el objeto lleva esa marca;
+ * sin ella el doble entra como `{ default: {...} }` y `enviarWhatsapp` queda
+ * `undefined` —la prueba no falla por lo que vigila, falla por el atajo—.
+ */
 function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
   const resolvedPath = require.resolve(modulePath)
   require.cache[resolvedPath] = {
     id: resolvedPath,
     filename: resolvedPath,
     loaded: true,
-    exports: mockExports,
+    exports: { __esModule: true, ...mockExports },
     parent: null,
     children: [],
   } as unknown as NodeJS.Module
@@ -37,10 +46,26 @@ interface EnvioCapturado {
   origen: string | null
 }
 
+/** La tx mockeada: un doble de Prisma, no un PrismaClient. */
+type TxMock = Record<string, unknown>
+
+interface EntradaEnvio {
+  companyId: string
+  telefono: string
+  texto: string
+  registro?: { origen?: string }
+}
+interface ResultadoEnvio {
+  ok: boolean
+  mensajeId?: string
+  motivo?: string
+  detalle?: string
+}
+
 let envios: EnvioCapturado[] = []
-let dbActual: any
+let dbActual: TxMock
 let conEmpresaErrorOnce: Error | null = null
-let enviarWhatsappOverrideOnce: ((input: any) => Promise<any>) | null = null
+let enviarWhatsappOverrideOnce: ((input: EntradaEnvio) => Promise<ResultadoEnvio>) | null = null
 
 const mockEnviarWhatsapp = async (input: {
   companyId: string
@@ -64,7 +89,7 @@ const mockEnviarWhatsapp = async (input: {
 
 // El tenant se mockea completo: todos los nombres que usa la cadena real
 // (`conEmpresa`, `sinEmpresa`, ...) para que los import estáticos resuelvan.
-const mockConEmpresa = async (_companyId: string, fn: (tx: any) => any): Promise<any> => {
+const mockConEmpresa = async (_companyId: string, fn: (tx: TxMock) => unknown): Promise<unknown> => {
   if (conEmpresaErrorOnce) {
     const err = conEmpresaErrorOnce
     conEmpresaErrorOnce = null
@@ -75,13 +100,13 @@ const mockConEmpresa = async (_companyId: string, fn: (tx: any) => any): Promise
 
 mockModule('@/lib/tenant', {
   conEmpresa: mockConEmpresa,
-  sinEmpresa: async (_motivo: string, fn: (tx: any) => Promise<any>) => fn({}),
+  sinEmpresa: async (_motivo: string, fn: (tx: TxMock) => Promise<unknown>) => fn({}),
   conEmpresaOTodas: async (
     _companyId: string | null,
     _motivo: string,
-    fn: (tx: any) => Promise<any>
+    fn: (tx: TxMock) => Promise<unknown>
   ) => fn({}),
-  conUsuario: async (_userId: string, fn: (tx: any) => Promise<any>) => fn({}),
+  conUsuario: async (_userId: string, fn: (tx: TxMock) => Promise<unknown>) => fn({}),
 })
 
 mockModule('server-only', {})

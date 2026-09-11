@@ -108,9 +108,6 @@ export default async function LeadsPipelinePage({
       <PipelineBoard
         leads={result.leads}
         stats={stats}
-        total={result.total}
-        pagina={result.pagina}
-        totalPaginas={result.totalPaginas}
         filters={{ q, etapa, prioridad, estado, fuente, canal }}
         columnMeta={COLUMN_META}
       />

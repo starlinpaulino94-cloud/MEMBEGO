@@ -31,13 +31,22 @@ const TELEFONO = FROM
 
 // ── Mocks (se registran ANTES de importar entrantes/trasEntrante) ───────────
 
+/**
+ * Sustituye un módulo por un doble, metiéndolo en la caché de `require`.
+ *
+ * El `__esModule: true` no es adorno. La cadena real llega al conector por
+ * `await import('@/modules/connect/whatsapp')`, y un `import()` dinámico de un
+ * módulo CommonJS solo expone nombres sueltos si el objeto lleva esa marca;
+ * sin ella el doble entra como `{ default: {...} }` y `enviarWhatsapp` queda
+ * `undefined` —la prueba no falla por lo que vigila, falla por el atajo—.
+ */
 function mockModule(modulePath: string, mockExports: Record<string, unknown>) {
   const resolvedPath = require.resolve(modulePath)
   require.cache[resolvedPath] = {
     id: resolvedPath,
     filename: resolvedPath,
     loaded: true,
-    exports: mockExports,
+    exports: { __esModule: true, ...mockExports },
     parent: null,
     children: [],
   } as unknown as NodeJS.Module
@@ -78,18 +87,23 @@ const txMensajeria = {
   },
 }
 
-const mockConEmpresa = async (_companyId: string, fn: (tx: any) => any): Promise<any> =>
-  fn(txMensajeria)
+/** La tx mockeada: un doble de Prisma, no un PrismaClient. */
+type TxMock = Record<string, unknown>
+
+const mockConEmpresa = async (
+  _companyId: string,
+  fn: (tx: TxMock) => unknown
+): Promise<unknown> => fn(txMensajeria)
 
 mockModule('@/lib/tenant', {
   conEmpresa: mockConEmpresa,
-  sinEmpresa: async (_motivo: string, fn: (tx: any) => Promise<any>) => fn({}),
+  sinEmpresa: async (_motivo: string, fn: (tx: TxMock) => Promise<unknown>) => fn({}),
   conEmpresaOTodas: async (
     _companyId: string | null,
     _motivo: string,
-    fn: (tx: any) => Promise<any>
+    fn: (tx: TxMock) => Promise<unknown>
   ) => fn({}),
-  conUsuario: async (_userId: string, fn: (tx: any) => Promise<any>) => fn({}),
+  conUsuario: async (_userId: string, fn: (tx: TxMock) => Promise<unknown>) => fn({}),
 })
 
 // El contacto nuevo/existente: fuente de `esNueva` para el auto-reply.
@@ -223,7 +237,7 @@ beforeEach(() => {
 // ── Flujo entrante → auto-reply ─────────────────────────────────────────────
 
 test('un mensaje de texto entrante dispara exactamente un auto-reply con esNueva del contacto', async () => {
-  const result = await registrarEntranteWhatsapp(eventoDe('wamid.in.001', 'Quiero reservar') as any)
+  const result = await registrarEntranteWhatsapp(eventoDe('wamid.in.001', 'Quiero reservar'))
 
   assert.equal(result, 'entrante text')
   assert.equal(mensajesEntrantes.length, 1, 'debería persistir el entrante')
@@ -243,7 +257,7 @@ test('un mensaje de texto entrante dispara exactamente un auto-reply con esNueva
 test('un wamid duplicado no vuelve a disparar el auto-reply', async () => {
   const ev = eventoDe('wamid.dup.001', 'Quiero reservar')
 
-  const primero = await registrarEntranteWhatsapp(ev as any)
+  const primero = await registrarEntranteWhatsapp(ev)
   assert.equal(primero, 'entrante text')
   assert.equal(llamadasAutoReply.length, 1)
 
@@ -251,7 +265,7 @@ test('un wamid duplicado no vuelve a disparar el auto-reply', async () => {
   // `entrantes` lo trata como duplicado (deshace el no leído y NO llama a
   // trasEntrante).
   duplicadoSiguiente = true
-  const segundo = await registrarEntranteWhatsapp(ev as any)
+  const segundo = await registrarEntranteWhatsapp(ev)
 
   assert.equal(segundo, 'duplicado')
   assert.equal(llamadasAutoReply.length, 1, 'el duplicado no debería re-disparar el auto-reply')
@@ -261,25 +275,25 @@ test('un wamid duplicado no vuelve a disparar el auto-reply', async () => {
 // ── Gating del hook en trasEntrante ─────────────────────────────────────────
 
 test('trasEntrante: un canal distinto a WHATSAPP no dispara auto-reply', async () => {
-  await trasEntrante(inputTrasEntrante({ canal: 'MESSENGER' }) as any)
+  await trasEntrante(inputTrasEntrante({ canal: 'MESSENGER' }))
 
   assert.equal(llamadasAutoReply.length, 0, 'el auto-reply es solo WhatsApp')
 })
 
 test('trasEntrante: un mensaje que no es texto no dispara auto-reply', async () => {
-  await trasEntrante(inputTrasEntrante({ tipo: 'image', texto: 'mi foto' }) as any)
+  await trasEntrante(inputTrasEntrante({ tipo: 'image', texto: 'mi foto' }))
 
   assert.equal(llamadasAutoReply.length, 0, 'el auto-reply es solo para texto')
 })
 
 test('trasEntrante: texto null no dispara auto-reply', async () => {
-  await trasEntrante(inputTrasEntrante({ tipo: 'text', texto: null }) as any)
+  await trasEntrante(inputTrasEntrante({ tipo: 'text', texto: null }))
 
   assert.equal(llamadasAutoReply.length, 0)
 })
 
 test('trasEntrante: contacto ya existente llega con esNueva=false (no bienvenida)', async () => {
-  await trasEntrante(inputTrasEntrante({ nuevo: false }) as any)
+  await trasEntrante(inputTrasEntrante({ nuevo: false }))
 
   assert.equal(llamadasAutoReply.length, 1)
   assert.equal(llamadasAutoReply[0]!.esNueva, false, 'la señal esNueva debe propagarse desde el contacto')
@@ -290,7 +304,7 @@ test('trasEntrante: nunca lanza aunque el CRM falle (fire-and-safe)', async () =
 
   let rechazo: unknown = null
   try {
-    await trasEntrante(inputTrasEntrante({}) as any)
+    await trasEntrante(inputTrasEntrante({}))
   } catch (e) {
     rechazo = e
   }

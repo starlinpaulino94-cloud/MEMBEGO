@@ -1,5 +1,3 @@
-import type { Prisma } from '@prisma/client'
-
 // ── Lead ───────────────────────────────────────────────────────────────────
 
 export type LeadFuente = 'ORGANICO' | 'PAGADO' | 'REFERENCIA' | 'EVENTO' | 'OTRO'
