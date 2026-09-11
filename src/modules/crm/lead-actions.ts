@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import type { Lead, LeadCreateInput, LeadUpdateInput, LeadEtapa, LeadFuente, LeadCanal, LeadEstado, LeadPrioridad } from './types'
+import type { Lead, LeadUpdateInput, LeadEtapa, LeadFuente, LeadCanal, LeadEstado, LeadPrioridad } from './types'
 
 // ── State ──────────────────────────────────────────────────────────────────
 

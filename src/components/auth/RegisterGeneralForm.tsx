@@ -67,14 +67,20 @@ export function RegisterGeneralForm() {
       toast.success('¡Bienvenido a MembeGo! Tu cuenta está lista.')
       const destino = '/cliente/celebracion'
       const creds = credsRef.current
+      // Carga completa a propósito, no `router.push`. Acaba de crearse la
+      // sesión: la cookie es nueva y la caché de cliente todavía guarda el
+      // render anónimo de la ruta. Una navegación blanda llevaría al usuario
+      // recién registrado a una pantalla que cree que no ha entrado.
       if (creds) {
         const supabase = createClient()
         supabase.auth
           .signInWithPassword({ email: creds.email, password: creds.password })
           .finally(() => {
+            // eslint-disable-next-line @next/next/no-location-assign-relative-destination
             window.location.href = destino
           })
       } else {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = destino
       }
     }
