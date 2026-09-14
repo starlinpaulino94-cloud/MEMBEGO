@@ -110,3 +110,273 @@ Con todas las empresas en DOP se ve igual que antes: una línea. En cuanto haya
 dos monedas con dinero, el reporte lo dice y la comparación contra el periodo
 anterior se calcula solo para la principal. Sumar pesos con dólares da un número
 que no es dinero de nada.
+
+---
+
+# Catálogo de métricas
+
+*Añadido en la Fase 0 del sistema integral de reportes. Lo anterior —pantallas,
+las cinco reglas, exportar, imprimir, monedas— sigue vigente sin cambios: son
+el «cómo». Esto es el «qué».*
+
+## Por qué hacía falta
+
+Las cinco reglas protegen el **cómo** se calcula: la zona horaria, el fechado
+de los cobros, que ninguna cifra salga de una lista recortada. Lo que no estaba
+escrito es **qué significa** cada cifra. La pregunta «¿cuántos clientes activos
+tenemos?» tiene hoy más de una respuesta defendible según qué pantalla se mire.
+
+> **Sexta regla: una métrica, una definición, un sitio.** Si «membresía
+> renovada» significa una cosa en el reporte de la empresa y otra en el del
+> superadmin, las dos pantallas están mal aunque las dos consultas sean
+> correctas.
+
+## Vocabulario
+
+### «Ingreso»
+
+Dos flujos distintos, y `modules/reportes/queries.ts` ya los separa a
+propósito:
+
+| Término | Qué es | Fuente |
+| --- | --- | --- |
+| **Ingreso de caja** | Entró por el mostrador | `Transaction.monto`, estado cobrado |
+| **Cobro de membresía** | Activaciones y renovaciones | `Membership.montoPagado` vía `whereCobrado` |
+
+No se suman en una sola cifra sin decirlo: sumarlas hace imposible cuadrar el
+reporte con la caja del día. Cuando un reporte necesite el total, lo llama
+**ingreso total** y enseña los dos sumandos al lado.
+
+Y la distinción que ningún reporte puede difuminar:
+
+- **Cobrado** — el dinero está. Es lo que se reporta como ingreso.
+- **Proyectado** — lo que entraría si nadie cancela. Va rotulado como
+  estimación, nunca en la misma columna.
+
+`Transaction.estado` tiene ocho valores (`PENDING`, `VALIDATING`, `APPROVED`,
+`APPLIED`, `CANCELLED`, `REVERTED`, `EXPIRED`, `ERROR`). **Solo `APPROVED` y
+`APPLIED` son dinero.** Ningún reporte suma `PENDING` a un ingreso.
+
+### «Membresía activa»
+
+`estado = 'ACTIVA'` **no basta**. La función correcta ya existe:
+`estaVigente` (`modules/membresia/vigencia.ts`) — activa **y** no caducada.
+
+La segunda condición existe porque el job de vencimiento puede no haber pasado.
+Una membresía que dice `ACTIVA` con fecha de marzo no está activa, y contarla
+infla el indicador más visible del panel.
+
+### «Cliente activo»
+
+Un cliente con al menos una membresía **vigente** al cierre del periodo. No es
+«cliente que usó algo este mes» — eso es **cliente con actividad**, que es otra
+métrica y lleva otro nombre.
+
+### «Cancelada» vs «vencida»
+
+- **Cancelada** — alguien la cortó: hay una decisión detrás.
+- **Vencida** — se acabó el tiempo y nadie renovó.
+
+Dos conversaciones comerciales distintas: **no se agregan juntas** en ninguna
+métrica de pérdida. Al cliente se le muestra «Finalizada» en ambos casos
+(`lib/estados.ts` → `labelCliente`); al negocio, nunca.
+
+### «Renovación»
+
+Un cobro sobre una membresía **que ya existía**, que extiende su vigencia. Se
+distingue de la **activación**, que es el primer cobro. Ver «Lo que hoy no se
+puede medir».
+
+## Reglas transversales que faltaban
+
+**Límites del rango.** Inclusivo al inicio, exclusivo al final:
+`desde <= fecha < hasta`. Una venta a las 23:59:59 del último día entra; una a
+las 00:00:00 del siguiente, no.
+
+**Comparación.** El periodo anterior tiene **exactamente los mismos días**.
+Comparar 30 contra 31 produce una variación que no significa nada.
+
+**Denominador cero.** Una tasa sin base no es 0 %: es **«sin dato»**. Enseñar
+0 % de renovación porque no venció ninguna membresía es decir algo falso.
+
+**Datos incompletos.** Ya existe el mecanismo (`incompleto: boolean`, regla 5).
+Se extiende a un segundo caso: cuando el rango pedido es anterior a la fecha
+desde la que existe el dato, el reporte lo dice — *«datos completos desde
+DD/MM/AAAA»*.
+
+## Fichas
+
+🔒 requiere permiso financiero · 👤 expone datos personales.
+
+### Membresías
+
+| Métrica | Definición | Fórmula / fuente |
+| --- | --- | --- |
+| Activas | Vigentes al cierre | `estaVigente` |
+| Nuevas | Creadas en el periodo | `Membership.createdAt` |
+| Pendientes de pago | Esperando validación | `estado IN ('PENDIENTE','PENDIENTE_PAGO')` |
+| Rechazadas | Pago rechazado | `estado = 'RECHAZADA'` |
+| Canceladas | Cortadas por decisión | `AuditLog.accion = 'MEMBRESIA_CANCELADA'` |
+| Renovadas | Cobro que extiende vigencia | `AuditLog.accion = 'MEMBRESIA_RENOVADA'` |
+| Próximas a vencer | Vencen en N días | `fechaVencimiento` entre hoy y hoy+N, vigentes |
+| Tasa de renovación | Renovadas ÷ (renovadas + vencidas) | derivada |
+| Churn | Bajas ÷ activas al inicio | derivada |
+| Ingresos por plan 🔒 | Cobros agrupados por plan | `whereCobrado` + `planId` |
+
+**Los cambios de plan se clasifican por el precio del momento**, no por el de
+hoy: un plan cuyo precio subió el mes pasado convertiría retroactivamente
+subidas en bajadas. Por eso el evento guarda precios, no solo ids.
+
+### Finanzas 🔒
+
+| Métrica | Fórmula / fuente |
+| --- | --- |
+| Ingreso de caja | `Transaction.monto`, `estado IN ('APPROVED','APPLIED')` |
+| Cobros de membresía | `whereCobrado` |
+| Intentos de pago | `PagoIntento` por `createdAt` |
+| Tasa de aprobación | `APROBADO` ÷ (`APROBADO` + `RECHAZADO`) |
+| Motivos de rechazo | `PagoIntento.motivoRechazo` |
+| Cobrado sin entregar | `estado='APROBADO' AND fulfillmentEstado='PENDIENTE'` |
+| Anuladas / revertidas | `Transaction.estado IN ('CANCELLED','REVERTED')` |
+| Descuentos | `Membership.descuentoBienvenida` |
+
+`PagoIntento` ya está indexado para esto: `[companyId, estado, createdAt]`.
+
+### Clientes 👤
+
+| Métrica | Fuente |
+| --- | --- |
+| Nuevos | `Cliente.createdAt` |
+| Activos | derivada de membresías |
+| Con actividad | `Visit.fechaVisita` |
+| Con varias membresías | `Membership` agrupado por `clienteId` |
+| Valor generado 🔒 | `montoPagado` + `Transaction.monto` |
+
+**Frontera de privacidad, no negociable:** una empresa ve **su relación** con
+el cliente. Nunca sus membresías, visitas ni gasto en otra empresa. `Cliente`
+lleva `companyId`, así que el aislamiento es directo; lo que hay que vigilar es
+no cruzar por `User` —que sí es global— y reconstruir por detrás lo que la
+frontera prohíbe.
+
+### Operación
+
+| Métrica | Fuente |
+| --- | --- |
+| Canjes | `Visit` por `fechaVisita` |
+| Canjes que descontaron | `Visit.descontado = true` |
+| Por sucursal / empleado | `Visit.sucursalId` / `Visit.empleadoId` |
+| QR generados / usados | `AuditLog.accion IN ('QR_GENERADO','QR_USADO')` |
+
+**Dos limitaciones que hay que decir antes de construir:**
+
+1. **`Visit` no tiene `companyId`** — se llega por `membershipId`, y está
+   documentado como decisión deliberada en el modelo. No existe ni puede
+   existir un índice `[companyId, fechaVisita]`. El propio modelo prevé «del
+   orden de millones de filas al mes». Se aborda en su fase, con backfill por
+   lotes e índice `CONCURRENTLY`, no antes.
+2. **`sucursalId` y `empleadoId` son opcionales.** Los reportes por sucursal o
+   empleado llevan una fila **«sin asignar»** que no se esconde. Esconderla
+   haría que los subtotales no sumaran el total, que es la forma más rápida de
+   que nadie vuelva a confiar en el reporte.
+
+Los reportes de empleado miden **operaciones, no personas**: van detrás de su
+propio permiso y no incluyen métricas de ritmo individual que no sirvan a una
+decisión operativa.
+
+## Lo que hoy NO se puede medir
+
+**Ningún reporte va a inventar estos datos.**
+
+| Métrica | Por qué no |
+| --- | --- |
+| Vencidas por periodo | `modules/membresia/vencimiento.ts` pone `VENCIDA` sin escribir auditoría |
+| Cambio de plan | `cambiarPlanDeMembresia` audita con `accion: 'PAGO_APROBADO'` y el plan anterior en el payload |
+| Activaciones | El paso a `ACTIVA` no deja rastro |
+| Suspensión / reactivación | `MembershipEstado` no tiene `SUSPENDIDA` |
+| Motivo de cancelación | No se pide ni se guarda |
+| Renovación fallida | El cron de tarjeta no registra el fallo |
+| Cambio de precio | No se versiona |
+| Reembolsos | No existe el concepto en el modelo |
+| Aperturas y clics | El proveedor no devuelve evidencia |
+
+**Sobre el histórico:** se podrá reconstruir parcialmente desde `AuditLog`
+—renovaciones y cancelaciones sí están—, pero vencimientos, activaciones y
+cambios de plan **no existen y no se van a fabricar**.
+
+## Permisos
+
+Hoy `reportes` es una sección sin funciones: quien entra lo ve y lo exporta
+todo. Se separa en:
+
+| Función | Qué abre |
+| --- | --- |
+| `ver` | Reportes operativos |
+| `ver_financieros` | Todo lo marcado 🔒 |
+| `ver_datos_personales` | Todo lo marcado 👤 |
+| `exportar` | Las rutas `export`/`exportar` |
+| `ver_empleados` | Actividad por empleado |
+| `ver_auditoria` | Diagnósticos de calidad de datos |
+
+**Se niega por defecto**: una función que no está en el catálogo no existe.
+
+El permiso se comprueba **en la consulta, no en el componente**. Una pantalla
+que esconde una columna mientras la ruta de exportación la sigue devolviendo no
+protege nada — y la regla de exportar dice que el archivo usa las mismas
+funciones que la pantalla, así que el permiso tiene que vivir debajo de las dos.
+
+## Filtros que faltan
+
+**Rangos.** Hoy hay cinco presets (`rango.ts`). Faltan: ayer, esta semana,
+semana anterior, este trimestre, trimestre anterior, este año, año anterior,
+últimos 90 y 365 días, fecha concreta.
+
+**Comparación.** Contra el periodo anterior ya existe. Falta contra el **mismo
+periodo del año anterior**.
+
+**Dimensiones.** Sucursal, plan, estado, cliente, empleado, promoción,
+beneficio, campaña, método de pago, canal, fuente, moneda.
+
+Los filtros se combinan, se limpian y **se ven**: si un número sale de un
+subconjunto, la pantalla lo dice — y el archivo exportado también, que para eso
+existe el bloque «Alcance del reporte».
+
+## Fases
+
+Una fase = un PR = una parada para auditar. **Una fase no está terminada si
+solo existe la interfaz.**
+
+| Fase | Contenido | Terminada cuando |
+| --- | --- | --- |
+| 0 | Este catálogo | Revisado y fusionado |
+| 1 | `MembershipEvent`, motivo de cancelación, emisión desde todos los puntos que mutan membresías, backfill, índices | Cancelar, renovar, vencer, activar y cambiar plan escriben su evento. Pruebas que fallan al revertir cada emisión |
+| 2 | Permisos granulares + filtros ampliados | Sin `ver_financieros` no se ven ingresos **ni en la exportación**. Prueba con dos empresas |
+| 3 | Reportes de membresías sobre eventos | Cada cifra abre su detalle. Corte de datos visible |
+| 4 | Finanzas y conciliación | Cobrado ≠ proyectado, separados y probados |
+| 5 | Operación: QR, sucursales, empleados, beneficios. Incluye `Visit.companyId` | Backfill verificado. Consulta por sucursal sin JOIN |
+| 6 | Marketing, CRM, campañas, referidos | Etapas leídas de `PipelineConfig`, nunca fijas |
+| 7 | XLSX y exportación en segundo plano | 100k filas sin bloquear la petición |
+
+**La Fase 7 no incluye una librería de PDF.** La decisión de este documento
+—«si algún día hace falta una portada con logo y paginación fija, entra
+entonces»— sigue en pie: el botón de imprimir ya produce PDF por el diálogo del
+navegador, y el presupuesto de JavaScript está al 96 %.
+
+### Decisiones pendientes que bloquean la Fase 1
+
+1. **Qué es «suspendida»** para el negocio: ¿pausa voluntaria que conserva
+   saldo, o impago congelado? Define columnas, no etiquetas.
+2. **Desde cuándo debe existir el historial**: aceptar el corte con backfill
+   parcial desde `AuditLog`, o arrancar limpio desde la migración.
+3. **Si RLS Capa 2** (`prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql`,
+   hoy «NO aplicar todavía») entra aquí o es proyecto aparte. Recomendación:
+   aparte.
+
+## Lo que este sistema no va a hacer
+
+- **No inventará historia.** Lo que no se registró, no se reconstruye.
+- **No mezclará estimaciones con dinero cobrado** en la misma columna.
+- **No enseñará métricas sin evidencia del proveedor** (aperturas, clics).
+- **No dará por buena una cifra sin trazabilidad**: si no se puede abrir hasta
+  las filas que la producen, no va en el reporte.
+- **No cruzará empresas.** Ni en pantalla, ni en exportación, ni en un trabajo
+  en segundo plano.
