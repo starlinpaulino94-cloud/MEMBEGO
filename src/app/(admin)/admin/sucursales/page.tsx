@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { MapPin, Plus, Pencil, Phone, Navigation } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/system/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function SucursalesPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   // Self-heal para empresas creadas antes de la sucursal automática: al
   // entrar aquí, si no hay ninguna, se crea la principal con los datos de
@@ -31,9 +31,7 @@ export default async function SucursalesPage() {
     company: { name: string }; _count: { visits: number }
   }[] = []
   try {
-    sucursales = await conEmpresaOTodas(
-      companyId,
-      'sucursales: el superadmin las ve de todas las empresas',
+    sucursales = await conEmpresa(companyId,
       (tx) => tx.sucursal.findMany({
         where: companyId ? { companyId } : {},
         include: {
@@ -169,3 +167,4 @@ export default async function SucursalesPage() {
     </div>
   )
 }
+

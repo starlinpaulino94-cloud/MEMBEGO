@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { sinEmpresa } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import {
   ROLES_EXENTOS_PERMISOS,
   resolverPermisosUsuario,
@@ -136,6 +136,19 @@ export default async function AdminLayout({
   ])
   const nombreEmpresaActiva =
     empresas.find((e) => e.id === (user.metadata.companyId ?? null))?.name ?? null
+  // La sede que acompaña al nombre en la tarjeta del menú (contrato Stitch:
+  // «CARTOWN Wash · Sede Higüey 23000»). Sale de la ciudad de la empresa; si
+  // no la tiene, la tarjeta enseña solo el nombre en vez de inventarse una.
+  const sedeEmpresaActiva = user.metadata.companyId
+    ? await conEmpresa(user.metadata.companyId, (tx) =>
+        tx.company.findUnique({
+          where: { id: user.metadata.companyId! },
+          select: { ciudad: true, provincia: true },
+        })
+      )
+        .then((c) => (c?.ciudad ? `Sede ${c.ciudad}` : (c?.provincia ?? null)))
+        .catch(() => null)
+    : null
 
   return (
     <AppShell
@@ -150,15 +163,25 @@ export default async function AdminLayout({
       badges={badges}
       sistemasExternos={sistemasExternos}
       nombreEmpresa={nombreEmpresaActiva}
+      sedeEmpresa={sedeEmpresaActiva}
+      // El conmutador vive en la barra lateral, bajo la marca (contrato
+      // Stitch): sobre qué empresa trabajas se lee antes de decidir a dónde
+      // ir. Con una sola empresa no se monta y la columna pinta su tarjeta
+      // estática con el mismo aspecto.
+      conmutadorEmpresa={
+        empresas.length >= 2 ? (
+          <AdminCompanySwitcher
+            empresas={empresas}
+            activaId={user.metadata.companyId ?? null}
+            sede={sedeEmpresaActiva}
+          />
+        ) : undefined
+      }
     >
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el
           primer vistazo y en todas las pantallas del panel. */}
       {demo && <BannerDemo nombreEmpresa={demo} />}
-      <AdminCompanySwitcher
-        empresas={empresas}
-        activaId={user.metadata.companyId ?? null}
-      />
       {children}
     </AppShell>
   )

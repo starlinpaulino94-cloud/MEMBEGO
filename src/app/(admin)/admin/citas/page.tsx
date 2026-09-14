@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { CalendarDays, Search, Settings2, Users, X } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { empresaDelPanel } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import {
   getAgenda,
   getAgendaConfig,
@@ -59,15 +59,13 @@ export default async function CitasAdminPage({
   const user = await requireRole(ADMIN_ROLES)
   const sp = await searchParams
   // Superadmin: trabaja sobre su empresa ACTIVA (igual que el resto del panel).
-  const companyId = empresaDelPanel(user)
+  const companyId = await requireCompanyContext(user)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="tu agenda de citas" />
   }
 
-  const company = await conEmpresaOTodas(
-    companyId,
-    'citas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const company = await conEmpresa(companyId,
     (tx) => tx.company.findUnique({
       where: { id: companyId },
       select: { zonaHoraria: true, idioma: true },
@@ -323,3 +321,4 @@ export default async function CitasAdminPage({
     </div>
   )
 }
+

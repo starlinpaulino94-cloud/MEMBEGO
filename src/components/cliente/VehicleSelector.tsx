@@ -44,7 +44,7 @@ export function VehicleSelector({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2.5 font-semibold text-foreground transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring',
+          'inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 font-semibold text-foreground transition-colors duration-fast hover:bg-retail-mist focus-visible:outline-2 focus-visible:outline-ring',
           className
         )}
         aria-label="Cambiar vehículo"

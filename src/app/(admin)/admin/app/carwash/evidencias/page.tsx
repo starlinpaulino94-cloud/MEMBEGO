@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -62,9 +62,7 @@ export default async function EvidenciasPage({
 
   // Contexto de la cola cuando llegan desde una tarjeta de la pista.
   const entradaCola = cola
-    ? await conEmpresaOTodas(
-      companyId,
-      'app · carwash · evidencias: sin empresa activa es el superadmin',
+    ? await conEmpresa(companyId,
       (tx) => tx.colaVehiculo
           .findFirst({
             where: { id: cola, companyId },
@@ -199,3 +197,4 @@ export default async function EvidenciasPage({
     </div>
   )
 }
+

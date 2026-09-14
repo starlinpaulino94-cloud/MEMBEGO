@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Form from 'next/form'
 import { requireSection } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getLeads, getStats } from '@/modules/crm/queries'
 import type {
   LeadFilter,
@@ -35,20 +35,11 @@ export default async function LeadsPipelinePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   // El layout de /admin/crm ya guarda la sección 'leads' para todo el subtree;
-  // este guard re-verifica para obtener el usuario que companyFilter necesita.
+  // este guard re-verifica para obtener el usuario cuya empresa activa manda.
   const user = await requireSection('leads')
   if (!user) redirect('/login')
 
-  const companyId = companyFilter(user)
-  if (!companyId) {
-    return (
-      <div className="space-y-5">
-        <p className="text-sm text-muted-foreground">
-          Selecciona una empresa desde el panel de superadmin para usar el CRM.
-        </p>
-      </div>
-    )
-  }
+  const companyId = await requireCompanyContext(user)
 
   const sp = await searchParams
   const q = (sp.q ?? '').trim()

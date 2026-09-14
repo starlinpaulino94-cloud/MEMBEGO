@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -48,9 +48,7 @@ export default async function OrdenPage({ params }: { params: Promise<{ id: stri
   const orden = await getOrdenDetalle(companyId, id)
   if (!orden) notFound()
 
-  const productos = await conEmpresaOTodas(
-    companyId,
-    'app · carwash · compras · [id]: sin empresa activa es el superadmin',
+  const productos = await conEmpresa(companyId,
     (tx) => tx.productoInventario
       .findMany({
         where: { companyId, activo: true },
@@ -78,3 +76,4 @@ export default async function OrdenPage({ params }: { params: Promise<{ id: stri
     </div>
   )
 }
+

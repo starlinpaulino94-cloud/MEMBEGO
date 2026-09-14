@@ -6,7 +6,6 @@ export interface EngagementConfig {
   /** Color de acento del motor en el cliente (hex #rrggbb). */
   color: string
   gamificacion: boolean
-  pruebaSocial: boolean
   campanas: boolean
   carruseles: boolean
   /** Popups inteligentes en el Home (Fase 8). */
@@ -39,7 +38,9 @@ export function normalizeEngagementConfig(
   return {
     color,
     gamificacion: bool(o.gamificacion, true),
-    pruebaSocial: bool(o.pruebaSocial, true),
+    // `pruebaSocial` existió hasta 2026-09-09: la sección EN VIVO se retiró
+    // del Inicio por decisión del usuario. La clave puede seguir viva en el
+    // JSON guardado de empresas viejas; simplemente se ignora.
     campanas: bool(o.campanas, true),
     carruseles: bool(o.carruseles, true),
     popups: bool(o.popups, true),

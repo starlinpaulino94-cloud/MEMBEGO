@@ -1,5 +1,6 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { marcarEntrega } from '@/modules/pagos/intentos'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import { periodEnd } from '@/lib/server-utils'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
@@ -243,8 +244,7 @@ export async function renovarMembresiaPorTarjeta(
   if (marca.count === 0) return { estado: 'omitida', motivo: 'Ya estaba renovada.' }
 
   try {
-    await conEmpresa(m.companyId, async (tx) => {
-      await tx.membership.update({
+    await conEmpresa(m.companyId, async (tx) => {      await tx.membership.update({
         where: { id: membershipId },
         data: {
           estado: 'ACTIVA',
@@ -315,14 +315,18 @@ export async function renovarMembresiaPorTarjeta(
       })
     })
   } catch (e) {
-    // El cobro SÍ ocurrió; no se revierte activadoAt. Se deja constancia.
+    // El cobro SÍ ocurrió; no se revierte activadoAt. La entrega queda
+    // FALLIDA con su motivo: caso de conciliación con reintento explícito.
     logErrorBd('pagos:renovacion:extension', e, { membershipId, intentoId: intento.id })
+    await marcarEntrega(m.companyId, intento.id, false, 'Cobrado, pero la extensión falló.')
     await conEmpresa(m.companyId, (tx) =>
       tx.pagoIntento
         .update({ where: { id: intento.id }, data: { motivoRechazo: 'Cobrado, pero la extensión falló.' } })
     ).catch(anotarFallo('pagos:renovacion:extensionFallo', { intentoId: intento.id }))
     return { estado: 'error', motivo: 'Cobrado, pero la extensión falló. Revisar a mano.' }
   }
+
+  await marcarEntrega(m.companyId, intento.id, true)
 
   // Recibo por correo al cliente (best-effort; el cobro ya está hecho).
   const { enviarConfirmacionPago } = await import('@/modules/pagos/correoConfirmacion')

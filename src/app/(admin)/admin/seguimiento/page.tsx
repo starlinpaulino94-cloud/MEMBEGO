@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import Form from 'next/form'
 import { PageHeader } from '@/components/ui/page-header'
@@ -48,9 +48,7 @@ export default async function SeguimientoPage({
     return <p className="text-muted-foreground">Tu cuenta no está vinculada a una empresa.</p>
   }
 
-  const empresa = await conEmpresaOTodas(
-    companyId,
-    'seguimiento: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const empresa = await conEmpresa(companyId,
     (tx) => tx.company.findUnique({
       where: { id: companyId },
       select: { zonaHoraria: true, name: true },
@@ -307,3 +305,4 @@ export default async function SeguimientoPage({
     </div>
   )
 }
+

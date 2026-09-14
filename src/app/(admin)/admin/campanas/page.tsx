@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas, type Tx } from '@/lib/tenant'
+import { conEmpresa, type Tx } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { Card, CardContent } from '@/components/ui/card'
@@ -69,9 +69,7 @@ export default async function CampanasPage({
       take: paginacion.tomar,
     })
   try {
-    ;[campanas, total] = await conEmpresaOTodas(
-      companyId,
-      'campanas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    ;[campanas, total] = await conEmpresa(companyId,
       (tx) => Promise.all([
         query(tx),
         tx.campana.count({ where: { companyId } }),
@@ -196,3 +194,4 @@ export default async function CampanasPage({
     </div>
   )
 }
+

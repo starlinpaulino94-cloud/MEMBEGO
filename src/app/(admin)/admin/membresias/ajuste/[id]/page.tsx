@@ -2,14 +2,13 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { empresaDelPanel } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { conEmpresa } from '@/lib/tenant'
 import { formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,8 +42,7 @@ export default async function ComprobanteAjustePage({
   params: Promise<{ id: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = empresaDelPanel(user)
-  if (!companyId) return <SinEmpresaActiva seccion="los comprobantes de ajuste" />
+  const companyId = await requireCompanyContext(user)
 
   const { id } = await params
 

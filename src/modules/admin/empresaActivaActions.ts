@@ -52,6 +52,7 @@ export async function cambiarEmpresaActiva(
   }
 
   try {
+    const anterior = user.metadata.companyId ?? null
     await sinEmpresa('actualizar empresa activa del usuario', (tx) =>
       tx.user.update({
         where: { id: user.metadata.dbUserId },
@@ -73,6 +74,14 @@ export async function cambiarEmpresaActiva(
     )
     if (authError) {
       console.error('[empresa-activa] auth sync error:', authError)
+      if (anterior && anterior !== target) {
+        await sinEmpresa('revertir empresa activa tras fallo de sincronización Auth', (tx) =>
+          tx.user.update({
+            where: { id: user.metadata.dbUserId },
+            data: { companyId: anterior },
+          })
+        ).catch((e) => console.error('[empresa-activa] revert error:', e))
+      }
       return { error: 'No se pudo cambiar de empresa. Intenta de nuevo.' }
     }
 

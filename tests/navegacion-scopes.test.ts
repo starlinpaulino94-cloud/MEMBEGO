@@ -9,10 +9,12 @@ import {
   menuEnUnaColumna,
   ofreceEntradaAEmpresa,
   ofreceSalidaAPlataforma,
+  visibleGroups,
   visibleWorkspaces,
   workspaceLanding,
   workspaceOf,
   workspacesForRole,
+  type CapacidadNav,
   type ContextoNav,
 } from '../src/components/layout/nav-config'
 import type { AppRole } from '../src/types'
@@ -49,7 +51,7 @@ test('en PLATFORM solo se ofrecen módulos globales', () => {
 
 test('en COMPANY el superadmin solo ve módulos de empresa', () => {
   const espacios = visibleWorkspaces(EMPRESA_COMO_SA)
-  assert.equal(espacios.length, 9)
+  assert.deepEqual(espacios.map((w) => w.id), ['empresa'])
   const hrefs = hrefsDe(EMPRESA_COMO_SA)
   for (const h of hrefs) {
     assert.ok(h.startsWith('/admin'), `el ámbito COMPANY ofrece una ruta global: ${h}`)
@@ -90,15 +92,15 @@ test('una ruta fuera de su ámbito no resuelve espacio', () => {
   assert.equal(workspaceOf('/admin/scanner', PLATFORM), null)
   assert.equal(workspaceOf('/superadmin/empresas', EMPRESA_COMO_SA), null)
   assert.equal(workspaceOf('/superadmin/dashboard', PLATFORM), 'plataforma')
-  assert.equal(workspaceOf('/admin/scanner', ADMIN), 'operacion')
+  assert.equal(workspaceOf('/admin/scanner', ADMIN), 'empresa')
 })
 
 test('los aterrizajes nunca salen de su ámbito', () => {
   const plataforma = visibleWorkspaces(PLATFORM)[0]
   assert.equal(workspaceLanding(plataforma, PLATFORM), '/superadmin/dashboard')
-  const marketing = visibleWorkspaces(ADMIN).find((w) => w.id === 'marketing')!
-  // Campañas es el principal del espacio, no Prospectos.
-  assert.equal(workspaceLanding(marketing, ADMIN), '/admin/campanas')
+  // El hub aterriza en su módulo principal: el Resumen.
+  const empresa = visibleWorkspaces(ADMIN)[0]!
+  assert.equal(workspaceLanding(empresa, ADMIN), '/admin/dashboard')
 })
 
 test('las migas de plataforma nombran el espacio único', () => {
@@ -109,22 +111,31 @@ test('las migas de plataforma nombran el espacio único', () => {
   )
 })
 
-test('Soporte y Administración están anclados al pie', () => {
-  const espacios = workspacesForRole('ADMINISTRADOR')
-  const pie = espacios.filter((w) => w.anclado).map((w) => w.id)
-  assert.deepEqual(pie, ['administracion', 'soporte'])
+test('lo que se consulta poco va al final, no flotando', () => {
+  // Antes esto era `anclado` sobre dos espacios del riel. Con el hub en una
+  // columna la intención es la misma y se cumple con el ORDEN: Ajustes cierra
+  // el menú, para que no cambie de sitio según cuántos grupos tenga delante.
+  const empresa = workspacesForRole('ADMINISTRADOR')[0]!
+  const grupos = empresa.groups.map((g) => g.id)
+  assert.equal(grupos.at(-1), 'ajustes')
+  assert.equal(grupos[0], 'principal', 'Y lo que se consulta a diario abre.')
 })
 
 test('Parques y Tours sigue gated por la capacidad EXCURSIONES', () => {
-  const con = visibleWorkspaces({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['EXCURSIONES'] })
-  const sin = visibleWorkspaces({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] })
-  assert.ok(con.some((w) => w.id === 'tours'))
-  assert.ok(!sin.some((w) => w.id === 'tours'))
+  const con = hrefsDe({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['EXCURSIONES'] })
+  const sin = hrefsDe({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] })
+  assert.ok(con.includes('/admin/excursiones'))
+  assert.ok(!sin.includes('/admin/excursiones'))
 })
 
-test('/admin/crm se conserva y resuelve dentro de Marketing', () => {
+test('/admin/crm se conserva y resuelve dentro de Clientes', () => {
+  // Cambia de grupo —el diseño pone los prospectos con los clientes, no con
+  // marketing— pero NO desaparece: eso es lo que esta guardia vigila desde que
+  // una reagrupación anterior estuvo a punto de perderlo.
   assert.ok(hrefsDe(ADMIN).includes('/admin/crm'))
-  assert.equal(workspaceOf('/admin/crm', ADMIN), 'marketing')
+  const empresa = workspacesForRole('ADMINISTRADOR')[0]!
+  const grupo = empresa.groups.find((g) => g.items.some((i) => i.href === '/admin/crm'))
+  assert.equal(grupo?.id, 'clientes')
 })
 
 test('roles acotados ven sus secciones también con ámbito', () => {
@@ -136,13 +147,18 @@ test('roles acotados ven sus secciones también con ámbito', () => {
   assert.ok(!supervisor.includes('/admin/campanas'))
 })
 
-test('las claves de contador son exactamente las cinco reales', () => {
+test('las claves de contador son exactamente las siete reales', () => {
+  // Las dos del hub (planes activos y canjes de hoy) entraron con el contrato
+  // Stitch: conteos baratos y cacheados. Las caras —clientes en riesgo— siguen
+  // fuera a propósito; ver la nota de coste en modules/navegacion/badges.ts.
   assert.deepEqual([...CLAVES_BADGE], [
     'platformOpenTickets',
     'companyOpenTickets',
     'platformIncidents',
     'solicitudes',
     'colaAtascada',
+    'planesActivos',
+    'canjesHoy',
   ])
 })
 
@@ -156,21 +172,20 @@ test('platformIncidents existe pero no condiciona la visibilidad', () => {
   assert.equal(canSeeItem(item, PLATFORM), true)
 })
 
-test('cada rol de empresa ve los nueve espacios (con Tours)', () => {
+test('cada rol de empresa ve el hub con sus ocho grupos', () => {
   for (const role of ['ADMINISTRADOR', 'GERENTE', 'ADMIN_EMPRESA'] as AppRole[]) {
-    const ids = visibleWorkspaces({ role, scope: 'COMPANY', capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] }).map(
-      (w) => w.id
-    )
-    assert.deepEqual(ids, [
-      'inicio',
+    const ctx = { role, scope: 'COMPANY' as const, capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] as CapacidadNav[] }
+    const espacios = visibleWorkspaces(ctx)
+    assert.deepEqual(espacios.map((w) => w.id), ['empresa'])
+    assert.deepEqual(visibleGroups(espacios[0]!, ctx).map((g) => g.id), [
+      'principal',
+      'experiencia-cliente',
+      'catalogo',
+      'operaciones',
       'clientes',
-      'tours',
-      'beneficios',
       'marketing',
-      'operacion',
       'analitica',
-      'administracion',
-      'soporte',
+      'ajustes',
     ])
   }
 })
@@ -196,17 +211,20 @@ test('los dos sentidos del conmutador nunca se ofrecen a la vez', () => {
 test('los aterrizajes del conmutador caen en un módulo real de su ámbito', () => {
   // Un conmutador que lleva a una ruta sin menú aterriza sin contexto.
   assert.equal(workspaceOf(ATERRIZAJE_PLATAFORMA, PLATFORM), 'plataforma')
-  assert.equal(workspaceOf(ATERRIZAJE_EMPRESA, EMPRESA_COMO_SA), 'inicio')
+  assert.equal(workspaceOf(ATERRIZAJE_EMPRESA, EMPRESA_COMO_SA), 'empresa')
 })
 
-test('la plataforma se pinta en una columna; el panel de empresa, en dos niveles', () => {
-  // Un riel con un único icono no reparte nada. La plataforma y el mostrador
-  // son un solo espacio y van en una columna con sus grupos rotulados; el
-  // panel de empresa tiene nueve espacios y necesita el riel.
+test('plataforma, mostrador y empresa se pintan en una columna; el cliente no', () => {
+  // El panel de empresa tenía nueve espacios y necesitaba riel. Los diseños de
+  // Stitch lo definen como UNA columna con ocho grupos rotulados, así que el
+  // riel deja de tener a quién repartir en el ámbito de empresa.
+  //
+  // El cliente conserva sus espacios: su navegación no es este hub, son los
+  // cuatro destinos del dock.
   assert.equal(menuEnUnaColumna(visibleWorkspaces(PLATFORM)), true)
   assert.equal(menuEnUnaColumna(visibleWorkspaces({ role: 'EMPLEADO' })), true)
-  assert.equal(menuEnUnaColumna(visibleWorkspaces(EMPRESA_COMO_SA)), false)
-  assert.equal(menuEnUnaColumna(visibleWorkspaces(ADMIN)), false)
+  assert.equal(menuEnUnaColumna(visibleWorkspaces(EMPRESA_COMO_SA)), true)
+  assert.equal(menuEnUnaColumna(visibleWorkspaces(ADMIN)), true)
   assert.equal(menuEnUnaColumna(visibleWorkspaces({ role: 'CLIENTE' })), false)
 })
 

@@ -12,7 +12,6 @@ import { revalidatePath } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import type { Capacidad } from '@/modules/capacidades/catalogo'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -42,7 +41,7 @@ async function contexto(
   if (!user || !(ADMIN_ROLES as readonly string[]).includes(user.metadata.role)) {
     return { error: 'No autorizado.' }
   }
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = user.metadata.companyId ?? null
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
   if (!(await tieneCapacidad(companyId, capacidad))) {
     return { error: 'Este módulo no está activado para tu negocio.' }

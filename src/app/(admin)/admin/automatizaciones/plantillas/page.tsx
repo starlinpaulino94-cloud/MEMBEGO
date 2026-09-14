@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { ALL_PLAYBOOKS, type AutomationPlaybook, type PlaybookCategory } from '@/lib/automation'
@@ -49,9 +49,7 @@ export default async function PlantillasAutomatizacionPage({
   }
 
   // Instalaciones vivas de esta empresa (las archivadas no cuentan).
-  const instaladas = await conEmpresaOTodas(
-    companyId,
-    'automatizaciones · plantillas: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const instaladas = await conEmpresa(companyId,
     (tx) => tx.automation.findMany({
       where: {
         companyId,
@@ -308,3 +306,4 @@ function InstaladasLista({
     </div>
   )
 }
+

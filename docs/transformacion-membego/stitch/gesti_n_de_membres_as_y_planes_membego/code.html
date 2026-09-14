@@ -1,0 +1,608 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>MEMBEGO Panel Administrativo</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {"darkMode": "class", "theme": {"extend": {"colors": {"surface-container-lowest": "#ffffff", "outline-variant": "#bfc7d2", "secondary-container": "#57dffe", "tertiary-fixed-dim": "#94ccff", "error-container": "#ffdad6", "on-secondary-fixed-variant": "#004e5c", "outline": "#707881", "on-secondary-fixed": "#001f26", "on-surface": "#141b2b", "primary-container": "#007bb9", "on-primary-fixed-variant": "#004b73", "tertiary-container": "#287ab3", "on-primary": "#ffffff", "primary-fixed": "#cce5ff", "secondary-fixed-dim": "#4cd7f6", "on-background": "#141b2b", "on-surface-variant": "#3f4850", "on-tertiary-container": "#fdfcff", "on-tertiary": "#ffffff", "inverse-surface": "#293040", "background": "#f9f9ff", "surface-tint": "#006398", "inverse-on-surface": "#edf0ff", "on-primary-container": "#fdfcff", "primary": "#006194", "secondary": "#00687a", "on-secondary-container": "#006172", "surface-container-high": "#e1e8fd", "surface-container-low": "#f1f3ff", "error": "#ba1a1a", "surface-container-highest": "#dce2f7", "tertiary-fixed": "#cde5ff", "on-error-container": "#93000a", "surface-container": "#e9edff", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#004b74", "inverse-primary": "#93ccff", "on-error": "#ffffff", "surface": "#f9f9ff", "on-tertiary-fixed": "#001d32", "secondary-fixed": "#acedff", "primary-fixed-dim": "#93ccff", "on-primary-fixed": "#001d31", "surface-dim": "#d3daef", "surface-variant": "#dce2f7", "surface-bright": "#f9f9ff", "tertiary": "#006195"}, "borderRadius": {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"}, "spacing": {"space-md": "0.75rem", "header-search-height": "2.75rem", "gutter-card": "0.75rem", "space-xs": "0.25rem", "screen-edge-padding": "1rem", "space-sm": "0.5rem", "space-base": "1rem", "space-2xl": "2rem", "space-lg": "1.25rem", "header-location-height": "2.25rem", "space-xl": "1.5rem", "bottom-nav-height": "3.5rem", "gutter-compact": "0.5rem", "space-2xs": "0.125rem"}, "fontFamily": {"body-lg": ["Inter"], "label-lg": ["Inter"], "body-md": ["Inter"], "price-sm": ["Inter"], "label-sm": ["Inter"], "price-lg": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"], "body-sm": ["Inter"], "headline-lg": ["Inter"], "headline-sm": ["Inter"]}, "fontSize": {"body-lg": ["16px", {"lineHeight": "22px", "fontWeight": "400"}], "label-lg": ["14px", {"lineHeight": "18px", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}], "price-sm": ["13px", {"lineHeight": "16px", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}], "price-lg": ["20px", {"lineHeight": "24px", "fontWeight": "700"}], "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "label-md": ["12px", {"lineHeight": "16px", "fontWeight": "500"}], "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}], "headline-lg": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "headline-sm": ["16px", {"lineHeight": "22px", "fontWeight": "600"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-base flex items-center justify-between bg-surface-container-lowest"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary-container flex items-center justify-center text-on-primary font-headline-md text-headline-md shadow-sm">M</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface leading-none">MEMBEGO</span><span class="font-label-sm text-label-sm text-on-surface-variant font-medium tracking-wider uppercase mt-0.5">Admin Hub</span></div></div><div class="w-2 h-2 rounded-full bg-secondary-container" title="Sistema Operativo Activo"></div></div><div class="px-space-base py-space-xs"><div class="p-space-sm bg-surface-container-low rounded-xl flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[18px]">store</span><div class="flex-1 min-w-0"><p class="font-label-sm text-label-sm text-on-surface truncate">CARTOWN Wash</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate">Sede Higüey 23000</p></div><span class="material-symbols-outlined text-on-surface-variant text-[16px]">unfold_more</span></div></div><nav class="flex-1 px-space-sm py-space-xs overflow-y-auto space-y-space-md" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-xl"><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Principal</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="resumen" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">Resumen</span></div></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Experiencia Cliente</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="editor-de-inicio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_quilt</span><span class="font-body-md text-body-md">Editor de Inicio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="navegacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">navigation</span><span class="font-body-md text-body-md">Navegación</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="cerca-de-ti" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">location_on</span><span class="font-body-md text-body-md">Cerca de ti</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="mi-qr" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">qr_code_2</span><span class="font-body-md text-body-md">Mi QR</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Catálogo</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="membresias" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">card_membership</span><span class="font-body-md text-body-md">Membresías</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">8</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="beneficios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">stars</span><span class="font-body-md text-body-md">Beneficios</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ofertas" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">local_offer</span><span class="font-body-md text-body-md">Ofertas</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-semibold">Hot</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="servicios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">handyman</span><span class="font-body-md text-body-md">Servicios</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="excursiones" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">travel_explore</span><span class="font-body-md text-body-md">Excursiones</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Operaciones</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="canjes-y-qr" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">check_circle</span><span class="font-body-md text-body-md">Canjes y QR</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface">14</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="reservas-y-citas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">calendar_today</span><span class="font-body-md text-body-md">Reservas y Citas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="pagos-y-facturacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">receipt_long</span><span class="font-body-md text-body-md">Pagos &amp; Facturación</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Clientes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="directorio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">group</span><span class="font-body-md text-body-md">Directorio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="segmentos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">pie_chart</span><span class="font-body-md text-body-md">Segmentos</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="en-riesgo" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-error text-[18px]">warning</span><span class="font-body-md text-body-md">En Riesgo</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container font-medium">3</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Marketing</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="campanas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">campaign</span><span class="font-body-md text-body-md">Campañas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="banners" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_carousel</span><span class="font-body-md text-body-md">Banners</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="fidelizacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">loyalty</span><span class="font-body-md text-body-md">Fidelización</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Analítica</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="metricas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">insights</span><span class="font-body-md text-body-md">Métricas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ingresos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">payments</span><span class="font-body-md text-body-md">Ingresos</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="rendimiento" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">speed</span><span class="font-body-md text-body-md">Rendimiento</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Ajustes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="empresa" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">business</span><span class="font-body-md text-body-md">Empresa</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="sucursales" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">storefront</span><span class="font-body-md text-body-md">Sucursales</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="roles-y-permisos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">admin_panel_settings</span><span class="font-body-md text-body-md">Roles y Permisos</span></a></div></nav><div class="p-space-base bg-surface-container-low flex items-center justify-between"><div class="flex items-center gap-space-sm min-w-0"><div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant"><span class="material-symbols-outlined text-[18px]">domain</span></div><div class="truncate"><p class="font-label-sm text-label-sm text-on-surface truncate font-semibold">CARTOWN RD</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">RNC 131-98765-2</p></div></div><button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded-lg" title="Cerrar sesión" type="button"><span class="material-symbols-outlined text-[20px]">logout</span></button></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center gap-space-lg flex-1 max-w-2xl"><div class="relative w-full max-w-md"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-10 pl-9 pr-10 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" placeholder="Buscar socios, folios de canje o membresías..." type="text"><kbd class="absolute right-3 top-1/2 -translate-y-1/2 font-label-sm text-label-sm bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant border border-outline-variant/30">/</kbd></div><div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed text-[12px] font-label-md"><span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span><span>Higüey Online · Turno Diurno</span></div></div><div class="flex items-center gap-space-md"><button class="flex items-center gap-space-xs px-space-md h-9 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-sm text-label-sm shadow-sm transition-all" type="button"><span class="material-symbols-outlined text-[18px]">qr_code_scanner</span><span>Canje Rápido</span></button><button class="relative p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Notificaciones de Canjes" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest"></span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right hidden sm:block"><p class="font-label-sm text-label-sm text-on-surface leading-tight">Starlin Paulino</p><p class="font-body-sm text-body-sm text-[11px] text-on-surface-variant leading-tight">Administrador</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-background min-h-screen w-full px-space-xl py-space-xl"><div class="flex flex-col w-full space-y-space-xl">
+<!-- Top Stats & Header Utility Bar -->
+<div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-space-lg">
+<div class="space-y-space-2xs">
+<div class="flex items-center gap-space-xs text-outline font-label-sm text-label-sm uppercase tracking-wider">
+<span>Catálogo Operativo</span>
+<span>/</span>
+<span class="text-primary font-semibold">Membresías &amp; Suscripciones</span>
+</div>
+<div class="flex items-baseline gap-space-md">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Planes y Membresías</h1>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+          Sincronizado con App Cartown
+        </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+        Gestiona el ciclo de vida recurrente, reglas de redención por QR y visibilidad en vitrina digital.
+      </p>
+</div>
+<!-- Main Global CTAs -->
+<div class="flex flex-wrap items-center gap-space-sm">
+<button class="flex items-center gap-space-xs px-space-base h-10 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md transition-colors shadow-sm" id="btn-open-rules">
+<span class="material-symbols-outlined text-[18px] text-primary">tune</span>
+<span>Reglas de Renovación</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-base h-10 rounded-xl bg-surface-container-lowest hover:bg-surface-container-low text-on-surface font-label-md text-label-md shadow-sm transition-colors" id="btn-welcome-config">
+<span class="material-symbols-outlined text-[18px] text-secondary">card_giftcard</span>
+<span>Configurar Bienvenida</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-lg h-10 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md shadow-sm transition-all">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>Nuevo Plan / Membresía</span>
+</button>
+</div>
+</div>
+<!-- KPI Pulse Overview (Compact Strip) -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-space-md">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="space-y-0.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Planes Publicados</span>
+<div class="flex items-baseline gap-1.5">
+<span class="font-price-lg text-price-lg text-on-surface">3</span>
+<span class="font-body-sm text-body-sm text-outline font-normal">/ 4 creados</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">public</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="space-y-0.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant">En Borrador</span>
+<div class="flex items-baseline gap-1.5">
+<span class="font-price-lg text-price-lg text-on-surface">1</span>
+<span class="font-body-sm text-body-sm text-outline font-normal">pendiente</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-xl bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">edit_note</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="space-y-0.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Suscriptores Activos</span>
+<div class="flex items-baseline gap-1.5">
+<span class="font-price-lg text-price-lg text-on-surface">23</span>
+<span class="font-label-sm text-label-sm text-secondary font-semibold">+4 este mes</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">group</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="space-y-0.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Recurrente Mensual Proyectado</span>
+<div class="flex items-baseline gap-1">
+<span class="font-price-lg text-price-lg text-on-surface">RD$ 40,800</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">MRR</span>
+</div>
+</div>
+<div class="w-10 h-10 rounded-xl bg-tertiary-fixed flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[20px]">autorenew</span>
+</div>
+</div>
+</div>
+<!-- Promotional / Acquisition Engine Banner (Captura 101) -->
+<div class="bg-gradient-to-r from-primary to-secondary text-on-primary rounded-xl p-space-lg shadow-sm relative overflow-hidden">
+<div class="absolute -right-10 -bottom-10 w-48 h-48 rounded-full bg-surface-container-lowest/10 blur-xl pointer-events-none"></div>
+<div class="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-space-md">
+<div class="flex items-start gap-space-md max-w-3xl">
+<div class="w-12 h-12 rounded-xl bg-surface-container-lowest/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[26px]">redeem</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<h2 class="font-headline-sm text-headline-sm text-on-primary">Beneficio de Bienvenida · Clientes Nuevos</h2>
+<span class="px-2 py-0.5 rounded bg-surface-container-lowest/25 text-on-primary font-label-sm text-label-sm uppercase tracking-wider">
+              Financiado por la Empresa
+            </span>
+</div>
+<p class="font-body-md text-body-md text-on-primary/90">
+            Descuento o lavado de cortesía aplicado automáticamente en el <span class="font-semibold underline underline-offset-2">Mi QR</span> del suscriptor tras registrarse en su primer ciclo mensual.
+          </p>
+<div class="flex items-center gap-space-md pt-1 font-label-sm text-label-sm text-on-primary/80">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">verified</span> Auto-redimible en Tótem de Higüey</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">schedule</span> Validez 30 días de ingreso</span>
+</div>
+</div>
+</div>
+<!-- Action Toggle & Config -->
+<div class="flex items-center gap-space-md bg-surface-container-lowest/15 backdrop-blur-md px-space-md py-space-sm rounded-xl self-start md:self-auto">
+<div class="text-right">
+<p class="font-label-sm text-label-sm text-on-primary font-semibold">Estado de la Regla</p>
+<p class="font-body-sm text-body-sm text-on-primary/80 text-[11px]" id="status-toggle-label">Activa en la App</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" id="welcome-incentive-switch" type="checkbox">
+<div class="w-11 h-6 bg-surface-container-lowest/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-container"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Search & Segment Filters (Amazon/Membego Utility Bar Pattern) -->
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm space-y-space-md">
+<div class="flex flex-col md:flex-row gap-space-sm items-center justify-between">
+<!-- Search Input -->
+<div class="relative w-full md:max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="w-full h-10 pl-9 pr-4 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest" id="search-input" placeholder="Filtrar por plan, vehículo o ID de sincronización..." type="text">
+</div>
+<!-- Status Chips & Ordering -->
+<div class="flex items-center gap-space-xs overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+<button class="status-filter active px-space-md py-1.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md transition-all whitespace-nowrap shadow-sm" data-filter="all">
+          Todos (4)
+        </button>
+<button class="status-filter px-space-md py-1.5 rounded-xl bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant font-label-md text-label-md transition-all whitespace-nowrap" data-filter="publicados">
+          Publicados (3)
+        </button>
+<button class="status-filter px-space-md py-1.5 rounded-xl bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant font-label-md text-label-md transition-all whitespace-nowrap" data-filter="borrador">
+          Borrador (1)
+        </button>
+<button class="status-filter px-space-md py-1.5 rounded-xl bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant font-label-md text-label-md transition-all whitespace-nowrap opacity-60" data-filter="pausados">
+          Pausados (0)
+        </button>
+</div>
+<!-- Vehicle Segment Selector -->
+<div class="flex items-center gap-space-xs w-full md:w-auto justify-end">
+<div class="flex items-center gap-1 bg-surface-container-low px-space-sm py-1 rounded-xl">
+<span class="material-symbols-outlined text-[16px] text-outline">directions_car</span>
+<select class="bg-transparent font-label-sm text-label-sm text-on-surface focus:outline-none py-1 pr-2 cursor-pointer">
+<option>Todos los Tipos de Auto</option>
+<option>Sedán &amp; Hatchback</option>
+<option>SUV Mediana</option>
+<option>SUV Grande &amp; Camionetas</option>
+</select>
+</div>
+<button class="h-9 w-9 flex items-center justify-center rounded-xl bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high" title="Ordenar por precio">
+<span class="material-symbols-outlined text-[18px]">swap_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Plans Catalog Bento Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-space-lg" id="plans-container">
+<!-- Plan 1: Silver SUV Med/Peq -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between transition-all hover:shadow-md relative overflow-hidden group">
+<div class="absolute top-0 left-0 right-0 h-1.5 bg-secondary"></div>
+<div>
+<!-- Card Header Meta -->
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-surface-container-low p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary text-[32px]">local_car_wash</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold uppercase">
+                  Publicado
+                </span>
+<span class="font-label-sm text-label-sm text-outline">ID: PLN-SUV-01</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mt-1">PLAN SILVER (SUV PEQ/MED)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Diseñado para SUVs familiares, Jeeps y crossovers.</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-price-lg text-price-lg text-primary">RD$ 1,600</span>
+<span class="block font-label-sm text-label-sm text-on-surface-variant">/ mes</span>
+</div>
+</div>
+<!-- Visual App Placement Callout -->
+<div class="mt-space-md p-space-sm bg-surface-container-low rounded-xl flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0">smartphone</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant leading-snug">
+<strong class="text-on-surface font-semibold">Visibilidad en App:</strong> Aparece en <span class="text-primary font-medium">Inicio del cliente (Membresías recomendadas #1)</span> y en perfil de CARTOWN Wash.
+          </p>
+</div>
+<!-- Plan Inclusions & Benefits Strip -->
+<div class="mt-space-md grid grid-cols-2 sm:grid-cols-4 gap-space-xs text-left">
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Cupo</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">4 Lavados/mes</span>
+</div>
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Canje</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Código QR Dinámico</span>
+</div>
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Vigencia</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">30 días renovables</span>
+</div>
+<div class="bg-primary-fixed p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-on-primary-fixed-variant">Ahorro Cliente</span>
+<span class="font-label-md text-label-md text-on-primary-fixed-variant font-bold">RD$ 1,200/mes</span>
+</div>
+</div>
+<!-- Metrics Snapshot with Sparkline Visualization -->
+<div class="mt-space-md p-space-sm bg-surface rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-space-lg">
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Suscripciones</span>
+<span class="font-price-sm text-price-sm text-on-surface font-bold">14 activas</span>
+</div>
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Retención</span>
+<span class="font-price-sm text-price-sm text-secondary font-bold">88%</span>
+</div>
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Satisfacción</span>
+<div class="flex items-center gap-0.5 font-price-sm text-price-sm text-on-surface font-bold">
+<span>4.9</span>
+<span class="material-symbols-outlined text-[14px] text-amber-500" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+</div>
+</div>
+<!-- Sparkline representation -->
+<div class="hidden sm:flex items-center gap-1">
+<span class="font-label-sm text-label-sm text-outline mr-1 text-[10px]">Tendencia</span>
+<svg class="w-20 h-6 text-primary" fill="none" viewBox="0 0 80 24">
+<path d="M2 18L18 14L34 16L50 8L66 10L78 3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<circle cx="78" cy="3" fill="currentColor" r="2.5"></circle>
+</svg>
+</div>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="mt-space-lg pt-space-md flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<button class="px-space-md h-9 bg-primary-fixed text-on-primary-fixed-variant hover:bg-primary-fixed-dim rounded-xl font-label-sm text-label-sm font-semibold transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">group</span>
+<span>Ver suscriptores (14)</span>
+</button>
+<button class="px-space-md h-9 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-xl font-label-sm text-label-sm transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Editar plan</span>
+</button>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-surface-container-low transition-colors" title="Pausar captación de este plan">
+<span class="material-symbols-outlined text-[18px]">pause_circle</span>
+</button>
+<button class="p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low transition-colors" title="Opciones avanzadas">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Plan 2: Silver Sedan & Hatch -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between transition-all hover:shadow-md relative overflow-hidden group">
+<div class="absolute top-0 left-0 right-0 h-1.5 bg-primary"></div>
+<div>
+<!-- Card Header Meta -->
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-surface-container-low p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-[32px]">directions_car</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold uppercase">
+                  Publicado
+                </span>
+<span class="font-label-sm text-label-sm text-outline">ID: PLN-SED-02</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mt-1">PLAN SILVER (SEDAN Y HATCH)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Ideal para autos compactos personales y de plataforma.</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-price-lg text-price-lg text-primary">RD$ 1,200</span>
+<span class="block font-label-sm text-label-sm text-on-surface-variant">/ mes</span>
+</div>
+</div>
+<!-- Plan Inclusions & Benefits Strip -->
+<div class="mt-space-md grid grid-cols-2 sm:grid-cols-3 gap-space-xs text-left">
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Beneficio Core</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">4 Lavados Exteriores</span>
+</div>
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Plus Incluido</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Cera Líquida Premium</span>
+</div>
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Vigencia Ciclo</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">30 días consecutivos</span>
+</div>
+</div>
+<!-- Metrics Snapshot -->
+<div class="mt-space-md p-space-sm bg-surface rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-space-lg">
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Suscriptores</span>
+<span class="font-price-sm text-price-sm text-on-surface font-bold">8 membresías</span>
+</div>
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Volumen Mensual</span>
+<span class="font-price-sm text-price-sm text-primary font-bold">RD$ 9,600 / mes</span>
+</div>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span>Cobro automático activo</span>
+</div>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="mt-space-lg pt-space-md flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<button class="px-space-md h-9 bg-primary-fixed text-on-primary-fixed-variant hover:bg-primary-fixed-dim rounded-xl font-label-sm text-label-sm font-semibold transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">group</span>
+<span>Ver suscriptores (8)</span>
+</button>
+<button class="px-space-md h-9 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-xl font-label-sm text-label-sm transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Editar plan</span>
+</button>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-surface-container-low transition-colors" title="Pausar captación">
+<span class="material-symbols-outlined text-[18px]">pause_circle</span>
+</button>
+<button class="p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low transition-colors" title="Opciones avanzadas">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Plan 3: Gold VIP SUV Grande -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between transition-all hover:shadow-md relative overflow-hidden group">
+<div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 to-amber-600"></div>
+<div>
+<!-- Card Header Meta -->
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-amber-50 p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-amber-600 text-[32px]">workspace_premium</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold uppercase">
+                  Publicado
+                </span>
+<span class="font-label-sm text-label-sm text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full font-semibold">Nivel VIP</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mt-1">PLAN GOLD (SUV GRANDE / VIP)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Acceso ilimitado y prioridad de cabina en sucursal.</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-price-lg text-price-lg text-primary">RD$ 3,000</span>
+<span class="block font-label-sm text-label-sm text-on-surface-variant">/ mes</span>
+</div>
+</div>
+<!-- Plan Inclusions & Benefits Strip -->
+<div class="mt-space-md grid grid-cols-2 sm:grid-cols-3 gap-space-xs text-left">
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Frecuencia</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Lavados Ilimitados</span>
+</div>
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Tratamientos</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Aspirado + Encerado VIP</span>
+</div>
+<div class="bg-surface-container-high/60 p-space-sm rounded-xl">
+<span class="block font-label-sm text-label-sm text-outline">Sucursal</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Fila Preferencial</span>
+</div>
+</div>
+<!-- Metrics Snapshot -->
+<div class="mt-space-md p-space-sm bg-surface rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-space-lg">
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Suscriptor VIP Activo</span>
+<span class="font-price-sm text-price-sm text-on-surface font-bold">1 membresía (Gian Carlos)</span>
+</div>
+<div>
+<span class="font-body-sm text-body-sm text-outline block text-[11px]">Valor de Retención</span>
+<span class="font-label-sm text-label-sm text-error font-semibold">Alto Valor Estratégico</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-amber-500 text-[22px]">star</span>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="mt-space-lg pt-space-md flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<button class="px-space-md h-9 bg-primary-fixed text-on-primary-fixed-variant hover:bg-primary-fixed-dim rounded-xl font-label-sm text-label-sm font-semibold transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">group</span>
+<span>Ver suscriptores (1)</span>
+</button>
+<button class="px-space-md h-9 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-xl font-label-sm text-label-sm transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+<span>Editar plan</span>
+</button>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-surface-container-low transition-colors" title="Pausar captación">
+<span class="material-symbols-outlined text-[18px]">pause_circle</span>
+</button>
+<button class="p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low transition-colors" title="Opciones avanzadas">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Plan 4: Draft / Promo Primavera -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between transition-all hover:shadow-md relative overflow-hidden group">
+<div class="absolute top-0 left-0 right-0 h-1.5 bg-outline-variant"></div>
+<div>
+<!-- Card Header Meta -->
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex gap-space-md">
+<div class="w-14 h-14 rounded-xl bg-surface-container-low p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-outline text-[32px]">science</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-semibold uppercase">
+                  Borrador
+                </span>
+<span class="font-label-sm text-label-sm text-outline">ID: PLN-TST-04</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mt-1">PAGO DE PRUEBA / PROMO PRIMAVERA</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Tarifa reducida promocional para testeo de pasarela y nuevos clientes.</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-price-lg text-price-lg text-outline">RD$ 500</span>
+<span class="block font-label-sm text-label-sm text-on-surface-variant">/ mes</span>
+</div>
+</div>
+<!-- Missing Configuration Alert Callout -->
+<div class="mt-space-md p-space-sm bg-error-container/60 rounded-xl flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-error text-[18px] shrink-0 mt-0.5">warning</span>
+<div class="space-y-0.5">
+<p class="font-label-sm text-label-sm text-on-error-container font-semibold">Configuración Incompleta</p>
+<p class="font-body-sm text-body-sm text-on-error-container/90 leading-tight">
+              Falta configurar fecha de expiración antes de publicar en la App del cliente.
+            </p>
+</div>
+</div>
+<!-- Incomplete Status Information -->
+<div class="mt-space-md p-space-sm bg-surface rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-space-xs text-outline font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+<span>No visible en la vitrina de CARTOWN</span>
+</div>
+<button class="font-label-sm text-label-sm text-primary hover:underline font-semibold flex items-center gap-1">
+<span>Completar campos</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="mt-space-lg pt-space-md flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<button class="px-space-md h-9 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-sm text-label-sm font-semibold transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">publish</span>
+<span>Completar y Publicar</span>
+</button>
+<button class="px-space-md h-9 bg-surface-container-high hover:bg-surface-container-highest text-on-surface rounded-xl font-label-sm text-label-sm transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+<span>Descartar</span>
+</button>
+</div>
+<button class="p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined text-[18px]">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Operational Lifecycle & Billing Settings Drawer Panel -->
+<div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm transition-all" id="rules-drawer">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-sm pb-space-md border-b border-surface-container-low">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">settings_suggest</span>
+</div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Motor de Cobro &amp; Reglas de Renovación Automática</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Configuración global aplicable a todos los planes activos con cobro por tarjeta en App.</p>
+</div>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="px-3 py-1 rounded-full bg-secondary-fixed/50 text-on-secondary-fixed text-label-sm font-label-sm font-semibold">
+          Pasarela: Cardnet RD (Tokenizada)
+        </span>
+</div>
+</div>
+<!-- Rule Parameters Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-lg pt-space-md">
+<!-- Periodo de Gracia -->
+<div class="bg-surface-container-low p-space-md rounded-xl space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Periodo de Gracia</span>
+<span class="material-symbols-outlined text-outline text-[18px]">hourglass_top</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Días en que el socio puede canjear vía QR antes del bloqueo por tarjeta declinada.</p>
+<div class="pt-2 flex items-center gap-space-xs">
+<select class="w-full bg-surface-container-lowest font-body-sm text-body-sm text-on-surface rounded-xl p-2 focus:outline-none">
+<option>3 Días Calendario (Recomendado)</option>
+<option>5 Días Calendario</option>
+<option>Sin periodo de gracia (Corte inmediato)</option>
+</select>
+</div>
+</div>
+<!-- Reintentos de Pago -->
+<div class="bg-surface-container-low p-space-md rounded-xl space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Frecuencia de Reintentos</span>
+<span class="material-symbols-outlined text-outline text-[18px]">replay</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Intentos de cobro inteligente para evitar abandono involuntario.</p>
+<div class="pt-2 flex items-center gap-space-xs">
+<select class="w-full bg-surface-container-lowest font-body-sm text-body-sm text-on-surface rounded-xl p-2 focus:outline-none">
+<option>3 reintentos (Días 1, 2 y 4 post vencimiento)</option>
+<option>1 reintento único</option>
+<option>Reintento semanal automático</option>
+</select>
+</div>
+</div>
+<!-- Regla de Acumulación -->
+<div class="bg-surface-container-low p-space-md rounded-xl space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-semibold">Lavados no utilizados</span>
+<span class="material-symbols-outlined text-outline text-[18px]">cached</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Comportamiento del saldo de lavados al renovar la mensualidad.</p>
+<div class="pt-2 flex items-center gap-space-xs">
+<select class="w-full bg-surface-container-lowest font-body-sm text-body-sm text-on-surface rounded-xl p-2 focus:outline-none">
+<option>Expiran al fin del ciclo (Político Standard)</option>
+<option>Se acumula un máximo de 2 lavados al mes siguiente</option>
+<option>Se canjean por puntos en Fidelización</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Bottom Save Trigger -->
+<div class="mt-space-lg flex justify-end gap-space-xs">
+<button class="px-space-md h-9 rounded-xl bg-surface-container-high text-on-surface font-label-sm text-label-sm">
+        Revertir Cambios
+      </button>
+<button class="px-space-lg h-9 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-label-sm text-label-sm shadow-sm transition-all flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">save</span>
+<span>Guardar Reglas Globales</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  // Filter buttons interaction
+  const filterButtons = document.querySelectorAll('.status-filter');
+  filterButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterButtons.forEach(b => {
+        b.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+        b.classList.add('bg-surface-container-low', 'text-on-surface-variant');
+      });
+      btn.classList.remove('bg-surface-container-low', 'text-on-surface-variant');
+      btn.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+    });
+  });
+
+  // Welcome incentive toggle interaction
+  const toggle = document.getElementById('welcome-incentive-switch');
+  const toggleLabel = document.getElementById('status-toggle-label');
+  if (toggle && toggleLabel) {
+    toggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        toggleLabel.textContent = 'Activa en la App';
+      } else {
+        toggleLabel.textContent = 'Pausada';
+      }
+    });
+  }
+
+  // Smooth scroll to rules drawer from header
+  const openRulesBtn = document.getElementById('btn-open-rules');
+  const rulesDrawer = document.getElementById('rules-drawer');
+  if (openRulesBtn && rulesDrawer) {
+    openRulesBtn.addEventListener('click', () => {
+      rulesDrawer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+</script></main></div></body></html>

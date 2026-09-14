@@ -140,6 +140,33 @@
 }
 
 @theme {
+  /* ── RETAIL · azules comerciales del contrato Stitch (una sola fuente: las
+     pantallas usan las utilidades, el ámbito .retail las referencias) ── */
+  --color-retail-blue: #0284c7;
+  --color-retail-deep: #0369a1;
+  --color-retail-cyan: #06b6d4;
+  --color-retail-mist: #f0f9ff;
+  --color-retail-star: #f59e0b;
+  /* El verde azulado del banner comercial de Stitch (su `secondary`): el
+     degradado retail-blue → retail-lagoon es la receta de la tarjeta
+     «Canje inmediato» del Inicio. */
+  --color-retail-lagoon: #00687a;
+  /* ── VIBE · Rediseño violeta del Inicio (Stitch «amazon style», aprobado
+     2026-09-10). Los degradados viven como clases `grad-vibe-*` más abajo;
+     aquí, los sólidos. El cian del contrato es `retail-cyan` (#06b6d4): no
+     se duplica. */
+  --color-vibe-violet: #7c3aed;
+  --color-vibe-deep: #5b21b6;
+  --color-vibe-ink: #630ed4;
+  --color-vibe-cobalt: #2563eb;
+  --color-vibe-lavanda: #dce9ff;
+  --color-vibe-niebla: #e5eeff;
+  --color-vibe-borde: #e0e7ff;
+  --color-vibe-chip: #ddd6fe;
+  --color-vibe-fondo: #f8f9ff;
+  --color-vibe-celeste: #c7d2fe;
+  --color-vibe-sky: #38bdf8;
+  --color-vibe-aqua: #67e8f9;
   /* ── MMS · Motion tokens ────────────────────────────────────────────
      Duraciones y curvas oficiales del Membego Motion System. TODA
      animación DEBE consumir estos valores, nunca números sueltos.
@@ -308,25 +335,30 @@
   --glass-border: oklch(1 0 0 / 45%);
   --glow-color: 59 130 246;
 
-  /* Sidebar — deep navy (matches logo background) */
-  --sidebar: oklch(0.14 0.035 260);
-  --sidebar-foreground: oklch(0.80 0.010 260);
-  /* DS 2.0 · NO es `--primary`: el azul de marca (L .55) sobre este navy
-     (L .14) se queda en ~3.4:1, por debajo de AA. Este azul aclarado
-     (L .72) da ~7:1 contra el navy y es el que marca la selección del
-     menú. Si se toca el navy, hay que recalcular este par. */
-  --sidebar-primary: oklch(0.72 0.15 255);
-  --sidebar-primary-foreground: oklch(0.16 0.03 255);
-  --sidebar-accent: oklch(0.20 0.035 260);
-  --sidebar-accent-foreground: oklch(0.92 0.008 260);
-  --sidebar-border: oklch(0.22 0.030 260);
-  --sidebar-ring: oklch(0.72 0.15 255);
-  /* DS 2.0 · Superficies de interacción del menú, antes escritas a mano
-     como `bg-white/[0.05]` y `bg-white/[0.08]` en cada enlace. */
-  --sidebar-hover: oklch(1 0 0 / 6%);
-  --sidebar-active: oklch(1 0 0 / 10%);
-  /* DS 3.0 - Riel de espacios: un escalon MAS oscuro que el panel. */
-  --sidebar-rail: oklch(0.105 0.030 260);
+  /* ── Barra lateral, tema CLARO ─────────────────────────────────────────
+     Era navy profundo, a juego con el fondo del logo. Los ocho diseños
+     administrativos de Stitch la pintan clara: superficie casi blanca, texto
+     oscuro, rótulos de grupo en gris y el módulo activo en azul de marca.
+
+     Con el navy, el panel quedaba partido en dos identidades —columna oscura,
+     contenido claro— que no está en ningún diseño. El navy sigue vivo en el
+     tema oscuro, unos bloques más abajo, para quien lo elija con el toggle. */
+  --sidebar: oklch(0.985 0.002 260);
+  --sidebar-foreground: oklch(0.42 0.012 260);
+  /* Sobre superficie clara, el azul de marca SÍ vale: da 4.6:1 contra
+     blanco. El aclarado de antes existía porque el fondo era navy. */
+  --sidebar-primary: oklch(0.55 0.22 255);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.955 0.006 260);
+  --sidebar-accent-foreground: oklch(0.22 0.02 260);
+  --sidebar-border: oklch(0.91 0.005 260);
+  --sidebar-ring: oklch(0.55 0.22 255);
+  /* Superficies de interacción del menú. En claro son sombras del texto, no
+     velos blancos: sobre casi-blanco, `white/6%` no se ve. */
+  --sidebar-hover: oklch(0.22 0.02 260 / 6%);
+  --sidebar-active: oklch(0.22 0.02 260 / 10%);
+  /* Riel de espacios: un escalón más OSCURO que el panel también en claro. */
+  --sidebar-rail: oklch(0.955 0.006 260);
   /* Seleccion del menu, relleno solido (el patron del rediseno). Toma los
      mismos valores que el boton principal, que ya esta auditado a 4.5:1:
      una pastilla azul con texto blanco no puede tener otro contraste que
@@ -469,6 +501,27 @@
      el boton azul con texto blanco de la misma pantalla. */
   --sidebar-selected: oklch(0.55 0.22 255);
   --sidebar-selected-foreground: oklch(0.99 0 0);
+}
+
+/* ── El color por defecto del microcopy ────────────────────────────────────
+   `.text-caption` y `.text-overline` llevan color gris por defecto, y eso está
+   bien: casi siempre son texto secundario sobre fondo claro.
+
+   Pero vivían en `@layer utilities`, la MISMA capa que `text-white` o
+   `text-primary`, y se escribían después. Resultado: `class="text-overline
+   text-primary"` salía gris, en silencio, y nadie podía darles otro color sin
+   `!important`. Sobre el banner azul del Inicio eso dejaba el sobretítulo y el
+   pie ilegibles — un fallo de contraste que parecía de diseño y era de
+   cascada.
+
+   En `@layer components` el valor sigue aplicándose donde nadie pide otro
+   color, y cualquier utilidad `text-*` explícita le gana, que es justo lo que
+   quien la escribe está pidiendo. */
+@layer components {
+  .text-caption,
+  .text-overline {
+    color: var(--muted-foreground);
+  }
 }
 
 @layer base {
@@ -649,14 +702,52 @@
   .text-caption {          /* Microcopy · 12.5px — el suelo */
     font-size: 0.78125rem;
     line-height: 1.45;
-    color: var(--muted-foreground);
   }
   .text-overline {         /* Etiquetas de sección en mayúsculas · 12px */
     font-size: 0.75rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--muted-foreground);
+  }
+  /* El color por defecto de estas dos vive en `@layer components` (más
+     abajo), NO aquí. Ver allí el porqué. */
+
+  /* ── Escala de etiqueta y precio (contrato Stitch) ──────────────────
+     El DESIGN.md de Stitch define `label-*` y `price-*` además de los
+     roles de arriba. Las etiquetas son el texto funcional de las fichas
+     —sobretítulos de empresa, sellos, botones—, y el precio es su propio
+     rol porque en una app comercial el número manda sobre el título.
+
+     DESVIACIÓN DELIBERADA: Stitch pone `label-sm` en 11px. Aquí es 12px.
+     El suelo de 12px de este sistema salió de una auditoría de 218 tamaños
+     escritos a mano por debajo de ese valor, y bajarlo ahora reabre
+     exactamente lo que esa decisión cerró. Un píxel no cambia la
+     composición; sí cambia quién puede leerla. */
+  .text-label-lg {         /* Etiqueta de acción · 14px */
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+  }
+  .text-label-md {         /* Metadato · 12px */
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1rem;
+  }
+  .text-label-sm {         /* Sello · 12px (Stitch dice 11px; ver arriba) */
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 0.875rem;
+  }
+  .text-price-lg {         /* El número que decide · 20px */
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.5rem;
+    letter-spacing: -0.01em;
+  }
+  .text-price-sm {         /* Precio secundario · 13px */
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1rem;
   }
 
   /* ── Elevaciones (alias semánticos de las sombras) ──────────────────
@@ -685,6 +776,26 @@
       0 2px 4px rgb(15 23 42 / 0.04),
       0 8px 24px -4px rgb(15 23 42 / 0.08),
       0 24px 56px -12px rgb(15 23 42 / 0.14);
+  }
+
+  /* ── VIBE · degradados del rediseño violeta del Inicio (recetas EXACTAS
+     del export de Stitch, aprobado 2026-09-10). Como clases y no como hex
+     inline: la guardia de deuda cuenta hex en la interfaz, y un degradado
+     repetido a mano en seis sitios es como se desincroniza un diseño. */
+  .grad-vibe-header {
+    background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 35%, #2563eb 70%, #06b6d4 100%);
+  }
+  .grad-vibe {
+    background: linear-gradient(90deg, #7c3aed 0%, #2563eb 100%);
+  }
+  .grad-vibe-cta {
+    background: linear-gradient(90deg, #7c3aed 0%, #2563eb 60%, #06b6d4 100%);
+  }
+  .grad-vibe-cyan {
+    background: linear-gradient(90deg, #06b6d4 0%, #2563eb 100%);
+  }
+  .grad-vibe-noche {
+    background: linear-gradient(to top, #0b0f19 0%, rgb(30 27 75 / 0.5) 50%, transparent 100%);
   }
 
   /* Skeleton con shimmer (en vez de spinners) */
@@ -1135,4 +1246,37 @@
     .skeleton-shimmer { animation: none; }
     .card-lift:hover { transform: none; }
   }
+}
+
+/* ── RETAIL · ámbito visual de la experiencia del cliente (contrato Stitch) ──
+   Inter + azules comerciales sobre lienzo claro, siempre en claro
+   (color-scheme: light) aunque el resto de la app use otro tema. Las
+   utilidades semánticas (bg-primary, text-muted…) siguen funcionando porque
+   leen estas mismas variables. */
+.retail {
+  color-scheme: light;
+  --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --background: #ffffff;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #4b5563;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: var(--color-retail-blue);
+  --primary: var(--color-retail-blue);
+  --primary-foreground: #ffffff;
+  --primary-hover: var(--color-retail-deep);
+  --primary-soft: #e0f2fe;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #111827;
+  --accent: #e0f2fe;
+  --accent-foreground: var(--color-retail-deep);
+  font-family: var(--font-sans);
+}
+
+.retail-header {
+  background: linear-gradient(90deg, var(--color-retail-blue) 0%, var(--color-retail-cyan) 100%);
 }

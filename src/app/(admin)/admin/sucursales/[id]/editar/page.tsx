@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { SucursalForm } from '@/components/admin/SucursalForm'
 
 export default async function EditarSucursalPage({
@@ -13,10 +13,8 @@ export default async function EditarSucursalPage({
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
 
-  const companyId = companyFilter(user)
-  const suc = await conEmpresaOTodas(
-    companyId,
-    'sucursales · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const companyId = await requireCompanyContext(user)
+  const suc = await conEmpresa(companyId,
     (tx) => tx.sucursal.findUnique({ where: { id } })
   )
   if (!suc) return notFound()
@@ -41,3 +39,4 @@ export default async function EditarSucursalPage({
     </div>
   )
 }
+

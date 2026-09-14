@@ -81,6 +81,8 @@ export function AppSidebar({
   ayudaHref,
   /** El cajón móvil pinta los dos niveles a la vez y sin plegar. */
   variante = 'escritorio',
+  empresa,
+  conmutador,
 }: {
   ctx: ContextoNav
   badges?: BadgesNav
@@ -91,6 +93,8 @@ export function AppSidebar({
   userName?: string | null
   ayudaHref?: string | null
   variante?: 'escritorio' | 'movil'
+  empresa?: { nombre: string; sede: string | null } | null
+  conmutador?: React.ReactNode
 }) {
   const pathname = usePathname()
 
@@ -128,6 +132,8 @@ export function AppSidebar({
         userEmail={userEmail}
         userName={userName}
         ayudaHref={ayudaHref}
+        empresa={empresa}
+        conmutador={conmutador}
       />
     )
   }

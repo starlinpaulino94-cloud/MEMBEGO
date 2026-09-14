@@ -1,10 +1,31 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowRight, Clock, Gift, Star } from 'lucide-react'
+import { Clock, Star } from 'lucide-react'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento } from '@/lib/promociones'
 import { formatMoney } from '@/lib/format'
 import { PromoCountdown } from './PromoCountdown'
+
+/**
+ * TARJETA DE PROMOCIÓN — lenguaje retail (contrato Stitch + dirección Amazon).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LO QUE CAMBIÓ Y POR QUÉ
+ *
+ * La versión anterior era un anuncio estilo Temu: degradados de relleno, chip
+ * de cristal, CTA gigante «Aprovechar ahora» en cada tarjeta. La dirección del
+ * usuario es la contraria: LA IMAGEN MANDA. La tarjeta entera es el enlace, el
+ * arte va en 1:1 (el formato que exige la subida), y el compromiso se pide en
+ * el perfil de la promoción — que ahora tiene galería, descripción y reseñas
+ * con qué pedirlo.
+ *
+ * Lo FUNCIONAL se queda, porque es dato y decide: el sello de descuento, el
+ * contador cuando vence en <72 h, la fecha de vigencia, el código, el precio,
+ * y los estados (por vencer, agotada, expirada). Lo decorativo se fue.
+ *
+ * La API no cambió: mismas props, mismos consumidores (catálogo del cliente,
+ * buscador, landing pública).
+ */
 
 interface PromotionCardProps {
   promotion: PromotionPublic
@@ -16,6 +37,11 @@ interface PromotionCardProps {
   hrefBase?: string
   /** Ruta a la que volver desde el detalle (se añade como `?retorno=`). */
   retorno?: string
+  /**
+   * La pantalla superpone una acción en la esquina superior derecha (el
+   * corazón de guardar): los sellos bajan para no quedar tapados.
+   */
+  esquinaLibre?: boolean
 }
 
 function fechaCorta(d: string | Date) {
@@ -29,42 +55,113 @@ function detalleHref(hrefBase: string, id: string, retorno?: string) {
   return retorno ? `${base}?retorno=${encodeURIComponent(retorno)}` : base
 }
 
+/** El arte 1:1 con sus sellos. Sin imagen: inicial sobre tinte de marca. */
+function Arte({
+  promotion,
+  isExpired,
+  porVencer,
+  agotada,
+  esquinaLibre,
+}: {
+  promotion: PromotionPublic
+  isExpired: boolean
+  porVencer: boolean
+  agotada: boolean
+  esquinaLibre?: boolean
+}) {
+  return (
+    <div className="relative aspect-square w-full bg-muted">
+      {promotion.imagenUrl ? (
+        <Image
+          src={promotion.imagenUrl}
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 20rem, (min-width: 640px) 33vw, 50vw"
+          className="object-cover transition-transform duration-base group-hover:scale-105"
+        />
+      ) : (
+        <span className="flex size-full items-center justify-center bg-brand-primary-soft text-h1 text-primary" aria-hidden>
+          {promotion.titulo.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+
+      {promotion.descuento && !isExpired ? (
+        <span className="absolute left-2 top-2 rounded-full bg-foreground/85 px-2.5 py-1 text-label-lg text-background">
+          {formatDescuento(promotion.descuento, promotion.tipo)}
+        </span>
+      ) : null}
+
+      <span
+        className={`absolute right-2 flex flex-col items-end gap-1 ${esquinaLibre ? 'top-12' : 'top-2'}`}
+      >
+        {promotion.isFeatured && !isExpired ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-card/95 px-2 py-0.5 text-label-sm font-semibold text-foreground">
+            <Star className="size-3 fill-retail-star text-retail-star" aria-hidden /> Destacada
+          </span>
+        ) : null}
+        {porVencer ? (
+          <span className="rounded-full bg-destructive px-2 py-0.5 text-label-sm font-semibold text-white">
+            Por vencer
+          </span>
+        ) : null}
+        {agotada && !isExpired ? (
+          <span className="rounded-full bg-foreground/85 px-2 py-0.5 text-label-sm font-semibold text-background">
+            Agotada
+          </span>
+        ) : null}
+      </span>
+
+      {isExpired ? (
+        <span className="absolute inset-0 flex items-center justify-center bg-foreground/55">
+          <span className="rounded-full border border-white/60 px-4 py-1.5 text-label-lg text-white">
+            Expirada
+          </span>
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 export function PromotionCard({
   promotion,
   variant = 'default',
   hrefBase = '/promocion',
   retorno,
+  esquinaLibre = false,
 }: PromotionCardProps) {
-  const isExpired =
+  const isExpired = Boolean(
     promotion.vigenciaHasta && new Date(promotion.vigenciaHasta) < new Date()
+  )
 
   if (variant === 'compact') {
     return (
-      <Link href={detalleHref(hrefBase, promotion.id, retorno)} className="group block">
-        <div className="card-interactive overflow-hidden rounded-xl border border-border bg-card">
-          <div className="relative h-24 w-full overflow-hidden bg-gradient-brand">
+      <Link
+        href={detalleHref(hrefBase, promotion.id, retorno)}
+        className="group block outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <div className="overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast group-hover:border-primary/40">
+          <div className="relative h-24 w-full bg-muted">
             {promotion.imagenUrl ? (
               <Image
                 src={promotion.imagenUrl}
-                alt={promotion.titulo}
+                alt=""
                 fill
-                className="object-cover transition-transform duration-hero group-hover:scale-105"
+                sizes="12rem"
+                className="object-cover transition-transform duration-base group-hover:scale-105"
               />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Gift className="h-6 w-6 text-white/70" aria-hidden />
-              </div>
-            )}
-            {promotion.descuento && (
-              <span className="absolute right-2 top-2 rounded-full bg-card px-2 py-0.5 text-caption font-bold text-primary elevation-1">
-                {formatDescuento(promotion.descuento, promotion.tipo)}
+              <span className="flex size-full items-center justify-center bg-brand-primary-soft text-h3 text-primary" aria-hidden>
+                {promotion.titulo.slice(0, 1).toUpperCase()}
               </span>
             )}
+            {promotion.descuento ? (
+              <span className="absolute right-2 top-2 rounded-full bg-foreground/85 px-2 py-0.5 text-label-sm font-semibold text-background">
+                {formatDescuento(promotion.descuento, promotion.tipo)}
+              </span>
+            ) : null}
           </div>
           <div className="p-3">
-            <p className="line-clamp-1 text-small font-semibold text-foreground">
-              {promotion.titulo}
-            </p>
+            <p className="line-clamp-1 text-label-lg text-foreground">{promotion.titulo}</p>
             <p className="mt-0.5 line-clamp-1 text-caption">{promotion.company.name}</p>
           </div>
         </div>
@@ -81,139 +178,53 @@ export function PromotionCard({
     new Date(promotion.vigenciaHasta).getTime() - ahora.getTime() < 72 * 60 * 60 * 1000
   const agotada = promotion.venta?.agotada ?? false
 
-  // Tarjeta-anuncio (Temu-style): imagen con gradiente, badge de descuento
-  // protagonista, urgencia con contador y CTA gigante siempre visible.
   return (
-    <Link href={detalleHref(hrefBase, promotion.id, retorno)} className="group block h-full">
-      <div className="card-interactive relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
-        {/* Imagen protagonista */}
-        <div className="relative h-44 w-full overflow-hidden bg-gradient-brand">
-          {promotion.imagenUrl ? (
-            <Image
-              src={promotion.imagenUrl}
-              alt={promotion.titulo}
-              fill
-              className="object-cover transition-transform duration-hero group-hover:scale-105"
-            />
-          ) : (
-            <>
-              <div className="absolute inset-0 bg-grid-light opacity-50" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Gift className="h-10 w-10 text-white/60" aria-hidden />
-              </div>
-            </>
-          )}
-          {/* Gradiente para legibilidad del chip de empresa */}
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/40 to-transparent" />
+    <Link
+      href={detalleHref(hrefBase, promotion.id, retorno)}
+      className="group block h-full outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast group-hover:border-primary/40">
+        <Arte
+          promotion={promotion}
+          isExpired={isExpired}
+          porVencer={porVencer}
+          agotada={agotada}
+          esquinaLibre={esquinaLibre}
+        />
 
-          {/* Descuento: protagonista del anuncio */}
-          {promotion.descuento && !isExpired && (
-            <span className="absolute left-3 top-3 rounded-lg bg-primary px-3 py-1.5 text-h3 font-black tracking-tight text-primary-foreground elevation-2">
-              {formatDescuento(promotion.descuento, promotion.tipo)}
-            </span>
-          )}
+        <div className="flex flex-1 flex-col p-3">
+          <h3 className="line-clamp-2 text-label-lg text-foreground">{promotion.titulo}</h3>
+          <p className="mt-0.5 line-clamp-1 text-caption">{promotion.company.name}</p>
 
-          {/* Badges de estado (derecha) */}
-          <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
-            {promotion.isFeatured && !isExpired && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning px-2.5 py-1 text-caption font-bold uppercase tracking-wide text-warning-foreground">
-                <Star className="h-3 w-3 fill-current" aria-hidden /> Patrocinada
-              </span>
-            )}
-            {porVencer && (
-              <span className="rounded-full bg-destructive px-2.5 py-1 text-caption font-bold uppercase tracking-wide text-white">
-                Por vencer
-              </span>
-            )}
-            {agotada && !isExpired && (
-              <span className="rounded-full bg-foreground/85 px-2.5 py-1 text-caption font-bold uppercase tracking-wide text-background">
-                Agotada
-              </span>
-            )}
-          </div>
-
-          {/* Empresa: chip glass sobre la imagen */}
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-card/90 py-1 pl-1 pr-3 backdrop-blur elevation-1">
-            {promotion.company.logoUrl ? (
-              <span className="relative block h-5 w-5 overflow-hidden rounded-full">
-                <Image src={promotion.company.logoUrl} alt="" fill className="object-cover" />
-              </span>
-            ) : (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[12px] font-bold leading-none text-primary-foreground">
-                {promotion.company.name.slice(0, 1).toUpperCase()}
-              </span>
-            )}
-            <span className="max-w-36 truncate text-caption font-medium text-foreground">
-              {promotion.company.name}
-            </span>
-          </div>
-
-          {/* Expirada */}
-          {isExpired && (
-            <div className="absolute inset-0 flex items-center justify-center bg-foreground/55 backdrop-blur-[2px]">
-              <span className="rounded-full border border-white/40 px-4 py-1.5 text-small font-semibold text-white">
-                Expirada
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Contenido */}
-        <div className="flex flex-1 flex-col p-5">
-          <h3 className="line-clamp-2 text-h3 text-foreground">
-            {promotion.titulo}
-          </h3>
-
-          {promotion.descripcion && (
-            <p className="mt-1.5 line-clamp-2 text-small text-muted-foreground">
-              {promotion.descripcion}
-            </p>
-          )}
-
-          {/* Precio de venta directa (si es comprable) */}
-          {promotion.venta && !isExpired && (
-            <p className="mt-2.5 text-h1 tabular-nums text-foreground">
+          {promotion.venta && !isExpired ? (
+            <p className="mt-1.5 text-price-lg tabular-nums text-foreground">
               {formatMoney(promotion.venta.precio)}
             </p>
-          )}
+          ) : null}
 
-          {promotion.codigo && (
-            <div className="mt-3 inline-flex w-fit items-center gap-2 rounded-lg border border-dashed border-border bg-muted/50 px-2.5 py-1">
-              <span className="text-caption">Código</span>
-              <code className="font-mono text-caption font-bold text-foreground">
+          {promotion.codigo ? (
+            <p className="mt-2 inline-flex w-fit items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1">
+              <span className="text-label-sm text-muted-foreground">Código</span>
+              <code className="font-mono text-label-md font-bold text-foreground">
                 {promotion.codigo}
               </code>
-            </div>
-          )}
+            </p>
+          ) : null}
 
-          {/* Urgencia: contador en vivo si vence en <72h; fecha si no */}
-          <div className="mt-3">
+          {/* Urgencia: contador en vivo si vence en <72 h; fecha si no. */}
+          <div className="mt-auto pt-2">
             {porVencer && promotion.vigenciaHasta ? (
               <PromoCountdown hasta={promotion.vigenciaHasta} />
             ) : promotion.vigenciaHasta ? (
               <span
-                className={`inline-flex items-center gap-1.5 text-caption ${
-                  isExpired ? 'font-medium text-destructive' : ''
+                className={`inline-flex items-center gap-1.5 text-label-md ${
+                  isExpired ? 'font-semibold text-destructive' : 'text-muted-foreground'
                 }`}
               >
-                <Clock className="h-3.5 w-3.5" aria-hidden />
+                <Clock className="size-3.5" aria-hidden />
                 {isExpired ? 'Expiró' : 'Hasta'} el {fechaCorta(promotion.vigenciaHasta)}
               </span>
             ) : null}
-          </div>
-
-          {/* CTA gigante, siempre visible (no solo al hover) */}
-          <div className="mt-auto pt-4">
-            <span
-              className={`inline-flex min-h-12 w-full items-center justify-center gap-1.5 rounded-lg text-small font-bold transition group-hover:opacity-90 group-active:scale-[0.99] ${
-                isExpired || agotada
-                  ? 'bg-muted text-muted-foreground'
-                  : 'bg-primary text-primary-foreground'
-              }`}
-            >
-              {isExpired ? 'Ver detalle' : agotada ? 'Agotada · ver detalle' : 'Aprovechar ahora'}
-              <ArrowRight className="h-4 w-4" aria-hidden />
-            </span>
           </div>
         </div>
       </div>

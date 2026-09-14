@@ -205,6 +205,10 @@ export async function reservarCita(
 
     // Cupos + creación en una transacción (revalida contra carreras).
     const resultado = await conEmpresa(companyId, async (tx) => {
+      // Candado por empresa: serializa la comprobación de cupos con la
+      // inserción. Contar e insertar sin lock permite sobreventa cuando dos
+      // reservas concurrentes leen el mismo cupo libre.
+      await tx.$queryRaw`SELECT id FROM "companies" WHERE id = ${companyId} FOR UPDATE`
       const [enSlot, enDia, mias] = await Promise.all([
         tx.cita.count({
           where: {
@@ -244,21 +248,16 @@ export async function reservarCita(
           duracionMin: cfg.duracionMin,
           servicio,
           estado: cfg.autoConfirmar ? 'CONFIRMADA' : 'PENDIENTE',
+          // Vínculo de la recompensa DENTRO de la misma transacción: si el
+          // vínculo falla, no hay cita a medias con QR prometido pero
+          // inexistente (migración 20260756 garantiza la columna).
+          ...(compraId ? { compraId } : {}),
         },
         select: { id: true, estado: true },
       })
       return { cita }
     })
     if ('error' in resultado) return { error: resultado.error }
-
-    // Vincular la recompensa a la cita (habilita su QR). Defensivo: si la
-    // columna citas.compraId aún no existe (migración 20260756 pendiente),
-    // la cita queda creada igual y solo se pierde el vínculo.
-    if (compraId) {
-      await conEmpresa(companyId, (tx) =>
-        tx.cita.update({ where: { id: resultado.cita.id }, data: { compraId } })
-      ).catch((e) => console.error('[citas] vincular compra:', e))
-    }
 
     // Con la agenda en autoconfirmación la cita nace CONFIRMADA y tiene que
     // llegar a la agenda de Google igual que si la confirmara el negocio.

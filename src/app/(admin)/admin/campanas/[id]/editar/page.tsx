@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { CampanaForm } from '@/components/admin/CampanaForm'
 
 export const dynamic = 'force-dynamic'
@@ -13,12 +13,10 @@ export default async function EditarCampanaPage({
   params: Promise<{ id: string }>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const { id } = await params
 
-  const campana = await conEmpresaOTodas(
-    companyId,
-    'campanas · [id] · editar: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const campana = await conEmpresa(companyId,
     (tx) => tx.campana.findUnique({ where: { id } })
   )
   if (!campana) notFound()
@@ -43,3 +41,4 @@ export default async function EditarCampanaPage({
     </div>
   )
 }
+

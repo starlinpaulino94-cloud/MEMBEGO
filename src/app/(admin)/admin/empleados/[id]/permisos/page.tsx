@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { requireCompanyContext } from '@/lib/auth/company-context'
+import { conEmpresa } from '@/lib/tenant'
 import { puedeEditarPermisos, resolverPermisosUsuario } from '@/lib/auth/permissions'
 import { safeInternalPath } from '@/lib/utils'
 import { PermisosEmpleadoForm } from '@/components/admin/PermisosEmpleadoForm'
@@ -36,12 +37,12 @@ export default async function PermisosEmpleadoPage({
    * está también en la base (RLS · Capa 2) y el `if` pasa a ser la segunda,
    * que es el orden correcto.
    *
-   * `conEmpresaOTodas` porque el superadmin entra aquí sin empresa activa y
-   * tiene que poder abrir la ficha de cualquiera.
+   * La empresa es la ACTIVA de la sesión (`requireCompanyContext`): el
+   * superadmin que necesite otra empresa la selecciona primero en plataforma.
    */
-  const empleado = await conEmpresaOTodas(
-    user.metadata.companyId,
-    'permisos: el superadmin edita los de cualquier empleado, sin empresa activa',
+  const companyId = await requireCompanyContext(user)
+  const empleado = await conEmpresa(
+    companyId,
     (tx) =>
       tx.user.findUnique({
         where: { id },
@@ -51,7 +52,7 @@ export default async function PermisosEmpleadoPage({
   if (!empleado) notFound()
   if (
     user.metadata.role !== 'SUPERADMIN' &&
-    (!empleado.companyId || empleado.companyId !== user.metadata.companyId)
+    (!empleado.companyId || empleado.companyId !== companyId)
   ) {
     notFound()
   }

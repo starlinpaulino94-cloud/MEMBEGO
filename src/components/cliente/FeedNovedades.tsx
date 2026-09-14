@@ -1,53 +1,42 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Megaphone,
   CalendarDays,
   Newspaper,
   BadgeCheck,
-  ArrowRight,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { RetailSeccionHeader, RetailSeccionPie } from '@/components/cliente/inicio/RetailSeccion'
 import type { NovedadInicio } from '@/modules/social/queries'
+
+/**
+ * NOVEDADES DEL INICIO — filas densas del contrato Stitch.
+ *
+ * La versión anterior era un carrusel de tarjetas con degradado por categoría
+ * (naranja para promos, violeta para eventos) y un CTA blanco por tarjeta:
+ * llamativo, pero de otro idioma. La receta que manda es la de «Experiencias
+ * y Excursiones» del Inicio de Stitch: fila con miniatura de 88px y el tipo
+ * en pastilla oscura, sobretítulo de la EMPRESA en mayúsculas, título de una
+ * línea, bajada gris, y la fila de dato (descuento, fecha) con la píldora
+ * clara de acción a la derecha.
+ *
+ * La fila entera es el enlace; la píldora es visual, no un botón anidado.
+ * Las promociones traen su arte real; los posts no tienen imagen y llevan la
+ * tesela con el icono del tipo — mismo esqueleto, sin fingir fotos.
+ */
 
 interface TipoMeta {
   label: string
   icon: LucideIcon
-  /** Fondo de la tarjeta rica (gradiente de marca por tipo). */
-  bg: string
-  /** Chip de categoría sobre el fondo oscuro. */
-  chip: string
   cta: string
 }
 
 const TIPO_META: Record<string, TipoMeta> = {
-  PROMOCION: {
-    label: 'Promoción',
-    icon: Megaphone,
-    bg: 'bg-gradient-to-br from-rose-500 via-orange-500 to-amber-500',
-    chip: 'bg-white/20 text-white',
-    cta: 'Obtener beneficio',
-  },
-  EVENTO: {
-    label: 'Evento',
-    icon: CalendarDays,
-    bg: 'bg-gradient-to-br from-violet-600 via-violet-500 to-fuchsia-500',
-    chip: 'bg-white/20 text-white',
-    cta: 'Ver evento',
-  },
-  NOTICIA: {
-    label: 'Noticia',
-    icon: Newspaper,
-    bg: 'bg-gradient-to-br from-slate-700 via-slate-600 to-slate-500',
-    chip: 'bg-white/20 text-white',
-    cta: 'Leer más',
-  },
-  BENEFICIO: {
-    label: 'Beneficio',
-    icon: BadgeCheck,
-    bg: 'bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500',
-    chip: 'bg-white/20 text-white',
-    cta: 'Obtener beneficio',
-  },
+  PROMOCION: { label: 'Promoción', icon: Megaphone, cta: 'Ver oferta' },
+  EVENTO: { label: 'Evento', icon: CalendarDays, cta: 'Ver evento' },
+  NOTICIA: { label: 'Noticia', icon: Newspaper, cta: 'Leer más' },
+  BENEFICIO: { label: 'Beneficio', icon: BadgeCheck, cta: 'Ver beneficio' },
 }
 
 function fmtFecha(d: Date) {
@@ -58,74 +47,111 @@ function fmtFecha(d: Date) {
   }).format(new Date(d))
 }
 
-/**
- * Novedades de las empresas que el cliente sigue, como carrusel horizontal de
- * tarjetas ricas (estilo Airbnb): fondo con gradiente por categoría, icono
- * de marca de agua, badge del tipo y CTA de un toque.
- */
+function fmtFechaHora(d: Date) {
+  return new Intl.DateTimeFormat('es-DO', {
+    timeZone: 'America/Santo_Domingo',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(d))
+}
+
+/** La línea de dato de cada tipo: lo que decide, no relleno. */
+function Dato({ n }: { n: NovedadInicio }) {
+  if (n.tipo === 'PROMOCION') {
+    return (
+      <span className="min-w-0 truncate">
+        {n.descuento ? (
+          <span className="text-price-sm tabular-nums text-primary">{n.descuento}</span>
+        ) : null}
+        {n.vence ? (
+          <span className="text-caption">
+            {n.descuento ? ' · ' : ''}hasta el {fmtFecha(n.vence)}
+          </span>
+        ) : null}
+      </span>
+    )
+  }
+  if (n.tipo === 'EVENTO') {
+    return (
+      <span className="min-w-0 truncate text-label-md font-semibold text-foreground">
+        {fmtFechaHora(n.fecha)}
+      </span>
+    )
+  }
+  return <span className="min-w-0 truncate text-caption">Publicada el {fmtFecha(n.fecha)}</span>
+}
+
 export function FeedNovedades({ novedades }: { novedades: NovedadInicio[] }) {
   if (novedades.length === 0) return null
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            Novedades de tus empresas
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Lo último para ti: eventos, noticias y beneficios.
-          </p>
-        </div>
-        <Link
-          href="/cliente/promociones"
-          className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-sm font-semibold text-primary transition hover:bg-primary/10"
-        >
-          Ver todo <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
+    <div>
+      <RetailSeccionHeader
+        id="retail-novedades"
+        titulo="Novedades de tus empresas"
+        bajada="Lo último de los negocios que sigues"
+        enlace={{ href: '/cliente/promociones', texto: 'Ver todas' }}
+      />
 
-      <div className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-2">
+      <ul className="mt-3 flex flex-col gap-2.5">
         {novedades.map((n) => {
           const meta = TIPO_META[n.tipo] ?? TIPO_META.NOTICIA
           const Icon = meta.icon
           return (
-            <Link
-              key={`${n.tipo}-${n.id}`}
-              href={n.href}
-              className={`group relative flex w-[240px] shrink-0 snap-start flex-col justify-between overflow-hidden rounded-2xl p-4 text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-premium sm:w-[264px] ${meta.bg}`}
-            >
-              {/* Icono de marca de agua */}
-              <Icon
-                aria-hidden
-                className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 text-white/10 transition-transform duration-hero group-hover:scale-110"
-              />
-              <div className="relative flex items-center justify-between gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${meta.chip}`}
-                >
-                  {meta.label}
-                </span>
-                {n.tipo === 'EVENTO' && (
-                  <span className="text-xs font-medium text-white/80">
-                    {fmtFecha(n.fecha)}
+            <li key={`${n.tipo}-${n.id}`}>
+              <Link
+                href={n.href}
+                className="flex items-center gap-3 rounded-lg bg-card p-2.5 elevation-1 outline-none transition-colors duration-fast hover:bg-brand-primary-soft/40 focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]"
+              >
+                <span className="relative size-22 shrink-0 overflow-hidden rounded-lg">
+                  {n.imagenUrl ? (
+                    <Image
+                      src={n.imagenUrl}
+                      alt=""
+                      fill
+                      sizes="88px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden
+                      className="flex size-full items-center justify-center bg-brand-primary-soft"
+                    >
+                      <Icon className="size-7 text-primary" />
+                    </span>
+                  )}
+                  <span className="absolute bottom-1 left-1 rounded bg-foreground/80 px-1.5 py-0.5 text-label-sm font-semibold leading-none text-background">
+                    {meta.label}
                   </span>
-                )}
-              </div>
-              <div className="relative mt-6 min-h-[3.75rem]">
-                <p className="line-clamp-2 text-[15px] font-bold leading-snug">
-                  {n.titulo}
-                </p>
-                <p className="mt-1 truncate text-xs text-white/70">{n.companyName}</p>
-              </div>
-              {/* CTA de un toque (≥48px con el padding de la tarjeta) */}
-              <span className="relative mt-4 inline-flex min-h-10 w-fit items-center gap-1.5 rounded-full bg-white px-4 text-xs font-bold text-foreground shadow-sm transition group-hover:gap-2.5">
-                {meta.cta} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-              </span>
-            </Link>
+                </span>
+
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-overline text-retail-deep">
+                    {n.companyName}
+                  </span>
+                  <span className="mt-0.5 block truncate text-h4 text-foreground">
+                    {n.titulo}
+                  </span>
+                  {n.resumen ? (
+                    <span className="block truncate text-caption">{n.resumen}</span>
+                  ) : null}
+                  <span className="mt-1.5 flex items-center justify-between gap-2">
+                    <Dato n={n} />
+                    <span className="shrink-0 rounded-full bg-brand-primary-soft px-3.5 py-1.5 text-label-md font-semibold text-primary">
+                      {meta.cta}
+                    </span>
+                  </span>
+                </span>
+              </Link>
+            </li>
           )
         })}
-      </div>
-    </section>
+      </ul>
+
+      <RetailSeccionPie href="/cliente/promociones">Ver todas las novedades</RetailSeccionPie>
+    </div>
   )
 }

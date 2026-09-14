@@ -1,0 +1,667 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>MEMBEGO Panel Administrativo</title><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {"darkMode": "class", "theme": {"extend": {"colors": {"surface-container-lowest": "#ffffff", "outline-variant": "#bfc7d2", "secondary-container": "#57dffe", "tertiary-fixed-dim": "#94ccff", "error-container": "#ffdad6", "on-secondary-fixed-variant": "#004e5c", "outline": "#707881", "on-secondary-fixed": "#001f26", "on-surface": "#141b2b", "primary-container": "#007bb9", "on-primary-fixed-variant": "#004b73", "tertiary-container": "#287ab3", "on-primary": "#ffffff", "primary-fixed": "#cce5ff", "secondary-fixed-dim": "#4cd7f6", "on-background": "#141b2b", "on-surface-variant": "#3f4850", "on-tertiary-container": "#fdfcff", "on-tertiary": "#ffffff", "inverse-surface": "#293040", "background": "#f9f9ff", "surface-tint": "#006398", "inverse-on-surface": "#edf0ff", "on-primary-container": "#fdfcff", "primary": "#006194", "secondary": "#00687a", "on-secondary-container": "#006172", "surface-container-high": "#e1e8fd", "surface-container-low": "#f1f3ff", "error": "#ba1a1a", "surface-container-highest": "#dce2f7", "tertiary-fixed": "#cde5ff", "on-error-container": "#93000a", "surface-container": "#e9edff", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#004b74", "inverse-primary": "#93ccff", "on-error": "#ffffff", "surface": "#f9f9ff", "on-tertiary-fixed": "#001d32", "secondary-fixed": "#acedff", "primary-fixed-dim": "#93ccff", "on-primary-fixed": "#001d31", "surface-dim": "#d3daef", "surface-variant": "#dce2f7", "surface-bright": "#f9f9ff", "tertiary": "#006195"}, "borderRadius": {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"}, "spacing": {"space-md": "0.75rem", "header-search-height": "2.75rem", "gutter-card": "0.75rem", "space-xs": "0.25rem", "screen-edge-padding": "1rem", "space-sm": "0.5rem", "space-base": "1rem", "space-2xl": "2rem", "space-lg": "1.25rem", "header-location-height": "2.25rem", "space-xl": "1.5rem", "bottom-nav-height": "3.5rem", "gutter-compact": "0.5rem", "space-2xs": "0.125rem"}, "fontFamily": {"body-lg": ["Inter"], "label-lg": ["Inter"], "body-md": ["Inter"], "price-sm": ["Inter"], "label-sm": ["Inter"], "price-lg": ["Inter"], "headline-md": ["Inter"], "label-md": ["Inter"], "body-sm": ["Inter"], "headline-lg": ["Inter"], "headline-sm": ["Inter"]}, "fontSize": {"body-lg": ["16px", {"lineHeight": "22px", "fontWeight": "400"}], "label-lg": ["14px", {"lineHeight": "18px", "fontWeight": "600"}], "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}], "price-sm": ["13px", {"lineHeight": "16px", "fontWeight": "600"}], "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}], "price-lg": ["20px", {"lineHeight": "24px", "fontWeight": "700"}], "headline-md": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "label-md": ["12px", {"lineHeight": "16px", "fontWeight": "500"}], "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}], "headline-lg": ["22px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700"}], "headline-sm": ["16px", {"lineHeight": "22px", "fontWeight": "600"}]}}}};</script></head><body class="bg-background font-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest z-50 flex flex-col shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-space-base flex items-center justify-between bg-surface-container-lowest"><div class="flex items-center gap-space-sm"><div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary-container flex items-center justify-center text-on-primary font-headline-md text-headline-md shadow-sm">M</div><div class="flex flex-col"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface leading-none">MEMBEGO</span><span class="font-label-sm text-label-sm text-on-surface-variant font-medium tracking-wider uppercase mt-0.5">Admin Hub</span></div></div><div class="w-2 h-2 rounded-full bg-secondary-container" title="Sistema Operativo Activo"></div></div><div class="px-space-base py-space-xs"><div class="p-space-sm bg-surface-container-low rounded-xl flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[18px]">store</span><div class="flex-1 min-w-0"><p class="font-label-sm text-label-sm text-on-surface truncate">CARTOWN Wash</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px] truncate">Sede Higüey 23000</p></div><span class="material-symbols-outlined text-on-surface-variant text-[16px]">unfold_more</span></div></div><nav class="flex-1 px-space-sm py-space-xs overflow-y-auto space-y-space-md" data-active-classes="bg-primary-container text-on-primary-container font-semibold rounded-xl"><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Principal</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="resumen" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span class="font-body-md text-body-md">Resumen</span></div></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Experiencia Cliente</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="editor-de-inicio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_quilt</span><span class="font-body-md text-body-md">Editor de Inicio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="navegacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">navigation</span><span class="font-body-md text-body-md">Navegación</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="cerca-de-ti" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">location_on</span><span class="font-body-md text-body-md">Cerca de ti</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="mi-qr" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">qr_code_2</span><span class="font-body-md text-body-md">Mi QR</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Catálogo</p><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="membresias" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">card_membership</span><span class="font-body-md text-body-md">Membresías</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">8</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="beneficios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">stars</span><span class="font-body-md text-body-md">Beneficios</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ofertas" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">local_offer</span><span class="font-body-md text-body-md">Ofertas</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-semibold">Hot</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="servicios" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">handyman</span><span class="font-body-md text-body-md">Servicios</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="excursiones" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">travel_explore</span><span class="font-body-md text-body-md">Excursiones</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Operaciones</p><a aria-current="page" class="flex items-center justify-between px-space-sm py-space-xs transition-colors bg-primary-container text-on-primary-container font-semibold rounded-xl" data-path="canjes-y-qr" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[18px]">check_circle</span><span class="font-body-md text-body-md">Canjes y QR</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-surface-container-high text-on-surface">14</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="reservas-y-citas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">calendar_today</span><span class="font-body-md text-body-md">Reservas y Citas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="pagos-y-facturacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">receipt_long</span><span class="font-body-md text-body-md">Pagos &amp; Facturación</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Clientes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="directorio" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">group</span><span class="font-body-md text-body-md">Directorio</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="segmentos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">pie_chart</span><span class="font-body-md text-body-md">Segmentos</span></a><a class="flex items-center justify-between px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="en-riesgo" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-error text-[18px]">warning</span><span class="font-body-md text-body-md">En Riesgo</span></div><span class="font-label-sm text-label-sm px-1.5 py-0.5 rounded-full bg-error-container text-on-error-container font-medium">3</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Marketing</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="campanas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">campaign</span><span class="font-body-md text-body-md">Campañas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="banners" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">view_carousel</span><span class="font-body-md text-body-md">Banners</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="fidelizacion" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">loyalty</span><span class="font-body-md text-body-md">Fidelización</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Analítica</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="metricas" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">insights</span><span class="font-body-md text-body-md">Métricas</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="ingresos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">payments</span><span class="font-body-md text-body-md">Ingresos</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="rendimiento" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">speed</span><span class="font-body-md text-body-md">Rendimiento</span></a></div><div class="space-y-space-2xs"><p class="px-space-sm py-space-2xs font-label-sm text-label-sm uppercase tracking-wider text-outline">Ajustes</p><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="empresa" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">business</span><span class="font-body-md text-body-md">Empresa</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="sucursales" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">storefront</span><span class="font-body-md text-body-md">Sucursales</span></a><a class="flex items-center px-space-sm py-space-xs rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" data-path="roles-y-permisos" href="#"><span class="material-symbols-outlined mr-space-sm text-[18px]">admin_panel_settings</span><span class="font-body-md text-body-md">Roles y Permisos</span></a></div></nav><div class="p-space-base bg-surface-container-low flex items-center justify-between"><div class="flex items-center gap-space-sm min-w-0"><div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed-variant"><span class="material-symbols-outlined text-[18px]">domain</span></div><div class="truncate"><p class="font-label-sm text-label-sm text-on-surface truncate font-semibold">CARTOWN RD</p><p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">RNC 131-98765-2</p></div></div><button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded-lg" title="Cerrar sesión" type="button"><span class="material-symbols-outlined text-[20px]">logout</span></button></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 px-space-xl flex items-center justify-between"><div class="flex items-center gap-space-lg flex-1 max-w-2xl"><div class="relative w-full max-w-md"><span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span><input class="w-full h-10 pl-9 pr-10 bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary" placeholder="Buscar socios, folios de canje o membresías..." type="text"><kbd class="absolute right-3 top-1/2 -translate-y-1/2 font-label-sm text-label-sm bg-surface-container px-1.5 py-0.5 rounded text-on-surface-variant border border-outline-variant/30">/</kbd></div><div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed text-[12px] font-label-md"><span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span><span>Higüey Online · Turno Diurno</span></div></div><div class="flex items-center gap-space-md"><button class="flex items-center gap-space-xs px-space-md h-9 bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-sm text-label-sm shadow-sm transition-all" type="button"><span class="material-symbols-outlined text-[18px]">qr_code_scanner</span><span>Canje Rápido</span></button><button class="relative p-2 rounded-xl text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors" title="Notificaciones de Canjes" type="button"><span class="material-symbols-outlined text-[20px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest"></span></button><div class="h-6 w-px bg-outline-variant/40"></div><div class="flex items-center gap-space-sm pl-space-xs"><div class="text-right hidden sm:block"><p class="font-label-sm text-label-sm text-on-surface leading-tight">Starlin Paulino</p><p class="font-body-sm text-body-sm text-[11px] text-on-surface-variant leading-tight">Administrador</p></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="relative pt-16 bg-background min-h-screen w-full px-space-xl py-space-xl"><div class="flex flex-col w-full gap-space-xl">
+<!-- Top Navigation & Breadcrumbs -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-base">
+<div class="space-y-space-xs">
+<nav class="flex items-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm">
+<span class="hover:text-primary cursor-pointer transition-colors">Marketing</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Campañas y Difusión</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary font-semibold">Centro de Mensajería y Promociones</span>
+</nav>
+<div class="space-y-1">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Campañas y Comunicación con Clientes</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-3xl">
+          Gestión de notificaciones push, automatizaciones por ciclo de vida, ofertas enviadas y campañas dirigidas a clientes de MEMBEGO.
+        </p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="h-9 px-space-md bg-surface-container-low hover:bg-surface-container text-on-surface rounded-xl font-label-sm text-label-sm flex items-center gap-space-xs transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">bookmark_manager</span>
+<span>Ver Plantillas</span>
+</button>
+<button class="h-9 px-space-md bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface rounded-xl font-label-sm text-label-sm flex items-center gap-space-xs transition-colors shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>Ejecutar Automatizaciones Ahora</span>
+</button>
+<button class="h-9 px-space-md bg-primary hover:bg-primary-container text-on-primary rounded-xl font-label-sm text-label-sm flex items-center gap-space-xs transition-all shadow-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>+ Nueva Notificación / Campaña</span>
+</button>
+</div>
+</div>
+<!-- Status / Channels Overview Banner -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- App Push Status -->
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[22px]">notifications_active</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface">App Push Directo</span>
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-medium">1,420 dispositivos vinculados</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-semibold uppercase tracking-wider">Activo</span>
+</div>
+<!-- WhatsApp API Status -->
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">chat</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface">WhatsApp Cloud API</span>
+<span class="font-label-sm text-label-sm text-on-primary-fixed-variant bg-primary-fixed px-1.5 py-0.2 rounded font-semibold">85%</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-medium">Plantilla HSM en validación Meta</p>
+</div>
+</div>
+<button class="font-label-sm text-label-sm px-2.5 py-1 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-semibold transition-colors">Completar</button>
+</div>
+<!-- Webhook Gateway Status -->
+<div class="p-space-base bg-surface-container-lowest rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[22px]">hub</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface">Avisos en Webhook</span>
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant font-medium">Latencia promedio: 42ms</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-semibold">Producción</span>
+</div>
+</div>
+<!-- MODULE 1: Trigger-based Marketing (Automatizaciones Inteligentes) -->
+<section class="space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-2 h-5 bg-primary rounded-full"></div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Automatizaciones Inteligentes</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Disparadores automáticos por ciclo de vida de cliente sin intervención manual.</p>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-semibold flex items-center gap-1 cursor-pointer hover:underline">
+<span>3 reglas activas</span>
+<span class="material-symbols-outlined text-[16px]">tune</span>
+</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Card 1: Cumpleaños -->
+<div class="bg-surface-container-lowest p-space-base rounded-xl shadow-sm flex flex-col justify-between space-y-space-md">
+<div class="space-y-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-9 h-9 rounded-xl bg-tertiary-fixed flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[20px]">cake</span>
+</div>
+<!-- Toggle ON -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">Cumpleaños de Clientes</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+              Envía felicitación instantánea y beneficio digital asignado (ej. Descuento 20% en lavado CARTOWN) a las 09:00 AM de su fecha natal.
+            </p>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-low/60 -mx-space-base -mb-space-base px-space-base py-space-sm rounded-b-xl flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary">insights</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Apertura:</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">92%</span>
+</div>
+<div class="flex items-center gap-1 text-primary cursor-pointer hover:text-primary-container">
+<span class="font-label-sm text-label-sm font-semibold">Configurar</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</div>
+</div>
+</div>
+<!-- Card 2: Membresía por vencer -->
+<div class="bg-surface-container-lowest p-space-base rounded-xl shadow-sm flex flex-col justify-between space-y-space-md">
+<div class="space-y-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-9 h-9 rounded-xl bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[20px]">event_repeat</span>
+</div>
+<!-- Toggle ON -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">Membresía por Vencer</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+              Avisa automáticamente 7 días antes de caducar el ciclo mensual para renovar y proteger beneficios acumulados en Mi QR.
+            </p>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-low/60 -mx-space-base -mb-space-base px-space-base py-space-sm rounded-b-xl flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary">autorenew</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Renovación:</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">64%</span>
+</div>
+<div class="flex items-center gap-1 text-primary cursor-pointer hover:text-primary-container">
+<span class="font-label-sm text-label-sm font-semibold">Configurar</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</div>
+</div>
+</div>
+<!-- Card 3: Cliente Inactivo -->
+<div class="bg-surface-container-lowest p-space-base rounded-xl shadow-sm flex flex-col justify-between space-y-space-md">
+<div class="space-y-space-sm">
+<div class="flex items-start justify-between">
+<div class="w-9 h-9 rounded-xl bg-error-container flex items-center justify-center text-on-error-container">
+<span class="material-symbols-outlined text-[20px]">person_off</span>
+</div>
+<!-- Toggle ON -->
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-9 h-5 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div>
+<h3 class="font-label-lg text-label-lg text-on-surface">Cliente Inactivo (+30 días)</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+              Envía un pase de reactivación exclusivo con caducidad estricta de 72 horas para fomentar el retorno inmediato al negocio.
+            </p>
+</div>
+</div>
+<div class="pt-space-sm bg-surface-container-low/60 -mx-space-base -mb-space-base px-space-base py-space-sm rounded-b-xl flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-secondary">replay</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Retorno:</span>
+<span class="font-label-sm text-label-sm font-bold text-on-surface">28%</span>
+</div>
+<div class="flex items-center gap-1 text-primary cursor-pointer hover:text-primary-container">
+<span class="font-label-sm text-label-sm font-semibold">Configurar</span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- MODULE 2: Compositor y Envío Segmentado con Simulador Móvil -->
+<section class="space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-2 h-5 bg-secondary rounded-full"></div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Compositor de Difusión y Push Segmentado</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Redacta y visualiza en tiempo real el mensaje push que recibirán los socios en su App.</p>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<span class="font-label-sm text-label-sm px-2.5 py-1 bg-surface-container rounded-full text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+          Simulador sincronizado
+        </span>
+</div>
+</div>
+<!-- Two-Column Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+<!-- Left Column: Notification Form (7 Cols) -->
+<div class="lg:col-span-7 bg-surface-container-lowest p-space-xl rounded-xl shadow-sm space-y-space-base">
+<!-- Segment Picker -->
+<div class="space-y-space-xs">
+<label class="font-label-sm text-label-sm font-semibold text-on-surface flex items-center justify-between">
+<span>Segmento Destinatario</span>
+<span class="text-primary font-normal cursor-pointer hover:underline">Crear nuevo filtro</span>
+</label>
+<div class="relative">
+<select class="w-full h-10 px-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary appearance-none pr-10 cursor-pointer" id="segment-selector">
+<option value="122">Seguidores de la empresa (122 clientes activos)</option>
+<option value="84">Socios con Membresía Silver activa (84 clientes)</option>
+<option value="36">Clientes en riesgo de baja (+25 días ausentes)</option>
+<option value="450">Usuarios en Higüey radio 15 km (450 usuarios)</option>
+<option value="1420">Toda la base de datos vinculada (1,420 usuarios)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-[18px]">expand_more</span>
+</div>
+</div>
+<!-- Push Title -->
+<div class="space-y-space-xs">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-label-sm font-semibold text-on-surface">Título de la Notificación</label>
+<span class="font-label-sm text-label-sm text-outline" id="title-counter">48 / 65 car.</span>
+</div>
+<div class="relative">
+<input class="w-full h-10 px-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary placeholder:text-outline" id="push-title-input" maxlength="65" placeholder="Ej. ¡Sorpresa especial de fin de semana!" type="text" value="¡2x1 este fin de semana en CARTOWN Higüey! 🚗✨">
+</div>
+</div>
+<!-- Push Message Body -->
+<div class="space-y-space-xs">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-label-sm font-semibold text-on-surface">Mensaje / Cuerpo de la Notificación</label>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-outline">Insertar tag:</span>
+<button class="font-label-sm text-label-sm px-1.5 py-0.5 bg-surface-container hover:bg-surface-container-high rounded text-primary font-medium" onclick="insertTag('{nombre}')" type="button">{nombre}</button>
+<button class="font-label-sm text-label-sm px-1.5 py-0.5 bg-surface-container hover:bg-surface-container-high rounded text-primary font-medium" onclick="insertTag('{dias_vencimiento}')" type="button">{dias}</button>
+</div>
+</div>
+<textarea class="w-full p-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary placeholder:text-outline resize-none leading-relaxed" id="push-body-input" placeholder="Escribe el mensaje atractivo para el cliente..." rows="3">Hola {nombre}, aprovecha este sábado y domingo tu beneficio de lavado exterior gratis con tu pase activo. ¡Te esperamos en la sucursal Higüey!</textarea>
+</div>
+<!-- Target In-App Destination -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<div class="space-y-space-xs">
+<label class="font-label-sm text-label-sm font-semibold text-on-surface">Destino en la App Membego</label>
+<div class="relative">
+<select class="w-full h-10 px-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary appearance-none pr-10 cursor-pointer" id="deep-link-select">
+<option value="offers">Inicio &gt; Ofertas relámpago</option>
+<option value="qr">Mi QR (Pase de Membresía)</option>
+<option value="business">Perfil Empresa (CARTOWN Higüey)</option>
+<option value="services">Catálogo de Servicios y Lavados</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-[18px]">link</span>
+</div>
+</div>
+<div class="space-y-space-xs">
+<label class="font-label-sm text-label-sm font-semibold text-on-surface">Programación de Envío</label>
+<div class="relative">
+<select class="w-full h-10 px-space-md bg-surface-container-low rounded-xl font-body-sm text-body-sm text-on-surface focus:outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary appearance-none pr-10 cursor-pointer">
+<option>Enviar inmediatamente</option>
+<option>Hoy a las 18:00 (Hora pico)</option>
+<option>Mañana sábado a las 08:30 AM</option>
+<option>Personalizado...</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none text-[18px]">schedule</span>
+</div>
+</div>
+</div>
+<!-- Summary & Primary Button -->
+<div class="pt-space-sm flex flex-col sm:flex-row sm:items-center justify-between gap-space-md bg-surface-container-low/40 -mx-space-xl -mb-space-xl p-space-xl rounded-b-xl">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[18px]">send</span>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface font-semibold">Impacto instantáneo estimado</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]"><span class="font-bold text-primary" id="target-count">122</span> notificaciones directas push</p>
+</div>
+</div>
+<button class="h-10 px-space-xl bg-primary hover:bg-primary-container active:scale-[0.99] text-on-primary rounded-xl font-label-md text-label-md flex items-center justify-center gap-space-xs shadow-sm transition-all" id="send-btn" type="button">
+<span class="material-symbols-outlined text-[18px]">campaign</span>
+<span id="btn-text">Enviar Notificación a 122 Clientes</span>
+</button>
+</div>
+</div>
+<!-- Right Column: Interactive Mobile Mockup (5 Cols) -->
+<div class="lg:col-span-5 flex flex-col items-center">
+<div class="w-full max-w-[340px] bg-inverse-surface text-inverse-on-surface p-3 rounded-[32px] shadow-xl relative">
+<!-- Smartphone Outer Rim and Speaker Notch -->
+<div class="w-24 h-4 bg-surface-container-lowest/20 rounded-full mx-auto mb-2 flex items-center justify-center">
+<div class="w-2.5 h-2.5 rounded-full bg-surface-container-lowest/40"></div>
+</div>
+<!-- Smartphone Screen Area -->
+<div class="bg-surface rounded-[24px] overflow-hidden flex flex-col min-h-[510px] text-on-surface">
+<!-- Mobile Top Bar with Cyan Gradient -->
+<div class="bg-gradient-to-r from-primary to-secondary text-on-primary px-3 pt-2 pb-2">
+<div class="flex justify-between items-center text-[11px] font-label-sm mb-1.5 opacity-90">
+<span>9:41</span>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">signal_cellular_alt</span>
+<span class="material-symbols-outlined text-[13px]">wifi</span>
+<span class="material-symbols-outlined text-[13px]">battery_full</span>
+</div>
+</div>
+<!-- Search Bar & Scan Mock inside App -->
+<div class="h-8 bg-surface-container-lowest rounded-lg flex items-center justify-between px-2.5 shadow-sm text-on-surface">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-outline text-[16px]">search</span>
+<span class="font-body-sm text-[11px] text-outline">Buscar en CARTOWN...</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[16px]">qr_code_scanner</span>
+</div>
+</div>
+<!-- Sub Location Banner in App Shell Mobile Style -->
+<div class="bg-surface-container-low px-3 py-1 flex items-center justify-between text-[11px] text-primary">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">location_on</span>
+<span class="truncate font-label-sm">Higüey 23000 · CARTOWN Wash</span>
+</div>
+<span class="material-symbols-outlined text-[14px]">expand_more</span>
+</div>
+<!-- Lock Screen / In-App Push Floating Card Preview (The Highlight) -->
+<div class="p-3 space-y-3 flex-1 flex flex-col justify-start">
+<div class="text-center py-1">
+<span class="font-label-sm text-[10px] uppercase tracking-wider text-outline">Vista Previa Push Flotante</span>
+</div>
+<!-- Push Notification Box Simulator -->
+<div class="bg-surface-container-lowest p-3 rounded-2xl shadow-md space-y-2 transform transition-transform hover:scale-[1.02]">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<div class="w-5 h-5 rounded-md bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white text-[10px] font-bold">M</div>
+<span class="font-label-sm text-[11px] font-bold text-on-surface tracking-tight">MEMBEGO</span>
+<span class="text-[9px] text-outline">• ahora</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[14px]">notifications</span>
+</div>
+<div class="space-y-0.5">
+<h4 class="font-label-md text-label-md font-bold text-on-surface leading-tight" id="preview-title">
+                    ¡2x1 este fin de semana en CARTOWN Higüey! 🚗✨
+                  </h4>
+<p class="font-body-sm text-[11px] text-on-surface-variant leading-normal" id="preview-body">
+                    Hola Ramón, aprovecha este sábado y domingo tu beneficio de lavado exterior gratis con tu pase activo. ¡Te esperamos en la sucursal Higüey!
+                  </p>
+</div>
+<div class="pt-1.5 flex items-center justify-between text-[10px] text-primary font-semibold">
+<span class="flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px]">touch_app</span>
+                    Toca para canjear
+                  </span>
+<span class="text-outline text-[9px] uppercase tracking-wider" id="preview-link">Ofertas Relámpago</span>
+</div>
+</div>
+<!-- App Background Mockup Content -->
+<div class="space-y-2 opacity-50 pointer-events-none pt-2">
+<div class="h-16 bg-surface-container-high rounded-xl flex items-center px-3 gap-2">
+<div class="w-10 h-10 rounded-lg bg-surface-container-lowest"></div>
+<div class="space-y-1 flex-1">
+<div class="w-24 h-2.5 bg-surface-container-lowest rounded"></div>
+<div class="w-32 h-2 bg-surface-container-lowest rounded"></div>
+</div>
+</div>
+<div class="h-16 bg-surface-container-high rounded-xl flex items-center px-3 gap-2">
+<div class="w-10 h-10 rounded-lg bg-surface-container-lowest"></div>
+<div class="space-y-1 flex-1">
+<div class="w-20 h-2.5 bg-surface-container-lowest rounded"></div>
+<div class="w-28 h-2 bg-surface-container-lowest rounded"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Dock 4-Slot Standard Membego Mobile -->
+<div class="h-12 bg-surface-container-lowest px-4 flex items-center justify-around text-on-surface-variant shadow-sm">
+<div class="flex flex-col items-center text-primary">
+<span class="material-symbols-outlined text-[18px]">home</span>
+<span class="font-label-sm text-[9px]">Inicio</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="material-symbols-outlined text-[18px]">person</span>
+<span class="font-label-sm text-[9px]">Cuenta</span>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[14px]">qr_code_2</span>
+</div>
+<span class="font-label-sm text-[9px]">Mi QR</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="material-symbols-outlined text-[18px]">menu</span>
+<span class="font-label-sm text-[9px]">Menú</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- MODULE 3: Historial de Campañas Enviadas y Métricas (Basado en captura 107) -->
+<section class="space-y-space-md">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<div class="w-2 h-5 bg-tertiary rounded-full"></div>
+<div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Historial de Campañas y Notificaciones Enviadas</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Rendimiento analítico de apertura, conversión y canjes en punto de venta.</p>
+</div>
+</div>
+<!-- Filters Strip -->
+<div class="flex items-center gap-space-xs overflow-x-auto">
+<button class="px-space-md py-1 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm font-semibold whitespace-nowrap shadow-sm">Todas (24)</button>
+<button class="px-space-md py-1 rounded-xl bg-surface-container-lowest hover:bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-medium whitespace-nowrap transition-colors">Push App</button>
+<button class="px-space-md py-1 rounded-xl bg-surface-container-lowest hover:bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-medium whitespace-nowrap transition-colors">Automatizadas</button>
+<button class="px-space-md py-1 rounded-xl bg-surface-container-lowest hover:bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm font-medium whitespace-nowrap transition-colors">Programadas</button>
+</div>
+</div>
+<!-- Data Table Container -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low font-label-sm text-label-sm uppercase tracking-wider text-outline">
+<th class="px-space-base py-space-md">Campaña &amp; Mensaje</th>
+<th class="px-space-base py-space-md">Canal</th>
+<th class="px-space-base py-space-md">Audiencia</th>
+<th class="px-space-base py-space-md text-center">Tasa Apertura</th>
+<th class="px-space-base py-space-md text-center">Canjes / Clics</th>
+<th class="px-space-base py-space-md">Estado</th>
+<th class="px-space-base py-space-md text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-transparent font-body-sm text-body-sm text-on-surface">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-base py-space-md">
+<div class="font-label-md text-label-md font-bold text-on-surface">Flash Weekend: -30% Detailing</div>
+<div class="text-on-surface-variant text-[11px] truncate max-w-xs">Aviso express de lluvia con descuento especial en cera sintética.</div>
+<div class="text-[10px] text-outline mt-0.5">Enviado ayer a las 17:40 por Starlin P.</div>
+</td>
+<td class="px-space-base py-space-md">
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-semibold">
+<span class="material-symbols-outlined text-[14px]">notifications</span>
+                  Push App
+                </span>
+</td>
+<td class="px-space-base py-space-md">
+<div class="font-label-sm text-label-sm font-semibold">412 clientes</div>
+<div class="text-[11px] text-on-surface-variant">Socios Activos Higüey</div>
+</td>
+<td class="px-space-base py-space-md text-center">
+<div class="font-label-md text-label-md font-bold text-on-surface">78.4%</div>
+<div class="w-16 bg-surface-container-high h-1.5 rounded-full mx-auto mt-1 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 78.4%"></div>
+</div>
+</td>
+<td class="px-space-base py-space-md text-center">
+<span class="font-label-md text-label-md font-bold text-primary">89 canjes</span>
+<span class="text-[11px] text-on-surface-variant block">RD$ 48,200 atrib.</span>
+</td>
+<td class="px-space-base py-space-md">
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                  Completada
+                </span>
+</td>
+<td class="px-space-base py-space-md text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors" title="Duplicar" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors" title="Ver Analítica" type="button">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-base py-space-md">
+<div class="font-label-md text-label-md font-bold text-on-surface">Recordatorio Ciclo Mensual: Pase Silver</div>
+<div class="text-on-surface-variant text-[11px] truncate max-w-xs">Renovación automática para mantener cupón de aspirado profundo.</div>
+<div class="text-[10px] text-outline mt-0.5">Disparador de Automatización • Activo continuo</div>
+</td>
+<td class="px-space-base py-space-md">
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-semibold">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+                  Trigger Auto
+                </span>
+</td>
+<td class="px-space-base py-space-md">
+<div class="font-label-sm text-label-sm font-semibold">84 clientes / mes</div>
+<div class="text-[11px] text-on-surface-variant">Por vencer (-7d)</div>
+</td>
+<td class="px-space-base py-space-md text-center">
+<div class="font-label-md text-label-md font-bold text-on-surface">91.2%</div>
+<div class="w-16 bg-surface-container-high h-1.5 rounded-full mx-auto mt-1 overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 91.2%"></div>
+</div>
+</td>
+<td class="px-space-base py-space-md text-center">
+<span class="font-label-md text-label-md font-bold text-primary">54 renovados</span>
+<span class="text-[11px] text-on-surface-variant block">64.2% retención</span>
+</td>
+<td class="px-space-base py-space-md">
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+                  En curso
+                </span>
+</td>
+<td class="px-space-base py-space-md text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors" title="Duplicar" type="button">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors" title="Ver Analítica" type="button">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors">
+<td class="px-space-base py-space-md">
+<div class="font-label-md text-label-md font-bold text-on-surface">Sorteo VIP: Día del Padre CARTOWN</div>
+<div class="text-on-surface-variant text-[11px] truncate max-w-xs">Invitación exclusiva a clientes con más de 12 visitas en el año.</div>
+<div class="text-[10px] text-outline mt-0.5">Programada para 28 de Julio, 08:00 AM</div>
+</td>
+<td class="px-space-base py-space-md">
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-semibold">
+<span class="material-symbols-outlined text-[14px]">all_inbox</span>
+                  Push + Correo
+                </span>
+</td>
+<td class="px-space-base py-space-md">
+<div class="font-label-sm text-label-sm font-semibold">185 socios VIP</div>
+<div class="text-[11px] text-on-surface-variant">Frecuencia Alta</div>
+</td>
+<td class="px-space-base py-space-md text-center">
+<span class="text-outline text-label-sm font-medium">Pendiente</span>
+</td>
+<td class="px-space-base py-space-md text-center">
+<span class="text-outline text-label-sm font-medium">-</span>
+</td>
+<td class="px-space-base py-space-md">
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface font-semibold">
+<span class="material-symbols-outlined text-[12px]">schedule</span>
+                  Programada
+                </span>
+</td>
+<td class="px-space-base py-space-md text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors" title="Editar" type="button">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<button class="p-1 rounded-lg text-on-surface-variant hover:text-error hover:bg-surface-container transition-colors" title="Cancelar Envío" type="button">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer / Pagination Status -->
+<div class="px-space-base py-space-sm bg-surface-container-low flex items-center justify-between font-body-sm text-[12px] text-on-surface-variant">
+<span>Mostrando 3 de 24 campañas globales registradas</span>
+<div class="flex items-center gap-2">
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest text-on-surface disabled:opacity-40" disabled="">Anterior</button>
+<button class="px-2.5 py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-on-surface">Siguiente</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<script>
+  // Dynamic Real-Time Sync between Composer and Mobile Preview
+  const titleInput = document.getElementById('push-title-input');
+  const bodyInput = document.getElementById('push-body-input');
+  const previewTitle = document.getElementById('preview-title');
+  const previewBody = document.getElementById('preview-body');
+  const previewLink = document.getElementById('preview-link');
+  const titleCounter = document.getElementById('title-counter');
+  const deepLinkSelect = document.getElementById('deep-link-select');
+  const segmentSelect = document.getElementById('segment-selector');
+  const targetCount = document.getElementById('target-count');
+  const btnText = document.getElementById('btn-text');
+  const sendBtn = document.getElementById('send-btn');
+
+  if (titleInput && previewTitle && titleCounter) {
+    titleInput.addEventListener('input', (e) => {
+      const val = e.target.value;
+      previewTitle.textContent = val.trim() !== '' ? val : 'Título de la notificación';
+      titleCounter.textContent = `${val.length} / 65 car.`;
+    });
+  }
+
+  if (bodyInput && previewBody) {
+    bodyInput.addEventListener('input', (e) => {
+      const val = e.target.value;
+      // replace mockup placeholders
+      const parsed = val.replace(/{nombre}/g, 'Ramón').replace(/{dias_vencimiento}/g, '7');
+      previewBody.textContent = parsed.trim() !== '' ? parsed : 'Cuerpo del mensaje en preview...';
+    });
+  }
+
+  if (deepLinkSelect && previewLink) {
+    deepLinkSelect.addEventListener('change', (e) => {
+      const selectedOption = e.target.options[e.target.selectedIndex].text;
+      previewLink.textContent = selectedOption.split('>').pop().trim();
+    });
+  }
+
+  if (segmentSelect && targetCount && btnText) {
+    segmentSelect.addEventListener('change', (e) => {
+      const count = e.target.value;
+      targetCount.textContent = count;
+      btnText.textContent = `Enviar Notificación a ${count} Clientes`;
+    });
+  }
+
+  window.insertTag = function(tag) {
+    if (!bodyInput) return;
+    const start = bodyInput.selectionStart;
+    const end = bodyInput.selectionEnd;
+    const text = bodyInput.value;
+    bodyInput.value = text.substring(0, start) + tag + text.substring(end);
+    bodyInput.focus();
+    bodyInput.selectionStart = bodyInput.selectionEnd = start + tag.length;
+    // Trigger preview update
+    bodyInput.dispatchEvent(new Event('input'));
+  };
+
+  if (sendBtn) {
+    sendBtn.addEventListener('click', () => {
+      const originalHtml = sendBtn.innerHTML;
+      sendBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span><span>Enviando difusión...</span>`;
+      sendBtn.disabled = true;
+      setTimeout(() => {
+        sendBtn.innerHTML = `<span class="material-symbols-outlined text-[18px]">check_circle</span><span>¡Enviado con éxito!</span>`;
+        sendBtn.classList.remove('bg-primary');
+        sendBtn.classList.add('bg-secondary');
+        setTimeout(() => {
+          sendBtn.innerHTML = originalHtml;
+          sendBtn.disabled = false;
+          sendBtn.classList.add('bg-primary');
+          sendBtn.classList.remove('bg-secondary');
+        }, 2500);
+      }, 900);
+    });
+  }
+</script></main></div></body></html>

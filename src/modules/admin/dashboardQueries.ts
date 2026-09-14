@@ -1,5 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
 import { contarColasDePago } from '@/modules/pagos/colasConteo'
+import { whereTransferencias } from '@/modules/pagos/colas'
 import { whereCobrado } from '@/modules/pagos/cobrado'
 import { diaLocal, limiteDiaLocal, sumarDias } from '@/modules/reportes/rango'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
@@ -49,6 +50,19 @@ export interface DashboardEjecutivo {
   actividad: { id: string; accion: string; entidadTipo: string; fecha: Date; autor: string | null }[]
   /** Recomendaciones automáticas basadas en los datos. */
   recomendaciones: { texto: string; href: string; cta: string }[]
+  // ── Contrato Stitch (Resumen Operativo): todo real, nada estimado ──
+  /** Cobrado el mes ANTERIOR completo, para el delta «vs mes anterior». */
+  ingresosMesAnterior: number
+  /** Los 2 planes con más membresías vigentes: «18 Silver · 5 Gold». */
+  topPlanes: { nombre: string; total: number }[]
+  /** Monto declarado en las transferencias por validar. */
+  transferenciasMonto: number
+  /** Monto de la última transferencia recibida en esa cola. */
+  ultimaTransferencia: number | null
+  /** Nombres (3) de membresías que vencen en 7 días, para la pila de avatares. */
+  porVencerNombres: string[]
+  /** Citas de hoy (pendientes o confirmadas), en el día del negocio. */
+  citasHoy: number
 }
 
 export async function getDashboardEjecutivo(
@@ -73,6 +87,11 @@ export async function getDashboardEjecutivo(
   const hoyDia = diaLocal(now, timeZone)
   const inicioHoy = limiteDiaLocal(hoyDia, timeZone)
   const inicioMes = limiteDiaLocal(`${hoyDia.slice(0, 7)}-01`, timeZone)
+  // Primer día del mes ANTERIOR, en el calendario del negocio.
+  const [anioStr, mesStr] = hoyDia.split('-')
+  const mesPrevio = new Date(Date.UTC(Number(anioStr), Number(mesStr) - 2, 1))
+  const inicioMesAnterior = limiteDiaLocal(mesPrevio.toISOString().slice(0, 10), timeZone)
+  const finHoy = limiteDiaLocal(sumarDias(hoyDia, 1), timeZone)
   const primerDiaSerie = sumarDias(hoyDia, -13)
   const hace14dias = limiteDiaLocal(primerDiaSerie, timeZone)
   const vigente = membresiaVigente(now)
@@ -208,6 +227,74 @@ export async function getDashboardEjecutivo(
    * tarifa) y traerla a memoria significaría cargar todas las membresías
    * vigentes en cada carga del panel. Si falla, cae a 0 y el panel lo dice.
    */
+  const [
+    ingresosMesAnterior,
+    topPlanesRaw,
+    transferenciasAgg,
+    ultimaTransferenciaRow,
+    porVencerRows,
+    citasHoy,
+  ] = await Promise.all([
+    tx.membership
+      .aggregate({
+        where: whereCobrado(inicioMesAnterior, inicioMes, { companyId }),
+        _sum: { montoPagado: true },
+      })
+      .then((a) => Number(a._sum.montoPagado ?? 0))
+      .catch(() => 0),
+    tx.membership
+      .groupBy({
+        by: ['planId'],
+        where: { companyId, ...vigente },
+        _count: { _all: true },
+        orderBy: { _count: { planId: 'desc' } },
+        take: 2,
+      })
+      .catch(() => []),
+    tx.membership
+      .aggregate({ where: whereTransferencias(companyId), _sum: { montoPagado: true } })
+      .then((a) => Number(a._sum.montoPagado ?? 0))
+      .catch(() => 0),
+    tx.membership
+      .findFirst({
+        where: whereTransferencias(companyId),
+        orderBy: { updatedAt: 'desc' },
+        select: { montoPagado: true },
+      })
+      .catch(() => null),
+    tx.membership
+      .findMany({
+        where: { companyId, estado: 'ACTIVA', fechaVencimiento: { gte: now, lte: en7dias } },
+        orderBy: { fechaVencimiento: 'asc' },
+        take: 3,
+        select: { cliente: { select: { nombre: true } } },
+      })
+      .catch(() => []),
+    tx.cita
+      .count({
+        where: {
+          companyId,
+          inicio: { gte: inicioHoy, lt: finHoy },
+          estado: { in: ['PENDIENTE', 'CONFIRMADA'] },
+        },
+      })
+      .catch(() => 0),
+  ])
+
+  // Nombres de plan para el top (2 ids como mucho).
+  const planesNombrados = topPlanesRaw.length
+    ? await tx.plan
+        .findMany({
+          where: { id: { in: topPlanesRaw.map((t) => t.planId) } },
+          select: { id: true, nombre: true },
+        })
+        .catch(() => [])
+    : []
+  const topPlanes = topPlanesRaw.map((t) => ({
+    nombre: planesNombrados.find((pl) => pl.id === t.planId)?.nombre ?? 'Plan',
+    total: t._count._all,
+  }))
+
   const recurrenteEsperado = await tx
     .$queryRaw<{ total: number }[]>`
       SELECT COALESCE(SUM(COALESCE(tarifa.precio, p.precio)), 0)::float8 AS total
@@ -330,6 +417,12 @@ export async function getDashboardEjecutivo(
     topPromos,
     actividad,
     recomendaciones,
+    ingresosMesAnterior,
+    topPlanes,
+    transferenciasMonto: transferenciasAgg,
+    ultimaTransferencia: ultimaTransferenciaRow?.montoPagado != null ? Number(ultimaTransferenciaRow.montoPagado) : null,
+    porVencerNombres: porVencerRows.map((r) => r.cliente?.nombre ?? '').filter(Boolean),
+    citasHoy,
   }
   })
 }

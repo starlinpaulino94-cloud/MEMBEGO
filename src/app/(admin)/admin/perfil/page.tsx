@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas, sinEmpresa } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { ExternalLink, AlertCircle, Building2 } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
@@ -106,9 +106,7 @@ export default async function PerfilEmpresaPage({
     // Las dos funciones de categorías abren su propia transacción: fuera del
     // envoltorio, que anidarlas agota el pool con el pooler por delante.
     ;[[company, plantilla], categories, selectedCategoryIds] = await Promise.all([
-      conEmpresaOTodas(
-        companyId,
-        'perfil: sin empresa activa es el superadmin',
+      conEmpresa(companyId,
         (tx) =>
           Promise.all([
             tx.company.findUnique({ where: { id: companyId } }),
@@ -244,3 +242,4 @@ export default async function PerfilEmpresaPage({
     </div>
   )
 }
+

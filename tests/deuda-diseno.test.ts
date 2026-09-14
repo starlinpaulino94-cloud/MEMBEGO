@@ -40,7 +40,7 @@ const MEDIDAS = MEDIDAS_SIN_TIPAR as Record<string, { que: string; porque: strin
  */
 const TECHOS: Record<string, number> = {
   hexEnInterfaz: 121,
-  colorCrudo: 170,
+  colorCrudo: 147,
   radiosFuera: 0,
   microTextos: 0,
   sombrasArbitrarias: 0,

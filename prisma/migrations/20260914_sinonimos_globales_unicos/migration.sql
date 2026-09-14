@@ -1,0 +1,42 @@
+-- ============================================================================
+-- Sinónimos globales: un solo término por idioma          (F2 · aditiva)
+-- ============================================================================
+--
+-- QUÉ ARREGLA
+--
+-- `BusquedaSinonimo` declara `@@unique([companyId, idioma, termino])`, pero en
+-- PostgreSQL dos NULL no son iguales entre sí: el único NO impide dos filas
+-- globales («carro» → «vehículo» y «carro» → «coche») con el mismo término.
+--
+-- Y `guardarSinonimo` resuelve el alta con `findFirst` + `create`, porque
+-- Prisma no admite NULL en el `where` de un upsert compuesto. Dos altas a la
+-- vez del mismo término global pasan las dos por el `findFirst` sin encontrar
+-- nada y crean las dos filas. A partir de ahí la expansión de la búsqueda
+-- devuelve resultados distintos según qué fila lea primero.
+--
+-- El índice parcial cubre justo el hueco que el único de Prisma no puede
+-- expresar. Los sinónimos DE EMPRESA siguen cubiertos por aquel.
+--
+-- POR QUÉ AQUÍ NO HAY NADA DE RLS
+--
+-- Las tres tablas de la migración 20260913 no necesitan políticas propias. El
+-- aislamiento de MembeGo no se escribe tabla por tabla: la Capa 1
+-- (`20260771_rls_barrera_publica`) recorre `pg_tables` y la Capa 2
+-- (`migrations_manual/2026-07-rls-capa2-aislamiento.sql`) deduce la política
+-- del esquema. `home_revisiones` y `busqueda_sinonimos` entran por Nivel 0
+-- (tienen `companyId`); `home_bloques` entra por Nivel N a través de su clave
+-- foránea NOT NULL `revisionId`.
+--
+-- Escribirlas a mano aquí, además de sobrar, rompía tres cosas: chocaba con el
+-- nombre `membego_inquilino` que ya crea la Capa 2 (y `CREATE POLICY` no es
+-- idempotente, así que abortaba la migración entera), añadía FORCE ROW LEVEL
+-- SECURITY —que la Capa 2 evita a propósito, porque alcanzaría también al
+-- dueño que ejecuta las migraciones— y creaba las políticas sin `TO
+-- membego_app`, aplicándolas a todos los roles.
+--
+-- Rollback: DROP INDEX.
+-- ============================================================================
+
+CREATE UNIQUE INDEX IF NOT EXISTS "busqueda_sinonimos_global_idioma_termino_key"
+ON "busqueda_sinonimos" ("idioma", "termino")
+WHERE "companyId" IS NULL;

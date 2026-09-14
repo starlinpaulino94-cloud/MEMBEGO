@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { PostForm } from '@/components/admin/PostForm'
@@ -12,9 +12,7 @@ export default async function NuevaPublicacionPage() {
   const companyId = await resolveCompanyId(user)
 
   const campanas = companyId
-    ? await conEmpresaOTodas(
-      companyId,
-      'publicaciones · nuevo: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    ? await conEmpresa(companyId,
       (tx) => tx.campana.findMany({
           where: { companyId, activo: true },
           select: { id: true, nombre: true },
@@ -35,3 +33,4 @@ export default async function NuevaPublicacionPage() {
     </div>
   )
 }
+

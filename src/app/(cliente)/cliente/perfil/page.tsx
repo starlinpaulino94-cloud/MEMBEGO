@@ -1,326 +1,409 @@
 import Link from 'next/link'
-import { membresiaVigente } from '@/modules/membresia/vigencia'
+import Image from 'next/image'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { getClientePerfil } from '@/modules/cliente/queries'
-import { ProfileForm } from '@/components/cliente/ProfileForm'
-import { IdMembegoCard } from '@/components/cliente/IdMembegoCard'
-import { ensureCodigoCorto } from '@/lib/referidos'
-import { WhatsAppButton } from '@/components/cliente/WhatsAppButton'
-import { ChangePasswordForm } from '@/components/cliente/ChangePasswordForm'
-import { UbicacionViviendaForm } from '@/components/cliente/UbicacionViviendaForm'
-import { LocationService } from '@/modules/geo/ubicaciones/service'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getClienteAllMemberships, getClientePerfil } from '@/modules/cliente/queries'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
+import { getSeguidasIds } from '@/modules/social/queries'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/system/EmptyState'
 import {
   Car,
-  User,
-  ShieldCheck,
-  Receipt,
-  History,
-  Building2,
-  LifeBuoy,
-  WalletCards,
-  Gift,
-  MapPin,
-  Lock,
   ChevronRight,
+  Gift,
+  QrCode,
+  Settings,
+  Store,
+  TicketPercent,
 } from 'lucide-react'
 import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Mi perfil' }
+export const metadata = { title: 'Mi cuenta' }
+
+type TabId = 'todas' | 'favoritas' | 'activas' | 'vencidas'
+
+const TABS: { id: TabId; label: string; href: string }[] = [
+  { id: 'todas', label: 'Todas mis cuentas', href: '/cliente/empresas' },
+  { id: 'favoritas', label: 'Favoritos', href: '/cliente/perfil?tab=favoritas' },
+  { id: 'activas', label: 'Pases activos', href: '/cliente/perfil?tab=activas' },
+  { id: 'vencidas', label: 'Vencidas', href: '/cliente/perfil?tab=vencidas' },
+]
+
+function fmtFechaCorta(d: Date) {
+  return new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'short' }).format(d)
+}
 
 /**
- * CX2 · Perfil = centro de identidad del usuario.
+ * CX2 · Cuenta = centro de la persona (contrato Stitch S02).
  *
- * Estructura unificada: hero de identidad (avatar + nombre + resumen en
- * números) → accesos rápidos → configuración por categorías (Cuenta,
- * Seguridad, Vehículos). Los formularios existentes se reutilizan tal cual:
- * cero cambios de lógica de negocio.
+ * Aquí vive lo que la persona USA: membresías, beneficios, empresas
+ * frecuentes, la invitación. Lo que la persona CONFIGURA (datos, seguridad,
+ * soporte, sesión) se mudó a `/cliente/ajustes`, detrás del engranaje —
+ * decisión del usuario (2026-09-09): Cuenta y Configuración son pantallas
+ * separadas.
  */
-export default async function PerfilPage() {
+export default async function PerfilPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const user = await requireRole('CLIENTE')
 
-  // ANTES decía «Tu cuenta no está completamente configurada». Ese mensaje
-  // se escribió para una sesión ROTA; desde que un cliente puede existir sin
-  // empresa, es el estado normal de quien acaba de registrarse. Decirle a
-  // alguien que su cuenta está mal y que llame a soporte, cuando lo único
-  // que pasa es que aún no se ha unido a ningún negocio, es mandarlo a
-  // resolver un problema que no tiene.
   if (!user.metadata.clienteId) {
     return <SinEmpresaTodavia que="ficha en ningún negocio" detalle="Tu cuenta de Membego está lista. Los datos de contacto se completan al unirte a tu primer negocio." />
   }
+
+  const sp = await searchParams
+  const tab: TabId =
+    sp.tab === 'favoritas' || sp.tab === 'activas' || sp.tab === 'vencidas'
+      ? sp.tab
+      : 'todas'
 
   let cliente = null
   let loadError = false
   try {
     cliente = await getClientePerfil(user.metadata.clienteId)
   } catch (e) {
-    // El log clasifica la causa (schema drift / conexión / otro) con remedio;
-    // getClientePerfil ya degradó lo degradable, así que llegar aquí es real.
     const { logErrorBd } = await import('@/lib/prisma-errors')
     logErrorBd('cliente-perfil', e, { clienteId: user.metadata.clienteId })
     loadError = true
   }
 
-  if (loadError) return <p className="text-muted-foreground">No pudimos cargar tu información. Intenta de nuevo más tarde.</p>
+  if (loadError)
+    return <p className="text-muted-foreground">No pudimos cargar tu información. Intenta de nuevo más tarde.</p>
   if (!cliente) return <p className="text-muted-foreground">No se encontró tu información.</p>
 
-  const isCarwash = cliente.company.type === 'carwash'
+  const ahora = new Date()
 
-  // Resumen del hero (realce, nunca bloquea la página).
-  const [
-    whatsapp,
-    membresiasActivas,
-    empresasSeguidas,
-    beneficiosActivos,
-    ubicacion,
-  ] = await Promise.all([
-    // Lo de la empresa del cliente, en su contexto y en una sola transacción.
-    conEmpresa(cliente.companyId, (tx) =>
-      tx.whatsAppConfig.findUnique({ where: { companyId: cliente.companyId } })
-    ).catch(() => null),
-    conEmpresa(cliente.companyId, (tx) =>
-      tx.membership.count({
-        where: {
-          cliente: { id: cliente.id },
-          // La condición estaba copiada a mano aquí; es la misma que define
-          // `membresiaVigente`, y con dos copias solo hace falta que una se
-          // quede atrás para que dos pantallas discrepen.
-          ...membresiaVigente(),
-        },
-      })
-    ).catch(() => 0),
-    // A cuántas empresas SIGUE esta persona: la cuenta cruza inquilinos por
-    // definición — es lo que hace interesante el número.
+  const [memberships, compras, seguidas, beneficiosCount] = await Promise.all([
+    getClienteAllMemberships(user.supabaseId, cliente.id).catch(() => []),
+    (async () => {
+      const ids = await misClienteIds(user.supabaseId).catch(() => [] as string[])
+      if (ids.length === 0) return []
+      return sinEmpresa('cuenta: beneficios activos de la persona', (tx) =>
+        tx.productoCompra.findMany({
+          where: { clienteId: { in: ids }, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
+          select: {
+            id: true,
+            usosRestantes: true,
+            fechaVencimiento: true,
+            company: { select: { name: true } },
+            promocion: { select: { titulo: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        })
+      ).catch(() => [])
+    })(),
     user.metadata.dbUserId
-      ? sinEmpresa('perfil: seguir empresas es de la persona y cruza inquilinos', (tx) =>
-          tx.companyFollow.count({ where: { userId: user.metadata.dbUserId! } })
-        ).catch(() => 0)
-      : Promise.resolve(0),
+      ? getSeguidasIds(user.metadata.dbUserId).catch(() => new Set<string>())
+      : Promise.resolve(new Set<string>()),
     conEmpresa(cliente.companyId, (tx) =>
       tx.productoCompra.count({
         where: { clienteId: cliente.id, estado: 'ACTIVA', usosRestantes: { gt: 0 } },
       })
     ).catch(() => 0),
-    user.metadata.dbUserId
-      ? LocationService.primaria(user.metadata.dbUserId).catch(() => null)
-      : Promise.resolve(null),
   ])
 
-  const zonaActual =
-    ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
+  const vigente = (m: { estado: string; fechaVencimiento: Date | null }) =>
+    m.estado === 'ACTIVA' && (!m.fechaVencimiento || m.fechaVencimiento > ahora)
+  const vencida = (m: { estado: string; fechaVencimiento: Date | null }) =>
+    m.estado === 'VENCIDA' || (m.fechaVencimiento !== null && m.fechaVencimiento <= ahora)
 
-  // Regalos P2P · R1: el @ID con el que otros pueden enviarle regalos. Se
-  // genera la primera vez; si la BD aún no está migrada, la tarjeta se oculta
-  // sin romper el perfil.
-  const idMembego = await ensureCodigoCorto(cliente.id).catch(() => null)
+  const activas = memberships.filter(vigente)
+  const vencidas = memberships.filter(vencida)
+  const favoritas = memberships.filter((m) => seguidas.has(m.companyId))
+  const visibles =
+    tab === 'activas' ? activas : tab === 'vencidas' ? vencidas : tab === 'favoritas' ? favoritas : memberships
+  const conteos: Record<TabId, number> = {
+    todas: memberships.length,
+    favoritas: favoritas.length,
+    activas: activas.length,
+    vencidas: vencidas.length,
+  }
 
-  const iniciales = cliente.nombre.trim().slice(0, 2).toUpperCase()
+  const empresas = [...new Map(memberships.map((m) => [m.companyId, m.company])).values()]
+  const nombre = cliente.nombre.split(' ')[0] || 'ti'
+  const iniciales = cliente.nombre.trim().slice(0, 1).toUpperCase()
 
-  const resumen = [
-    { icon: WalletCards, valor: membresiasActivas, label: 'Membresías', href: '/mis-membresias' },
-    { icon: Building2, valor: empresasSeguidas, label: 'Empresas', href: '/cliente/empresas' },
-    { icon: Gift, valor: beneficiosActivos, label: 'Beneficios', href: '/cliente/mis-promociones' },
-  ]
-
-  const accesos = [
-    { icon: Receipt, label: 'Mis pagos', desc: 'Estado e historial', href: '/cliente/pagos' },
-    { icon: History, label: 'Historial', desc: 'Tus visitas y canjes', href: '/cliente/historial' },
-    ...(isCarwash
-      ? [
-          {
-            icon: Car,
-            label: 'Mis vehículos',
-            desc: 'Los que usas en tus visitas',
-            href: '/cliente/vehiculos',
-          },
-        ]
-      : []),
-    { icon: Building2, label: 'Mis empresas', desc: 'Las que sigues', href: '/cliente/empresas' },
-    { icon: LifeBuoy, label: 'Ayuda', desc: 'Soporte y tickets', href: '/cliente/ayuda' },
+  const tiles = [
+    { label: 'Membresías', href: '/mis-membresias' },
+    { label: 'Actividad y citas', href: '/cliente/citas' },
+    { label: 'Mis pagos', href: '/cliente/pagos' },
+    { label: 'Beneficios', href: '/cliente/mis-promociones' },
   ]
 
   return (
-    <div className="space-y-6 animate-fade-up">
-      {/* ── Hero de identidad ─────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden rounded-xl border border-border bg-card elevation-1">
-        <div aria-hidden className="absolute inset-x-0 top-0 h-20 bg-gradient-brand opacity-90" />
-        <div className="relative px-5 pb-5 pt-9">
-          <div className="flex items-end justify-between gap-3">
-            {cliente.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={cliente.avatarUrl}
-                alt=""
-                className="h-20 w-20 rounded-2xl border-4 border-card object-cover elevation-2"
-              />
-            ) : (
-              <span className="flex h-20 w-20 items-center justify-center rounded-2xl border-4 border-card bg-gradient-brand text-h3 font-bold text-white elevation-2">
-                {iniciales}
-              </span>
-            )}
-            {whatsapp?.activo && (
-              <WhatsAppButton
-                codigoPais={whatsapp.codigoPais}
-                numero={whatsapp.numero}
-                mensaje={whatsapp.mensajePlantilla}
-              />
-            )}
-          </div>
-          <h1 className="mt-3 text-h1 text-foreground">{cliente.nombre}</h1>
-          <p className="text-small text-muted-foreground">
-            {cliente.email} · {cliente.company.name}
-          </p>
-
-          {/* Resumen en números (cada uno navega a su módulo) */}
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {resumen.map((r) => (
-              <Link
-                key={r.label}
-                href={r.href}
-                className="card-lift rounded-xl border border-border bg-background/60 p-3 text-center active:scale-[0.98]"
-              >
-                <r.icon className="mx-auto h-4 w-4 text-primary" aria-hidden />
-                <p className="mt-1 text-h3 tabular-nums text-foreground">{r.valor}</p>
-                <p className="text-caption">{r.label}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
+    <div className="space-y-5 animate-fade-up">
+      {/* ── Saludo: el engranaje lleva a Configuración (pantalla propia) ── */}
+      <section className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft text-h3 text-primary"
+        >
+          {iniciales}
+        </span>
+        <h1 className="min-w-0 flex-1 truncate text-h2 text-foreground">
+          Hola, {nombre}
+        </h1>
+        <Link
+          href="/cliente/ajustes"
+          aria-label="Configuración de la cuenta"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors duration-fast hover:bg-retail-mist hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <Settings className="h-5 w-5" aria-hidden />
+        </Link>
       </section>
 
-      {/* ── Accesos rápidos ───────────────────────────────────────────────── */}
-      <section className="grid gap-2 sm:grid-cols-2">
-        {accesos.map((a, i) => (
+      {/* ── Accesos: teselas suaves, como en el diseño ─────────────────── */}
+      <section className="grid grid-cols-2 gap-2">
+        {tiles.map((t) => (
           <Link
-            key={a.href}
-            href={a.href}
-            className={`card-lift animate-fade-up flex items-center gap-3 rounded-xl border border-border bg-card p-4 elevation-1 active:scale-[0.98] ${['', 'delay-75', 'delay-150', 'delay-200'][i] ?? ''}`}
+            key={t.href + t.label}
+            href={t.href}
+            className="flex min-h-14 items-center justify-center rounded-lg bg-retail-mist px-3 text-label-lg text-foreground outline-none transition-colors duration-fast hover:bg-brand-primary-soft active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <a.icon className="h-5 w-5" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-small font-semibold text-foreground">{a.label}</span>
-              <span className="block truncate text-caption">{a.desc}</span>
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" aria-hidden />
+            {t.label}
           </Link>
         ))}
       </section>
 
-      {/* ── Mi ID MembeGo (Regalos P2P · R1) ──────────────────────────────── */}
-      {idMembego && <IdMembegoCard codigo={idMembego} />}
+      {/* ── Pestañas con conteos reales ────────────────────────────────── */}
+      <nav aria-label="Filtrar membresías" className="relative no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {TABS.map((t) => {
+          const activo = t.id === 'todas' ? tab === 'todas' : tab === t.id
+          const n = t.id === 'todas' ? null : conteos[t.id]
+          return (
+            <Link
+              key={t.id}
+              href={t.href}
+              aria-current={activo ? 'page' : undefined}
+              className={
+                activo
+                  ? 'inline-flex min-h-10 shrink-0 items-center rounded-full bg-retail-deep px-4 text-label-lg text-white transition active:scale-[0.97]'
+                  : 'inline-flex min-h-10 shrink-0 items-center rounded-full border border-border bg-card px-4 text-label-lg text-muted-foreground transition hover:text-foreground active:scale-[0.97]'
+              }
+            >
+              {t.label}
+              {n !== null && <span className="ml-1 tabular-nums">({n})</span>}
+            </Link>
+          )
+        })}
+      </nav>
 
-      {/* ── Configuración por categorías ──────────────────────────────────── */}
-      <p className="text-overline">Configuración</p>
-
-      {/* Cuenta */}
-      <Card className="border-border/60 shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-h4">
-            <User className="h-4 w-4 text-muted-foreground" />
-            Cuenta
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProfileForm
-            clienteId={cliente.id}
-            nombre={cliente.nombre}
-            email={cliente.email}
-            telefono={cliente.telefono ?? null}
-            avatarUrl={cliente.avatarUrl ?? null}
-            fechaNacimiento={
-              cliente.fechaNacimiento
-                ? cliente.fechaNacimiento.toISOString().slice(0, 10)
-                : null
+      {/* ── Tus membresías (tarjeta del contrato: estado, tesela, pase) ── */}
+      <section>
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-h2 text-foreground">Tus membresías</h2>
+          <Link
+            href="/mis-membresias"
+            className="shrink-0 text-label-lg text-primary hover:underline"
+          >
+            Ver todas ({memberships.length})
+          </Link>
+        </div>
+        {visibles.length === 0 ? (
+          <EmptyState
+            icon={QrCode}
+            title={tab === 'todas' ? 'Aún no tienes membresías' : 'Nada aquí con este filtro'}
+            description="Al suscribirte a un negocio, tus pases aparecen aquí."
+            action={
+              <Button asChild>
+                <Link href="/cliente/planes">Explorar planes</Link>
+              </Button>
             }
-            ciudad={cliente.ciudad ?? null}
-            genero={cliente.genero ?? null}
-            notifPromos={cliente.notifPromos}
-            notifRecordatorios={cliente.notifRecordatorios}
           />
-        </CardContent>
-      </Card>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {visibles.map((m) => {
+              const ok = vigente(m)
+              const EmpresaIcon = m.company.type === 'carwash' ? Car : Store
+              return (
+                <li key={m.id} className="rounded-lg border border-border bg-card p-4 elevation-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 text-label-md font-medium text-muted-foreground">
+                        <span
+                          aria-hidden
+                          className={
+                            ok ? 'h-2 w-2 rounded-full bg-success' : 'h-2 w-2 rounded-full bg-muted-foreground/50'
+                          }
+                        />
+                        <span className={ok ? 'font-semibold text-success' : undefined}>
+                          {ok ? 'ACTIVO' : m.estado}
+                        </span>
+                        {m.fechaVencimiento && (
+                          <span>· Renueva {fmtFechaCorta(m.fechaVencimiento)}</span>
+                        )}
+                      </p>
+                      <p className="mt-1 truncate text-h3 text-foreground">{m.company.name}</p>
+                      <p className="text-caption">
+                        Plan {m.plan.nombre} ·{' '}
+                        {m.plan.esIlimitado
+                          ? 'usos ilimitados'
+                          : `${m.lavadosRestantes} de ${m.plan.lavadosIncluidos ?? '—'} disponibles`}
+                      </p>
+                    </div>
+                    <span
+                      aria-hidden
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-retail-mist text-primary"
+                    >
+                      <EmpresaIcon className="h-6 w-6" />
+                    </span>
+                  </div>
+                  {/* La fila del pase: el gesto más frecuente, a un toque. */}
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-retail-mist p-2 pl-3">
+                    <span className="flex min-w-0 items-center gap-2 text-label-md font-semibold text-foreground">
+                      <QrCode className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                      <span className="truncate">Pase digital listo</span>
+                    </span>
+                    <Link
+                      href={`/cliente/qr?id=${m.id}`}
+                      className="inline-flex min-h-10 shrink-0 items-center rounded-full bg-retail-deep px-4 text-label-md font-semibold text-white transition hover:opacity-95 active:scale-[0.98]"
+                    >
+                      Ver QR y uso
+                    </Link>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
 
-      {/* Seguridad */}
-      <Card className="border-border/60 shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-h4">
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-            Seguridad
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ChangePasswordForm />
-        </CardContent>
-      </Card>
+      {/* ── Banner comercial ───────────────────────────────────────────── */}
+      <section className="flex items-center justify-between gap-3 rounded-lg bg-retail-deep p-4 text-white">
+        <div className="min-w-0">
+          <p className="text-body font-bold leading-snug">
+            Disfruta visitas y servicios sin límite
+          </p>
+          <p className="mt-0.5 truncate text-caption text-white/85">
+            Ahorra hasta un 40% en tus locales favoritos
+          </p>
+        </div>
+        <Link
+          href="/cliente/planes"
+          className="inline-flex min-h-10 shrink-0 items-center rounded-full bg-card px-4 text-label-md font-bold text-primary transition active:scale-[0.97]"
+        >
+          Explorar planes
+        </Link>
+      </section>
 
-      {/* Ubicación — §42. La acción de guardarla NO existía fuera del
-          registro: quien se saltó ese paso o se mudó no tenía forma de
-          ponerla, y el enlace "Cambiar" del Inicio moría aquí. */}
-      <Card className="border-border/60 shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-h4">
-            <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden />
-            Mi ubicación
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <UbicacionViviendaForm zonaActual={zonaActual} />
-        </CardContent>
-      </Card>
-
-      {/* Vehículos (solo carwash) — el formulario embebido se fue a su propia
-          pantalla: el perfil resume y enlaza, no gestiona. */}
-      {isCarwash && (
-        <Card className="border-border/60 shadow-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-h4">
-              <Car className="h-4 w-4 text-muted-foreground" aria-hidden />
-              Mis vehículos
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-small text-muted-foreground">
-              {cliente.vehiculos.length === 0
-                ? 'Todavía no has añadido ninguno.'
-                : cliente.vehiculos
-                    .slice(0, 2)
-                    .map((v) => `${v.marca} ${v.modelo}`)
-                    .join(', ') +
-                  (cliente.vehiculos.length > 2
-                    ? ` y ${cliente.vehiculos.length - 2} más`
-                    : '')}
-            </p>
-            <Button asChild variant="outline">
-              <Link href="/cliente/vehiculos">
-                {cliente.vehiculos.length === 0 ? 'Añadir vehículo' : 'Gestionar'}
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+      {/* ── Usar de nuevo: la imagen manda, como en el resto de la app ─── */}
+      {empresas.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="text-h2 text-foreground">Usar de nuevo</h2>
+            <Link
+              href="/cliente/empresas"
+              className="shrink-0 text-label-lg text-primary hover:underline"
+            >
+              Visitar frecuentes
+            </Link>
+          </div>
+          <ul className="mt-3 grid grid-cols-2 gap-3">
+            {empresas.slice(0, 4).map((e) => {
+              const esCarwash = e.type === 'carwash'
+              return (
+                <li key={e.id} className="overflow-hidden rounded-lg border border-border bg-card elevation-1">
+                  <div className="relative aspect-16/10 w-full bg-muted">
+                    {e.logoUrl ? (
+                      <Image
+                        src={e.logoUrl}
+                        alt=""
+                        fill
+                        sizes="(min-width: 640px) 20rem, 50vw"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="flex size-full items-center justify-center bg-brand-primary-soft text-h1 text-primary"
+                      >
+                        {e.name.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="truncate text-label-lg text-foreground">{e.name}</p>
+                    <Link
+                      href={esCarwash ? '/cliente/citas' : `/cliente/empresas/${e.slug}`}
+                      className="mt-2 flex min-h-10 items-center justify-center rounded-full border border-primary px-3 text-label-md font-bold text-primary transition-colors duration-fast hover:bg-brand-primary-soft active:scale-[0.98]"
+                    >
+                      {esCarwash ? 'Pedir turno rápido' : 'Canjear descuento'}
+                    </Link>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
       )}
 
-      {/* Privacidad — §42. Enlace, no ajuste: las políticas son documentos. */}
-      <Card className="border-border/60 shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-h4">
-            <Lock className="h-4 w-4 text-muted-foreground" aria-hidden />
-            Privacidad
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-small text-muted-foreground">
-            Qué datos guardamos y para qué los usamos.
+      {/* ── Tus beneficios y cupones ───────────────────────────────────── */}
+      <section>
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-h2 text-foreground">
+            Tus beneficios y cupones
+          </h2>
+          <Link
+            href="/cliente/mis-promociones"
+            className="shrink-0 text-label-lg text-primary hover:underline"
+          >
+            Ver todos ({beneficiosCount})
+          </Link>
+        </div>
+        {compras.length === 0 ? (
+          <p className="mt-2 rounded-lg border border-border bg-card p-4 text-small text-muted-foreground">
+            Sin beneficios activos por ahora.
           </p>
-          <Button asChild variant="outline">
-            <Link href="/privacy">Ver política</Link>
-          </Button>
-        </CardContent>
-      </Card>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {compras.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/cliente/mis-promociones/${c.id}`}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 elevation-1 outline-none transition-colors duration-fast hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
+                    <TicketPercent className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-small font-semibold text-foreground">
+                      {c.promocion?.titulo ?? 'Beneficio'}
+                    </span>
+                    <span className="block truncate text-label-md text-muted-foreground">
+                      {c.company.name}
+                      {c.fechaVencimiento ? ` · Vence ${fmtFechaCorta(c.fechaVencimiento)}` : ' · Disponible'}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Invita y gana: la banda suave del diseño ───────────────────── */}
+      <Link
+        href="/cliente/invita-y-gana"
+        className="flex items-center gap-3 rounded-lg bg-brand-primary-soft p-4 outline-none transition-colors duration-fast hover:bg-retail-mist focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card text-primary">
+          <Gift className="h-5 w-5" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-small font-bold text-retail-deep">
+            Invita amigos y gana
+          </span>
+          <span className="block truncate text-label-md text-retail-deep/75">
+            Recompensas por cada invitado que se une
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-retail-deep/60" aria-hidden />
+      </Link>
     </div>
   )
 }

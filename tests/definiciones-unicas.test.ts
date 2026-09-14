@@ -75,7 +75,9 @@ test('el criterio de «cobrado» no se escribe a mano', () => {
     const src = sinComentarios(readFileSync(f, 'utf8'))
     for (const consulta of consultasDeMembresia(src, ['aggregate'])) {
       if (!/_sum:\s*\{\s*montoPagado/.test(consulta)) continue
-      if (/whereCobrado/.test(consulta)) continue
+      // `whereTransferencias` también es un criterio centralizado (colas.ts):
+      // sumar lo declarado en esa cola no es «cobrado», y no lo reescribe.
+      if (/whereCobrado|whereTransferencias/.test(consulta)) continue
       infractores.push(f)
       break
     }

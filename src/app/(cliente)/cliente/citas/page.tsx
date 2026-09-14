@@ -188,7 +188,7 @@ export default async function CitasClientePage({
       ) : (
         <section className="animate-fade-up space-y-4">
           {/* Selector de día */}
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <div className="relative -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {diasAbiertos.map((d) => (
               <Link
                 key={d.ymd}

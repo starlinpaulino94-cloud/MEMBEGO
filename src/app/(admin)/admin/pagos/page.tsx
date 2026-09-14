@@ -1,9 +1,9 @@
 import Image from 'next/image'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney, formatDate } from '@/lib/format'
 import { EstadoBadge } from '@/components/EstadoBadge'
@@ -116,7 +116,7 @@ export default async function PagosPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const sp = await searchParams
   const colaRaw = sp.cola
   const cola: Cola = COLAS.some((c) => c.clave === colaRaw)
@@ -155,9 +155,7 @@ export default async function PagosPage({
     seguimientoMembresiasData,
     seguimientoComprasData,
     totalSucursalMembresias,
-  ] = await conEmpresaOTodas(
-    companyId,
-    'pagos: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  ] = await conEmpresa(companyId,
     (tx) => Promise.all([
       tx.membership
         .findMany({
@@ -1048,3 +1046,4 @@ export default async function PagosPage({
     </div>
   )
 }
+

@@ -1,5 +1,8 @@
 'use server'
 
+import { terminosBusqueda } from '@/modules/busqueda/sinonimos'
+import { filtrosPromociones, filtrosEmpresas, textoExcursiones } from '@/modules/busqueda/filtros'
+
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
@@ -304,19 +307,15 @@ export async function buscarUnificado(
 
     const supabaseId = user.supabaseId
     const q = query.trim()
+    const terminos = await terminosBusqueda(q, user.metadata.companyId)
+    const filtroPromos = filtrosPromociones(terminos, new Date())
 
     // Buscar en promociones (públicas + privadas de las empresas del usuario) y empresas
     const [promocionesPublicas, promocionesMias, rawEmpresas] = await Promise.all([
       sinEmpresa('buscador: promociones públicas', (tx) =>
         tx.promocion.findMany({
           where: {
-            visibilidad: 'publica',
-            activo: true,
-            OR: [
-              { titulo: { contains: q, mode: 'insensitive' } },
-              { descripcion: { contains: q, mode: 'insensitive' } },
-              { tags: { hasSome: [q] } },
-            ],
+            ...filtroPromos,
           },
           select: {
             id: true,
@@ -343,18 +342,13 @@ export async function buscarUnificado(
       sinEmpresa('buscador: promociones en mis empresas', (tx) =>
         tx.promocion.findMany({
           where: {
-            visibilidad: 'publica',
-            activo: true,
+            ...filtroPromos,
             company: {
+              isActive: true, isPublished: true, esDemo: false,
               clientes: {
                 some: { supabaseId },
               },
             },
-            OR: [
-              { titulo: { contains: q, mode: 'insensitive' } },
-              { descripcion: { contains: q, mode: 'insensitive' } },
-              { tags: { hasSome: [q] } },
-            ],
           },
           select: {
             id: true,
@@ -381,17 +375,7 @@ export async function buscarUnificado(
       sinEmpresa('buscador: empresas', (tx) =>
         tx.company.findMany({
           where: {
-            isActive: true,
-            isPublished: true,
-            esDemo: false,
-            OR: [
-              { name: { contains: q, mode: 'insensitive' } },
-              { description: { contains: q, mode: 'insensitive' } },
-              { type: { contains: q, mode: 'insensitive' } },
-              { ciudad: { contains: q, mode: 'insensitive' } },
-              { provincia: { contains: q, mode: 'insensitive' } },
-              { slug: { contains: q, mode: 'insensitive' } },
-            ],
+            ...filtrosEmpresas(terminos),
           },
           select: {
             id: true,
@@ -445,7 +429,7 @@ export async function buscarUnificado(
     // Obtener empresas donde el usuario es cliente
     const clienteIds = await sinEmpresa('buscador: mis fichas', (tx) =>
       tx.cliente.findMany({
-        where: { supabaseId },
+        where: { supabaseId, company: { isActive: true, isPublished: true, esDemo: false } },
         select: { companyId: true },
       })
     )
@@ -477,12 +461,7 @@ export async function buscarUnificado(
           where: {
             estado: 'ACTIVA',
             companyId: { in: empresasVisiblesIds },
-            OR: [
-              { nombre: { contains: q, mode: 'insensitive' } },
-              { descripcion: { contains: q, mode: 'insensitive' } },
-              { categoria: { contains: q, mode: 'insensitive' } },
-              { ubicacion: { contains: q, mode: 'insensitive' } },
-            ],
+            OR: textoExcursiones(terminos),
           },
           select: {
             id: true,
@@ -543,12 +522,7 @@ export async function buscarUnificado(
               where: {
                 companyId: { in: companyIds },
                 estado: 'ACTIVA',
-                OR: [
-                  { nombre: { contains: q, mode: 'insensitive' } },
-                  { descripcion: { contains: q, mode: 'insensitive' } },
-                  { categoria: { contains: q, mode: 'insensitive' } },
-                  { ubicacion: { contains: q, mode: 'insensitive' } },
-                ],
+                OR: textoExcursiones(terminos),
               },
               select: {
                 id: true,

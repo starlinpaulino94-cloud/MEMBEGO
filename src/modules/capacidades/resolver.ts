@@ -75,7 +75,7 @@ export const getCapacidadesEmpresa = unstable_cache(
   { revalidate: 300, tags: [CAPACIDADES_TAG] }
 )
 
-/** ¿La empresa tiene esta capacidad encendida? Fail-open ante cualquier error. */
+/** ¿La empresa tiene esta capacidad encendida? Fail-closed ante cualquier error. */
 export async function tieneCapacidad(
   companyId: string | null | undefined,
   capacidad: Capacidad
@@ -84,9 +84,8 @@ export async function tieneCapacidad(
   try {
     const c = await getCapacidadesEmpresa(companyId)
     return c.activas.includes(capacidad)
-  } catch (e) {
-    console.error('[capacidades] tieneCapacidad', e)
-    return true
+  } catch {
+    return false
   }
 }
 

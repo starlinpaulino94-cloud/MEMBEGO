@@ -78,7 +78,7 @@ function Logo({
 
   if (company.logoUrl) {
     return (
-      <div className={cn('relative shrink-0 overflow-hidden rounded-xl bg-muted', clases)}>
+      <div className={cn('relative shrink-0 overflow-hidden rounded-lg bg-muted', clases)}>
         <Image src={company.logoUrl} alt="" fill sizes="64px" className="object-cover" />
       </div>
     )
@@ -87,7 +87,7 @@ function Logo({
     <div
       aria-hidden
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-xl bg-gradient-brand font-bold text-white',
+        'flex shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft font-bold text-primary',
         clases
       )}
     >
@@ -162,7 +162,7 @@ export function BusinessCard({
         className={cn(
           // `relative`: la capa invisible que hace clicable toda la fila se
           // ancla aquí. Sin esto se estiraría hasta el <body>.
-          'card-interactive relative flex items-center gap-3 rounded-xl border border-border bg-card p-3',
+          'card-interactive relative flex items-center gap-3 rounded-lg border border-border bg-card p-3',
           className
         )}
       >
@@ -190,77 +190,76 @@ export function BusinessCard({
     )
   }
 
-  // ── featured: con banner, para destacar en una vitrina ────────────────────
-  const conBanner = variant === 'featured'
-
+  // ── estándar/destacada: guiada por IMAGEN, como la tarjeta del Inicio ─────
+  //
+  // La imagen manda (dirección Amazon del usuario): banner arriba con la
+  // ciudad como sello, cuerpo con logo, nombre, valoración y el gancho del
+  // plan más barato. La tarjeta entera es el enlace mediante la capa
+  // invisible; el slot de acción (seguir) queda por encima y sigue clicable.
+  // El botón «Ver membresías» se retira: el compromiso se pide en el perfil.
   return (
     <div
       className={cn(
-        'card-interactive flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card',
+        "group relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40",
         className
       )}
     >
-      {conBanner && (
-        <div className="relative h-28 w-full overflow-hidden bg-gradient-brand">
-          {company.bannerUrl && (
-            <Image
-              src={company.bannerUrl}
-              alt=""
-              fill
-              sizes="(max-width: 640px) 100vw, 400px"
-              className="object-cover"
-            />
-          )}
-          {company.isFeatured && (
-            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-card/90 px-2.5 py-1 text-caption font-semibold text-foreground backdrop-blur">
-              <Star className="h-3.5 w-3.5 fill-warning text-warning" aria-hidden />
-              Destacada
-            </span>
-          )}
-        </div>
-      )}
-
-      <div className="flex flex-1 flex-col gap-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Logo company={company} size={conBanner ? 'lg' : 'md'} />
-            <div className="min-w-0">
-              <h3 className="truncate text-h3 text-foreground">
-                <Link href={href} className="outline-none hover:underline focus-visible:underline">
-                  {company.name}
-                </Link>
-              </h3>
-              <Meta company={company} />
-            </div>
-          </div>
-          {precio && (
-            <div className="shrink-0 text-right">
-              <p className="text-h3 tabular-nums text-primary">{formatMoney(precio.precio)}</p>
-              <p className="text-caption">desde / mes</p>
-            </div>
-          )}
-        </div>
-
-        {precio?.nombre && (
-          <p className="-mt-2 text-small font-semibold text-foreground">{precio.nombre}</p>
+      <div className="relative aspect-16/10 w-full bg-muted">
+        {company.bannerUrl ? (
+          <Image
+            src={company.bannerUrl}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 100vw, 400px"
+            className="object-cover transition-transform duration-base group-hover:scale-105"
+          />
+        ) : (
+          <span aria-hidden className="flex size-full items-center justify-center bg-brand-primary-soft text-h1 font-bold text-primary">
+            {company.name.slice(0, 2).toUpperCase()}
+          </span>
         )}
+        {company.ciudad && (
+          <span className="absolute left-2 top-2 rounded-full bg-card/95 px-2 py-0.5 text-label-sm font-semibold text-foreground">
+            {company.ciudad}
+          </span>
+        )}
+        {company.isFeatured && (
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-card/95 px-2 py-0.5 text-label-sm font-semibold text-foreground">
+            <Star className="size-3 fill-retail-star text-retail-star" aria-hidden />
+            Destacada
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col gap-1 p-3">
+        <div className="flex items-center gap-2.5">
+          <Logo company={company} size="sm" />
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-h4 text-foreground">
+              <Link href={href} className="outline-none focus-visible:underline">
+                {/* La capa invisible hace clicable toda la tarjeta sin anidar
+                    la acción dentro del enlace (HTML inválido). */}
+                <span className="absolute inset-0" aria-hidden />
+                {company.name}
+              </Link>
+            </h3>
+            <Meta company={company} />
+          </div>
+          {action && <div className="relative z-10 shrink-0">{action}</div>}
+        </div>
 
         {company.descripcion && (
-          <p className="line-clamp-2 text-small text-muted-foreground">{company.descripcion}</p>
+          <p className="line-clamp-2 text-caption text-muted-foreground">{company.descripcion}</p>
         )}
 
-        <div className="mt-auto space-y-4">
-          <Stats company={company} />
-          <div className="flex items-center gap-2">
-            <Link
-              href={href}
-              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg bg-primary px-4 text-small font-semibold text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 active:scale-[0.99]"
-            >
-              Ver membresías
-            </Link>
-            {action}
-          </div>
-        </div>
+        <Stats company={company} />
+
+        {precio && (
+          <span className="mt-auto inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-3 py-1 pt-1 text-label-md text-primary">
+            {precio.nombre}
+            <span className="font-bold tabular-nums">{formatMoney(precio.precio)}</span>
+          </span>
+        )}
       </div>
     </div>
   )

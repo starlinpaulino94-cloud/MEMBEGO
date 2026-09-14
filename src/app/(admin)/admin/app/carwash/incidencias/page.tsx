@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -65,9 +65,7 @@ export default async function IncidenciasPage({
     )
   }
 
-  const empresa = await conEmpresaOTodas(
-    companyId,
-    'app · carwash · incidencias: sin empresa activa es el superadmin',
+  const empresa = await conEmpresa(companyId,
     (tx) => tx.company
       .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
       .catch(anotarFallo('carwash:incidencias:company'))
@@ -157,3 +155,4 @@ export default async function IncidenciasPage({
     </div>
   )
 }
+

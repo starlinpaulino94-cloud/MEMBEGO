@@ -302,7 +302,7 @@ export default async function MembershipDetail({
                 </p>
                 <Link
                   href="/cliente/planes"
-                  className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+                  className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-brand-primary-hover"
                 >
                   Renovar membresía
                 </Link>

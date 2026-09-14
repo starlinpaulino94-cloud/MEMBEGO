@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
-import { conEmpresa, conEmpresaOTodas } from '@/lib/tenant'
-import { companyFilter } from '@/modules/admin/queries'
+import { conEmpresa } from '@/lib/tenant'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { PageHeader } from '@/components/ui/page-header'
@@ -17,14 +17,12 @@ export default async function EditarCampanaPage({
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
 
   // Se lee CON el contexto del administrador, no a pelo por id. Además de
   // preparar RLS, cierra un hueco: hasta ahora esta pantalla abría la campaña
   // de cualquier empresa a quien acertara el identificador.
-  const campana = await conEmpresaOTodas(
-    companyId,
-    'invitaciones · editar: sin empresa activa es el superadmin',
+  const campana = await conEmpresa(companyId,
     (tx) => tx.campanaInvitacion.findUnique({ where: { id } })
   )
   if (!campana) notFound()
@@ -85,3 +83,4 @@ export default async function EditarCampanaPage({
     </div>
   )
 }
+

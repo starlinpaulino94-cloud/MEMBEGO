@@ -38,16 +38,16 @@ export function SavePromoButton({ promocionId, guardada }: SavePromoButtonProps)
       disabled={pending}
       aria-label={saved ? 'Quitar de guardadas' : 'Guardar promoción'}
       title={saved ? 'Quitar de guardadas' : 'Guardar promoción'}
-      className={`absolute right-3 top-3 z-10 rounded-full border bg-white/95 p-2 shadow-sm backdrop-blur transition disabled:opacity-60 ${
+      className={`absolute right-2 top-2 z-10 rounded-full border bg-card/95 p-2 elevation-1 backdrop-blur transition-colors duration-fast disabled:opacity-60 ${
         saved
           ? 'border-destructive/25 text-destructive'
           : 'border-border text-muted-foreground hover:text-destructive'
       }`}
     >
       {pending ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
       ) : (
-        <Heart className={`h-4 w-4 ${saved ? 'fill-rose-500' : ''}`} />
+        <Heart className={`h-4 w-4 ${saved ? 'fill-destructive' : ''}`} aria-hidden />
       )}
     </button>
   )

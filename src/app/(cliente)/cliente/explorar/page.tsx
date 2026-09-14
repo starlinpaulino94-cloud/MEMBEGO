@@ -88,7 +88,7 @@ export default async function ExplorarEmpresasPage({
       {/* Chips de categoría */}
       {categorias.length > 0 && (
         <nav aria-label="Categorías">
-          <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          <ul className="relative no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
               const activa = cat.slug === (category || null)
               return (
@@ -99,7 +99,7 @@ export default async function ExplorarEmpresasPage({
                     className={cn(
                       'inline-flex min-h-11 items-center rounded-full px-4 text-small font-semibold transition-colors',
                       activa
-                        ? 'bg-primary text-primary-foreground'
+                        ? 'bg-retail-deep text-white'
                         : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
                     )}
                   >

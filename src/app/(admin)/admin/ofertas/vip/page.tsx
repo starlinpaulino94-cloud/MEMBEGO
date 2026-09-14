@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Gift, Plus, Users, ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { empresaDelPanel } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getOfertasAdmin } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +22,7 @@ const ESTADO_CLASE: Record<string, string> = {
 
 export default async function OfertasVipPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = empresaDelPanel(user)
+  const companyId = await requireCompanyContext(user)
 
   if (!companyId) {
     return <SinEmpresaActiva seccion="tus regalos VIP" />
@@ -93,3 +93,4 @@ export default async function OfertasVipPage() {
     </div>
   )
 }
+

@@ -1,0 +1,402 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary-fixed": "#001f26", "secondary-fixed-dim": "#4cd7f6", "surface-tint": "#006398", "error": "#ba1a1a", "tertiary-fixed": "#cde5ff", "surface-container": "#e9edff", "outline": "#707881", "on-background": "#141b2b", "secondary-container": "#57dffe", "on-error-container": "#93000a", "primary-fixed": "#cce5ff", "primary-fixed-dim": "#93ccff", "on-surface-variant": "#3f4850", "on-surface": "#141b2b", "on-tertiary-container": "#fdfcff", "on-primary": "#ffffff", "on-secondary-fixed-variant": "#004e5c", "surface-container-highest": "#dce2f7", "on-primary-fixed": "#001d31", "surface": "#ffffff", "surface-variant": "#dce2f7", "tertiary": "#006195", "on-primary-container": "#fdfcff", "inverse-on-surface": "#edf0ff", "error-container": "#ffdad6", "background": "#ffffff", "surface-container-low": "#f1f3ff", "surface-container-high": "#e1e8fd", "on-tertiary-fixed-variant": "#004b74", "on-secondary": "#ffffff", "on-error": "#ffffff", "inverse-primary": "#93ccff", "primary-container": "#007bb9", "surface-dim": "#d3daef", "surface-bright": "#ffffff", "tertiary-container": "#287ab3", "secondary-fixed": "#acedff", "inverse-surface": "#293040", "on-secondary-container": "#006172", "primary": "#006194", "on-primary-fixed-variant": "#004b73", "outline-variant": "#bfc7d2", "tertiary-fixed-dim": "#94ccff", "surface-container-lowest": "#ffffff", "on-tertiary": "#ffffff", "secondary": "#00687a", "on-tertiary-fixed": "#001d32" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-md": "0.75rem", "space-lg": "1.25rem", "space-sm": "0.5rem", "space-base": "1rem", "gutter-card": "0.75rem", "space-2xs": "0.125rem", "screen-edge-padding": "1rem", "space-2xl": "2rem", "space-xl": "1.5rem", "space-xs": "0.25rem", "header-location-height": "2.25rem", "header-search-height": "2.75rem", "gutter-compact": "0.5rem", "bottom-nav-height": "3.5rem" }, "fontFamily": { "label-sm": ["Inter"], "label-md": ["Inter"], "headline-lg": ["Inter"], "label-lg": ["Inter"], "headline-sm": ["Inter"], "price-lg": ["Inter"], "body-lg": ["Inter"], "headline-md": ["Inter"], "body-sm": ["Inter"], "body-md": ["Inter"], "price-sm": ["Inter"] }, "fontSize": { "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }], "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "500" }], "headline-lg": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "label-lg": ["14px", { "lineHeight": "18px", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "22px", "fontWeight": "600" }], "price-lg": ["20px", { "lineHeight": "24px", "fontWeight": "700" }], "body-lg": ["16px", { "lineHeight": "22px", "fontWeight": "400" }], "headline-md": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "700" }], "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }], "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }], "price-sm": ["13px", { "lineHeight": "16px", "fontWeight": "600" }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md text-body-md antialiased"><header class="fixed top-0 w-full z-50 pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.06)]"><div class="bg-gradient-to-r from-primary to-secondary-container px-space-md py-space-sm flex items-center justify-between gap-space-sm h-14"><div class="flex-1 flex items-center bg-surface rounded-xl px-space-sm h-10 shadow-[0_1px_3px_rgba(0,0,0,0.08)]"><span class="material-symbols-outlined text-outline text-[20px] mr-space-xs shrink-0">search</span><input class="w-full bg-transparent text-on-surface placeholder:text-outline text-body-sm font-body-sm focus:outline-none truncate" placeholder="Buscar en Membego (empresas, membresías, ofertas)..." type="search"><button aria-label="Escanear código QR" class="w-11 h-11 flex items-center justify-center text-on-surface hover:text-primary shrink-0 transition-colors" type="button"><span class="material-symbols-outlined text-[20px]">qr_code_scanner</span></button></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div><div class="h-header-location-height bg-secondary-fixed/30 backdrop-blur-md px-space-md flex items-center gap-space-xs"><span class="material-symbols-outlined text-primary text-[18px] shrink-0">location_on</span><span class="truncate text-on-secondary-container font-label-md text-label-md">Explorar cerca de Higüey 23000 · Actualizar ubicación</span><span class="material-symbols-outlined text-on-secondary-container text-[16px] shrink-0 ml-auto">expand_more</span></div></header><main class="relative w-full min-h-screen bg-surface pt-[5.75rem] pb-[4.5rem]"><div class="flex flex-col w-full">
+<!-- Quick Category Access / Circular Pill Ribbon -->
+<div class="w-full bg-surface-container-lowest py-space-sm shadow-sm">
+<div class="flex items-center gap-space-md px-screen-edge-padding overflow-x-auto no-scrollbar scroll-smooth">
+<button class="flex flex-col items-center gap-space-xs shrink-0 group focus:outline-none text-left">
+<div class="w-12 h-12 rounded-full bg-primary-fixed flex items-center justify-center text-primary shadow-sm group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]">local_car_wash</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Lavados</span>
+</button>
+<button class="flex flex-col items-center gap-space-xs shrink-0 group focus:outline-none text-left">
+<div class="w-12 h-12 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary shadow-sm group-hover:bg-secondary group-hover:text-on-secondary transition-colors">
+<span class="material-symbols-outlined text-[24px]">restaurant</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Gastronomía</span>
+</button>
+<button class="flex flex-col items-center gap-space-xs shrink-0 group focus:outline-none text-left">
+<div class="w-12 h-12 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary shadow-sm group-hover:bg-tertiary group-hover:text-on-tertiary transition-colors">
+<span class="material-symbols-outlined text-[24px]">sailing</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Tours</span>
+</button>
+<button class="flex flex-col items-center gap-space-xs shrink-0 group focus:outline-none text-left">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface shadow-sm group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]">spa</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Bienestar</span>
+</button>
+<button class="flex flex-col items-center gap-space-xs shrink-0 group focus:outline-none text-left">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-on-surface shadow-sm group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]">handyman</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Servicios</span>
+</button>
+<button class="flex flex-col items-center gap-space-xs shrink-0 group focus:outline-none text-left">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface shadow-sm group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]">category</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface font-medium">Todos</span>
+</button>
+</div>
+</div>
+<!-- Hero Editorial Carousel (Amazon "Todo para tu belleza" inspired vertical layout) -->
+<div class="w-full bg-surface-container-low pt-space-base pb-space-lg">
+<div class="flex gap-space-md overflow-x-auto no-scrollbar px-screen-edge-padding snap-x snap-mandatory">
+<!-- Card 1: Cuida tu vehículo (CARTOWN) -->
+<div class="snap-center shrink-0 w-[84vw] max-w-[340px] bg-surface-container-lowest rounded-xl shadow-md overflow-hidden flex flex-col justify-between">
+<div class="p-space-base flex flex-col">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="bg-primary-fixed text-on-primary-fixed font-label-sm text-label-sm px-space-xs py-space-2xs rounded-sm font-semibold tracking-wide uppercase">Beneficio Destacado</span>
+<span class="flex items-center text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[15px] text-secondary mr-space-2xs">verified</span> Higüey
+            </span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface leading-tight mt-space-xs">Cuida tu vehículo con especialistas</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-xs line-clamp-2">CARTOWN Wash &amp; Detailing · Lavado cerámico, vapor y planes recurrentes con tarifa preferencial.</p>
+</div>
+<div class="relative w-full h-44 bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close-up professional automotive car detailing in a high-end garage, luxury black vehicle gleaming under soft blue studio spotlight with soapy white foam, pristine reflections, ultra realistic commercial shot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKcHoYQoZrdq7i8H9l8W4lMGZOkbZv03keQZ_fOdt5KrmbadhynMKXVxD4fKLgFZs8Hp237O7hGhowVY6iARUs8L9-0gaOL0qKR_8vhJxUYumUX2OkxyrF8kSObfX8kE_QpEY45NLpmOEWU1rB7IwlEPsSZAIzqU7GIYIeHEQG5gqRggD78QC39C-VCraFfhNoP5H0KxrkTELQLOPY2OubHeNdJ1C-2P3duxKVDhVSDTKblXLTStMp">
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+<div class="absolute bottom-space-sm left-space-base">
+<span class="bg-surface/90 backdrop-blur-sm text-on-surface font-label-sm text-label-sm px-space-xs py-space-2xs rounded shadow-sm font-medium">Hasta 40% ahorro en membresía</span>
+</div>
+</div>
+<div class="p-space-base pt-space-sm flex items-center justify-between bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Planes desde</span>
+<span class="font-price-lg text-price-lg text-primary">RD$ 1,850<span class="font-label-sm text-label-sm text-on-surface-variant font-normal">/mes</span></span>
+</div>
+<button class="h-9 px-space-base bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg rounded-full shadow-sm flex items-center gap-space-xs transition-colors active:scale-95">
+<span>Ver beneficios</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card 2: Sabores cerca de ti (Mestizo) -->
+<div class="snap-center shrink-0 w-[84vw] max-w-[340px] bg-surface-container-lowest rounded-xl shadow-md overflow-hidden flex flex-col justify-between">
+<div class="p-space-base flex flex-col">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-space-xs py-space-2xs rounded-sm font-semibold tracking-wide uppercase">Gastronomía VIP</span>
+<span class="flex items-center text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[15px] text-secondary mr-space-2xs">near_me</span> 1.2 km
+            </span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface leading-tight mt-space-xs">Sabores de autor cerca de ti</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-xs line-clamp-2">Mestizo Restaurante · Cocina fusión con cortes premium, postre de bienvenida para miembros Membego.</p>
+</div>
+<div class="relative w-full h-44 bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Artisanal Mexican and Caribbean gourmet taco dish on slate plate with fresh garnishes, microgreens, lime, warm ambient bistro lighting, vibrant colors, fine dining photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAw8AdcE5UUnCifDWLa67-BCpuhroOzndCPdHIe_nJtu-BrQn1tGu0QKZsYApwKWRirSsS0clwzBDmYdfTlL4eZSPamPweCJkUCYGbtLR6kWcLmmRZTgyVYUbq7nzj2x4Q-ix5vNtb429ENYFPyuB4REnDfIo2XhjugOXMySHbr1f1kloLuo65jBRT4FcqPDVSdxmEwlzDfcuMssEODjW5sLzO1qV4iymJVz4-dYvDNub-DsX5dg2z9">
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+<div class="absolute bottom-space-sm left-space-base">
+<span class="bg-surface/90 backdrop-blur-sm text-on-surface font-label-sm text-label-sm px-space-xs py-space-2xs rounded shadow-sm font-medium">Postre gratis en tu 1ra visita</span>
+</div>
+</div>
+<div class="p-space-base pt-space-sm flex items-center justify-between bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Membresía Foodie</span>
+<span class="font-price-lg text-price-lg text-primary">RD$ 950<span class="font-label-sm text-label-sm text-on-surface-variant font-normal">/mes</span></span>
+</div>
+<button class="h-9 px-space-base bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg rounded-full shadow-sm flex items-center gap-space-xs transition-colors active:scale-95">
+<span>Ver menú</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card 3: Escápate este fin de semana -->
+<div class="snap-center shrink-0 w-[84vw] max-w-[340px] bg-surface-container-lowest rounded-xl shadow-md overflow-hidden flex flex-col justify-between">
+<div class="p-space-base flex flex-col">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm px-space-xs py-space-2xs rounded-sm font-semibold tracking-wide uppercase">Aventura y Sol</span>
+<span class="flex items-center text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[15px] text-tertiary mr-space-2xs">explore</span> Punta Cana
+            </span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface leading-tight mt-space-xs">Escápate este fin de semana</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-xs line-clamp-2">Excursiones eco-turísticas, catamaranes a Saona y paseos en buggy con cupo preferente.</p>
+</div>
+<div class="relative w-full h-44 bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Luxury white catamaran sailing in turquoise transparent Caribbean ocean waters near tropical sandy coast, sunny bright day, high aesthetic adventure travel photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7B-PleJw0HxcInsErNyp0ductw4YuMySuq_BeCt18o6E3uNg2zw8zfw7bvXfVKjkYGKzCwh8UCJcjF1LsMo_PL7JTzQDE2nhN81XcTNVGAeuTFBnDCUiYkmW3F55TaWwR_Nt9hhEKnLAPQZ6uHn7XcbwFvB1Q6d6IjQI6VUBBWj3RS9qwNHOapgpaUyNtykI5YzG1jBkaighsD5D-2XEp0lPMH-h-keNnNUZD1dSjxehSEftpyOyW">
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+<div class="absolute bottom-space-sm left-space-base">
+<span class="bg-surface/90 backdrop-blur-sm text-on-surface font-label-sm text-label-sm px-space-xs py-space-2xs rounded shadow-sm font-medium">20% OFF en grupos</span>
+</div>
+</div>
+<div class="p-space-base pt-space-sm flex items-center justify-between bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Tours desde</span>
+<span class="font-price-lg text-price-lg text-primary">RD$ 3,200</span>
+</div>
+<button class="h-9 px-space-base bg-primary hover:bg-primary-container text-on-primary font-label-lg text-label-lg rounded-full shadow-sm flex items-center gap-space-xs transition-colors active:scale-95">
+<span>Explorar</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Reference Snapshot / Amazon Hierarchy Verification Banner -->
+<div class="w-full px-screen-edge-padding py-space-sm bg-surface-container-highest flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[18px]">bolt</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">Ofertas relámpago con canje en QR</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-medium">Termina en 04:12:30</span>
+</div>
+<!-- Section: Empresas destacadas en Higüey & Zona Este -->
+<div class="w-full bg-surface py-space-lg">
+<div class="px-screen-edge-padding flex items-center justify-between mb-space-sm">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Empresas destacadas</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Negocios verificados con membresía Membego</p>
+</div>
+<a class="font-label-sm text-label-sm text-primary flex items-center hover:underline shrink-0" href="#">
+        Ver todas <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</a>
+</div>
+<!-- Horizontal scroll of compact business cards -->
+<div class="flex gap-space-md overflow-x-auto no-scrollbar px-screen-edge-padding">
+<!-- Business 1: CARTOWN -->
+<div class="shrink-0 w-64 bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col">
+<div class="relative w-full h-32 rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover" data-alt="Modern car wash facility and auto detailing center CARTOWN, polished floor, bright daylight LEDs, high quality automotive presentation" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBySwlFJc8Uyu3zacCc5tdHSaX33Li_NSom05ems7wm_FnYx_XFcNBkmHeWEQKN-nyu0SSbMrA6tG5zWHXLH8HsIJx4WFgiqM-kkrwCln1E_nEhl1aEKiFX3rfQ3t43m4kqRiL1VsGA3ptQ2Uvh6V8VIhMVMDOGG9GZreSYOCS6H30bc5QrszU6UxdUGunKdMB9hLwy2AaKjGuvhow7to-eCV8nugkv0kx5_T2vXT_cy7Jh0JE_esw1">
+<span class="absolute top-space-xs left-space-xs bg-primary text-on-primary font-label-sm text-label-sm px-space-xs py-space-2xs rounded-sm font-semibold">Abierto ahora</span>
+<span class="absolute bottom-space-xs right-space-xs bg-on-surface/80 backdrop-blur-xs text-on-primary font-label-sm text-label-sm px-space-xs py-space-2xs rounded">2 planes</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">CARTOWN Wash &amp; Detailing</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Lavado, nanocerámica y estética</p>
+<div class="flex items-center gap-space-xs mt-space-xs">
+<div class="flex items-center text-amber-500">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-price-sm text-price-sm text-on-surface ml-space-2xs">4.9</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(120 reseñas)</span>
+</div>
+<div class="mt-space-sm pt-space-xs bg-surface-container-low rounded-lg p-space-xs flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-primary font-medium">Lavado Ilimitado</span>
+<span class="material-symbols-outlined text-primary text-[18px]">arrow_circle_right</span>
+</div>
+</div>
+<!-- Business 2: Mestizo -->
+<div class="shrink-0 w-64 bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col">
+<div class="relative w-full h-32 rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover" data-alt="Chic modern restaurant interior Mestizo with tropical plants, warm wood furniture, patrons dining peacefully, cocktail bar in background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIqkWeKx2xCuXiYcuenaUTGhDBkTlIMNVlwHe0Vzabgt0AYWRhbhonleig8SrZM-O857d-U7gociNITOtaw_MyPc1JGjchlH3ANqnCYhz1bOZV10DgFxV3hRtNuUlY503ADheYUIUd0DvYEnsl4TLmYjPHUFTbPDjVSFG5Kp3vh_7KuJKL8sZRcdv1xRMESvhLvwV3lNBfpoPgBGrN3N3sEApfw4358UyyJ8wqTtKAR5p1zJkdgrbM">
+<span class="absolute top-space-xs left-space-xs bg-primary text-on-primary font-label-sm text-label-sm px-space-xs py-space-2xs rounded-sm font-semibold">Abierto ahora</span>
+<span class="absolute bottom-space-xs right-space-xs bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm px-space-xs py-space-2xs rounded">Cortesía activa</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Mestizo Restaurante</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Comida mexicana &amp; caribeña fusión</p>
+<div class="flex items-center gap-space-xs mt-space-xs">
+<div class="flex items-center text-amber-500">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-price-sm text-price-sm text-on-surface ml-space-2xs">4.8</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(94 reseñas)</span>
+</div>
+<div class="mt-space-sm pt-space-xs bg-surface-container-low rounded-lg p-space-xs flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-secondary font-medium">Postre o taco de cortesía</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">arrow_circle_right</span>
+</div>
+</div>
+<!-- Business 3: Punta Cana EcoTours -->
+<div class="shrink-0 w-64 bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col">
+<div class="relative w-full h-32 rounded-lg overflow-hidden bg-surface-container-low mb-space-sm">
+<img class="w-full h-full object-cover" data-alt="Tropical boat dock in Punta Cana with blue speedboats and catamarans lined up under clear skies, palm trees, pristine coastal scene" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4Tbt_oazEi7eAjp8FE5acNUerLxjuM-RpT5pf4IcvkW8q0OOJ40fejv2NJEyv4VP7vymfXUqxyHd0Umn8yQmM9ck9KeILFHBgHaHyRW_phrTC8DiKEa7vtdLbpH9Z_aeeT2UBjuLKvwAmpI_T4Z5-tRVU8VPSekaoTl4vi6Bw9hHL-hr0bTaH_4VcDqBiuWQ4VAHgdg7S8Bzc9nRYG5P8-B__M0zDRKxpK3PJw5BP0pCnqRRjsShU">
+<span class="absolute top-space-xs left-space-xs bg-surface-container-highest text-on-surface-variant font-label-sm text-label-sm px-space-xs py-space-2xs rounded-sm font-semibold">Reserva online</span>
+<span class="absolute bottom-space-xs right-space-xs bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm px-space-xs py-space-2xs rounded">Top Rated</span>
+</div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Punta Cana EcoTours</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Excursiones náuticas y aventura</p>
+<div class="flex items-center gap-space-xs mt-space-xs">
+<div class="flex items-center text-amber-500">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-price-sm text-price-sm text-on-surface ml-space-2xs">5.0</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">(210 reseñas)</span>
+</div>
+<div class="mt-space-sm pt-space-xs bg-surface-container-low rounded-lg p-space-xs flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-tertiary font-medium">Descuentos de grupo</span>
+<span class="material-symbols-outlined text-tertiary text-[18px]">arrow_circle_right</span>
+</div>
+</div>
+</div>
+<div class="px-screen-edge-padding mt-space-sm">
+<a class="w-full py-space-xs bg-surface-container-low hover:bg-surface-container text-primary font-label-md text-label-md rounded-lg flex items-center justify-center gap-space-xs transition-colors" href="#">
+<span>Explorar más de 45 empresas asociadas</span>
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</a>
+</div>
+</div>
+<!-- Section: Membresías Recomendadas (Commercial Dense 2-Column Catalog Grid like Amazon) -->
+<div class="w-full bg-surface-container-low py-space-lg">
+<div class="px-screen-edge-padding mb-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-headline-md text-on-surface">Membresías recomendadas</h3>
+<span class="font-label-sm text-label-sm bg-primary-fixed text-on-primary-fixed px-space-xs py-space-2xs rounded font-medium">Ahorro mensual</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Paga mensual y disfruta beneficios continuos</p>
+</div>
+<div class="px-screen-edge-padding grid grid-cols-2 gap-gutter-card">
+<!-- Product Card 1: Lavado Ilimitado Silver -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col justify-between">
+<div>
+<div class="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden mb-space-xs">
+<img class="w-full h-full object-cover" data-alt="Shiny metallic emblem of vehicle detailing membership Silver pass with bubbles water clean finish on blue backdrop, polished 3D render" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7cHwIl68qT_dZ86RkCOOYqhuBDmZE1_Ch9LZ-w4mJVxvJHlkBFxwdiP1_Cm97clYrXm5-R_FHK_0iTLN5QkNB3h42-db0PV2o3E6ZCshbtSnlX-RIEcJOZW2nhd6H9CVDjCHpK7GUA9y50kMh5PQUqSmtZMeO-05D2WRrKRFcUZng7hqsYGCk7S2eCJzVLVGk66gKXy8X_bcsEkE2X-B41ytVlIH_2jA-ht2tM9Q1Otjy2qV2vz4_">
+<span class="absolute top-space-xs left-space-xs bg-primary text-on-primary font-label-sm text-label-sm px-space-xs py-space-2xs rounded">Popular</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-semibold uppercase">CARTOWN Wash</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-tight mt-space-2xs line-clamp-2">Lavado Ilimitado Silver</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-xs line-clamp-2">Lavados exteriores sin límite + cera líquida protectora en cada visita.</p>
+</div>
+<div class="mt-space-sm pt-space-xs">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-price-lg text-price-lg text-on-surface">RD$ 1,850</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">/mes</span>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant line-through">RD$ 2,400</p>
+<button class="w-full mt-space-xs h-9 bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md rounded-full shadow-sm flex items-center justify-center font-semibold active:scale-95 transition-transform">
+            Unirme
+          </button>
+</div>
+</div>
+<!-- Product Card 2: Club Foodie VIP Mestizo -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex flex-col justify-between">
+<div>
+<div class="relative w-full aspect-square rounded-lg bg-surface-container-low overflow-hidden mb-space-xs">
+<img class="w-full h-full object-cover" data-alt="Culinary membership club card with golden fork emblem and dark wooden texture background, elegant gourmet visual styling" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVns0y66deBlkwED9knrgOtX0yyCbYM6QKRWz4_-lIX8g-xSV-pYMtSVW5xh68c2wLiXl5wzBRD4iMG4xgJg_ALmud57bVLixiBuO0gdVxkURVmDDCaUO6mAkbIz43w-ZK5HNl-FbT-DN5WUpyYWVkqgh5LrZNDtkOvZm7RXlZ1NLwgj_cH-sjg_U1GtF-qNwGj-v29NlW-ZoVJKie2UDQexTA7rMC0LQsw_sB1EpmUMPQBPH2epFM">
+<span class="absolute top-space-xs left-space-xs bg-secondary text-on-secondary font-label-sm text-label-sm px-space-xs py-space-2xs rounded">VIP Gastronómico</span>
+</div>
+<span class="font-label-sm text-label-sm text-secondary font-semibold uppercase">Mestizo Rest.</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface leading-tight mt-space-2xs line-clamp-2">Club Foodie Mestizo VIP</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-space-xs line-clamp-2">15% descuento en cuenta total + bebida de bienvenida artesanal en cada visita.</p>
+</div>
+<div class="mt-space-sm pt-space-xs">
+<div class="flex items-baseline gap-space-xs">
+<span class="font-price-lg text-price-lg text-on-surface">RD$ 950</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">/mes</span>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant line-through">RD$ 1,300</p>
+<button class="w-full mt-space-xs h-9 bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md rounded-full shadow-sm flex items-center justify-center font-semibold active:scale-95 transition-transform">
+            Unirme
+          </button>
+</div>
+</div>
+</div>
+<div class="px-screen-edge-padding mt-space-sm">
+<a class="w-full py-space-xs bg-surface-container-lowest hover:bg-surface text-primary font-label-md text-label-md rounded-lg flex items-center justify-center gap-space-xs shadow-sm transition-colors" href="#">
+<span>Ver todas las 28 membresías activas</span>
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</a>
+</div>
+</div>
+<!-- Promotional Amazon-Style In-Feed Commercial Card -->
+<div class="w-full px-screen-edge-padding py-space-sm bg-surface">
+<div class="w-full bg-gradient-to-r from-primary-container to-secondary rounded-xl p-space-base text-on-primary flex items-center justify-between shadow-sm">
+<div class="flex flex-col max-w-[70%]">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-secondary-fixed">Canje inmediato</span>
+<h4 class="font-headline-md text-headline-md leading-tight mt-space-2xs text-white">¿Vas a un comercio asociado hoy?</h4>
+<p class="font-body-sm text-body-sm text-surface-container-highest mt-space-2xs">Muestra tu código QR en caja para aplicar tus descuentos sin trámites.</p>
+</div>
+<button class="w-12 h-12 rounded-full bg-surface-container-lowest text-primary flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0">
+<span class="material-symbols-outlined text-[28px]">qr_code_2</span>
+</button>
+</div>
+</div>
+<!-- Section: Experiencias y Excursiones para ti (Dense Amazon-Style List Rows) -->
+<div class="w-full bg-surface py-space-lg">
+<div class="px-screen-edge-padding flex items-center justify-between mb-space-sm">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Experiencias y Excursiones</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Reserva paseos de fin de semana con tarifa Membego</p>
+</div>
+<a class="font-label-sm text-label-sm text-primary flex items-center hover:underline shrink-0" href="#">
+        Ver más <span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</a>
+</div>
+<div class="px-screen-edge-padding flex flex-col gap-space-sm">
+<!-- Experience Row 1: Tour Catamarán Isla Saona -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex items-center gap-space-md">
+<div class="w-24 h-24 rounded-lg bg-surface-container-low shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="Tourists relaxing on catamaran deck overlooking turquoise water and white beach of Saona Island Dominican Republic, tropical paradise scenery" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGIr7Edv_d1aS-60nFD3yVdXICBVpMPx50BpEzkxtOUDLvXIB1QQCpr7KMtuX5osPVjQDg70kapQIH9Sz6HSKb4Ce-sCfQCh_yJRf_9Gy0_KYwL845N-Tl2OIzvGQ-0ewVKdm07UkDx1LzaZcvdE5Fr1DMonL5HJlrBRd1y1GqBaLc29AZpHr9aPYjdll9Z8QMIuNrvB3tcpR8BQmCKwge932gFYYDhTM3StVkKv6IKqLgMUpR_P9B">
+<span class="absolute bottom-space-2xs left-space-2xs bg-on-surface/80 text-on-primary font-label-sm text-[10px] leading-none px-space-2xs py-1 rounded">Full Day</span>
+</div>
+<div class="flex-1 min-w-0">
+<span class="font-label-sm text-label-sm text-tertiary font-semibold uppercase">Punta Cana EcoTours</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Tour Catamarán a Isla Saona</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Almuerzo buffet dominicano + barra libre</p>
+<div class="flex items-center justify-between mt-space-xs">
+<div class="flex flex-col">
+<span class="font-price-sm text-price-sm text-primary font-bold">RD$ 3,850</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant">Precio socio Membego</span>
+</div>
+<button class="h-8 px-space-md bg-surface-container-high hover:bg-surface-container text-primary font-label-sm text-label-sm rounded-full font-semibold transition-colors">
+              Reservar cupo
+            </button>
+</div>
+</div>
+</div>
+<!-- Experience Row 2: Paseo en Buggy por Dunas -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex items-center gap-space-md">
+<div class="w-24 h-24 rounded-lg bg-surface-container-low shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="All terrain 4x4 buggy kicking up sand dust on offroad beach trail in Macao Dominican Republic, action shot in bright afternoon sunlight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLVAs2QcuXb-qQKzS7a_vTVpWySTstbHMab8xmlCMeGtpM6vOE4YaOVfsozk9risHAC7ZIl0x7WgTY1yAhbDrXtHWQkn1FAVLKY2ReGhvm1peb40033M3WuSzMdgPESF2cauWHW8j4WQN8VVCutXsM-Ba91428BUVlQVZGwHLjL9JznUbJ4CqLDnFAvF_Grt9KHCE8-05syzINO1iVFBdEMAdGVm17ac6jTa2ObWdyjS3OKMdPn2ZW">
+<span class="absolute bottom-space-2xs left-space-2xs bg-on-surface/80 text-on-primary font-label-sm text-label-sm leading-none px-space-2xs py-1 rounded">4 horas</span>
+</div>
+<div class="flex-1 min-w-0">
+<span class="font-label-sm text-label-sm text-tertiary font-semibold uppercase">Punta Cana EcoTours</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Paseo en Buggy por Dunas y Cenote</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Incluye parada en cueva indígena y playa</p>
+<div class="flex items-center justify-between mt-space-xs">
+<div class="flex flex-col">
+<span class="font-price-sm text-price-sm text-primary font-bold">RD$ 2,200</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant">Por vehículo doble</span>
+</div>
+<button class="h-8 px-space-md bg-surface-container-high hover:bg-surface-container text-primary font-label-sm text-label-sm rounded-full font-semibold transition-colors">
+              Reservar cupo
+            </button>
+</div>
+</div>
+</div>
+<!-- Experience Row 3: Cena Degustación Mestizo -->
+<div class="bg-surface-container-lowest rounded-xl p-space-sm shadow-sm flex items-center gap-space-md">
+<div class="w-24 h-24 rounded-lg bg-surface-container-low shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="Five-course tasting menu elegant culinary presentation with red wine pairing at restaurant Mestizo, candlelit dining table" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6ltjgF7m0b0a0A6bM1GBWc8u5pwlos94iUxiaxTC3RqTtfJBmYOd-hg6YgXoN5G1c1tM3cyTiHo0uTeKazHamdEE4HTAMOFjyNRkEsvblfu031Oy1u5Evxz3rH3wrNEgWxNq9gBym4irW6_Vld-JXkqLVV5peTJuQyhSvaJhDPNaVo1VBGlgv3ou0LV_mBAKE9chD3jvpwVsX3p75ZuIz4KVU2oFObVTrxjIa1P2SxNEKRG7YkKit">
+<span class="absolute bottom-space-2xs left-space-2xs bg-on-surface/80 text-on-primary font-label-sm text-label-sm leading-none px-space-2xs py-1 rounded">5 tiempos</span>
+</div>
+<div class="flex-1 min-w-0">
+<span class="font-label-sm text-label-sm text-secondary font-semibold uppercase">Mestizo Restaurante</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface truncate">Cena Degustación de Autor</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Maridaje de 3 vinos + postre caribeño</p>
+<div class="flex items-center justify-between mt-space-xs">
+<div class="flex flex-col">
+<span class="font-price-sm text-price-sm text-primary font-bold">RD$ 2,900</span>
+<span class="font-label-sm text-[11px] text-on-surface-variant">Por pareja</span>
+</div>
+<button class="h-8 px-space-md bg-surface-container-high hover:bg-surface-container text-primary font-label-sm text-label-sm rounded-full font-semibold transition-colors">
+              Ver detalles
+            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Final Dense Amazon-Style Outlink Footer Module -->
+<div class="px-screen-edge-padding mt-space-base">
+<div class="bg-surface-container-low rounded-xl p-space-base flex flex-col gap-space-sm">
+<div class="flex items-center justify-between border-none">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">loyalty</span>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">¿Tienes un código de comercio?</span>
+</div>
+<button class="px-space-md py-space-xs bg-surface-container-lowest text-primary rounded-full font-label-sm text-label-sm font-semibold shadow-sm">Ingresar</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Afíliate directamente a un negocio local ingresando el PIN suministrado en tienda.</p>
+</div>
+</div>
+</div>
+</div></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/95 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-label-md"><div class="flex justify-around items-center h-bottom-nav-height px-space-xs"><a aria-current="page" class="flex flex-col items-center justify-center flex-1 h-full py-space-xs transition-colors text-primary font-label-md" data-path="inicio" href="#"><span class="material-symbols-outlined text-[22px]">home</span><span class="font-label-sm text-label-sm mt-space-2xs">Inicio</span></a><a class="flex flex-col items-center justify-center flex-1 h-full py-space-xs text-outline hover:text-on-surface transition-colors" data-path="cuenta" href="#"><span class="material-symbols-outlined text-[22px]">person</span><span class="font-label-sm text-label-sm mt-space-2xs">Cuenta</span></a><a class="flex flex-col items-center justify-center flex-1 h-full py-space-xs text-outline hover:text-on-surface transition-colors" data-path="mi-qr" href="#"><span class="material-symbols-outlined text-[22px]">qr_code_2</span><span class="font-label-sm text-label-sm mt-space-2xs">Mi QR</span></a><a class="flex flex-col items-center justify-center flex-1 h-full py-space-xs text-outline hover:text-on-surface transition-colors" data-path="menu" href="#"><span class="material-symbols-outlined text-[22px]">menu</span><span class="font-label-sm text-label-sm mt-space-2xs">Menú</span></a></div></nav></body></html>

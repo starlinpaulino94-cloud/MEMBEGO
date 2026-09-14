@@ -1,0 +1,383 @@
+# P0 · Línea base verificada y contratos (corte P1A)
+
+Fecha: 2026-09-07 · Commit base: `19919e67` · Árbol previo: limpio.
+
+## 1. Verificaciones ejecutadas sobre el corte
+
+| Comando | Resultado |
+|---|---|
+| `tsc --noEmit` | 0 errores en producto (`src/`, `tests/`, `packages/`). Únicos errores: `.next/dev/types/routes.d.ts:320` (artefacto generado malformado, preexistente, fuera del código versionado) |
+| `eslint` (archivos del corte) | 0 errores, 0 warnings tras retirar 2 imports muertos del dashboard |
+| `tsx --test tests/ambito-empresa.test.ts` | 9/9 en verde |
+| `node scripts/rls-cobertura.mjs` | 380 archivos con contexto; 23 con llamadas directas justificadas; 0 huecos |
+| `git grep companyFilter` en `src/app/(admin)` | 0 resultados (quedan en módulos: `growth` migrado a `resolveCompanyId`, carwash a sesión) |
+| `git grep conEmpresaOTodas` en `src/app/(admin)` | 0 resultados |
+
+Suite completa pendiente de corrida final antes de cerrar P1A.
+
+## 2. Contratos establecidos (P1A)
+
+- `requireCompanyContext(user)` (`src/lib/auth/company-context.ts`): única vía de
+  ámbito en páginas /admin. El rol nunca decide alcance; sin empresa redirige
+  (SA → `/superadmin/empresas`, staff → `/admin/sin-empresa`, nunca `/login`).
+- `companyFilter` eliminado de `modules/admin/queries.ts`; `adminMetrics(companyId)`.
+- `conEmpresaOTodas` prohibido en páginas /admin (test `ambito-empresa.test.ts`);
+  allowlist `sinEmpresa` en páginas: `metodos-pago/nuevo` (picker SA),
+  `perfil` (selector `?empresa` SA + estados explícitos).
+- Guards y capacidades fail-closed ante error de lectura o fila ausente.
+- `cambiarEmpresaActiva` revierte `User.companyId` si falla el sync de Auth.
+
+## 3. Decisiones D01–D08 (acta)
+
+D01 QR activo derivado · D02 rechazo en Inter · D03 superadmin con skin hub
+(pendiente F8) · D04 módulos sin Stitch derivados (pendiente F6) ·
+D05 renovación opt-in · D06 tokens unificados retail · D07 éxito solo con
+payload real · D08 sin contenido ilustrativo. Ninguna aplicada aún salvo D06
+(base de F1) y D05 (capacidad existente conservada).
+
+## 6. F1 · Carcasa retail + Cuenta + Menú + QR (S01–S04)
+
+- `CustomerShell` (header degradado + buscador→`/cliente/buscar` + escáner→QR
+  + avatar→Cuenta, barra ubicación→`/cliente/cerca`, pestañas en escritorio,
+  dock 4 fijos en móvil) + `BottomNav` reescrito (Inicio·Cuenta·Mi QR·Menú).
+- Inter en ámbito `.retail` (tokens `@theme` retail-*: única fuente) + lienzo
+  claro forzado; AppShell sin dock (personal).
+- N `/cliente/menu` (acordeón categorías→explorar, 8 filas filtradas por
+  contenido, sesión, nota Cuenta>Configuración) y N `/cliente/qr` (vacío S04
+  fiel + activo derivado D01: QR real, usos, vigencia, selector multi-pase).
+- `/cliente/perfil` = Cuenta S02 (saludo, accesos, pestañas con conteos,
+  membresías, banner, usar-de-nuevo, beneficios, invita, config+soporte,
+  sesión) + sección Configuración con los formularios existentes intactos.
+- D09 (nueva): la campana de notificaciones de S02 se omite hasta el centro
+  de notificaciones (F7); sin campana decorativa. Píldora DO/ES omitida (sin
+  i18n real).
+- Deuda de diseño contenida (HEX 118≤121, clases 170=170, radios 0, micro 0).
+- Pruebas: `tests/cliente-retail.test.ts` (6) + `movil-cliente` migrado.
+  Suite completa: 1929/1929. Tipos: 0 en producto. Lint: limpio.
+
+## 7. F2a · Home versionado + sinónimos (modelo y publicación)
+
+- `HomeRevision` (BORRADOR→PROGRAMADA→PUBLICADA→PAUSADA→ARCHIVADA, solo esos
+  caminos) + `HomeBloque` (7 tipos cerrados, único por revisión) +
+  `BusquedaSinonimo` (global + empresa). Migración `20260913` aditiva.
+- Publicar valida: hero 1–3 slides con entidades publicadas de la empresa,
+  imágenes del storage propio, CTAs internos, vigencia futura. Auditoría
+  COMPOSICION_* nueva. Programar no necesita cron (lectura efectiva).
+- Sinónimos: tabla + expansión pura con tope; cableado al buscador en F2c.
+- Pruebas: `tests/home-composicion.test.ts` (11). `prisma validate` OK.
+  Etiquetas de bitácora para las 4 acciones nuevas. Suite completa: 1945/1945.
+
+## 8. F2b · Editor de inicio (A05)
+
+- `/admin/personalizacion` = editor (territorio, Borrador/Publicar/Programar/
+  Pausar/Reanudar/Archivar, 7 bloques con orden y toggles, hero 1–3 slides con
+  arte del storage propio, segmentación, preview 1:1 Visitante/Socio) +
+  formulario de engagement existente intacto debajo.
+- Acciones con estado recargan la página tras éxito (sin estados locales
+  divergentes); preview 1:1 solo lectura, sin mutaciones.
+- `tsc` salida 0 en todo el proyecto. Deuda contenida (clases 170=170).
+  Suite completa: 1945/1945.
+
+## 9. Reapertura de F2b antes de conectar F2c
+
+La declaración anterior de F2b como cerrado no acredita el recorrido
+guardar/publicar/ver ni fidelidad visual: no había evidencia de una ejecución
+autenticada contra una base aislada. F2c continúa pendiente.
+
+Corregido en esta revisión:
+
+- El editor recupera `ctaDestino.tipo` y `ctaDestino.id`, sin convertir un
+  destino plan/promoción/excursión en empresa al reabrir el borrador.
+- La vigencia de `datetime-local` se serializa como instante ISO; una fecha
+  inválida devuelve un error visible, no una promesa rechazada sin gestionar.
+- Un fallo de escritura al publicar llega a la respuesta de error; ya no se
+  absorbe antes de devolver `ok: true`.
+- El módulo `use server` deja de reexportar una constante no asíncrona.
+
+Evidencia nueva: 4 pruebas conductuales en `home-editor-contrato.test.ts`
+aprobadas; TypeScript completo (`--noEmit --incremental false`) y ESLint
+estricto de los archivos de este corte con salida 0.
+
+Pendiente antes de activar el nuevo consumidor: RLS explícita para las tablas
+de la migración `20260913`, selección correcta de revisión efectiva,
+validación de destinos públicos al leer, aplicación real de segmentación y
+prueba autenticada publicar → Inicio. No se aplicó ninguna migración ni se
+utilizó la base configurada como si fuera una base de pruebas.
+
+Entorno de validación: Docker no está disponible por comando; la CLI Supabase
+sí existe. Las variables `E2E_SUPABASE_URL` y `E2E_BASE_URL` no están definidas
+en el proceso. Esto no prueba qué contiene `.env`; no se presupone que esa
+configuración apunte a un entorno desechable.
+
+## 4. Estado RLS producción
+
+DESCONOCIDO (sin cambios): los SQL y wrappers están en el repo; el rol efectivo
+de `DATABASE_URL` y las políticas aplicadas no se verificaron contra la base
+viva. Verificación requerida antes de F3.
+
+## 5. P1B · Cobro separado de cumplimiento, cita atómica, dedupe real
+
+- `PagoIntento` suma `fulfillmentEstado` (PENDIENTE|COMPLETADA|FALLIDA),
+  `fulfillmentAt`, `fulfillmentError`, `fulfillmentIntentos`; `activadoAt`
+  queda como reclamo del CARGO. `confirmarIntento` devuelve `entrega` y
+  `reintentarEntrega` recupera FALLIDA→PENDIENTE con reclamo atómico, sin
+  recobrar. Renovación con tarjeta marca la entrega en ambos caminos.
+- Migración `20260912_p1b_cumplimiento_dedupe` (aditiva; rollback = DROP).
+- `reservarCita`: candado `FOR UPDATE` por empresa + vínculo `compraId`
+  dentro de la misma transacción (20260756 garantiza la columna).
+- Notificaciones: `dedupeKey` + `@@unique([userId, dedupeKey])`; la misma
+  clave por lote convierte el reintento en no-op.
+- Pruebas: `tests/pagos-cumplimiento.test.ts` (9). Suite completa: 1929/1929.
+  Tipos: 0 errores en producto. Lint del corte: limpio. RLS: sin huecos.
+
+---
+
+## 10. Auditoría de avance y cierre técnico de F2c (2026-09-08)
+
+Punto de partida: commit `19919e67` + **árbol de trabajo sin confirmar** (121
+archivos modificados, 30 sin seguimiento). Todo F1, F2a, F2b y F2c vivían solo
+en disco, sobre la rama `claude/meta-integracion` (8 commits de Meta, aún sin
+mezclar). No es una situación estable: se documenta como riesgo abierto.
+
+### 10.1 Verificación real ejecutada sobre ese árbol
+
+| Comando | Antes de este corte | Después |
+|---|---|---|
+| `tsc --noEmit --incremental false` | 0 errores | 0 errores |
+| `eslint src tests --max-warnings=0` | 2 avisos (`opengraph-image`, preexistentes en HEAD) | igual |
+| `npm test` | **1962 pruebas · 1 en rojo** | **1962 · 0 en rojo** |
+| `SENTRY_UPLOAD=off npm run build` | salida 0 | salida 0 |
+| `node scripts/rls-cobertura.mjs` | 387 archivos con contexto · 23 directos justificados · 0 huecos | igual |
+| `npx prisma validate` | válido | válido |
+
+La declaración anterior de «suite completa 1945/1945» no cubría F2c: la
+reescritura del Inicio dejó en rojo `tests/cliente-sin-empresa.test.ts`.
+
+### 10.2 Defectos encontrados y corregidos
+
+1. **La prueba en rojo no era una regresión de conducta, sino de ubicación.**
+   Buscaba `const sinEmpresa = !companyId` dentro de
+   `cliente/inicio/page.tsx`; F2c partió esa pantalla en dos y la regla se
+   mudó a `InicioPrevio.tsx`. La decisión se extrajo a
+   `src/modules/cliente/primerPaso.ts` (función pura) y la guardia pasó a
+   ejercitarla: 4 pruebas conductuales sustituyen al grep.
+
+2. **La segmentación por radio dejaba el Inicio publicado invisible.**
+   `admiteAudienciaHome` devolvía `false` cuando faltaba la ubicación de la
+   persona *o* las coordenadas del negocio. Como el Inicio cae a la pantalla
+   anterior cuando no hay composición admitida, el administrador publicaba,
+   veía su vista previa correcta, y el cliente sin consentimiento de
+   geolocalización —la mayoría— seguía viendo la app vieja, sin error ni
+   aviso. El radio es un filtro positivo: solo puede excluir a quien sabemos
+   dónde está. Corregido y cubierto con 3 pruebas (no existía ninguna).
+
+3. **`CustomerShell` pintaba `BannerDemo` dos veces** (sobre el contenido y
+   bajo el dock). Uno solo.
+
+4. **Las pestañas de escritorio no decían en cuál estabas**: sin
+   `aria-current` ni indicador visible, los cuatro destinos se veían y se
+   anunciaban idénticos. Se extrajo `TabsEscritorio` (cliente) y la lista de
+   destinos pasó a `src/components/layout/destinos-cliente.ts`, única fuente
+   que consumen el dock móvil y las pestañas: la misma navegación en dos
+   formatos ya no puede separarse.
+
+### 10.3 La RLS del Home estaba planteada al revés
+
+`20260914_home_rls` escribía a mano políticas `membego_inquilino` para las tres
+tablas de `20260913`. Sobraba, y además rompía:
+
+- **Chocaba de nombre.** La Capa 2 ya crea `membego_inquilino` en cada tabla
+  que cubre. `CREATE POLICY` no es idempotente, así que en una base donde la
+  Capa 2 ya hubiera corrido, la migración abortaba entera — y vive en
+  `prisma/migrations/`, o sea que `migrate deploy` la habría ejecutado sola.
+  Eso es justo lo que `2026-07-rls-capa2-aislamiento.sql` dice en su cabecera
+  que no debe pasar: la RLS no se aplica sola en un despliegue.
+- **Añadía `FORCE ROW LEVEL SECURITY`**, que la Capa 2 evita a propósito
+  (§ del archivo): FORCE alcanza también al DUEÑO de las tablas, que es quien
+  ejecuta las migraciones y los caminos omniscientes.
+- **Creaba las políticas sin `TO membego_app`**, aplicándolas a todos los
+  roles en vez de solo al de la aplicación.
+
+Y no hacía falta: el aislamiento **no se escribe tabla por tabla**. La Capa 1
+recorre `pg_tables` (y deja `ALTER DEFAULT PRIVILEGES` puesto, así que una
+tabla nueva nace sin permisos para `anon`/`authenticated`), y la Capa 2 deduce
+la política del esquema. `home_revisiones` y `busqueda_sinonimos` entran por
+Nivel 0 —tienen `companyId`—; `home_bloques` entra por Nivel N a través de su
+clave foránea NOT NULL `revisionId`.
+
+Lo que sí hacía falta se conserva: `20260914_sinonimos_globales_unicos`, un
+índice único parcial para `companyId IS NULL`. El `@@unique` de Prisma no lo
+cubre porque en PostgreSQL dos NULL no son iguales, y `guardarSinonimo`
+resuelve el alta con `findFirst` + `create`: dos altas simultáneas del mismo
+término global creaban dos filas.
+
+`scripts/verificar-home-rls.mts` se retira. Duplicaba `scripts/probar-rls.mjs`
+—que ya siembra dos empresas y comprueba el aislamiento de verdad—, apuntaba
+al proyecto Supabase `ybzhvfmybyyomwpjpaud` y hacía `GRANT … TO authenticated`
+sobre él. La cobertura se movió a `probar-rls.mjs` como caso 7: lectura de la
+composición, herencia del bloque por su revisión, y rechazo de colgar un
+bloque de una revisión ajena. Ese arnés se niega a arrancar contra Supabase.
+
+### 10.4 Pendiente antes de dar F2c por cerrado
+
+- **`npm run rls:probar` no se ha ejecutado**: necesita un PostgreSQL de
+  usar y tirar con la Capa 2 aplicada. Hay un PostgreSQL 16 local corriendo en
+  el 5432, pero el proyecto no está cableado a él y no se conocen sus
+  credenciales; no se intentó adivinarlas. En CI este arnés ya corre contra la
+  base sombra, así que el caso 7 se validará solo al abrir el PR.
+- **`scripts/verificar-home-e2e.mts` no se ha ejecutado.** Apunta al mismo
+  proyecto Supabase y crea empresas, usuarios de Auth, promociones y planes.
+  Limpia al final, pero escribe de verdad mientras corre. **No se ejecuta sin
+  decisión explícita sobre qué base es esa.**
+- Sin esa corrida no hay evidencia de fidelidad visual por captura
+  (390/768/1280) ni del recorrido publicar → ver → pausar.
+
+### 10.4 Decisión abierta D10 · qué pasa con `InicioPrevio`
+
+El Inicio tiene hoy dos pantallas: `InicioComercial` (retail, contrato Stitch)
+y `InicioPrevio` (la anterior, íntegra: héroe del motor de experiencias,
+`WalletStack`, prueba social, gamificación, onboarding, novedades). La segunda
+es la que se ve mientras la empresa no publique composición.
+
+El encargo pide retirar los restos visuales de la estructura anterior, pero
+`InicioPrevio` es también el único sitio donde viven seis capacidades reales.
+Retirarla sin reubicarlas pierde funciones. Recomendación: darles sitio en el
+contrato retail (wallet → bloque propio o `Mi QR`; motor de experiencias →
+bloque HERO derivado cuando no hay composición; el resto → Cuenta) y sustituir
+el respaldo por un Inicio retail por defecto, no por la pantalla vieja.
+Requiere aprobación porque cambia alcance.
+
+---
+
+## 11. F2d · D10 · Un solo Inicio (2026-09-08)
+
+**Decisión del usuario:** retirar la pantalla anterior en el mismo corte, no
+dejarla tras bandera. También confirmó que el proyecto Supabase de la
+configuración es desechable, así que §10.4 queda corregido: la corrida
+autenticada puede hacerse. La nota de `01-linea-base.md` §7 que describe esa
+cadena como «de producción» quedó desactualizada.
+
+**Lo que había.** Dos inicios. `InicioComercial` solo aparecía con composición
+publicada; el resto del tiempo se veía `InicioPrevio`, la app anterior íntegra.
+Sumado al fallo de segmentación del §10.2, el rediseño casi nunca se veía.
+
+**Arquitectura.** Un solo Inicio (`InicioRetail`) con dos mitades de dueños
+distintos:
+
+- **Comercial** — los 7 bloques que la empresa compone y publica. Sin
+  composición, su sitio lo ocupan las ofertas personalizadas: nadie se queda
+  sin nada que descubrir, y con composición no se repite el mismo contenido.
+- **Personal** — sale del estado de esa persona y no es configurable. Ningún
+  panel puede apagarle la wallet a nadie. Por eso las seis capacidades NO se
+  convirtieron en bloques del modelo de composición.
+
+El orden lo decide el contexto: con membresías la wallet va primero (la app se
+abre para enseñar el QR en el mostrador); sin ellas manda la mitad comercial.
+
+**Las seis capacidades, reubicadas.** Wallet → `RetailWallet`. Motor de
+experiencias → `RetailExperiencia`. Prueba social, onboarding y el popup →
+secciones retail reutilizando los componentes existentes, que ya leían tokens.
+Novedades e invitación → `RetailDescubreMas`. Gamificación → cabecera de la
+wallet, no en la barra superior: meterle otra insignia a la cabecera era
+recuperar la cabecera saturada que el rediseño retira.
+
+**Lo que no se perdió al reescribir el héroe.** El renderizador anterior traía
+degradados, brillo en bucle y botones de cristal —eso se va—, pero también
+llevaba datos: la cuenta atrás, el color y el arte de una campaña (que
+configura el administrador, no el sistema), los cupos restantes y cuánta gente
+la reclamó. Todo eso sigue, en lenguaje retail.
+
+**Retirados.** `InicioPrevio`, `ExperienciaHero`, `CampanaBanner`,
+`DescubreMas`, `BuscadorSimple` (este duplicaba el buscador de la cabecera).
+Los primitivos `PromoBanner`/`FlashPromotion`/`Shine` viven en `packages/ui` y
+quedan sin consumidor: su retirada es de F8. `BuscadorInicio`,
+`BuscadorUnificado` y `BuscadorExcursiones` ya estaban muertos antes del
+programa y los hereda F3.
+
+**Pruebas.** 4 conductuales nuevas en `cliente-retail.test.ts` (no vuelven a
+ser dos inicios; sin composición sigue siendo retail; las seis capacidades
+tienen casa; no se repite el buscador ni la barra de ubicación). La guardia del
+primer paso pasó a mirar el cargador y la wallet.
+
+**Verificación:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
+**suite 1966/1966** · `build` compilado.
+
+---
+
+## 12. F2c cerrado con evidencia · y el estado real de la RLS (2026-09-08)
+
+El usuario confirmó que el proyecto Supabase de la configuración es
+desechable, así que por fin se pudo ejecutar lo que faltaba.
+
+### 12.1 Lo que la base tenía de verdad
+
+`prisma migrate status` desmintió la nota del §9 («no se aplicó ninguna
+migración»): `20260913_home_composicion` **y** `20260914_home_rls` ya estaban
+aplicadas. Es decir, las políticas a mano que el §10.3 declara equivocadas
+estaban vivas.
+
+La inspección de la base encontró, además, algo que el §4 daba por DESCONOCIDO
+y ahora es un hecho:
+
+- **La Capa 2 nunca se aplicó a esta base.** Las únicas tres tablas con
+  política `membego_inquilino` en todo `public` eran las del Home; el resto de
+  las ~140 no tiene ninguna. El aislamiento aquí es enteramente aplicativo
+  (`conEmpresa` fija `app.company_id`, pero ninguna política lo lee).
+- Las únicas tres tablas con `FORCE ROW LEVEL SECURITY` eran también esas, y
+  con políticas `TO public` en vez de `TO membego_app`.
+
+Nada se rompió porque el rol de conexión tiene BYPASSRLS, que gana incluso a
+FORCE: las políticas estaban puestas y eran inertes.
+
+### 12.2 Cómo se corrigió el historial
+
+No se borró el registro de `20260914_home_rls` a mano. Se restauró su archivo
+desde git —una migración aplicada no se edita ni se borra— y se añadió
+`20260915_home_rls_al_mecanismo_generico`, que retira sus políticas y su FORCE
+de forma idempotente. Las tres tablas quedan como las otras ~140: RLS activado
+por la Capa 1, sin política propia, esperando a que la Capa 2 deduzca la suya.
+
+Verificado contra la base: 0 tablas con `membego_inquilino`, 0 con FORCE, RLS
+activado en las tres, e índice parcial de sinónimos globales presente.
+
+### 12.3 El recorrido autenticado, ejecutado
+
+`scripts/verificar-home-e2e.mts` contra el build de producción, con sesiones
+reales de Supabase Auth:
+
+- Publicar desde `/admin/personalizacion` → **visible para el cliente**.
+- El sinónimo encuentra la promoción pública y **no** expone la empresa sin
+  publicar.
+- **Pausar retira la composición** del Inicio.
+- Capturas 390 / 768 / 1280 sin desbordamiento horizontal.
+
+Las capturas van a `.next-qa/capturas/` (fuera del repo). Antes apuntaban a la
+carpeta temporal de otra herramienta, cableada a mano.
+
+### 12.4 Dos defectos que solo se veían mirando las capturas
+
+1. **El microcopy no se podía recolorear.** `.text-caption` y `.text-overline`
+   fijaban `color: var(--muted-foreground)` dentro de `@layer utilities`, la
+   misma capa que `text-primary` o `text-white`, y se escribían después. Así
+   que `class="text-overline text-primary"` salía **gris**, en silencio, en
+   todas las pantallas. Sobre el banner azul del Inicio dejaba el sobretítulo
+   y el pie ilegibles: parecía un fallo de diseño y era de cascada. El color
+   por defecto se movió a `@layer components`, donde sigue aplicándose si
+   nadie pide otro y pierde ante cualquier `text-*` explícita.
+
+2. **El banner QR no llegaba a AA.** El degradado `retail-header` va de
+   #0284c7 a #06b6d4: con blanco encima da entre 4.10:1 y 2.45:1, por debajo
+   del 4.5:1 que WCAG AA pide para texto normal — y el texto además iba al
+   80 % y al 90 % de opacidad. Ahora es azul profundo sólido (#0369a1,
+   **5.93:1**) con blanco al 100 %. El degradado se queda en la cabecera de la
+   carcasa, donde no lleva texto encima.
+
+### 12.5 Tableta
+
+Entre 768 y 1023 px la app se pintaba en una columna de 448 px con márgenes
+vacíos a los lados: el `max-w-md` del móvil llegaba hasta `lg`. Se añadió un
+escalón `md:max-w-3xl` en la carcasa y en el dock.
+
+**Verificación final:** `tsc` 0 · `eslint` 0 errores (2 avisos preexistentes) ·
+**suite 1966/1966** · `build` compilado · E2E autenticado en verde · migraciones
+al día.

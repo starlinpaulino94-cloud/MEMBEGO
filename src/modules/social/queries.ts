@@ -1,4 +1,5 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { formatDescuento } from '@/lib/promociones'
 import type { Prisma } from '@prisma/client'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
 import { SIN_DEMO } from '@/modules/demo'
@@ -777,6 +778,14 @@ export interface NovedadInicio {
   /** Fecha del evento (eventos) o de publicación (resto). */
   fecha: Date
   href: string
+  /** Arte de la promoción; los posts no tienen imagen (tesela con icono). */
+  imagenUrl: string | null
+  /** Descripción/contenido para la bajada de una línea. */
+  resumen: string | null
+  /** Solo promociones: el sello ya formateado («−35%», «2×1»…). */
+  descuento: string | null
+  /** Solo promociones: fin de vigencia para el «hasta el …». */
+  vence: Date | null
 }
 
 /**
@@ -817,6 +826,11 @@ export async function getNovedadesInicio(
             select: {
               id: true,
               titulo: true,
+              descripcion: true,
+              imagenUrl: true,
+              descuento: true,
+              tipo: true,
+              vigenciaHasta: true,
               publicadaEn: true,
               company: companySel,
             },
@@ -838,6 +852,7 @@ export async function getNovedadesInicio(
               id: true,
               tipo: true,
               titulo: true,
+              contenido: true,
               fechaEvento: true,
               publicadaEn: true,
               company: companySel,
@@ -857,6 +872,10 @@ export async function getNovedadesInicio(
         companySlug: p.company.slug,
         fecha: p.publicadaEn,
         href: `/cliente/promociones/${p.id}`,
+        imagenUrl: p.imagenUrl,
+        resumen: p.descripcion,
+        descuento: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
+        vence: p.vigenciaHasta,
       })),
       ...posts.map((p) => ({
         id: p.id,
@@ -866,6 +885,10 @@ export async function getNovedadesInicio(
         companySlug: p.company.slug,
         fecha: p.tipo === 'EVENTO' && p.fechaEvento ? p.fechaEvento : p.publicadaEn,
         href: `/cliente/empresas/${p.company.slug}`,
+        imagenUrl: null,
+        resumen: p.contenido,
+        descuento: null,
+        vence: null,
       })),
     ]
 

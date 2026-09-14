@@ -1,10 +1,10 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getOfertaDetalleAdmin, ofertaVigente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
 import { absoluteUrl } from '@/lib/site'
@@ -26,12 +26,10 @@ export default async function OfertaDetallePage({
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const { id } = await params
-  const companyId = companyFilter(user) ?? user.metadata.companyId ?? null
+  const companyId = await requireCompanyContext(user)
   if (!companyId) notFound()
 
-  const company = await conEmpresaOTodas(
-    companyId,
-    'ofertas · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+  const company = await conEmpresa(companyId,
     (tx) => tx.company.findUnique({
       where: { id: companyId },
       select: { zonaHoraria: true },
@@ -49,9 +47,7 @@ export default async function OfertaDetallePage({
   // Candidatos para agregar: clientes de la empresa que aún no están invitados.
   const yaInvitados = new Set(invitados.map((i) => i.cliente.id))
   const candidatos = (
-    await conEmpresaOTodas(
-      companyId,
-      'ofertas · [id]: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    await conEmpresa(companyId,
       (tx) => tx.cliente.findMany({
         where: { companyId },
         select: { id: true, nombre: true },
@@ -169,3 +165,4 @@ export default async function OfertaDetallePage({
     </div>
   )
 }
+

@@ -47,7 +47,7 @@ export function Carrusel({
       </div>
 
       {/* Carril: scroll-snap + padding lateral para que el último ítem respire. */}
-      <div className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-2">
+      <div className="relative no-scrollbar -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-1 px-1 pb-2">
         {children}
       </div>
     </section>

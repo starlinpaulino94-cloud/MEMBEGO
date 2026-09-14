@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Cable, MessageSquare } from 'lucide-react'
 import { requireSection } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getOrCreatePipelineConfig } from '@/modules/crm/queries'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,16 +27,7 @@ export default async function ConfiguracionPage() {
   const user = await requireSection('leads')
   if (!user) redirect('/login')
 
-  const companyId = companyFilter(user)
-  if (!companyId) {
-    return (
-      <div className="space-y-5">
-        <p className="text-sm text-muted-foreground">
-          Selecciona una empresa desde el panel de superadmin para usar el CRM.
-        </p>
-      </div>
-    )
-  }
+  const companyId = await requireCompanyContext(user)
 
   const config = await getOrCreatePipelineConfig(companyId)
 

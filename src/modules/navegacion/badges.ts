@@ -93,6 +93,34 @@ const trabajosMuertos = unstable_cache(
 )
 
 /**
+ * Planes activos de la empresa: el «Membresías · 8» del diseño. Un count por
+ * columna indexada; con la caché de 60 s, su coste no lo paga cada menú.
+ */
+const planesActivos = unstable_cache(
+  async (companyId: string): Promise<number> =>
+    conEmpresa(companyId, (tx) => tx.plan.count({ where: { companyId, activo: true } })),
+  ['nav-badge-planes-activos'],
+  { revalidate: REVALIDAR }
+)
+
+/**
+ * Visitas registradas HOY en la empresa: el «Canjes y QR · 14» del diseño.
+ * El día se corta en hora local del servidor; para un contador de menú esa
+ * aproximación basta y no obliga a arrastrar la zona horaria del negocio.
+ */
+const canjesDeHoy = unstable_cache(
+  async (companyId: string): Promise<number> => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    return conEmpresa(companyId, (tx) =>
+      tx.visit.count({ where: { cliente: { companyId }, fechaVisita: { gte: hoy } } })
+    )
+  },
+  ['nav-badge-canjes-hoy'],
+  { revalidate: REVALIDAR }
+)
+
+/**
  * Los contadores que le corresponden a esta persona.
  *
  * Lo que NO se pide no se cuenta: un administrador de empresa no dispara la
@@ -115,7 +143,19 @@ export async function badgesDeNavegacion(
     // `platformIncidents` no se cuenta: no existe una fuente de verdad de
     // incidentes abiertos y un badge sin dato no se pinta. Ver ClaveBadge.
   } else if (companyId) {
-    tareas.push({ clave: 'companyOpenTickets', contar: () => ticketsDeEmpresa(companyId) })
+    tareas.push(
+      { clave: 'companyOpenTickets', contar: () => ticketsDeEmpresa(companyId) },
+      { clave: 'planesActivos', contar: () => planesActivos(companyId) },
+      { clave: 'canjesHoy', contar: () => canjesDeHoy(companyId) }
+    )
+  }
+
+  // El superadmin DENTRO de una empresa también ve el hub: sus contadores.
+  if (role === 'SUPERADMIN' && companyId) {
+    tareas.push(
+      { clave: 'planesActivos', contar: () => planesActivos(companyId) },
+      { clave: 'canjesHoy', contar: () => canjesDeHoy(companyId) }
+    )
   }
 
   const resultados = await Promise.allSettled(tareas.map((t) => t.contar()))

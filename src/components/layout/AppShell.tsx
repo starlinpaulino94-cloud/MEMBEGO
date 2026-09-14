@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppHeader } from '@/components/layout/AppHeader'
-import { BottomNav } from '@/components/layout/BottomNav'
 import { NavProgress } from '@/components/layout/NavProgress'
 import type { BadgesNav } from '@/components/layout/NavPanel'
 import {
@@ -56,9 +55,6 @@ import type { AppRole } from '@/types'
  */
 
 const CLAVE_COMPACTO = 'membego.nav.compacto.v1'
-
-/** Roles con navegación inferior en móvil (experiencia principalmente táctil). */
-const BOTTOM_NAV_ROLES: readonly AppRole[] = ['CLIENTE']
 
 /**
  * Se ejecuta antes del primer pintado. Va en texto plano y sin dependencias a
@@ -129,9 +125,10 @@ export function AppShell({
   notifCount = 0,
   badges,
   companies,
-  qrHref,
   sistemasExternos,
   nombreEmpresa,
+  sedeEmpresa,
+  conmutadorEmpresa,
   children,
 }: {
   /**
@@ -148,16 +145,17 @@ export function AppShell({
   /** Contadores REALES del menú. Los que fallaron no vienen y no se pintan. */
   badges?: BadgesNav
   companies?: CompanyOption[]
-  /** Destino del dock central "Mi QR" en la barra inferior (cliente). */
-  qrHref?: string | null
   /** Sistema satélite conectado: el header ofrece el acceso directo por SSO. */
   sistemasExternos?: { slug: string; nombre: string }[]
   /** Nombre de la empresa activa para la píldora de ámbito (solo texto). */
   nombreEmpresa?: string | null
+  /** Sede o ciudad de la empresa activa, para la tarjeta del menú. */
+  sedeEmpresa?: string | null
+  /** AdminCompanySwitcher ya montado (solo con ≥2 empresas). */
+  conmutadorEmpresa?: React.ReactNode
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const hasBottomNav = BOTTOM_NAV_ROLES.includes(ctx.role)
 
   const compacto = useSyncExternalStore(
     suscribirCompacto,
@@ -206,6 +204,8 @@ export function AppShell({
         >
           <AppSidebar
             ctx={ctx}
+            empresa={nombreEmpresa ? { nombre: nombreEmpresa, sede: sedeEmpresa ?? null } : null}
+            conmutador={conmutadorEmpresa}
             badges={badges}
             compacto={compacto}
             onToggleCompacto={alternarCompacto}
@@ -235,6 +235,8 @@ export function AppShell({
                 lista de módulos que se quede atrás. */}
             <AppSidebar
               ctx={ctx}
+              empresa={nombreEmpresa ? { nombre: nombreEmpresa, sede: sedeEmpresa ?? null } : null}
+            conmutador={conmutadorEmpresa}
               badges={badges}
               variante="movil"
               userEmail={userEmail}
@@ -267,19 +269,12 @@ export function AppShell({
               sí decide cada pantalla es la separación entre SUS secciones. */}
           <main
             className={cn(
-              'mx-auto w-full max-w-7xl px-4 py-8 md:px-6 lg:px-8',
-              // Hueco para la barra inferior. La clase vive en `globals.css`
-              // porque necesita `env(safe-area-inset-bottom)`.
-              hasBottomNav && 'con-dock-inferior'
+              'mx-auto w-full max-w-7xl px-4 py-8 md:px-6 lg:px-8'
             )}
           >
             {children}
           </main>
         </div>
-
-        {hasBottomNav && (
-          <BottomNav role={ctx.role} qrHref={qrHref} hiddenNav={[...(ctx.ocultas ?? [])]} />
-        )}
       </div>
     </>
   )

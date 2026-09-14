@@ -1,0 +1,66 @@
+// ──────────────────────────────────────────────────────────────────────────
+// HOME COMERCIAL (F2)
+//
+// Composición versionada del Inicio del cliente: qué bloques se muestran, en
+// qué orden, con qué contenido y para qué audiencia. El cliente NUNCA lee
+// borradores; solo la revisión efectiva (publicada, o programada ya vencida).
+// ──────────────────────────────────────────────────────────────────────────
+
+/// Revisión de la composición del Inicio. Estados:
+/// BORRADOR (editable) → PROGRAMADA (con fecha) → PUBLICADA (visible) →
+/// PAUSADA (oculta temporal) → ARCHIVADA (historial). Ver transiciones en
+/// `src/modules/home/composicion.ts`.
+model HomeRevision {
+  id             String    @id @default(cuid())
+  /// Empresa dueña. NULL = plataforma (F8); en F2 siempre tiene empresa.
+  companyId      String?
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Territorio comercial ("Higüey", "Bávaro · 20 km"…). Texto libre del negocio.
+  territorio     String?
+  estado         String    @default("BORRADOR")
+  programadaPara DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  bloques        HomeBloque[]
+
+  @@index([companyId, estado, programadaPara])
+  @@map("home_revisiones")
+}
+
+/// Bloque del feed. Los 7 tipos son cerrados (contrato Stitch A05):
+/// CABECERA (sistema, fijo) · HERO · CATEGORIAS · DESTACADAS · MEMBRESIAS ·
+/// BANNER_QR · EXPERIENCIAS. `config` varía por tipo y se valida con Zod.
+model HomeBloque {
+  id         String        @id @default(cuid())
+  revisionId String
+  revision   HomeRevision  @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  tipo       String
+  orden      Int
+  activo     Boolean       @default(true)
+  titulo     String?
+  config     Json          @default("{}")
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([revisionId, tipo])
+  @@index([revisionId, orden])
+  @@map("home_bloques")
+}
+
+/// Sinónimos de búsqueda por ámbito (F2): "carro"→"vehículo",
+/// "pestañas"→"cejas"… NULL en companyId = global (plataforma).
+model BusquedaSinonimo {
+  id           String   @id @default(cuid())
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  idioma       String   @default("es-DO")
+  termino      String
+  equivalencia String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([companyId, idioma, termino])
+  @@index([companyId, idioma])
+  @@map("busqueda_sinonimos")
+}

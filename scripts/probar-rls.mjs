@@ -33,6 +33,11 @@
  *                           necesitan.
  *   6. Sin contexto       — si nadie declaró empresa, no se ve NADA. Fallo
  *                           cerrado: un olvido no debe abrir la puerta.
+ *   7. Inicio comercial   — `home_revisiones` (Nivel 0) y `home_bloques`
+ *                           (Nivel N, por `revisionId`): lo que compone la
+ *                           pantalla que ve el cliente no cruza empresas, ni
+ *                           leyéndola ni colgando un bloque de una revisión
+ *                           ajena.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * USO
@@ -150,6 +155,8 @@ function limpiar() {
   // claves foráneas lo impiden.
   try {
     comoOmnisciente(`
+      delete from home_bloques    where "revisionId" in ('${A}_h', '${B}_h');
+      delete from home_revisiones where id in ('${A}_h', '${B}_h');
       delete from visits      where "clienteId" in ('${A}_k', '${B}_k');
       delete from memberships where "clienteId" in ('${A}_k', '${B}_k');
       delete from clientes    where id in ('${A}_k', '${B}_k');
@@ -216,6 +223,12 @@ try {
     insert into visits (id, "clienteId", "membershipId", servicio, "fechaVisita") values
       ('${A}_v', '${A}_k', '${A}_m', 'Lavado', now()),
       ('${B}_v', '${B}_k', '${B}_m', 'Lavado', now());
+    insert into home_revisiones (id, "companyId", territorio, estado, "updatedAt") values
+      ('${A}_h', '${A}', 'Territorio A', 'PUBLICADA', now()),
+      ('${B}_h', '${B}', 'Territorio B', 'PUBLICADA', now());
+    insert into home_bloques (id, "revisionId", tipo, orden, "updatedAt") values
+      ('${A}_hb', '${A}_h', 'CABECERA', 0, now()),
+      ('${B}_hb', '${B}_h', 'CABECERA', 0, now());
   `)
 
   // ── 1. El `where` olvidado ────────────────────────────────────────────────
@@ -278,6 +291,42 @@ try {
     'Sin contexto de empresa no se ve nada (fallo cerrado, no abierto)',
     sinContexto === '0',
     `vio ${sinContexto} filas sin declarar empresa`
+  )
+
+  // ── 7. La composición del Inicio, que es lo que ve el cliente ─────────────
+  //
+  // `home_revisiones` entra por Nivel 0 y `home_bloques` por Nivel N a través
+  // de `revisionId`. Se comprueban aquí, y no con un script aparte, por la
+  // razón que explica la cabecera de este archivo: las políticas se DEDUCEN,
+  // así que nadie las ha leído una por una y el único aval es sembrar dos
+  // empresas y mirar qué devuelve la base.
+  //
+  // Que estas dos tablas caigan por el mecanismo genérico es justamente lo que
+  // se está comprobando: si mañana una tabla nueva se queda sin camino, este
+  // caso —no un documento— es lo que lo dice.
+  const revisiones = comoInquilino(A, `select id from home_revisiones where id in ('${A}_h','${B}_h');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Inicio: la composición de A no incluye la de B',
+    revisiones.length === 1 && revisiones[0] === `${A}_h`,
+    `devolvió: ${JSON.stringify(revisiones)}`
+  )
+
+  const bloques = comoInquilino(A, `select id from home_bloques where id in ('${A}_hb','${B}_hb');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Inicio: los bloques heredan el inquilino de su revisión (Nivel N)',
+    bloques.length === 1 && bloques[0] === `${A}_hb`,
+    `devolvió: ${JSON.stringify(bloques)}`
+  )
+
+  comprobar(
+    'Inicio: A no puede colgar un bloque de la composición de B',
+    fallaComoInquilino(
+      A,
+      `insert into home_bloques (id,"revisionId",tipo,orden,"updatedAt")
+       values ('${A}_intruso','${B}_h','HERO',1,now());`
+    )
   )
 } catch (e) {
   fallos++

@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { Check, Infinity as InfinityIcon, Plus, Pencil, Package, LayoutTemplate } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney } from '@/lib/format'
 import { sufijoPeriodo, textoVigencia } from '@/modules/planes/periodo'
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function PlanesPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const prefs = await getRegionalPrefs(companyId)
 
   // Para compartir la sección de planes del perfil público de la empresa.
@@ -46,9 +46,7 @@ export default async function PlanesPage() {
   let bienvenida: { activa: boolean; tipo: string; valor: number | null } | null = null
   if (companyId) {
     try {
-      const company = await conEmpresaOTodas(
-        companyId,
-        'planes: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      const company = await conEmpresa(companyId,
         (tx) => tx.company.findUnique({
           where: { id: companyId },
           select: { bienvenidaActiva: true, bienvenidaTipo: true, bienvenidaValor: true },
@@ -67,9 +65,7 @@ export default async function PlanesPage() {
   }
 
   try {
-    planes = await conEmpresaOTodas(
-      companyId,
-      'planes: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    planes = await conEmpresa(companyId,
       (tx) => tx.plan.findMany({
         where: companyId ? { companyId } : {},
         select: {
@@ -241,3 +237,4 @@ export default async function PlanesPage() {
     </div>
   )
 }
+

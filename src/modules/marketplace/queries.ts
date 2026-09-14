@@ -107,6 +107,11 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
 
     return companies.map((c) => ({
       ...c,
+      // Decimal fuera del borde: crudo tiene .toFixed, pero tras el viaje por
+      // unstable_cache se vuelve string y revienta en la primera pantalla que
+      // formatee. Por eso el fallo era intermitente: la carga sin caché
+      // pasaba y la cacheada no.
+      averageRating: c.averageRating != null ? Number(c.averageRating) : null,
       categories: c.categories.map((cc) => cc.category.slug),
       desdePlan: c.plans[0]
         ? { nombre: c.plans[0].nombre, precio: Number(c.plans[0].precio) }
@@ -170,6 +175,8 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
 
     return {
       ...company,
+      // Mismo borde que en la lista: nunca un Decimal hacia la caché.
+      averageRating: company.averageRating != null ? Number(company.averageRating) : null,
       categories: company.categories.map((c) => c.category.slug),
     } as CompanyPublic
   } catch (error) {
@@ -369,6 +376,17 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
           tags: true,
           isFeatured: true,
           createdAt: true,
+          // Venta directa: sin estos campos ninguna destacada podía ser
+          // «relámpago» en el Inicio — `venta` llegaba siempre undefined y el
+          // filtro no encontraba nada (bug latente desde la tira anterior).
+          esComprable: true,
+          precio: true,
+          usosPorCompra: true,
+          beneficioVigenciaDias: true,
+          beneficioVigenciaHasta: true,
+          limitePorCliente: true,
+          maxCanjes: true,
+          canjes: true,
           company: {
             select: {
               id: true,
@@ -386,7 +404,23 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
       })
     )
 
-    return promotions as PromotionPublic[]
+    return promotions.map((p) => {
+      const { esComprable, precio, usosPorCompra, beneficioVigenciaDias,
+        beneficioVigenciaHasta, limitePorCliente, maxCanjes, canjes, ...resto } = p
+      return {
+        ...resto,
+        venta: esComprable
+          ? {
+              precio: Number(precio ?? 0),
+              usosPorCompra,
+              agotada: maxCanjes != null && canjes >= maxCanjes,
+              beneficioVigenciaDias,
+              beneficioVigenciaHasta,
+              limitePorCliente,
+            }
+          : null,
+      }
+    }) as PromotionPublic[]
   } catch (error) {
     console.error('[getFeaturedPromotions] Error:', error)
     return []
@@ -418,6 +452,9 @@ export async function getPromotionDetail(
           slug: true,
           descripcion: true,
           imagenUrl: true,
+          // El perfil de la promoción enseña su galería completa: el arte
+          // adicional que la empresa subió, no solo la portada.
+          imagenes: true,
           tipo: true,
           descuento: true,
           codigo: true,
@@ -826,6 +863,8 @@ export interface PlanConEmpresa extends PlanPublic {
      */
     moneda: string | null
     idioma: string | null
+    /** Ya normalizada a number (Decimal en el borde). Null = sin reseñas. */
+    averageRating: number | null
   }
 }
 
@@ -882,7 +921,7 @@ export async function getPlanesPublic(
           company: {
             select: {
               id: true, name: true, slug: true, logoUrl: true, ciudad: true,
-              moneda: true, idioma: true,
+              moneda: true, idioma: true, averageRating: true,
             },
           },
         },
@@ -897,7 +936,8 @@ export async function getPlanesPublic(
       descripcion: p.descripcion,
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
-      company: p.company,
+      // Number() en el borde: Decimal serializado tras unstable_cache es string.
+      company: { ...p.company, averageRating: p.company.averageRating != null ? Number(p.company.averageRating) : null },
     }))
   } catch (error) {
     console.error('[getPlanesPublic] Error:', error)
@@ -1058,5 +1098,75 @@ export async function getCompanyPostsPublic(
   } catch (error) {
     console.error('[getCompanyPostsPublic] Error:', error)
     return empty
+  }
+}
+
+// ── Reseñas públicas de una empresa ─────────────────────────────────────────
+
+export interface ResenasEmpresa {
+  /** Promedio real (1–5) sobre las valoraciones visibles, o null sin datos. */
+  promedio: number | null
+  total: number
+  /** Las últimas con comentario: lo que un cliente escribió, con su nombre de
+   *  pila. Sin comentario no se lista — una fila de solo estrellas no cuenta
+   *  nada que el promedio no diga ya. */
+  comentarios: { id: string; rating: number; comentario: string; autor: string; fecha: Date }[]
+}
+
+/**
+ * El perfil de una promoción o membresía enseña las reseñas de los clientes
+ * del negocio. Son las de `CompanyRating` —valoración por cliente, única por
+ * empresa— porque eso es lo que hoy existe: reseñas POR PLAN no hay todavía,
+ * y etiquetarlas como si lo fueran sería inventar. La sección se titula con
+ * el nombre de la empresa por esa razón.
+ */
+export async function getResenasEmpresa(companyId: string): Promise<ResenasEmpresa> {
+  try {
+    return await sinEmpresa('marketplace: reseñas públicas de la empresa', async (tx) => {
+      const [agregado, filas] = await Promise.all([
+        tx.companyRating.aggregate({
+          where: { companyId, visible: true },
+          _avg: { rating: true },
+          _count: { _all: true },
+        }),
+        tx.companyRating.findMany({
+          where: { companyId, visible: true, comment: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            rating: true,
+            comment: true,
+            createdAt: true,
+            cliente: { select: { nombre: true } },
+          },
+        }),
+      ])
+      return {
+        promedio: agregado._avg.rating != null ? Number(agregado._avg.rating) : null,
+        total: agregado._count._all,
+        comentarios: filas.flatMap((f) =>
+          f.comment
+            ? [{
+                id: f.id,
+                rating: f.rating,
+                comentario: f.comment,
+                // Nombre de pila + inicial: identifica sin exponer el nombre
+                // completo de un cliente en una pantalla pública.
+                autor: (() => {
+                  const partes = f.cliente.nombre.trim().split(/\s+/)
+                  const pila = partes[0] ?? 'Cliente'
+                  const inicial = partes[1]?.[0]
+                  return inicial ? `${pila} ${inicial}.` : pila
+                })(),
+                fecha: f.createdAt,
+              }]
+            : []
+        ),
+      }
+    })
+  } catch (error) {
+    console.error('[getResenasEmpresa] Error:', error)
+    return { promedio: null, total: 0, comentarios: [] }
   }
 }

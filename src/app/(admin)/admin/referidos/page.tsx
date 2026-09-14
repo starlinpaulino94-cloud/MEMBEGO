@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import {
   Users,
   Gift,
@@ -14,7 +14,7 @@ import {
 import { requireRole } from '@/lib/auth/guards'
 import { referidoEstadoUi } from '@/lib/estados'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatMoney } from '@/lib/format'
 import {
@@ -66,7 +66,7 @@ function Bar({ value, max, className }: { value: number; max: number; className?
 
 export default async function ReferidosPage() {
   const user = await requireRole(ADMIN_ROLES)
-  const companyId = companyFilter(user)
+  const companyId = await requireCompanyContext(user)
   const isSuperadmin = user.metadata.role === 'SUPERADMIN'
   const where = companyId ? { companyId } : {}
   const prefs = await getRegionalPrefs(companyId)
@@ -82,9 +82,7 @@ export default async function ReferidosPage() {
     // fuera del envoltorio para no anidar transacciones (agota el pool).
     ;[dash, [reglas, companies]] = await Promise.all([
       getEmpresaReferidosDashboard(companyId ?? null),
-      conEmpresaOTodas(
-      companyId,
-      'referidos: sin empresa activa es el superadmin, que cruza empresas a propósito',
+      conEmpresa(companyId,
       (tx) => Promise.all([
         tx.reglaRecompensa.findMany({
           where,
@@ -499,3 +497,4 @@ export default async function ReferidosPage() {
     </div>
   )
 }
+

@@ -1,5 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
-import { conEmpresaOTodas } from '@/lib/tenant'
+import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
@@ -16,9 +16,7 @@ export default async function NuevaCampanaInvitacionPage() {
 
   // Promociones vigentes de la empresa: candidatas a beneficio digital (E8).
   const promociones = companyId
-    ? await conEmpresaOTodas(
-      companyId,
-      'invitaciones · nueva: sin empresa activa es el superadmin, que cruza empresas a propósito',
+    ? await conEmpresa(companyId,
       (tx) => tx.promocion.findMany({
           where: { companyId, activo: true, archivada: false },
           select: { id: true, titulo: true },
@@ -37,3 +35,4 @@ export default async function NuevaCampanaInvitacionPage() {
     </div>
   )
 }
+

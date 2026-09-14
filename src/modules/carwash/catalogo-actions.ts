@@ -11,7 +11,6 @@ import { revalidatePath } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/types'
-import { companyFilter } from '@/modules/admin/queries'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { clienteLocal } from '@/modules/plataforma/cliente-local'
 
@@ -26,7 +25,7 @@ const RUTA = '/admin/app/carwash/catalogo'
 async function empresaDelAdmin(): Promise<string | null> {
   const user = await getUser()
   if (!user || !(ADMIN_ROLES as readonly string[]).includes(user.metadata.role)) return null
-  return companyFilter(user) ?? user.metadata.companyId ?? null
+  return user.metadata.companyId ?? null
 }
 
 function numero(v: FormDataEntryValue | null): number | null {

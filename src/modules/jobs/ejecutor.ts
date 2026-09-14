@@ -112,6 +112,26 @@ async function procesarRecompensas(carga: CargaRecompensas): Promise<ResultadoTr
 }
 
 /**
+ * Identidad estable de un lote de notificaciones (P1B): empresa + audiencia +
+ * contenido + desplazamiento. Dos ejecuciones del mismo lote producen la misma
+ * clave, así que el índice único (userId, dedupeKey) convierte el reintento en
+ * no-op en vez de duplicar. Nunca incluye fecha de ejecución ni contadores.
+ */
+export function dedupeKeyNotificacion(carga: CargaNotificar): string {
+  const p = carga.payload
+  return [
+    'notif',
+    carga.companyId,
+    carga.audiencia,
+    p.tipo,
+    p.titulo,
+    p.mensaje,
+    p.href ?? '',
+    String(carga.desde),
+  ].join('|')
+}
+
+/**
  * Un lote de notificaciones y, si quedan más, el encadenamiento del siguiente.
  *
  * EL ORDEN ES PARTE DE LA CORRECCIÓN, no un detalle estético: se ordena por
@@ -121,6 +141,7 @@ async function procesarRecompensas(carga: CargaRecompensas): Promise<ResultadoTr
  * notificación dos veces y otros ninguna.
  */
 async function notificarLote(carga: CargaNotificar): Promise<ResultadoTrabajo> {
+  const claveLote = dedupeKeyNotificacion(carga)
   const { userIds, hayMas } = await sinEmpresa(
     'jobs: lote de notificaciones por usuario (cross-tenant)',
     async (tx) => {
@@ -132,10 +153,13 @@ async function notificarLote(carga: CargaNotificar): Promise<ResultadoTrabajo> {
       if (userIds.length === 0) return { userIds, hayMas: false }
 
       await tx.notificacion.createMany({
-        data: userIds.map((userId) => ({ userId, ...carga.payload })),
-        // Sin unicidad en la tabla `skipDuplicates` no hace nada, pero se deja
-        // puesto: el día que se añada un índice único por (userId, tipo, día), el
-        // reintento deja de duplicar sin tocar este archivo.
+        data: userIds.map((userId) => ({
+          userId,
+          ...carga.payload,
+          dedupeKey: claveLote,
+        })),
+        // Con el índice único (userId, dedupeKey) el reintento del mismo lote
+        // se convierte en no-op en vez de duplicar notificaciones.
         skipDuplicates: true,
       })
 

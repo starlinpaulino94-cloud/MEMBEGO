@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ChevronRight, ExternalLink, Menu, Search, X } from 'lucide-react'
+import { ChevronRight, ExternalLink, Menu, QrCode, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   ATERRIZAJE_EMPRESA,
@@ -11,6 +11,7 @@ import {
   breadcrumbs,
   buscarModulos,
   ofreceEntradaAEmpresa,
+  visibleWorkspaces,
   ofreceSalidaAPlataforma,
   type ContextoNav,
 } from '@/components/layout/nav-config'
@@ -50,6 +51,20 @@ import { CompanySwitcher, type CompanyOption } from '@/components/cliente/Compan
  * cabecera. Quién lo ve lo dicen `ofreceEntradaAEmpresa` y
  * `ofreceSalidaAPlataforma` en nav-config; aquí no se mira el rol.
  */
+
+/** Cómo se llama cada rol delante de una persona. Sin traducción, minúsculas. */
+const ROTULO_ROL: Partial<Record<ContextoNav['role'], string>> = {
+  SUPERADMIN: 'Superadministrador',
+  ADMINISTRADOR: 'Administrador',
+  ADMIN_EMPRESA: 'Administrador',
+  GERENTE: 'Gerente',
+  SUPERVISOR: 'Supervisor',
+  MARKETING: 'Marketing',
+  CAJERO: 'Cajero',
+  RECEPCION: 'Recepción',
+  EMPLEADO: 'Empleado',
+  CLIENTE: 'Cliente',
+}
 
 function SegmentoAmbito({
   activo,
@@ -113,6 +128,15 @@ export function AppHeader({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  // El mismo menú filtrado que pinta la barra lateral: si el escáner no está
+  // ahí para este rol, el atajo tampoco.
+  const puedeCanjear = useMemo(
+    () =>
+      visibleWorkspaces(ctx).some((w) =>
+        w.groups.some((g) => g.items.some((i) => i.href === '/admin/scanner'))
+      ),
+    [ctx]
+  )
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -187,11 +211,11 @@ export function AppHeader({
             {ctx.scope === 'COMPANY' && nombreEmpresa ? `Empresa · ${nombreEmpresa}` : 'Empresa'}
           </SegmentoAmbito>
         </div>
-      ) : nombreEmpresa ? (
-        <span className="hidden min-w-0 shrink-0 truncate rounded-full bg-muted px-2.5 py-1 text-caption font-semibold text-muted-foreground md:block">
-          {nombreEmpresa}
-        </span>
       ) : null}
+      {/* La empresa activa ya no se repite aquí: vive en la tarjeta de la
+          columna (contrato Stitch), y esta píldora solo le robaba ancho al
+          buscador. El conmutador de ámbito del superadmin sí se queda: es
+          navegación, no rótulo. */}
 
       {/* Migas: espacio › dominio › módulo › subpágina.
           En móvil se reducen a la última —el contexto es útil en escritorio,
@@ -254,7 +278,7 @@ export function AppHeader({
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="Buscar…"
             aria-label="Buscar un módulo"
-            className="h-10 w-full rounded-xl border border-transparent bg-muted/70 pl-9 pr-12 text-sm text-foreground outline-none transition-all duration-fast placeholder:text-muted-foreground/50 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20"
+            className="h-10 w-full rounded-full border border-transparent bg-muted pl-9 pr-12 text-sm text-foreground outline-none transition-all duration-fast placeholder:text-muted-foreground/60 focus:border-ring focus:bg-background focus:ring-2 focus:ring-ring/20"
           />
           {query ? (
             <button
@@ -317,9 +341,38 @@ export function AppHeader({
             <span className="hidden sm:inline">{s.nombre}</span>
           </a>
         ))}
+        {/* CANJE RÁPIDO — el atajo que el diseño pone en la barra superior.
+            Está ahí porque el mostrador lo usa decenas de veces al día y
+            llegar por el menú cuesta dos clics con un cliente delante.
+
+            Solo se ofrece a quien de verdad puede canjear: se comprueba contra
+            el MISMO menú filtrado que pinta la barra lateral, así que un rol
+            sin permiso sobre el escáner tampoco lo ve aquí. Ocultar un botón
+            no autoriza nada —el servidor sigue mandando—, pero ofrecer un
+            atajo a una pantalla prohibida es prometer algo que no se cumple. */}
+        {puedeCanjear && (
+          <Link
+            href="/admin/scanner"
+            className="mr-1 inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-3 text-label-lg text-primary-foreground transition-colors duration-fast hover:bg-brand-primary-hover focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <QrCode className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Canje rápido</span>
+            <span className="sr-only sm:hidden">Canje rápido</span>
+          </Link>
+        )}
         {companies && <CompanySwitcher companies={companies} />}
         <ThemeToggle />
         <NotificationBell initialCount={notifCount} />
+        {userEmail && (userName || ctx.role) ? (
+          <span className="hidden min-w-0 max-w-[12rem] text-right lg:block" aria-hidden>
+            <span className="block truncate text-label-lg text-foreground">
+              {userName || userEmail}
+            </span>
+            <span className="block truncate text-label-md capitalize text-muted-foreground">
+              {ROTULO_ROL[ctx.role] ?? ctx.role.toLowerCase()}
+            </span>
+          </span>
+        ) : null}
         {userEmail && (
           <MenuUsuario
             role={ctx.role}

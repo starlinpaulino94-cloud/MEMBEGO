@@ -38,6 +38,9 @@ export interface PromotionPublic {
   slug: string | null
   descripcion: string
   imagenUrl: string | null
+  /** Galería adicional del perfil. Solo la trae el detalle (getPromotionDetail);
+   *  en los listados viaja undefined. */
+  imagenes?: string[]
   tipo: string
   descuento: number | null
   codigo: string | null

@@ -138,19 +138,11 @@ export default async function PlanesPage({
     )
   } catch (e) {
     console.error('[cliente-planes]', e)
-    return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">No pudimos cargar tu información. Intenta más tarde.</p>
-      </main>
-    )
+    return <p className="text-muted-foreground">No pudimos cargar tu información. Intenta más tarde.</p>
   }
 
   if (!cliente) {
-    return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">No se encontró tu información.</p>
-      </main>
-    )
+    return <p className="text-muted-foreground">No se encontró tu información.</p>
   }
 
   const membership = cliente.memberships[0] ?? null
@@ -172,11 +164,7 @@ export default async function PlanesPage({
   })
 
   if (!resultado) {
-    return (
-      <main className="container max-w-5xl py-8">
-        <p className="text-muted-foreground">No pudimos cargar los planes. Intenta más tarde.</p>
-      </main>
-    )
+    return <p className="text-muted-foreground">No pudimos cargar los planes. Intenta más tarde.</p>
   }
 
   const planes: PlanItem[] = resultado.planes.map((p) => ({
@@ -214,24 +202,27 @@ export default async function PlanesPage({
   const faltanRequisitos = !resultado.requisitos.canProceed && !resultado.vitrina
 
   return (
-    <main className="container max-w-5xl py-8">
-      {/* ── Cabecera integrada y limpia (adiós al banner gigante) ─────────── */}
-      <header className="animate-fade-up mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">
+    // Sin `main` ni contenedor propio: el CustomerShell ya pone los dos, y un
+    // segundo <main> anidado además es HTML inválido.
+    <div className="space-y-6 animate-fade-up">
+      <header>
+        {/* `flex-wrap`: a 390px las dos salidas no caben junto al sobretítulo
+            y deben BAJAR de línea, no empujar el ancho del documento. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="min-w-0 break-words text-overline text-primary">
             Membresías · {cliente.company.name}
           </p>
-          <div className="-mt-1 flex shrink-0 items-center gap-1">
+          <div className="flex items-center gap-1">
             {/* Sin esta salida, «Planes» significaría para siempre «los planes
                 de la empresa que tengas activa», que es justo el supuesto que
                 esta fase quita. */}
-            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+            <Button asChild variant="ghost" size="sm" className="rounded-full text-muted-foreground">
               <Link href="/cliente/planes?todos=1">
                 <Store className="mr-1.5 h-4 w-4" />
                 Otros negocios
               </Link>
             </Button>
-            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+            <Button asChild variant="ghost" size="sm" className="rounded-full text-muted-foreground">
               <Link href="/mis-membresias">
                 <ArrowLeft className="mr-1.5 h-4 w-4" />
                 Mis membresías
@@ -239,37 +230,37 @@ export default async function PlanesPage({
             </Button>
           </div>
         </div>
-        <h1 className="mt-2 max-w-2xl text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+        <h1 className="mt-2 max-w-2xl break-words text-h2 text-foreground">
           {cliente.nombre
             ? `Hola ${cliente.nombre.split(' ')[0]}, elige tu plan ideal`
             : 'Elige tu plan ideal'}
         </h1>
-        <p className="mt-2 max-w-xl text-muted-foreground">
+        <p className="mt-1 max-w-xl text-small text-muted-foreground">
           Paga menos por lo que ya haces. Aquí tienes cada plan con todos sus
           detalles para decidir con calma.
         </p>
       </header>
 
       {/* ── Banners de estado ─────────────────────────────────────────────── */}
-      <div className="mb-8 space-y-3">
+      <div className="space-y-3">
         {pendingPayment && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-warning/25 bg-warning/8 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-lg border border-warning/25 bg-warning/8 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-warning/15">
-                <Clock className="h-4.5 w-4.5 text-warning" />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning/15">
+                <Clock className="h-4.5 w-4.5 text-warning" aria-hidden />
               </span>
               <div className="min-w-0">
-                <p className="font-semibold text-foreground">
+                <p className="text-h4 text-foreground">
                   Plan {pendingPayment.plan.nombre} pendiente de pago
                 </p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
+                <p className="mt-0.5 text-small text-muted-foreground">
                   {pendingPayment.estado === 'RECHAZADA'
                     ? 'Tu comprobante fue rechazado. Envía uno nuevo para activarlo.'
                     : 'Sube tu comprobante para que el equipo active tu membresía.'}
                 </p>
               </div>
             </div>
-            <Button asChild size="sm" className="shrink-0 bg-warning-foreground hover:bg-warning-foreground/90">
+            <Button asChild size="sm" className="shrink-0 rounded-full bg-warning-foreground hover:bg-warning-foreground/90">
               <Link href={`/membresia/${pendingPayment.id}`}>
                 <CreditCard className="mr-2 h-4 w-4" /> Completar pago
               </Link>
@@ -278,21 +269,21 @@ export default async function PlanesPage({
         )}
 
         {pendingChange && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-brand-primary-soft/50 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <ArrowRightLeft className="h-4.5 w-4.5 text-primary" />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft">
+                <ArrowRightLeft className="h-4.5 w-4.5 text-primary" aria-hidden />
               </span>
               <div className="min-w-0">
-                <p className="font-semibold text-foreground">
+                <p className="text-h4 text-foreground">
                   Cambio a {pendingChange.planSolicitado?.nombre} solicitado
                 </p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
+                <p className="mt-0.5 text-small text-muted-foreground">
                   Tu plan actual sigue activo. Sube el comprobante del nuevo plan para completar el cambio.
                 </p>
               </div>
             </div>
-            <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Button asChild size="sm" variant="outline" className="shrink-0 rounded-full">
               <Link href={`/membresia/${pendingChange.id}`}>
                 <CreditCard className="mr-2 h-4 w-4" /> Subir comprobante
               </Link>
@@ -305,16 +296,16 @@ export default async function PlanesPage({
             para precios exactos y compra en línea. Solo donde el vehículo
             significa algo: en un restaurante esta tarjeta no tiene sentido. */}
         {resultado.vitrina && resultado.requiereVehiculo && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 elevation-1 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted">
-                <Car className="h-4.5 w-4.5 text-muted-foreground" />
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-retail-mist">
+                <Car className="h-4.5 w-4.5 text-primary" aria-hidden />
               </span>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-small text-muted-foreground">
                 Registra tu vehículo para ver el precio exacto de tu categoría y comprar en línea.
               </p>
             </div>
-            <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Button asChild size="sm" variant="outline" className="shrink-0 rounded-full">
               <Link href={vehiculoNext}>Registrar vehículo</Link>
             </Button>
           </div>
@@ -378,22 +369,22 @@ export default async function PlanesPage({
           />
 
           {/* Confianza: reduce la fricción de compra sin agregar ruido. */}
-          <div className="animate-fade-up delay-500 mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground">
+          <div className="animate-fade-up delay-500 mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-caption">
             <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
               Pago verificado por el equipo
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
               Tu QR se activa al aprobarse el pago
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
               Sin contratos ni permanencia
             </span>
           </div>
         </>
       )}
-    </main>
+    </div>
   )
 }

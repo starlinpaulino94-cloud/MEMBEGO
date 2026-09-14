@@ -60,7 +60,10 @@ export function ExplorarEmpresasList({
   }
 
   return (
-    <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    // `grid-cols-1` EXPLÍCITO: sin plantilla, la pista implícita es `auto` y
+    // respeta el min-content de la tarjeta más ancha — a 390px la rejilla
+    // entera desborda. `grid-cols-N` compila a minmax(0,1fr), que recorta.
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {empresas.map((company) => {
         const siguiendo = seguidas.has(company.id)
         const pending = pendingId === company.id
