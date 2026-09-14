@@ -488,9 +488,12 @@ export async function cancelarMembresia(
     if (!m) return { error: 'Membresía no encontrada.' }
 
     await conEmpresa(m.cliente.companyId, async (tx) => {
+      // Cancelar es «deja de cobrarme»: también apaga la renovación con
+      // tarjeta. Sin esto, bastaba con que la membresía volviera a ACTIVA para
+      // que el cron la recogiera y cobrara sin que nadie lo pidiera.
       await tx.membership.update({
         where: { id: membershipId },
-        data: { estado: 'CANCELADA' },
+        data: { estado: 'CANCELADA', autoRenovar: false },
       })
       await tx.auditLog.create({
         data: {

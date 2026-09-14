@@ -46,6 +46,23 @@ export async function trasEntrante(input: {
       telefono: input.telefono,
       primero: input.contacto.nuevo,
     })
+    // Auto-reply (portado de la rama): keyword, bienvenida si primer mensaje,
+    // o catálogo por intención de excursiones. Solo WHATSAPP de texto.
+    // Fire-and-safe: el entrante ya está guardado y las automatizaciones siguen.
+    if (input.canal === 'WHATSAPP' && input.tipo === 'text' && input.texto) {
+      try {
+        const { responderAutoReply } = await import('@/modules/mensajeria/autoReply')
+        await responderAutoReply({
+          companyId: input.companyId,
+          conversacionId: input.conversacionId,
+          texto: input.texto,
+          telefono: input.telefono ?? '',
+          esNueva: input.contacto.nuevo,
+        })
+      } catch (e) {
+        console.error('[mensajeria] auto-reply tras entrante', e)
+      }
+    }
     if (prospecto?.creado) {
       await emitirProspectoCreado({
         companyId: input.companyId,

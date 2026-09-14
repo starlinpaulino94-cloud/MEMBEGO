@@ -75,7 +75,7 @@ test('métricas puras: mediana de respuesta y conversión', () => {
 
 test('esquema y migración: un prospecto por contacto, aditivo, con RLS', () => {
   const schema = leer('prisma/schema/crm.prisma')
-  assert.match(schema, /contactoId String\s+@unique/)
+  assert.match(schema, /contactoId\s+String\s+@unique/)
   assert.match(schema, /onDelete: Restrict/)
   assert.match(leer('prisma/schema/mensajeria.prisma'), /prospecto\s+Prospecto\?/)
   const sql = leer('prisma/migrations/20260911_crm_prospectos/migration.sql')

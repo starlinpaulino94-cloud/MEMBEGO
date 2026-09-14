@@ -1,4 +1,15 @@
-// ─── CRM · prospectos y seguimientos (Meta · Fase 6) ─────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
+// CRM — PROSPECTOS, LEADS, SEGUIMIENTO Y PIPELINE
+//
+// Multi-tenant por companyId en todos los modelos.
+// Sin enums Prisma: valores controlados en código (String).
+//
+// Prospectos (main, Fase 6) y Leads (branch) conviven: los prospectos nacen de
+// la mensajería entrante; los leads son el pipeline de ventas clásico. Las
+// conversaciones viven en mensajeria.prisma, no aquí.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ─── Prospectos y seguimientos ─────────────────────────────────────────────
 //
 // Un prospecto NACE SOLO: de la primera conversación entrante de un contacto
 // que todavía no es cliente de la empresa. Uno por contacto (UNIQUE): si la
@@ -10,20 +21,20 @@ model Prospecto {
   id        String @id @default(cuid())
   companyId String
 
-  contactoId String             @unique
-  contacto   ContactoMensajeria @relation(fields: [contactoId], references: [id], onDelete: Restrict)
+  contactoId     String             @unique
+  contacto       ContactoMensajeria @relation(fields: [contactoId], references: [id], onDelete: Restrict)
   /// La conversación por la que llegó.
   conversacionId String?
   /// WHATSAPP | MESSENGER | INSTAGRAM: el canal de origen.
-  canal String
+  canal          String
 
   /// nuevo | contactado | cotizacion | negociacion | cerrado | perdido
   etapa           String   @default("nuevo")
   etapaCambiadaAt DateTime @default(now())
 
-  nombre   String?
-  telefono String?
-  notas    String?
+  nombre      String?
+  telefono    String?
+  notas       String?
   /// El Cliente en que se convirtió, si se convirtió.
   clienteId   String?
   asignadoAId String?
@@ -50,8 +61,8 @@ model SeguimientoProspecto {
   prospecto   Prospecto @relation(fields: [prospectoId], references: [id], onDelete: Cascade)
 
   /// Llamada | Email | WhatsApp | Visita | Reunión
-  tipo String
-  nota String
+  tipo         String
+  nota         String
   /// Cuándo toca hacerlo; null = sin fecha.
   programadoAt DateTime?
   /// Cuándo se hizo; null = pendiente.
@@ -63,4 +74,93 @@ model SeguimientoProspecto {
   @@index([companyId, hechoAt, programadoAt])
   @@index([prospectoId, createdAt])
   @@map("seguimientos_prospecto")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// CRM — LEADS, SEGUIMIENTO Y PIPELINE
+//
+// Multi-tenant por companyId en todos los modelos.
+// Sin enums Prisma: valores controlados en código (String).
+// ──────────────────────────────────────────────────────────────────────────
+
+model Lead {
+  id        String  @id @default(uuid())
+  companyId String
+  clienteId String?
+
+  nombre           String
+  email            String?
+  telefono         String?
+  fuente           String    @default("ORGANICO") // ORGANICO, PAGADO, REFERENCIA, EVENTO, OTRO
+  canal            String    @default("WEB") // WHATSAPP, INSTAGRAM, FACEBOOK, TELEFONO, PRESENCIAL, WEB
+  estado           String    @default("ACTIVO") // ACTIVO, INACTIVO, CONVERTIDO, DESCARTADO
+  etapa            String    @default("NUEVO") // NUEVO, CONTACTADO, INTERESADO, PROPUESTA, NEGOCIACION, GANADO, PERDIDO
+  score            Int?
+  fechaSeguimiento DateTime?
+  prioridad        String    @default("MEDIA") // BAJA, MEDIA, ALTA, URGENTE
+  asignadoA        String? // userId
+  notas            String?
+  tags             String[]  @default([])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  notasSeguimiento NotaSeguimiento[]
+
+  @@unique([companyId, telefono], name: "Lead_company_telefono")
+  @@index([companyId])
+  @@index([companyId, estado])
+  @@index([companyId, etapa])
+  @@index([fechaSeguimiento])
+  @@index([asignadoA])
+}
+
+model NotaSeguimiento {
+  id           String    @id @default(uuid())
+  leadId       String
+  lead         Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId       String
+  contenido    String
+  tipo         String    @default("NOTA") // NOTA, LLAMADA, EMAIL, WHATSAPP, REUNION
+  estado       String    @default("PENDIENTE") // PENDIENTE, COMPLETADA
+  fechaProxima DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([leadId])
+  @@index([leadId, createdAt])
+}
+
+model PipelineConfig {
+  id               String   @id @default(uuid())
+  companyId        String   @unique
+  categoria        String // CAR_WASH, BARBERIA, etc.
+  stages           Json // [{id, nombre, color, orden, esObligatoria, reglasTransicion}]
+  camposCustom     Json // [{key, label, tipo, opciones, obligatorio}]
+  automatizaciones Json // {bienvenida:bool, recordatorioDias:int, cierre:bool, plantillas:{...}}
+  updatedAt        DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// AUTO-REPLY — CONFIGURACIÓN DE RESPUESTAS AUTOMÁTICAS POR WHATSAPP
+//
+// Cada empresa define reglas de auto-reply para mensajes entrantes.
+// Las keywords se matchean contra el texto del inbound para decidir
+// qué plantilla enviar. Permite catálogos como attachment.
+// ──────────────────────────────────────────────────────────────────────────
+
+model AutoReplyConfig {
+  id            String   @id @default(cuid())
+  companyId     String
+  nombre        String // Nombre descriptivo de la regla, ej: "Saludo bienvenida"
+  keywords      String[] @default([]) // Palabras clave que activan esta respuesta
+  esBienvenida  Boolean  @default(false) // Si es el saludo automático de primer contacto
+  tipoRespuesta String   @default("TEXTO") // TEXTO, IMAGEN, DOCUMENTO, CATALOGO
+  contenido     String // Texto o plantilla de la respuesta
+  catalogoPath  String? // Ruta o URL del catálogo si tipoRespuesta = CATALOGO
+  activa        Boolean  @default(true) // Habilitada / deshabilitada
+  orden         Int      @default(0) // Prioridad de evaluación (menor = primero)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, nombre])
+  @@index([companyId, activa])
 }

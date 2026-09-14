@@ -354,6 +354,55 @@ export async function runSeed(): Promise<SeedResult> {
     details.push(`Usuario: ${u.email} (${u.role})`)
   }
 
+  // 3. Auto-reply configs (idempotente por companyId + nombre)
+  let autoReplyCount = 0
+  for (const company of SEED_COMPANIES) {
+    const companyId = companiesBySlug[company.slug]?.id
+    if (!companyId) continue
+
+    // Regla: Bienvenida (esBienvenida = true)
+    await prisma.autoReplyConfig.upsert({
+      where: { companyId_nombre: { companyId, nombre: 'Bienvenida' } },
+      update: {},
+      create: {
+        companyId,
+        nombre: 'Bienvenida',
+        esBienvenida: true,
+        tipoRespuesta: 'TEXTO',
+        contenido: `¡Hola! 👋 Bienvenido(a) a ${company.name}. ¿En qué podemos ayudarte?`,
+        activa: true,
+        orden: 0,
+      },
+    })
+    autoReplyCount++
+
+    // Regla: Catálogo de excursiones
+    const catalogoUrl =
+      company.type === 'carwash'
+        ? 'https://membego.com/cartown/catalogo'
+        : 'https://membego.com/tonis/catalogo'
+
+    await prisma.autoReplyConfig.upsert({
+      where: {
+        companyId_nombre: { companyId, nombre: 'Catálogo Excursiones' },
+      },
+      update: {},
+      create: {
+        companyId,
+        nombre: 'Catálogo Excursiones',
+        keywords: ['excursion', 'tour', 'reserva', 'catalogo'],
+        tipoRespuesta: 'CATALOGO',
+        contenido:
+          'Aquí tienes nuestro catálogo de excursiones disponibles. ¡Elige la que más te guste!',
+        catalogoPath: catalogoUrl,
+        activa: true,
+        orden: 1,
+      },
+    })
+    autoReplyCount++
+  }
+  details.push(`Auto-reply configs: ${autoReplyCount}`)
+
   return {
     companies: SEED_COMPANIES.length,
     plans: plansCount,

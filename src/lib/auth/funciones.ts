@@ -54,6 +54,10 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   personalizacion: 'Personalización',
   app: 'App Car Wash',
   excursiones: 'Excursiones',
+  leads: 'Leads',
+  conversaciones: 'Conversaciones',
+  pipeline: 'Pipeline comercial',
+  configuracion: 'Configuración CRM',
   integraciones: 'Integraciones',
 }
 
@@ -88,6 +92,7 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
   membresias: [
     { codigo: 'cambiar_plan', label: 'Cambiar el plan de una membresía' },
     { codigo: 'renovar', label: 'Renovar membresías' },
+    { codigo: 'ajustar_lavados', label: 'Sumar o restar lavados a una membresía' },
   ],
   clientes: [
     { codigo: 'nota_crear', label: 'Agregar notas al cliente' },

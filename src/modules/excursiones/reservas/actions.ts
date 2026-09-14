@@ -34,6 +34,7 @@ import { prisma } from '@/lib/prisma'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from '@/lib/email'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { randomBytes } from 'crypto'
 import {
   ESTADOS_RESERVA,
@@ -59,6 +60,7 @@ import { verificarYBloquearCupoActividad } from './queries'
 import { sincronizarEstadoAgotada } from '../catalogo/actions'
 import { getExcursionesConfig } from '../config'
 import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 
 export interface ReservaActionState {
   error?: string
@@ -606,13 +608,13 @@ export async function crearReserva(
     }
 
     // Send confirmation email to client (non-blocking)
+    const reservaCompleta = await conEmpresa(companyId, (tx) =>
+      tx.reservaExc.findFirst({
+        where: { id: creada.id, companyId },
+        select: { checkinToken: true },
+      })
+    )
     if (clienteEmail) {
-      const reservaCompleta = await conEmpresa(companyId, (tx) =>
-        tx.reservaExc.findFirst({
-          where: { id: creada.id, companyId },
-          select: { checkinToken: true },
-        })
-      )
       const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
       if (reservaCompleta?.checkinToken) {
         correoConfirmacionReserva({
@@ -629,6 +631,22 @@ export async function crearReserva(
           sendEmail({ to: clienteEmail, subject: `Confirmación de reserva ${creada.numero} — ${excursion.nombre}`, html, companyId })
         ).catch((e) => console.error('[excursiones] Error enviando email confirmación en crearReserva:', e))
       }
+    }
+
+    // Send WhatsApp confirmation to client (non-blocking)
+    if (clienteTelefono) {
+      enviarConfirmacionReservaWhatsApp({
+        companyId,
+        clienteId: targetClienteId,
+        telefono: clienteTelefono,
+        numeroReserva: creada.numero,
+        nombreExcursion: excursion.nombre,
+        fecha: v.datos.fecha.toISOString().split('T')[0],
+        hora: v.datos.hora ?? '',
+        pasajeros: v.datos.adultos + v.datos.ninos,
+        total: Number(creada.total),
+        moneda: excursion.moneda,
+      }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en crearReserva:', e))
     }
 
     revalidatePath('/admin/excursiones/reservas')
@@ -691,6 +709,7 @@ export async function registrarPago(
         select: {
           id: true,
           estado: true,
+          numero: true,
           total: true,
           moneda: true,
           pagos: { select: { monto: true, estado: true } },
@@ -742,6 +761,19 @@ export async function registrarPago(
         reserva.id,
         user.metadata.dbUserId ?? null
       ).catch(anotarFallo('excursiones:reservas:autoVentaComision'))
+
+      emitirEventoEstrategia({
+        companyId,
+        type: 'reserva.pagada',
+        subjectId: reserva.id,
+        payload: {
+          reservaId: reserva.id,
+          numero: reserva.numero,
+          total: Number(reserva.total),
+          moneda: reserva.moneda,
+          metodo: v.datos.metodo,
+        },
+      }).catch(anotarFallo('excursiones:reservas:eventoPagada'))
     }
 
     await auditar(companyId, user.metadata.dbUserId ?? null, reserva.id, {

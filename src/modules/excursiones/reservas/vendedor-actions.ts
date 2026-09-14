@@ -24,6 +24,7 @@ import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { correoAccesoCliente, correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 import { sendEmail } from '@/lib/email'
+import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
 
@@ -480,13 +481,13 @@ export async function crearReservaVendedor(
     }
 
     // Send confirmation email to client (non-blocking)
+    const reservaCompleta = await conEmpresa(companyId, (tx) =>
+      tx.reservaExc.findFirst({
+        where: { id: reserva.id, companyId },
+        select: { checkinToken: true },
+      })
+    )
     if (clienteEmail) {
-      const reservaCompleta = await conEmpresa(companyId, (tx) =>
-        tx.reservaExc.findFirst({
-          where: { id: reserva.id, companyId },
-          select: { checkinToken: true },
-        })
-      )
       const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
       if (reservaCompleta?.checkinToken) {
         correoConfirmacionReserva({
@@ -502,6 +503,30 @@ export async function crearReservaVendedor(
         }).then((html) =>
           sendEmail({ to: clienteEmail, subject: `Confirmación de reserva ${reserva.numero} — ${excursion.nombre}`, html, companyId })
         ).catch((e) => console.error('[excursiones] Error enviando email confirmación en crearReservaVendedor:', e))
+      }
+    }
+
+    // Send WhatsApp confirmation to client (non-blocking)
+    {
+      const cliente = await conEmpresa(companyId, (tx) =>
+        tx.cliente.findUnique({
+          where: { id: targetClienteId },
+          select: { telefono: true },
+        })
+      )
+      if (cliente?.telefono) {
+        enviarConfirmacionReservaWhatsApp({
+          companyId,
+          clienteId: targetClienteId,
+          telefono: cliente.telefono,
+          numeroReserva: reserva.numero,
+          nombreExcursion: excursion.nombre,
+          fecha: v.datos.fecha.toISOString().split('T')[0],
+          hora: v.datos.hora ?? '',
+          pasajeros: v.datos.adultos + v.datos.ninos,
+          total: Number(totales.total),
+          moneda: excursion.moneda,
+        }).catch((e) => console.error('[excursiones] Error enviando WhatsApp confirmación en crearReservaVendedor:', e))
       }
     }
 

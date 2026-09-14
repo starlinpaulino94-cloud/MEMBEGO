@@ -56,6 +56,17 @@ export function cuerpoMensajeTexto(paraE164: string, texto: string): Record<stri
   }
 }
 
+/** Cuerpo del envío de imagen simple (Cloud API · `/messages`). */
+export function cuerpoMensajeImagen(paraE164: string, mediaId: string): Record<string, unknown> {
+  return {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: paraE164,
+    type: 'image',
+    image: { id: mediaId },
+  }
+}
+
 /** Largo máximo del cuerpo de un mensaje de texto en la Cloud API. */
 export const MAX_TEXTO_WHATSAPP = 4096
 

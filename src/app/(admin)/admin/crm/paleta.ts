@@ -23,11 +23,20 @@
  *  contacta (pending), se cotiza (warning), se negocia (marca) y se cierra
  *  (success). */
 export const ETAPA_CHIP = {
+  // Legacy lowercase (configuración del pipeline)
   nuevo: 'bg-info/10 text-info',
   contactado: 'bg-pending/15 text-pending',
   cotizacion: 'bg-warning/15 text-warning',
   negociacion: 'bg-primary/10 text-primary',
   cerrado: 'bg-success/10 text-success',
+  // DB values (UPPERCASE — Lead.etapa)
+  NUEVO: 'bg-info/10 text-info',
+  CONTACTADO: 'bg-pending/15 text-pending',
+  INTERESADO: 'bg-warning/15 text-warning',
+  PROPUESTA: 'bg-primary/10 text-primary',
+  NEGOCIACION: 'bg-primary/15 text-primary',
+  GANADO: 'bg-success/10 text-success',
+  PERDIDO: 'bg-destructive/10 text-destructive',
 } as const
 
 /** El mismo recorrido cuando solo es un punto (configuración del embudo). */
@@ -55,12 +64,14 @@ export const COLORES_ETAPA: readonly string[] = [
   'bg-destructive',
 ]
 
-/** Prioridad del lead. Mismo criterio que el `Badge` de la ficha, que ya usaba
- *  `destructive` / `warning` / `success` para este mismo dato. */
 export const PRIORIDAD_PUNTO = {
   alta: 'bg-destructive',
   media: 'bg-warning',
   baja: 'bg-success',
+  ALTA: 'bg-destructive',
+  MEDIA: 'bg-warning',
+  BAJA: 'bg-success',
+  URGENTE: 'bg-destructive',
 } as const
 
 /**
