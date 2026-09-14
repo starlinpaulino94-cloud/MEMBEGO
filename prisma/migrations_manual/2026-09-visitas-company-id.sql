@@ -16,6 +16,19 @@
 -- solo `UPDATE` sobre toda la tabla toma millones de locks de fila, infla el
 -- WAL y bloquea a quien intente escribir encima. Por eso va POR LOTES.
 --
+-- ⚠ ANTES DE NADA: MIRA EL TAMAÑO DE LA TABLA.
+--
+--   SELECT count(*) FROM "visits";
+--
+-- Todo el aparato de este archivo —lotes, `CONCURRENTLY`, un cliente externo—
+-- defiende de un bloqueo que solo existe con volumen. Con unos cientos de miles
+-- de filas o menos no defiende de nada y solo complica: usa
+-- `2026-09-visitas-company-id-BASE-PEQUENA.sql`, que hace lo mismo de una
+-- pasada y corre entero en el editor de Supabase.
+--
+-- El 14-09-2026, la producción de MEMBEGO tenía 130 visitas. Este archivo es
+-- para el día que sean millones, que el modelo prevé pero todavía no son.
+--
 -- ORDEN DE EJECUCIÓN EN PRODUCCIÓN
 --
 --   PASO 1 · añadir la columna              (rápido, no reescribe la tabla)
@@ -26,9 +39,37 @@
 -- Cuando la migración de Prisma corra después, su `ADD COLUMN IF NOT EXISTS` y
 -- sus `CREATE INDEX IF NOT EXISTS` no harán nada, porque ya estará todo.
 --
--- CÓMO EJECUTARLO: en el SQL Editor de Supabase, UNA SENTENCIA A LA VEZ. Si
--- pegas el archivo entero, el paso 3 dirá "cannot run inside a transaction
--- block".
+-- CÓMO EJECUTARLO — Y DÓNDE, QUE NO ES LO MISMO PARA TODOS LOS PASOS
+--
+-- Los pasos 1, 2 y 4 van en el SQL Editor de Supabase sin problema.
+--
+-- EL PASO 3 NO PUEDE EJECUTARSE EN EL SQL EDITOR DE SUPABASE. El editor
+-- envuelve en una transacción TODO lo que le mandas —no solo cuando pegas
+-- varias sentencias—, y `CREATE INDEX CONCURRENTLY` no puede correr dentro de
+-- una. Devuelve `ERROR: 25001: CREATE INDEX CONCURRENTLY cannot run inside a
+-- transaction block`, y no hay forma de evitarlo desde ahí. Este archivo decía
+-- «una sentencia a la vez» heredándolo de
+-- `2026-07-visitas-indices-concurrently.sql`; era falso, y se corrigió cuando
+-- el error apareció de verdad.
+--
+-- Hay dos salidas, y la primera es casi siempre la buena:
+--
+--   A · SI LA TABLA ES PEQUEÑA, NO HACE FALTA `CONCURRENTLY`. Mira primero
+--       cuántas filas hay (la consulta está al final del paso 2). Con unos
+--       pocos cientos de miles, un `CREATE INDEX` normal tarda menos de un
+--       segundo y el bloqueo de escrituras no lo nota nadie. En ese caso NO
+--       ejecutes el paso 3: deja que lo haga la migración de Prisma
+--       `20260919_visitas_company_id`, que crea los mismos dos índices sin
+--       `CONCURRENTLY`. No tienes que hacer nada más.
+--
+--   B · SI LA TABLA YA ES GRANDE, hace falta un cliente que NO envuelva en
+--       transacción. `psql` sirve, que va en autocommit por defecto:
+--
+--         psql "<cadena de conexión de Supabase>" -f este-archivo.sql
+--
+--       (sin `-1` ni `--single-transaction`, que es justo lo que lo rompería).
+--       Cualquier cliente de escritorio —TablePlus, DBeaver, pgAdmin— vale
+--       igual, siempre que la sesión esté en autocommit.
 --
 -- SE PUEDE PARAR A MEDIAS. El paso 2 es idempotente y reanudable: solo toca
 -- filas con `companyId IS NULL`. Mientras queden, el reporte de operación avisa
@@ -70,7 +111,10 @@ SELECT count(*) AS visitas_sin_empresa FROM "visits" WHERE "companyId" IS NULL;
 
 
 -- ── PASO 3 · los índices, sin bloquear ──────────────────────────────────────
--- UNA SENTENCIA A LA VEZ. `CONCURRENTLY` no puede ir dentro de una transacción.
+--
+-- ESTE PASO NO CORRE EN EL SQL EDITOR DE SUPABASE (error 25001). Lee arriba:
+-- con la tabla pequeña, sáltatelo y deja que los cree la migración de Prisma;
+-- con la tabla grande, ejecútalo desde `psql` u otro cliente en autocommit.
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "visits_companyId_fechaVisita_idx"
   ON "visits" ("companyId", "fechaVisita");

@@ -17,6 +17,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "geo:seed": "tsx scripts/geo-seed.ts",
     "test": "tsx --test tests/*.test.ts",
+    "migraciones:sellar": "node scripts/sellar-migraciones.mjs",
     "certificar:referidos": "tsx --tsconfig tsconfig.json scripts/certificar-referidos.ts",
     "respaldo:verificar": "node scripts/verificar-respaldo.mjs",
     "presupuesto": "node scripts/presupuesto-bundle.mjs",
