@@ -35,8 +35,13 @@ ALTER TABLE "conexiones_empresa" ADD COLUMN IF NOT EXISTS "recursoExterno" TEXT;
 --
 -- ⚠ CUÁNDO SÍ HARÍA FALTA: sobre una tabla con volumen (clientes, pagos), un
 -- índice único normal bloquea las ESCRITURAS mientras se construye. Ahí se usa
--- `CREATE UNIQUE INDEX CONCURRENTLY`, se ejecuta SOLO, en su propia pestaña, y
--- se comprueba después con `SELECT indisvalid FROM pg_index ...`.
+-- `CREATE UNIQUE INDEX CONCURRENTLY` — y, como dice el párrafo de arriba, NO
+-- desde el editor de Supabase. Lanzarlo aislado tampoco sirve: el editor
+-- envuelve en transacción CADA ejecución, no solo los pegotes de varias
+-- sentencias. Hace falta un cliente en autocommit (`psql` sin `-1`, TablePlus,
+-- DBeaver). Después se comprueba con
+-- `SELECT indisvalid FROM pg_index ...`: una construcción concurrente
+-- interrumpida deja un índice INVÁLIDO que hay que localizar y borrar.
 --
 -- NULL no colisiona con NULL en PostgreSQL, así que las conexiones sin cuenta
 -- externa (Google Calendar, CardNET) conviven sin problema.

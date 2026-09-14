@@ -20,7 +20,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function crudo(...ruta: string[]): string {
@@ -103,6 +103,45 @@ test('los índices se crean con IF NOT EXISTS para que el manual pueda ir antes'
       crudo(...MANUAL).includes(`CREATE INDEX CONCURRENTLY IF NOT EXISTS "${idx}"`),
       `${idx} debe tener su versión CONCURRENTLY en el archivo manual`
     )
+  }
+})
+
+test('ningún archivo con CONCURRENTLY dice que se ejecute en el editor de Supabase', () => {
+  // El editor SQL de Supabase envuelve en una transacción TODO lo que se le
+  // manda —una sentencia o veinte—, así que `CONCURRENTLY` siempre devuelve
+  // `ERROR: 25001`. Dos archivos decían «una sentencia a la vez» y otro «solo,
+  // en su propia pestaña»; las tres instrucciones eran falsas y costaron un
+  // intento fallido en producción. El repo ya sabía la verdad en
+  // `20260905_connect_identidad_externa`, y se contradecía a sí mismo.
+  const raiz = join(__dirname, '..', 'prisma')
+  const archivos = [
+    ...readdirSync(join(raiz, 'migrations_manual')).map((f) => join(raiz, 'migrations_manual', f)),
+    ...readdirSync(join(raiz, 'migrations'), { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => join(raiz, 'migrations', d.name, 'migration.sql')),
+  ].filter((f) => f.endsWith('.sql') && existsSync(f))
+
+  for (const archivo of archivos) {
+    const texto = readFileSync(archivo, 'utf8')
+    if (!texto.includes('CONCURRENTLY')) continue
+    assert.doesNotMatch(
+      texto,
+      /UNA SENTENCIA A LA VEZ|en su propia pestaña/,
+      `${archivo} repite la instrucción falsa sobre el editor de Supabase`
+    )
+  }
+})
+
+test('los archivos que ejecutan CONCURRENTLY dicen con qué cliente', () => {
+  // Decir que no se puede en Supabase sin decir dónde sí deja a quien aplica el
+  // SQL con un error y sin salida.
+  for (const ruta of [
+    MANUAL,
+    ['prisma', 'migrations_manual', '2026-07-visitas-indices-concurrently.sql'],
+  ]) {
+    const texto = crudo(...ruta)
+    assert.match(texto, /autocommit/i, `${ruta.join('/')} no dice qué cliente usar`)
+    assert.match(texto, /psql/, ruta.join('/'))
   }
 })
 
