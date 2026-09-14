@@ -1,5 +1,6 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { formatDescuento } from '@/lib/promociones'
+import { resumenDePlan } from '@/modules/planes/resumen'
 import type { Prisma } from '@prisma/client'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
 import { SIN_DEMO } from '@/modules/demo'
@@ -770,7 +771,7 @@ export async function getAudienciaEmpresa(
 
 export interface NovedadInicio {
   id: string
-  /** 'PROMOCION' | 'EVENTO' | 'NOTICIA' | 'BENEFICIO' */
+  /** 'PROMOCION' | 'MEMBRESIA' | 'EVENTO' | 'NOTICIA' | 'BENEFICIO' */
   tipo: string
   titulo: string
   companyName: string
@@ -778,7 +779,7 @@ export interface NovedadInicio {
   /** Fecha del evento (eventos) o de publicación (resto). */
   fecha: Date
   href: string
-  /** Arte de la promoción; los posts no tienen imagen (tesela con icono). */
+  /** Arte de la promoción o del plan; los posts no tienen (tesela con icono). */
   imagenUrl: string | null
   /** Descripción/contenido para la bajada de una línea. */
   resumen: string | null
@@ -786,11 +787,47 @@ export interface NovedadInicio {
   descuento: string | null
   /** Solo promociones: fin de vigencia para el «hasta el …». */
   vence: Date | null
+  /** Solo membresías: precio y qué incluye, ya redactado. */
+  precio: number | null
+  /** Solo membresías: «4 lavados · 30 días» o «Ilimitado · 30 días». */
+  incluye: string | null
+  /**
+   * ¿Se publicó en los últimos 14 días?
+   *
+   * El feed enseña TODO lo que está vigente, no solo lo de esta quincena —un
+   * negocio con el mismo plan desde hace tres meses tenía la pantalla vacía—,
+   * pero «Novedades» sigue significando algo: esto es lo que deja marcar lo
+   * que de verdad es nuevo sin esconder el resto.
+   */
+  nuevo: boolean
 }
 
 /**
- * Novedades recientes de las empresas que el usuario sigue, para el feed del
- * inicio: promociones nuevas, próximos eventos y publicaciones recientes.
+ * Novedades de las empresas que el usuario sigue: promociones y membresías
+ * VIGENTES, próximos eventos y publicaciones recientes.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ LO VIGENTE PESA MÁS QUE LO RECIENTE
+ *
+ * Antes todo entraba por «publicado en los últimos 14 días». Con eso, un
+ * negocio que lleva tres meses con la misma promoción —lo normal en una
+ * membresía de lavado— tenía la pantalla VACÍA, y el cliente concluía que no
+ * había nada que comprar. La quincena no describía el catálogo: lo escondía.
+ *
+ * Ahora entra lo que está VIGENTE, y lo reciente se MARCA (`nuevo`) en vez de
+ * ser el filtro. Así «Novedades» sigue significando algo —lo nuevo se
+ * distingue— sin que la pantalla mienta sobre lo que el negocio ofrece.
+ *
+ * Los posts NO cambian: una noticia de hace tres meses sí es vieja, y un
+ * evento pasado ya no sirve para nada. Lo que se corrigió es tratar un
+ * catálogo como si fuera un titular.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SIGUE HACIENDO FALTA SEGUIR A LA EMPRESA
+ *
+ * Es una decisión, no un olvido: este feed es «lo de los negocios que sigo».
+ * Quien quiera descubrir negocios nuevos tiene Explorar. Sin ese límite, la
+ * pantalla sería el catálogo entero de MembeGo y dejaría de ser de nadie.
  */
 export async function getNovedadesInicio(
   dbUserId: string,
@@ -808,19 +845,34 @@ export async function getNovedadesInicio(
     const companyIds = follows.map((f) => f.companyId)
     if (companyIds.length === 0) return []
 
+    /**
+     * Las empresas de práctica quedan fuera, SIEMPRE.
+     *
+     * Es una de las reglas fijas del producto: datos de demostración no se
+     * mezclan con producción. Una empresa de práctica que alguien siguió
+     * probando metería ofertas que no existen en el mismo feed que las de
+     * verdad, y el cliente no tendría forma de distinguirlas.
+     */
+    const empresaReal = { companyId: { in: companyIds }, company: { esDemo: false } } as const
+
     const now = new Date()
     const hace14dias = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+    const esNuevo = (d: Date | null | undefined) => d != null && d >= hace14dias
     const companySel = { select: { name: true, slug: true } } as const
 
-    const [promos, posts] = await sinEmpresa(
+    const [promos, planes, posts] = await sinEmpresa(
       'social: novedades de empresas seguidas (cruzan empresas)',
       (tx) =>
         Promise.all([
           tx.promocion.findMany({
             where: {
-              companyId: { in: companyIds },
+              ...empresaReal,
               activo: true,
-              publicadaEn: { gte: hace14dias },
+              // Las archivadas y las privadas no son novedades de nadie: las
+              // primeras el negocio las retiró, y las segundas solo las ven
+              // sus propios miembros desde otra pantalla.
+              archivada: false,
+              visibilidad: 'publica',
               OR: [{ vigenciaHasta: null }, { vigenciaHasta: { gte: now } }],
             },
             select: {
@@ -837,9 +889,30 @@ export async function getNovedadesInicio(
             orderBy: { publicadaEn: 'desc' },
             take: limit,
           }),
+          // MEMBRESÍAS. No existía en el feed, y es lo que el negocio más
+          // quiere vender: un cliente que sigue al lavadero veía sus noticias
+          // y no sus planes. `activo` es el único estado que tiene un plan —no
+          // hay vigencia ni archivado— así que eso es exactamente «vigente».
+          tx.plan.findMany({
+            where: { ...empresaReal, activo: true },
+            select: {
+              id: true,
+              nombre: true,
+              descripcion: true,
+              imagenUrl: true,
+              precio: true,
+              esIlimitado: true,
+              lavadosIncluidos: true,
+              vigenciaDias: true,
+              createdAt: true,
+              company: companySel,
+            },
+            orderBy: [{ createdAt: 'desc' }, { orden: 'asc' }],
+            take: limit,
+          }),
           tx.companyPost.findMany({
             where: {
-              companyId: { in: companyIds },
+              ...empresaReal,
               activo: true,
               OR: [
                 // Eventos futuros…
@@ -876,6 +949,28 @@ export async function getNovedadesInicio(
         resumen: p.descripcion,
         descuento: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
         vence: p.vigenciaHasta,
+        precio: null,
+        incluye: null,
+        nuevo: esNuevo(p.publicadaEn),
+      })),
+      ...planes.map((p) => ({
+        id: p.id,
+        tipo: 'MEMBRESIA',
+        titulo: p.nombre,
+        companyName: p.company.name,
+        companySlug: p.company.slug,
+        fecha: p.createdAt,
+        // La ficha pública del plan, que ya existe y es la misma que se abre al
+        // compartir el enlace. Mandar a `/cliente/planes` daría una lista
+        // donde el cliente tendría que volver a buscar lo que acaba de tocar.
+        href: `/plan/${p.id}`,
+        imagenUrl: p.imagenUrl,
+        resumen: p.descripcion,
+        descuento: null,
+        vence: null,
+        precio: Number(p.precio),
+        incluye: resumenDePlan(p.esIlimitado, p.lavadosIncluidos, p.vigenciaDias),
+        nuevo: esNuevo(p.createdAt),
       })),
       ...posts.map((p) => ({
         id: p.id,
@@ -889,11 +984,20 @@ export async function getNovedadesInicio(
         resumen: p.contenido,
         descuento: null,
         vence: null,
+        precio: null,
+        incluye: null,
+        nuevo: esNuevo(p.publicadaEn),
       })),
     ]
 
-    // Más recientes primero (eventos por cercanía se mezclan por fecha).
-    items.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+    // Lo NUEVO primero y, dentro de cada grupo, lo más reciente. Sin el primer
+    // criterio, un plan de hace seis meses empujaría fuera del corte la
+    // promoción que se publicó ayer, y la pantalla dejaría de avisar de lo que
+    // sí es novedad — que es para lo que el cliente la abre.
+    items.sort((a, b) => {
+      if (a.nuevo !== b.nuevo) return a.nuevo ? -1 : 1
+      return new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+    })
     return items.slice(0, limit)
   } catch (e) {
     console.error('[social] getNovedadesInicio', e)
