@@ -20,6 +20,7 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { revalidateTag } from 'next/cache'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
 
@@ -127,6 +128,32 @@ export async function activarMembresia(
         payload: { planId: membership.planId, clienteId: membership.clienteId, monto: Number(membership.plan.precio) },
         ...meta,
       },
+    })
+
+    /**
+     * ACTIVADA o RENOVADA, y la diferencia la decide `fechaInicio`.
+     *
+     * Esta misma función activa una membresía nueva y reactiva una que venció.
+     * Para el negocio no son lo mismo: la primera es una venta, la segunda es
+     * que alguien volvió. `fechaInicio == null` es lo que las separa, y es el
+     * mismo criterio que ya usa el descuento de bienvenida unas líneas arriba
+     * — no se inventa aquí una regla nueva.
+     */
+    await registrarEventoMembresia(tx, {
+      companyId: membership.companyId,
+      membershipId: membership.id,
+      clienteId: membership.clienteId,
+      tipo: membership.fechaInicio == null ? 'ACTIVADA' : 'RENOVADA',
+      origen: userId ? 'ADMIN' : 'API',
+      estadoAnterior: membership.estado,
+      estadoNuevo: 'ACTIVA',
+      planAnteriorId: membership.planId,
+      planNuevoId: membership.planId,
+      precioNuevo: Number(membership.plan.precio),
+      monto: montoNeto,
+      actorUserId: userId,
+      ocurridoEn: now,
+      payload: { descuentoBienvenida, esPrimera },
     })
 
     return { esPrimera }

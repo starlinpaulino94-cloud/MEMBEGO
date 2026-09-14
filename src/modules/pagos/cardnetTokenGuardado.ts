@@ -2,6 +2,7 @@ import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { marcarEntrega } from '@/modules/pagos/intentos'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 import { periodEnd } from '@/lib/server-utils'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
@@ -312,6 +313,27 @@ export async function renovarMembresiaPorTarjeta(
             qrRenovado: qrVivo?.id ?? null,
           },
         },
+      })
+
+      // `origen: 'CRON'` es lo que separa esto de una renovación en el
+      // mostrador. Son el mismo hecho comercial con dos lecturas muy
+      // distintas: una la pidió alguien, la otra ocurrió sola con la tarjeta
+      // guardada. Sin ese campo, «renovaciones automáticas» no se puede
+      // reportar y la primera vez que alguien pregunte habrá que adivinarlo.
+      await registrarEventoMembresia(tx, {
+        companyId: m.companyId,
+        membershipId,
+        clienteId: m.clienteId,
+        tipo: 'RENOVADA',
+        origen: 'CRON',
+        estadoAnterior: m.estado,
+        estadoNuevo: 'ACTIVA',
+        planAnteriorId: m.planId,
+        planNuevoId: m.planId,
+        monto: pesos,
+        actorUserId: null,
+        ocurridoEn: now,
+        payload: { automatica: true, intentoId: intento.id },
       })
     })
   } catch (e) {
