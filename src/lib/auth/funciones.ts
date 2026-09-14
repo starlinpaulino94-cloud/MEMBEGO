@@ -163,4 +163,21 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'reporte_exportar', label: 'Exportar reportes de excursiones' },
     { codigo: 'checkin_registrar', label: 'Hacer check-in de pasajeros' },
   ],
+  /**
+   * REPORTES. Hasta ahora la sección era todo o nada: quien entraba veía las
+   * cifras de facturación y se las podía descargar. Un encargado de turno
+   * necesita el reporte de operación; no necesita saber cuánto factura el
+   * negocio.
+   *
+   * Solo están las tres que HOY se hacen cumplir de verdad. `ver_datos_personales`,
+   * `ver_empleados` y `ver_auditoria` están diseñadas en `docs/REPORTES.md` y
+   * entrarán aquí cuando existan los reportes que las necesitan: listarlas
+   * antes sería un interruptor pintado, que es justo lo que la regla de arriba
+   * prohíbe.
+   */
+  reportes: [
+    { codigo: 'ver', label: 'Ver los reportes' },
+    { codigo: 'ver_financieros', label: 'Ver ingresos y cifras de dinero' },
+    { codigo: 'exportar', label: 'Descargar los reportes' },
+  ],
 }

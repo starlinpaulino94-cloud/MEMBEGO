@@ -1,5 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
-import { requireRole } from '@/lib/auth/guards'
+import { requireRole, requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
@@ -30,7 +30,11 @@ export default async function ReportesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const user = await requireRole(ADMIN_ROLES)
+  // El módulo ya estaba guardado por rol; ahora además por función. Quien no
+  // tenga `reportes.ver` no entra aunque su rol lo dejara pasar.
+  await requireRole(ADMIN_ROLES)
+  const user = await requireSection('reportes', 'ver')
+  if (!user) return <SinEmpresaActiva seccion="los reportes" />
   const companyId = await requireCompanyContext(user)
   if (!companyId || companyId === '__none__') {
     return <SinEmpresaActiva seccion="tus reportes" />
@@ -47,7 +51,11 @@ export default async function ReportesPage({
 
   const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
-  const r = await getReporte(companyId, rango, timeZone)
+  // El permiso viaja a la CONSULTA, no al componente: la ruta de exportación
+  // usa esta misma función, así que esconder la columna en la vista dejaría el
+  // dato saliendo por el archivo.
+  const verFinancieros = await puedeFuncion('reportes', 'ver_financieros')
+  const r = await getReporte(companyId, rango, timeZone, { verFinancieros })
   const qs = paramsDeRango(rango)
 
   return (

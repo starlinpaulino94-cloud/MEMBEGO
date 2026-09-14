@@ -30,7 +30,8 @@ export const MINIMO_OPERACIONES = 10
 export const UMBRAL_ENTREGAS = 60
 
 interface Entrada {
-  ingresosCaja: { variacion: number | null }
+  /** `null` = sin permiso financiero. El insight de ingresos no sale. */
+  ingresosCaja: { variacion: number | null } | null
   clientesNuevos: { variacion: number | null }
   operaciones: { valor: number }
   entregas: { valor: number }
@@ -39,7 +40,7 @@ interface Entrada {
 export function calcularInsights(r: Entrada): Insight[] {
   const out: Insight[] = []
 
-  const ingreso = r.ingresosCaja.variacion
+  const ingreso = r.ingresosCaja?.variacion ?? null
   if (ingreso != null && Math.abs(ingreso) >= UMBRAL_VARIACION) {
     out.push({
       texto:
