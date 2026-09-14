@@ -73,12 +73,22 @@ export default async function ReportesPage({
           {/* El ciclo de vida vive aparte porque responde otra pregunta: este
               reporte dice cuánto entró, aquél dice qué pasó con las membresías.
               Mezclarlos daría una pantalla que no se puede leer de una vez. */}
-          <Link
-            href={`/admin/reportes/membresias${qs}`}
-            className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
-          >
-            Ver el ciclo de vida de las membresías <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link
+              href={`/admin/reportes/membresias${qs}`}
+              className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+            >
+              Ciclo de vida de las membresías <ArrowRight className="h-4 w-4" />
+            </Link>
+            {verFinancieros && (
+              <Link
+                href={`/admin/reportes/finanzas${qs}`}
+                className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+              >
+                Finanzas y cobros <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
+          </div>
         </div>
       }
       controles={
