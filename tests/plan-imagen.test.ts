@@ -71,8 +71,15 @@ test('solo formatos de imagen, y el parámetro de consulta no engaña', () => {
 test('sin NEXT_PUBLIC_SUPABASE_URL se rechaza, no se deja pasar', () => {
   // Fallar abierto aquí sería aceptar cualquier origen justo cuando la
   // configuración está rota.
-  assert.equal(prefijoImagenPlan(undefined), null)
-  assert.ok(validarImagenPlan(BUENA, undefined))
+  //
+  // Se pasa '' y NO `undefined`: en JavaScript un `undefined` explícito
+  // dispara el valor por defecto del parámetro, que es justamente leer
+  // `process.env.NEXT_PUBLIC_SUPABASE_URL`. Con esa variable puesta —como en
+  // la CI— la prueba comprobaba lo contrario de lo que dice su nombre, y solo
+  // pasaba en una máquina donde la variable no existiera. La cadena vacía sí
+  // llega al cuerpo y representa «no hay con qué comparar».
+  assert.equal(prefijoImagenPlan(''), null)
+  assert.ok(validarImagenPlan(BUENA, ''))
 })
 
 // ── Guardias de las pantallas ────────────────────────────────────────────────
@@ -100,6 +107,22 @@ test('las tres pantallas del cliente pintan la imagen', () => {
     assert.match(src, /imagenUrl/, `${nombre}: no lee imagenUrl`)
     assert.match(src, /<img/, `${nombre}: no pinta ninguna imagen`)
   }
+})
+
+test('la pantalla de inicio prefiere la imagen del plan al logo de la empresa', () => {
+  // Cuatro planes de la misma empresa son cuatro veces el mismo logo: la
+  // rejilla del inicio no distingue nada. El logo se queda solo de respaldo.
+  const src = fuenteSinComentarios('src', 'modules', 'home', 'lectura.ts')
+  assert.match(src, /imagen: p\.imagenUrl \?\? p\.company\.logoUrl/)
+})
+
+test('las consultas públicas de planes traen la imagen', () => {
+  const src = fuenteSinComentarios('src', 'modules', 'marketplace', 'queries.ts')
+  // Las dos: el catálogo global (inicio y «ver más») y la de una empresa.
+  assert.ok(
+    (src.match(/imagenUrl: p\.imagenUrl/g) ?? []).length >= 2,
+    'alguna consulta pública no devuelve la imagen'
+  )
 })
 
 test('el motor de elegibilidad trae la imagen: si no, la tarjeta nunca la ve', () => {

@@ -150,7 +150,11 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     })),
     planes: planes.map((p): PlanInicio => ({
       id: p.id, nombre: p.nombre, empresa: p.company.name, descripcion: p.descripcion,
-      imagen: p.company.logoUrl, href: `/plan/${p.id}`,
+      // La imagen del PLAN manda; el logo de la empresa es el respaldo. Antes
+      // se pintaba siempre el logo, así que cuatro planes de la misma empresa
+      // eran cuatro veces el mismo círculo negro: la rejilla no distinguía
+      // nada. Con la foto del plan, cada tarjeta enseña lo que se compra.
+      imagen: p.imagenUrl ?? p.company.logoUrl, href: `/plan/${p.id}`,
       precio: formatMoney(p.precio, p.company), periodo: `/ ${p.vigenciaDias} días`,
       valoracion: p.company.averageRating,
       resenas: hechos.get(p.company.id)?.resenas ?? 0,
