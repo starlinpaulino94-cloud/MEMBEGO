@@ -20,7 +20,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function crudo(...ruta: string[]): string {
@@ -106,28 +106,29 @@ test('los índices se crean con IF NOT EXISTS para que el manual pueda ir antes'
   }
 })
 
-test('ningún archivo con CONCURRENTLY dice que se ejecute en el editor de Supabase', () => {
+test('ningún archivo manual con CONCURRENTLY dice que se ejecute en el editor de Supabase', () => {
   // El editor SQL de Supabase envuelve en una transacción TODO lo que se le
   // manda —una sentencia o veinte—, así que `CONCURRENTLY` siempre devuelve
   // `ERROR: 25001`. Dos archivos decían «una sentencia a la vez» y otro «solo,
   // en su propia pestaña»; las tres instrucciones eran falsas y costaron un
-  // intento fallido en producción. El repo ya sabía la verdad en
-  // `20260905_connect_identidad_externa`, y se contradecía a sí mismo.
-  const raiz = join(__dirname, '..', 'prisma')
-  const archivos = [
-    ...readdirSync(join(raiz, 'migrations_manual')).map((f) => join(raiz, 'migrations_manual', f)),
-    ...readdirSync(join(raiz, 'migrations'), { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => join(raiz, 'migrations', d.name, 'migration.sql')),
-  ].filter((f) => f.endsWith('.sql') && existsSync(f))
-
-  for (const archivo of archivos) {
-    const texto = readFileSync(archivo, 'utf8')
+  // intento fallido en producción.
+  //
+  // SOLO SE MIRA `migrations_manual/`, y el motivo es otra cosa que se aprendió
+  // el mismo día: una migración YA APLICADA no se edita, ni sus comentarios.
+  // `migrate deploy` lo tolera —comprobado—, pero el siguiente `migrate dev` se
+  // planta y exige `migrate reset`, que borra la base. La corrección de esta
+  // frase llegó a escribirse en `20260905_connect_identidad_externa` y hubo que
+  // revertirla; lo vigila `tests/migraciones-inmutables.test.ts`. Los archivos
+  // manuales sí se pueden corregir: nadie guarda su suma.
+  const raiz = join(__dirname, '..', 'prisma', 'migrations_manual')
+  for (const nombre of readdirSync(raiz)) {
+    if (!nombre.endsWith('.sql')) continue
+    const texto = readFileSync(join(raiz, nombre), 'utf8')
     if (!texto.includes('CONCURRENTLY')) continue
     assert.doesNotMatch(
       texto,
       /UNA SENTENCIA A LA VEZ|en su propia pestaña/,
-      `${archivo} repite la instrucción falsa sobre el editor de Supabase`
+      `${nombre} repite la instrucción falsa sobre el editor de Supabase`
     )
   }
 })
