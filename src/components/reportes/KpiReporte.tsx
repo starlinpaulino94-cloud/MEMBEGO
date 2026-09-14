@@ -27,11 +27,24 @@ export function KpiReporte({
   nota,
 }: {
   label: string
-  kpi: KpiValor
+  /** `null` = quien mira no tiene permiso para esta cifra. */
+  kpi: KpiValor | null
   formato: (n: number) => string
   invertido?: boolean
   nota?: string
 }) {
+  // Sin permiso NO se pinta un cero. Un cero afirma que el negocio no facturó,
+  // y eso es una mentira sobre el negocio, no una restricción sobre quien mira.
+  if (!kpi) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card p-5 print:border-black print:p-2">
+        <p className="text-overline">{label}</p>
+        <p className="mt-1.5 truncate text-h3 text-muted-foreground print:text-base">Sin permiso</p>
+        <p className="mt-1 text-xs text-muted-foreground">Pídelo a quien administra el negocio</p>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card p-5 print:border-black print:p-2">
       <p className="text-overline">{label}</p>

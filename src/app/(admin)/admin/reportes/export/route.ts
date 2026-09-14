@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
+import { requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
 import { TZ_PLATAFORMA } from '@/lib/format'
@@ -23,6 +24,11 @@ export async function GET(req: NextRequest) {
   if (!user || !ADMIN_ROLES.includes(user.metadata.role)) {
     return NextResponse.json({ error: 'No autorizado.' }, { status: 403 })
   }
+  // Descargar es su propio permiso. Ver una cifra en pantalla y llevársela en
+  // un archivo que sale de la oficina no son la misma decisión.
+  if (!(await requireSection('reportes', 'exportar'))) {
+    return NextResponse.json({ error: 'No autorizado.' }, { status: 403 })
+  }
   const companyId = user.metadata.companyId as string | undefined
   if (!companyId) {
     return NextResponse.json({ error: 'Tu cuenta no está vinculada a una empresa.' }, { status: 400 })
@@ -35,7 +41,11 @@ export async function GET(req: NextRequest) {
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const rango = leerRango(sp, timeZone)
-  const reporte = await getReporte(companyId, rango, timeZone)
+  // El mismo filtro que la pantalla. Si esto se olvidara, el archivo traería
+  // las cifras que la vista oculta — y nadie se enteraría, porque el fallo no
+  // se ve: se descarga.
+  const verFinancieros = await puedeFuncion('reportes', 'ver_financieros')
+  const reporte = await getReporte(companyId, rango, timeZone, { verFinancieros })
 
   return respuestaCsv(
     reporteToCsv(reporte, {

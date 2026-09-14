@@ -171,6 +171,14 @@ model Membership {
   // membresías existentes: siguen valiendo sin vehículo (compatibilidad).
   vehiculos     MembresiaVehiculo[]
 
+  /// Historia de la membresía. Ver `MembresiaEvento`.
+  eventos       MembresiaEvento[]
+
+  /// Por qué se canceló, en palabras de quien la canceló. Null en las
+  /// canceladas antes de que el campo existiera y en las que se cortaron sin
+  /// escribir nada — se distingue de la cadena vacía a propósito.
+  motivoCancelacion String?
+
   @@unique([clienteId, companyId])
   @@index([estado])
   @@index([clienteId])
@@ -391,4 +399,116 @@ model Comprobante {
 
   @@index([membershipId])
   @@map("comprobantes")
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LA HISTORIA DE UNA MEMBRESÍA
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// `Membership` guarda su ESTADO, no su historia. Mirándola se sabe que hoy está
+// CANCELADA; nunca cuándo se activó, cuántas veces se renovó, si subió o bajó
+// de plan, ni quién la cortó. Eso no es un hueco de pantalla: es que el dato
+// nunca se escribió, y por eso «membresías que bajaron de plan en agosto» no se
+// puede responder por mucho que se mejore el reporte.
+//
+// Esta tabla es APPEND-ONLY. Una fila describe algo que YA PASÓ y no se corrige
+// nunca: si el hecho cambió, hay un hecho nuevo. Es lo que permite que un
+// informe cerrado siga diciendo mañana lo mismo que hoy.
+//
+// DOS FECHAS, Y NO ES REDUNDANCIA
+//
+//   · `ocurridoEn`   — cuándo pasó de verdad.
+//   · `registradoEn` — cuándo lo escribimos.
+//
+// En el camino normal son casi la misma. En las filas reconstruidas desde la
+// bitácora se separan meses, y esa distancia es justo la información que hace
+// falta para saber qué parte del historial es de primera mano.
+//
+// `reconstruido` marca esas filas. `docs/runbooks/restaurar-datos-borrados.md`
+// lo dice mejor que yo: «un hueco documentado es recuperable; un dato inventado
+// contamina los reportes para siempre». Esta columna es la diferencia entre las
+// dos cosas.
+//
+// LOS PRECIOS VAN GUARDADOS, NO SE MIRAN DESPUÉS
+//
+// Un cambio de plan se clasifica en subida o bajada comparando precios. Si se
+// leyeran los del plan HOY, un plan que subió de precio el mes pasado
+// convertiría retroactivamente en bajadas los cambios que fueron subidas. Por
+// eso se copian los dos importes del momento.
+
+enum MembresiaEventoTipo {
+  CREADA
+  ACTIVADA
+  RENOVADA
+  CAMBIO_PLAN
+  CANCELADA
+  VENCIDA
+  RECHAZADA
+}
+
+/// Quién provocó el evento. No es el rol de quien lo hizo: es el CAMINO por el
+/// que entró, que es lo que distingue una renovación en el mostrador de una que
+/// cobró el cron con la tarjeta guardada.
+enum MembresiaEventoOrigen {
+  ADMIN
+  CLIENTE
+  SUPERADMIN
+  CRON
+  API
+  RECONSTRUIDO
+}
+
+model MembresiaEvento {
+  id           String     @id @default(cuid())
+  companyId    String
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  /// Copiado, no resuelto por relación: el reporte de clientes lo agrupa sin
+  /// tener que pasar por `memberships`.
+  clienteId    String
+
+  tipo MembresiaEventoTipo
+
+  /// Estado de la membresía antes y después. Texto y no el enum
+  /// `MembershipEstado` a propósito: si algún día ese enum pierde un valor, la
+  /// historia no puede dejar de poder leerse.
+  estadoAnterior String?
+  estadoNuevo    String?
+
+  planAnteriorId String?
+  planNuevoId    String?
+  precioAnterior Decimal? @db.Decimal(10, 2)
+  precioNuevo    Decimal? @db.Decimal(10, 2)
+
+  /// El importe que se movió en este evento, cuando lo hubo. Null no es cero:
+  /// es «este evento no era de dinero».
+  monto Decimal? @db.Decimal(10, 2)
+
+  motivo String?
+  origen MembresiaEventoOrigen
+
+  /// Quién lo hizo. Null cuando lo hizo un proceso (`origen = CRON`).
+  actorUserId String?
+  actor       User?   @relation("EventosMembresia", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  ocurridoEn   DateTime @default(now())
+  registradoEn DateTime @default(now())
+
+  /// true = la fila no la escribió el camino normal, sino el backfill desde
+  /// `audit_logs`. Los reportes lo usan para decir hasta dónde llega el dato
+  /// de primera mano.
+  reconstruido Boolean @default(false)
+
+  payload Json @default("{}")
+
+  /// El patrón de todo reporte de ciclo de vida: los eventos de un tipo, de una
+  /// empresa, dentro de un rango.
+  @@index([companyId, tipo, ocurridoEn])
+  /// La ficha de una membresía: su línea de tiempo.
+  @@index([membershipId, ocurridoEn])
+  /// El reporte que no filtra por tipo (todo lo que pasó en el periodo).
+  @@index([companyId, ocurridoEn])
+  @@map("membresia_eventos")
 }

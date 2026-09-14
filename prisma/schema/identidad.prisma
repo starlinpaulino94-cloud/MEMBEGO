@@ -207,6 +207,7 @@ model User {
   updatedAt          DateTime  @updatedAt
 
   memberships      Membership[]
+  eventosMembresia MembresiaEvento[] @relation("EventosMembresia")
   visits           Visit[]             @relation("EmpleadoVisits")
   /// Visitas que ESTE usuario deshizo. Va aparte de `visits`: quien registra un
   /// lavado y quien lo devuelve rara vez son la misma persona.
@@ -403,6 +404,7 @@ model Company {
   plans                  Plan[]
   clientes               Cliente[]
   memberships            Membership[]
+  membresiaEventos       MembresiaEvento[]
   tarjetasTokenizadas    TarjetaTokenizada[]
   sucursales             Sucursal[]
   cajaSesiones           CajaSesion[]

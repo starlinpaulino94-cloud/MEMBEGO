@@ -10,6 +10,7 @@ import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { validarImagenPlan } from '@/modules/planes/imagen'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -518,6 +519,17 @@ export async function cancelarMembresia(
           payload: { prevEstado: m.estado },
         },
       })
+      await registrarEventoMembresia(tx, {
+        companyId: m.cliente.companyId,
+        membershipId: m.id,
+        clienteId: m.clienteId,
+        tipo: 'CANCELADA',
+        origen: 'ADMIN',
+        estadoAnterior: m.estado,
+        estadoNuevo: 'CANCELADA',
+        planAnteriorId: m.planId,
+        actorUserId: user.metadata.dbUserId ?? null,
+      })
     })
 
     revalidatePath('/superadmin/membresias')
@@ -584,6 +596,23 @@ export async function desactivarMembresia(
             vencimientoAnterior: m.fechaVencimiento?.toISOString() ?? null,
           },
         },
+      })
+      // Desactivar a mano y vencer por el paso del tiempo terminan en el mismo
+      // estado, y el reporte de bajas los cuenta juntos con razón: en los dos
+      // casos la membresía dejó de valer. `origen` los separa para quien
+      // necesite saber si lo decidió alguien o el calendario.
+      await registrarEventoMembresia(tx, {
+        companyId: m.cliente.companyId,
+        membershipId: m.id,
+        clienteId: m.clienteId,
+        tipo: 'VENCIDA',
+        origen: 'ADMIN',
+        estadoAnterior: m.estado,
+        estadoNuevo: 'VENCIDA',
+        planAnteriorId: m.planId,
+        actorUserId: user.metadata.dbUserId ?? null,
+        ocurridoEn: ahora,
+        payload: { manual: true, vencimientoAnterior: m.fechaVencimiento?.toISOString() ?? null },
       })
     })
 

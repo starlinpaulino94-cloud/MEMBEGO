@@ -16,6 +16,7 @@ import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { validarCobroMembresia } from '@/modules/membresias/cobro'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -340,8 +341,14 @@ export async function cambiarPlanDeMembresia(
       })
     )
 
-    await conEmpresa(companyId, (tx) =>
-      tx.auditLog.create({
+    await conEmpresa(companyId, async (tx) => {
+      // La acción dice `PAGO_APROBADO` porque el enum `AuditAccion` no tiene un
+      // valor para el cambio de plan, y añadir uno es una migración. Se deja
+      // como está —quitarlo rompería quien ya lee esta bitácora— pero deja de
+      // ser la única fuente: el evento de abajo SÍ dice lo que pasó, y es el
+      // que leen los reportes. «Cuántos subieron de plan en agosto» no se puede
+      // responder buscando pagos aprobados y abriendo su JSON uno por uno.
+      await tx.auditLog.create({
         data: {
           companyId,
           userId: user.metadata.dbUserId ?? null,
@@ -357,7 +364,28 @@ export async function cambiarPlanDeMembresia(
           },
         },
       })
-    )
+
+      // Los DOS precios del momento. Leer el del plan anterior más tarde
+      // convertiría en bajada un cambio que fue subida en cuanto alguien
+      // ajuste una tarifa.
+      await registrarEventoMembresia(tx, {
+        companyId,
+        membershipId: membership.id,
+        clienteId: membership.clienteId,
+        tipo: 'CAMBIO_PLAN',
+        origen: 'ADMIN',
+        estadoAnterior: membership.estado,
+        estadoNuevo: 'ACTIVA',
+        planAnteriorId: membership.planId,
+        planNuevoId: nuevoPlan.id,
+        precioAnterior: Number(membership.plan.precio),
+        precioNuevo: Number(nuevoPlan.precio),
+        monto: Number(nuevoPlan.precio),
+        actorUserId: user.metadata.dbUserId ?? null,
+        ocurridoEn: now,
+        payload: { planAnteriorNombre: membership.plan.nombre, planNuevoNombre: nuevoPlan.nombre },
+      })
+    })
 
     // Venta oficial del cambio aplicado: ticket + factura imprimible.
     await registrarVentaConfirmada({
@@ -516,6 +544,11 @@ export async function cancelarMembresia(
     if (!user) return { error: 'No autorizado.' }
 
     const membershipId = String(formData.get('membershipId') ?? '')
+    // Por qué se cancela. Opcional a propósito: exigirlo convertiría una
+    // cancelación urgente en una pelea con un formulario. Cuando viene, va al
+    // evento y al reporte de motivos; cuando no, se distingue de la cadena
+    // vacía — `null` significa «no se preguntó».
+    const motivo = String(formData.get('motivo') ?? '').trim().slice(0, 300)
     const membership = await assertOwnership(membershipId, user)
     if (!membership) return { error: 'Membresía no encontrada.' }
     if (membership.estado === 'CANCELADA') {
@@ -535,7 +568,7 @@ export async function cancelarMembresia(
          */
         await tx.membership.update({
         where: { id: membership.id },
-        data: { estado: 'CANCELADA', autoRenovar: false },
+        data: { estado: 'CANCELADA', autoRenovar: false, motivoCancelacion: motivo || null },
       })
       await tx.auditLog.create({
         data: {
@@ -547,6 +580,20 @@ export async function cancelarMembresia(
           payload: { clienteId: membership.clienteId, planId: membership.planId },
           ...meta,
         },
+      })
+      // La bitácora dice QUÉ pasó; el evento lo deja en la forma que el reporte
+      // de ciclo de vida puede agregar sin leer JSON.
+      await registrarEventoMembresia(tx, {
+        companyId: membership.cliente.companyId,
+        membershipId: membership.id,
+        clienteId: membership.clienteId,
+        tipo: 'CANCELADA',
+        origen: 'ADMIN',
+        estadoAnterior: membership.estado,
+        estadoNuevo: 'CANCELADA',
+        planAnteriorId: membership.planId,
+        motivo: motivo || null,
+        actorUserId: user.metadata.dbUserId ?? null,
       })
     })
 
@@ -819,6 +866,23 @@ export async function renovarMembresia(
         ...meta,
       },
     })
+
+    await registrarEventoMembresia(tx, {
+      companyId: membership.cliente.companyId,
+      membershipId: membership.id,
+      clienteId: membership.clienteId,
+      tipo: 'RENOVADA',
+      origen: 'ADMIN',
+      estadoAnterior: membership.estado,
+      estadoNuevo: 'ACTIVA',
+      planAnteriorId: membership.planId,
+      planNuevoId: membership.planId,
+      monto,
+      actorUserId: user.metadata.dbUserId ?? null,
+      ocurridoEn: now,
+      payload: { metodo, encadenada: sigueVigente },
+    })
+
     return asiento.id
   })
 
