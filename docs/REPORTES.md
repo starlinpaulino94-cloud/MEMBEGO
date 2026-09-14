@@ -168,9 +168,23 @@ infla el indicador más visible del panel.
 
 ### «Cliente activo»
 
-Un cliente con al menos una membresía **vigente** al cierre del periodo. No es
-«cliente que usó algo este mes» — eso es **cliente con actividad**, que es otra
-métrica y lleva otro nombre.
+**Ya estaba decidido** en `docs/auditoria-clientes-membresias.md` (bloque 3, el
+semáforo del cliente), y los reportes no estrenan una definición propia:
+
+| Estado | Definición |
+| --- | --- |
+| 🟢 Activo | Membresía vigente **y** visita en los últimos 30 días |
+| 🟡 En riesgo | Vigente, sin visitas en 30-60 días **o** vence en menos de 7 con usos dentro |
+| 🟠 Dormido | Sin visitas en más de 60 días, o vencida hace menos de 30 |
+| 🔴 Perdido | Vencida hace más de 60 días sin renovar |
+
+Los umbrales son **configurables por empresa**: un car wash y un restaurante no
+tienen la misma frecuencia normal de visita, y un umbral fijo llamaría «dormido»
+a un cliente que va cada dos meses porque su negocio funciona así.
+
+«Cliente con membresía vigente» y «cliente con actividad» son los dos
+**ingredientes** del semáforo, no sinónimos suyos. Un reporte que necesite uno
+de los dos lo llama por su nombre.
 
 ### «Cancelada» vs «vencida»
 
@@ -292,7 +306,7 @@ decisión operativa.
 | Vencidas por periodo | `modules/membresia/vencimiento.ts` pone `VENCIDA` sin escribir auditoría |
 | Cambio de plan | `cambiarPlanDeMembresia` audita con `accion: 'PAGO_APROBADO'` y el plan anterior en el payload |
 | Activaciones | El paso a `ACTIVA` no deja rastro |
-| Suspensión / reactivación | `MembershipEstado` no tiene `SUSPENDIDA` |
+| Suspensión / reactivación | **No es una carencia: el producto no suspende membresías.** Ver «Tres decisiones» |
 | Motivo de cancelación | No se pide ni se guarda |
 | Renovación fallida | El cron de tarjeta no registra el fallo |
 | Cambio de precio | No se versiona |
@@ -361,15 +375,49 @@ solo existe la interfaz.**
 entonces»— sigue en pie: el botón de imprimir ya produce PDF por el diálogo del
 navegador, y el presupuesto de JavaScript está al 96 %.
 
-### Decisiones pendientes que bloquean la Fase 1
+### Tres decisiones, ya tomadas en la documentación
 
-1. **Qué es «suspendida»** para el negocio: ¿pausa voluntaria que conserva
-   saldo, o impago congelado? Define columnas, no etiquetas.
-2. **Desde cuándo debe existir el historial**: aceptar el corte con backfill
-   parcial desde `AuditLog`, o arrancar limpio desde la migración.
-3. **Si RLS Capa 2** (`prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql`,
-   hoy «NO aplicar todavía») entra aquí o es proyecto aparte. Recomendación:
-   aparte.
+Las tres estaban resueltas antes de empezar. Se recogen aquí para que la Fase 1
+no las vuelva a abrir.
+
+**1 · No se añade el estado `SUSPENDIDA`.**
+
+`docs/GUIA_LENGUAJE_MEMBEGO.md` es la autoridad sobre estados y etiquetas, y su
+tabla de `MembershipEstado` tiene exactamente seis: `PENDIENTE`,
+`PENDIENTE_PAGO`, `ACTIVA`, `VENCIDA`, `RECHAZADA`, `CANCELADA`. Las campañas sí
+tienen `PAUSADA`; las membresías, a propósito, no.
+
+Así que **«membresías suspendidas» y «reactivadas» no son reportes que falten:
+son reportes de algo que el producto no hace**. Inventar el estado para poder
+enseñar la cifra sería construir el dato al revés — primero el gráfico, después
+la realidad. Si algún día el negocio quiere pausar membresías, será una decisión
+de producto con su propia migración, y entonces el reporte sale solo.
+
+**2 · El histórico se reconstruye hasta donde llegue, y el hueco se dice.**
+
+`docs/runbooks/restaurar-datos-borrados.md`:
+
+> **No inventes filas para «cuadrar».** Un hueco documentado es recuperable; un
+> dato inventado contamina los reportes para siempre.
+
+La regla ya estaba escrita, y estaba escrita pensando justo en esto. Se aplica
+al backfill: se reconstruyen desde `AuditLog` las renovaciones y las
+cancelaciones —que sí dejaron rastro— y **nada más**. Vencimientos, activaciones
+y cambios de plan anteriores a la Fase 1 no existen y no se fabrican. Todo
+reporte de ciclo de vida lleva su fecha de corte visible.
+
+**3 · RLS Capa 2 es proyecto aparte, y ya no está bloqueado.**
+
+`docs/RLS.md` § 4 dice que el único motivo por el que no podía encenderse —85
+archivos consultando sin contexto de empresa— **quedó resuelto el 2026-08-11**:
+la lista `PENDIENTES` del gate está vacía y `scripts/rls-cobertura.mjs` lo
+verifica en cada ejecución.
+
+Lo que queda son sus pasos 4 a 6: aplicarla en una base de prueba, ejercitar la
+aplicación con el rol `membego_app`, correr `npm run rls:probar`, y recién
+entonces producción con los runbooks a mano. Eso es un trabajo con su propio
+riesgo y su propia marcha atrás — **no se mete dentro de una fase de reportes**,
+donde un fallo se confundiría con un error de consulta.
 
 ## Lo que este sistema no va a hacer
 
