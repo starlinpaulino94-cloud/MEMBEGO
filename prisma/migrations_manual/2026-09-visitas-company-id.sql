@@ -16,6 +16,19 @@
 -- solo `UPDATE` sobre toda la tabla toma millones de locks de fila, infla el
 -- WAL y bloquea a quien intente escribir encima. Por eso va POR LOTES.
 --
+-- ⚠ ANTES DE NADA: MIRA EL TAMAÑO DE LA TABLA.
+--
+--   SELECT count(*) FROM "visits";
+--
+-- Todo el aparato de este archivo —lotes, `CONCURRENTLY`, un cliente externo—
+-- defiende de un bloqueo que solo existe con volumen. Con unos cientos de miles
+-- de filas o menos no defiende de nada y solo complica: usa
+-- `2026-09-visitas-company-id-BASE-PEQUENA.sql`, que hace lo mismo de una
+-- pasada y corre entero en el editor de Supabase.
+--
+-- El 14-09-2026, la producción de MEMBEGO tenía 130 visitas. Este archivo es
+-- para el día que sean millones, que el modelo prevé pero todavía no son.
+--
 -- ORDEN DE EJECUCIÓN EN PRODUCCIÓN
 --
 --   PASO 1 · añadir la columna              (rápido, no reescribe la tabla)

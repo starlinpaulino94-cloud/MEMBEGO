@@ -286,10 +286,16 @@ frontera prohíbe.
 1. ~~**`Visit` no tiene `companyId`**~~ — **resuelto en la Fase 5.** La
    columna existe (nullable), con su índice `[companyId, fechaVisita]`, y se
    escribe en el único sitio que crea visitas. La migración
-   `20260919_visitas_company_id` solo añade; el relleno del histórico va por
-   lotes y los índices con `CONCURRENTLY` en
-   `prisma/migrations_manual/2026-09-visitas-company-id.sql`, **que se ejecuta
-   a mano y ANTES en producción**.
+   `20260919_visitas_company_id` solo añade; el relleno del histórico se aplica
+   a mano, y hay **dos versiones según el tamaño de la tabla**:
+   `2026-09-visitas-company-id-BASE-PEQUENA.sql` (una pasada, corre entero en el
+   editor de Supabase) y `2026-09-visitas-company-id.sql` (lotes e índices
+   `CONCURRENTLY`, para cuando la tabla crezca — necesita un cliente en
+   autocommit, porque **el editor de Supabase envuelve cada ejecución en una
+   transacción y `CONCURRENTLY` no puede correr ahí**).
+
+   El 14-09-2026 producción tenía **130 visitas**: el aparato de lotes es para
+   el volumen que el modelo prevé, no para el que hay.
 
    **Mientras el relleno no termine, el reporte de operación lo dice** —banner
    en pantalla y línea «Cobertura de visitas» en el CSV—: los periodos más
