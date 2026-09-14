@@ -60,6 +60,19 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
         </Link>
 
         <div className="mt-8 overflow-hidden rounded-2xl border border-border/80 shadow-premium">
+          {/* Imagen del plan, cuando el negocio subió una. Va ENCIMA del
+              encabezado de color, no debajo: el degradado lleva el nombre y el
+              precio en blanco, y meter una foto detrás de ese texto obliga a
+              oscurecerla hasta que deja de ser la que eligió el negocio. */}
+          {plan.imagenUrl && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={plan.imagenUrl}
+              alt=""
+              className="aspect-[16/9] w-full max-w-full object-cover"
+            />
+          )}
+
           {/* Encabezado con color del plan */}
           <div
             className="p-8 text-white"

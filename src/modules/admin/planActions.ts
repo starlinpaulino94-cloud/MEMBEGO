@@ -9,6 +9,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
+import { validarImagenPlan } from '@/modules/planes/imagen'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -35,6 +36,7 @@ function parsePlan(formData: FormData): { error: string } | {
   vigenciaDias: number
   condiciones: string | null
   color: string | null
+  imagenUrl: string | null
   orden: number
 } {
   const nombre = String(formData.get('nombre') ?? '').trim()
@@ -46,6 +48,7 @@ function parsePlan(formData: FormData): { error: string } | {
   const vigenciaRaw = String(formData.get('vigenciaDias') ?? '').trim()
   const condiciones = String(formData.get('condiciones') ?? '').trim()
   const color = String(formData.get('color') ?? '').trim()
+  const imagenUrl = String(formData.get('imagenUrl') ?? '').trim()
   const ordenRaw = String(formData.get('orden') ?? '').trim()
 
   if (!nombre || !precioRaw) return { error: 'Nombre y precio son obligatorios.' }
@@ -61,6 +64,13 @@ function parsePlan(formData: FormData): { error: string } | {
   const orden = ordenRaw ? Number(ordenRaw) : 0
   if (isNaN(orden)) return { error: 'El orden no es válido.' }
 
+  // El campo de la imagen es oculto y lo rellena el componente de subida, así
+  // que aquí es donde se comprueba de verdad: un formulario enviado a mano
+  // podría poner cualquier origen, y esa URL acaba en un `<img>` de la
+  // pantalla de cada cliente.
+  const errorImagen = validarImagenPlan(imagenUrl)
+  if (errorImagen) return { error: errorImagen }
+
   return {
     nombre,
     precio,
@@ -74,6 +84,7 @@ function parsePlan(formData: FormData): { error: string } | {
     vigenciaDias,
     condiciones: condiciones || null,
     color: color || null,
+    imagenUrl: imagenUrl || null,
     orden,
   }
 }
@@ -179,6 +190,7 @@ export async function crearPlan(
           vigenciaDias: parsed.vigenciaDias,
           condiciones: parsed.condiciones,
           color: parsed.color,
+          imagenUrl: parsed.imagenUrl,
           orden: parsed.orden,
         },
         select: { id: true },
@@ -259,6 +271,7 @@ export async function actualizarPlan(
           vigenciaDias: parsed.vigenciaDias,
           condiciones: parsed.condiciones,
           color: parsed.color,
+          imagenUrl: parsed.imagenUrl,
           orden: parsed.orden,
           activo,
         },

@@ -39,6 +39,8 @@ export interface PlanItem {
   beneficios: string[]
   vigenciaDias: number
   condiciones: string | null
+  /** Imagen que sube el negocio. `null` = la tarjeta va como hasta ahora. */
+  imagenUrl?: string | null
   /** Onboarding v2 · decisión del motor de elegibilidad (default: comprable). */
   comprable?: boolean
   /** El vehículo elegido excede el nivel del plan (§12: se explica, no se esconde). */
@@ -288,7 +290,23 @@ export function PlanesGrid({
                 </div>
               )}
 
-              <div className={cn('relative flex flex-1 flex-col p-6 sm:p-7', isRecommended && 'pt-10')}>
+              {/* Imagen del plan, si el negocio subió una. Va sobre la
+                  cabecera y no detrás del texto: de fondo obligaría a teñirla
+                  para que el contenido siguiera leyéndose, y entonces la foto
+                  que eligió el negocio ya no es la que ve el cliente. */}
+              {plan.imagenUrl && (
+                <div className="relative aspect-[16/9] w-full max-w-full overflow-hidden bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={plan.imagenUrl}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              )}
+
+              <div className={cn('relative flex flex-1 flex-col p-6 sm:p-7', isRecommended && !plan.imagenUrl && 'pt-10')}>
                 {/* 1 · Cabecera: nombre + variante + precio */}
                 <div className="mb-6">
                   <div className="flex flex-wrap items-center gap-2">
