@@ -71,8 +71,15 @@ test('solo formatos de imagen, y el parámetro de consulta no engaña', () => {
 test('sin NEXT_PUBLIC_SUPABASE_URL se rechaza, no se deja pasar', () => {
   // Fallar abierto aquí sería aceptar cualquier origen justo cuando la
   // configuración está rota.
-  assert.equal(prefijoImagenPlan(undefined), null)
-  assert.ok(validarImagenPlan(BUENA, undefined))
+  //
+  // Se pasa '' y NO `undefined`: en JavaScript un `undefined` explícito
+  // dispara el valor por defecto del parámetro, que es justamente leer
+  // `process.env.NEXT_PUBLIC_SUPABASE_URL`. Con esa variable puesta —como en
+  // la CI— la prueba comprobaba lo contrario de lo que dice su nombre, y solo
+  // pasaba en una máquina donde la variable no existiera. La cadena vacía sí
+  // llega al cuerpo y representa «no hay con qué comparar».
+  assert.equal(prefijoImagenPlan(''), null)
+  assert.ok(validarImagenPlan(BUENA, ''))
 })
 
 // ── Guardias de las pantallas ────────────────────────────────────────────────
