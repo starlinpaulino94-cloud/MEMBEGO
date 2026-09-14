@@ -51,3 +51,17 @@ export function clasificarCambioPlan(
   if (precioNuevo < precioAnterior) return 'BAJADA'
   return 'LATERAL'
 }
+
+/**
+ * Tasa de renovación: renovadas ÷ (renovadas + bajas), en porcentaje entero.
+ *
+ * `null` cuando no hubo ninguna de las dos. Una tasa sin base **no es 0 %**:
+ * 0 % afirma que nadie renovó pudiendo hacerlo, y eso es una conclusión, no un
+ * dato. Enseñarla porque la división no se puede hacer sería inventar una mala
+ * noticia.
+ */
+export function tasaRenovacion(renovadas: number, bajas: number): number | null {
+  const base = renovadas + bajas
+  if (base <= 0) return null
+  return Math.round((renovadas / base) * 100)
+}

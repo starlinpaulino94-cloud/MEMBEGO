@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { ArrowRight } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { requireRole, requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -65,7 +67,20 @@ export default async function ReportesPage({
       prefs={prefs}
       empresa={empresa?.name ?? 'Tu negocio'}
       generadoEn={formatDateTime(new Date(), prefs)}
-      eyebrow={<RangoFechas rango={rango} accion="/admin/reportes" />}
+      eyebrow={
+        <div className="space-y-3">
+          <RangoFechas rango={rango} accion="/admin/reportes" />
+          {/* El ciclo de vida vive aparte porque responde otra pregunta: este
+              reporte dice cuánto entró, aquél dice qué pasó con las membresías.
+              Mezclarlos daría una pantalla que no se puede leer de una vez. */}
+          <Link
+            href={`/admin/reportes/membresias${qs}`}
+            className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+          >
+            Ver el ciclo de vida de las membresías <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      }
       controles={
         <>
           <BotonExportar href={`/admin/reportes/export${qs}`} />
