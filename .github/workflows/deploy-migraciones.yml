@@ -142,13 +142,27 @@ jobs:
         # NO lo automatiza a propósito: marcar migraciones como aplicadas sin
         # correrlas es una operación delicada que no debe pasar sola en cada push.
         run: |
+          # `cmd | tee` devuelve el estado de `tee`, que casi siempre es 0. Sin
+          # `pipefail`, un `migrate deploy` que falla —o que ni siquiera llega a
+          # la base, como el P1001 del 14-09-2026— se traga su código de salida
+          # y este paso sale VERDE sin haber migrado nada. Es exactamente el
+          # fallo que este flujo existe para evitar, colado por una tubería.
+          set -o pipefail
           if ! npx prisma migrate deploy 2>&1 | tee salida-migrate.txt; then
             {
               echo '## ❌ La migración falló'
               echo
-              echo 'Si es el PRIMER despliegue contra esta base, falta el baseline de una sola vez:'
-              echo '`npm run migraciones:baseline -- --aplicar` con la DIRECT_URL, ANTES de este flujo.'
-              echo 'Procedimiento completo en `docs/DEVOPS.md`.'
+              echo 'Las dos causas habituales, en orden de frecuencia:'
+              echo
+              echo '1. **`P1001: Can'"'"'t reach database server`** — el secreto apunta a un host'
+              echo '   que este runner no alcanza. Los runners de GitHub son solo IPv4 y'
+              echo '   `db.<ref>.supabase.co` es solo IPv6 en los proyectos nuevos. Usa el'
+              echo '   **Session pooler** (también puerto 5432, host `…pooler.supabase.com`,'
+              echo '   usuario `postgres.<ref>`). El 6543 no sirve: no admite DDL.'
+              echo '2. **`already exists` / `migration has been modified`** — `_prisma_migrations`'
+              echo '   no cuadra con el repositorio, casi siempre porque se aplicó algo a mano'
+              echo '   en el SQL Editor. Se diagnostica y se registra según'
+              echo '   `docs/DEVOPS.md` § «El registro se desactualiza solo».'
               echo
               echo '```'
               tail -40 salida-migrate.txt

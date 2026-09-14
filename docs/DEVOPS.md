@@ -40,6 +40,16 @@ mientras todos los checks decían que estaba bien. Se corrigió poniéndolo rojo
 **condicionalmente**, no siempre: un check rojo permanente entrena a ignorar los
 checks, que es peor que no tenerlo.
 
+**Y volvió a pasar por otra puerta.** El run 202 del 14-09-2026 terminó en
+verde diciendo «✅ Migraciones aplicadas» mientras su propio log decía
+`P1001: Can't reach database server`. La causa: `cmd | tee archivo` devuelve el
+estado de `tee`, y GitHub corre cada `run:` con `bash -e`, que no lleva
+`pipefail`. El fallo de `migrate deploy` se perdía en la tubería. Se arregló
+con `set -o pipefail` y lo vigila `tests/flujos-pipefail.test.ts`, que recorre
+todos los flujos. Merece recordarse porque es la **segunda** vez que este
+flujo dice verde con la base sin migrar: la primera fue de diseño, la segunda
+de una tubería.
+
 **Qué trae el resumen del job.** Con el secreto puesto, la salida de
 `prisma migrate status` antes de migrar y la de `migrate deploy` después. Sin
 él, y solo si hay algo pendiente, **el SQL de cada migración listo para pegar**
@@ -93,9 +103,11 @@ y está escrito en «El registro se desactualiza solo».
 3. **Desactivar el auto-deploy de Vercel desde Git** para `main`, o el
    despliegue saldría en paralelo a la migración y se perdería el orden.
 
-   ⚠️ El punto 3 depende del 2, y el 2 ya está hecho: desactivar el auto-deploy
-   antes de configurar el secreto habría dejado a `main` mezclando sin
-   desplegar nada. Ese orden ya no es un riesgo.
+   ⚠️ **NO toques todavía el auto-deploy de Vercel.** De los dos secretos del
+   punto 2 solo está `MIGRATIONS_DATABASE_URL`; `VERCEL_DEPLOY_HOOK_URL` sigue
+   vacío —verificado en el run 202 del 14-09-2026, que avisó «sin configurar;
+   se omite el despliegue»—. Con el hook vacío, desactivar el auto-deploy
+   dejaría a `main` mezclando y **sin desplegar nada por ningún camino**.
 
    ⚠️ **Desde que el secreto existe, TODO push a `main` ejecuta
    `migrate deploy`**, traiga migraciones o no: el paso solo mira si el secreto
