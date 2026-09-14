@@ -849,6 +849,8 @@ export interface PlanPublic {
   descripcion: string | null
   beneficios: string[]
   vigenciaDias: number
+  /** Imagen que subió el negocio. Null = quien pinte decide su respaldo. */
+  imagenUrl: string | null
 }
 
 /** Un plan con el negocio que lo ofrece, para el catálogo global. */
@@ -921,6 +923,7 @@ export async function getPlanesPublic(
         select: {
           id: true, nombre: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
+          imagenUrl: true,
           company: {
             select: {
               id: true, name: true, slug: true, logoUrl: true, ciudad: true,
@@ -939,6 +942,7 @@ export async function getPlanesPublic(
       descripcion: p.descripcion,
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
+      imagenUrl: p.imagenUrl,
       // Number() en el borde: Decimal serializado tras unstable_cache es string.
       company: { ...p.company, averageRating: p.company.averageRating != null ? Number(p.company.averageRating) : null },
     }))
@@ -958,6 +962,7 @@ export async function getCompanyPlanesPublic(companyId: string): Promise<PlanPub
         select: {
           id: true, nombre: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
+          imagenUrl: true,
         },
       })
     )
@@ -970,6 +975,7 @@ export async function getCompanyPlanesPublic(companyId: string): Promise<PlanPub
       descripcion: p.descripcion,
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
+      imagenUrl: p.imagenUrl,
     }))
   } catch (error) {
     console.error('[getCompanyPlanesPublic] Error:', error)

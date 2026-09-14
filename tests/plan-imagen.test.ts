@@ -102,6 +102,22 @@ test('las tres pantallas del cliente pintan la imagen', () => {
   }
 })
 
+test('la pantalla de inicio prefiere la imagen del plan al logo de la empresa', () => {
+  // Cuatro planes de la misma empresa son cuatro veces el mismo logo: la
+  // rejilla del inicio no distingue nada. El logo se queda solo de respaldo.
+  const src = fuenteSinComentarios('src', 'modules', 'home', 'lectura.ts')
+  assert.match(src, /imagen: p\.imagenUrl \?\? p\.company\.logoUrl/)
+})
+
+test('las consultas públicas de planes traen la imagen', () => {
+  const src = fuenteSinComentarios('src', 'modules', 'marketplace', 'queries.ts')
+  // Las dos: el catálogo global (inicio y «ver más») y la de una empresa.
+  assert.ok(
+    (src.match(/imagenUrl: p\.imagenUrl/g) ?? []).length >= 2,
+    'alguna consulta pública no devuelve la imagen'
+  )
+})
+
 test('el motor de elegibilidad trae la imagen: si no, la tarjeta nunca la ve', () => {
   const src = fuenteSinComentarios('src', 'modules', 'elegibilidad', 'index.ts')
   assert.match(src, /imagenUrl: true/, 'falta en el select')
