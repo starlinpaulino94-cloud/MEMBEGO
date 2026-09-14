@@ -56,6 +56,12 @@ model Plan {
   activo           Boolean  @default(true)
   // F4.3: presentación del plan en tarjetas públicas y del panel.
   color            String? // hex o token, ej. "#0ea5e9"
+  /// Imagen del plan, subida desde el dispositivo al bucket `promociones`
+  /// bajo `<companyId>/planes/<planId>/`. Es la URL pública del objeto, no el
+  /// archivo: el bucket es público y la política de escritura ya exige que el
+  /// primer segmento sea una empresa del usuario. `null` = sin imagen, y las
+  /// tarjetas siguen pintando el degradado de `color` como hasta ahora.
+  imagenUrl        String?
   orden            Int      @default(0) // menor = primero
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
