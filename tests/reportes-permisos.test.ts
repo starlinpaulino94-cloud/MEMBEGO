@@ -38,17 +38,19 @@ function rango(params: Record<string, string>) {
 
 // ── Permisos ─────────────────────────────────────────────────────────────────
 
-test('la sección de reportes declara sus tres funciones', () => {
+test('la sección de reportes declara sus funciones', () => {
+  // `ver_empleados` entró con el reporte de operación (Fase 5), que es el
+  // primero que desglosa por persona.
   const codigos = (FUNCIONES_POR_SECCION.reportes ?? []).map((f) => f.codigo)
-  assert.deepEqual(codigos, ['ver', 'ver_financieros', 'exportar'])
+  assert.deepEqual(codigos, ['ver', 'ver_financieros', 'ver_empleados', 'exportar'])
 })
 
 test('solo se declaran funciones que existen cableadas', () => {
-  // La regla de honestidad del catálogo. `ver_datos_personales`,
-  // `ver_empleados` y `ver_auditoria` están diseñadas en docs/REPORTES.md pero
-  // todavía no tienen reporte que las haga cumplir: no deben estar aquí.
+  // La regla de honestidad del catálogo. `ver_datos_personales` y
+  // `ver_auditoria` están diseñadas en docs/REPORTES.md pero todavía no tienen
+  // reporte que las haga cumplir: no deben estar aquí.
   const codigos = (FUNCIONES_POR_SECCION.reportes ?? []).map((f) => f.codigo)
-  for (const sinCablear of ['ver_datos_personales', 'ver_empleados', 'ver_auditoria']) {
+  for (const sinCablear of ['ver_datos_personales', 'ver_auditoria']) {
     assert.ok(!codigos.includes(sinCablear), `${sinCablear} no está cableada todavía`)
   }
 })

@@ -34,6 +34,7 @@ async function main() {
         data: {
           clienteId: cliente.id,
           membershipId: membership.id,
+          companyId: membership.companyId,
           servicio: i % 2 ? 'Lavado Premium' : 'Lavado Express',
           createdAt: new Date(ahora.getTime() - i * 3 * dia),
         } as never,

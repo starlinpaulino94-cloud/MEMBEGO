@@ -283,11 +283,25 @@ frontera prohíbe.
 
 **Dos limitaciones que hay que decir antes de construir:**
 
-1. **`Visit` no tiene `companyId`** — se llega por `membershipId`, y está
-   documentado como decisión deliberada en el modelo. No existe ni puede
-   existir un índice `[companyId, fechaVisita]`. El propio modelo prevé «del
-   orden de millones de filas al mes». Se aborda en su fase, con backfill por
-   lotes e índice `CONCURRENTLY`, no antes.
+1. ~~**`Visit` no tiene `companyId`**~~ — **resuelto en la Fase 5.** La
+   columna existe (nullable), con su índice `[companyId, fechaVisita]`, y se
+   escribe en el único sitio que crea visitas. La migración
+   `20260919_visitas_company_id` solo añade; el relleno del histórico va por
+   lotes y los índices con `CONCURRENTLY` en
+   `prisma/migrations_manual/2026-09-visitas-company-id.sql`, **que se ejecuta
+   a mano y ANTES en producción**.
+
+   **Mientras el relleno no termine, el reporte de operación lo dice** —banner
+   en pantalla y línea «Cobertura de visitas» en el CSV—: los periodos más
+   viejos salen por debajo de lo que fueron, y callarlo sería mentir sobre el
+   alcance. La cobertura se enseña como un sí/no y no como un número: contar
+   las pendientes de UNA empresa exigiría el JOIN por `membershipId` que la fase
+   existe para evitar, y un conteo global sería dato de otro inquilino.
+
+   La columna no lleva `@relation`: una clave foránea nueva sobre `visits`
+   obliga a Postgres a validar la tabla entera con un lock exclusivo, que es
+   exactamente el bloqueo que el resto de la fase se toma el trabajo de evitar.
+   La integridad la sigue dando `membershipId`, de donde el valor se copia.
 2. **`sucursalId` y `empleadoId` son opcionales.** Los reportes por sucursal o
    empleado llevan una fila **«sin asignar»** que no se esconde. Esconderla
    haría que los subtotales no sumaran el total, que es la forma más rápida de
@@ -364,9 +378,9 @@ solo existe la interfaz.**
 | 0 | Este catálogo | Revisado y fusionado |
 | 1 | `MembershipEvent`, motivo de cancelación, emisión desde todos los puntos que mutan membresías, backfill, índices | Cancelar, renovar, vencer, activar y cambiar plan escriben su evento. Pruebas que fallan al revertir cada emisión |
 | 2 | Permisos granulares + filtros ampliados | Sin `ver_financieros` no se ven ingresos **ni en la exportación**. Prueba con dos empresas |
-| 3 | Reportes de membresías sobre eventos | Cada cifra abre su detalle. Corte de datos visible |
-| 4 | Finanzas y conciliación | Cobrado ≠ proyectado, separados y probados |
-| 5 | Operación: QR, sucursales, empleados, beneficios. Incluye `Visit.companyId` | Backfill verificado. Consulta por sucursal sin JOIN |
+| 3 ✅ | Reportes de membresías sobre eventos | Cada cifra abre su detalle. Corte de datos visible |
+| 4 ✅ | Finanzas y conciliación | Cobrado ≠ proyectado, separados y probados |
+| 5 ✅ | Operación: QR, sucursales, empleados, beneficios. Incluye `Visit.companyId` | Hecho. Consulta por sucursal sin JOIN; cobertura del relleno visible en pantalla y CSV; `ver_empleados` filtra EN LA CONSULTA |
 | 6 | Marketing, CRM, campañas, referidos | Etapas leídas de `PipelineConfig`, nunca fijas |
 | 7 | XLSX y exportación en segundo plano | 100k filas sin bloquear la petición |
 

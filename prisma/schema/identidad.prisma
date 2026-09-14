@@ -584,6 +584,12 @@ model AuditLog {
   @@index([accion])
   @@index([entidadTipo, entidadId])
   @@index([createdAt])
+  /// El reporte de operación cuenta los QR generados y usados de una empresa
+  /// entre dos fechas. Con los índices sueltos, Postgres elige uno de los tres
+  /// y descarta el resto leyendo filas: sobre una bitácora que recibe varias
+  /// entradas por cada escaneo, eso es la tabla entera. El compuesto resuelve
+  /// las tres condiciones de una pasada.
+  @@index([companyId, accion, createdAt])
   @@map("audit_logs")
 }
 

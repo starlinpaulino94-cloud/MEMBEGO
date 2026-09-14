@@ -340,6 +340,28 @@ model Visit {
   userAgent    String?
   createdAt    DateTime   @default(now())
 
+  /// Empresa dueña de la visita. COPIADA de la membresía al crearla, no
+  /// resuelta por relación.
+  ///
+  /// El modelo decía —con razón para lo que entonces se consultaba— que a la
+  /// empresa se llega por la membresía. El reporte de operación rompió eso:
+  /// «canjes de esta empresa entre dos fechas» tenía que entrar por
+  /// `membershipId` y descartar filas después, sobre la tabla que más crece de
+  /// todo el sistema. Con esta columna y su índice, la misma pregunta se
+  /// responde de una pasada y sin JOIN.
+  ///
+  /// NULLABLE, y no por comodidad: las visitas anteriores al backfill lo
+  /// tienen en null hasta que el lote las alcanza, y el reporte AVISA mientras
+  /// queden —ver `prisma/migrations_manual/2026-09-visitas-company-id.sql`—.
+  /// Un reporte que enseñara esas filas como cero sin decirlo mentiría.
+  ///
+  /// Sin `@relation`: una clave foránea nueva sobre `visits` obliga a Postgres
+  /// a validar la tabla entera con un lock exclusivo, que es exactamente el
+  /// bloqueo de escrituras que el resto de esta migración se toma el trabajo de
+  /// evitar. La integridad la sigue dando `membershipId`, que sí es FK y de
+  /// donde este valor se copia.
+  companyId    String?
+
   /// REVERSA. Una visita revertida NO se borra: se marca.
   ///
   /// Borrarla dejaría el saldo cuadrado y el historial mintiendo — el lavado
@@ -380,6 +402,10 @@ model Visit {
   /// frecuente del portal.
   @@index([membershipId, fechaVisita])
   @@index([clienteId, fechaVisita])
+  /// El índice que justifica la columna: todo reporte de operación es «esta
+  /// empresa, entre estas dos fechas». Sin él, la columna solo ahorraría el
+  /// JOIN y seguiría leyendo la tabla entera.
+  @@index([companyId, fechaVisita])
   @@map("visits")
 }
 
