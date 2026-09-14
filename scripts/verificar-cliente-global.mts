@@ -366,10 +366,20 @@ async function main() {
     where: { clienteId: anaRestaurante.id },
   })
   await prisma.visit.create({
-    data: { clienteId: anaLavadero.id, membershipId: memLav.id, servicio: 'Lavado' },
+    data: {
+      clienteId: anaLavadero.id,
+      membershipId: memLav.id,
+      companyId: memLav.companyId,
+      servicio: 'Lavado',
+    },
   })
   await prisma.visit.create({
-    data: { clienteId: anaRestaurante.id, membershipId: memRes.id, servicio: 'Cena' },
+    data: {
+      clienteId: anaRestaurante.id,
+      membershipId: memRes.id,
+      companyId: memRes.companyId,
+      servicio: 'Cena',
+    },
   })
   const historial = await getClienteVisitas(ana.supabaseId, 1, 20)
   comprobar(

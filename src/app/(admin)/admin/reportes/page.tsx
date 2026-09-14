@@ -80,6 +80,12 @@ export default async function ReportesPage({
             >
               Ciclo de vida de las membresías <ArrowRight className="h-4 w-4" />
             </Link>
+            <Link
+              href={`/admin/reportes/operacion${qs}`}
+              className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+            >
+              Operación y canjes <ArrowRight className="h-4 w-4" />
+            </Link>
             {verFinancieros && (
               <Link
                 href={`/admin/reportes/finanzas${qs}`}
