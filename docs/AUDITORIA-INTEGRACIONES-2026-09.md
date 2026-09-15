@@ -1,0 +1,511 @@
+# Auditoría profunda del módulo de Integraciones
+
+> Hecha el 15 de septiembre de 2026 sobre `main` (`c94a2e0`). Cada afirmación
+> lleva su archivo y su línea: lo que no se pudo comprobar en el código no se
+> afirma. La comparación con GoHighLevel se hace contra su superficie pública
+> documentada (Marketplace, API v2, Workflows), no contra su código.
+
+---
+
+## 0. Resumen en una página
+
+MembeGo no tiene «un módulo de integraciones»: tiene **tres capas distintas**
+que hoy comparten apellido y están en estados de madurez muy diferentes.
+
+| Capa | Qué es | Dónde vive | Madurez |
+|---|---|---|---|
+| **A · Satélites** | Sistemas verticales (car wash, restaurante) que MembeGo alimenta con SSO + webhooks firmados | `modules/integraciones`, `modules/plataforma`, `api/platform/v1` | **Alta** — contrato cerrado, SDK propio, firma Ed25519, idempotencia, uso único de token |
+| **B · Connect** | Catálogo de integraciones que **la empresa** conecta (Google Calendar, WhatsApp, Meta, CardNET) | `modules/connect`, `api/connect` | **Media-alta** — framework excelente, 5 proveedores reales de 14 en catálogo |
+| **C · Desarrolladores** | Claves de API y webhooks salientes para que **un tercero** (Zapier, un script) integre | `modules/connect/clavesApi`, `modules/connect/webhooks` | **Media-baja** — las piezas existen, la operación diaria no |
+
+**La arquitectura es mejor que la de GoHighLevel. La cobertura, no.** El
+framework de Connect (`modules/connect/catalogo.ts`) resuelve con una sola
+función lo que en GHL son tres verdades distintas repartidas por la interfaz, y
+el aislamiento multiempresa está razonado línea a línea en un sitio donde casi
+nadie lo razona. Lo que falta no es diseño: son **proveedores, verbos de API,
+cadencia operativa y un marketplace de terceros**.
+
+**Distancia estimada a paridad con GoHighLevel:** el módulo está hoy en torno al
+**35 %** de la superficie de integraciones de GHL. Cerrar los diez hallazgos
+Altos de la §3 lo llevaría a ~55 % con unas 6–8 semanas de trabajo. La paridad
+real (§5) es un programa de 6–9 meses, y buena parte de él no debería hacerse:
+la §6 propone qué copiar y qué no.
+
+---
+
+## 1. Lo que está bien, y hay que proteger
+
+No es cortesía: estas decisiones son las que hacen barato todo lo que viene
+después, y las tres primeras son mejores que su equivalente en GHL.
+
+1. **Una sola verdad sobre el estado de una integración.**
+   `modules/connect/catalogo.ts:139` ensambla las cinco preguntas
+   (implementado · publicado · desplegado · con plan · conectado) en un único
+   sitio del que beben la rejilla, el detalle y los módulos contextuales. Es
+   imposible que dos pantallas digan cosas distintas porque no hay dos códigos
+   que puedan responder.
+
+2. **Adaptadores que solo leen.** `proveedores/adaptadores.ts:13` — una
+   integración cuya verdad vive en otro subsistema (CardNET, Instagram) se
+   **lee**, no se replica. Es la regla que evita el problema clásico de dos
+   tablas que discrepan.
+
+3. **El `companyId` que llega por la red no se cree nunca.**
+   `modules/plataforma/api.ts:23`. El token deliberadamente *no* lleva la
+   empresa dentro para que saltarse la comprobación no parezca razonable. Es un
+   nivel de cuidado que no se ve casi nunca.
+
+4. **Uso único por INSERT, no por campo `usado`.** `TokenSSOUsado` usa el `jti`
+   como clave primaria (`integraciones.prisma`), así que el segundo canje
+   choca. No hay ventana entre comprobar y marcar.
+
+5. **Secretos: hash o sellado, nunca claro.** `CredencialSistema.clientSecretHash`
+   (scrypt), `clavesApiNucleo.ts` (prefijo público indexado + secreto hasheado,
+   con marca `mbk_` reconocible por los escáneres de GitHub),
+   `connect/cifrado.ts` (AES-256-GCM con AAD por fila y rotación de claves
+   maestras).
+
+6. **SSRF cortado al guardar, no al entregar.** `webhooksNucleo.ts:31` bloquea
+   `169.254.169.254`, rangos privados y `.internal`. GHL tampoco lo documenta
+   tan explícitamente.
+
+7. **Patrón outbox en las dos direcciones** (`EventoSaliente`, `EntregaWebhook`):
+   la fila se crea antes del intento, así que un receptor caído no pierde nada.
+
+8. **Contratos versionados en un paquete instalable** (`@membego/contracts`) y
+   un SDK propio (`@membego/platform-sdk`) que resuelve renovación de token,
+   reintentos con jitter e idempotencia. GHL no da SDK oficial.
+
+9. **35 archivos de prueba** tocan estas tres capas (de 182 en total), incluida
+   una que compara el inventario de la API con las rutas del disco: una ruta
+   nueva sin documentar rompe la CI (`packages/contracts/src/inventario.ts:15`).
+
+---
+
+## 2. Mapa real de cobertura
+
+### 2.1 Proveedores del catálogo (Capa B)
+
+| Proveedor | Estado en código | Qué hace de verdad |
+|---|---|---|
+| Google Calendar | **Nativo, OAuth 2.0 + PKCE** | Crea y borra eventos de citas; revoca al desconectar |
+| WhatsApp (Cloud API) | **Nativo** | Entrantes, salientes, estados, plantillas sincronizadas, alta manual y alta incrustada |
+| Facebook / Messenger | **Nativo** | Páginas, mensajes, webhook firmado |
+| Instagram | **Adaptado** sobre la conexión de Meta | DM por la Página |
+| CardNET | **Adaptado** sobre el subsistema de pagos | Cobro con tarjeta |
+| Google · PayPal · Stripe · QuickBooks · HubSpot · Mailchimp · Brevo · Zapier · Make | **Solo metadatos** (`metadatos.ts:100-160`) | Nada. Tarjeta de «Próximamente» |
+
+**5 implementados de 14 publicados.** Los 9 restantes son honestos —el
+framework impide que se puedan conectar (`indice.ts:97`)— pero son 9 tarjetas
+que prometen.
+
+### 2.2 API pública (Capa A/C)
+
+- **24 rutas**, todas `GET` o `POST`. **No existe `PUT`, `PATCH` ni `DELETE`**
+  en el tipo del inventario (`packages/contracts/src/inventario.ts:35`).
+- **Sin paginación por cursor** en ninguna: límites fijos (búsqueda acotada,
+  citas `take: 500` en `appointments/route.ts:71`).
+- Recursos cubiertos: clientes, vehículos, membresías, beneficios,
+  promociones, transacciones, citas (solo lectura), sucursales, empresa,
+  entitlements, SSO.
+- Recursos **ausentes**: conversaciones y mensajes, oportunidades y embudos,
+  etiquetas, notas y tareas, campos personalizados, usuarios y permisos,
+  productos, facturas, pagos, formularios, enlaces, medios.
+
+### 2.3 Eventos
+
+- **7 eventos se reenvían** (`integraciones/nucleo.ts:10`): registro, primera
+  visita, visita, compra, primera compra, membresía activada, referido
+  convertido.
+- El mapa v2 conoce 10 (`packages/contracts/src/eventos.ts:46`) — `reserva.creada`,
+  `reserva.pagada` y `venta.generada` **existen como nombre y no se emiten**.
+- El propio código ya lo reconoce: `eventosDeProyeccionSinEmisor()`
+  (`modules/plataforma/eventos.ts:131`) lista los eventos que el contrato exige
+  y el bus no emite.
+- GoHighLevel expone del orden de **30–40 tipos** de webhook.
+
+---
+
+## 3. Hallazgos
+
+Ordenados por lo que cuesta si no se arregla, no por lo que cuesta arreglarlo.
+
+### 🔴 A-1 · Los reintentos tardan un día entero
+
+`vercel.json:15` programa `/api/cron/integraciones` a las **13:00 UTC, una vez
+al día**. Ese cron es el único que reintenta las dos colas
+(`cron/integraciones/route.ts:18-26`).
+
+Consecuencia: un webhook que falla en su intento inmediato **no se vuelve a
+intentar hasta 24 horas después**. Con `MAX_INTENTOS = 8`
+(`connect/webhooks.ts:28`), agotar la cola tarda **ocho días**. Un satélite que
+se reinicia durante treinta segundos deja al cliente sin su evento hasta mañana.
+
+GoHighLevel reintenta con backoff en el orden de segundos y minutos.
+
+**Arreglo:** la cola ya existe. `modules/jobs/cola.ts:19` publica en QStash
+cuando `QSTASH_TOKEN` está configurado. Al fallar una entrega, programar el
+reintento en QStash con backoff exponencial (30 s · 2 m · 10 m · 1 h · 6 h)
+en vez de esperar al cron. El cron se queda como barrido de resiliencia.
+**Esfuerzo: 2–3 días. Es el hallazgo con mejor relación coste/beneficio del
+informe.**
+
+### 🔴 A-2 · La firma de los webhooks de empresa no cubre el timestamp
+
+`connect/webhooks.ts:205-213` envía `X-Membego-Timestamp` pero firma
+**solo el cuerpo**: `firmarHmac(secreto, cuerpo)`.
+
+El timestamp viaja sin autenticar, así que quien capture una entrega puede
+reenviarla mañana con el timestamp que quiera y la firma seguirá siendo válida.
+No hay ventana anti-replay que valga.
+
+Y es doblemente llamativo porque **el mismo repositorio ya lo hace bien** en la
+otra dirección: `packages/contracts/src/eventos.ts:89` define
+`materialFirmado(timestamp, eventId, cuerpo)` precisamente para esto, y los
+satélites lo usan (`integraciones/despacho.ts:112`).
+
+**Arreglo:** firmar `timestamp.deliveryId.cuerpo` con el mismo helper, enviar
+las dos cabeceras durante una ventana de migración (igual que se hizo con
+Ed25519 en los satélites) y documentar la verificación. **Esfuerzo: 1 día.**
+
+### 🔴 A-3 · No existe marketplace de aplicaciones de terceros
+
+Hay exactamente **dos** principales (`modules/plataforma/api.ts:75-89`):
+
+- `sistema` — satélite dado de alta **por el superadmin**, `client_credentials`.
+- `empresa` — clave `mbk_…` que **el dueño genera para sí mismo**.
+
+**No existe el tercero**, que es el que define a GoHighLevel: una app publicada
+por un desarrollador externo que **una empresa instala dándole permiso**. Eso
+exige, y no hay nada de ello:
+
+- flujo `authorization_code` + PKCE **de salida** (hoy `oauthNucleo.ts` es solo
+  de entrada: MembeGo como cliente de Google, no como servidor de autorización),
+- pantalla de consentimiento con scopes legibles,
+- modelo de app (nombre, logo, redirect URIs, scopes solicitados, estado de
+  revisión),
+- instalación/desinstalación por empresa, con revocación en cascada,
+- webhooks por app, no por empresa.
+
+**Esfuerzo: 6–10 semanas.** Es la pieza más cara del informe y la §6 discute si
+merece la pena hoy.
+
+### 🟠 A-4 · La empresa no puede ver, probar ni reenviar una entrega
+
+`EntregaWebhook` guarda estado, intentos, código HTTP y último error. Esa tabla
+**no se enseña en ninguna pantalla de empresa**: el único lector es un `count()`
+del panel del superadmin (`connect/superadmin.ts:100`).
+
+Concretamente, el dueño de un negocio no puede:
+
+- ver qué entregas hubo y cómo fueron,
+- **mandar un evento de prueba** al crear el webhook (el formulario de
+  `WebhooksPanel.tsx:118-140` solo tiene nombre y URL),
+- **reenviar** una entrega fallida,
+- ver el cuerpo que se envió.
+
+En GHL todo eso es la pantalla principal de webhooks. Sin ello, «no me llegan
+los eventos» es un ticket de soporte, y el panel del superadmin
+(`modules/integraciones/panel.ts:24-33`) existe precisamente porque alguien ya
+aprendió esa lección del lado de los satélites — pero no se trasladó al lado de
+las empresas. **Esfuerzo: 1 semana.**
+
+### 🟠 A-5 · No se pueden elegir los eventos desde la interfaz
+
+El modelo lo soporta (`SuscripcionWebhook.eventos`, y `suscripcionQuiere()` en
+`webhooksNucleo.ts:92` trata la lista vacía como «todos»), pero el formulario de
+creación **no ofrece ningún selector**. Toda suscripción nace recibiendo todo.
+
+Para una empresa con un endpoint que solo le interesa la conversión de
+referidos, eso es ruido, coste y superficie de datos innecesaria.
+**Esfuerzo: 1 día** (el backend ya está).
+
+### 🟠 A-6 · El fan-out se hace dentro del request, en serie
+
+`connect/webhooks.ts:181-186` recorre las suscripciones **secuencialmente**, con
+`TIMEOUT_MS = 10_000` por cada una. Con cinco suscripciones lentas, el worker
+del bus de eventos se queda cincuenta segundos en una sola operación de negocio.
+Lo mismo en `integraciones/despacho.ts:161` con los satélites.
+
+Es best-effort y no rompe nada, pero consume el presupuesto de ejecución de
+Vercel (`maxDuration = 60`) y retrasa todo lo que venga detrás.
+
+**Arreglo:** encolar el fan-out en QStash (mismo trabajo que A-1) o al menos
+paralelizar con `Promise.allSettled` y un tope de concurrencia.
+**Esfuerzo: 2 días, compartidos con A-1.**
+
+### 🟠 A-7 · No hay rotación de secretos, solo revocación
+
+- Claves de API: `revocarClaveApi` (`clavesApi.ts:89`). No hay rotar.
+- Secreto de webhook: se genera al crear y no se puede cambiar sin borrar la
+  suscripción.
+- `SistemaConectado.secreto`: se copia una vez al `.env` del satélite y no hay
+  camino de rotación en el panel.
+
+`CredencialSistema` sí tiene `expiresAt` con un comentario que dice lo correcto
+(«una fecha convierte la rotación en algo que ocurre aunque nadie se acuerde»),
+pero no hay nada que actúe sobre esa fecha ni que avise.
+
+Una rotación que obliga a un corte de servicio es una rotación que no se hace.
+**Arreglo:** permitir dos secretos vivos a la vez con solapamiento (el receptor
+acepta cualquiera de los dos durante N días). **Esfuerzo: 3–4 días.**
+
+### 🟠 A-8 · Sin canal SMS
+
+`action-catalog.ts:77` declara `SEND_SMS: 'send_sms'` y `actionSink.ts:29` dice
+que los canales no integrados degradan a `simulated: true`. O sea: una
+automatización puede decir que manda un SMS, marcarse como correcta, y no
+mandarlo nunca. `canales.ts` ni siquiera lo lista, lo que es la decisión
+honesta, pero la acción sigue existiendo en el catálogo del motor.
+
+SMS es un canal de primera clase en GoHighLevel (Twilio nativo, con LC Phone
+como reventa). **Esfuerzo: 1–2 semanas** con un proveedor.
+
+### 🟠 A-9 · El correo no es de la empresa
+
+`sendEmail` (`lib/email.ts`) usa Resend **de la plataforma**. Una empresa no
+conecta su propio proveedor ni su propio dominio: los correos salen del dominio
+de MembeGo. `canales.ts:60` lo dice explícitamente («el correo depende de la
+plataforma, no de la empresa»).
+
+Consecuencias reales: la entregabilidad de una empresa se contamina con la de
+las demás, no hay DKIM/SPF del dominio del cliente, y el remitente no es el
+negocio. GHL resuelve esto con Mailgun/LC Email por subcuenta y dominio
+verificado. **Esfuerzo: 2–3 semanas.**
+
+### 🟠 A-10 · El calendario es de ida, no de vuelta
+
+`connect/googleCalendar.ts` crea (`crearEventoCalendario:349`) y borra
+(`eliminarEventoCalendario:433`) eventos. **No hay `watch`/canal push, ni lectura
+de `freeBusy`, ni sincronización incremental.**
+
+Consecuencia concreta: si el dueño se bloquea dos horas en su Google Calendar,
+MembeGo sigue ofreciendo esas horas y le crea una doble reserva. Ese es el fallo
+que un negocio de citas nota el primer día.
+
+Tampoco hay Outlook/Microsoft 365 ni iCal. GHL tiene los tres, bidireccionales.
+**Esfuerzo: 2–3 semanas para Google bidireccional; +2 para Outlook.**
+
+### 🟡 B-1 · Sin trigger de webhook entrante ni acción HTTP a medida
+
+El motor tiene `send_webhook`, pero **solo reparte por las suscripciones ya
+creadas** (`actionSink.ts:194-215`). No existe:
+
+- **trigger** «me llega un POST a esta URL» (el *Inbound Webhook* de GHL, que es
+  cómo la mayoría de la gente conecta cualquier cosa sin programar),
+- **acción** «llama a esta URL con este método, estas cabeceras y este cuerpo, y
+  guarda la respuesta» (el *Custom Webhook* de GHL).
+
+Sin esas dos piezas, cualquier integración que MembeGo no haya escrito a mano es
+imposible para el usuario final. Es, con diferencia, **la funcionalidad de GHL
+con mejor relación valor/esfuerzo que aquí no existe**. **Esfuerzo: 2 semanas
+las dos.**
+
+### 🟡 B-2 · Sin app de Zapier ni de Make
+
+Las tarjetas existen (`metadatos.ts:147,154`) y no hay nada detrás. Y sin embargo
+**la base ya está**: hay OpenAPI público (`api/platform/v1/openapi/route.ts`),
+claves de API por empresa y webhooks salientes. Una app de Zapier con 3 triggers
+y 3 actions es cuestión de días, no de meses, y es el atajo barato a «miles de
+integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
+
+### 🟡 B-3 · Sin salud activa de las conexiones
+
+`modules/connect/meta/salud.ts` existe, pero **ningún cron lo llama** (los tres
+crons de `vercel.json` son automatizaciones, renovaciones de tarjeta e
+integraciones). El estado de una conexión solo cambia cuando un envío falla —
+salud pasiva.
+
+Con Meta esto es concreto y está documentado en `docs/connect/meta-arquitectura.md`:
+el token de usuario de larga duración caduca a los 60 días y `data_access_expires_at`
+a los 90. Hoy eso se descubre cuando un mensaje no sale.
+
+El estado `REAUTORIZAR` ya existe en el vocabulario (`catalogo.ts:detalleDe`) y
+no hay nada que lo encienda a tiempo. **Esfuerzo: 3–4 días.**
+
+### 🟡 B-4 · Faltan eventos que ya tienen nombre
+
+`reserva.creada`, `reserva.pagada` y `venta.generada` están en el mapa v2 y no se
+emiten. Y de los eventos que un integrador espera, no existen: cita
+creada/movida/cancelada, pago recibido/fallido, mensaje entrante/saliente,
+cliente actualizado, membresía cancelada/vencida.
+
+`eventosDeProyeccionSinEmisor()` ya convierte esto en una lista visible en vez de
+una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vaciarse.
+**Esfuerzo: 1–2 semanas.**
+
+### 🟡 B-5 · La API pública no puede modificar ni borrar
+
+Solo `GET` y `POST`. Un integrador no puede actualizar un cliente, cancelar una
+cita ni borrar nada. Para una API que se ofrece a terceros, eso obliga a
+soluciones raras (crear duplicados) o simplemente cierra el caso de uso.
+**Esfuerzo: 2–3 semanas** para los recursos principales.
+
+### 🟡 B-6 · Sin paginación por cursor
+
+Límites fijos y silenciosos: la búsqueda de clientes devuelve `MAX_BUSQUEDA`, las
+citas `take: 500` sin decir que hay más. Un integrador con 3.000 citas en el mes
+se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
+
+### 🟡 B-7 · Sin métricas de uso por credencial
+
+`CredencialSistema.lastUsedAt` y `anotarUsoClave` son todo lo que hay. No hay
+peticiones por día, por endpoint, ni tasa de error; ni para el integrador ni para
+el superadmin. El propio hub de desarrolladores lo dice con honestidad
+(«MembeGo no mide hoy esa señal», `desarrolladores/page.tsx:27`), que es la
+actitud correcta y a la vez la confirmación del hueco. **Esfuerzo: 1 semana.**
+
+### 🟡 B-8 · Deuda declarada de la migración expansiva
+
+`SistemaConectado.categoria` y `SistemaConectado.activo` son legado vivo, con un
+CHECK que impide que `activo` y `estado` se separen. Está bien gestionado y
+documentado — pero la fase de contracción no está programada, y el
+`leerCatalogo()` de `panel.ts:104` mantiene **dos rutas de lectura** (la nueva y
+el `catch` con el esquema viejo) que habrá que recordar borrar.
+**Esfuerzo: 2 días cuando toque.**
+
+---
+
+## 4. Seguridad: lo que sí y lo que no
+
+| Control | Estado |
+|---|---|
+| Secretos hasheados/sellados | ✅ scrypt, AES-256-GCM con AAD y rotación de claves maestras |
+| SSRF en webhooks salientes | ✅ `webhooksNucleo.ts:31`, por nombre y por rango |
+| Aislamiento multiempresa | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio, RLS con pruebas de cobertura |
+| Uso único de token SSO | ✅ por clave primaria, sin ventana de carrera |
+| Idempotencia de escrituras | ✅ `ClaveIdempotencia` con huella SHA-256 del cuerpo |
+| Rate limit de la API | ✅ distribuido con Upstash, fail-open al local (`lib/rate-limit.ts:4`) |
+| Firma Ed25519 a satélites | ✅ sobre `timestamp.eventId.cuerpo` |
+| `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
+| **Firma de webhooks de empresa** | ❌ **no cubre el timestamp (A-2)** |
+| **Rotación de secretos** | ❌ **solo revocación (A-7)** |
+| **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
+| **Caducidad de credenciales** | ⚠️ el campo existe, nadie lo hace cumplir |
+| **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
+
+---
+
+## 5. Comparación con GoHighLevel, capacidad por capacidad
+
+Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
+
+| Capacidad | MembeGo | GHL | Nota |
+|---|:-:|:-:|---|
+| Framework de catálogo de integraciones | **5** | 3 | MembeGo es mejor: una sola verdad, adaptadores de solo lectura |
+| Aislamiento multiempresa | **5** | 4 | Razonado y probado; GHL lo tiene pero no lo documenta así |
+| Contrato con verticales (SSO + eventos) | **5** | 1 | GHL no tiene este concepto. Es diferenciador de MembeGo |
+| SDK oficial para integradores | **4** | 0 | `@membego/platform-sdk`; GHL no da SDK |
+| Idempotencia y firma de eventos | **4** | 3 | Ed25519 + inbox; la firma a empresas es el punto débil (A-2) |
+| Documentación de la API | **3** | 4 | OpenAPI generado del inventario (no se queda viejo) vs. portal completo de GHL |
+| **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
+| **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
+| **Superficie de la API** | **2** | 5 | 24 rutas GET/POST vs. API v2 completa con CRUD |
+| **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
+| **Operación de webhooks (log, prueba, reenvío)** | **1** | 5 | Existe la tabla, no la pantalla (A-4) |
+| **Cadencia de reintentos** | **1** | 5 | 24 h vs. minutos (A-1) |
+| **Webhook entrante / acción HTTP en flujos** | **0** | 5 | No existe (B-1) |
+| **SMS / telefonía** | **0** | 5 | No existe (A-8) |
+| **Correo con dominio propio** | **0** | 5 | Resend de plataforma (A-9) |
+| **Calendario bidireccional** | **1** | 5 | Solo escritura, solo Google (A-10) |
+| **Pasarelas de pago** | **2** | 5 | CardNET + Azul (buen encaje local) vs. Stripe/PayPal/Square/NMI/Authorize |
+| **Zapier / Make** | **0** | 5 | Tarjetas sin código (B-2) |
+| **Métricas de uso de la API** | **1** | 4 | `lastUsedAt` (B-7) |
+| **Salud activa de conexiones** | **1** | 4 | Pasiva (B-3) |
+
+**Media ponderada ≈ 35 % de la superficie de GHL**, con una distribución muy
+marcada: MembeGo **gana** en los cimientos y **pierde** en todo lo que es
+volumen de conectores y operación diaria.
+
+Dicho de otro modo: MembeGo ha construido bien los cimientos de un edificio de
+veinte plantas y tiene levantadas siete. GHL tiene las veinte plantas con unos
+cimientos que él mismo ha tenido que apuntalar sobre la marcha.
+
+---
+
+## 6. Qué hacer, en qué orden, y qué NO copiar
+
+### Fase 1 · Operación (3–4 semanas) — cerrar los 🔴 y los 🟠 baratos
+
+Sin esto, cada integración nueva multiplica los tickets de soporte.
+
+| # | Trabajo | Días | Hallazgo |
+|---|---|:-:|---|
+| 1 | Reintentos por QStash con backoff exponencial | 3 | A-1 |
+| 2 | Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración | 1 | A-2 |
+| 3 | Pantalla de entregas: log, cuerpo, reenviar, evento de prueba | 5 | A-4 |
+| 4 | Selector de eventos en el formulario | 1 | A-5 |
+| 5 | Fan-out encolado y en paralelo con tope | 2 | A-6 |
+| 6 | Rotación con solapamiento de claves y secretos | 4 | A-7 |
+| 7 | Cron de salud: Meta, OAuth, caducidades → `REAUTORIZAR` | 3 | B-3 |
+
+**Resultado: el módulo pasa de ~35 % a ~45 %** y —más importante— deja de
+generar trabajo manual por cada cliente conectado.
+
+### Fase 2 · Alcance (6–8 semanas) — que un tercero pueda integrar sin nosotros
+
+| # | Trabajo | Semanas | Hallazgo |
+|---|---|:-:|---|
+| 8 | Trigger de webhook entrante + acción HTTP a medida en flujos | 2 | B-1 |
+| 9 | App de Zapier (3 triggers, 3 actions) sobre lo que ya existe | 1 | B-2 |
+| 10 | Catálogo de eventos hasta ~20 tipos (citas, pagos, mensajes) | 2 | B-4 |
+| 11 | `PATCH`/`DELETE` en clientes, citas, membresías | 2 | B-5 |
+| 12 | Paginación por cursor en todas las listas | 1 | B-6 |
+| 13 | Métricas de uso por credencial | 1 | B-7 |
+
+**Resultado: ~58 %.** Aquí es donde la curva de valor por semana es más alta:
+los puntos 8 y 9 juntos cuestan tres semanas y abren, en la práctica, la
+conexión con cualquier herramienta que el cliente ya use.
+
+### Fase 3 · Canales (8–10 semanas) — donde GHL cobra de verdad
+
+| # | Trabajo | Semanas | Hallazgo |
+|---|---|:-:|---|
+| 14 | Calendario bidireccional (Google `watch` + `freeBusy`) | 3 | A-10 |
+| 15 | SMS con proveedor y control de coste por empresa | 2 | A-8 |
+| 16 | Correo con dominio propio por empresa | 3 | A-9 |
+| 17 | Outlook / Microsoft 365 | 2 | A-10 |
+
+**Resultado: ~72 %.**
+
+### Fase 4 · Marketplace (10–14 semanas) — solo cuando haya demanda
+
+El punto 18 es A-3: servidor OAuth propio, modelo de app, consentimiento,
+instalación por empresa, revisión, webhooks por app. **Recomendación explícita:
+no hacerlo todavía.** Un marketplace sin desarrolladores externos es un coste de
+mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
+**tres terceros pidiendo integrar**, no una fecha.
+
+### Lo que NO conviene copiar de GoHighLevel
+
+1. **Su modelo de «snapshots» y subcuentas anidadas.** MembeGo tiene un modelo
+   de empresa/sucursal más limpio; importarlo traería la complejidad sin el
+   caso de uso de agencia.
+2. **Su multiplicación de integraciones marginales.** GHL tiene conectores que
+   nadie usa y que envejecen mal. Cinco integraciones que funcionan de verdad
+   valen más que treinta tarjetas — y el framework actual ya lo tiene resuelto
+   con la separación implementado/previsto.
+3. **Su reventa de telefonía y correo (LC Phone, LC Email).** Es un negocio,
+   no una integración, y trae con él soporte de portabilidad, cumplimiento y
+   fraude. Conviene empezar con el proveedor a nombre del cliente.
+4. **Traducir los identificadores de protocolo.** Ya está bien resuelto
+   (`scopes.ts:10` en inglés, comentarios en español); no ceder en eso.
+
+---
+
+## 7. La respuesta corta a «¿qué tan lejos estamos?»
+
+- **En arquitectura: no estamos lejos, estamos por delante.** Las decisiones de
+  aislamiento, contrato y una-sola-verdad son mejores que las de GHL, y son
+  justamente las que no se pueden añadir después.
+- **En operación: estamos a un mes.** Los siete trabajos de la Fase 1 son
+  concretos, pequeños y ninguno exige decisiones de producto. El reintento
+  diario (A-1) y la ausencia de log de entregas (A-4) son, hoy, los dos que más
+  caros salen por cliente conectado.
+- **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
+  real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
+  y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la
+  cobertura lo que treinta conectores harían en un año.
+- **En marketplace de terceros: estamos lejos, y está bien estarlo** mientras no
+  haya desarrolladores externos esperando.
+
