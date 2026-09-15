@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { CatalogoIntegraciones } from '@/components/connect/CatalogoIntegraciones'
+import { AplicacionesConectadas } from '@/components/integraciones/AplicacionesConectadas'
+import { aplicacionesDeEmpresa } from '@/modules/integraciones/sso'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +54,17 @@ export default async function IntegracionesPage() {
     (ESTADOS_QUE_PIDEN_ATENCION as readonly string[]).includes(e.estado)
   )
 
+  // Los sistemas satélite del vertical. Van aparte del catálogo de Connect —y
+  // ARRIBA— porque no son algo que conectar: son aplicaciones que ya son de la
+  // empresa y que aquí se ABREN. Mezclarlas con WhatsApp o la contabilidad
+  // convertiría un acceso diario en una tarjeta más de un catálogo.
+  const aplicaciones = await aplicacionesDeEmpresa(user)
+  // El motivo de una aplicación que no abre es configuración de la plataforma:
+  // útil para quien puede arreglarlo, ruido para el resto del equipo.
+  const puedeVerDiagnostico = ['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA', 'GERENTE'].includes(
+    user.metadata.role
+  )
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -77,6 +90,8 @@ export default async function IntegracionesPage() {
             : 'Ábrelas para ver qué pasa en cada una.'}
         </StatusBanner>
       )}
+
+      <AplicacionesConectadas aplicaciones={aplicaciones} diagnostico={puedeVerDiagnostico} />
 
       <CatalogoIntegraciones entradas={entradas} />
     </div>
