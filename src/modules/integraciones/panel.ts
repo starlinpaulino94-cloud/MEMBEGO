@@ -435,7 +435,10 @@ export async function revivirFallidos(sistemaId: string): Promise<number> {
     const r = await tx.eventoSaliente
       .updateMany({
         where: { sistemaId, estado: { in: ['DEAD_LETTER', 'FALLIDO'] } },
-        data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null },
+        // `proximoIntentoAt: null` = «vencido, ya toca». Un evento revivido que
+        // conservara la fecha de su último descarte volvería a la cola con una
+        // espera de 24 h colgando, y quien pulsó el botón no vería nada moverse.
+        data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null, proximoIntentoAt: null },
       })
       .catch(() => ({ count: 0 }))
     return r.count

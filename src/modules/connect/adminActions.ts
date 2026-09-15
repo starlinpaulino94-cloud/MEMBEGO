@@ -6,7 +6,19 @@ import { crearClaveApi, revocarClaveApi } from '@/modules/connect/clavesApi'
 import { crearConexion, desconectarConexion } from '@/modules/connect/registro'
 import { conectarWhatsapp } from '@/modules/connect/whatsapp'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
-import { cambiarEstadoSuscripcion, crearSuscripcion } from '@/modules/connect/webhooks'
+import {
+  actualizarEventosSuscripcion,
+  cambiarEstadoSuscripcion,
+  crearSuscripcion,
+  reenviarEntregaAhora,
+  rotarSecretoSuscripcion,
+} from '@/modules/connect/webhooks'
+import { soloEventosConocidos } from '@/modules/connect/eventosSuscribibles'
+import {
+  entregaDeEmpresa,
+  probarSuscripcion,
+  type ResultadoPrueba,
+} from '@/modules/connect/entregas'
 import { MENSAJE_URL } from '@/modules/connect/webhooksNucleo'
 import { SCOPES_POR_CAPABILITY } from '@membego/contracts'
 
@@ -14,7 +26,7 @@ import { SCOPES_POR_CAPABILITY } from '@membego/contracts'
  * Acciones del panel de INTEGRACIONES de una empresa (Connect · Fase 4).
  *
  * Cada una empieza por `requireSection('integraciones', <función>)`, y ese
- * segundo argumento no es decorativo: es lo que hace que las cuatro funciones
+ * segundo argumento no es decorativo: es lo que hace que las funciones
  * listadas en `lib/auth/funciones.ts` sean interruptores REALES y no pintados.
  * La regla de honestidad del módulo de Permisos dice que solo se lista lo que
  * tiene guardia cableada; esto es el otro extremo de esa promesa.
@@ -35,6 +47,8 @@ export interface AccionState {
   claveNueva?: string
   /** El secreto de firma de un webhook recién creado. */
   secretoNuevo?: string
+  /** Lo que respondió el servidor de la empresa al evento de prueba (A-4). */
+  prueba?: ResultadoPrueba
 }
 
 /** Scopes que una empresa puede conceder a una clave suya. */
@@ -119,7 +133,11 @@ export async function crearWebhookAction(
     nombre,
     url,
     // Sin eventos elegidos = todos. Ver `suscripcionQuiere`.
-    eventos: formData.getAll('eventos').map(String).filter(Boolean),
+    //
+    // Se filtra contra el catálogo: un evento inventado no se guarda. Guardarlo
+    // no daría error en ningún sitio — daría una suscripción que no recibe nada
+    // y una tarde buscando por qué.
+    eventos: soloEventosConocidos(formData.getAll('eventos').map(String)),
     creadoPor: user.metadata.dbUserId ?? null,
   })
 
@@ -157,6 +175,175 @@ export async function cambiarEstadoWebhookAction(
       estado === 'ACTIVE'
         ? 'Webhook reactivado. Los próximos eventos se te entregarán.'
         : 'Webhook pausado. Dejamos de entregarte eventos hasta que lo reactives.',
+  }
+}
+
+/**
+ * ROTAR EL SECRETO de un webhook (hallazgo A-7).
+ *
+ * Permiso propio, `webhook_rotar`, y no vale con `webhook_estado`: pausar es
+ * reversible con un clic y solo afecta a lo que llegue después; rotar pone en
+ * marcha un reloj que, si nadie copia el secreto nuevo a tiempo, termina en un
+ * receptor que deja de validar nuestras firmas. Son facultades distintas.
+ */
+export async function rotarSecretoWebhookAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'webhook_rotar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta el webhook.' }
+
+  const res = await rotarSecretoSuscripcion(user.metadata.companyId, id)
+  if (!res.ok) return { error: 'No encontramos ese webhook.' }
+
+  revalidatePath('/admin/integraciones')
+  // El secreto nuevo viaja en `secretoNuevo` —el mismo campo que al crear— para
+  // que la pantalla lo enseñe con el bloque que ya existe. Y la fecha va en el
+  // texto: es el dato que convierte «lo copio luego» en una decisión con plazo.
+  return {
+    success: `Secreto rotado. El anterior sigue valiendo hasta el ${res.anteriorHasta.toLocaleDateString('es-DO', { day: 'numeric', month: 'long' })}: copia el nuevo en tu servidor antes de esa fecha.`,
+    secretoNuevo: res.secreto,
+  }
+}
+
+/**
+ * CAMBIAR QUÉ EVENTOS RECIBE un webhook (hallazgo A-5).
+ *
+ * Reutiliza `webhook_estado` a propósito, y no es pereza: quien puede pausar un
+ * webhook ya puede dejar de recibirlo TODO. Poder dejar de recibir una parte es
+ * estrictamente menos que eso, así que un permiso nuevo no protegería nada y
+ * sería un interruptor más que explicar en la pantalla de permisos.
+ */
+export async function actualizarEventosWebhookAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'webhook_estado')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta el webhook.' }
+
+  const eventos = soloEventosConocidos(formData.getAll('eventos').map(String))
+  const res = await actualizarEventosSuscripcion(user.metadata.companyId, id, eventos)
+  if (!res.ok) return { error: 'No se pudo guardar. Recarga la página.' }
+
+  revalidatePath('/admin/integraciones')
+  return {
+    success:
+      eventos.length === 0
+        ? 'Guardado. Volverás a recibir todos los eventos.'
+        : `Guardado. Recibirás ${eventos.length === 1 ? 'solo ese evento' : `solo esos ${eventos.length} eventos`}.`,
+  }
+}
+
+/**
+ * MANDAR UN EVENTO DE PRUEBA (hallazgo A-4).
+ *
+ * Es lo primero que quiere hacer cualquiera que acaba de pegar una URL, y hasta
+ * ahora no se podía: había que esperar a que ocurriera un evento de verdad —una
+ * compra, una visita— para descubrir si el webhook estaba bien escrito. Con
+ * suerte, eso es media hora; sin suerte, es el lunes.
+ *
+ * Tiene permiso PROPIO y no reutiliza `webhook_estado`: la prueba hace que
+ * NUESTRO servidor toque una URL que escribió otra persona, y eso es una
+ * facultad distinta de pausar un webhook.
+ */
+export async function probarWebhookAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'webhook_probar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta el webhook.' }
+
+  const res = await probarSuscripcion(user.metadata.companyId, id)
+  if ('error' in res) return { error: res.error }
+
+  revalidatePath('/admin/integraciones')
+  // La prueba NO es un error aunque el servidor conteste mal: el resultado va
+  // en `prueba` y la pantalla lo pinta con su gravedad. Devolverlo como `error`
+  // perdería el diagnóstico, que es justo lo que se fue a buscar.
+  return { prueba: res }
+}
+
+/**
+ * EL CUERPO EXACTO QUE SE ENVIÓ, a demanda.
+ *
+ * Se pide al abrir una entrega y no con la lista entera: cincuenta cuerpos
+ * viajando al navegador para que se lea uno es trabajo tirado, y las listas de
+ * entregas se abren muchas más veces de las que se abre un cuerpo.
+ *
+ * Es una LECTURA, así que le basta el permiso de la sección: no hay función
+ * aparte que conceder. Y va acotada por la empresa del usuario —nunca por el
+ * id suelto que manda el navegador—, que es lo que impide leer la entrega de
+ * otra empresa con un id adivinado.
+ */
+export async function detalleEntregaAction(
+  _prev: DetalleEntregaState,
+  formData: FormData
+): Promise<DetalleEntregaState> {
+  const user = await requireSection('integraciones')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta la entrega.' }
+
+  const entrega = await entregaDeEmpresa(user.metadata.companyId, id)
+  if (!entrega) return { error: 'No encontramos esa entrega.' }
+
+  return { id, cuerpo: JSON.stringify(entrega.payload ?? {}, null, 2) }
+}
+
+export interface DetalleEntregaState {
+  error?: string
+  /** A qué entrega corresponde el cuerpo, para no pintarlo bajo otra. */
+  id?: string
+  cuerpo?: string
+}
+
+/**
+ * REENVIAR UNA ENTREGA (hallazgo A-4).
+ *
+ * Cierra el ciclo del que depende todo lo demás: se arregla el servidor y se
+ * comprueba aquí mismo si sirvió, en vez de esperar al siguiente evento real
+ * para enterarse.
+ */
+export async function reenviarEntregaAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'webhook_reenviar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta la entrega.' }
+
+  const res = await reenviarEntregaAhora(user.metadata.companyId, id)
+  if (!res.ok) {
+    return {
+      error:
+        res.motivo === 'suscripcion_inactiva'
+          ? 'Este webhook está pausado o apagado. Reactívalo antes de reenviar.'
+          : 'No encontramos esa entrega.',
+    }
+  }
+
+  revalidatePath('/admin/integraciones')
+  if (res.resultado === 'enviado') {
+    return { success: 'Entregado. Tu servidor lo recibió y lo aceptó.' }
+  }
+  // Volver a fallar es un resultado legítimo del botón, no un fallo del botón.
+  // Se dice lo que pasa DESPUÉS, que es lo que la persona necesita saber para
+  // decidir si se queda mirando o se va a arreglar su servidor.
+  return {
+    error:
+      'Tu servidor volvió a rechazarlo. Seguiremos reintentando solos; mira el detalle de la entrega para ver qué respondió.',
   }
 }
 

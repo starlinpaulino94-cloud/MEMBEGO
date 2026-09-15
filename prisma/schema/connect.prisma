@@ -337,10 +337,38 @@ model SuscripcionWebhook {
   /// receptor comprueba que el webhook viene de nosotros y nadie más.
   ///
   /// A diferencia de las credenciales de conector, este NO va cifrado con la
-  /// clave maestra: tiene que poder ENSEÑARSE de nuevo en el panel (quien
-  /// integra lo copia a su servidor), y un secreto que se puede volver a ver
-  /// no gana nada por estar sellado. Lo que sí se puede es rotarlo.
+  /// clave maestra. La razón que se dio aquí —«tiene que poder enseñarse de
+  /// nuevo en el panel»— resultó ser FALSA al revisarlo en la Fase A-7: no hay,
+  /// ni hubo nunca, pantalla que lo vuelva a enseñar. Así que hoy está en claro
+  /// sin una razón que lo sostenga, y sellarlo es una migración pendiente
+  /// anotada en la auditoría.
+  ///
+  /// Lo que sí se puede, ya de verdad, es rotarlo: ver `secretoAnterior`.
   secreto String
+
+  /// EL SECRETO QUE SE ESTÁ RETIRANDO, mientras dure el solape de la rotación.
+  ///
+  /// Hasta ahora rotar era imposible sin cortar: había un solo secreto, así que
+  /// cambiarlo dejaba de golpe todas las entregas sin firma reconocible para un
+  /// receptor que todavía no lo hubiera copiado. La única salida era borrar la
+  /// suscripción y crear otra — que además cambia el id y pierde el historial.
+  ///
+  /// Con esta columna se firma con LOS DOS a la vez y la cabecera v2 lleva las
+  /// dos firmas; el receptor acepta con la que tenga configurada y los dos
+  /// lados dejan de tener que coincidir en el mismo minuto.
+  ///
+  /// NULL = no hay rotación en curso, que es el caso de todas las filas
+  /// existentes. Por eso la migración no rellena nada.
+  secretoAnterior String?
+
+  /// Hasta cuándo se sigue firmando también con el anterior.
+  ///
+  /// Se guarda la FECHA y no un booleano: un «rotando: sí» no dice cuánto queda
+  /// y obliga a un trabajo que lo apague: si ese trabajo no corre, el secreto
+  /// viejo vive para siempre, que es lo contrario de rotar. Con la fecha, el
+  /// solape se acaba SOLO — quien firma compara contra el reloj, y una fila
+  /// caducada no firma con el viejo aunque nadie la haya limpiado.
+  secretoAnteriorHasta DateTime?
 
   /// ACTIVE | PAUSED | DISABLED. PAUSED lo pone la empresa; DISABLED lo pone
   /// el sistema tras demasiados fallos seguidos — y por eso son distintos:
@@ -393,11 +421,28 @@ model EntregaWebhook {
   ultimoError String?
   enviadoAt   DateTime?
 
+  /// Cuándo toca el siguiente intento. Lo escribe quien anota el fallo, con la
+  /// escalera de `modules/integraciones/reintentos.ts`.
+  ///
+  /// NULL SIGNIFICA «YA», y es lo que hace que la migración no necesite
+  /// rellenar nada: las entregas que estaban en cola antes de existir esta
+  /// columna quedan vencidas, que es exactamente lo que eran.
+  ///
+  /// Su razón de ser es que el cron y la cola no se pisen. Sin esta fecha, el
+  /// barrido diario atendería una entrega que ya tiene su reintento programado
+  /// para dentro de seis horas, le gastaría el intento antes de tiempo y
+  /// convertiría la escalera en «una vez al día» otra vez.
+  proximoIntentoAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([estado, createdAt])
   @@index([companyId, createdAt])
   @@index([suscripcionId, createdAt])
+  /// El barrido pregunta SIEMPRE por las dos columnas juntas («pendientes y
+  /// vencidas»); con el índice de `[estado, createdAt]` tendría que leer todas
+  /// las pendientes para descartar las que aún no tocan.
+  @@index([estado, proximoIntentoAt])
   @@map("entregas_webhook")
 }
 
