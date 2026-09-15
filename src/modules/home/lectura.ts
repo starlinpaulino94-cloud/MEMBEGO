@@ -4,7 +4,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { LocationConsentService } from '@/modules/geo/consentimiento/service'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
-import { getCategoriesPublic, getFeaturedCompanies, getPlanesPublic, getFeaturedPromotions } from '@/modules/marketplace/cached'
+import { getCategoriesPublic, getFeaturedCompanies, getPlanesPublic, getFeaturedPromotions, getPromotionsPublic } from '@/modules/marketplace/cached'
 import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-queries'
 import { getMisEmpresas, getPromoFeed } from '@/modules/social/queries'
 import { formatMoney } from '@/lib/format'
@@ -85,38 +85,59 @@ async function composicionAdmitida(user: SessionUser) {
 /** El hero por defecto: las promociones activas destacadas con descuento, precio y contexto del negocio. */
 async function heroesPorDefecto(
   promociones: any[],
-  limite = 3
+  limite = 4
 ): Promise<HeroInicio[]> {
-  const candidatas = promociones
-    .filter((p) => p && p.titulo && (p.imagenUrl || p.company?.logoUrl))
+  const candidatas = [...promociones]
+    .filter((p) => p && p.titulo)
+    .sort((a, b) => {
+      // Priorizar las que tienen imagen o descuento
+      const hasImgA = a.imagenUrl || a.company?.logoUrl || a.empresa?.logoUrl ? 1 : 0
+      const hasImgB = b.imagenUrl || b.company?.logoUrl || b.empresa?.logoUrl ? 1 : 0
+      const hasDescA = a.descuento || a.descuentoTexto || a.tipo === '2x1' ? 1 : 0
+      const hasDescB = b.descuento || b.descuentoTexto || b.tipo === '2x1' ? 1 : 0
+      return (hasImgB + hasDescB) - (hasImgA + hasDescA)
+    })
     .slice(0, limite)
 
   if (candidatas.length === 0) return []
-  const contexto = await contextoHeroPorDefecto(candidatas.map((p) => p.company.id))
+
+  const companyIds = candidatas
+    .map((p) => p.company?.id ?? p.empresa?.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+  const contexto = await contextoHeroPorDefecto(companyIds)
 
   return candidatas.map((p) => {
-    const descuento = p.descuento != null
-      ? formatDescuento(Number(p.descuento), p.tipo)
-      : p.tipo === '2x1'
-        ? '2×1'
-        : p.tipo === '3x2'
-          ? '3×2'
-          : null
+    const compId = p.company?.id ?? p.empresa?.id
+    const compName = p.company?.name ?? p.empresa?.nombre ?? 'Negocio afiliado'
+    const compLogo = p.company?.logoUrl ?? p.empresa?.logoUrl ?? null
+    const ctx = compId ? contexto.get(compId) : null
 
-    const precio = p.venta ? formatMoney(p.venta.precio) : (p.precio ? formatMoney(Number(p.precio)) : null)
-    const ctx = contexto.get(p.company.id)
+    const descuento = p.descuentoTexto ?? (
+      p.descuento != null
+        ? formatDescuento(Number(p.descuento), p.tipo)
+        : p.tipo === '2x1'
+          ? '2×1'
+          : p.tipo === '3x2'
+            ? '3×2'
+            : null
+    )
+
+    const precio = p.precioTexto ?? (
+      p.venta ? formatMoney(p.venta.precio) : (p.precio ? formatMoney(Number(p.precio)) : null)
+    )
 
     return {
       titulo: p.titulo,
       subtitulo: p.descripcion,
-      empresa: p.company.name,
-      ciudad: ctx?.ciudad ?? null,
-      imagen: p.imagenUrl ?? p.company.logoUrl ?? null,
-      href: `/cliente/promociones/${p.id}`,
+      empresa: compName,
+      ciudad: ctx?.ciudad ?? p.company?.ciudad ?? null,
+      imagen: p.imagenUrl ?? compLogo ?? null,
+      href: p.href ?? `/cliente/promociones/${p.id}`,
       cta: descuento ? 'Aprovechar oferta' : 'Ver beneficio',
       planDesde: ctx?.planDesde ?? null,
       color: ctx?.color ?? null,
-      valoracion: ctx?.valoracion ?? p.company.averageRating ?? null,
+      valoracion: ctx?.valoracion ?? (p.company?.averageRating != null ? Number(p.company.averageRating) : null),
       descuento,
       precio,
       etiqueta: descuento ? 'Oferta destacada' : 'Novedad destacada',
@@ -145,8 +166,8 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     getFeaturedCompanies(10),
     getPlanesPublic({ limit: 20 }),
     tipos.includes('EXPERIENCIAS') ? excursionesDestacadas(4) : Promise.resolve([]),
-    // Las promociones alimentan el relámpago siempre, y el hero cuando no hay composición
-    getFeaturedPromotions(10),
+    // Las promociones activas (públicas y destacadas) alimentan el hero, novedades y relámpago
+    getPromotionsPublic({ limit: 20 }).catch(() => getFeaturedPromotions(10)),
     totalesVitrina(),
     dbUserId ? getMisEmpresas(dbUserId).catch(() => []) : Promise.resolve([]),
     dbUserId ? getPromoFeed(dbUserId).catch(() => null) : Promise.resolve(null),
@@ -303,14 +324,13 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     }
   }
 
-  const poolPromos: any[] = promoFeed
-    ? [
-        ...promoFeed.misEmpresas,
-        ...promoFeed.destacadas,
-        ...promoFeed.nuevas,
-        ...promoFeed.recomendadas,
-      ]
-    : promociones
+  const poolPromos: any[] = [
+    ...(promoFeed?.misEmpresas ?? []),
+    ...(promoFeed?.nuevas ?? []),
+    ...(promoFeed?.destacadas ?? []),
+    ...(promoFeed?.recomendadas ?? []),
+    ...promociones,
+  ]
 
   const uniquePoolMap = new Map<string, any>()
   for (const pr of poolPromos) {
@@ -318,9 +338,13 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   }
   const pool = [...uniquePoolMap.values()]
 
-  const paraTiRaw = promoFeed
-    ? [...promoFeed.misEmpresas, ...promoFeed.recomendadas, ...promoFeed.destacadas]
-    : promociones
+  const paraTiRaw = [
+    ...(promoFeed?.misEmpresas ?? []),
+    ...(promoFeed?.nuevas ?? []),
+    ...(promoFeed?.recomendadas ?? []),
+    ...(promoFeed?.destacadas ?? []),
+    ...promociones,
+  ]
   const paraTiVistos = new Set<string>()
   const paraTi: PromoNovedadItem[] = []
   for (const p of paraTiRaw) {
@@ -388,15 +412,13 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
 
   const heroesPromos = await heroesPorDefecto(
     paraTi.length > 0 ? paraTi : pool,
-    3
+    4
   )
 
-  const heroes = heroesPublicados.length > 0
-    ? [...heroesPublicados, ...heroesPromos].slice(0, 4)
-    : heroesPromos
+  const heroes = [...heroesPromos, ...heroesPublicados].slice(0, 4)
 
   // Tarjeta relámpago del rediseño
-  const urgentes = promociones
+  const urgentes = pool
     .filter((p) => p.venta && !p.venta.agotada && p.vigenciaHasta && new Date(p.vigenciaHasta) > ahora)
     .sort((a, b) => new Date(a.vigenciaHasta!).getTime() - new Date(b.vigenciaHasta!).getTime())
     .slice(0, 2)
