@@ -167,6 +167,22 @@ informe.**
 
 </details>
 
+### ✅ A-2 · La firma no cubría el timestamp — RESUELTO (20/09/2026)
+
+> Cerrado. Sale `X-Membego-Signature-V2` = HMAC de
+> `materialFirmado(timestamp, entregaId, cuerpo)` —el mismo material que firman
+> los satélites— junto a la v1 de siempre, para que nadie deje de aceptar sus
+> avisos el día del despliegue. La guía del panel enseña el verificador
+> completo, con la ventana anti-replay y la deduplicación por id de entrega.
+>
+> La prueba que vale es `tests/connect-firma-webhook.test.ts`: implementa el
+> receptor **tal como lo documenta la guía** y comprueba que acepta lo que
+> mandamos y que rechaza un replay con el timestamp refrescado — el ataque
+> exacto que la v1 permitía.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🔴 A-2 · La firma de los webhooks de empresa no cubre el timestamp
 
 `connect/webhooks.ts:205-213` envía `X-Membego-Timestamp` pero firma
@@ -184,6 +200,8 @@ satélites lo usan (`integraciones/despacho.ts:112`).
 **Arreglo:** firmar `timestamp.deliveryId.cuerpo` con el mismo helper, enviar
 las dos cabeceras durante una ventana de migración (igual que se hizo con
 Ed25519 en los satélites) y documentar la verificación. **Esfuerzo: 1 día.**
+
+</details>
 
 ### 🔴 A-3 · No existe marketplace de aplicaciones de terceros
 
@@ -417,7 +435,7 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | Rate limit de la API | ✅ distribuido con Upstash, fail-open al local (`lib/rate-limit.ts:4`) |
 | Firma Ed25519 a satélites | ✅ sobre `timestamp.eventId.cuerpo` |
 | `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
-| **Firma de webhooks de empresa** | ❌ **no cubre el timestamp (A-2)** |
+| Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
 | **Rotación de secretos** | ❌ **solo revocación (A-7)** |
 | **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
 | **Caducidad de credenciales** | ⚠️ el campo existe, nadie lo hace cumplir |
@@ -435,7 +453,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | Aislamiento multiempresa | **5** | 4 | Razonado y probado; GHL lo tiene pero no lo documenta así |
 | Contrato con verticales (SSO + eventos) | **5** | 1 | GHL no tiene este concepto. Es diferenciador de MembeGo |
 | SDK oficial para integradores | **4** | 0 | `@membego/platform-sdk`; GHL no da SDK |
-| Idempotencia y firma de eventos | **4** | 3 | Ed25519 + inbox; la firma a empresas es el punto débil (A-2) |
+| Idempotencia y firma de eventos | **5** | 3 | Ed25519 + inbox a satélites, HMAC sobre material firmado a empresas (A-2 resuelto) |
 | Documentación de la API | **3** | 4 | OpenAPI generado del inventario (no se queda viejo) vs. portal completo de GHL |
 | **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
@@ -471,7 +489,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | # | Trabajo | Días | Hallazgo |
 |---|---|:-:|---|
 | ~~1~~ | ~~Reintentos por QStash con backoff exponencial~~ ✅ hecho | 3 | A-1 |
-| 2 | Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración | 1 | A-2 |
+| ~~2~~ | ~~Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración~~ ✅ hecho | 1 | A-2 |
 | ~~3~~ | ~~Pantalla de entregas: log, cuerpo, reenviar, evento de prueba~~ ✅ hecho | 5 | A-4 |
 | 4 | Selector de eventos en el formulario | 1 | A-5 |
 | 5 | Fan-out encolado y en paralelo con tope | 2 | A-6 |
@@ -537,14 +555,14 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
 - **En arquitectura: no estamos lejos, estamos por delante.** Las decisiones de
   aislamiento, contrato y una-sola-verdad son mejores que las de GHL, y son
   justamente las que no se pueden añadir después.
-- **En operación: estamos a dos semanas.** De los siete trabajos de la Fase 1,
-  **A-1 y A-4 ya están cerrados** — que eran los dos que más caros salían por
-  cliente conectado: los reintentos pasaron de una vez al día a una escalera de
-  30 s a 24 h, y «no me llegan los eventos» dejó de ser un ticket de soporte
-  para ser una pantalla. Quedan cinco, todos concretos y ninguno exige
-  decisiones de producto. El siguiente por riesgo es A-2 (la firma no cubre el
-  timestamp); el siguiente por valor visible, A-5 (elegir eventos), que es un
-  día porque el backend ya está.
+- **En operación: estamos a semana y media.** De los siete trabajos de la
+  Fase 1, **A-1, A-2 y A-4 ya están cerrados** — los dos que más caros salían
+  por cliente conectado y el único con consecuencia de seguridad: los reintentos
+  pasaron de una vez al día a una escalera de 30 s a 24 h, «no me llegan los
+  eventos» dejó de ser un ticket para ser una pantalla, y la firma dejó de
+  admitir un replay con el timestamp refrescado. Quedan cuatro, todos concretos
+  y ninguno exige decisiones de producto. El siguiente por valor visible es A-5
+  (elegir eventos), que es un día porque el backend ya está.
 - **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
   real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
   y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la

@@ -151,23 +151,38 @@ test('probar NO crea una entrega: el registro es de eventos del negocio', () => 
   assert.match(src, /anotarConector\(/)
 })
 
+/** Las cabeceras que un trozo de código pone, por el nombre de su constante. */
+function cabecerasDe(src: string, desde: string): Set<string> {
+  const bloque = src.slice(src.indexOf(desde))
+  const fin = bloque.indexOf('body: cuerpo')
+  return new Set(
+    [...bloque.slice(0, fin > 0 ? fin : 2000).matchAll(/\[(CABECERA_[A-Z_0-9]+)\]/g)].map(
+      (m) => m[1]
+    )
+  )
+}
+
 test('la prueba manda la forma EXACTA de un aviso real', () => {
   /**
    * Una prueba con forma simplificada puede pasar en un servidor que rechaza
    * los avisos de verdad — la peor respuesta posible de un botón de probar:
-   * «funciona» cuando no funciona. Mismo sobre, mismas cabeceras, misma firma.
+   * «funciona» cuando no funciona.
+   *
+   * Se comparan las cabeceras de la sonda con las del emisor REAL, en vez de
+   * con una lista escrita aquí: una lista se queda vieja en cuanto alguien
+   * añade una cabecera al emisor, y se queda vieja en silencio, que es
+   * exactamente el fallo que esta prueba existe para detectar.
    */
-  const src = codigo(ENTREGAS)
-  assert.match(src, /SobreWebhook/)
-  assert.match(src, /firmarHmac\(/)
-  for (const cabecera of [
-    'X-Membego-Event',
-    'X-Membego-Delivery',
-    'X-Membego-Timestamp',
-    'X-Membego-Signature',
-  ]) {
-    assert.ok(src.includes(cabecera), `a la prueba le falta la cabecera ${cabecera}`)
-  }
+  const sonda = cabecerasDe(codigo(ENTREGAS), 'const post = await tocar(')
+  const emisor = cabecerasDe(codigo('src/modules/connect/webhooks.ts'), 'const resp = await fetch(')
+
+  assert.ok(emisor.size >= 4, 'no se encontraron las cabeceras del emisor')
+  assert.deepEqual(
+    [...sonda].sort(),
+    [...emisor].sort(),
+    'la prueba y la entrega real no mandan las mismas cabeceras'
+  )
+  assert.match(codigo(ENTREGAS), /SobreWebhook/)
 })
 
 test('la prueba se llama membego.test y no suplanta a un evento real', () => {

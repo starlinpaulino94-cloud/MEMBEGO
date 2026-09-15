@@ -3,6 +3,14 @@ import { randomBytes } from 'node:crypto'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
+import {
+  CABECERA_ENTREGA,
+  CABECERA_EVENTO_NOMBRE,
+  CABECERA_FIRMA_EMPRESA,
+  CABECERA_FIRMA_EMPRESA_V2,
+  CABECERA_TIMESTAMP,
+  materialFirmado,
+} from '@membego/contracts'
 import { dentroDelLimite } from '@/modules/connect/entitlements'
 import { anotarConector } from '@/modules/connect/bitacora'
 import {
@@ -201,22 +209,45 @@ interface ResultadoEntrega {
   error: string | null
 }
 
-/** POST firmado. La firma es HMAC-SHA256 del cuerpo, con el secreto. */
+/**
+ * POST firmado. Salen LAS DOS firmas (hallazgo A-2).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ DOS, Y NO LA BUENA DIRECTAMENTE
+ *
+ * La v1 firma solo el cuerpo y es la que verifica hoy todo el que ya integró.
+ * Cambiarle el significado a esa cabecera de golpe haría que TODOS empezaran a
+ * rechazar sus propios avisos el minuto del despliegue — y un webhook que
+ * rechaza todo no se nota: se nota tres días después, cuando alguien echa de
+ * menos un dato. Con las dos juntas, cada quien migra cuando puede, y la v1 se
+ * retira cuando nadie la use.
+ *
+ * Es la misma estrategia con la que los satélites pasaron de HMAC a Ed25519.
+ */
 async function entregar(
   url: string,
   secreto: string,
   sobre: SobreWebhook
 ): Promise<ResultadoEntrega> {
   const cuerpo = JSON.stringify(sobre)
+  const timestamp = Math.floor(Date.now() / 1000)
   try {
     const resp = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Membego-Event': sobre.event,
-        'X-Membego-Delivery': sobre.id,
-        'X-Membego-Timestamp': String(Math.floor(Date.now() / 1000)),
-        'X-Membego-Signature': firmarHmac(secreto, cuerpo),
+        [CABECERA_EVENTO_NOMBRE]: sobre.event,
+        [CABECERA_ENTREGA]: sobre.id,
+        [CABECERA_TIMESTAMP]: String(timestamp),
+        // v2: el timestamp y el id de la entrega van DENTRO de lo firmado, así
+        // que ya no se pueden cambiar por el camino. Es lo que hace que la
+        // ventana anti-replay signifique algo.
+        [CABECERA_FIRMA_EMPRESA_V2]: firmarHmac(
+          secreto,
+          materialFirmado(timestamp, sobre.id, cuerpo)
+        ),
+        // v1 (legado): el cuerpo a secas. Ver arriba.
+        [CABECERA_FIRMA_EMPRESA]: firmarHmac(secreto, cuerpo),
       },
       body: cuerpo,
       signal: AbortSignal.timeout(TIMEOUT_MS),

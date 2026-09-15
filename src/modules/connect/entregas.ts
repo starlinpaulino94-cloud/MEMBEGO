@@ -1,6 +1,14 @@
 import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
+import {
+  CABECERA_ENTREGA,
+  CABECERA_EVENTO_NOMBRE,
+  CABECERA_FIRMA_EMPRESA,
+  CABECERA_FIRMA_EMPRESA_V2,
+  CABECERA_TIMESTAMP,
+  materialFirmado,
+} from '@membego/contracts'
 import { anotarConector } from '@/modules/connect/bitacora'
 import {
   diagnosticarParaEmpresa,
@@ -211,16 +219,26 @@ export async function probarSuscripcion(
     data: { prueba: true },
   }
   const cuerpo = JSON.stringify(sobre)
+  const timestamp = Math.floor(Date.now() / 1000)
 
   const get = await tocar(sus.url, { method: 'GET' })
   const post = await tocar(sus.url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Membego-Event': sobre.event,
-      'X-Membego-Delivery': sobre.id,
-      'X-Membego-Timestamp': String(Math.floor(Date.now() / 1000)),
-      'X-Membego-Signature': firmarHmac(sus.secreto, cuerpo),
+      [CABECERA_EVENTO_NOMBRE]: sobre.event,
+      [CABECERA_ENTREGA]: sobre.id,
+      [CABECERA_TIMESTAMP]: String(timestamp),
+      // LAS DOS FIRMAS, igual que una entrega real. Si la prueba mandara solo
+      // la v2, un servidor que aún verifica la v1 la rechazaría y la pantalla
+      // diría «tu servidor no aceptó nuestra firma» sobre una integración que
+      // funciona perfectamente. La prueba tiene que mentir lo mínimo, y aquí lo
+      // mínimo es cero.
+      [CABECERA_FIRMA_EMPRESA_V2]: firmarHmac(
+        sus.secreto,
+        materialFirmado(timestamp, sobre.id, cuerpo)
+      ),
+      [CABECERA_FIRMA_EMPRESA]: firmarHmac(sus.secreto, cuerpo),
     },
     body: cuerpo,
   })

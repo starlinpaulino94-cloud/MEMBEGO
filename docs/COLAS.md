@@ -222,6 +222,48 @@ El botón «reintentar» del panel del superadmin es la excepción explícita
 está diciendo «ahora», y responderle que toca dentro de seis horas sería
 devolverle su propia espera.
 
+## La firma de los webhooks de empresa
+
+> Hallazgo **A-2** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.
+
+Cada entrega sale con **dos** firmas HMAC-SHA256, calculadas con el secreto
+`whs_…` de la suscripción:
+
+| Cabecera | Qué firma | Estado |
+|---|---|---|
+| `X-Membego-Signature-V2` | `{timestamp}.{entregaId}.{cuerpo}` | **la buena** |
+| `X-Membego-Signature` | el cuerpo a secas | legado, se retira |
+
+**Qué arregla la v2.** La v1 firmaba solo el cuerpo, así que `X-Membego-Timestamp`
+viajaba sin que nada lo protegiera: quien capturara una entrega podía reenviarla
+al día siguiente con el timestamp que quisiera y la firma seguía cuadrando. La
+cabecera existía y no servía para nada — comprobar la ventana anti-replay con un
+valor que elige el atacante es comprobar su palabra. Con el timestamp dentro del
+material firmado, cambiarlo rompe la firma, y la ventana pasa a significar algo.
+
+El id de la entrega va dentro por lo mismo, y añade una propiedad: dos entregas
+con el mismo cuerpo en el mismo segundo —el mismo evento a dos suscripciones de
+la misma empresa— dejan de tener firmas intercambiables.
+
+El material es `materialFirmado()` de `@membego/contracts`, el MISMO que firman
+los satélites con Ed25519. Escribir aquí otra concatenación «equivalente» es
+como emisor y receptor acaban discrepando por un punto de más.
+
+**Por qué salen las dos.** Cambiarle el significado a la cabecera de siempre
+haría que todo el que ya integró empezara a rechazar sus propios avisos el
+minuto del despliegue. Y eso no se nota el primer día: se nota tres días
+después, cuando alguien echa de menos un dato. Misma estrategia con la que los
+satélites pasaron de HMAC a Ed25519.
+
+**Cómo se retira la v1.** Anunciando una fecha, no midiendo. Qué cabecera
+comprueba un receptor pasa dentro de su servidor y no vuelve a nosotros: desde
+aquí, uno que verifica la v2 y otro que no verifica nada son indistinguibles.
+
+La guía de `/admin/integraciones/desarrolladores` enseña el verificador
+completo —firma, ventana y deduplicación por id de entrega— y una prueba
+comprueba que ese verificador acepta lo que el emisor manda y rechaza un replay
+con el timestamp refrescado.
+
 ## Fase 3 de Membego Connect — webhooks de empresa en la misma cola
 
 Las suscripciones de webhook que crea una empresa (`suscripciones_webhook`)

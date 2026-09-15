@@ -72,6 +72,58 @@ export const CABECERA_EVENTO = 'X-Membego-Event-Id'
 /** La firma simétrica anterior. Se retira cuando ningún satélite la use. */
 export const CABECERA_FIRMA_HMAC = 'X-Membego-Firma'
 
+// ── Webhooks de EMPRESA ─────────────────────────────────────────────────────
+//
+// Otro canal y otras cabeceras. Los satélites los registra el superadmin y
+// reciben Ed25519; estos los crea la propia empresa apuntando a donde quiera y
+// se firman con el secreto `whs_…` que se le enseña al crearlos. Comparten el
+// MATERIAL firmado (`materialFirmado`) a propósito: es la única parte donde una
+// diferencia entre los dos canales se pagaría en firmas rechazadas que nadie
+// sabe explicar.
+
+/** Id de la entrega. Va dentro del material firmado, así que no se puede mover. */
+export const CABECERA_ENTREGA = 'X-Membego-Delivery'
+/** Nombre del evento. Comodidad para enrutar; la verdad está en el cuerpo. */
+export const CABECERA_EVENTO_NOMBRE = 'X-Membego-Event'
+
+/**
+ * FIRMA v2 de los webhooks de empresa: HMAC-SHA256 hex de
+ * `materialFirmado(timestamp, entregaId, cuerpo)`.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * QUÉ ARREGLA RESPECTO A LA v1 (hallazgo A-2 de la auditoría)
+ *
+ * La v1 firmaba SOLO el cuerpo. El timestamp viajaba al lado, en su cabecera,
+ * sin que nada lo protegiera — así que quien capturara una entrega podía
+ * reenviarla mañana con el timestamp que quisiera y la firma seguiría siendo
+ * válida. La cabecera existía y no servía para nada: comprobar la ventana con
+ * un valor que el atacante elige es comprobar su palabra.
+ *
+ * Con el timestamp DENTRO del material, cambiarlo rompe la firma. Eso es lo que
+ * convierte la ventana anti-replay en una defensa de verdad.
+ *
+ * El id de la entrega va dentro por el mismo motivo, y añade uno: dos entregas
+ * con el mismo cuerpo en el mismo segundo —el mismo evento a dos suscripciones
+ * de la misma empresa— dejan de tener firmas intercambiables.
+ */
+export const CABECERA_FIRMA_EMPRESA_V2 = 'X-Membego-Signature-V2'
+
+/**
+ * FIRMA v1, HMAC-SHA256 hex del cuerpo a secas. LEGADO.
+ *
+ * Sigue saliendo porque quien ya verifica así dejaría de aceptar sus avisos el
+ * minuto del despliegue, y un webhook que empieza a rechazar todo no se nota
+ * hasta que alguien echa de menos un dato.
+ *
+ * CÓMO SE RETIRA, porque no es «cuando la telemetría lo diga»: no hay
+ * telemetría posible. Qué cabecera comprueba un receptor ocurre dentro de SU
+ * servidor y no vuelve a nosotros de ninguna forma — desde aquí, uno que
+ * verifica la v2 y otro que no verifica nada son indistinguibles. Así que se
+ * retira anunciando una fecha y pidiendo confirmación, no observando. Prometer
+ * lo contrario sería planear sobre un dato que nadie va a poder mirar.
+ */
+export const CABECERA_FIRMA_EMPRESA = 'X-Membego-Signature'
+
 /**
  * Ventana anti-replay: cinco minutos. Suficiente para un reloj mal puesto y un
  * reintento lento; poco para que un webhook capturado siga sirviendo.
