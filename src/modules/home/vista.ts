@@ -45,6 +45,8 @@ export interface PlanInicio {
   /** Valoración de la empresa (las estrellas del diseño). Null = sin dato. */
   readonly valoracion: number | null
   readonly resenas: number
+  /** Motivo contextual de recomendación: «De tus negocios», «Por tus intereses», «Más popular». */
+  readonly motivoRecomendacion?: string | null
 }
 
 export interface ExperienciaInicio {
@@ -98,6 +100,53 @@ export interface CategoriaInicio {
   readonly icon: string | null
 }
 
+export interface EmpresaScrollItem {
+  readonly id: string
+  readonly nombre: string
+  readonly slug: string
+  readonly rubro: string | null
+  readonly ciudad: string | null
+  readonly logoUrl: string | null
+  readonly bannerUrl: string | null
+  readonly href: string
+  readonly valoracion: number | null
+  readonly resenas: number
+  readonly esMia: boolean
+  readonly etiquetaRelacion: string | null
+}
+
+export interface PromoNovedadItem {
+  readonly id: string
+  readonly titulo: string
+  readonly slug: string | null
+  readonly descripcion: string
+  readonly imagenUrl: string | null
+  readonly tipo: string
+  readonly tipoEtiqueta: string
+  readonly descuentoTexto: string | null
+  readonly precioTexto: string | null
+  readonly vigenciaHasta: string | null
+  readonly diasRestantes: number | null
+  readonly href: string
+  readonly empresa: {
+    readonly id: string
+    readonly nombre: string
+    readonly slug: string
+    readonly logoUrl: string | null
+  }
+  readonly esPrivadaMiembros: boolean
+  readonly esDeMiEmpresa: boolean
+  readonly motivo: 'afinidad' | 'exclusiva' | 'descuento' | 'vencimiento'
+}
+
+export interface PromocionesNovedadesVista {
+  readonly paraTi: readonly PromoNovedadItem[]
+  readonly exclusivas: readonly PromoNovedadItem[]
+  readonly descuentos: readonly PromoNovedadItem[]
+  readonly porVencer: readonly PromoNovedadItem[]
+  readonly total: number
+}
+
 export interface InicioVista {
   readonly revisionId: string | null
   readonly territorio: string | null
@@ -107,6 +156,8 @@ export interface InicioVista {
   readonly empresas: readonly EmpresaInicio[]
   /** Total de empresas publicadas, para «Explorar más de N empresas». */
   readonly empresasTotal: number
+  readonly empresasScroll: readonly EmpresaScrollItem[]
+  readonly promocionesNovedades: PromocionesNovedadesVista
   readonly planes: readonly PlanInicio[]
   /** Total de planes activos, para «Ver todas las N membresías». */
   readonly planesTotal: number
@@ -114,3 +165,4 @@ export interface InicioVista {
   /** La tarjeta relámpago: countdown global (la que vence antes) + filas. */
   readonly relampago: { readonly hasta: string; readonly promos: readonly RelampagoInicio[] } | null
 }
+

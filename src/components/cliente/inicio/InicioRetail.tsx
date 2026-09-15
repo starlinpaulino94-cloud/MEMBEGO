@@ -5,23 +5,13 @@ import type { PanelPersonal } from '@/modules/cliente/panelPersonal'
 import type { InicioVista } from '@/modules/home/vista'
 import { InicioComercial } from './InicioComercial'
 import { VibeReferidos } from './VibeReferidos'
+import { VibeMembresiasActivas } from './VibeMembresiasActivas'
 
 /**
- * EL INICIO DEL CLIENTE — rediseño violeta (Stitch «amazon style», aprobado
- * 2026-09-10). La pantalla es la vitrina comercial del diseño: héroe,
- * categorías, «Relacionado», relámpago y el banner de referidos al cierre.
- *
- * LO QUE YA NO VIVE AQUÍ (decisiones acumuladas del usuario):
- * - La WALLET: el diseño nuevo no la trae en el Inicio; vive en
- *   /mis-membresias (y la Cuenta enseña la ficha del contrato). Con ella se
- *   fue el orden condicional wallet-primero.
- * - Las NOVEDADES de empresas seguidas: tienen su pantalla en
- *   /cliente/novedades (campana de la cabecera).
- * - EN VIVO (2026-09-09) y el héroe del motor (2026-09-10): retirados; el
- *   motor de experiencias habla solo por el popup.
- *
- * El onboarding de primera visita se conserva al fondo: es condicional (una
- * cookie lo apaga) y perderlo sería perder una capacidad, no un adorno.
+ * EL INICIO DEL CLIENTE — rediseño violeta enriquecido (Stitch «amazon style»):
+ * Acceso rápido a membresías activas, héroe, categorías, novedades con chips
+ * de promociones activas, empresas en scroll horizontal, membresías recomendadas,
+ * relámpago con timer y el banner de referidos al cierre.
  */
 export function InicioRetail({
   comercial,
@@ -46,6 +36,11 @@ export function InicioRetail({
       ) : null}
 
       <div className="mx-auto w-full max-w-md md:max-w-xl">
+        {/* Widget superior compacto si tiene membresías activas */}
+        {!personal.walletError && personal.wallet.length > 0 ? (
+          <VibeMembresiasActivas wallet={personal.wallet} />
+        ) : null}
+
         <InicioComercial data={comercial} />
 
         {/* El banner de referidos cierra la pantalla, salvo que el popup del
