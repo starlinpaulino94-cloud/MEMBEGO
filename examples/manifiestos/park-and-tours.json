@@ -1,8 +1,8 @@
 {
   "slug": "park-and-tours",
   "nombre": "Park & Tours",
-  "urlBase": "https://park-and-tours.vercel.app",
-  "webhookUrl": "https://park-and-tours.vercel.app/api/membego/webhook",
+  "urlBase": "https://parkandtours.membego.com",
+  "webhookUrl": "https://parkandtours.membego.com/api/membego/webhook",
   "businessTypes": ["EXCURSIONES"],
   "capabilities": [
     "CUSTOMER_LOOKUP",
