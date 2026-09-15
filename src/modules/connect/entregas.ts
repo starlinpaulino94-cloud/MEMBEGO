@@ -153,7 +153,15 @@ export interface ResultadoPrueba {
 /** Toca la URL y traduce lo que pase —incluido no poder conectar— a una respuesta. */
 async function tocar(url: string, init: RequestInit): Promise<RespuestaSonda> {
   try {
-    const resp = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_SONDA_MS) })
+    // `redirect: 'manual'` por el mismo motivo que en las entregas reales: sin
+    // él, una URL pública que redirige a `http://169.254.169.254/` convierte la
+    // prueba en una lectura del servicio de metadatos de la nube — y encima
+    // enseñaría el resultado en pantalla.
+    const resp = await fetch(url, {
+      ...init,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_SONDA_MS),
+    })
     const cuerpo = await resp.text().catch(() => '')
     return { status: resp.status, cuerpo: cuerpo.slice(0, MAX_CUERPO) }
   } catch (e) {

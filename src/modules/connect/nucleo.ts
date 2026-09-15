@@ -54,6 +54,14 @@ export const FEATURES_CONNECT = {
   'api_keys.max': { default: 0 },
   /** Cuántas suscripciones de webhook salientes. */
   'webhooks.max': { default: 0 },
+  /**
+   * Cuántos webhooks ENTRANTES puede tener (hallazgo B-1).
+   *
+   * Cero por defecto, como sus hermanos, y aquí la prudencia pesa un poco más:
+   * cada uno es una URL PÚBLICA que escribe en la base de esa empresa. Se
+   * conceden empresa a empresa, no se reparten con el alta.
+   */
+  'entrantes.max': { default: 0 },
 } as const
 
 export type FeatureConnect = keyof typeof FEATURES_CONNECT

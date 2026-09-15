@@ -80,6 +80,14 @@ export const ACTION_TYPES = {
   SEND_INSTAGRAM: 'send_instagram',
   SEND_INTERNAL_NOTIFICATION: 'send_internal_notification',
   SEND_WEBHOOK: 'send_webhook',
+  /**
+   * Llamar a UNA dirección concreta con método, cabeceras y cuerpo a medida.
+   *
+   * Distinta de `SEND_WEBHOOK`, que reparte el sobre estándar por las
+   * suscripciones ya creadas. Ésta la define la regla: es la que permite
+   * conectar con una herramienta que MembeGo no ha integrado a mano.
+   */
+  CALL_HTTP: 'call_http',
   // Auditoría
   RECORD_EVENT: 'record_event',
   RECORD_HISTORY: 'record_history',
@@ -145,6 +153,7 @@ export const ACTION_CATALOG: readonly ActionDefinition[] = [
   { id: ACTION_TYPES.SEND_INSTAGRAM, category: 'NOTIFICACIONES', description: 'Responder por Instagram en la conversación abierta (`conversacionId`); solo dentro de las 24 h.' },
   { id: ACTION_TYPES.SEND_INTERNAL_NOTIFICATION, category: 'NOTIFICACIONES', description: 'Notificación interna.' },
   { id: ACTION_TYPES.SEND_WEBHOOK, category: 'NOTIFICACIONES', description: 'Avisar a tus webhooks suscritos.' },
+  { id: ACTION_TYPES.CALL_HTTP, category: 'AUTOMATIZACION', description: 'Llamar a una dirección concreta con el método, las cabeceras y el cuerpo que elijas.' },
   // Auditoría
   { id: ACTION_TYPES.RECORD_EVENT, category: 'AUDITORIA', description: 'Registrar evento.' },
   { id: ACTION_TYPES.RECORD_HISTORY, category: 'AUDITORIA', description: 'Registrar historial.' },

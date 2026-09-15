@@ -419,6 +419,50 @@ que un negocio de citas nota el primer día.
 Tampoco hay Outlook/Microsoft 365 ni iCal. GHL tiene los tres, bidireccionales.
 **Esfuerzo: 2–3 semanas para Google bidireccional; +2 para Outlook.**
 
+### ✅ B-1 · Webhook entrante + acción HTTP + regla — RESUELTO (20/09/2026)
+
+> **Hecho:** los webhooks entrantes. Una URL secreta por webhook, lo que llega
+> entra al bus como `entrante.<slug>`, y una pantalla enseña el cuerpo exacto de
+> lo último recibido — que es la mitad del valor: sin ver el payload no se puede
+> construir nada encima.
+>
+> **La decisión que lo sostiene:** el evento va SIEMPRE prefijado. Un POST de
+> fuera no puede fingir `cliente.visita`, así que una URL filtrada en la
+> configuración de una herramienta ajena no otorga beneficios ni ensucia los
+> satélites de nadie.
+>
+> **Lo que hay que saber antes de venderlo.** El evento entra y queda guardado,
+> pero para ACTUAR sobre él hace falta una automatización suscrita a ese nombre
+> — y hoy las automatizaciones solo se instalan desde plantillas
+> (`lib/automation/templates`), no hay pantalla para escribir una que escuche un
+> evento arbitrario. O sea: el webhook entrante es hoy una superficie de
+> **captura** completa y utilizable, y su consumo depende de la otra mitad.
+>
+> **Y la segunda mitad, hecha:** la acción `call_http` («llama a esta URL con
+> este método, estas cabeceras y este cuerpo»), más la regla mínima que une las
+> dos — un evento, una llamada. Con eso el circuito se cierra: una herramienta
+> ajena avisa, una regla lo escucha, y llamamos a otra herramienta. El motor ya
+> interpolaba `{{...}}`, así que las variables salieron gratis.
+>
+> **Lo que no se puede poner:** cabeceras `x-membego-*`. Sin ese bloqueo, una
+> empresa podría llamar a un tercero con `X-Membego-Signature` a mano y hacerle
+> creer que ese POST es un evento oficial firmado por nosotros.
+>
+> **Y un agujero que esto destapó, anterior a todo:** `fetch` sigue
+> redirecciones por defecto, así que una URL pública que responda 302 hacia
+> `http://169.254.169.254/` saltaba toda la validación y convertía nuestro
+> servidor en un lector del servicio de metadatos de la nube. Estaba en las
+> entregas de webhook, en el despacho a satélites y en las dos sondas. Los cinco
+> caminos llevan ya `redirect: 'manual'`, con una prueba que cuenta los `fetch`
+> de cada archivo y exige que ninguno quede sin cubrir.
+>
+> **Sigue faltando** un constructor de reglas de verdad (condiciones, pasos,
+> horarios). El motor lo soporta; la pantalla de aquí es deliberadamente lo más
+> pequeño que cierra el circuito.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟡 B-1 · Sin trigger de webhook entrante ni acción HTTP a medida
 
 El motor tiene `send_webhook`, pero **solo reparte por las suscripciones ya
@@ -433,6 +477,8 @@ Sin esas dos piezas, cualquier integración que MembeGo no haya escrito a mano e
 imposible para el usuario final. Es, con diferencia, **la funcionalidad de GHL
 con mejor relación valor/esfuerzo que aquí no existe**. **Esfuerzo: 2 semanas
 las dos.**
+
+</details>
 
 ### 🟡 B-2 · Sin app de Zapier ni de Make
 
@@ -504,7 +550,7 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | Control | Estado |
 |---|---|
 | Secretos hasheados/sellados | ✅ scrypt, AES-256-GCM con AAD y rotación de claves maestras |
-| SSRF en webhooks salientes | ✅ `webhooksNucleo.ts:31`, por nombre y por rango |
+| SSRF en webhooks salientes | ✅ `webhooksNucleo.ts:31` por nombre y rango, y `redirect: 'manual'` en los cinco caminos de salida |
 | Aislamiento multiempresa | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio, RLS con pruebas de cobertura |
 | Uso único de token SSO | ✅ por clave primaria, sin ventana de carrera |
 | Idempotencia de escrituras | ✅ `ClaveIdempotencia` con huella SHA-256 del cuerpo |
@@ -537,7 +583,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
 | **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
-| **Webhook entrante / acción HTTP en flujos** | **0** | 5 | No existe (B-1) |
+| Webhook entrante / acción HTTP en flujos | **4** | 5 | Circuito completo; falta el constructor de reglas con condiciones (B-1) |
 | **SMS / telefonía** | **0** | 5 | No existe (A-8) |
 | **Correo con dominio propio** | **0** | 5 | Resend de plataforma (A-9) |
 | **Calendario bidireccional** | **1** | 5 | Solo escritura, solo Google (A-10) |
@@ -579,7 +625,7 @@ generar trabajo manual por cada cliente conectado.
 
 | # | Trabajo | Semanas | Hallazgo |
 |---|---|:-:|---|
-| 8 | Trigger de webhook entrante + acción HTTP a medida en flujos | 2 | B-1 |
+| ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
 | 9 | App de Zapier (3 triggers, 3 actions) sobre lo que ya existe | 1 | B-2 |
 | 10 | Catálogo de eventos hasta ~20 tipos (citas, pagos, mensajes) | 2 | B-4 |
 | 11 | `PATCH`/`DELETE` en clientes, citas, membresías | 2 | B-5 |

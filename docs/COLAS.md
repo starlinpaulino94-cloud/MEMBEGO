@@ -222,6 +222,147 @@ El botón «reintentar» del panel del superadmin es la excepción explícita
 está diciendo «ahora», y responderle que toca dentro de seis horas sería
 devolverle su propia espera.
 
+## La acción HTTP a medida, y la regla que cierra el circuito
+
+> Hallazgo **B-1** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md` (segunda mitad).
+
+`send_webhook` solo sabía repartir el sobre estándar por las suscripciones ya
+creadas. No había forma de decir «cuando pase esto, llama a ESTA URL con ESTE
+cuerpo», y sin eso cualquier herramienta que no hubiéramos integrado a mano
+quedaba fuera del alcance del usuario final.
+
+Ahora hay tres piezas y juntas forman un circuito:
+
+```
+herramienta ajena ──POST──► webhook entrante ──► evento en el bus
+                                                      │
+                                              regla «cuando pase X»
+                                                      │
+                                    acción HTTP ──────► otra herramienta
+```
+
+### La acción
+
+`call_http` recibe método, URL, cabeceras y cuerpo. El motor **ya interpola**
+`{{cliente.nombre}}` en los params antes de llamar al sink, así que las
+variables funcionan en los tres sin código extra.
+
+Lo que la acota:
+
+- **La URL pasa por `validarUrlWebhook`**, la misma guardia que un webhook
+  saliente. Escribir aquí una validación «parecida» sería la forma cómoda de que
+  una de las dos se quedara corta.
+- **No se pueden poner cabeceras `x-membego-*`.** Sin ese bloqueo, una empresa
+  podría llamar a un tercero con `X-Membego-Signature` a mano y hacerle creer que
+  ese POST es un evento oficial firmado por nosotros. No podría falsificar la
+  firma, pero sí engañar a un receptor que mire la cabecera sin verificarla.
+- Tope de cabeceras, tope de cuerpo, timeout, y un fallo **no** degrada a
+  `simulated: true`: la regla dijo «llama» y la dirección contestó mal, así que
+  marcarlo correcto escondería el fallo a quien lo configuró — y el paso puede
+  estar `required` para detener la cadena.
+
+### SSRF por redirección: el agujero que esto destapó
+
+`fetch` sigue redirecciones por defecto. Con eso, **toda la validación de la URL
+se salta en un paso**: basta con que la dirección configurada sea un dominio
+público perfectamente válido que responda `302` hacia `http://169.254.169.254/`
+—el servicio de metadatos de la nube— para que nuestro servidor vaya, desde
+dentro, a leer credenciales de infraestructura y las devuelva en el cuerpo que
+guardamos.
+
+La guardia de la URL no lo cubre porque solo ve la **primera** dirección.
+
+El agujero **ya existía** en las entregas de webhook a empresas, en el despacho a
+satélites y en las dos sondas — no lo trajo esta acción, la obligó a mirarlo.
+Los cinco caminos de salida llevan ahora `redirect: 'manual'`, y hay una prueba
+que cuenta los `fetch` de cada archivo y exige que ninguno quede sin cubrir.
+
+### La regla: lo más pequeño que cierra el circuito
+
+Un evento, una llamada. Sin condiciones, sin pasos encadenados, sin horarios —
+todo eso ya lo soporta el motor y tendrá su pantalla cuando alguien la necesite.
+Construir el constructor entero antes de que nadie hubiera podido probar el
+circuito habría sido el orden inverso, y la forma más cara de descubrir que
+faltaba otra cosa.
+
+**El disparador usa el nombre INTERNO del evento** (`cliente.visita`), no el del
+cable (`visit.completed`). Es el error que no se ve: una lista de disparadores
+construida con nombres v2 se guardaría sin error, se vería bien en pantalla y no
+se dispararía nunca.
+
+**Archivar no borra.** `AutomationRun.automationId` tiene `onDelete: Cascade`, así
+que un `delete` se llevaría el registro de qué se llamó, cuándo y con qué
+resultado. Misma regla que el catálogo de conectores: retirar no borra nada.
+
+## Webhooks entrantes: que algo de fuera avise hacia dentro
+
+> Hallazgo **B-1** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md` (primera mitad).
+
+MembeGo solo sabía **empujar**: eventos hacia los satélites y hacia las
+direcciones que una empresa suscribe. No había ninguna forma de que algo de
+fuera empujara hacia dentro, y ése era el hueco por el que cualquier integración
+que no hubiéramos escrito a mano resultaba imposible para el usuario final.
+
+Un webhook entrante es una URL secreta (`/api/connect/entrante/<token>`) a la
+que una herramienta ajena hace POST. Lo que llega entra en el bus como
+`entrante.<slug>` y queda guardado, de donde lo puede recoger una automatización
+suscrita a ese evento — igual que recoge `cliente.visita`.
+
+### La regla que sostiene todo lo demás
+
+**Lo que entra va SIEMPRE marcado como entrante.** Si el evento pudiera llamarse
+`cliente.visita`, cualquiera con la URL —un secreto, sí, pero uno que viaja en
+texto por la configuración de una herramienta de terceros— podría inventar
+visitas, disparar beneficios y meter datos falsos en los satélites de otras
+empresas. Con el prefijo, una automatización que lo escuche lo hace a sabiendas.
+
+### Lo demás que protege el endpoint
+
+Es la ruta más expuesta del módulo: pública por necesidad, sin sesión, y escribe
+en la base.
+
+- **El token no elige la empresa, la descubre.** No hay `companyId` en la
+  petición: sale de resolver el token, así que no existe parámetro que
+  manipular. Misma propiedad que las claves de API de empresa.
+- **Del token solo se guarda su hash.** Que la URL sea el credencial es lo normal
+  en un webhook entrante, pero no obliga a guardarla en claro: prefijo indexado
+  + secreto en scrypt, así que un volcado de la tabla no permite mandarle un
+  evento a nadie.
+- **El freno va antes de verificar el secreto.** Verificar cuesta a propósito
+  (scrypt); si el freno fuera después, probar tokens al azar saldría gratis para
+  quien prueba y nos costaría CPU a nosotros.
+- **El cuerpo tiene tope** (64 KB, medido en bytes y no en caracteres) y debe ser
+  un objeto JSON: un array llegaría al contexto de la automatización como
+  índices numerados.
+- **El mismo 404** para «no existe» y «el secreto no cuadra».
+
+### Dos decisiones que sorprenden, y por qué
+
+**Un webhook pausado responde 200.** Es lo contrario de lo que se espera de un
+«pausar», y es deliberado: una herramienta que recibe un error se pone a
+reintentar y a llenar de avisos de fallo el panel de su dueño, por algo que la
+empresa apagó a propósito. Se acepta, no se emite, y se dice en el cuerpo. Un
+token que no existe sí es 404: ahí no hay nada que respetar.
+
+**Lo que entra no sale por los webhooks salientes.** Devolverle a la empresa lo
+que acaba de mandarnos es ruido en el mejor caso; en el peor —dos herramientas
+encadenadas, la segunda apuntando otra vez a nuestra URL de entrada— es un bucle
+que solo se nota cuando ya se ha multiplicado. Reenviarlo a propósito sigue
+siendo posible con una automatización y `send_webhook`, que es distinto: lo hace
+porque alguien lo pidió.
+
+### No hay tabla de recepciones
+
+Lo recibido se guarda como evento en `automation_events`, que ya tiene el
+payload, la empresa, el tipo y la hora. La pantalla «Ver lo recibido» lee de
+ahí. Una segunda tabla con los mismos datos sería un sitio más que purgar y
+aislar, y dos respuestas posibles a «qué nos mandaron el martes».
+
+Esa pantalla es **la mitad del valor de la función**: quien conecta su
+herramienta necesita ver el cuerpo exacto para saber qué campos trae antes de
+construir nada encima. Es el flujo de las herramientas contra las que esto se
+integra — mandas una prueba, miras la forma, y luego automatizas.
+
 ## El fan-out y el barrido van en paralelo, y el barrido se corta a tiempo
 
 > Hallazgo **A-6** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.
