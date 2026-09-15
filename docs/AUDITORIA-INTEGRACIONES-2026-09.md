@@ -267,6 +267,22 @@ las empresas. **Esfuerzo: 1 semana.**
 
 </details>
 
+### ✅ A-5 · No se podían elegir los eventos — RESUELTO (20/09/2026)
+
+> Cerrado. Casillas al crear **y** al editar (lo segundo es lo que de verdad
+> hacía falta: todas las suscripciones existentes tienen la lista vacía porque
+> no había forma de decir otra cosa). El catálogo se deriva de lo que el bus
+> emite, no de una lista a mano.
+>
+> Lo que no estaba en el hallazgo y apareció al hacerlo: el selector, tal cual,
+> habría sido una **trampa**. Los avisos de automatización se llaman
+> `automation.<lo que la regla decida>` y no se pueden enumerar; en cuanto
+> alguien marcara «compras», habrían dejado de llegar en silencio. Se resolvió
+> dando a `suscripcionQuiere` la noción de familia (`automation.*`).
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟠 A-5 · No se pueden elegir los eventos desde la interfaz
 
 El modelo lo soporta (`SuscripcionWebhook.eventos`, y `suscripcionQuiere()` en
@@ -276,6 +292,8 @@ creación **no ofrece ningún selector**. Toda suscripción nace recibiendo todo
 Para una empresa con un endpoint que solo le interesa la conversión de
 referidos, eso es ruido, coste y superficie de datos innecesaria.
 **Esfuerzo: 1 día** (el backend ya está).
+
+</details>
 
 ### 🟠 A-6 · El fan-out se hace dentro del request, en serie
 
@@ -491,7 +509,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~1~~ | ~~Reintentos por QStash con backoff exponencial~~ ✅ hecho | 3 | A-1 |
 | ~~2~~ | ~~Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración~~ ✅ hecho | 1 | A-2 |
 | ~~3~~ | ~~Pantalla de entregas: log, cuerpo, reenviar, evento de prueba~~ ✅ hecho | 5 | A-4 |
-| 4 | Selector de eventos en el formulario | 1 | A-5 |
+| ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
 | 5 | Fan-out encolado y en paralelo con tope | 2 | A-6 |
 | 6 | Rotación con solapamiento de claves y secretos | 4 | A-7 |
 | 7 | Cron de salud: Meta, OAuth, caducidades → `REAUTORIZAR` | 3 | B-3 |
@@ -555,14 +573,16 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
 - **En arquitectura: no estamos lejos, estamos por delante.** Las decisiones de
   aislamiento, contrato y una-sola-verdad son mejores que las de GHL, y son
   justamente las que no se pueden añadir después.
-- **En operación: estamos a semana y media.** De los siete trabajos de la
-  Fase 1, **A-1, A-2 y A-4 ya están cerrados** — los dos que más caros salían
-  por cliente conectado y el único con consecuencia de seguridad: los reintentos
-  pasaron de una vez al día a una escalera de 30 s a 24 h, «no me llegan los
-  eventos» dejó de ser un ticket para ser una pantalla, y la firma dejó de
-  admitir un replay con el timestamp refrescado. Quedan cuatro, todos concretos
-  y ninguno exige decisiones de producto. El siguiente por valor visible es A-5
-  (elegir eventos), que es un día porque el backend ya está.
+- **En operación: estamos a una semana.** De los siete trabajos de la Fase 1,
+  **A-1, A-2, A-4 y A-5 están cerrados** — entre ellos los dos que más caros
+  salían por cliente conectado y el único con consecuencia de seguridad. Los
+  reintentos pasaron de una vez al día a una escalera de 30 s a 24 h; «no me
+  llegan los eventos» dejó de ser un ticket para ser una pantalla; la firma dejó
+  de admitir un replay con el timestamp refrescado; y una empresa puede por fin
+  recibir solo lo que le interesa. Quedan **tres**, todos concretos y ninguno
+  exige decisiones de producto: A-6 (fan-out encolado y en paralelo, 2 días),
+  A-7 (rotación de secretos con solapamiento, 4 días) y B-3 (salud activa de
+  las conexiones, 3 días).
 - **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
   real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
   y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la

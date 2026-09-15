@@ -7,10 +7,12 @@ import { crearConexion, desconectarConexion } from '@/modules/connect/registro'
 import { conectarWhatsapp } from '@/modules/connect/whatsapp'
 import { proveedorDe } from '@/modules/connect/proveedores/indice'
 import {
+  actualizarEventosSuscripcion,
   cambiarEstadoSuscripcion,
   crearSuscripcion,
   reenviarEntregaAhora,
 } from '@/modules/connect/webhooks'
+import { soloEventosConocidos } from '@/modules/connect/eventosSuscribibles'
 import {
   entregaDeEmpresa,
   probarSuscripcion,
@@ -130,7 +132,11 @@ export async function crearWebhookAction(
     nombre,
     url,
     // Sin eventos elegidos = todos. Ver `suscripcionQuiere`.
-    eventos: formData.getAll('eventos').map(String).filter(Boolean),
+    //
+    // Se filtra contra el catálogo: un evento inventado no se guarda. Guardarlo
+    // no daría error en ningún sitio — daría una suscripción que no recibe nada
+    // y una tarde buscando por qué.
+    eventos: soloEventosConocidos(formData.getAll('eventos').map(String)),
     creadoPor: user.metadata.dbUserId ?? null,
   })
 
@@ -168,6 +174,37 @@ export async function cambiarEstadoWebhookAction(
       estado === 'ACTIVE'
         ? 'Webhook reactivado. Los próximos eventos se te entregarán.'
         : 'Webhook pausado. Dejamos de entregarte eventos hasta que lo reactives.',
+  }
+}
+
+/**
+ * CAMBIAR QUÉ EVENTOS RECIBE un webhook (hallazgo A-5).
+ *
+ * Reutiliza `webhook_estado` a propósito, y no es pereza: quien puede pausar un
+ * webhook ya puede dejar de recibirlo TODO. Poder dejar de recibir una parte es
+ * estrictamente menos que eso, así que un permiso nuevo no protegería nada y
+ * sería un interruptor más que explicar en la pantalla de permisos.
+ */
+export async function actualizarEventosWebhookAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'webhook_estado')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta el webhook.' }
+
+  const eventos = soloEventosConocidos(formData.getAll('eventos').map(String))
+  const res = await actualizarEventosSuscripcion(user.metadata.companyId, id, eventos)
+  if (!res.ok) return { error: 'No se pudo guardar. Recarga la página.' }
+
+  revalidatePath('/admin/integraciones')
+  return {
+    success:
+      eventos.length === 0
+        ? 'Guardado. Volverás a recibir todos los eventos.'
+        : `Guardado. Recibirás ${eventos.length === 1 ? 'solo ese evento' : `solo esos ${eventos.length} eventos`}.`,
   }
 }
 

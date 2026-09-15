@@ -222,6 +222,46 @@ El botón «reintentar» del panel del superadmin es la excepción explícita
 está diciendo «ahora», y responderle que toca dentro de seis horas sería
 devolverle su propia espera.
 
+## Elegir qué eventos recibe un webhook
+
+> Hallazgo **A-5** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.
+
+`SuscripcionWebhook.eventos` existía desde la Fase 3 y la interfaz no ofrecía
+una sola casilla, así que toda suscripción nacía —y se quedaba— recibiéndolo
+todo. **Lista vacía sigue significando «todos»**, y eso no cambia: es el default
+de todo lo que hay creado hoy, y cambiarlo dejaría sin avisos a quien ya está
+integrado.
+
+Lo que sí cambia es que ahora se puede filtrar, al crear y **después**. Lo
+segundo es lo que de verdad hacía falta: todas las suscripciones existentes
+tienen la lista vacía precisamente porque no había forma de decir otra cosa.
+
+**La lista de eventos sale del bus**, no de un array escrito a mano
+(`modules/connect/eventosSuscribibles.ts`): se deriva de `EVENTOS_REENVIADOS`
+pasado por el mapa v2. Una lista a mano falla de las dos formas y las dos son
+caras — ofrecer un evento que nadie recibirá nunca, u olvidarse de uno nuevo.
+Lo único escrito a mano son las etiquetas de negocio, y una prueba exige que
+todo evento emitido tenga la suya: añadir uno sin traducirlo rompe la CI en vez
+de enseñarle `purchase.refunded` a la dueña de un salón.
+
+### La trampa que esto podía haber sido
+
+Los avisos que manda una automatización se llaman `automation.<lo que la regla
+decida>` (`estrategias/actionSink.ts`): el nombre lo inventa la propia empresa,
+así que **no se puede enumerar en una lista de casillas**.
+
+Sin resolver eso, el selector habría sido una trampa. En cuanto alguien marcara
+«compras» para filtrar, sus avisos de automatización habrían dejado de llegar
+—sin aviso, sin error y sin haberlo pedido—, porque la lista deja de estar
+vacía. Un filtro que apaga en silencio algo que no nombraste es peor que no
+tener filtro.
+
+Por eso `suscripcionQuiere` entiende **familias**: una entrada terminada en
+`.*` cubre su prefijo entero, y la pantalla ofrece «Avisos que manden tus
+automatizaciones» = `automation.*`. El prefijo se compara con el punto incluido,
+así que `automation.*` cubre `automation.x` pero no `automationX` ni
+`automations.y`.
+
 ## La firma de los webhooks de empresa
 
 > Hallazgo **A-2** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.

@@ -79,15 +79,48 @@ export const MENSAJE_URL: Record<MotivoUrl, string> = {
 }
 
 /**
+ * FAMILIA de eventos: `automation.*` cubre todos los que empiecen por
+ * `automation.`.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ HACE FALTA UN COMODÍN
+ *
+ * Los avisos que manda una automatización se llaman `automation.<lo que la
+ * regla decida>` (`estrategias/actionSink.ts`). Ese nombre lo inventa la propia
+ * empresa al escribir la regla, así que NO se puede enumerar en una lista de
+ * casillas: el día que alguien cree una regla nueva, su evento no estaría.
+ *
+ * Y sin comodín, el selector de eventos sería una trampa. Hasta ahora toda
+ * suscripción tiene la lista vacía —o sea, TODO, automatizaciones incluidas—.
+ * En cuanto alguien marcara «compras» para filtrar, sus avisos de
+ * automatización dejarían de llegar sin que nadie se lo hubiera dicho, y sin un
+ * solo error en ningún sitio. Un filtro que apaga en silencio algo que no
+ * nombraste es peor que no tener filtro.
+ */
+export const COMODIN = '.*'
+
+/** ¿Es esta entrada una familia (`automation.*`) y no un evento concreto? */
+export function esFamilia(entrada: string): boolean {
+  return entrada.endsWith(COMODIN)
+}
+
+/**
  * ¿Le toca este evento a esta suscripción?
  *
  * Una lista VACÍA significa «todos», y es deliberado: quien suscribe sin
  * elegir quiere enterarse de todo, y obligarle a enumerar eventos haría que
  * cada evento nuevo de MembeGo no le llegara hasta que se acordara de
  * añadirlo. Elegir explícitamente sigue disponible para quien quiera filtrar.
+ *
+ * Una entrada que termina en `.*` cubre su familia entera. El prefijo se
+ * compara CON el punto (`automation.` y no `automation`) para que una familia
+ * no se coma un evento que solo comparte el principio del nombre.
  */
 export function suscripcionQuiere(eventos: readonly string[], evento: string): boolean {
-  return eventos.length === 0 || eventos.includes(evento)
+  if (eventos.length === 0) return true
+  return eventos.some((e) =>
+    esFamilia(e) ? evento.startsWith(`${e.slice(0, -COMODIN.length)}.`) : e === evento
+  )
 }
 
 /**

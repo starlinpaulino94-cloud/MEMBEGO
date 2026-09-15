@@ -449,6 +449,53 @@ export async function reintentarEntregaWebhook(
 }
 
 /**
+ * CAMBIAR QUÉ EVENTOS RECIBE una suscripción (hallazgo A-5).
+ *
+ * Es la mitad que de verdad hace falta. Elegir al crear solo sirve para los
+ * webhooks nuevos, y TODOS los que existen hoy tienen la lista vacía —o sea,
+ * lo reciben todo— precisamente porque hasta ahora no había forma de decir otra
+ * cosa. Sin esto, la función no le serviría a nadie que ya estuviera integrado.
+ *
+ * La lista llega ya filtrada contra el catálogo (`soloEventosConocidos`): aquí
+ * no se valida otra vez, pero tampoco se acepta nada que no haya pasado por
+ * ahí — por eso el parámetro se llama `eventos` y quien llama es una server
+ * action, no la red.
+ *
+ * Lista vacía = todos, igual que al crear. No es un caso especial que haya que
+ * recordar: es el mismo significado en los dos sitios, y `suscripcionQuiere` es
+ * el único que lo interpreta.
+ */
+export async function actualizarEventosSuscripcion(
+  companyId: string,
+  id: string,
+  eventos: string[]
+): Promise<{ ok: boolean }> {
+  const r = await conEmpresa(companyId, (tx) =>
+    tx.suscripcionWebhook.updateMany({
+      // `updateMany` con el companyId en el `where`, y no `update` por id: el id
+      // viene del formulario. Con `update` bastaría con cambiarlo para tocar la
+      // suscripción de otra empresa.
+      where: { id, companyId },
+      data: { eventos },
+    })
+  ).catch(anotarFallo('connect:webhook:eventos', { id }))
+
+  if (!r || r.count === 0) return { ok: false }
+
+  await anotarConector({
+    companyId,
+    origen: 'CONEXION',
+    origenId: id,
+    evento: 'webhook.eventos_cambiados',
+    // Cuántos, no cuáles: la bitácora no es el sitio donde se consulta la
+    // configuración actual —esa está en la pantalla— y una lista larga por cada
+    // cambio la llena de ruido.
+    detalle: { elegidos: eventos.length },
+  })
+  return { ok: true }
+}
+
+/**
  * REENVIAR UNA ENTREGA A MANO (hallazgo A-4).
  *
  * Es el botón que cierra el ciclo: quien integra arregla su servidor y

@@ -3,6 +3,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { suscripcionesDeEmpresa } from '@/modules/connect/webhooks'
 import { limiteDe } from '@/modules/connect/entitlements'
 import { WebhooksPanel } from '@/components/connect/WebhooksPanel'
+import { eventosSuscribibles } from '@/modules/connect/eventosSuscribibles'
 import { PlanNoIncluye } from '@/components/connect/EstadoPlanConnect'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +37,10 @@ export default async function WebhooksPage() {
         ultimoError: w.ultimoError,
       }))}
       limite={limite}
+      // El catálogo se calcula AQUÍ, en el servidor. Es una lista derivada de
+      // lo que el bus emite; calcularla en el navegador arrastraría el núcleo
+      // de integraciones —y `node:crypto` con él— al bundle del cliente.
+      catalogo={eventosSuscribibles()}
     />
   )
 }

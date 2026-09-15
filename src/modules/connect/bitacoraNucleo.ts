@@ -32,6 +32,7 @@ export const EVENTOS_CONECTOR = [
   'webhook.apagado_por_fallos',
   'webhook.probado',
   'webhook.reenvio_manual',
+  'webhook.eventos_cambiados',
   'conexion.creada',
   'conexion.reiniciada',
   'conexion.desconectada',
@@ -64,6 +65,7 @@ const TECNICO: Record<EventoConector, string> = {
   'webhook.apagado_por_fallos': 'Una suscripción se apagó tras fallos consecutivos',
   'webhook.probado': 'Se mandó un evento de prueba a la URL de una suscripción',
   'webhook.reenvio_manual': 'Se reenvió una entrega a mano desde el panel',
+  'webhook.eventos_cambiados': 'Se cambió qué eventos recibe una suscripción',
   'conexion.creada': 'Se inició una conexión',
   'conexion.reiniciada': 'Se reinició una conexión',
   'conexion.desconectada': 'Se desconectó una aplicación y se borraron sus credenciales',
@@ -104,6 +106,7 @@ const NEGOCIO: Record<EventoConector, string | null> = {
   // contarle a la dueña del salón lo que su programador hizo hace un minuto.
   'webhook.probado': null,
   'webhook.reenvio_manual': null,
+  'webhook.eventos_cambiados': null,
   'conexion.creada': 'Empezaste a conectar esta aplicación',
   'conexion.reiniciada': 'Volviste a empezar la conexión',
   'conexion.desconectada': 'Desconectaste esta aplicación',

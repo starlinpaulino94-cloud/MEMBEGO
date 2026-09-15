@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Webhook } from 'lucide-react'
 import { formatDateTime } from '@/lib/format'
 import {
+  actualizarEventosWebhookAction,
   cambiarEstadoWebhookAction,
   crearWebhookAction,
   type AccionState,
@@ -31,10 +32,114 @@ import { CandadoPlan, LimiteAlcanzado } from '@/components/connect/EstadoPlanCon
  *  2. PAUSADO lo decide la empresa; APAGADO lo decidimos nosotros tras muchos
  *     fallos seguidos. Son estados distintos y la etiqueta lo dice.
  *  3. Sin elegir eventos, se reciben TODOS. Es lo que casi todo el mundo
- *     quiere y evita que un evento nuevo no le llegue por olvido.
+ *     quiere y evita que un evento nuevo no le llegue por olvido. Desde la
+ *     Fase A-5 esa regla deja de ser un secreto del código: la pantalla la
+ *     dice, y por fin hay casillas para no aceptarla.
  */
 
 const INIT: AccionState = {}
+
+/**
+ * LAS CASILLAS DE EVENTOS, compartidas por el alta y la edición.
+ *
+ * Un solo componente para los dos sitios porque la regla que hay que explicar
+ * —«sin marcar nada, llega todo»— es la misma, y escrita dos veces se acaba
+ * diciendo de dos formas. Es además la frase que evita el malentendido caro:
+ * quien ve una lista de casillas vacías asume que no recibe nada.
+ */
+function CasillasDeEventos({
+  catalogo,
+  marcados,
+  idPrefijo,
+}: {
+  catalogo: { valor: string; label: string }[]
+  /** Lo que ya recibe. Vacío = todos, y entonces no se marca ninguna. */
+  marcados: string[]
+  idPrefijo: string
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Qué eventos quieres recibir</legend>
+      <p className="text-caption text-muted-foreground">
+        Sin marcar ninguna, te avisamos de <strong>todo</strong> — incluidos los eventos que
+        añadamos más adelante. Marca solo si quieres filtrar.
+      </p>
+      {catalogo.map((e) => (
+        <label key={e.valor} className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="eventos"
+            value={e.valor}
+            id={`${idPrefijo}-${e.valor}`}
+            defaultChecked={marcados.includes(e.valor)}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span>
+            {e.label}
+            {/*
+              El nombre técnico, discreto y al lado. Quien escribe el receptor
+              compara contra esta cadena exacta; sin ella tendría que adivinar
+              cómo se llama «Un cliente te compra por primera vez» en el JSON.
+            */}
+            <code className="ml-2 font-mono text-caption text-muted-foreground">{e.valor}</code>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+/**
+ * Cambiar los eventos de un webhook que ya existe.
+ *
+ * Es la mitad que de verdad hacía falta: TODAS las suscripciones que hay hoy
+ * tienen la lista vacía, porque hasta ahora no había forma de decir otra cosa.
+ * Si solo se pudiera elegir al crear, esto no le serviría a nadie que ya
+ * estuviera integrado.
+ */
+function EditarEventos({
+  webhook,
+  catalogo,
+}: {
+  webhook: WebhookVista
+  catalogo: { valor: string; label: string }[]
+}) {
+  const [estado, guardar, guardando] = useActionState(actualizarEventosWebhookAction, INIT)
+  const [abierto, setAbierto] = useState(false)
+
+  if (!abierto) {
+    return (
+      <Button type="button" variant="ghost" size="sm" onClick={() => setAbierto(true)}>
+        Cambiar eventos
+      </Button>
+    )
+  }
+
+  return (
+    <form action={guardar} className="mt-2 w-full space-y-3 rounded-xl border border-border/60 p-4">
+      <input type="hidden" name="id" value={webhook.id} />
+      <CasillasDeEventos
+        catalogo={catalogo}
+        marcados={webhook.eventos}
+        idPrefijo={`ev-${webhook.id}`}
+      />
+      {estado.error && (
+        <StatusBanner variant="destructive" title="No se pudo guardar">
+          {estado.error}
+        </StatusBanner>
+      )}
+      {estado.success && <StatusBanner variant="success" title={estado.success} />}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={guardando}>
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAbierto(false)}>
+          Cerrar
+        </Button>
+      </div>
+    </form>
+  )
+}
 
 export interface WebhookVista {
   id: string
@@ -57,9 +162,17 @@ const ESTADO = {
 export function WebhooksPanel({
   webhooks,
   limite,
+  catalogo,
 }: {
   webhooks: WebhookVista[]
   limite: number | null
+  /**
+   * Los eventos que se pueden marcar, ya traducidos. Vienen del servidor y no
+   * se calculan aquí: el catálogo se deriva de lo que el bus emite de verdad
+   * (`modules/connect/eventosSuscribibles`) y meter ese módulo en el navegador
+   * arrastraría el núcleo de integraciones —y `node:crypto` con él— al bundle.
+   */
+  catalogo: { valor: string; label: string }[]
 }) {
   const [estado, crear, creando] = useActionState(crearWebhookAction, INIT)
   const [abierto, setAbierto] = useState(false)
@@ -135,6 +248,7 @@ export function WebhooksPanel({
                 Debe empezar por https:// y ser accesible desde internet.
               </p>
             </div>
+            <CasillasDeEventos catalogo={catalogo} marcados={[]} idPrefijo="nuevo" />
             <Button type="submit" disabled={creando}>
               {creando ? 'Creando…' : 'Crear webhook'}
             </Button>
@@ -160,9 +274,18 @@ export function WebhooksPanel({
                     {w.url}
                   </code>
                   <span className="text-caption text-muted-foreground sm:w-full">
+                    {/*
+                      Con las etiquetas y no con los identificadores: «Recibe:
+                      purchase.first_completed, referral.converted» obliga a
+                      traducir de cabeza cada vez que alguien quiere comprobar
+                      qué eligió. El identificador sigue a un clic, en las
+                      casillas.
+                    */}
                     {w.eventos.length === 0
                       ? 'Recibe todos los eventos'
-                      : `Recibe: ${w.eventos.join(', ')}`}
+                      : `Recibe: ${w.eventos
+                          .map((e) => catalogo.find((c) => c.valor === e)?.label ?? e)
+                          .join(' · ')}`}
                     {w.ultimoOkAt && ` · Última entrega correcta: ${formatDateTime(new Date(w.ultimoOkAt))}`}
                   </span>
                   {w.ultimoError && (
@@ -183,6 +306,9 @@ export function WebhooksPanel({
                         Ver entregas
                       </Link>
                     </Button>
+                  </span>
+                  <span>
+                    <EditarEventos webhook={w} catalogo={catalogo} />
                   </span>
                   {w.estado !== 'DISABLED' && (
                     <span>
