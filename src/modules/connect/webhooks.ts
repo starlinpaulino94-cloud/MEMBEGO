@@ -418,6 +418,87 @@ export async function reintentarEntregaWebhook(
 }
 
 /**
+ * REENVIAR UNA ENTREGA A MANO (hallazgo A-4).
+ *
+ * Es el botón que cierra el ciclo: quien integra arregla su servidor y
+ * comprueba AHÍ MISMO si sirvió, en vez de esperar a que caiga otro evento de
+ * verdad para enterarse.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ SE REINICIAN LOS INTENTOS
+ *
+ * Una entrega en DEAD_LETTER llegó a ocho intentos. Reenviarla sin más la
+ * mataría otra vez al primer fallo, y quien pulsó el botón interpretaría —con
+ * razón— que su arreglo no sirvió, cuando lo que pasó es que no le quedaban
+ * intentos. Reenviar significa «vuelve a intentarlo como si fuera nueva», y eso
+ * incluye volver a tener escalera. Es lo mismo que hace `revivirFallidos` con
+ * la cola de satélites.
+ *
+ * Se pierde el «esto falló ocho veces», y se pierde a propósito: el histórico
+ * de esa pelea está en la bitácora, y el estado de la fila sirve para saber qué
+ * pasa AHORA.
+ *
+ * Una suscripción pausada o apagada NO se reenvía: se dice y no se toca la
+ * fila. Entregarla igual sería saltarse la pausa que la propia empresa pidió, y
+ * dejarla caer en DEAD_LETTER por «suscripción inactiva» sería castigar la fila
+ * por algo que se arregla reactivando el webhook.
+ */
+export async function reenviarEntregaAhora(
+  companyId: string,
+  entregaId: string
+): Promise<
+  | { ok: true; resultado: 'enviado' | 'fallido' | 'agotado' }
+  | { ok: false; motivo: 'no_existe' | 'suscripcion_inactiva' }
+> {
+  const fila = await conEmpresa(companyId, (tx) =>
+    tx.entregaWebhook.findFirst({
+      // `findFirst` con `companyId` y no `findUnique` por id: el id viaja desde
+      // el navegador, y sin la condición de empresa un id adivinado de otra
+      // empresa devolvería su fila. La pantalla no lo permite; la consulta
+      // tampoco debe permitirlo.
+      where: { id: entregaId, companyId },
+      select: {
+        id: true,
+        companyId: true,
+        evento: true,
+        payload: true,
+        createdAt: true,
+        suscripcion: { select: { id: true, url: true, secreto: true, estado: true } },
+      },
+    })
+  ).catch(() => null)
+
+  if (!fila) return { ok: false, motivo: 'no_existe' }
+  if (fila.suscripcion.estado !== 'ACTIVE') {
+    return { ok: false, motivo: 'suscripcion_inactiva' }
+  }
+
+  await conEmpresa(companyId, (tx) =>
+    tx.entregaWebhook.update({
+      where: { id: entregaId },
+      data: {
+        estado: 'PENDIENTE',
+        intentos: 0,
+        ultimoError: null,
+        estadoHttp: null,
+        enviadoAt: null,
+        proximoIntentoAt: null,
+      },
+    })
+  ).catch(anotarFallo('connect:webhook:reenviar', { entregaId }))
+
+  await anotarConector({
+    companyId,
+    origen: 'CONEXION',
+    origenId: fila.suscripcion.id,
+    evento: 'webhook.reenvio_manual',
+    detalle: { entregaId, evento: fila.evento },
+  })
+
+  return { ok: true, resultado: await intentarEntrega({ ...fila, intentos: 0 }) }
+}
+
+/**
  * BARRIDO de las entregas VENCIDAS (cron).
  *
  * Desde la Fase A-1 esto ya no es quien reintenta: cada fallo programa su

@@ -136,7 +136,12 @@ test('whatsapp: el cuerpo de error de Meta no se registra nunca', () => {
 test('permisos: conectar y desconectar tienen su guardia cableada', () => {
   const acciones = leer('src/modules/connect/adminActions.ts')
   const funciones = FUNCIONES_POR_SECCION.integraciones ?? []
-  assert.equal(funciones.length, 6)
+  // Que la lista NO esté vacía, y no cuántas hay. Un número fijo se rompe cada
+  // vez que alguien añade un permiso legítimo —y quien lo ve romperse aprende a
+  // subir el número sin mirar, que es como una guardia deja de guardar—. Lo que
+  // de verdad hay que impedir es que el bucle de abajo pase por no tener nada
+  // que recorrer.
+  assert.ok(funciones.length > 0, 'el catálogo de funciones de integraciones está vacío')
   for (const f of funciones) {
     assert.ok(
       acciones.includes(`requireSection('integraciones', '${f.codigo}')`),

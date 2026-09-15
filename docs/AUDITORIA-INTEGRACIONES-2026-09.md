@@ -207,6 +207,26 @@ exige, y no hay nada de ello:
 **Esfuerzo: 6–10 semanas.** Es la pieza más cara del informe y la §6 discute si
 merece la pena hoy.
 
+### ✅ A-4 · La empresa no podía ver, probar ni reenviar una entrega — RESUELTO (20/09/2026)
+
+> Cerrado. `/admin/integraciones/desarrolladores/webhooks/[id]` enseña el
+> registro de entregas con su estado, su código HTTP, el error del servidor, el
+> cuerpo exacto que se envió y cuándo toca el siguiente intento; y trae los dos
+> botones que faltaban: **mandar un evento de prueba** (con diagnóstico en
+> lenguaje de negocio) y **reenviar** una entrega.
+>
+> El diagnóstico NO se escribió de nuevo: `diagnostico.ts` pasa a tener un solo
+> árbol de decisión (`clasificarSonda`) y dos redacciones — la del superadmin,
+> que habla con el equipo del satélite, y la de la empresa, que habla con quien
+> programó su servidor. Duplicar el árbol habría dado dos verdades sobre el
+> mismo 404.
+>
+> Dos permisos nuevos y cableados, `webhook_probar` y `webhook_reenviar`, para
+> no pintar botones que la acción va a rechazar.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟠 A-4 · La empresa no puede ver, probar ni reenviar una entrega
 
 `EntregaWebhook` guarda estado, intentos, código HTTP y último error. Esa tabla
@@ -226,6 +246,8 @@ los eventos» es un ticket de soporte, y el panel del superadmin
 (`modules/integraciones/panel.ts:24-33`) existe precisamente porque alguien ya
 aprendió esa lección del lado de los satélites — pero no se trasladó al lado de
 las empresas. **Esfuerzo: 1 semana.**
+
+</details>
 
 ### 🟠 A-5 · No se pueden elegir los eventos desde la interfaz
 
@@ -419,7 +441,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
 | **Superficie de la API** | **2** | 5 | 24 rutas GET/POST vs. API v2 completa con CRUD |
 | **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
-| **Operación de webhooks (log, prueba, reenvío)** | **1** | 5 | Existe la tabla, no la pantalla (A-4) |
+| **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
 | **Webhook entrante / acción HTTP en flujos** | **0** | 5 | No existe (B-1) |
 | **SMS / telefonía** | **0** | 5 | No existe (A-8) |
@@ -450,7 +472,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 |---|---|:-:|---|
 | ~~1~~ | ~~Reintentos por QStash con backoff exponencial~~ ✅ hecho | 3 | A-1 |
 | 2 | Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración | 1 | A-2 |
-| 3 | Pantalla de entregas: log, cuerpo, reenviar, evento de prueba | 5 | A-4 |
+| ~~3~~ | ~~Pantalla de entregas: log, cuerpo, reenviar, evento de prueba~~ ✅ hecho | 5 | A-4 |
 | 4 | Selector de eventos en el formulario | 1 | A-5 |
 | 5 | Fan-out encolado y en paralelo con tope | 2 | A-6 |
 | 6 | Rotación con solapamiento de claves y secretos | 4 | A-7 |
@@ -515,12 +537,14 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
 - **En arquitectura: no estamos lejos, estamos por delante.** Las decisiones de
   aislamiento, contrato y una-sola-verdad son mejores que las de GHL, y son
   justamente las que no se pueden añadir después.
-- **En operación: estamos a tres semanas.** De los siete trabajos de la Fase 1,
-  **A-1 ya está cerrado**: los reintentos pasaron de una vez al día a una
-  escalera de 30 s a 24 h. Quedan seis, todos concretos y ninguno exige
-  decisiones de producto. El que más caro sale ahora es la ausencia de log de
-  entregas (A-4): sin pantalla, «no me llegan los eventos» sigue siendo un
-  ticket de soporte aunque ahora lleguen mucho antes.
+- **En operación: estamos a dos semanas.** De los siete trabajos de la Fase 1,
+  **A-1 y A-4 ya están cerrados** — que eran los dos que más caros salían por
+  cliente conectado: los reintentos pasaron de una vez al día a una escalera de
+  30 s a 24 h, y «no me llegan los eventos» dejó de ser un ticket de soporte
+  para ser una pantalla. Quedan cinco, todos concretos y ninguno exige
+  decisiones de producto. El siguiente por riesgo es A-2 (la firma no cubre el
+  timestamp); el siguiente por valor visible, A-5 (elegir eventos), que es un
+  día porque el backend ya está.
 - **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
   real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
   y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la

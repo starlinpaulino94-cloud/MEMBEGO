@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import Link from 'next/link'
 import { Webhook } from 'lucide-react'
 import { formatDateTime } from '@/lib/format'
 import {
@@ -169,8 +170,22 @@ export function WebhooksPanel({
                       {w.ultimoError}
                     </span>
                   )}
+                  {/*
+                    El enlace a las entregas va ANTES que pausar y reactivar, y
+                    es el único que aparece en los tres estados. Quien abre esta
+                    lista casi siempre viene con la misma pregunta —«¿está
+                    llegando?»— y hasta la Fase A-4 esa pregunta no tenía dónde
+                    contestarse. Pausar es lo que se hace DESPUÉS de mirar.
+                  */}
+                  <span className="sm:ml-auto">
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/admin/integraciones/desarrolladores/webhooks/${w.id}`}>
+                        Ver entregas
+                      </Link>
+                    </Button>
+                  </span>
                   {w.estado !== 'DISABLED' && (
-                    <span className="sm:ml-auto">
+                    <span>
                       <BotonConfirmado
                         accion={cambiarEstadoWebhookAction}
                         estadoInicial={INIT}
@@ -186,7 +201,7 @@ export function WebhooksPanel({
                     </span>
                   )}
                   {w.estado === 'DISABLED' && (
-                    <span className="sm:ml-auto">
+                    <span>
                       <BotonConfirmado
                         accion={cambiarEstadoWebhookAction}
                         estadoInicial={INIT}
