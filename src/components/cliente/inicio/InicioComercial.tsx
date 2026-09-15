@@ -5,24 +5,21 @@ import { VibeCategorias } from './VibeCategorias'
 import { VibeHero } from './VibeHero'
 import { VibeRelacionado } from './VibeRelacionado'
 import { VibeRelampago } from './VibeRelampago'
+import { VibePromocionesNovedades } from './VibePromocionesNovedades'
+import { VibeEmpresasScroll } from './VibeEmpresasScroll'
 
 function assertNever(value: never): never {
   throw new TypeError(`Bloque de inicio no soportado: ${String(value)}`)
 }
 
 /**
- * REDISEÑO VIOLETA (Stitch «amazon style», aprobado 2026-09-10): los tipos
- * del contrato se mapean a los bloques del nuevo diseño.
+ * REDISEÑO VIOLETA (Stitch «amazon style» enriquecido):
  *
  * - HERO → héroe a foto completa con asomo.
- * - CATEGORIAS → chips violeta.
- * - MEMBRESIAS → «Relacionado con los artículos que viste».
- * - EXPERIENCIAS → cabecera de excursiones + tarjeta «Ofertas Relámpago»
- *   (las filas son las promociones comprables vigentes).
- * - DESTACADAS y BANNER_QR → el diseño nuevo NO los trae: se apagan aquí,
- *   no se inventa dónde ponerlos. Las empresas viven en Explorar y el QR en
- *   su pestaña del dock. La curación publicada sigue decidiendo qué bloques
- *   y en qué orden, sobre este mapa.
+ * - CATEGORIAS → chips violeta + Novedades con promociones activas por afinidad.
+ * - DESTACADAS → scroll horizontal de empresas (híbrido mis empresas + destacadas) con botón "Ver más".
+ * - MEMBRESIAS → «Membresías recomendadas para ti» con badges contextuales.
+ * - EXPERIENCIAS → cabecera de excursiones + tarjeta «Ofertas Relámpago» con timer.
  */
 function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
   switch (tipo) {
@@ -31,9 +28,21 @@ function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
     case 'HERO':
       return <VibeHero heroes={data.heroes} />
     case 'CATEGORIAS':
-      return <VibeCategorias categorias={data.categorias} />
+      return (
+        <>
+          <VibeCategorias categorias={data.categorias} />
+          {data.promocionesNovedades ? (
+            <VibePromocionesNovedades promociones={data.promocionesNovedades} />
+          ) : null}
+        </>
+      )
     case 'DESTACADAS':
-      return null
+      return (
+        <VibeEmpresasScroll
+          empresas={data.empresasScroll}
+          total={data.empresasTotal}
+        />
+      )
     case 'MEMBRESIAS':
       return <VibeRelacionado planes={data.planes} total={data.planesTotal} />
     case 'BANNER_QR':
