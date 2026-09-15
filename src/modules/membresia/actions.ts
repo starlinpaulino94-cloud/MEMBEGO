@@ -12,6 +12,7 @@ import { generarCodigo } from '@/lib/codes'
 import { categoriaDeEmpresa, vehiculosDe } from '@/modules/elegibilidad'
 import { requisitosParaAccion, decidirPlan } from '@/modules/elegibilidad/decidir'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 export interface SeleccionState {
   error?: string
@@ -601,6 +602,8 @@ export async function cancelarMiMembresia(
           select: {
             id: true,
             estado: true,
+            planId: true,
+            fechaVencimiento: true,
             canceladaAlVencimiento: true,
             cliente: { select: { id: true, supabaseId: true, companyId: true } },
           },
@@ -636,6 +639,38 @@ export async function cancelarMiMembresia(
             detalle:
               'Sigue activa hasta el vencimiento, sin renovación. Pedida por el cliente desde la app.',
           },
+        },
+      })
+
+      /**
+       * EL EVENTO REGISTRA LA DECISIÓN; EL ESTADO, LA SITUACIÓN.
+       *
+       * Aquí la membresía sigue ACTIVA —el cliente conserva sus usos hasta el
+       * vencimiento, decisión de producto del 12-08-2026—, así que el evento
+       * dice la verdad: `estadoNuevo: 'ACTIVA'`. Lo que cambió no es el estado,
+       * es el futuro.
+       *
+       * Y aun así el tipo es `CANCELADA`, porque para el negocio ESTO es la
+       * cancelación: es el momento en que el cliente decide irse, semanas antes
+       * de que el estado lo refleje. Un reporte de bajas que esperase al
+       * vencimiento vería el problema cuando ya no se puede hacer nada.
+       *
+       * `programada: true` lo distingue de un corte inmediato, para que un
+       * reporte pueda contar las dos cosas por separado si algún día hace
+       * falta.
+       */
+      await registrarEventoMembresia(tx, {
+        companyId: membership.cliente.companyId,
+        membershipId: membership.id,
+        clienteId: membership.cliente.id,
+        tipo: 'CANCELADA',
+        origen: 'CLIENTE',
+        estadoAnterior: membership.estado,
+        estadoNuevo: membership.estado,
+        planAnteriorId: membership.planId,
+        payload: {
+          programada: true,
+          efectivaEn: membership.fechaVencimiento?.toISOString() ?? null,
         },
       })
     })

@@ -106,6 +106,29 @@ export interface CargaEventoMeta {
   companyId: string | null
 }
 
+/**
+ * UN reintento de UNA entrega de las colas de salida (auditoría A-1).
+ *
+ * Es el trabajo más pequeño del catálogo a propósito: una fila, un intento. Lo
+ * que antes hacía el cron para cien entregas a la vez —y solo una vez al día—
+ * ahora lo programa cada entrega para sí misma, con la espera que le toca
+ * (`modules/integraciones/reintentos.ts`).
+ *
+ * `intentos` es un CERROJO OPTIMISTA, no información: el trabajo solo actúa si
+ * la fila sigue teniendo exactamente ese número de intentos. Sin él, un
+ * reintento de QStash sobre un trabajo que ya se ejecutó gastaría un intento de
+ * más, y el cron y la cola podrían atender la misma entrega a la vez.
+ */
+export interface CargaReintentoEntrega {
+  tipo: 'reintento-entrega'
+  /** `satelite` → `eventos_salientes`; `empresa` → `entregas_webhook`. */
+  cola: 'satelite' | 'empresa'
+  entregaId: string
+  /** Intentos que la fila tenía al programarse. Si cambió, el trabajo no hace nada. */
+  intentos: number
+  companyId: string
+}
+
 export type CargaTrabajo =
   | CargaNotificar
   | CargaAutomatizaciones
@@ -114,6 +137,7 @@ export type CargaTrabajo =
   | CargaRecompensas
   | CargaCampanaDirigida
   | CargaEventoMeta
+  | CargaReintentoEntrega
 
 /** Tipos aceptados por el endpoint `/api/jobs` (cada caso del ejecutor). */
 export const TIPOS_TRABAJO = [
@@ -124,6 +148,7 @@ export const TIPOS_TRABAJO = [
   'recompensas-referido',
   'campana-dirigida',
   'meta-evento',
+  'reintento-entrega',
 ] as const
 
 /** Ruta del endpoint que ejecuta los trabajos. */

@@ -52,6 +52,8 @@ export async function ejecutarTrabajo(carga: CargaTrabajo): Promise<ResultadoTra
       const { procesarEventoMeta } = await import('@/modules/connect/meta/webhookDispatcher')
       return procesarEventoMeta(carga.eventoId)
     }
+    case 'reintento-entrega':
+      return reintentarEntrega(carga)
   }
 }
 
@@ -218,4 +220,39 @@ async function idsClientes(
     select: { id: true },
   })
   return users.map((u) => u.id)
+}
+
+/**
+ * UN reintento de UNA entrega de las colas de salida (auditoría A-1).
+ *
+ * Idempotente por el cerrojo de `intentos`: cada cola comprueba que la fila
+ * sigue teniendo los intentos que tenía al programarse y, si no, no hace nada.
+ * Por eso este trabajo puede repetirse sin gastar un intento de más — que es lo
+ * que QStash necesita poder asumir.
+ *
+ * SIEMPRE devuelve 2xx (no lanza): que la entrega vuelva a fallar es el caso
+ * NORMAL, no un fallo del trabajo, y ese fallo ya programó por su cuenta el
+ * siguiente intento. Lanzar aquí haría que QStash reintentara el trabajo encima
+ * del reintento que ya está en la cola.
+ */
+async function reintentarEntrega(
+  carga: import('@/modules/jobs/tipos').CargaReintentoEntrega
+): Promise<ResultadoTrabajo> {
+  const { entregaId, intentos, cola } = carga
+
+  const r =
+    cola === 'satelite'
+      ? await (await import('@/modules/integraciones/despacho')).reintentarEventoSaliente(
+          entregaId,
+          intentos
+        )
+      : await (await import('@/modules/connect/webhooks')).reintentarEntregaWebhook(
+          entregaId,
+          intentos
+        )
+
+  return {
+    procesados: r.resultado === 'omitido' ? 0 : 1,
+    detalle: r.motivo ? `${r.resultado}: ${r.motivo}` : r.resultado,
+  }
 }

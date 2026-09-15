@@ -63,8 +63,15 @@ export interface PuntoSerie {
 }
 
 export interface Reporte {
-  ingresosCaja: Kpi
-  ingresosMembresias: Kpi
+  /**
+   * `null` = quien mira no tiene `ver_financieros`.
+   *
+   * Null y no cero a propósito: un cero dice «no facturaste», que es una
+   * afirmación falsa sobre el negocio. La pantalla y el CSV enseñan «sin
+   * permiso», que es lo que pasa de verdad.
+   */
+  ingresosCaja: Kpi | null
+  ingresosMembresias: Kpi | null
   operaciones: Kpi
   entregas: Kpi
   clientesNuevos: Kpi
@@ -253,8 +260,16 @@ const kpi = (valor: number, anterior: number): Kpi => ({
 export async function getReporte(
   companyId: string,
   rango: Rango,
-  timeZone: string
+  timeZone: string,
+  /**
+   * Permisos de quien pide el reporte. El filtro va AQUÍ y no en el
+   * componente: una pantalla que esconde una columna mientras la consulta la
+   * sigue devolviendo no protege nada, porque la ruta de exportación usa esta
+   * misma función y se llevaría el dato igual.
+   */
+  opciones: { verFinancieros?: boolean } = {}
 ): Promise<Reporte> {
+  const verFinancieros = opciones.verFinancieros !== false
   const fallos = { n: 0 }
   const cero = { ingresos: 0, operaciones: 0 }
 
@@ -298,8 +313,8 @@ export async function getReporte(
   )
 
   return {
-    ingresosCaja: kpi(ventas.ingresos, ventasAnt.ingresos),
-    ingresosMembresias: kpi(membresias, membresiasAnt),
+    ingresosCaja: verFinancieros ? kpi(ventas.ingresos, ventasAnt.ingresos) : null,
+    ingresosMembresias: verFinancieros ? kpi(membresias, membresiasAnt) : null,
     operaciones: kpi(ventas.operaciones, ventasAnt.operaciones),
     entregas: kpi(entregas, entregasAnt),
     clientesNuevos: kpi(nuevos, nuevosAnt),
@@ -342,12 +357,13 @@ export function reporteToCsv(
     { ventas: 0, entregas: 0, ingresos: 0 }
   )
 
-  const conVariacion = (label: string, k: Kpi, dinero = false) => [
-    label,
-    dinero ? k.valor.toFixed(2) : k.valor,
-    dinero ? k.anterior.toFixed(2) : k.anterior,
-    k.variacion ?? '',
-  ]
+  // Sin permiso, la fila SALE igual y dice por qué está vacía. Omitirla haría
+  // que dos exportaciones del mismo periodo tuvieran distinto número de filas
+  // sin ninguna explicación dentro del archivo.
+  const conVariacion = (label: string, k: Kpi | null, dinero = false) =>
+    k === null
+      ? [label, 'sin permiso', 'sin permiso', '']
+      : [label, dinero ? k.valor.toFixed(2) : k.valor, dinero ? k.anterior.toFixed(2) : k.anterior, k.variacion ?? '']
 
   return armarCsvBloques([
     {
@@ -358,6 +374,10 @@ export function reporteToCsv(
         ['Periodo', `${contexto.desdeDia} a ${contexto.hastaDia}`],
         ['Dias', contexto.dias],
         ['Datos completos', r.incompleto ? 'NO - alguna consulta fallo' : 'Si'],
+        [
+          'Cifras de dinero',
+          r.ingresosCaja === null ? 'OCULTAS - sin permiso financiero' : 'Incluidas',
+        ],
       ],
     },
     {

@@ -344,6 +344,10 @@ export async function ejecutarCanje(
           clienteId: membership.clienteId,
           vehiculoId,
           membershipId: membership.id,
+          // Copiada de la membresía, que es la dueña del dato. Es el ÚNICO
+          // sitio donde se crea una visita, así que aquí se decide si el
+          // reporte de operación de mañana tiene que volver a hacer el JOIN.
+          companyId: membership.companyId,
           sucursalId,
           empleadoId: actor.dbUserId,
           servicio,

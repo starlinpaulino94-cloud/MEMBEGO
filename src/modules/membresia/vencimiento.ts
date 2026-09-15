@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sinEmpresa } from '@/lib/tenant'
 import { membresiaCaducada } from '@/modules/membresia/vigencia'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 /**
  * El JOB que pone al día el estado de las membresías. Las reglas puras —qué es
@@ -33,7 +34,10 @@ export async function vencerMembresias(ahora: Date = new Date()): Promise<Result
       // Se leen primero para poder auditar QUÉ venció, no solo cuántas.
       const caducadas = await tx.membership.findMany({
         where: membresiaCaducada(ahora),
-        select: { id: true, companyId: true },
+        // `clienteId` y `planId` se traen para el evento: el reporte de
+        // vencimientos agrupa por plan y por cliente, y resolverlos después
+        // obligaría a volver a la tabla por cada fila.
+        select: { id: true, companyId: true, clienteId: true, planId: true },
       })
       if (caducadas.length === 0) return { vencidas: 0, empresas: 0 }
 
@@ -67,6 +71,34 @@ export async function vencerMembresias(ahora: Date = new Date()): Promise<Result
             },
           })
           .catch(() => undefined)
+      }
+
+      /**
+       * UN EVENTO POR MEMBRESÍA, aunque la auditoría siga agrupando.
+       *
+       * La entrada de bitácora es una por empresa a propósito —mil entradas
+       * iguales harían ilegible el día—, pero un reporte necesita lo contrario:
+       * saber QUÉ membresía venció, de qué plan y de qué cliente. Agrupada no
+       * se puede responder «cuántas vencieron del plan Gold en agosto».
+       *
+       * Y hay un detalle que la bitácora no salva: usa `accion:
+       * 'MEMBRESIA_CANCELADA'` para un vencimiento, con `tipo:
+       * 'VENCIMIENTO_AUTOMATICO'` en el payload. O sea que hoy, en la bitácora,
+       * vencer y cancelar son indistinguibles sin abrir el JSON. El evento las
+       * separa: `VENCIDA` y `CANCELADA` son tipos distintos, que es lo que son.
+       */
+      for (const m of caducadas) {
+        await registrarEventoMembresia(tx, {
+          companyId: m.companyId,
+          membershipId: m.id,
+          clienteId: m.clienteId,
+          tipo: 'VENCIDA',
+          origen: 'CRON',
+          estadoAnterior: 'ACTIVA',
+          estadoNuevo: 'VENCIDA',
+          planAnteriorId: m.planId,
+          ocurridoEn: ahora,
+        })
       }
 
       return { vencidas: count, empresas: porEmpresa.size }
