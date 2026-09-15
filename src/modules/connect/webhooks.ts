@@ -24,6 +24,7 @@ import {
   type SecretosDeFirma,
 } from '@/modules/connect/webhooksNucleo'
 import { programarReintento } from '@/modules/integraciones/programador'
+import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 
 /**
@@ -233,7 +234,15 @@ export async function repartirEventoAWebhooks(input: {
     const interesadas = suscripciones.filter((s) => suscripcionQuiere(s.eventos, input.evento))
     if (interesadas.length === 0) return
 
-    for (const s of interesadas) {
+    // EN PARALELO Y ACOTADO (A-6). En serie, cinco suscripciones lentas dejaban
+    // al worker del bus cincuenta segundos ocupado en una sola visita — y el
+    // tiempo que una empresa tarda en recibir sus avisos dependía de cuántas
+    // suscripciones tuviera y de lo lento que fuera el servidor de otra.
+    //
+    // Sin `continuar`: el fan-out corre dentro del worker de eventos, que tiene
+    // 300 s, y el número de suscripciones lo acota el entitlement. Aquí no hay
+    // presupuesto que apurar; en el barrido sí.
+    await enParalelo(interesadas, CONCURRENCIA, async (s) => {
       const entrega = await conEmpresa(input.companyId, (tx) =>
         tx.entregaWebhook.create({
           data: {
@@ -246,7 +255,7 @@ export async function repartirEventoAWebhooks(input: {
           select: { id: true, createdAt: true },
         })
       ).catch(anotarFallo('connect:webhook:outbox', { evento: input.evento }))
-      if (!entrega) continue
+      if (!entrega) return
 
       const sobre: SobreWebhook = {
         id: entrega.id,
@@ -257,7 +266,7 @@ export async function repartirEventoAWebhooks(input: {
       }
       const resultado = await entregar(s.url, s, sobre)
       await registrarResultado(input.companyId, entrega.id, s.id, resultado, 1)
-    }
+    })
   } catch (e) {
     console.error('[connect] fan-out de webhooks:', e)
   }
@@ -740,9 +749,20 @@ export async function reenviarEntregaAhora(
  * las entregas anteriores a esta fase y las que no se pudieron programar. Null
  * significa «ya tocaba», no «nunca».
  */
-export async function reintentarWebhooksPendientes(limite = 100): Promise<{
+export async function reintentarWebhooksPendientes(
+  limite = 100,
+  /**
+   * Cuánto tiempo puede consumir este barrido. Se corta por tiempo y no solo
+   * por número de filas porque las dos cosas no se parecen en nada: cien
+   * entregas contra un servidor sano son dos segundos, y contra uno caído son
+   * mil. Ver `PRESUPUESTO_BARRIDO_MS` en el cron.
+   */
+  presupuestoMs = 25_000
+): Promise<{
   enviados: number
   agotados: number
+  /** Filas que se dejaron para la próxima por falta de tiempo. */
+  sinTiempo: number
 }> {
   let enviados = 0
   let agotados = 0
@@ -763,11 +783,23 @@ export async function reintentarWebhooksPendientes(limite = 100): Promise<{
       })
   ).catch(() => [])
 
-  for (const e of pendientes) {
-    const r = await intentarEntrega(e)
-    if (r === 'enviado') enviados++
-    else if (r === 'agotado') agotados++
-  }
+  // Acotado por concurrencia Y por tiempo (A-6). En serie, con un receptor
+  // caído, cada fila costaba sus diez segundos de timeout: el cron procesaba
+  // unas seis de cien y la plataforma lo mataba, sin error y sin traza. Al día
+  // siguiente repetía con las mismas seis.
+  const { sinEmpezar } = await enParalelo(
+    pendientes,
+    CONCURRENCIA,
+    async (e) => {
+      const r = await intentarEntrega(e)
+      if (r === 'enviado') enviados++
+      else if (r === 'agotado') agotados++
+    },
+    // El margen es para que lo que esté en vuelo termine de escribir su
+    // resultado. Que nos maten a mitad de un `update` deja la fila diciendo
+    // algo que no pasó.
+    { continuar: antesDe(presupuestoMs, 12_000) }
+  )
 
-  return { enviados, agotados }
+  return { enviados, agotados, sinTiempo: sinEmpezar }
 }

@@ -295,6 +295,26 @@ referidos, eso es ruido, coste y superficie de datos innecesaria.
 
 </details>
 
+### ✅ A-6 · El fan-out se hacía en serie — RESUELTO (20/09/2026)
+
+> Cerrado, y el hallazgo se quedaba corto. El fan-out en serie era una molestia;
+> el **barrido** en serie era un fallo: cien filas a diez segundos de timeout
+> dentro de un `maxDuration` de sesenta significaba procesar unas seis y que la
+> plataforma matara la función — sin error y sin traza, repitiendo con las
+> mismas seis al día siguiente.
+>
+> Las cuatro rutas recorren ahora con `enParalelo` y concurrencia 6 (baja a
+> propósito: en un barrido muchas filas apuntan al mismo servidor caído). Los
+> dos barridos además se cortan por presupuesto y devuelven `sinTiempo`, que el
+> panel dice en voz alta.
+>
+> De paso, un fallo que solo existe en paralelo: el memo de destinos por empresa
+> guardaba el valor, así que seis trabajadores simultáneos habrían lanzado seis
+> veces la misma consulta. Ahora guarda la promesa.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟠 A-6 · El fan-out se hace dentro del request, en serie
 
 `connect/webhooks.ts:181-186` recorre las suscripciones **secuencialmente**, con
@@ -308,6 +328,8 @@ Vercel (`maxDuration = 60`) y retrasa todo lo que venga detrás.
 **Arreglo:** encolar el fan-out en QStash (mismo trabajo que A-1) o al menos
 paralelizar con `Promise.allSettled` y un tope de concurrencia.
 **Esfuerzo: 2 días, compartidos con A-1.**
+
+</details>
 
 ### ◐ A-7 · Rotación de secretos — RESUELTO PARA WEBHOOKS (20/09/2026)
 
@@ -546,7 +568,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~2~~ | ~~Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración~~ ✅ hecho | 1 | A-2 |
 | ~~3~~ | ~~Pantalla de entregas: log, cuerpo, reenviar, evento de prueba~~ ✅ hecho | 5 | A-4 |
 | ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
-| 5 | Fan-out encolado y en paralelo con tope | 2 | A-6 |
+| ~~5~~ | ~~Fan-out encolado y en paralelo con tope~~ ✅ hecho | 2 | A-6 |
 | ◐ 6 | Rotación con solapamiento — hecha para webhooks; queda el secreto de satélite | 4 | A-7 |
 | 7 | Cron de salud: Meta, OAuth, caducidades → `REAUTORIZAR` | 3 | B-3 |
 
@@ -609,16 +631,16 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
 - **En arquitectura: no estamos lejos, estamos por delante.** Las decisiones de
   aislamiento, contrato y una-sola-verdad son mejores que las de GHL, y son
   justamente las que no se pueden añadir después.
-- **En operación: estamos a una semana.** De los siete trabajos de la Fase 1,
-  **A-1, A-2, A-4 y A-5 están cerrados** — entre ellos los dos que más caros
-  salían por cliente conectado y el único con consecuencia de seguridad. Los
+- **En operación: estamos a media semana.** De los siete trabajos de la Fase 1,
+  **A-1, A-2, A-4, A-5 y A-6 están cerrados** — entre ellos los que más caros salían
+  por cliente conectado y el único con consecuencia de seguridad. Los
   reintentos pasaron de una vez al día a una escalera de 30 s a 24 h; «no me
   llegan los eventos» dejó de ser un ticket para ser una pantalla; la firma dejó
   de admitir un replay con el timestamp refrescado; una empresa puede por fin
-  recibir solo lo que le interesa; y rotar un secreto de webhook dejó de exigir
-  un corte. Queda **A-6** (fan-out encolado y en paralelo, 2 días), **B-3**
-  (salud activa de las conexiones, 3 días) y la mitad de A-7 que falta: el
-  secreto compartido con los satélites, que se separó porque toca la
+  recibir solo lo que le interesa; rotar un secreto de webhook dejó de exigir un
+  corte; y el barrido dejó de drenar su primer 6 % y parecer que funcionaba.
+  Queda **B-3** (salud activa de las conexiones, 3 días) y la mitad de A-7 que
+  falta: el secreto compartido con los satélites, que se separó porque toca la
   verificación de SSO en dos sitios y merece su propia revisión (2–3 días).
 
   Y dos cosas nuevas, pequeñas, que salieron al hacer el trabajo: avisar antes

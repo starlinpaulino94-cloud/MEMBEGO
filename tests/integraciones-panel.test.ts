@@ -71,9 +71,21 @@ test('pero el cron sigue drenándolo TODO', () => {
     const src = sinComentarios(readFileSync(cron, 'utf8'))
     const llamadas = [...src.matchAll(/reintentarPendientes\(([^)]*)\)/g)].map((m) => m[1].trim())
     for (const args of llamadas) {
+      /**
+       * Se mira el SEGUNDO argumento —el `sistemaId`— y no si hay comas.
+       *
+       * Antes bastaba con que no hubiera ninguna, lo que era cierto mientras la
+       * función tuviera un solo parámetro. En cuanto el cron pasó su presupuesto
+       * de tiempo (A-6), la guardia empezó a fallar por la coma de un argumento
+       * que no tiene nada que ver con lo que vigila. El invariante sigue siendo
+       * el mismo y sigue importando: si el cron acotara a un sistema, el resto
+       * de las colas dejaría de salir y nadie se enteraría hasta que se
+       * llenaran.
+       */
+      const segundo = (args.split(',')[1] ?? '').trim()
       assert.ok(
-        !/,/.test(args),
-        `${cron} acota el reintento a un sistema; el cron tiene que despacharlos todos`
+        segundo === '' || segundo === 'undefined',
+        `${cron} acota el reintento a «${segundo}»; el cron tiene que despacharlos todos`
       )
     }
   }

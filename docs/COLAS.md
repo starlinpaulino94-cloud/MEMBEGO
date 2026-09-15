@@ -222,6 +222,62 @@ El botón «reintentar» del panel del superadmin es la excepción explícita
 está diciendo «ahora», y responderle que toca dentro de seis horas sería
 devolverle su propia espera.
 
+## El fan-out y el barrido van en paralelo, y el barrido se corta a tiempo
+
+> Hallazgo **A-6** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.
+
+Las cuatro rutas de salida recorrían su lista con un `for` y un `await` dentro:
+cada entrega esperaba a que la anterior terminara o agotara sus diez segundos de
+timeout. Eso tenía dos consecuencias de tamaños muy distintos.
+
+**En el fan-out era una molestia.** Cinco suscripciones lentas dejaban al worker
+del bus cincuenta segundos ocupado en una sola operación de negocio.
+
+**En el barrido era un fallo.** El cron toma hasta cien filas y tiene sesenta
+segundos de `maxDuration`. Con un receptor caído, cada fila cuesta diez
+segundos: procesaba unas seis y la plataforma mataba la función. Las noventa y
+cuatro restantes no se intentaban, no aparecía ningún error, y al día siguiente
+volvía a pasar lo mismo con las mismas seis primeras. **Una cola que solo drena
+su primer 6 % está atascada y parece que funciona.**
+
+Ahora las cuatro usan `enParalelo` (`modules/integraciones/concurrencia.ts`),
+con `CONCURRENCIA = 6`.
+
+**Por qué seis y no sesenta.** Esto no es un pool de trabajos independientes. En
+un barrido, muchas de las filas pendientes apuntan **al mismo servidor** —están
+pendientes precisamente porque ese servidor está mal—, así que el límite no
+reparte carga entre destinos: se la concentra en uno. Un número alto convertiría
+nuestro reintento en una avalancha contra alguien que ya está caído, y encima
+justo cuando intenta levantarse.
+
+**Los barridos se cortan por tiempo.** `antesDe(presupuesto, margen)` deja de
+tomar trabajo antes de que se acabe el presupuesto, y los que ya estaban en
+vuelo terminan. El margen (12 s) cubre el timeout de una entrega más lo que
+cuesta anotar su resultado: sin él, la plataforma mataría la función a mitad de
+un `update` y la fila diría algo que no pasó. Lo que queda sin intentar se
+devuelve en `sinTiempo` — y el botón del panel lo dice, porque «12 entregados»
+con cuarenta filas sin tocar manda a casa a quien debería volver a pulsar.
+
+**El cron reparte su presupuesto entre las dos colas** (20 s cada una). Comparten
+cron, así que comparten los sesenta segundos; sin repartirlo, la primera podría
+consumirlo entero y la segunda no llegaría a intentar ni una entrega — un fallo
+que solo aparece el día en que una de las dos va mal, o sea el día que más
+importa.
+
+**Los fan-out NO se cortan por tiempo**, y es deliberado: corren dentro del
+worker de eventos (300 s) sobre una lista acotada por el entitlement. Ahí no hay
+presupuesto que apurar, y ponerles un corte sería complicarlos para protegerse
+de algo que no pasa.
+
+### Un detalle que solo aparece en paralelo
+
+El barrido de satélites memoizaba los destinos por empresa. En serie funcionaba;
+en paralelo, seis trabajadores que empiezan a la vez con filas de la misma
+empresa encontrarían el memo vacío los seis y lanzarían seis veces la misma
+consulta. Ahora el memo guarda la **promesa**, no el resultado: el primero la
+crea y los otros cinco esperan a esa misma — que es lo que el memo prometía
+desde el principio.
+
 ## Rotar el secreto de un webhook sin cortar
 
 > Hallazgo **A-7** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.

@@ -14,6 +14,7 @@ import {
 } from '@/modules/plataforma/firma'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 import { programarReintento } from '@/modules/integraciones/programador'
+import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
 
 /**
  * DESPACHO DE EVENTOS a los sistemas satélite conectados.
@@ -220,7 +221,11 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
     const sistemas = await sistemasDestino(evento.companyId, sistemaOrigenDe(evento.payload))
     if (sistemas.length === 0) return
 
-    for (const sistema of sistemas) {
+    // EN PARALELO Y ACOTADO (A-6): una visita genera hasta cuatro eventos hacia
+    // dos sistemas, y en serie cada uno esperaba a que el anterior agotara sus
+    // diez segundos. Un satélite lento retrasaba la entrega a los demás sin
+    // tener nada que ver con ellos.
+    await enParalelo(sistemas, CONCURRENCIA, async (sistema) => {
       const fila = await conEmpresa(evento.companyId, (tx) =>
         tx.eventoSaliente.create({
           data: {
@@ -235,7 +240,7 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
           },
         })
       ).catch(anotarFallo('integraciones:outbox', { tipo: evento.tipo }))
-      if (!fila) continue
+      if (!fila) return
 
       const error = await entregar(sistema.urlWebhook, sistema.secreto, cuerpoDe(fila), fila.id)
       await anotarResultado({
@@ -245,7 +250,7 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
         error,
         enCron: false,
       })
-    }
+    })
   } catch (e) {
     console.error('[integraciones] reenviar evento:', e)
   }
@@ -381,9 +386,17 @@ export async function reintentarPendientes(
    * respetar la escalera: si atendiera lo que ya está programado, volvería a
    * convertir los reintentos en «una vez al día».
    */
-  opciones: { soloVencidos?: boolean } = {}
-): Promise<{ enviados: number; fallidos: number }> {
+  opciones: { soloVencidos?: boolean; presupuestoMs?: number } = {}
+): Promise<{ enviados: number; fallidos: number; sinTiempo: number }> {
   const soloVencidos = opciones.soloVencidos !== false
+  /**
+   * Cuánto tiempo puede consumir este barrido.
+   *
+   * El default generoso es para el botón del panel, que corre dentro de una
+   * server action y no tiene la prisa del cron. El cron pasa el suyo, mucho más
+   * corto, porque comparte sus sesenta segundos con la otra cola.
+   */
+  const presupuestoMs = opciones.presupuestoMs ?? 25_000
   let enviados = 0
   let fallidos = 0
   const pendientes = await sinEmpresa('integraciones: reintento de eventos pendientes', (tx) =>
@@ -400,19 +413,38 @@ export async function reintentarPendientes(
     })
   ).catch(() => [])
 
-  const memo = new Map<string, Map<string, { urlWebhook: string; secreto: string }>>()
-  const destinosDe = async (companyId: string) => {
+  /**
+   * El memo guarda la PROMESA, no el resultado.
+   *
+   * Con el barrido en serie daba igual. En paralelo no: seis trabajadores que
+   * empiezan a la vez con filas de la misma empresa encontrarían el memo vacío
+   * los seis y lanzarían seis veces la misma consulta. Guardando la promesa, el
+   * primero la crea y los otros cinco esperan a esa misma — que es lo que el
+   * memo prometía desde el principio: «una consulta por empresa, no por
+   * evento».
+   */
+  const memo = new Map<string, Promise<Map<string, { urlWebhook: string; secreto: string }>>>()
+  const destinosDe = (companyId: string) => {
     const cacheado = memo.get(companyId)
     if (cacheado) return cacheado
-    const porId = new Map((await sistemasDestino(companyId)).map((s) => [s.id, s]))
-    memo.set(companyId, porId)
-    return porId
+    const promesa = sistemasDestino(companyId).then(
+      (lista) => new Map(lista.map((s) => [s.id, s]))
+    )
+    memo.set(companyId, promesa)
+    return promesa
   }
 
-  for (const ev of pendientes) {
-    const r = await intentarEvento(ev, (await destinosDe(ev.companyId)).get(ev.sistemaId))
-    if (r === 'enviado') enviados++
-    else if (r === 'agotado') fallidos++
-  }
-  return { enviados, fallidos }
+  // Acotado por concurrencia Y por tiempo (A-6): ver el mismo cambio en
+  // `reintentarWebhooksPendientes`.
+  const { sinEmpezar } = await enParalelo(
+    pendientes,
+    CONCURRENCIA,
+    async (ev) => {
+      const r = await intentarEvento(ev, (await destinosDe(ev.companyId)).get(ev.sistemaId))
+      if (r === 'enviado') enviados++
+      else if (r === 'agotado') fallidos++
+    },
+    { continuar: antesDe(presupuestoMs, 12_000) }
+  )
+  return { enviados, fallidos, sinTiempo: sinEmpezar }
 }
