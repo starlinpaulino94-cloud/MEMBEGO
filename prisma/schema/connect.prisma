@@ -393,11 +393,28 @@ model EntregaWebhook {
   ultimoError String?
   enviadoAt   DateTime?
 
+  /// Cuándo toca el siguiente intento. Lo escribe quien anota el fallo, con la
+  /// escalera de `modules/integraciones/reintentos.ts`.
+  ///
+  /// NULL SIGNIFICA «YA», y es lo que hace que la migración no necesite
+  /// rellenar nada: las entregas que estaban en cola antes de existir esta
+  /// columna quedan vencidas, que es exactamente lo que eran.
+  ///
+  /// Su razón de ser es que el cron y la cola no se pisen. Sin esta fecha, el
+  /// barrido diario atendería una entrega que ya tiene su reintento programado
+  /// para dentro de seis horas, le gastaría el intento antes de tiempo y
+  /// convertiría la escalera en «una vez al día» otra vez.
+  proximoIntentoAt DateTime?
+
   createdAt DateTime @default(now())
 
   @@index([estado, createdAt])
   @@index([companyId, createdAt])
   @@index([suscripcionId, createdAt])
+  /// El barrido pregunta SIEMPRE por las dos columnas juntas («pendientes y
+  /// vencidas»); con el índice de `[estado, createdAt]` tendría que leer todas
+  /// las pendientes para descartar las que aún no tocan.
+  @@index([estado, proximoIntentoAt])
   @@map("entregas_webhook")
 }
 

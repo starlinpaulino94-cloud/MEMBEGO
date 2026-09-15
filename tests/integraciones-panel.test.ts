@@ -37,9 +37,20 @@ const sinComentarios = (src: string) =>
 test('el botón de reenviar acota al sistema de su tarjeta', () => {
   assert.match(
     sinComentarios(ACCIONES),
-    /reintentarPendientes\(\s*100\s*,\s*sistemaId\s*\)/,
+    /reintentarPendientes\(\s*100\s*,\s*sistemaId\s*,/,
     'sin acotar, pulsar en un satélite despacha también la cola de los demás'
   )
+})
+
+test('y despacha YA, sin esperar a que toque el próximo intento', () => {
+  /**
+   * Desde los reintentos programados (A-1) cada entrega fallida tiene fecha
+   * para su siguiente intento, y el cron la respeta. El botón NO: quien acaba
+   * de arreglar la ruta del satélite y pulsa «reintentar» está diciendo
+   * «ahora», y responderle que toca dentro de seis horas sería devolverle su
+   * propia espera.
+   */
+  assert.match(sinComentarios(ACCIONES), /soloVencidos:\s*false/)
 })
 
 test('y el despacho de verdad filtra por ese sistema', () => {

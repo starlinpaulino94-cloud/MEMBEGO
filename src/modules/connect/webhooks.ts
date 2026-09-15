@@ -11,6 +11,8 @@ import {
   validarUrlWebhook,
   type MotivoUrl,
 } from '@/modules/connect/webhooksNucleo'
+import { programarReintento } from '@/modules/integraciones/programador'
+import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 
 /**
  * WEBHOOKS SALIENTES a cualquier URL (Membego Connect · Fase 3).
@@ -23,9 +25,14 @@ import {
  * suscripciones de esa empresa. Nunca al revés. Una suscripción no puede
  * pedir eventos de otra empresa porque nadie le pregunta de qué empresa
  * quiere: se le da lo suyo.
+ *
+ * CADENCIA (auditoría A-1): cada fallo programa SU siguiente intento en la
+ * cola, con espera creciente (30 s → 24 h). El cron diario deja de ser quien
+ * reintenta y pasa a ser la red de seguridad: recoge lo que se quedó sin
+ * programar porque QStash no estaba. Antes de esto, un receptor caído treinta
+ * segundos costaba veinticuatro horas de retraso.
  */
 
-const MAX_INTENTOS = 8
 const TIMEOUT_MS = 10_000
 
 export type ResultadoCrearSuscripcion =
@@ -230,12 +237,26 @@ async function entregar(
 }
 
 /**
- * Anota cómo fue la entrega y mueve la salud de la suscripción.
+ * Anota cómo fue la entrega, PROGRAMA el siguiente intento y mueve la salud de
+ * la suscripción.
  *
  * Al octavo intento la entrega pasa a DEAD_LETTER (deja de reintentarse sola);
  * a los `FALLOS_PARA_APAGAR` fallos SEGUIDOS, la suscripción entera se apaga.
  * Son dos umbrales distintos porque responden a preguntas distintas: uno es
  * «este mensaje no llega», el otro «este destino está muerto».
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ SE PROGRAMA AQUÍ Y NO EN CADA LLAMADOR
+ *
+ * Esta función es el ÚNICO sitio en el que se anota un fallo de entrega —lo
+ * llaman el fan-out inmediato, el barrido del cron y el trabajo de la cola—.
+ * Programar aquí es lo que hace imposible que exista una entrega fallida sin su
+ * reintento: no hay ningún camino que anote el fallo y se salte esto.
+ *
+ * Y la fecha se guarda en el MISMO `update` que el fallo. Escribirla después,
+ * en su propia consulta, dejaría una ventana en la que la fila está fallada y
+ * sin fecha — que para el barrido es indistinguible de «vencida», y la
+ * atendería a destiempo.
  */
 async function registrarResultado(
   companyId: string,
@@ -244,16 +265,30 @@ async function registrarResultado(
   r: ResultadoEntrega,
   intentos: number
 ): Promise<void> {
+  // Null en `fecha` = se acabaron los intentos. Se pregunta al programador en
+  // vez de comparar contra el máximo por segunda vez: dos sitios decidiendo
+  // cuándo muere una entrega acaban decidiendo cosas distintas.
+  const proximo = r.ok
+    ? null
+    : await programarReintento({ cola: 'empresa', entregaId, companyId, intentos })
+
   await conEmpresa(companyId, (tx) =>
     tx.entregaWebhook.update({
       where: { id: entregaId },
       data: r.ok
-        ? { estado: 'ENVIADO', intentos, estadoHttp: r.status, enviadoAt: new Date() }
+        ? {
+            estado: 'ENVIADO',
+            intentos,
+            estadoHttp: r.status,
+            enviadoAt: new Date(),
+            proximoIntentoAt: null,
+          }
         : {
             intentos,
             estadoHttp: r.status,
             ultimoError: r.error?.slice(0, 300) ?? null,
-            ...(intentos >= MAX_INTENTOS ? { estado: 'DEAD_LETTER' } : {}),
+            proximoIntentoAt: proximo?.fecha ?? null,
+            ...(proximo?.fecha ? {} : { estado: 'DEAD_LETTER' }),
           },
     })
   ).catch(anotarFallo('connect:webhook:marcar', { entregaId }))
@@ -298,10 +333,101 @@ async function registrarResultado(
   }
 }
 
+/** Una entrega tal como la necesitan el reintento y el barrido. */
+interface FilaEntrega {
+  id: string
+  companyId: string
+  evento: string
+  payload: unknown
+  intentos: number
+  createdAt: Date
+  suscripcion: { id: string; url: string; secreto: string; estado: string }
+}
+
 /**
- * Reintenta las entregas PENDIENTES (cron). El destino se vuelve a resolver en
- * cada reintento: una suscripción pausada entre medias deja de recibir, en vez
- * de vaciar la cola encima de quien pidió que paráramos.
+ * UN intento sobre UNA entrega. Lo comparten el barrido del cron y el trabajo
+ * de la cola, y por eso el destino se vuelve a resolver aquí: una suscripción
+ * pausada entre medias deja de recibir, en vez de que le vaciemos la cola
+ * encima a quien pidió que paráramos.
+ */
+async function intentarEntrega(e: FilaEntrega): Promise<'enviado' | 'fallido' | 'agotado'> {
+  if (e.suscripcion.estado !== 'ACTIVE') {
+    await sinEmpresa('connect: cerrar entrega de suscripción inactiva', (tx) =>
+      tx.entregaWebhook.update({
+        where: { id: e.id },
+        data: {
+          estado: 'DEAD_LETTER',
+          ultimoError: 'La suscripción ya no está activa.',
+          proximoIntentoAt: null,
+        },
+      })
+    ).catch(anotarFallo('connect:webhook:cerrar', { id: e.id }))
+    return 'agotado'
+  }
+
+  const sobre: SobreWebhook = {
+    id: e.id,
+    event: e.evento,
+    companyId: e.companyId,
+    createdAt: e.createdAt.toISOString(),
+    data: (e.payload ?? {}) as Record<string, unknown>,
+  }
+  const r = await entregar(e.suscripcion.url, e.suscripcion.secreto, sobre)
+  const intentos = e.intentos + 1
+  await registrarResultado(e.companyId, e.id, e.suscripcion.id, r, intentos)
+  if (r.ok) return 'enviado'
+  return agotoLosIntentos(intentos) ? 'agotado' : 'fallido'
+}
+
+/**
+ * EL REINTENTO PROGRAMADO (trabajo `reintento-entrega`, cola `empresa`).
+ *
+ * `intentosEsperados` es un cerrojo optimista: si la fila ya no tiene ese
+ * número de intentos, alguien la atendió entre medias —el barrido, o un
+ * reintento de QStash sobre este mismo trabajo— y aquí no hay nada que hacer.
+ * Sin el cerrojo, ese solapamiento gastaría un intento que nadie contó y
+ * acortaría la vida de la entrega sin que se note.
+ */
+export async function reintentarEntregaWebhook(
+  entregaId: string,
+  intentosEsperados: number
+): Promise<{ resultado: 'enviado' | 'fallido' | 'agotado' | 'omitido'; motivo?: string }> {
+  const fila = await sinEmpresa('connect: entrega de webhook por id (cola)', (tx) =>
+    tx.entregaWebhook.findUnique({
+      where: { id: entregaId },
+      select: {
+        id: true,
+        companyId: true,
+        evento: true,
+        payload: true,
+        intentos: true,
+        estado: true,
+        createdAt: true,
+        suscripcion: { select: { id: true, url: true, secreto: true, estado: true } },
+      },
+    })
+  ).catch(() => null)
+
+  if (!fila) return { resultado: 'omitido', motivo: 'no existe' }
+  if (fila.estado !== 'PENDIENTE') return { resultado: 'omitido', motivo: 'ya cerrada' }
+  if (fila.intentos !== intentosEsperados) {
+    return { resultado: 'omitido', motivo: 'la atendió otro' }
+  }
+
+  return { resultado: await intentarEntrega(fila) }
+}
+
+/**
+ * BARRIDO de las entregas VENCIDAS (cron).
+ *
+ * Desde la Fase A-1 esto ya no es quien reintenta: cada fallo programa su
+ * siguiente intento en la cola. Esto es la RED DE SEGURIDAD, y recoge lo que la
+ * cola no pudo tomar — QStash sin configurar, una publicación rechazada, un
+ * mensaje perdido.
+ *
+ * `proximoIntentoAt: null` entra en el barrido a propósito: es lo que tienen
+ * las entregas anteriores a esta fase y las que no se pudieron programar. Null
+ * significa «ya tocaba», no «nunca».
  */
 export async function reintentarWebhooksPendientes(limite = 100): Promise<{
   enviados: number
@@ -311,10 +437,13 @@ export async function reintentarWebhooksPendientes(limite = 100): Promise<{
   let agotados = 0
 
   const pendientes = await sinEmpresa(
-    'connect: entregas de webhook pendientes (cron global)',
+    'connect: entregas de webhook vencidas (cron global)',
     (tx) =>
       tx.entregaWebhook.findMany({
-        where: { estado: 'PENDIENTE' },
+        where: {
+          estado: 'PENDIENTE',
+          OR: [{ proximoIntentoAt: null }, { proximoIntentoAt: { lte: new Date() } }],
+        },
         orderBy: { createdAt: 'asc' },
         take: limite,
         include: {
@@ -324,29 +453,9 @@ export async function reintentarWebhooksPendientes(limite = 100): Promise<{
   ).catch(() => [])
 
   for (const e of pendientes) {
-    if (e.suscripcion.estado !== 'ACTIVE') {
-      await sinEmpresa('connect: cerrar entrega de suscripción inactiva (cron)', (tx) =>
-        tx.entregaWebhook.update({
-          where: { id: e.id },
-          data: { estado: 'DEAD_LETTER', ultimoError: 'La suscripción ya no está activa.' },
-        })
-      ).catch(anotarFallo('connect:webhook:cerrar', { id: e.id }))
-      agotados++
-      continue
-    }
-
-    const sobre: SobreWebhook = {
-      id: e.id,
-      event: e.evento,
-      companyId: e.companyId,
-      createdAt: e.createdAt.toISOString(),
-      data: (e.payload ?? {}) as Record<string, unknown>,
-    }
-    const r = await entregar(e.suscripcion.url, e.suscripcion.secreto, sobre)
-    const intentos = e.intentos + 1
-    await registrarResultado(e.companyId, e.id, e.suscripcion.id, r, intentos)
-    if (r.ok) enviados++
-    else if (intentos >= MAX_INTENTOS) agotados++
+    const r = await intentarEntrega(e)
+    if (r === 'enviado') enviados++
+    else if (r === 'agotado') agotados++
   }
 
   return { enviados, agotados }

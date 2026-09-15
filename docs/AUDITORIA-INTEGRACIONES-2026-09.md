@@ -130,6 +130,21 @@ que prometen.
 
 Ordenados por lo que cuesta si no se arregla, no por lo que cuesta arreglarlo.
 
+### ✅ A-1 · Los reintentos tardaban un día entero — RESUELTO (20/09/2026)
+
+> Cerrado en `20260920_reintentos_programados`. La escalera vive en
+> `modules/integraciones/reintentos.ts` (núcleo puro, 19 pruebas) y la comparten
+> las dos colas: 30 s → 2 m → 10 m → 30 m → 2 h → 6 h → 24 h, con jitter
+> determinista de ±20 %. El cron pasa a ser la red de seguridad y solo toma lo
+> vencido. Detalle y las tres trampas del diseño, en `docs/COLAS.md`.
+>
+> Se deja el hallazgo escrito porque el porqué sigue valiendo: es el ejemplo de
+> que el outbox garantizaba que no se perdía nada y no que llegara a tiempo, que
+> son dos promesas distintas.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🔴 A-1 · Los reintentos tardan un día entero
 
 `vercel.json:15` programa `/api/cron/integraciones` a las **13:00 UTC, una vez
@@ -149,6 +164,8 @@ reintento en QStash con backoff exponencial (30 s · 2 m · 10 m · 1 h · 6 h)
 en vez de esperar al cron. El cron se queda como barrido de resiliencia.
 **Esfuerzo: 2–3 días. Es el hallazgo con mejor relación coste/beneficio del
 informe.**
+
+</details>
 
 ### 🔴 A-2 · La firma de los webhooks de empresa no cubre el timestamp
 
@@ -403,7 +420,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Superficie de la API** | **2** | 5 | 24 rutas GET/POST vs. API v2 completa con CRUD |
 | **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
 | **Operación de webhooks (log, prueba, reenvío)** | **1** | 5 | Existe la tabla, no la pantalla (A-4) |
-| **Cadencia de reintentos** | **1** | 5 | 24 h vs. minutos (A-1) |
+| **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
 | **Webhook entrante / acción HTTP en flujos** | **0** | 5 | No existe (B-1) |
 | **SMS / telefonía** | **0** | 5 | No existe (A-8) |
 | **Correo con dominio propio** | **0** | 5 | Resend de plataforma (A-9) |
@@ -431,7 +448,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 
 | # | Trabajo | Días | Hallazgo |
 |---|---|:-:|---|
-| 1 | Reintentos por QStash con backoff exponencial | 3 | A-1 |
+| ~~1~~ | ~~Reintentos por QStash con backoff exponencial~~ ✅ hecho | 3 | A-1 |
 | 2 | Firmar `timestamp.deliveryId.cuerpo`, dos cabeceras en migración | 1 | A-2 |
 | 3 | Pantalla de entregas: log, cuerpo, reenviar, evento de prueba | 5 | A-4 |
 | 4 | Selector de eventos en el formulario | 1 | A-5 |
@@ -498,10 +515,12 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
 - **En arquitectura: no estamos lejos, estamos por delante.** Las decisiones de
   aislamiento, contrato y una-sola-verdad son mejores que las de GHL, y son
   justamente las que no se pueden añadir después.
-- **En operación: estamos a un mes.** Los siete trabajos de la Fase 1 son
-  concretos, pequeños y ninguno exige decisiones de producto. El reintento
-  diario (A-1) y la ausencia de log de entregas (A-4) son, hoy, los dos que más
-  caros salen por cliente conectado.
+- **En operación: estamos a tres semanas.** De los siete trabajos de la Fase 1,
+  **A-1 ya está cerrado**: los reintentos pasaron de una vez al día a una
+  escalera de 30 s a 24 h. Quedan seis, todos concretos y ninguno exige
+  decisiones de producto. El que más caro sale ahora es la ausencia de log de
+  entregas (A-4): sin pantalla, «no me llegan los eventos» sigue siendo un
+  ticket de soporte aunque ahora lleguen mucho antes.
 - **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
   real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
   y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la

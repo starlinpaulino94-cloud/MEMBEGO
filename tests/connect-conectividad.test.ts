@@ -8,6 +8,7 @@ import {
   suscripcionQuiere,
   validarUrlWebhook,
 } from '../src/modules/connect/webhooksNucleo'
+import { MAX_INTENTOS } from '../src/modules/integraciones/reintentos'
 
 /**
  * MEMBEGO CONNECT · Fase 3 — Universal Connectivity.
@@ -159,9 +160,19 @@ test('bus: el mismo evento va a satélites Y a webhooks de empresa', () => {
 
 test('webhooks: dos umbrales distintos, uno por mensaje y otro por destino', () => {
   const src = leer('src/modules/connect/webhooks.ts')
-  assert.match(src, /intentos >= MAX_INTENTOS \? \{ estado: 'DEAD_LETTER' \}/)
+  /**
+   * Desde los reintentos programados (A-1), quién decide que una entrega está
+   * muerta ES el programador: devuelve `fecha: null` cuando ya no queda
+   * escalera. La guardia sigue vigilando lo mismo —que agotar los intentos
+   * marque DEAD_LETTER— sobre la forma nueva de decirlo.
+   */
+  assert.match(src, /proximo\?\.fecha \? \{\} : \{ estado: 'DEAD_LETTER' \}/)
   assert.match(src, /fallosSeguidos >= FALLOS_PARA_APAGAR/)
-  assert.equal(FALLOS_PARA_APAGAR > 8, true, 'apagar el destino no puede ser más fácil que rendirse con un mensaje')
+  assert.equal(
+    FALLOS_PARA_APAGAR > MAX_INTENTOS,
+    true,
+    'apagar el destino no puede ser más fácil que rendirse con un mensaje'
+  )
 })
 
 test('webhooks: el destino se vuelve a resolver en cada reintento', () => {

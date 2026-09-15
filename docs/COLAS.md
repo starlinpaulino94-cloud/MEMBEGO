@@ -162,6 +162,66 @@ que antes había que consultar a mano: trabajos difuntos pendientes, webhooks a
 satélites en reintento, webhooks agotados y eventos del bus estancados (>6 h
 sin despachar).
 
+## Reintentos programados — la escalera, y el cron como red de seguridad
+
+> Hallazgo **A-1** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.
+
+Hasta aquí, el único que reintentaba una entrega fallida era el cron diario.
+Eso significaba que **un receptor caído treinta segundos le costaba a su cliente
+veinticuatro horas**, y que agotar los ocho intentos llevaba ocho días. El
+outbox garantizaba que no se perdía nada; no que llegara a tiempo, que es lo
+que de verdad se le promete a quien integra.
+
+Ahora **cada fallo programa su propio siguiente intento** en QStash, con espera
+creciente:
+
+| Tras el intento | Espera | Acumulado |
+|---|---|---|
+| 1.º | 30 s | 30 s |
+| 2.º | 2 min | ~2,5 min |
+| 3.º | 10 min | ~13 min |
+| 4.º | 30 min | ~43 min |
+| 5.º | 2 h | ~2,7 h |
+| 6.º | 6 h | ~8,7 h |
+| 7.º | 24 h | ~33 h |
+| 8.º | — | `DEAD_LETTER` |
+
+La escalera vive en `src/modules/integraciones/reintentos.ts` (núcleo puro, con
+pruebas) y la comparten las DOS colas de salida: satélites (`eventos_salientes`)
+y webhooks de empresa (`entregas_webhook`).
+
+**El jitter no es adorno.** Cuando un receptor se cae, todas sus entregas fallan
+en el mismo segundo; sin dispersión, las mil vuelven a la vez a los 30 s exactos
+y lo primero que recibe un servidor recién levantado es la misma avalancha que
+quizá lo tumbó. El desvío es de ±20 % y es **determinista** a partir del id y
+del número de intento: si fuera aleatorio, dos publicaciones del mismo reintento
+calcularían esperas distintas y la clave de deduplicación dejaría de describir el
+mismo mensaje.
+
+**Tres cosas que hay que saber para tocar esto:**
+
+1. **`programarReintento()` NO usa `encolar()`**, y es deliberado. `encolar()`
+   degrada a ejecutar en línea cuando falta QStash — y un reintento en línea se
+   ejecuta *ahora*, vuelve a fallar, vuelve a programar… dentro del mismo
+   request. Una recursión que se come los ocho intentos en un segundo. Aquí se
+   publica directo y, si no hay cola, no pasa nada: la fila guarda su
+   `proximoIntentoAt` y el cron barre. **El peor caso de la versión nueva es el
+   caso normal de la vieja.**
+2. **El cron toma solo lo VENCIDO** (`proximoIntentoAt` nulo o pasado). Si
+   atendiera todo lo pendiente le gastaría el intento a entregas ya programadas
+   y la escalera volvería a ser «una vez al día». `NULL` cuenta como vencido: es
+   lo que tienen las filas anteriores a la migración y las que no se pudieron
+   programar.
+3. **El cerrojo de `intentos`.** El trabajo solo actúa si la fila sigue teniendo
+   los intentos que tenía al programarse. Es lo que hace idempotente el
+   reintento: un reintento de QStash sobre el mismo trabajo, o el barrido
+   pisándolo, no gastan un intento que nadie contó.
+
+El botón «reintentar» del panel del superadmin es la excepción explícita
+(`soloVencidos: false`): quien acaba de arreglar la ruta del satélite y lo pulsa
+está diciendo «ahora», y responderle que toca dentro de seis horas sería
+devolverle su propia espera.
+
 ## Fase 3 de Membego Connect — webhooks de empresa en la misma cola
 
 Las suscripciones de webhook que crea una empresa (`suscripciones_webhook`)

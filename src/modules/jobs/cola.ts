@@ -81,6 +81,11 @@ export function claveDedup(carga: CargaTrabajo): string {
     case 'meta-evento':
       // El evento ya es único en la base (claveDedupe); aquí, uno por fila.
       return `meta:${carga.eventoId}`
+    case 'reintento-entrega':
+      // La entrega Y el número de intento: el 3.er reintento de una entrega es
+      // un mensaje distinto del 2.º, pero publicar dos veces el mismo tercero
+      // —porque nuestra publicación se reintentó— es el mismo mensaje.
+      return `reint:${carga.cola}:${carga.entregaId}:${carga.intentos}`
   }
 }
 

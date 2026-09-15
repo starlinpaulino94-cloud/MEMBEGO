@@ -103,7 +103,7 @@ export async function reintentarPendientesAction(
    * entregados» de vuelta mezclaba los de todos, así que ni siquiera servía
    * para saber si lo que se acababa de arreglar funcionaba.
    */
-  const { enviados, fallidos } = await reintentarPendientes(100, sistemaId)
+  const { enviados, fallidos } = await reintentarPendientes(100, sistemaId, { soloVencidos: false })
   await auditarIntegracion('INTEGRACION_REINTENTADA', sistemaId, quien.dbUserId, {
     enviados,
     agotados: fallidos,
