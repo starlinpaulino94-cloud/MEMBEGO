@@ -1,14 +1,30 @@
 import { z } from 'zod'
 
-/** Los 7 bloques del feed, en orden canónico (contrato Stitch A05). */
+/**
+ * Los bloques del feed, EN EL ORDEN EN QUE SALEN cuando nadie ha curado nada.
+ *
+ * Este array no es solo un catálogo de tipos válidos: es el Inicio por defecto.
+ * `getInicioVista` lo usa tal cual cuando no hay composición publicada, así que
+ * cambiar el orden de aquí cambia la pantalla de todo el mundo.
+ *
+ * El orden lo fijó el negocio (2026-09-15): las categorías para orientarse, el
+ * héroe para enganchar, lo que está vigente ahora, las empresas que todavía no
+ * conoces, las destacadas, y al final las membresías y las experiencias, que son
+ * la conversión.
+ *
+ * Nada de esto quita la curación: el panel sigue pudiendo publicar otro orden.
+ * Esto es el punto de partida, no un candado.
+ */
 export const TIPOS_BLOQUE = [
   'CABECERA',
-  'HERO',
   'CATEGORIAS',
+  'HERO',
+  'NOVEDADES',
+  'DESCUBRE',
   'DESTACADAS',
   'MEMBRESIAS',
-  'BANNER_QR',
   'EXPERIENCIAS',
+  'BANNER_QR',
 ] as const
 
 export type TipoBloque = (typeof TIPOS_BLOQUE)[number]
@@ -49,7 +65,10 @@ export type Segmentacion = z.infer<typeof Segmentacion>
 export const ComposicionInput = z
   .object({
     territorio: z.string().trim().min(1).max(80),
-    bloques: z.array(BloqueInput).min(1).max(7),
+    // El tope es el número de tipos que existen, leído de la lista: escribirlo
+    // a mano es cómo un bloque nuevo queda imposible de publicar y nadie
+    // entiende por qué el formulario lo rechaza.
+    bloques: z.array(BloqueInput).min(1).max(TIPOS_BLOQUE.length),
     segmentacion: Segmentacion.default({ membresia: 'CUALQUIERA', radioKm: 15, hasta: null }),
   })
   .superRefine((v, ctx) => {

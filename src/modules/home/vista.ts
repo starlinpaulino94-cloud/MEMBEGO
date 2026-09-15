@@ -98,6 +98,30 @@ export interface CategoriaInicio {
   readonly icon: string | null
 }
 
+/**
+ * Una novedad de la vitrina: promoción vigente o membresía activa.
+ *
+ * A diferencia del feed de la campana —que es «lo de los negocios que sigo»—,
+ * esto es lo que hay HOY en toda la vitrina. En una portada, atarlo a los
+ * seguidos dejaría la sección vacía justo para quien acaba de registrarse y no
+ * sigue a nadie todavía, que es a quien más falta le hace ver que hay oferta.
+ */
+export interface NovedadVitrina {
+  readonly id: string
+  /** 'PROMOCION' | 'MEMBRESIA' */
+  readonly tipo: 'PROMOCION' | 'MEMBRESIA'
+  readonly titulo: string
+  readonly empresa: string
+  readonly imagen: string | null
+  readonly href: string
+  /** Promociones: «−35%», «2×1». Membresías: el precio ya formateado. */
+  readonly dato: string | null
+  /** Promociones: «hasta el 30 sep». Membresías: «/mes · 4 usos · 30 días». */
+  readonly detalle: string | null
+  /** Publicado en los últimos 14 días: el sello «Nuevo». */
+  readonly nuevo: boolean
+}
+
 export interface InicioVista {
   readonly revisionId: string | null
   readonly territorio: string | null
@@ -105,8 +129,14 @@ export interface InicioVista {
   readonly heroes: readonly HeroInicio[]
   readonly categorias: readonly CategoriaInicio[]
   readonly empresas: readonly EmpresaInicio[]
+  /** Empresas para «Descubre más empresas»: TODAS las publicadas, no solo las
+   *  destacadas. Con un catálogo pequeño, «descubrir» y «destacar» serían la
+   *  misma lista dos veces si ambas leyeran `isFeatured`. */
+  readonly porDescubrir: readonly EmpresaInicio[]
   /** Total de empresas publicadas, para «Explorar más de N empresas». */
   readonly empresasTotal: number
+  /** Promociones vigentes y membresías activas de toda la vitrina. */
+  readonly novedades: readonly NovedadVitrina[]
   readonly planes: readonly PlanInicio[]
   /** Total de planes activos, para «Ver todas las N membresías». */
   readonly planesTotal: number

@@ -2,7 +2,10 @@ import { Fragment, type ReactNode } from 'react'
 import type { TipoBloque } from '@/modules/home/esquema'
 import type { InicioVista } from '@/modules/home/vista'
 import { VibeCategorias } from './VibeCategorias'
+import { VibeDescubre } from './VibeDescubre'
+import { VibeDestacadas } from './VibeDestacadas'
 import { VibeHero } from './VibeHero'
+import { VibeNovedades } from './VibeNovedades'
 import { VibeRelacionado } from './VibeRelacionado'
 import { VibeRelampago } from './VibeRelampago'
 
@@ -11,18 +14,21 @@ function assertNever(value: never): never {
 }
 
 /**
- * REDISEÑO VIOLETA (Stitch «amazon style», aprobado 2026-09-10): los tipos
- * del contrato se mapean a los bloques del nuevo diseño.
+ * El mapa de bloques del Inicio. La curación publicada decide QUÉ bloques y en
+ * qué orden; este mapa decide CÓMO se pinta cada uno.
  *
+ * - CATEGORIAS → chips, ahora con el color de cada rubro.
  * - HERO → héroe a foto completa con asomo.
- * - CATEGORIAS → chips violeta.
+ * - NOVEDADES → lo vigente de toda la vitrina (2026-09-15).
+ * - DESCUBRE → las empresas que el cliente todavía no conoce (2026-09-15).
+ * - DESTACADAS → las que el negocio promociona. Estuvo apagada con un
+ *   `return null` desde el rediseño del 10-09-2026; vuelve por petición
+ *   expresa, con su componente propio.
  * - MEMBRESIAS → «Relacionado con los artículos que viste».
- * - EXPERIENCIAS → cabecera de excursiones + tarjeta «Ofertas Relámpago»
- *   (las filas son las promociones comprables vigentes).
- * - DESTACADAS y BANNER_QR → el diseño nuevo NO los trae: se apagan aquí,
- *   no se inventa dónde ponerlos. Las empresas viven en Explorar y el QR en
- *   su pestaña del dock. La curación publicada sigue decidiendo qué bloques
- *   y en qué orden, sobre este mapa.
+ * - EXPERIENCIAS → excursiones + tarjeta «Ofertas Relámpago».
+ * - BANNER_QR → sigue apagado: el QR tiene su pestaña en el dock y repetirlo
+ *   aquí sería un atajo a un sitio al que ya se llega de un toque. Se deja el
+ *   `case` explícito para que no parezca un olvido.
  */
 function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
   switch (tipo) {
@@ -32,8 +38,12 @@ function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
       return <VibeHero heroes={data.heroes} />
     case 'CATEGORIAS':
       return <VibeCategorias categorias={data.categorias} />
+    case 'NOVEDADES':
+      return <VibeNovedades novedades={data.novedades} />
+    case 'DESCUBRE':
+      return <VibeDescubre empresas={data.porDescubrir} total={data.empresasTotal} />
     case 'DESTACADAS':
-      return null
+      return <VibeDestacadas empresas={data.empresas} total={data.empresasTotal} />
     case 'MEMBRESIAS':
       return <VibeRelacionado planes={data.planes} total={data.planesTotal} />
     case 'BANNER_QR':

@@ -3,7 +3,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { LocationConsentService } from '@/modules/geo/consentimiento/service'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
-import { getCategoriesPublic, getFeaturedCompanies, getPlanesPublic, getFeaturedPromotions } from '@/modules/marketplace/cached'
+import { getCategoriesPublic, getCompaniesPublic, getFeaturedCompanies, getPlanesPublic, getFeaturedPromotions } from '@/modules/marketplace/cached'
 import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-queries'
 import { formatMoney } from '@/lib/format'
 import { formatDescuento } from '@/lib/promociones'
@@ -13,7 +13,8 @@ import { HeroSlide, Segmentacion, TIPOS_BLOQUE, type TipoBloque } from './esquem
 import { admiteAudienciaHome } from './audiencia'
 import { heroPublico } from './hero-publico'
 import { contextoHeroPorDefecto, duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
-import type { EmpresaInicio, ExperienciaInicio, HeroInicio, InicioVista, PlanInicio } from './vista'
+import { resumenDePlan } from '@/modules/planes/resumen'
+import type { EmpresaInicio, ExperienciaInicio, HeroInicio, InicioVista, NovedadVitrina, PlanInicio } from './vista'
 
 /**
  * EL INICIO DEL DISEÑO ES EL ESTADO POR DEFECTO, NO UN PREMIO POR PUBLICAR.
@@ -71,6 +72,15 @@ async function composicionAdmitida(user: SessionUser) {
   return { revision, tipos, slides, companyId }
 }
 
+/** «30 sep» — la fecha corta de la línea de detalle de una novedad. */
+function fechaCorta(d: Date | string): string {
+  return new Intl.DateTimeFormat('es-DO', {
+    timeZone: 'America/Santo_Domingo',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(d))
+}
+
 /** El hero por defecto: las promociones destacadas del marketplace, con la
  *  ciudad y el plan más barato de su negocio. Contenido real, no maqueta. */
 async function heroesPorDefecto(
@@ -96,10 +106,18 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   const publicada = await composicionAdmitida(user).catch(() => null)
   const tipos: readonly TipoBloque[] = publicada?.tipos ?? TIPOS_BLOQUE
 
-  const [categorias, empresas, planes, excursiones, promociones, totales] = await Promise.all([
+  // `MEMBRESIAS` y `NOVEDADES` comparten los planes: se piden una vez si
+  // cualquiera de los dos está encendido, en vez de dos consultas iguales.
+  const quierePlanes = tipos.includes('MEMBRESIAS') || tipos.includes('NOVEDADES')
+
+  const [categorias, empresas, porDescubrir, planes, excursiones, promociones, totales] = await Promise.all([
     tipos.includes('CATEGORIAS') ? getCategoriesPublic() : Promise.resolve([]),
     tipos.includes('DESTACADAS') ? getFeaturedCompanies(6) : Promise.resolve([]),
-    tipos.includes('MEMBRESIAS') ? getPlanesPublic({ limit: 6 }) : Promise.resolve([]),
+    // TODAS las publicadas, no solo las destacadas: «descubrir» es para lo que
+    // el cliente todavía no conoce, y con un catálogo pequeño leer `isFeatured`
+    // aquí daría la misma lista que la sección de al lado, dos veces.
+    tipos.includes('DESCUBRE') ? getCompaniesPublic({ limit: 12 }) : Promise.resolve([]),
+    quierePlanes ? getPlanesPublic({ limit: 6 }) : Promise.resolve([]),
     tipos.includes('EXPERIENCIAS') ? excursionesDestacadas(4) : Promise.resolve([]),
     // Las promociones alimentan el relámpago siempre, y el hero cuando no hay
     // composición: se piden una vez (van cacheadas 120 s).
@@ -118,8 +136,19 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   // las estrellas del bloque «Relacionado» son de la empresa del plan).
   const hechos = await hechosDeEmpresas([
     ...empresas.map((e) => e.id),
+    ...porDescubrir.map((e) => e.id),
     ...planes.map((p) => p.company.id),
   ])
+
+  /** De una empresa del marketplace a la tarjeta del Inicio. */
+  const aTarjeta = (e: (typeof empresas)[number]): EmpresaInicio => ({
+    id: e.id, nombre: e.name, rubro: e.description, ciudad: e.ciudad,
+    imagen: e.bannerUrl ?? e.logoUrl, href: `/cliente/empresas/${e.slug}`,
+    valoracion: e.averageRating,
+    resenas: hechos.get(e.id)?.resenas ?? 0,
+    planes: hechos.get(e.id)?.planes ?? 0,
+    planDesde: e.desdePlan?.nombre ?? null,
+  })
 
   // Tarjeta relámpago del rediseño: las promociones comprables y vigentes,
   // ordenadas por la que vence antes. El countdown global es el de la más
@@ -128,6 +157,57 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   // STRING y `string > Date` compara texto — el bloque desaparecía solo en
   // cargas cacheadas (la familia del Decimal de siempre).
   const ahora = new Date()
+
+  /**
+   * NOVEDADES DE LA VITRINA: lo que está vigente AHORA en toda la plataforma.
+   *
+   * Sale de datos que ya se pidieron —las promociones destacadas y los planes
+   * públicos—, así que la sección no cuesta una consulta más. Es deliberado:
+   * una portada que añade una consulta por sección es una portada que se
+   * vuelve lenta sin que nadie sepa cuál de todas la frenó.
+   *
+   * NO se filtra por «empresas que sigo», al revés que el feed de la campana.
+   * En una portada eso dejaría la sección vacía justo para quien acaba de
+   * registrarse y no sigue a nadie — a quien más falta le hace ver que hay
+   * oferta. Las dos pantallas responden preguntas distintas y por eso leen
+   * cosas distintas.
+   */
+  const hace14dias = new Date(ahora.getTime() - 14 * 24 * 60 * 60 * 1000)
+  const vigentes = promociones.filter(
+    (p) => !p.vigenciaHasta || new Date(p.vigenciaHasta) > ahora
+  )
+  const novedades: NovedadVitrina[] = tipos.includes('NOVEDADES')
+    ? [
+        ...vigentes.map((p): NovedadVitrina => ({
+          id: p.id,
+          tipo: 'PROMOCION',
+          titulo: p.titulo,
+          empresa: p.company.name,
+          imagen: p.imagenUrl,
+          href: `/cliente/promociones/${p.id}`,
+          dato: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
+          detalle: p.vigenciaHasta ? `hasta el ${fechaCorta(p.vigenciaHasta)}` : 'sin fecha de fin',
+          nuevo: new Date(p.createdAt) >= hace14dias,
+        })),
+        ...planes.map((p): NovedadVitrina => ({
+          id: p.id,
+          tipo: 'MEMBRESIA',
+          titulo: p.nombre,
+          empresa: p.company.name,
+          imagen: p.imagenUrl ?? p.company.logoUrl,
+          href: `/plan/${p.id}`,
+          dato: formatMoney(p.precio, p.company),
+          detalle: resumenDePlan(p.esIlimitado, p.lavadosIncluidos, p.vigenciaDias),
+          nuevo: false,
+        })),
+      ]
+        // Lo nuevo primero: sin esto, un plan de siempre empujaría fuera del
+        // corte la promoción que se publicó ayer, que es lo que la sección
+        // existe para avisar.
+        .sort((a, b) => (a.nuevo === b.nuevo ? 0 : a.nuevo ? -1 : 1))
+        .slice(0, 8)
+    : []
+
   const urgentes = promociones
     .filter((p) => p.venta && !p.venta.agotada && p.vigenciaHasta && new Date(p.vigenciaHasta) > ahora)
     .sort((a, b) => new Date(a.vigenciaHasta!).getTime() - new Date(b.vigenciaHasta!).getTime())
@@ -140,14 +220,9 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     categorias,
     empresasTotal: totales.empresas,
     planesTotal: totales.planes,
-    empresas: empresas.map((e): EmpresaInicio => ({
-      id: e.id, nombre: e.name, rubro: e.description, ciudad: e.ciudad,
-      imagen: e.bannerUrl ?? e.logoUrl, href: `/cliente/empresas/${e.slug}`,
-      valoracion: e.averageRating,
-      resenas: hechos.get(e.id)?.resenas ?? 0,
-      planes: hechos.get(e.id)?.planes ?? 0,
-      planDesde: e.desdePlan?.nombre ?? null,
-    })),
+    empresas: empresas.map(aTarjeta),
+    porDescubrir: porDescubrir.map(aTarjeta),
+    novedades,
     planes: planes.map((p): PlanInicio => ({
       id: p.id, nombre: p.nombre, empresa: p.company.name, descripcion: p.descripcion,
       // La imagen del PLAN manda; el logo de la empresa es el respaldo. Antes

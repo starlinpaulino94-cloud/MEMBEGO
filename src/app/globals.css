@@ -1280,3 +1280,68 @@
 .retail-header {
   background: linear-gradient(90deg, var(--color-retail-blue) 0%, var(--color-retail-cyan) 100%);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COLOR POR CATEGORÍA DE NEGOCIO  (Inicio · 2026-09-15)
+
+   Antes los chips del Inicio ciclaban tres acentos por POSICIÓN, así que
+   «Lavados» salía violeta o cian según dónde cayera en la lista. Un color que
+   cambia solo no enseña a reconocer nada.
+
+   Ahora cada rubro tiene el suyo, y vive AQUÍ y no en el componente por dos
+   motivos que son el mismo: un hex escrito en un `.tsx` no cambia con el tema
+   —en oscuro, un fondo azul clarito sobre pantalla negra— y el auditor de
+   diseño lo cuenta como deuda, con razón.
+
+   Dos variables por categoría: `--cat-tinta` (icono y texto) y `--cat-fondo`
+   (la píldora). En claro, tinta de la familia 600-700 sobre fondo muy suave;
+   en oscuro se invierte la lógica: fondo apagado y tinta clara, porque el mismo
+   par no sobrevive al cambio de ground.
+
+   El violeta de marca —`--color-vibe-violet`— NO es de ninguna categoría: es el
+   héroe, los botones y los sellos. Si lo llevara también un rubro cualquiera,
+   dejaría de señalar «esto es MembeGo». Spa usa un violeta vecino, no el mismo.
+   ───────────────────────────────────────────────────────────────────────── */
+[data-categoria] { --cat-tinta: #5b5470; --cat-fondo: #f3f1fa; }
+
+[data-categoria='lavados']         { --cat-tinta:#2563eb; --cat-fondo:#e0edff; }
+[data-categoria='restaurantes']    { --cat-tinta:#c2410c; --cat-fondo:#ffeede; }
+[data-categoria='cafeterias']      { --cat-tinta:#b45309; --cat-fondo:#fff4d6; }
+[data-categoria='belleza']         { --cat-tinta:#be185d; --cat-fondo:#fde8f3; }
+[data-categoria='gimnasios']       { --cat-tinta:#047857; --cat-fondo:#e6f7f0; }
+[data-categoria='spa']             { --cat-tinta:#6d28d9; --cat-fondo:#f1e9ff; }
+[data-categoria='salud']           { --cat-tinta:#0e7490; --cat-fondo:#e0f6fb; }
+[data-categoria='clinicas']        { --cat-tinta:#1d4ed8; --cat-fondo:#e7f0ff; }
+[data-categoria='farmacias']       { --cat-tinta:#059669; --cat-fondo:#e6f7ef; }
+[data-categoria='veterinarias']    { --cat-tinta:#78716c; --cat-fondo:#f1ece4; }
+[data-categoria='tiendas']         { --cat-tinta:#7e22ce; --cat-fondo:#f6ebff; }
+[data-categoria='entretenimiento'] { --cat-tinta:#a21caf; --cat-fondo:#fce7f3; }
+[data-categoria='hoteles']         { --cat-tinta:#0369a1; --cat-fondo:#e0f2fe; }
+[data-categoria='servicios']       { --cat-tinta:#475569; --cat-fondo:#eef2f7; }
+[data-categoria='educacion']       { --cat-tinta:#1e40af; --cat-fondo:#e8f2ff; }
+[data-categoria='automotriz']      { --cat-tinta:#334155; --cat-fondo:#e7eaf2; }
+[data-categoria='tours']           { --cat-tinta:#0891b2; --cat-fondo:#e0f7fb; }
+
+/* MODO OSCURO. No se invierte a ciegas: el fondo baja a un tono profundo del
+   mismo matiz y la tinta sube a la familia 300-400, que es la que mantiene
+   contraste sobre él. Con los valores claros, estas teselas serían manchas
+   luminosas en una pantalla negra. */
+.dark [data-categoria] { --cat-tinta:#b7aed2; --cat-fondo:#2a2540; }
+
+.dark [data-categoria='lavados']         { --cat-tinta:#93c5fd; --cat-fondo:#1a2a4d; }
+.dark [data-categoria='restaurantes']    { --cat-tinta:#fdba74; --cat-fondo:#40220f; }
+.dark [data-categoria='cafeterias']      { --cat-tinta:#fcd34d; --cat-fondo:#3b2a0c; }
+.dark [data-categoria='belleza']         { --cat-tinta:#f9a8d4; --cat-fondo:#42132c; }
+.dark [data-categoria='gimnasios']       { --cat-tinta:#6ee7b7; --cat-fondo:#0d332a; }
+.dark [data-categoria='spa']             { --cat-tinta:#c4b5fd; --cat-fondo:#2e1f52; }
+.dark [data-categoria='salud']           { --cat-tinta:#67e8f9; --cat-fondo:#0d3038; }
+.dark [data-categoria='clinicas']        { --cat-tinta:#a5b4fc; --cat-fondo:#1d2450; }
+.dark [data-categoria='farmacias']       { --cat-tinta:#6ee7b7; --cat-fondo:#0c3328; }
+.dark [data-categoria='veterinarias']    { --cat-tinta:#d6d3d1; --cat-fondo:#332f2a; }
+.dark [data-categoria='tiendas']         { --cat-tinta:#d8b4fe; --cat-fondo:#331a4d; }
+.dark [data-categoria='entretenimiento'] { --cat-tinta:#f0abfc; --cat-fondo:#3d1140; }
+.dark [data-categoria='hoteles']         { --cat-tinta:#7dd3fc; --cat-fondo:#0c2c44; }
+.dark [data-categoria='servicios']       { --cat-tinta:#cbd5e1; --cat-fondo:#28303c; }
+.dark [data-categoria='educacion']       { --cat-tinta:#93c5fd; --cat-fondo:#18244f; }
+.dark [data-categoria='automotriz']      { --cat-tinta:#cbd5e1; --cat-fondo:#252c38; }
+.dark [data-categoria='tours']           { --cat-tinta:#67e8f9; --cat-fondo:#0b3038; }
