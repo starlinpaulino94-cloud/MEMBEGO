@@ -1,0 +1,94 @@
+import React from 'react'
+import {
+  View,
+  Text,
+  ScrollView,
+  RefreshControl,
+  TouchableOpacity,
+} from 'react-native'
+import { useInicio } from '../../src/hooks/useInicio'
+import { VibeHero } from '../../src/components/inicio/VibeHero'
+import { VibeCategorias } from '../../src/components/inicio/VibeCategorias'
+import { VibeRelacionado } from '../../src/components/inicio/VibeRelacionado'
+import { VibeRelampago } from '../../src/components/inicio/VibeRelampago'
+import { VibeReferidos } from '../../src/components/inicio/VibeReferidos'
+import { VibeOnboarding } from '../../src/components/inicio/VibeOnboarding'
+import { Skeleton } from '../../src/components/ui/Skeleton'
+
+export default function InicioScreen() {
+  const { data, isLoading, isError, refetch, isRefetching } = useInicio()
+
+  const comercial = data?.comercial
+  const personal = data?.personal
+
+  return (
+    <ScrollView
+      className="flex-1 bg-vibe-fondo"
+      contentContainerStyle={{ paddingVertical: 16 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          tintColor="#a855f7"
+          colors={['#a855f7']}
+        />
+      }
+    >
+      {isLoading && !data ? (
+        <View className="px-4 gap-4">
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <View className="flex-row gap-2">
+            <Skeleton className="h-9 w-24 rounded-full" />
+            <Skeleton className="h-9 w-24 rounded-full" />
+            <Skeleton className="h-9 w-24 rounded-full" />
+          </View>
+          <Skeleton className="h-20 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-xl" />
+        </View>
+      ) : isError && !data ? (
+        <View className="p-6 items-center">
+          <Text className="text-base text-slate-300 mb-3 text-center">
+            No pudimos conectar con el servidor. Puedes seguir navegando los beneficios guardados.
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            className="rounded-xl bg-purple-600 px-5 py-2.5"
+          >
+            <Text className="text-sm font-inter-bold text-white">Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {comercial ? (
+        <>
+          {/* 1. Novedades (hero carousel or empty state) */}
+          <VibeHero heroes={comercial.heroes} />
+
+          {/* 2. Category chips */}
+          <VibeCategorias categorias={comercial.categorias} />
+
+          {/* 3. Relacionado con los artículos que viste (2-col grid) */}
+          <VibeRelacionado
+            planes={comercial.planes}
+            total={comercial.planesTotal}
+          />
+
+          {/* 4. Ofertas Relámpago (only if data exists) */}
+          <VibeRelampago relampago={comercial.relampago} />
+        </>
+      ) : null}
+
+      {/* 5. Invita y Gana banner */}
+      <VibeReferidos />
+
+      {/* 6. Saca el máximo a MembeGo (onboarding checklist) */}
+      {personal?.onboarding ? (
+        <VibeOnboarding
+          items={personal.onboarding.items}
+          completados={personal.onboarding.completados}
+          total={personal.onboarding.total}
+        />
+      ) : null}
+    </ScrollView>
+  )
+}
