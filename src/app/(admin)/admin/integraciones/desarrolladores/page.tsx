@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowRight, ExternalLink, KeyRound, ScrollText, Webhook } from 'lucide-react'
+import { ArrowRight, ExternalLink, Inbox, KeyRound, ScrollText, Webhook } from 'lucide-react'
 import { requireSection } from '@/lib/auth/guards'
 import { appUrl } from '@/lib/site'
 import { clavesDeEmpresa } from '@/modules/connect/clavesApi'
@@ -53,6 +53,12 @@ const CAMINOS = [
     icono: Webhook,
     titulo: 'Webhooks',
     texto: 'Para que te avisemos a ti en el momento en que algo pasa.',
+  },
+  {
+    href: '/admin/integraciones/desarrolladores/entrantes',
+    icono: Inbox,
+    titulo: 'Webhooks entrantes',
+    texto: 'Para que tu herramienta nos avise a nosotros. La dirección es el secreto.',
   },
   {
     href: '/admin/integraciones/desarrolladores/registros',

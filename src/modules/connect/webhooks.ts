@@ -25,6 +25,7 @@ import {
 } from '@/modules/connect/webhooksNucleo'
 import { programarReintento } from '@/modules/integraciones/programador'
 import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
+import { esEventoEntrante } from '@/modules/connect/entrantesNucleo'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 
 /**
@@ -225,6 +226,21 @@ export async function repartirEventoAWebhooks(input: {
   datos: Record<string, unknown>
 }): Promise<void> {
   try {
+    /**
+     * LO QUE ENTRÓ DE FUERA NO SALE POR AQUÍ (B-1).
+     *
+     * Un evento `entrante.*` es algo que la propia empresa nos acaba de mandar
+     * desde su herramienta. Devolvérselo por su webhook saliente es, en el mejor
+     * caso, ruido: recibe de vuelta lo que acaba de enviar. En el peor —dos
+     * herramientas encadenadas, la segunda apuntando otra vez a nuestra URL de
+     * entrada— es un bucle que solo se nota cuando ya se ha multiplicado.
+     *
+     * Reenviarlo a propósito sigue siendo posible, y con una diferencia que
+     * importa: una automatización con `send_webhook` lo hace porque alguien lo
+     * pidió, no porque el sistema lo haga solo.
+     */
+    if (esEventoEntrante(input.evento)) return
+
     const suscripciones = await conEmpresa(input.companyId, (tx) =>
       tx.suscripcionWebhook.findMany({
         where: { companyId: input.companyId, estado: 'ACTIVE' },

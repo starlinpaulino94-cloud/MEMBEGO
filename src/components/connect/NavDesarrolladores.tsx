@@ -13,8 +13,11 @@ import { TabsNav } from '@/components/ui/tabs-nav'
  * pestaña está activa. Todo lo demás del hub es servidor.
  *
  * El orden no es alfabético, es el del recorrido real de quien integra:
- * primero entiende la API, luego se hace una clave, luego pide avisos, y solo
- * cuando algo falla mira los registros. Al final, la documentación —que se
+ * primero entiende la API, luego se hace una clave, luego pide avisos —hacia
+ * fuera con «Webhooks», hacia dentro con «Entrantes»—, y solo cuando algo falla
+ * mira los registros. Los dos de avisos van juntos y en ese orden porque son la
+ * misma idea en las dos direcciones, y la de salida es la que casi todo el mundo
+ * necesita primero. Al final, la documentación —que se
  * abre aparte, porque es la especificación OpenAPI y no una pantalla del
  * panel—, marcada con el icono de «se va fuera».
  */
@@ -25,6 +28,7 @@ const SECCIONES = [
   { href: BASE, label: 'Resumen' },
   { href: `${BASE}/claves`, label: 'Claves de API' },
   { href: `${BASE}/webhooks`, label: 'Webhooks' },
+  { href: `${BASE}/entrantes`, label: 'Entrantes' },
   { href: `${BASE}/registros`, label: 'Registros' },
 ] as const
 

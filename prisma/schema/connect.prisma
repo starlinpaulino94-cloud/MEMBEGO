@@ -572,3 +572,59 @@ model EventoMeta {
   @@index([procesadoAt])
   @@map("eventos_meta")
 }
+
+/// WEBHOOK ENTRANTE: una URL secreta a la que una herramienta ajena hace POST.
+///
+/// Es el hermano que faltaba de `SuscripcionWebhook`. Aquel avisa hacia fuera;
+/// éste deja que algo de fuera avise hacia dentro — y era el hueco por el que
+/// cualquier integración que MembeGo no hubiera escrito a mano resultaba
+/// imposible para el usuario final.
+///
+/// Lo que llega entra en el bus como `entrante.<slug>` y queda guardado en
+/// `automation_events`, así que no hace falta una tabla de recepciones: el
+/// propio evento ES el registro de lo recibido.
+model WebhookEntrante {
+  id        String @id @default(cuid())
+  companyId String
+
+  /// Cómo lo llama la empresa («Pedidos de mi tienda»). Se puede cambiar.
+  nombre String
+
+  /// Identificador estable derivado del nombre AL CREAR, y nunca después.
+  ///
+  /// Viaja dentro del nombre del evento (`entrante.<slug>`), así que renombrar
+  /// el webhook no puede dejar mudas a las automatizaciones que lo escuchaban.
+  slug String
+
+  /// Mitad pública del token, la que va en la URL y localiza esta fila.
+  /// Única globalmente: la URL no dice de qué empresa es, y no debe decirlo.
+  prefijo String @unique
+
+  /// `scrypt$N$r$p$sal$hash` del secreto. La URL entera se enseña UNA vez.
+  ///
+  /// Que la URL sea el credencial es lo normal en un webhook entrante —es lo
+  /// que hacen las herramientas contra las que esto se integra—, pero que lo
+  /// sea no obliga a guardarla en claro: un volcado de esta tabla no permite
+  /// mandarle un evento a nadie.
+  secretoHash String
+
+  /// ACTIVE | PAUSED. Pausado responde 200 y NO emite: una herramienta que
+  /// recibiera un error se pondría a reintentar y a llenar sus propios avisos
+  /// de fallo por algo que la empresa apagó a propósito.
+  estado String @default("ACTIVE")
+
+  /// Cuántos avisos se han aceptado y cuándo fue el último. Es lo primero que
+  /// se mira al configurar la herramienta del otro lado: «¿llegó algo?».
+  recibidos Int       @default(0)
+  ultimoAt  DateTime?
+
+  creadoPor String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Un solo webhook por slug y empresa: dos con el mismo nombre emitirían el
+  /// mismo evento y sería imposible saber cuál lo mandó.
+  @@unique([companyId, slug])
+  @@index([companyId, estado])
+  @@map("webhooks_entrantes")
+}

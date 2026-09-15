@@ -2,6 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
+import { appUrl } from '@/lib/site'
+import {
+  cambiarEstadoEntrante,
+  crearEntrante,
+  eliminarEntrante,
+} from '@/modules/connect/entrantes'
 import { crearClaveApi, revocarClaveApi } from '@/modules/connect/clavesApi'
 import { crearConexion, desconectarConexion } from '@/modules/connect/registro'
 import { conectarWhatsapp } from '@/modules/connect/whatsapp'
@@ -176,6 +182,94 @@ export async function cambiarEstadoWebhookAction(
         ? 'Webhook reactivado. Los próximos eventos se te entregarán.'
         : 'Webhook pausado. Dejamos de entregarte eventos hasta que lo reactives.',
   }
+}
+
+/**
+ * CREAR UN WEBHOOK ENTRANTE (hallazgo B-1).
+ *
+ * Permiso PROPIO y separado de los salientes: crear uno abre una URL pública
+ * que ESCRIBE en la base de la empresa. Los salientes solo mandan hacia fuera.
+ * Son facultades distintas y la pantalla de permisos tiene que poder
+ * distinguirlas.
+ */
+export async function crearEntranteAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'entrante_crear')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const nombre = String(formData.get('nombre') ?? '').trim()
+  if (!nombre) return { error: 'Ponle un nombre para reconocerlo después.' }
+
+  const res = await crearEntrante({
+    companyId: user.metadata.companyId,
+    nombre,
+    // `appUrl()` es el único dueño de las URLs de la aplicación: escrita a mano
+    // aquí, la URL que alguien copia a su herramienta apuntaría al dominio
+    // equivocado el día que la app se mude.
+    base: appUrl(),
+    creadoPor: user.metadata.dbUserId ?? null,
+  })
+
+  if (!res.ok) {
+    return {
+      error:
+        res.motivo === 'nombre_repetido'
+          ? 'Ya tienes un webhook entrante que se llama casi igual. Ponle otro nombre.'
+          : 'Tu plan no incluye webhooks entrantes, o alcanzaste el máximo. Escríbenos para ampliarlo.',
+    }
+  }
+
+  revalidatePath('/admin/integraciones')
+  return {
+    success: `Listo. Pega esta dirección en tu herramienta — es un secreto y no se puede volver a ver. Lo que llegue entrará como «${res.evento}».`,
+    // Viaja por `secretoNuevo` para reutilizar el bloque que ya enseña un
+    // secreto una sola vez: la URL ES el credencial y se trata como tal.
+    secretoNuevo: res.url,
+  }
+}
+
+/** Pausa o reactiva un webhook entrante. */
+export async function cambiarEstadoEntranteAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'entrante_gestionar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  const estado = String(formData.get('estado') ?? '')
+  if (estado !== 'ACTIVE' && estado !== 'PAUSED') return { error: 'Estado no válido.' }
+
+  const res = await cambiarEstadoEntrante(user.metadata.companyId, id, estado)
+  if (!res.ok) return { error: 'No se pudo cambiar. Recarga la página.' }
+
+  revalidatePath('/admin/integraciones')
+  return {
+    success:
+      estado === 'ACTIVE'
+        ? 'Reactivado. Volvemos a procesar lo que te manden.'
+        : 'Pausado. Seguiremos aceptando los avisos para que tu herramienta no se llene de errores, pero no haremos nada con ellos.',
+  }
+}
+
+/** Elimina un webhook entrante: su URL deja de valer en la siguiente llamada. */
+export async function eliminarEntranteAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'entrante_gestionar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta el webhook.' }
+
+  const res = await eliminarEntrante(user.metadata.companyId, id)
+  if (!res.ok) return { error: 'No encontramos ese webhook.' }
+
+  revalidatePath('/admin/integraciones')
+  return { success: 'Eliminado. Esa dirección deja de funcionar.' }
 }
 
 /**
