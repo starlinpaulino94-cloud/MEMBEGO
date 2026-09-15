@@ -222,6 +222,78 @@ El botón «reintentar» del panel del superadmin es la excepción explícita
 está diciendo «ahora», y responderle que toca dentro de seis horas sería
 devolverle su propia espera.
 
+## La acción HTTP a medida, y la regla que cierra el circuito
+
+> Hallazgo **B-1** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md` (segunda mitad).
+
+`send_webhook` solo sabía repartir el sobre estándar por las suscripciones ya
+creadas. No había forma de decir «cuando pase esto, llama a ESTA URL con ESTE
+cuerpo», y sin eso cualquier herramienta que no hubiéramos integrado a mano
+quedaba fuera del alcance del usuario final.
+
+Ahora hay tres piezas y juntas forman un circuito:
+
+```
+herramienta ajena ──POST──► webhook entrante ──► evento en el bus
+                                                      │
+                                              regla «cuando pase X»
+                                                      │
+                                    acción HTTP ──────► otra herramienta
+```
+
+### La acción
+
+`call_http` recibe método, URL, cabeceras y cuerpo. El motor **ya interpola**
+`{{cliente.nombre}}` en los params antes de llamar al sink, así que las
+variables funcionan en los tres sin código extra.
+
+Lo que la acota:
+
+- **La URL pasa por `validarUrlWebhook`**, la misma guardia que un webhook
+  saliente. Escribir aquí una validación «parecida» sería la forma cómoda de que
+  una de las dos se quedara corta.
+- **No se pueden poner cabeceras `x-membego-*`.** Sin ese bloqueo, una empresa
+  podría llamar a un tercero con `X-Membego-Signature` a mano y hacerle creer que
+  ese POST es un evento oficial firmado por nosotros. No podría falsificar la
+  firma, pero sí engañar a un receptor que mire la cabecera sin verificarla.
+- Tope de cabeceras, tope de cuerpo, timeout, y un fallo **no** degrada a
+  `simulated: true`: la regla dijo «llama» y la dirección contestó mal, así que
+  marcarlo correcto escondería el fallo a quien lo configuró — y el paso puede
+  estar `required` para detener la cadena.
+
+### SSRF por redirección: el agujero que esto destapó
+
+`fetch` sigue redirecciones por defecto. Con eso, **toda la validación de la URL
+se salta en un paso**: basta con que la dirección configurada sea un dominio
+público perfectamente válido que responda `302` hacia `http://169.254.169.254/`
+—el servicio de metadatos de la nube— para que nuestro servidor vaya, desde
+dentro, a leer credenciales de infraestructura y las devuelva en el cuerpo que
+guardamos.
+
+La guardia de la URL no lo cubre porque solo ve la **primera** dirección.
+
+El agujero **ya existía** en las entregas de webhook a empresas, en el despacho a
+satélites y en las dos sondas — no lo trajo esta acción, la obligó a mirarlo.
+Los cinco caminos de salida llevan ahora `redirect: 'manual'`, y hay una prueba
+que cuenta los `fetch` de cada archivo y exige que ninguno quede sin cubrir.
+
+### La regla: lo más pequeño que cierra el circuito
+
+Un evento, una llamada. Sin condiciones, sin pasos encadenados, sin horarios —
+todo eso ya lo soporta el motor y tendrá su pantalla cuando alguien la necesite.
+Construir el constructor entero antes de que nadie hubiera podido probar el
+circuito habría sido el orden inverso, y la forma más cara de descubrir que
+faltaba otra cosa.
+
+**El disparador usa el nombre INTERNO del evento** (`cliente.visita`), no el del
+cable (`visit.completed`). Es el error que no se ve: una lista de disparadores
+construida con nombres v2 se guardaría sin error, se vería bien en pantalla y no
+se dispararía nunca.
+
+**Archivar no borra.** `AutomationRun.automationId` tiene `onDelete: Cascade`, así
+que un `delete` se llevaría el registro de qué se llamó, cuándo y con qué
+resultado. Misma regla que el catálogo de conectores: retirar no borra nada.
+
 ## Webhooks entrantes: que algo de fuera avise hacia dentro
 
 > Hallazgo **B-1** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md` (primera mitad).

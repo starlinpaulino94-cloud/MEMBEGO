@@ -351,6 +351,13 @@ async function entregar(
         [CABECERA_FIRMA_EMPRESA]: firmarHmac(secretos.secreto, cuerpo),
       },
       body: cuerpo,
+      // SIN REDIRECCIONES. `fetch` las sigue por defecto, y eso deja sin
+      // efecto la guardia de la URL en un solo paso: un dominio público
+      // perfectamente válido que responda 302 hacia `http://169.254.169.254/`
+      // haría que nuestro servidor fuera, desde dentro, a leer credenciales de
+      // infraestructura. La validación solo ve la PRIMERA dirección; esto cubre
+      // las demás.
+      redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     if (resp.ok) return { ok: true, status: resp.status, error: null }

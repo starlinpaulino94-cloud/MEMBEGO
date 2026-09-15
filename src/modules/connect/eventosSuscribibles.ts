@@ -94,3 +94,28 @@ export function soloEventosConocidos(pedidos: readonly string[]): string[] {
   const validos = new Set(valoresSuscribibles())
   return [...new Set(pedidos.filter((p) => validos.has(p)))]
 }
+
+// ── Disparadores de una regla (B-1) ──────────────────────────────────────────
+
+/**
+ * Los eventos que puede ESCUCHAR una automatización, con su nombre INTERNO.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * INTERNO, NO v2, Y LA DIFERENCIA NO SE VE HASTA QUE NO FUNCIONA
+ *
+ * Por el cable viaja `visit.completed`; por el bus, `cliente.visita`. Quien
+ * despacha una automatización compara contra `DomainEvent.type`, que es el
+ * interno. Una lista de disparadores construida con los nombres v2 —los mismos
+ * que se eligen para filtrar un webhook saliente— se guardaría sin error, se
+ * vería bien en pantalla y no se dispararía nunca.
+ *
+ * Las etiquetas salen del MISMO sitio que las de la suscripción, buscadas por
+ * su nombre v2: dos listas de frases para los mismos siete eventos acabarían
+ * diciendo cosas distintas del mismo hecho.
+ */
+export function eventosDisparadores(): EventoSuscribible[] {
+  return EVENTOS_REENVIADOS.map((interno) => ({
+    valor: interno,
+    label: ETIQUETAS[TIPO_V2[interno] ?? interno] ?? interno,
+  }))
+}

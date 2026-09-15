@@ -8,6 +8,11 @@ import {
   crearEntrante,
   eliminarEntrante,
 } from '@/modules/connect/entrantes'
+import {
+  archivarRegla,
+  cambiarEstadoRegla,
+  crearReglaHttp,
+} from '@/modules/connect/reglasHttp'
 import { crearClaveApi, revocarClaveApi } from '@/modules/connect/clavesApi'
 import { crearConexion, desconectarConexion } from '@/modules/connect/registro'
 import { conectarWhatsapp } from '@/modules/connect/whatsapp'
@@ -182,6 +187,104 @@ export async function cambiarEstadoWebhookAction(
         ? 'Webhook reactivado. Los próximos eventos se te entregarán.'
         : 'Webhook pausado. Dejamos de entregarte eventos hasta que lo reactives.',
   }
+}
+
+/**
+ * CREAR UNA REGLA «cuando pase X, llama a Y» (hallazgo B-1).
+ *
+ * Un solo permiso para crear, pausar y archivar: las tres son la misma
+ * facultad —decidir a quién llamamos y cuándo— y partirla en tres
+ * interruptores sería pedirle a quien administra permisos que distinga cosas
+ * que en la práctica van juntas.
+ */
+export async function crearReglaHttpAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'regla_http')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const res = await crearReglaHttp({
+    companyId: user.metadata.companyId,
+    nombre: String(formData.get('nombre') ?? ''),
+    evento: String(formData.get('evento') ?? ''),
+    metodo: String(formData.get('metodo') ?? 'POST'),
+    url: String(formData.get('url') ?? ''),
+    cabeceras: cabecerasDelFormulario(formData),
+    cuerpo: String(formData.get('cuerpo') ?? ''),
+  })
+
+  if (!res.ok) {
+    if (res.motivo === 'sin_nombre') return { error: 'Ponle un nombre para reconocerla después.' }
+    if (res.motivo === 'sin_evento') return { error: 'Elige qué evento la dispara.' }
+    return { error: res.detalle ?? 'No se pudo crear la regla.' }
+  }
+
+  revalidatePath('/admin/integraciones')
+  return { success: 'Regla creada y activa. La próxima vez que ocurra ese evento, llamaremos.' }
+}
+
+/**
+ * Las cabeceras vienen como filas paralelas `cabeceraNombre[]` / `cabeceraValor[]`.
+ *
+ * Se recorren por índice y no con `Object.fromEntries` sobre pares sueltos: si
+ * un nombre llegara sin su valor, emparejarlos por posición deja el hueco
+ * vacío, mientras que reconstruirlos a ciegas desplazaría todos los siguientes
+ * — y una cabecera de autorización con el valor de otra es un fallo que solo se
+ * ve en el servidor del otro lado.
+ */
+function cabecerasDelFormulario(formData: FormData): Record<string, string> {
+  const nombres = formData.getAll('cabeceraNombre').map(String)
+  const valores = formData.getAll('cabeceraValor').map(String)
+  const out: Record<string, string> = {}
+  for (let i = 0; i < nombres.length; i++) {
+    const n = nombres[i]?.trim()
+    const v = valores[i]?.trim()
+    if (n && v) out[n] = v
+  }
+  return out
+}
+
+/** Pausa o reactiva una regla. */
+export async function cambiarEstadoReglaAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'regla_http')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  const estado = String(formData.get('estado') ?? '')
+  if (estado !== 'PUBLISHED' && estado !== 'PAUSED') return { error: 'Estado no válido.' }
+
+  const res = await cambiarEstadoRegla(user.metadata.companyId, id, estado)
+  if (!res.ok) return { error: 'No se pudo cambiar. Recarga la página.' }
+
+  revalidatePath('/admin/integraciones')
+  return {
+    success:
+      estado === 'PUBLISHED'
+        ? 'Regla reactivada.'
+        : 'Regla pausada. Dejamos de llamar hasta que la reactives.',
+  }
+}
+
+/** Archiva una regla: deja de dispararse y su historial se conserva. */
+export async function archivarReglaAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'regla_http')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta la regla.' }
+
+  const res = await archivarRegla(user.metadata.companyId, id)
+  if (!res.ok) return { error: 'No encontramos esa regla.' }
+
+  revalidatePath('/admin/integraciones')
+  return { success: 'Regla archivada. Dejó de dispararse; su historial se conserva.' }
 }
 
 /**

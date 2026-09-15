@@ -29,6 +29,7 @@ const SECCIONES = [
   { href: `${BASE}/claves`, label: 'Claves de API' },
   { href: `${BASE}/webhooks`, label: 'Webhooks' },
   { href: `${BASE}/entrantes`, label: 'Entrantes' },
+  { href: `${BASE}/reglas`, label: 'Reglas' },
   { href: `${BASE}/registros`, label: 'Registros' },
 ] as const
 

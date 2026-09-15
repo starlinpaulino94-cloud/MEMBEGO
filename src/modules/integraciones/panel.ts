@@ -319,7 +319,13 @@ export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
 /** Un toque a la URL, sin lanzar nunca: los fallos de red son un resultado. */
 async function tocar(url: string, init: RequestInit): Promise<RespuestaSonda> {
   try {
-    const resp = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_SONDA_MS) })
+    const resp = await fetch(url, {
+      ...init,
+      // Igual que las entregas: sin esto, una URL que redirige a la red interna
+      // convierte la sonda en un lector del servicio de metadatos de la nube.
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_SONDA_MS),
+    })
     const cuerpo = await resp.text().catch(() => '')
     return { status: resp.status, cuerpo: cuerpo.slice(0, MAX_CUERPO) }
   } catch (e) {

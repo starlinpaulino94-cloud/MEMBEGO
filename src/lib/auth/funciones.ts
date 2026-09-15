@@ -72,6 +72,7 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'webhook_rotar', label: 'Rotar el secreto de un webhook' },
     { codigo: 'entrante_crear', label: 'Crear webhooks entrantes (URLs para recibir)' },
     { codigo: 'entrante_gestionar', label: 'Pausar y eliminar webhooks entrantes' },
+    { codigo: 'regla_http', label: 'Crear y gestionar reglas que llaman a otra app' },
     { codigo: 'app_conectar', label: 'Conectar aplicaciones (WhatsApp, Google…)' },
     { codigo: 'app_desconectar', label: 'Desconectar aplicaciones' },
   ],
