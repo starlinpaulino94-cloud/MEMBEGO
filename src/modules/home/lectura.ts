@@ -274,7 +274,7 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     empresa: p.company.name,
     descripcion: p.descripcion,
     imagen: p.company.logoUrl,
-    href: `/plan/${p.id}`,
+    href: `/cliente/planes?todos=1`,
     precio: formatMoney(p.precio, p.company),
     periodo: `/ ${p.vigenciaDias} días`,
     valoracion: p.company.averageRating,
