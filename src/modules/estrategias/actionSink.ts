@@ -23,6 +23,10 @@ import type { ActionSink, AutomationEngine, AutomationRepository } from '@/lib/a
  *  - send_webhook                  → entrega por las suscripciones de webhook
  *                                    de la empresa (Fase 7): hereda firma,
  *                                    reintentos y dead letter de la Fase 3.
+ *  - call_http                     → llama a UNA dirección con el método, las
+ *                                    cabeceras y el cuerpo que define la regla
+ *                                    (B-1). Es la que permite conectar con algo
+ *                                    que no hemos integrado a mano.
  *  - run_workflow                  → ejecuta otra automatización publicada de
  *                                    la empresa (por templateKey)
  *
@@ -69,6 +73,8 @@ export class LiveActionSink implements ActionSink {
           return await this.enviarPorMensajeria('MESSENGER', input)
         case ACTION_TYPES.SEND_INSTAGRAM:
           return await this.enviarPorMensajeria('INSTAGRAM', input)
+        case ACTION_TYPES.CALL_HTTP:
+          return await this.llamarHttp(input)
         case ACTION_TYPES.SEND_WEBHOOK:
           return await this.invocarWebhook(input)
         case ACTION_TYPES.RUN_WORKFLOW:
@@ -213,6 +219,43 @@ export class LiveActionSink implements ActionSink {
       datos: { ...datos, ...(input.subjectId ? { customerId: input.subjectId } : {}) },
     })
     return { ok: true, detail: { channel: 'webhook', evento: `automation.${nombre}` } }
+  }
+
+  /**
+   * ACCIÓN HTTP A MEDIDA (B-1).
+   *
+   * Los `params` llegan YA interpolados por el motor, así que la URL, las
+   * cabeceras y el cuerpo pueden llevar `{{cliente.nombre}}` y compañía sin que
+   * este método sepa nada de variables.
+   *
+   * ────────────────────────────────────────────────────────────────────────
+   * NO LANZA, Y DEVUELVE `ok: false` CUANDO FALLA
+   *
+   * Es distinto de los canales que degradan a `simulated: true`. Aquéllos
+   * degradan porque les falta una conexión que la empresa no puso; aquí no
+   * falta nada: la regla dijo «llama a esta dirección» y la dirección contestó
+   * mal. Marcarlo como correcto escondería el fallo justo a quien lo configuró,
+   * y el paso podría estar marcado `required` para detener la cadena — cosa que
+   * no puede hacer si siempre decimos que sí.
+   *
+   * El detalle lleva el código y un trozo de la respuesta: sin eso, «no
+   * funciona» es lo único que se sabe.
+   */
+  private async llamarHttp(input: {
+    companyId: string
+    params: Record<string, unknown>
+  }): Promise<{ ok: boolean; detail?: unknown }> {
+    const { ejecutarLlamadaHttp } = await import('@/modules/connect/llamadaHttp')
+    const r = await ejecutarLlamadaHttp(input.params)
+    return {
+      ok: r.ok,
+      detail: {
+        channel: 'http',
+        status: r.status,
+        ...(r.error ? { error: r.error } : {}),
+        ...(r.respuesta ? { respuesta: r.respuesta } : {}),
+      },
+    }
   }
 
   /** Teléfono de la ficha del cliente. Null si no lo tiene. */

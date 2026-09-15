@@ -18,8 +18,26 @@
 -- corra después, sus `CREATE INDEX IF NOT EXISTS` no harán nada porque los
 -- índices ya estarán.
 --
--- CÓMO EJECUTARLO: en el SQL Editor de Supabase, UNA SENTENCIA A LA VEZ. Si
--- pegas el archivo entero te dirá "cannot run inside a transaction block".
+-- CÓMO EJECUTARLO — CORREGIDO
+--
+-- Este archivo decía que bastaba con lanzar las sentencias de una en una desde
+-- el SQL Editor de Supabase. ES FALSO, y se descubrió al intentarlo con el
+-- archivo hermano
+-- `2026-09-visitas-company-id.sql`: el editor de Supabase envuelve en una
+-- transacción TODO lo que le mandas, una sentencia o veinte, así que
+-- `CONCURRENTLY` devuelve siempre `ERROR: 25001: CREATE INDEX CONCURRENTLY
+-- cannot run inside a transaction block`.
+--
+-- Hace falta un cliente en autocommit. `psql` lo está por defecto:
+--
+--   psql "<cadena de conexión de Supabase>" -f este-archivo.sql
+--
+-- (sin `-1` ni `--single-transaction`). Cualquier cliente de escritorio
+-- —TablePlus, DBeaver, pgAdmin— vale igual con la sesión en autocommit.
+--
+-- Y ANTES DE NADA: mira cuántas filas tiene la tabla. Si son pocos cientos de
+-- miles, un `CREATE INDEX` normal tarda menos de un segundo y este archivo
+-- sobra — deja que los cree la migración y no ejecutes nada de aquí.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "visits_membershipId_fechaVisita_idx"

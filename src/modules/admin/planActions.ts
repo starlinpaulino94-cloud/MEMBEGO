@@ -9,6 +9,8 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
+import { validarImagenPlan } from '@/modules/planes/imagen'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -35,6 +37,7 @@ function parsePlan(formData: FormData): { error: string } | {
   vigenciaDias: number
   condiciones: string | null
   color: string | null
+  imagenUrl: string | null
   orden: number
 } {
   const nombre = String(formData.get('nombre') ?? '').trim()
@@ -46,6 +49,7 @@ function parsePlan(formData: FormData): { error: string } | {
   const vigenciaRaw = String(formData.get('vigenciaDias') ?? '').trim()
   const condiciones = String(formData.get('condiciones') ?? '').trim()
   const color = String(formData.get('color') ?? '').trim()
+  const imagenUrl = String(formData.get('imagenUrl') ?? '').trim()
   const ordenRaw = String(formData.get('orden') ?? '').trim()
 
   if (!nombre || !precioRaw) return { error: 'Nombre y precio son obligatorios.' }
@@ -61,6 +65,13 @@ function parsePlan(formData: FormData): { error: string } | {
   const orden = ordenRaw ? Number(ordenRaw) : 0
   if (isNaN(orden)) return { error: 'El orden no es válido.' }
 
+  // El campo de la imagen es oculto y lo rellena el componente de subida, así
+  // que aquí es donde se comprueba de verdad: un formulario enviado a mano
+  // podría poner cualquier origen, y esa URL acaba en un `<img>` de la
+  // pantalla de cada cliente.
+  const errorImagen = validarImagenPlan(imagenUrl)
+  if (errorImagen) return { error: errorImagen }
+
   return {
     nombre,
     precio,
@@ -74,6 +85,7 @@ function parsePlan(formData: FormData): { error: string } | {
     vigenciaDias,
     condiciones: condiciones || null,
     color: color || null,
+    imagenUrl: imagenUrl || null,
     orden,
   }
 }
@@ -179,6 +191,7 @@ export async function crearPlan(
           vigenciaDias: parsed.vigenciaDias,
           condiciones: parsed.condiciones,
           color: parsed.color,
+          imagenUrl: parsed.imagenUrl,
           orden: parsed.orden,
         },
         select: { id: true },
@@ -259,6 +272,7 @@ export async function actualizarPlan(
           vigenciaDias: parsed.vigenciaDias,
           condiciones: parsed.condiciones,
           color: parsed.color,
+          imagenUrl: parsed.imagenUrl,
           orden: parsed.orden,
           activo,
         },
@@ -505,6 +519,17 @@ export async function cancelarMembresia(
           payload: { prevEstado: m.estado },
         },
       })
+      await registrarEventoMembresia(tx, {
+        companyId: m.cliente.companyId,
+        membershipId: m.id,
+        clienteId: m.clienteId,
+        tipo: 'CANCELADA',
+        origen: 'ADMIN',
+        estadoAnterior: m.estado,
+        estadoNuevo: 'CANCELADA',
+        planAnteriorId: m.planId,
+        actorUserId: user.metadata.dbUserId ?? null,
+      })
     })
 
     revalidatePath('/superadmin/membresias')
@@ -571,6 +596,23 @@ export async function desactivarMembresia(
             vencimientoAnterior: m.fechaVencimiento?.toISOString() ?? null,
           },
         },
+      })
+      // Desactivar a mano y vencer por el paso del tiempo terminan en el mismo
+      // estado, y el reporte de bajas los cuenta juntos con razón: en los dos
+      // casos la membresía dejó de valer. `origen` los separa para quien
+      // necesite saber si lo decidió alguien o el calendario.
+      await registrarEventoMembresia(tx, {
+        companyId: m.cliente.companyId,
+        membershipId: m.id,
+        clienteId: m.clienteId,
+        tipo: 'VENCIDA',
+        origen: 'ADMIN',
+        estadoAnterior: m.estado,
+        estadoNuevo: 'VENCIDA',
+        planAnteriorId: m.planId,
+        actorUserId: user.metadata.dbUserId ?? null,
+        ocurridoEn: ahora,
+        payload: { manual: true, vencimientoAnterior: m.fechaVencimiento?.toISOString() ?? null },
       })
     })
 

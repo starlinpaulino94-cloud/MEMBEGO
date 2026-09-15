@@ -58,8 +58,14 @@ export async function conciliar(
 
   try {
     await conEmpresa(companyId, async (tx) => {
-      const [cobrosSinTransaccion, visitasSinTransaccion, atascadas, cajasAbiertas, descuadres] =
-        await Promise.all([
+      const [
+        cobrosSinTransaccion,
+        visitasSinTransaccion,
+        atascadas,
+        cajasAbiertas,
+        descuadres,
+        sinEntregar,
+      ] = await Promise.all([
           // 1 · Dinero en Membresías que no llegó al libro de transacciones.
           tx.membership.findMany({
             where: {
@@ -112,6 +118,19 @@ export async function conciliar(
             },
             select: { id: true, diferencia: true },
           }),
+
+          // 6 · El cliente pagó y no recibió.
+          //
+          // Es el único descuadre que el cliente descubre ANTES que el negocio,
+          // y por eso no se acota a la ventana: un pago atascado hace tres
+          // semanas sigue siendo un cliente esperando hoy. Los demás hallazgos
+          // miran los últimos días porque son cosas que se corrigen en caliente;
+          // éste no caduca.
+          tx.pagoIntento.aggregate({
+            where: { companyId, estado: 'APROBADO', fulfillmentEstado: 'PENDIENTE' },
+            _sum: { monto: true },
+            _count: { _all: true },
+          }),
         ])
 
       if (cobrosSinTransaccion.length > 0) {
@@ -125,6 +144,19 @@ export async function conciliar(
           severidad: 'ALTA',
           monto,
           href: '/admin/pagos',
+        })
+      }
+
+      if (sinEntregar._count._all > 0) {
+        hallazgos.push({
+          clave: 'cobrado-sin-entregar',
+          titulo: 'Pagos cobrados con entrega pendiente',
+          explicacion:
+            'El cliente pagó y todavía no recibió lo que compró. No depende del periodo: se revisa todo lo que siga abierto, porque un pago atascado hace semanas sigue siendo un cliente esperando. Es el descuadre que el cliente encuentra antes que tú.',
+          cantidad: sinEntregar._count._all,
+          severidad: 'ALTA',
+          monto: Number(sinEntregar._sum.monto ?? 0),
+          href: '/admin/reportes/finanzas',
         })
       }
 

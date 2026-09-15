@@ -203,8 +203,23 @@ export function CatalogoPlanesGlobal({
                     <li key={p.id} className="flex">
                       <Link
                         href={`/cliente/empresas/${empresa.slug}`}
-                        className="flex w-full flex-col rounded-lg border border-border bg-card p-4 elevation-1 transition-colors duration-fast hover:border-primary/40"
+                        className="flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40"
                       >
+                        {/* La foto del plan, si la hay. Aquí las tarjetas van
+                            agrupadas POR empresa y el logo ya está en la
+                            cabecera del grupo: repetirlo en cada tarjeta no
+                            distinguiría una de otra, que es justo lo que hay
+                            que hacer. */}
+                        {p.imagenUrl && (
+                          <Image
+                            src={p.imagenUrl}
+                            alt=""
+                            width={640}
+                            height={360}
+                            className="aspect-[16/9] w-full max-w-full object-cover"
+                          />
+                        )}
+                        <span className="flex flex-col p-4">
                         <p className="text-h4 text-foreground">{p.nombre}</p>
                         <p className="mt-1 text-price-lg tabular-nums text-foreground">
                           <span className="text-overline">desde </span>
@@ -235,6 +250,7 @@ export function CatalogoPlanesGlobal({
                             {p.descripcion}
                           </p>
                         )}
+                        </span>
                       </Link>
                     </li>
                   ))}

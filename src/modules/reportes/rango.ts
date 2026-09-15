@@ -12,11 +12,37 @@
 
 export const PRESETS = [
   { clave: 'hoy', label: 'Hoy' },
+  { clave: 'ayer', label: 'Ayer' },
   { clave: '7d', label: 'Últimos 7 días' },
   { clave: '30d', label: 'Últimos 30 días' },
+  { clave: '90d', label: 'Últimos 90 días' },
+  { clave: '365d', label: 'Últimos 365 días' },
+  { clave: 'semana', label: 'Esta semana' },
+  { clave: 'semana-pasada', label: 'Semana pasada' },
   { clave: 'mes', label: 'Este mes' },
   { clave: 'mes-pasado', label: 'Mes pasado' },
+  { clave: 'trimestre', label: 'Este trimestre' },
+  { clave: 'trimestre-pasado', label: 'Trimestre pasado' },
+  { clave: 'ano', label: 'Este año' },
+  { clave: 'ano-pasado', label: 'Año pasado' },
 ] as const
+
+/**
+ * CONTRA QUÉ SE COMPARA.
+ *
+ * `periodo` — los mismos días justo antes. Responde «¿voy mejor que el mes
+ * pasado?».
+ * `ano` — el mismo tramo del año anterior. Responde «¿voy mejor que el
+ * diciembre pasado?», que es otra pregunta: en un negocio con temporada, un
+ * diciembre comparado contra noviembre siempre gana y no significa nada.
+ */
+export const COMPARACIONES = [
+  { clave: 'periodo', label: 'Periodo anterior' },
+  { clave: 'ano', label: 'Mismo periodo del año pasado' },
+] as const
+
+export type Comparacion = (typeof COMPARACIONES)[number]['clave']
+export const COMPARACION_POR_DEFECTO: Comparacion = 'periodo'
 
 export type PresetRango = (typeof PRESETS)[number]['clave']
 export const PRESET_POR_DEFECTO: PresetRango = '30d'
@@ -38,8 +64,12 @@ export interface Rango {
   /** Días que abarca (inclusive en ambos extremos). */
   dias: number
   etiqueta: string
-  /** Mismo número de días justo antes, para comparar. */
+  /** Contra qué se compara: el periodo anterior o el mismo del año pasado. */
+  comparacion: Comparacion
+  /** El tramo de comparación, ya resuelto según `comparacion`. */
   anterior: { desde: Date; hasta: Date; desdeDia: string; hastaDia: string }
+  /** Cómo se lee la comparación en pantalla («vs. periodo anterior»). */
+  etiquetaComparacion: string
 }
 
 const ES_DIA = /^\d{4}-\d{2}-\d{2}$/
@@ -106,6 +136,42 @@ function ultimoDiaDelMes(dia: string): string {
 }
 
 /**
+ * El lunes de la semana de `dia`.
+ *
+ * Lunes y no domingo: el negocio cierra la semana con el fin de semana dentro,
+ * y una «semana» que parte el sábado del domingo no sirve para comparar un
+ * car wash, donde el fin de semana ES la semana.
+ */
+function lunesDeLaSemana(dia: string): string {
+  const d = new Date(`${dia}T00:00:00Z`)
+  // getUTCDay: 0 = domingo. Se convierte a «días desde el lunes».
+  const desdeLunes = (d.getUTCDay() + 6) % 7
+  return sumarDias(dia, -desdeLunes)
+}
+
+/** El primer día del trimestre al que pertenece `dia`. */
+function primerDiaDelTrimestre(dia: string): string {
+  const [a, m] = dia.split('-').map(Number)
+  const mesInicio = Math.floor((m - 1) / 3) * 3 + 1
+  return `${a}-${String(mesInicio).padStart(2, '0')}-01`
+}
+
+/**
+ * El mismo tramo, un año antes.
+ *
+ * Se resta un año al AÑO y se deja el resto igual, con una excepción: el 29 de
+ * febrero no existe en un año normal, y `new Date` lo convertiría en el 1 de
+ * marzo sin avisar. Se corta al 28, que es el último día real equivalente.
+ */
+function unAnoAntes(dia: string): string {
+  const [a, m, d] = dia.split('-').map(Number)
+  const anoAntes = a - 1
+  const diasDelMes = new Date(Date.UTC(anoAntes, m, 0)).getUTCDate()
+  const diaSeguro = Math.min(d, diasDelMes)
+  return `${anoAntes}-${String(m).padStart(2, '0')}-${String(diaSeguro).padStart(2, '0')}`
+}
+
+/**
  * Lee el rango de la URL. Tolerante a basura: un preset inventado o una fecha
  * mal escrita cae en el rango por defecto en vez de romper el reporte.
  *
@@ -146,10 +212,52 @@ export function leerRango(
         desdeDia = hoy
         hastaDia = hoy
         break
+      case 'ayer':
+        desdeDia = sumarDias(hoy, -1)
+        hastaDia = desdeDia
+        break
       case '7d':
         desdeDia = sumarDias(hoy, -6)
         hastaDia = hoy
         break
+      case '90d':
+        desdeDia = sumarDias(hoy, -89)
+        hastaDia = hoy
+        break
+      case '365d':
+        desdeDia = sumarDias(hoy, -364)
+        hastaDia = hoy
+        break
+      case 'semana':
+        desdeDia = lunesDeLaSemana(hoy)
+        hastaDia = hoy
+        break
+      case 'semana-pasada': {
+        const lunesPasado = sumarDias(lunesDeLaSemana(hoy), -7)
+        desdeDia = lunesPasado
+        hastaDia = sumarDias(lunesPasado, 6)
+        break
+      }
+      case 'trimestre':
+        desdeDia = primerDiaDelTrimestre(hoy)
+        hastaDia = hoy
+        break
+      case 'trimestre-pasado': {
+        const finTrimestrePasado = sumarDias(primerDiaDelTrimestre(hoy), -1)
+        desdeDia = primerDiaDelTrimestre(finTrimestrePasado)
+        hastaDia = finTrimestrePasado
+        break
+      }
+      case 'ano':
+        desdeDia = `${hoy.slice(0, 4)}-01-01`
+        hastaDia = hoy
+        break
+      case 'ano-pasado': {
+        const anoPasado = Number(hoy.slice(0, 4)) - 1
+        desdeDia = `${anoPasado}-01-01`
+        hastaDia = `${anoPasado}-12-31`
+        break
+      }
       case 'mes':
         desdeDia = primerDiaDelMes(hoy)
         hastaDia = hoy
@@ -167,10 +275,25 @@ export function leerRango(
   }
 
   const dias = Math.max(1, diasEntre(desdeDia, hastaDia))
-  // El periodo anterior tiene EXACTAMENTE los mismos días: comparar 30 días
-  // contra un mes de 31 daría una caída que no existió.
-  const antHastaDia = sumarDias(desdeDia, -1)
-  const antDesdeDia = sumarDias(antHastaDia, -(dias - 1))
+
+  const comparacionPedida = leer('comparar')
+  const comparacion: Comparacion =
+    COMPARACIONES.find((c) => c.clave === comparacionPedida)?.clave ?? COMPARACION_POR_DEFECTO
+
+  let antDesdeDia: string
+  let antHastaDia: string
+  if (comparacion === 'ano') {
+    // El mismo tramo del año pasado, día por día. No se fuerza a que tenga los
+    // mismos días: si el año pasado ese mes tenía 28 y este 29, la comparación
+    // honesta es mes contra mes, no 28 días contra 28.
+    antDesdeDia = unAnoAntes(desdeDia)
+    antHastaDia = unAnoAntes(hastaDia)
+  } else {
+    // El periodo anterior tiene EXACTAMENTE los mismos días: comparar 30 días
+    // contra un mes de 31 daría una caída que no existió.
+    antHastaDia = sumarDias(desdeDia, -1)
+    antDesdeDia = sumarDias(antHastaDia, -(dias - 1))
+  }
 
   return {
     preset,
@@ -180,6 +303,9 @@ export function leerRango(
     hasta: limiteDiaLocal(hastaDia, timeZone, true),
     dias,
     etiqueta,
+    comparacion,
+    etiquetaComparacion:
+      COMPARACIONES.find((c) => c.clave === comparacion)?.label ?? 'Periodo anterior',
     anterior: {
       desdeDia: antDesdeDia,
       hastaDia: antHastaDia,
@@ -214,6 +340,12 @@ export function paramsDeRango(rango: Rango): string {
     sp.set('hasta', rango.hastaDia)
   } else if (rango.preset !== PRESET_POR_DEFECTO) {
     sp.set('rango', rango.preset)
+  }
+  // La comparación viaja con el rango: sin esto, la exportación saldría
+  // comparando contra el periodo anterior mientras la pantalla comparaba
+  // contra el año pasado, y el archivo diría otra cosa que la vista.
+  if (rango.comparacion !== COMPARACION_POR_DEFECTO) {
+    sp.set('comparar', rango.comparacion)
   }
   const q = sp.toString()
   return q ? `?${q}` : ''

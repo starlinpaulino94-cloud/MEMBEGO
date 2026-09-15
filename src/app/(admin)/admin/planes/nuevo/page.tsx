@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
+import { requireCompanyContext } from '@/lib/auth/company-context'
 import { planPrefill } from '@/modules/admin/plantillas'
 import { NuevoPlanForm } from '@/components/admin/NuevoPlanForm'
 import { LayoutTemplate } from 'lucide-react'
@@ -10,7 +11,10 @@ export default async function NuevoPlanEmpresaPage({
 }: {
   searchParams: Promise<{ plantilla?: string }>
 }) {
-  await requireRole(ADMIN_ROLES)
+  const user = await requireRole(ADMIN_ROLES)
+  // La subida de la imagen ocurre antes de guardar, así que la empresa tiene
+  // que llegar al formulario: es el primer segmento de la ruta del archivo.
+  const companyId = await requireCompanyContext(user)
   const { plantilla } = await searchParams
 
   // Fase E3: al llegar desde la galería, se copia la configuración de la
@@ -45,7 +49,11 @@ export default async function NuevoPlanEmpresaPage({
         </div>
       )}
 
-      <NuevoPlanForm redirectTo="/admin/planes" prefill={prefill ?? undefined} />
+      <NuevoPlanForm
+        redirectTo="/admin/planes"
+        companyId={companyId}
+        prefill={prefill ?? undefined}
+      />
     </div>
   )
 }

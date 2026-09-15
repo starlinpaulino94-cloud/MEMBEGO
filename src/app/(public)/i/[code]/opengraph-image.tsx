@@ -1,5 +1,5 @@
 import { getGrowthLanding } from '@/modules/growth/links'
-import { originalImageResponse, OG_SIZE, tarjetaOg } from '@/lib/share/og'
+import { fetchImageDataUrl, originalImageResponse, OG_SIZE, tarjetaOg } from '@/lib/share/og'
 import { SITE_NAME } from '@/lib/site'
 
 // Growth Engine 3.0 · Vista previa enriquecida al compartir una invitación.
@@ -27,12 +27,18 @@ export default async function Image({ params }: { params: Promise<{ code: string
     if (original) return original
   }
 
+  // La descarga la hacemos NOSOTROS, no satori. Si llegamos aquí con `imagen`,
+  // es porque `originalImageResponse` acaba de no poder traerla: pasarle esa
+  // misma URL al `<img>` haría que satori lanzara y el endpoint devolviera 500,
+  // es decir, una imagen rota en WhatsApp. Ver `fetchImageDataUrl`.
+  const fondo = imagen ? await fetchImageDataUrl(imagen) : null
+
   return tarjetaOg(
     (
       <div style={{ width: '100%', height: '100%', display: 'flex', background: '#FFFFFF' }}>
         <div style={{ width: 679, height: '100%', display: 'flex', background: '#EEF2F7' }}>
-          {imagen ? (
-            <img src={imagen} alt="" width={679} height={910} style={{ width: 679, height: 910, objectFit: 'cover' }} />
+          {fondo ? (
+            <img src={fondo} alt="" width={679} height={910} style={{ width: 679, height: 910, objectFit: 'cover' }} />
           ) : (
             <div
               style={{
