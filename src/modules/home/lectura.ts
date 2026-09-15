@@ -82,25 +82,46 @@ async function composicionAdmitida(user: SessionUser) {
   return { revision, tipos, slides, companyId }
 }
 
-/** El hero por defecto: las promociones destacadas del marketplace, con la
- *  ciudad y el plan más barato de su negocio. Contenido real, no maqueta. */
+/** El hero por defecto: las promociones activas destacadas con descuento, precio y contexto del negocio. */
 async function heroesPorDefecto(
-  promociones: Awaited<ReturnType<typeof getFeaturedPromotions>>
+  promociones: any[],
+  limite = 3
 ): Promise<HeroInicio[]> {
-  const primeras = promociones.filter((p) => p.imagenUrl).slice(0, 3)
-  const contexto = await contextoHeroPorDefecto(primeras.map((p) => p.company.id))
-  return primeras.map((p) => ({
-    titulo: p.titulo,
-    subtitulo: p.descripcion,
-    empresa: p.company.name,
-    ciudad: contexto.get(p.company.id)?.ciudad ?? null,
-    imagen: p.imagenUrl,
-    href: `/cliente/promociones/${p.id}`,
-    cta: 'Ver beneficios',
-    planDesde: contexto.get(p.company.id)?.planDesde ?? null,
-    color: contexto.get(p.company.id)?.color ?? null,
-    valoracion: contexto.get(p.company.id)?.valoracion ?? null,
-  }))
+  const candidatas = promociones
+    .filter((p) => p && p.titulo && (p.imagenUrl || p.company?.logoUrl))
+    .slice(0, limite)
+
+  if (candidatas.length === 0) return []
+  const contexto = await contextoHeroPorDefecto(candidatas.map((p) => p.company.id))
+
+  return candidatas.map((p) => {
+    const descuento = p.descuento != null
+      ? formatDescuento(Number(p.descuento), p.tipo)
+      : p.tipo === '2x1'
+        ? '2×1'
+        : p.tipo === '3x2'
+          ? '3×2'
+          : null
+
+    const precio = p.venta ? formatMoney(p.venta.precio) : (p.precio ? formatMoney(Number(p.precio)) : null)
+    const ctx = contexto.get(p.company.id)
+
+    return {
+      titulo: p.titulo,
+      subtitulo: p.descripcion,
+      empresa: p.company.name,
+      ciudad: ctx?.ciudad ?? null,
+      imagen: p.imagenUrl ?? p.company.logoUrl ?? null,
+      href: `/cliente/promociones/${p.id}`,
+      cta: descuento ? 'Aprovechar oferta' : 'Ver beneficio',
+      planDesde: ctx?.planDesde ?? null,
+      color: ctx?.color ?? null,
+      valoracion: ctx?.valoracion ?? p.company.averageRating ?? null,
+      descuento,
+      precio,
+      etiqueta: descuento ? 'Oferta destacada' : 'Novedad destacada',
+    }
+  })
 }
 
 export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
@@ -186,12 +207,6 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   }
 
   const empresasScrollBase = [...scrollMap.values()]
-
-  const heroes = publicada
-    ? (await Promise.all(publicada.slides.map((slide) => heroPublico(publicada.companyId, slide)))).filter(
-        (h): h is HeroInicio => h !== null
-      )
-    : await heroesPorDefecto(promociones)
 
   // Calificaciones y conteos de planes/reseñas en un solo lote
   const hechos = await hechosDeEmpresas([
@@ -363,6 +378,22 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     porVencer,
     total: pool.length,
   }
+
+  // Las promociones activas alimentan el Hero principal en la sección de novedades
+  const heroesPublicados = publicada
+    ? (await Promise.all(publicada.slides.map((slide) => heroPublico(publicada.companyId, slide)))).filter(
+        (h): h is HeroInicio => h !== null
+      )
+    : []
+
+  const heroesPromos = await heroesPorDefecto(
+    paraTi.length > 0 ? paraTi : pool,
+    3
+  )
+
+  const heroes = heroesPublicados.length > 0
+    ? [...heroesPublicados, ...heroesPromos].slice(0, 4)
+    : heroesPromos
 
   // Tarjeta relámpago del rediseño
   const urgentes = promociones

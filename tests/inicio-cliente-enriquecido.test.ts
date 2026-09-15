@@ -6,6 +6,7 @@ import type {
   EmpresaScrollItem,
   PromocionesNovedadesVista,
   PlanInicio,
+  HeroInicio,
 } from '../src/modules/home/vista'
 import type { WalletStackItem } from '../src/components/wallet/WalletStack'
 
@@ -71,10 +72,28 @@ test('tipos de vista del inicio enriquecido soportan novedades, empresas y membr
     motivoRecomendacion: 'De tus negocios',
   }
 
+  const mockHero: HeroInicio = {
+    titulo: 'Oferta 2x1 en estética',
+    subtitulo: 'Aprovecha este fin de semana',
+    empresa: 'AutoSpa Pro',
+    ciudad: 'Santo Domingo',
+    imagen: 'https://img.jpg',
+    href: '/cliente/promociones/promo_1',
+    cta: 'Aprovechar oferta',
+    planDesde: null,
+    color: '#3b82f6',
+    valoracion: 4.9,
+    descuento: '2×1',
+    precio: 'RD$1,500',
+    etiqueta: 'Oferta destacada',
+  }
+
   assert.equal(mockPromo.tipo, '2x1')
   assert.equal(mockEmpresa.esMia, true)
   assert.equal(mockFeed.paraTi.length, 1)
   assert.equal(mockPlan.motivoRecomendacion, 'De tus negocios')
+  assert.equal(mockHero.descuento, '2×1')
+  assert.equal(mockHero.precio, 'RD$1,500')
 })
 
 test('wallet filtra correctamente solo las membresias activas para el widget superior', () => {

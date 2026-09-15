@@ -76,6 +76,12 @@ export interface HeroInicio {
   readonly color: string | null
   /** Valoración de la empresa para el sello del héroe. Null = no se pinta. */
   readonly valoracion: number | null
+  /** Descuento formateado («−30%», «2×1») si el hero representa una promoción. */
+  readonly descuento?: string | null
+  /** Precio formateado de la promoción («RD$1,500»). */
+  readonly precio?: string | null
+  /** Etiqueta de la cabecera del hero («Oferta destacada», «Novedad destacada»). */
+  readonly etiqueta?: string | null
 }
 
 /** Fila de la tarjeta «Ofertas Relámpago» del rediseño violeta. */
