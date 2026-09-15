@@ -132,3 +132,50 @@ export function suscripcionQuiere(eventos: readonly string[], evento: string): b
  * empresa que fue el sistema quien la apagó y que hay algo que mirar.
  */
 export const FALLOS_PARA_APAGAR = 20
+
+// ── Rotación del secreto (A-7) ───────────────────────────────────────────────
+
+/**
+ * Los secretos con los que se firma una entrega: el vigente y, si hay una
+ * rotación en curso, el que se está retirando.
+ */
+export interface SecretosDeFirma {
+  secreto: string
+  secretoAnterior: string | null
+  secretoAnteriorHasta: Date | null
+}
+
+/**
+ * Los secretos VIVOS ahora mismo, el vigente SIEMPRE el primero.
+ *
+ * El orden no es estético: la cabecera v1 no admite lista —su verificador hace
+ * un único `timingSafeEqual`— y se firma con `secretos[0]`. Si el orden se
+ * invirtiera, un receptor que siga en v1 se quedaría validando con el secreto
+ * que se está retirando, y se le caería el día que venza el solape en vez del
+ * día que le avisamos.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL SOLAPE SE ACABA SOLO
+ *
+ * Se compara contra el reloj en CADA envío, así que una rotación caducada deja
+ * de firmar con el secreto viejo aunque nadie haya limpiado la fila. Si
+ * dependiera de un trabajo que la borra, un trabajo que no corre dejaría el
+ * secreto retirado firmando para siempre — o sea, lo contrario de rotar.
+ *
+ * Una fila a medias (secreto sin fecha, o fecha sin secreto) no revive nada:
+ * hacen falta los dos.
+ */
+export function secretosVivos(s: SecretosDeFirma, ahora: Date = new Date()): string[] {
+  // Las tres condiciones en un solo `if` y no en un booleano intermedio: así el
+  // compilador ve que dentro `secretoAnterior` ya no puede ser null, y la
+  // garantía queda en el tipo en vez de en un `!` que promete lo mismo sin que
+  // nadie lo compruebe.
+  if (
+    s.secretoAnterior !== null &&
+    s.secretoAnteriorHasta !== null &&
+    s.secretoAnteriorHasta.getTime() > ahora.getTime()
+  ) {
+    return [s.secreto, s.secretoAnterior]
+  }
+  return [s.secreto]
+}

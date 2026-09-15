@@ -7,6 +7,7 @@ import {
   CABECERA_FIRMA_EMPRESA,
   CABECERA_FIRMA_EMPRESA_V2,
   CABECERA_TIMESTAMP,
+  cabeceraDeFirmas,
   materialFirmado,
 } from '@membego/contracts'
 import { anotarConector } from '@/modules/connect/bitacora'
@@ -15,7 +16,8 @@ import {
   type Diagnostico,
   type RespuestaSonda,
 } from '@/modules/integraciones/diagnostico'
-import type { SobreWebhook } from '@/modules/connect/webhooks'
+import { SELECT_SECRETOS, type SobreWebhook } from '@/modules/connect/webhooks'
+import { secretosVivos } from '@/modules/connect/webhooksNucleo'
 
 /**
  * EL REGISTRO DE ENTREGAS de una empresa (hallazgo A-4 de la auditoría).
@@ -205,7 +207,7 @@ export async function probarSuscripcion(
   const sus = await conEmpresa(companyId, (tx) =>
     tx.suscripcionWebhook.findFirst({
       where: { id: suscripcionId, companyId },
-      select: { id: true, url: true, secreto: true, estado: true },
+      select: { id: true, url: true, estado: true, ...SELECT_SECRETOS },
     })
   ).catch(() => null)
 
@@ -229,14 +231,19 @@ export async function probarSuscripcion(
       [CABECERA_EVENTO_NOMBRE]: sobre.event,
       [CABECERA_ENTREGA]: sobre.id,
       [CABECERA_TIMESTAMP]: String(timestamp),
-      // LAS DOS FIRMAS, igual que una entrega real. Si la prueba mandara solo
-      // la v2, un servidor que aún verifica la v1 la rechazaría y la pantalla
-      // diría «tu servidor no aceptó nuestra firma» sobre una integración que
-      // funciona perfectamente. La prueba tiene que mentir lo mínimo, y aquí lo
-      // mínimo es cero.
-      [CABECERA_FIRMA_EMPRESA_V2]: firmarHmac(
-        sus.secreto,
-        materialFirmado(timestamp, sobre.id, cuerpo)
+      // LAS DOS VERSIONES DE FIRMA, y la v2 con TODOS los secretos vivos —
+      // exactamente como una entrega real. Cualquier atajo aquí hace que la
+      // prueba mienta, y siempre en la dirección peor:
+      //
+      //   · solo la v2 → un servidor que aún verifica la v1 la rechaza, y la
+      //     pantalla acusa a una integración que funciona;
+      //   · solo el secreto vigente → una empresa que acaba de rotar y todavía
+      //     no ha copiado el nuevo vería «tu servidor no aceptó nuestra firma»
+      //     justo cuando el solape existe para que eso NO pase.
+      [CABECERA_FIRMA_EMPRESA_V2]: cabeceraDeFirmas(
+        secretosVivos(sus).map((sec) =>
+          firmarHmac(sec, materialFirmado(timestamp, sobre.id, cuerpo))
+        )
       ),
       [CABECERA_FIRMA_EMPRESA]: firmarHmac(sus.secreto, cuerpo),
     },

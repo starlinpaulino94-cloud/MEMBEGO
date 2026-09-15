@@ -9,9 +9,12 @@ import {
   CABECERA_FIRMA_EMPRESA_V2,
   CABECERA_TIMESTAMP,
   VENTANA_REPLAY_SEGUNDOS,
+  cabeceraDeFirmas,
+  firmasDeCabecera,
   materialFirmado,
 } from '@membego/contracts'
 import { firmarHmac } from '../src/modules/integraciones/nucleo'
+import { secretosVivos } from '../src/modules/connect/webhooksNucleo'
 
 /**
  * FIRMA DE LOS WEBHOOKS DE EMPRESA · hallazgo A-2 de la auditoría.
@@ -60,15 +63,24 @@ function avisoValido(
 
   const material = `${ts}.${entrega}.${cuerpoCrudo}`
   const esperada = createHmac('sha256', secreto).update(material, 'utf8').digest()
-  const recibida = Buffer.from(cabeceras[CABECERA_FIRMA_EMPRESA_V2.toLowerCase()] ?? '', 'hex')
-  if (recibida.length !== esperada.length) return false
-  return timingSafeEqual(recibida, esperada)
+
+  // La cabecera trae una LISTA: una firma normalmente, dos durante una
+  // rotación. Se acepta si alguna cuadra con el secreto que tiene el receptor.
+  return (cabeceras[CABECERA_FIRMA_EMPRESA_V2.toLowerCase()] ?? '')
+    .split(',')
+    .some((f) => {
+      const recibida = Buffer.from(f.trim(), 'hex')
+      return recibida.length === esperada.length && timingSafeEqual(recibida, esperada)
+    })
 }
 
 /** Lo que MembeGo manda, con la misma forma que `entregar()`. */
-function entregaFirmada(opciones: { ts?: number; entregaId?: string; cuerpo?: string } = {}) {
+function entregaFirmada(
+  opciones: { ts?: number; entregaId?: string; cuerpo?: string; secretos?: string[] } = {}
+) {
   const ts = opciones.ts ?? Math.floor(Date.now() / 1000)
   const entregaId = opciones.entregaId ?? 'ent_abc123'
+  const secretos = opciones.secretos ?? [SECRETO]
   const cuerpo =
     opciones.cuerpo ??
     JSON.stringify({
@@ -83,11 +95,12 @@ function entregaFirmada(opciones: { ts?: number; entregaId?: string; cuerpo?: st
     cabeceras: {
       [CABECERA_TIMESTAMP.toLowerCase()]: String(ts),
       [CABECERA_ENTREGA.toLowerCase()]: entregaId,
-      [CABECERA_FIRMA_EMPRESA_V2.toLowerCase()]: firmarHmac(
-        SECRETO,
-        materialFirmado(ts, entregaId, cuerpo)
+      [CABECERA_FIRMA_EMPRESA_V2.toLowerCase()]: cabeceraDeFirmas(
+        secretos.map((sec) => firmarHmac(sec, materialFirmado(ts, entregaId, cuerpo)))
       ),
-      [CABECERA_FIRMA_EMPRESA.toLowerCase()]: firmarHmac(SECRETO, cuerpo),
+      // La v1 firma SIEMPRE con el vigente, que es el primero: no puede llevar
+      // lista porque su verificador hace un único `timingSafeEqual`.
+      [CABECERA_FIRMA_EMPRESA.toLowerCase()]: firmarHmac(secretos[0], cuerpo),
     } as Record<string, string>,
   }
 }
@@ -238,4 +251,144 @@ test('la guía dice que la firma de legado sigue valiendo, y que hay que migrar'
   const guia = leer(GUIA)
   assert.ok(guia.includes('CABECERA_FIRMA_EMPRESA'))
   assert.match(guia, /migra|migrar/i)
+})
+
+// ─── Rotación con solape (A-7) ───────────────────────────────────────────────
+
+const SECRETO_NUEVO = 'whs_' + 'c'.repeat(48)
+
+test('ROTAR: durante el solape valen los DOS, y por eso no se corta nada', () => {
+  /**
+   * Es la propiedad entera del hallazgo A-7. Antes había un solo secreto: al
+   * cambiarlo, todas las entregas quedaban de golpe sin una firma que el
+   * receptor reconociera hasta que alguien copiara el nuevo a mano. Una
+   * rotación que obliga a un corte es una rotación que no se hace — y la
+   * primera vez que hace falta rotar de verdad es cuando se sospecha que el
+   * secreto se filtró, o sea el peor momento para descubrirlo.
+   */
+  const { cuerpo, cabeceras } = entregaFirmada({ secretos: [SECRETO_NUEVO, SECRETO] })
+
+  // Quien ya copió el nuevo, valida.
+  assert.ok(avisoValido(cuerpo, cabeceras, SECRETO_NUEVO), 'el que ya rotó no valida')
+  // Y quien todavía no, también. Los dos lados dejan de tener que coincidir
+  // en el mismo minuto, que es justo lo que no se podía antes.
+  assert.ok(avisoValido(cuerpo, cabeceras, SECRETO), 'el que aún no rotó se quedó fuera')
+})
+
+test('ROTAR: un tercer secreto cualquiera sigue sin valer', () => {
+  // Aceptar una lista no puede convertirse en aceptar más de la cuenta.
+  const { cuerpo, cabeceras } = entregaFirmada({ secretos: [SECRETO_NUEVO, SECRETO] })
+  assert.ok(!avisoValido(cuerpo, cabeceras, 'whs_' + 'z'.repeat(48)))
+})
+
+test('ROTAR: acabado el solape, el viejo deja de valer', () => {
+  // La lista vuelve a tener un elemento y quien no copió el nuevo se entera —
+  // que es el punto del plazo. Lo que no puede pasar es que se entere antes.
+  const { cuerpo, cabeceras } = entregaFirmada({ secretos: [SECRETO_NUEVO] })
+  assert.ok(avisoValido(cuerpo, cabeceras, SECRETO_NUEVO))
+  assert.ok(!avisoValido(cuerpo, cabeceras, SECRETO))
+})
+
+test('fuera de una rotación la cabecera lleva UNA firma y se lee igual que siempre', () => {
+  // La lista no puede tener coste para quien no está rotando: si la cabecera
+  // habitual cambiara de forma, cada receptor tendría que desplegar por algo
+  // que no le afecta.
+  const { cabeceras } = entregaFirmada()
+  assert.ok(!cabeceras[CABECERA_FIRMA_EMPRESA_V2.toLowerCase()].includes(','))
+  assert.equal(firmasDeCabecera(cabeceras[CABECERA_FIRMA_EMPRESA_V2.toLowerCase()]).length, 1)
+})
+
+test('la lista se compone y se lee con las mismas funciones del contrato', () => {
+  // Emisor y receptor no pueden separar el formato: si uno usara `', '` y el
+  // otro `','`, la segunda firma sería basura y solo fallaría durante una
+  // rotación, que es cuando nadie quiere descubrir un fallo de formato.
+  const firmas = ['aa', 'bb']
+  assert.deepEqual(firmasDeCabecera(cabeceraDeFirmas(firmas)), firmas)
+  assert.deepEqual(firmasDeCabecera(' aa , bb '), firmas)
+  assert.deepEqual(firmasDeCabecera(''), [])
+  assert.deepEqual(firmasDeCabecera(null), [])
+})
+
+test('el solape se acaba SOLO, sin depender de que nadie limpie la fila', () => {
+  /**
+   * Si el final del solape dependiera de un trabajo que borra el secreto viejo,
+   * un trabajo que no corre lo dejaría firmando para siempre — o sea, lo
+   * contrario de rotar. Se compara contra el reloj en cada envío.
+   */
+  const base = {
+    secreto: SECRETO_NUEVO,
+    secretoAnterior: SECRETO,
+    secretoAnteriorHasta: new Date('2026-09-20T00:00:00Z'),
+  }
+  assert.deepEqual(secretosVivos(base, new Date('2026-09-19T23:59:00Z')), [
+    SECRETO_NUEVO,
+    SECRETO,
+  ])
+  assert.deepEqual(secretosVivos(base, new Date('2026-09-20T00:01:00Z')), [SECRETO_NUEVO])
+})
+
+test('sin rotación en curso se firma solo con el vigente', () => {
+  assert.deepEqual(
+    secretosVivos({ secreto: SECRETO, secretoAnterior: null, secretoAnteriorHasta: null }),
+    [SECRETO]
+  )
+  // Y una fila a medias —un secreto sin fecha, o al revés— no resucita nada.
+  assert.deepEqual(
+    secretosVivos({ secreto: SECRETO, secretoAnterior: 'x', secretoAnteriorHasta: null }),
+    [SECRETO]
+  )
+  assert.deepEqual(
+    secretosVivos({
+      secreto: SECRETO,
+      secretoAnterior: null,
+      secretoAnteriorHasta: new Date(Date.now() + 1000),
+    }),
+    [SECRETO]
+  )
+})
+
+test('el vigente va SIEMPRE el primero de la lista', () => {
+  // La v1 firma con `secretos[0]`, y tiene que ser el vigente: si el orden se
+  // invirtiera, un receptor en v1 se quedaría con el secreto que se retira.
+  const vivos = secretosVivos({
+    secreto: SECRETO_NUEVO,
+    secretoAnterior: SECRETO,
+    secretoAnteriorHasta: new Date(Date.now() + 60_000),
+  })
+  assert.equal(vivos[0], SECRETO_NUEVO)
+})
+
+test('rotar dos veces no deja tres secretos vivos', () => {
+  // La segunda rotación retira el de la primera, no el de antes. Quien rota dos
+  // veces en la misma tarde —porque se equivocó al copiar— quiere que el
+  // penúltimo muera.
+  const src = codigo('src/modules/connect/webhooks.ts')
+  const fn = src.slice(src.indexOf('export async function rotarSecretoSuscripcion'))
+  assert.match(fn.slice(0, 1500), /secretoAnterior: actual\.secreto/)
+})
+
+test('rotar está acotado por empresa en la lectura Y en la escritura', () => {
+  // El id sale del formulario. Rotarle el secreto a otra empresa no es solo
+  // leer de más: es cortarle el servicio.
+  const src = codigo('src/modules/connect/webhooks.ts')
+  const fn = src.slice(src.indexOf('export async function rotarSecretoSuscripcion'))
+  const cuerpo = fn.slice(0, 1500)
+  assert.match(cuerpo, /findFirst\(\{[\s\S]{0,200}where: \{ id, companyId \}/)
+  assert.match(cuerpo, /updateMany\(\{[\s\S]{0,120}where: \{ id, companyId \}/)
+})
+
+test('los secretos NUNCA viajan a la lista del navegador: solo la fecha', () => {
+  const vista = codigo('src/app/(admin)/admin/integraciones/desarrolladores/webhooks/page.tsx')
+  const mapeo = vista.slice(vista.indexOf('webhooks={webhooks.map('), vista.indexOf('puedeRotar='))
+  assert.ok(!/secreto:/.test(mapeo), 'el mapeo a la vista incluye un secreto')
+  assert.match(mapeo, /rotandoHasta:/)
+})
+
+test('la guía enseña a recorrer la lista, no a comparar una sola firma', () => {
+  // Un receptor que compare solo la primera firma se rompe justo el día de una
+  // rotación, y el fallo parecerá nuestro.
+  const guia = leer(GUIA)
+  assert.match(guia, /\.split\(','\)/)
+  assert.match(guia, /some\(/)
+  assert.match(guia, /rota|rotación/i)
 })

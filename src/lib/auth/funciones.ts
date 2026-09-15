@@ -69,6 +69,7 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'webhook_estado', label: 'Pausar y reactivar webhooks' },
     { codigo: 'webhook_probar', label: 'Mandar eventos de prueba a un webhook' },
     { codigo: 'webhook_reenviar', label: 'Reenviar entregas de webhook' },
+    { codigo: 'webhook_rotar', label: 'Rotar el secreto de un webhook' },
     { codigo: 'app_conectar', label: 'Conectar aplicaciones (WhatsApp, Google…)' },
     { codigo: 'app_desconectar', label: 'Desconectar aplicaciones' },
   ],

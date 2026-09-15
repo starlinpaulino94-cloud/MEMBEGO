@@ -8,6 +8,7 @@ import {
   actualizarEventosWebhookAction,
   cambiarEstadoWebhookAction,
   crearWebhookAction,
+  rotarSecretoWebhookAction,
   type AccionState,
 } from '@/modules/connect/adminActions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,10 +26,15 @@ import { CandadoPlan, LimiteAlcanzado } from '@/components/connect/EstadoPlanCon
  * Tres cosas que la pantalla tiene que dejar claras, porque son las tres que
  * generan tickets de soporte cuando no se dicen:
  *
- *  1. El SECRETO sirve para verificar que el aviso viene de nosotros. Se
- *     enseña al crear y se puede volver a ver — a diferencia de las claves de
- *     API, aquí no gana nada estar oculto: quien integra tiene que copiarlo a
- *     su servidor de todos modos.
+ *  1. El SECRETO sirve para verificar que el aviso viene de nosotros, y se
+ *     enseña UNA sola vez: al crear el webhook o al rotarlo. No se puede
+ *     volver a ver.
+ *
+ *     (Este comentario decía lo contrario —«se puede volver a ver»— y era
+ *     falso: nunca hubo pantalla que lo enseñara. Lo que lo vuelve aceptable es
+ *     la rotación de la Fase A-7: quien pierda el secreto ya no tiene que
+ *     borrar la suscripción y crear otra, con id nuevo e historial perdido;
+ *     rota, y tiene unos días de solape para copiarlo.)
  *  2. PAUSADO lo decide la empresa; APAGADO lo decidimos nosotros tras muchos
  *     fallos seguidos. Son estados distintos y la etiqueta lo dice.
  *  3. Sin elegir eventos, se reciben TODOS. Es lo que casi todo el mundo
@@ -151,6 +157,11 @@ export interface WebhookVista {
   ultimoOkAt: string | null
   ultimoErrorAt: string | null
   ultimoError: string | null
+  /**
+   * Hasta cuándo sigue valiendo el secreto anterior, si hay una rotación en
+   * curso. Null = no la hay. NUNCA viajan los secretos: solo la fecha.
+   */
+  rotandoHasta: string | null
 }
 
 const ESTADO = {
@@ -163,9 +174,12 @@ export function WebhooksPanel({
   webhooks,
   limite,
   catalogo,
+  puedeRotar,
 }: {
   webhooks: WebhookVista[]
   limite: number | null
+  /** Rotar tiene permiso propio: no se pinta el botón si la acción va a negarlo. */
+  puedeRotar: boolean
   /**
    * Los eventos que se pueden marcar, ya traducidos. Vienen del servidor y no
    * se calculan aquí: el catálogo se deriva de lo que el bus emite de verdad
@@ -294,6 +308,19 @@ export function WebhooksPanel({
                     </span>
                   )}
                   {/*
+                    El plazo, mientras dure. Es lo único de la rotación que hay
+                    que tener delante todos los días: el secreto nuevo se enseña
+                    una vez al rotarlo, pero «cuándo deja de valer el viejo» es
+                    la fecha que decide si hay que correr.
+                  */}
+                  {w.rotandoHasta && (
+                    <span className="text-caption text-warning sm:w-full">
+                      Rotación en curso: el secreto anterior deja de valer el{' '}
+                      {formatDateTime(new Date(w.rotandoHasta))}. Copia el nuevo en tu servidor
+                      antes.
+                    </span>
+                  )}
+                  {/*
                     El enlace a las entregas va ANTES que pausar y reactivar, y
                     es el único que aparece en los tres estados. Quien abre esta
                     lista casi siempre viene con la misma pregunta —«¿está
@@ -310,6 +337,28 @@ export function WebhooksPanel({
                   <span>
                     <EditarEventos webhook={w} catalogo={catalogo} />
                   </span>
+                  {puedeRotar && (
+                    <span>
+                      <BotonConfirmado
+                        accion={rotarSecretoWebhookAction}
+                        estadoInicial={INIT}
+                        campos={{ id: w.id }}
+                        variant="ghost"
+                        size="sm"
+                        confirmacion={{
+                          titulo: '¿Rotar el secreto de este webhook?',
+                          // Las tres cosas que hay que saber ANTES de pulsar, y
+                          // la tercera es la que evita el susto: nada se corta
+                          // hoy, pero hay un plazo y empieza ahora.
+                          descripcion:
+                            'Te daremos un secreto nuevo y lo verás una sola vez. El anterior seguirá valiendo unos días, así que no se corta nada ahora mismo — pero tienes que copiar el nuevo en tu servidor antes de que venza, o dejaremos de firmar con el que tienes.',
+                          textoConfirmar: 'Rotar secreto',
+                        }}
+                      >
+                        Rotar secreto
+                      </BotonConfirmado>
+                    </span>
+                  )}
                   {w.estado !== 'DISABLED' && (
                     <span>
                       <BotonConfirmado

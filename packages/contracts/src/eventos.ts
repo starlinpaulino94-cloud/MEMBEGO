@@ -109,6 +109,62 @@ export const CABECERA_EVENTO_NOMBRE = 'X-Membego-Event'
 export const CABECERA_FIRMA_EMPRESA_V2 = 'X-Membego-Signature-V2'
 
 /**
+ * Separador de las firmas que viajan en la cabecera v2.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ LA v2 LLEVA UNA LISTA Y NO UNA FIRMA
+ *
+ * Porque si no, **rotar un secreto es imposible sin cortar el servicio**.
+ *
+ * Durante una rotación hay un rato en el que el receptor puede tener
+ * configurado el secreto viejo o el nuevo, y desde aquí no hay forma de saber
+ * cuál. Con una sola firma en la cabecera hay que elegir: firmar con el viejo
+ * rompe a quien ya actualizó, firmar con el nuevo rompe a quien todavía no. Las
+ * dos opciones son un corte, y por eso hasta hoy la única «rotación» posible
+ * era borrar la suscripción y crear otra.
+ *
+ * Con una lista, el receptor acepta si ALGUNA cuadra con el secreto que tiene,
+ * y los dos lados dejan de tener que coincidir en el mismo minuto. Es lo mismo
+ * que hacen las pasarelas de pago que rotan secretos en caliente.
+ *
+ * EL COSTE DE HABERLO DEJADO PARA DESPUÉS habría sido una segunda migración de
+ * formato con receptores ya escritos contra el primero. La v2 es de esta misma
+ * semana y su ventana de adopción sigue abierta, así que cambiarla ahora no le
+ * rompe nada a nadie — dentro de seis meses, sí.
+ *
+ * Fuera de una rotación la lista tiene UN elemento, así que la cabecera se lee
+ * exactamente igual que antes para quien no esté rotando.
+ */
+export const SEPARADOR_FIRMAS = ','
+
+/** Compone el valor de la cabecera v2 a partir de las firmas candidatas. */
+export function cabeceraDeFirmas(firmas: readonly string[]): string {
+  return firmas.join(SEPARADOR_FIRMAS)
+}
+
+/**
+ * Las firmas que trae la cabecera v2. Siempre una lista, aunque venga una sola:
+ * que el receptor recorra desde el primer día es lo que hace que una rotación
+ * no le obligue a desplegar.
+ */
+export function firmasDeCabecera(valor: string | null | undefined): string[] {
+  return (valor ?? '')
+    .split(SEPARADOR_FIRMAS)
+    .map((f) => f.trim())
+    .filter(Boolean)
+}
+
+/**
+ * Cuánto vive el secreto viejo tras una rotación.
+ *
+ * Siete días: cabe un fin de semana y la semana laboral de quien tiene que
+ * tocar su servidor, que es el caso real («lo hago el lunes»). Más tiempo sería
+ * dejar viva de más una credencial que se rota, muchas veces, precisamente
+ * porque se sospecha que se filtró.
+ */
+export const DIAS_SOLAPE_ROTACION = 7
+
+/**
  * FIRMA v1, HMAC-SHA256 hex del cuerpo a secas. LEGADO.
  *
  * Sigue saliendo porque quien ya verifica así dejaría de aceptar sus avisos el

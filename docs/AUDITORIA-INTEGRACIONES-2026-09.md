@@ -309,6 +309,40 @@ Vercel (`maxDuration = 60`) y retrasa todo lo que venga detrás.
 paralelizar con `Promise.allSettled` y un tope de concurrencia.
 **Esfuerzo: 2 días, compartidos con A-1.**
 
+### ◐ A-7 · Rotación de secretos — RESUELTO PARA WEBHOOKS (20/09/2026)
+
+> **Hecho:** el secreto de una suscripción de webhook se rota con solape de 7
+> días. Se firma con el viejo y el nuevo a la vez, y el receptor valida con el
+> que tenga — para lo cual la cabecera v2 pasó a llevar una **lista** de firmas.
+> Ese cambio de formato se hizo ahora a propósito: la v2 es de esta misma semana
+> y su ventana de adopción sigue abierta; dentro de seis meses habría costado
+> una segunda migración con receptores ya escritos.
+>
+> **Corrección al hallazgo original.** Decía que `CredencialSistema.expiresAt`
+> «existe y nadie lo hace cumplir». Es falso: se comprueba en las dos rutas que
+> resuelven la credencial (`plataforma/api.ts` y `/oauth/token`). Lo que sí
+> falta es un aviso ANTES de que venza — hoy caduca sin que nadie se entere
+> hasta que deja de funcionar.
+>
+> **Corrección sobre las claves de API.** Ya eran rotables de hecho: se pueden
+> tener varias activas, así que crear la nueva, mover la integración y revocar
+> la vieja es un solape real. Solo se bloquea si `api_keys.max` vale
+> exactamente 1, y eso se arregla subiendo el límite, no con código.
+>
+> **Pendiente:** `SistemaConectado.secreto`. Se deja aparte y no por tiempo: lo
+> usan cinco caminos, y dos son de VERIFICACIÓN de SSO (`/sso/entrar` y
+> `/sso/redeem`), donde el solape significa «aceptar cualquiera de los dos».
+> Tocar la verificación de identidad en el mismo cambio que la firma de
+> webhooks daría un diff que nadie puede revisar con la atención que merece.
+>
+> **Descubierto al hacerlo:** el secreto de webhook nunca se pudo volver a ver,
+> pese a que tres comentarios lo afirmaban — y el del esquema usaba esa
+> afirmación para justificar guardarlo en claro. Sellarlo queda como migración
+> pendiente; los comentarios ya están corregidos.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟠 A-7 · No hay rotación de secretos, solo revocación
 
 - Claves de API: `revocarClaveApi` (`clavesApi.ts:89`). No hay rotar.
@@ -324,6 +358,8 @@ pero no hay nada que actúe sobre esa fecha ni que avise.
 Una rotación que obliga a un corte de servicio es una rotación que no se hace.
 **Arreglo:** permitir dos secretos vivos a la vez con solapamiento (el receptor
 acepta cualquiera de los dos durante N días). **Esfuerzo: 3–4 días.**
+
+</details>
 
 ### 🟠 A-8 · Sin canal SMS
 
@@ -454,9 +490,9 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | Firma Ed25519 a satélites | ✅ sobre `timestamp.eventId.cuerpo` |
 | `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
 | Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
-| **Rotación de secretos** | ❌ **solo revocación (A-7)** |
+| Rotación de secretos | ◐ webhooks con solape de 7 días; el secreto de satélite, pendiente |
 | **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
-| **Caducidad de credenciales** | ⚠️ el campo existe, nadie lo hace cumplir |
+| Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; falta AVISAR antes de que venza |
 | **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
 
 ---
@@ -511,7 +547,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~3~~ | ~~Pantalla de entregas: log, cuerpo, reenviar, evento de prueba~~ ✅ hecho | 5 | A-4 |
 | ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
 | 5 | Fan-out encolado y en paralelo con tope | 2 | A-6 |
-| 6 | Rotación con solapamiento de claves y secretos | 4 | A-7 |
+| ◐ 6 | Rotación con solapamiento — hecha para webhooks; queda el secreto de satélite | 4 | A-7 |
 | 7 | Cron de salud: Meta, OAuth, caducidades → `REAUTORIZAR` | 3 | B-3 |
 
 **Resultado: el módulo pasa de ~35 % a ~45 %** y —más importante— deja de
@@ -578,11 +614,16 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   salían por cliente conectado y el único con consecuencia de seguridad. Los
   reintentos pasaron de una vez al día a una escalera de 30 s a 24 h; «no me
   llegan los eventos» dejó de ser un ticket para ser una pantalla; la firma dejó
-  de admitir un replay con el timestamp refrescado; y una empresa puede por fin
-  recibir solo lo que le interesa. Quedan **tres**, todos concretos y ninguno
-  exige decisiones de producto: A-6 (fan-out encolado y en paralelo, 2 días),
-  A-7 (rotación de secretos con solapamiento, 4 días) y B-3 (salud activa de
-  las conexiones, 3 días).
+  de admitir un replay con el timestamp refrescado; una empresa puede por fin
+  recibir solo lo que le interesa; y rotar un secreto de webhook dejó de exigir
+  un corte. Queda **A-6** (fan-out encolado y en paralelo, 2 días), **B-3**
+  (salud activa de las conexiones, 3 días) y la mitad de A-7 que falta: el
+  secreto compartido con los satélites, que se separó porque toca la
+  verificación de SSO en dos sitios y merece su propia revisión (2–3 días).
+
+  Y dos cosas nuevas, pequeñas, que salieron al hacer el trabajo: avisar antes
+  de que caduque una credencial de satélite, y sellar el secreto de webhook
+  —hoy en claro por una razón que resultó ser falsa—.
 - **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
   real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
   y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la

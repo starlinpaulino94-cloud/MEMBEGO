@@ -222,6 +222,52 @@ El botón «reintentar» del panel del superadmin es la excepción explícita
 está diciendo «ahora», y responderle que toca dentro de seis horas sería
 devolverle su propia espera.
 
+## Rotar el secreto de un webhook sin cortar
+
+> Hallazgo **A-7** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.
+
+Había un solo secreto por suscripción. Cambiarlo dejaba de golpe todas las
+entregas sin una firma que el receptor reconociera, hasta que alguien copiara el
+nuevo a mano en su servidor. Así que la única rotación practicable era **borrar
+la suscripción y crear otra** — que cambia el id y tira el historial de
+entregas.
+
+Una rotación que obliga a un corte es una rotación que no se hace. Y el
+problema es *cuándo* se descubre: la primera vez que hace falta rotar de verdad
+es cuando se sospecha que el secreto se filtró, o sea el peor momento imaginable
+para enterarse de que el procedimiento duele.
+
+**Cómo funciona ahora.** Al rotar se genera un secreto nuevo y el anterior sigue
+vivo `DIAS_SOLAPE_ROTACION` días (7). Durante el solape la cabecera v2 lleva
+**las dos firmas** y el receptor valida con la que tenga configurada, así que
+los dos lados dejan de tener que coincidir en el mismo minuto.
+
+**El solape se acaba solo.** `secretosVivos()` compara contra el reloj en cada
+envío, así que una rotación caducada deja de firmar con el viejo aunque nadie
+haya limpiado la fila. Si dependiera de un trabajo que la borra, un trabajo que
+no corre dejaría el secreto retirado firmando para siempre — lo contrario de
+rotar.
+
+**El vigente va siempre primero en la lista**, y no es estético: la cabecera v1
+no admite lista (su verificador hace un único `timingSafeEqual`) y se firma con
+`secretos[0]`. Invertir el orden dejaría a un receptor en v1 validando con el
+secreto que se retira, y se le caería el día que vence el solape en vez del día
+que le avisamos.
+
+**Quien siga en v1 tiene un corte duro al vencer el plazo.** Es la razón
+adicional para migrar a v2, y la pantalla lo dice con la fecha exacta antes de
+que nadie confirme una rotación.
+
+### Lo que se descubrió al hacerlo
+
+El secreto de un webhook **nunca se pudo volver a ver**. Tres comentarios
+—el del esquema, el de `crearSuscripcion` y el del panel— afirmaban lo
+contrario, y el del esquema usaba esa afirmación para justificar guardarlo en
+claro en vez de sellarlo con la clave maestra como las credenciales de conector.
+Como no se enseña nunca, esa justificación no se sostiene: **sellarlo es una
+migración pendiente**, anotada en la auditoría. Los tres comentarios están
+corregidos.
+
 ## Elegir qué eventos recibe un webhook
 
 > Hallazgo **A-5** de `docs/AUDITORIA-INTEGRACIONES-2026-09.md`.

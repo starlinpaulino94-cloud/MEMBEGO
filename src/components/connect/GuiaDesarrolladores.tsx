@@ -137,9 +137,17 @@ function avisoValido(cuerpoCrudo, cabeceras, secreto) {
   //    por puntos y en ese orden.
   const material = \`\${ts}.\${entrega}.\${cuerpoCrudo}\`
   const esperada = createHmac('sha256', secreto).update(material, 'utf8').digest()
-  const recibida = Buffer.from(cabeceras['${CABECERA_FIRMA_EMPRESA_V2.toLowerCase()}'] ?? '', 'hex')
-  if (recibida.length !== esperada.length) return false
-  if (!timingSafeEqual(recibida, esperada)) return false
+
+  // La cabecera trae una LISTA separada por comas. Normalmente una sola firma;
+  // durante una rotación de secreto, dos. Acepta si alguna cuadra con el
+  // secreto que tengas: así una rotación no te obliga a desplegar a la vez que
+  // nosotros. Recórrela desde el primer día aunque hoy venga una.
+  const firmas = (cabeceras['${CABECERA_FIRMA_EMPRESA_V2.toLowerCase()}'] ?? '').split(',')
+  const alguna = firmas.some((f) => {
+    const recibida = Buffer.from(f.trim(), 'hex')
+    return recibida.length === esperada.length && timingSafeEqual(recibida, esperada)
+  })
+  if (!alguna) return false
 
   // 3. ¿Ya lo procesaste? Guarda los ids de entrega que ya viste: reintentamos,
   //    así que el mismo aviso puede llegarte más de una vez.
@@ -151,6 +159,13 @@ function avisoValido(cuerpoCrudo, cabeceras, secreto) {
             cuerpo a secas), sigue funcionando: mandamos las dos mientras dure el cambio. Pero esa
             no protege contra un aviso repetido, así que migra a la de arriba y avísanos cuando lo
             hayas hecho.
+          </p>
+          <p className="text-caption text-muted-foreground">
+            <strong>Y una razón más para migrar:</strong> la cabecera de arriba admite varias
+            firmas, así que cuando rotes el secreto te seguimos firmando con el viejo y con el
+            nuevo durante unos días y no se te cae nada. La antigua solo lleva una firma —la del
+            secreto vigente—, de modo que con ella una rotación sí te corta el día que vence el
+            plazo.
           </p>
         </Bloque>
 

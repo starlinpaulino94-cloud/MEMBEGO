@@ -183,12 +183,32 @@ test('webhooks: el destino se vuelve a resolver en cada reintento', () => {
 })
 
 test('webhooks: la bitácora nunca anota el secreto de firma', () => {
-  // Se quitan los comentarios ANTES de mirar: el propio comentario que explica
-  // «el secreto jamás» contiene la palabra, y una guardia que se dispara con su
-  // propia documentación es una guardia que se acaba desactivando.
-  const src = leer('src/modules/connect/webhooks.ts').replace(/\/\/.*$/gm, '')
+  /**
+   * Se quitan los comentarios ANTES de mirar: el propio comentario que explica
+   * «el secreto jamás» contiene la palabra, y una guardia que se dispara con su
+   * propia documentación es una guardia que se acaba desactivando.
+   *
+   * Y se mira SOLO el `detalle`, que es lo que este apunte promete. Antes se
+   * miraba el bloque entero, y eso incluía el nombre del evento: en cuanto
+   * apareció `webhook.secreto_rotado` —un nombre perfectamente legítimo— la
+   * guardia empezó a fallar por la palabra, no por el dato. Una guardia que
+   * salta con un nombre correcto enseña a ignorarla, y esta protege algo que no
+   * se puede permitir ignorar.
+   */
+  const src = leer('src/modules/connect/webhooks.ts')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+  let mirados = 0
   for (const bloque of src.split('anotarConector({').slice(1)) {
-    const detalle = bloque.slice(0, bloque.indexOf('})'))
-    assert.ok(!/secreto/.test(detalle), 'la bitácora estaría anotando el secreto de firma')
+    const llamada = bloque.slice(0, bloque.indexOf('})'))
+    const i = llamada.indexOf('detalle:')
+    if (i < 0) continue
+    mirados++
+    assert.ok(
+      !/secreto/.test(llamada.slice(i)),
+      'la bitácora estaría anotando el secreto de firma'
+    )
   }
+  // Que el bucle no pase por no tener nada que recorrer.
+  assert.ok(mirados > 0, 'no se encontró ningún `detalle` que vigilar')
 })

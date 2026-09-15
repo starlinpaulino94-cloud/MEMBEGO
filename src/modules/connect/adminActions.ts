@@ -11,6 +11,7 @@ import {
   cambiarEstadoSuscripcion,
   crearSuscripcion,
   reenviarEntregaAhora,
+  rotarSecretoSuscripcion,
 } from '@/modules/connect/webhooks'
 import { soloEventosConocidos } from '@/modules/connect/eventosSuscribibles'
 import {
@@ -174,6 +175,37 @@ export async function cambiarEstadoWebhookAction(
       estado === 'ACTIVE'
         ? 'Webhook reactivado. Los próximos eventos se te entregarán.'
         : 'Webhook pausado. Dejamos de entregarte eventos hasta que lo reactives.',
+  }
+}
+
+/**
+ * ROTAR EL SECRETO de un webhook (hallazgo A-7).
+ *
+ * Permiso propio, `webhook_rotar`, y no vale con `webhook_estado`: pausar es
+ * reversible con un clic y solo afecta a lo que llegue después; rotar pone en
+ * marcha un reloj que, si nadie copia el secreto nuevo a tiempo, termina en un
+ * receptor que deja de validar nuestras firmas. Son facultades distintas.
+ */
+export async function rotarSecretoWebhookAction(
+  _prev: AccionState,
+  formData: FormData
+): Promise<AccionState> {
+  const user = await requireSection('integraciones', 'webhook_rotar')
+  if (!user?.metadata.companyId) return { error: 'No autorizado.' }
+
+  const id = String(formData.get('id') ?? '')
+  if (!id) return { error: 'Falta el webhook.' }
+
+  const res = await rotarSecretoSuscripcion(user.metadata.companyId, id)
+  if (!res.ok) return { error: 'No encontramos ese webhook.' }
+
+  revalidatePath('/admin/integraciones')
+  // El secreto nuevo viaja en `secretoNuevo` —el mismo campo que al crear— para
+  // que la pantalla lo enseñe con el bloque que ya existe. Y la fecha va en el
+  // texto: es el dato que convierte «lo copio luego» en una decisión con plazo.
+  return {
+    success: `Secreto rotado. El anterior sigue valiendo hasta el ${res.anteriorHasta.toLocaleDateString('es-DO', { day: 'numeric', month: 'long' })}: copia el nuevo en tu servidor antes de esa fecha.`,
+    secretoNuevo: res.secreto,
   }
 }
 

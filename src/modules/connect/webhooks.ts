@@ -9,15 +9,19 @@ import {
   CABECERA_FIRMA_EMPRESA,
   CABECERA_FIRMA_EMPRESA_V2,
   CABECERA_TIMESTAMP,
+  DIAS_SOLAPE_ROTACION,
+  cabeceraDeFirmas,
   materialFirmado,
 } from '@membego/contracts'
 import { dentroDelLimite } from '@/modules/connect/entitlements'
 import { anotarConector } from '@/modules/connect/bitacora'
 import {
   FALLOS_PARA_APAGAR,
+  secretosVivos,
   suscripcionQuiere,
   validarUrlWebhook,
   type MotivoUrl,
+  type SecretosDeFirma,
 } from '@/modules/connect/webhooksNucleo'
 import { programarReintento } from '@/modules/integraciones/programador'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
@@ -49,9 +53,17 @@ export type ResultadoCrearSuscripcion =
   | { ok: false; motivo: 'url_invalida'; detalle: MotivoUrl }
 
 /**
- * Crea una suscripción. Devuelve el secreto de firma UNA vez —igual que las
- * claves de API— aunque aquí también se puede volver a ver desde el panel:
- * quien integra tiene que copiarlo a su servidor para verificar las firmas.
+ * Crea una suscripción. Devuelve el secreto de firma UNA vez, igual que las
+ * claves de API: no hay pantalla que lo vuelva a enseñar.
+ *
+ * (Aquí decía que «también se puede volver a ver desde el panel». No es cierto
+ * y nunca lo fue. Importa porque esa frase es la que justificaba guardarlo en
+ * claro en vez de sellarlo con la clave maestra como las credenciales de
+ * conector — y si no se enseña nunca, esa justificación no se sostiene.
+ * Sellarlo es una migración aparte; queda anotado en la auditoría.)
+ *
+ * Perderlo ya no obliga a borrar la suscripción: desde la Fase A-7 se rota, con
+ * unos días de solape en los que valen el viejo y el nuevo.
  */
 export async function crearSuscripcion(input: {
   companyId: string
@@ -125,6 +137,54 @@ export async function suscripcionesDeEmpresa(companyId: string) {
   )
 }
 
+/** Una suscripción tal como la pinta el panel. SIN secretos, por construcción. */
+export interface SuscripcionVista {
+  id: string
+  nombre: string
+  url: string
+  eventos: string[]
+  estado: string
+  fallosSeguidos: number
+  ultimoOkAt: Date | null
+  ultimoErrorAt: Date | null
+  ultimoError: string | null
+  /** Hasta cuándo vale el secreto anterior, o null si no hay rotación viva. */
+  rotandoHasta: Date | null
+}
+
+/**
+ * Lo mismo, pero ya resuelto para la pantalla.
+ *
+ * Existe por dos motivos, y el segundo importa más de lo que parece:
+ *
+ *  1. El tipo NO tiene campos de secreto, así que es imposible mandarlos al
+ *     navegador por descuido. Antes la página recibía la fila entera —secreto
+ *     incluido— y solo un mapeo a mano evitaba que viajara; un campo nuevo
+ *     añadido sin cuidado lo habría filtrado sin que nada avisara.
+ *  2. «¿Sigue vivo el solape?» se decide AQUÍ, contra el mismo reloj y con la
+ *     misma regla que usa quien firma. En la página sería una segunda respuesta
+ *     a la misma pregunta —y una que el compilador de React ni siquiera deja
+ *     calcular, porque leer el reloj durante el render es impuro.
+ */
+export async function suscripcionesParaPanel(companyId: string): Promise<SuscripcionVista[]> {
+  const filas = await suscripcionesDeEmpresa(companyId)
+  const ahora = new Date()
+  return filas.map((f) => ({
+    id: f.id,
+    nombre: f.nombre,
+    url: f.url,
+    eventos: f.eventos,
+    estado: f.estado,
+    fallosSeguidos: f.fallosSeguidos,
+    ultimoOkAt: f.ultimoOkAt,
+    ultimoErrorAt: f.ultimoErrorAt,
+    ultimoError: f.ultimoError,
+    // Vivo = `secretosVivos` devuelve dos. Se pregunta a la misma función que
+    // firma, y no se reimplementa la comparación de fechas.
+    rotandoHasta: secretosVivos(f, ahora).length > 1 ? f.secretoAnteriorHasta : null,
+  }))
+}
+
 /** Pausa, reactiva o desactiva. La empresa decide; el sistema solo DISABLED. */
 export async function cambiarEstadoSuscripcion(
   companyId: string,
@@ -167,7 +227,7 @@ export async function repartirEventoAWebhooks(input: {
     const suscripciones = await conEmpresa(input.companyId, (tx) =>
       tx.suscripcionWebhook.findMany({
         where: { companyId: input.companyId, estado: 'ACTIVE' },
-        select: { id: true, url: true, secreto: true, eventos: true },
+        select: { id: true, url: true, eventos: true, ...SELECT_SECRETOS },
       })
     )
     const interesadas = suscripciones.filter((s) => suscripcionQuiere(s.eventos, input.evento))
@@ -195,13 +255,20 @@ export async function repartirEventoAWebhooks(input: {
         createdAt: entrega.createdAt.toISOString(),
         data: input.datos,
       }
-      const resultado = await entregar(s.url, s.secreto, sobre)
+      const resultado = await entregar(s.url, s, sobre)
       await registrarResultado(input.companyId, entrega.id, s.id, resultado, 1)
     }
   } catch (e) {
     console.error('[connect] fan-out de webhooks:', e)
   }
 }
+
+/** Lo que se selecciona de una suscripción para poder firmar. */
+export const SELECT_SECRETOS = {
+  secreto: true,
+  secretoAnterior: true,
+  secretoAnteriorHasta: true,
+} as const
 
 interface ResultadoEntrega {
   ok: boolean
@@ -226,11 +293,12 @@ interface ResultadoEntrega {
  */
 async function entregar(
   url: string,
-  secreto: string,
+  secretos: SecretosDeFirma,
   sobre: SobreWebhook
 ): Promise<ResultadoEntrega> {
   const cuerpo = JSON.stringify(sobre)
   const timestamp = Math.floor(Date.now() / 1000)
+  const vivos = secretosVivos(secretos)
   try {
     const resp = await fetch(url, {
       method: 'POST',
@@ -242,12 +310,20 @@ async function entregar(
         // v2: el timestamp y el id de la entrega van DENTRO de lo firmado, así
         // que ya no se pueden cambiar por el camino. Es lo que hace que la
         // ventana anti-replay signifique algo.
-        [CABECERA_FIRMA_EMPRESA_V2]: firmarHmac(
-          secreto,
-          materialFirmado(timestamp, sobre.id, cuerpo)
+        //
+        // Y es una LISTA: durante una rotación van las dos firmas, y el
+        // receptor acepta con el secreto que tenga configurado. Fuera de una
+        // rotación lleva una sola y se lee igual que siempre.
+        [CABECERA_FIRMA_EMPRESA_V2]: cabeceraDeFirmas(
+          vivos.map((sec) => firmarHmac(sec, materialFirmado(timestamp, sobre.id, cuerpo)))
         ),
-        // v1 (legado): el cuerpo a secas. Ver arriba.
-        [CABECERA_FIRMA_EMPRESA]: firmarHmac(secreto, cuerpo),
+        // v1 (legado): el cuerpo a secas, y firmada SIEMPRE con el secreto
+        // vigente. No puede llevar lista —su verificador hace un único
+        // `timingSafeEqual` y una cadena con comas le daría basura—, así que
+        // durante una rotación un receptor que siga en v1 tiene que copiar el
+        // nuevo secreto antes de que acabe el solape. La pantalla se lo dice
+        // con la fecha exacta antes de que confirme la rotación.
+        [CABECERA_FIRMA_EMPRESA]: firmarHmac(secretos.secreto, cuerpo),
       },
       body: cuerpo,
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -372,7 +448,7 @@ interface FilaEntrega {
   payload: unknown
   intentos: number
   createdAt: Date
-  suscripcion: { id: string; url: string; secreto: string; estado: string }
+  suscripcion: { id: string; url: string; estado: string } & SecretosDeFirma
 }
 
 /**
@@ -403,7 +479,7 @@ async function intentarEntrega(e: FilaEntrega): Promise<'enviado' | 'fallido' | 
     createdAt: e.createdAt.toISOString(),
     data: (e.payload ?? {}) as Record<string, unknown>,
   }
-  const r = await entregar(e.suscripcion.url, e.suscripcion.secreto, sobre)
+  const r = await entregar(e.suscripcion.url, e.suscripcion, sobre)
   const intentos = e.intentos + 1
   await registrarResultado(e.companyId, e.id, e.suscripcion.id, r, intentos)
   if (r.ok) return 'enviado'
@@ -434,7 +510,7 @@ export async function reintentarEntregaWebhook(
         intentos: true,
         estado: true,
         createdAt: true,
-        suscripcion: { select: { id: true, url: true, secreto: true, estado: true } },
+        suscripcion: { select: { id: true, url: true, estado: true, ...SELECT_SECRETOS } },
       },
     })
   ).catch(() => null)
@@ -446,6 +522,82 @@ export async function reintentarEntregaWebhook(
   }
 
   return { resultado: await intentarEntrega(fila) }
+}
+
+/**
+ * ROTAR EL SECRETO de una suscripción, sin cortar (hallazgo A-7).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTO FALTABA, Y POR QUÉ IMPORTA
+ *
+ * Había un solo secreto por suscripción. Cambiarlo dejaba de golpe todas las
+ * entregas sin una firma que el receptor reconociera, hasta que alguien copiara
+ * el nuevo a mano en su servidor. Así que la única rotación practicable era
+ * borrar la suscripción y crear otra — que cambia el id y tira el historial de
+ * entregas.
+ *
+ * Y una rotación que obliga a un corte es una rotación que no se hace. El
+ * problema es cuándo se descubre: la primera vez que hace falta rotar de verdad
+ * es cuando se sospecha que el secreto se filtró, o sea el peor momento
+ * imaginable para enterarse de que el procedimiento duele.
+ *
+ * Ahora se firma con los dos durante `DIAS_SOLAPE_ROTACION` días y el receptor
+ * acepta con el que tenga configurado. El solape se acaba solo (ver
+ * `secretosVivos`).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ROTAR DOS VECES SEGUIDAS NO ENCADENA SECRETOS
+ *
+ * La segunda rotación retira el secreto de la primera, no el de antes. Es lo
+ * correcto y conviene decirlo: quien rota dos veces en la misma tarde
+ * —normalmente porque se equivocó al copiar— quiere que el penúltimo muera, no
+ * que sigan vivos tres. Vivos hay como mucho dos, siempre.
+ */
+export type ResultadoRotacion =
+  | { ok: true; secreto: string; anteriorHasta: Date }
+  | { ok: false; motivo: 'no_existe' }
+
+export async function rotarSecretoSuscripcion(
+  companyId: string,
+  id: string
+): Promise<ResultadoRotacion> {
+  const actual = await conEmpresa(companyId, (tx) =>
+    tx.suscripcionWebhook.findFirst({
+      // Acotado por empresa: el id sale del formulario, y con `findUnique` por
+      // id suelto bastaría cambiarlo para rotarle el secreto a otra empresa —
+      // que es, además, una forma cómoda de cortarle el servicio.
+      where: { id, companyId },
+      select: { id: true, secreto: true },
+    })
+  ).catch(() => null)
+  if (!actual) return { ok: false, motivo: 'no_existe' }
+
+  const nuevo = `whs_${randomBytes(24).toString('hex')}`
+  const anteriorHasta = new Date(Date.now() + DIAS_SOLAPE_ROTACION * 24 * 60 * 60 * 1000)
+
+  const r = await conEmpresa(companyId, (tx) =>
+    tx.suscripcionWebhook.updateMany({
+      where: { id, companyId },
+      data: {
+        secreto: nuevo,
+        secretoAnterior: actual.secreto,
+        secretoAnteriorHasta: anteriorHasta,
+      },
+    })
+  ).catch(anotarFallo('connect:webhook:rotar', { id }))
+  if (!r || r.count === 0) return { ok: false, motivo: 'no_existe' }
+
+  await anotarConector({
+    companyId,
+    origen: 'CONEXION',
+    origenId: id,
+    evento: 'webhook.secreto_rotado',
+    // Ni el viejo ni el nuevo, evidentemente. La fecha sí: es el dato que hace
+    // falta para reconstruir «por qué dejaron de llegarle los avisos el día 8».
+    detalle: { solapeHasta: anteriorHasta.toISOString() },
+  })
+
+  return { ok: true, secreto: nuevo, anteriorHasta }
 }
 
 /**
@@ -541,7 +693,7 @@ export async function reenviarEntregaAhora(
         evento: true,
         payload: true,
         createdAt: true,
-        suscripcion: { select: { id: true, url: true, secreto: true, estado: true } },
+        suscripcion: { select: { id: true, url: true, estado: true, ...SELECT_SECRETOS } },
       },
     })
   ).catch(() => null)
@@ -606,7 +758,7 @@ export async function reintentarWebhooksPendientes(limite = 100): Promise<{
         orderBy: { createdAt: 'asc' },
         take: limite,
         include: {
-          suscripcion: { select: { id: true, url: true, secreto: true, estado: true } },
+          suscripcion: { select: { id: true, url: true, estado: true, ...SELECT_SECRETOS } },
         },
       })
   ).catch(() => [])
