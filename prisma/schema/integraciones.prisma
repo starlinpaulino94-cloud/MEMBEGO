@@ -329,8 +329,14 @@ model EventoSaliente {
   enviadoAt   DateTime?
   createdAt   DateTime  @default(now())
 
+  /// Cuándo toca el siguiente intento. Misma escalera y mismo motivo que en
+  /// `EntregaWebhook.proximoIntentoAt`: NULL = vencido, y el cron deja de
+  /// competir con los reintentos ya programados en la cola.
+  proximoIntentoAt DateTime?
+
   @@index([estado, createdAt])
   @@index([companyId, tipo, createdAt])
+  @@index([estado, proximoIntentoAt])
   @@map("eventos_salientes")
 }
 
