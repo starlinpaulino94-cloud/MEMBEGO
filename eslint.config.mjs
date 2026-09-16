@@ -56,6 +56,13 @@ const eslintConfig = [
       'src/components/ui/**',
       'src/hooks/use-mobile.ts',
       'supabase/.temp/**',
+      // La app de Zapier es un PROYECTO APARTE: corre en la infraestructura de
+      // Zapier, no en la nuestra, y su plataforma exige CommonJS. Aplicarle las
+      // reglas de este proyecto —que prohíben `require`— la marcaría entera en
+      // rojo por cumplir el contrato de otro. Tiene su propio `package.json` y
+      // sus propias pruebas; lo que sí se vigila desde aquí es que su contrato
+      // no se separe del nuestro (`tests/connect-zapier.test.ts`).
+      'integrations/**',
     ],
   },
 ]

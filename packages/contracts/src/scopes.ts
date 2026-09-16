@@ -23,6 +23,19 @@ export const CAPABILITIES = [
   'VISIT_SYNC',
   'TRANSACTION_SYNC',
   'LOYALTY_EVENT',
+  /**
+   * Administrar las SUSCRIPCIONES DE WEBHOOK de la propia empresa.
+   *
+   * Es lo que necesita una app de Zapier (o Make, o cualquier constructor de
+   * flujos) para funcionar como se espera: al montar un Zap crea la
+   * suscripción, y al apagarlo la retira. Sin esto habría que entrar al panel a
+   * mano cada vez, que es justo lo que nadie hace.
+   *
+   * NO es una escritura de negocio: no crea clientes ni consume beneficios, así
+   * que no necesita decir qué sistema la respalda. Toca la configuración de
+   * avisos de quien presenta la clave, y de nadie más.
+   */
+  'WEBHOOK_SUBSCRIPTION',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -52,6 +65,7 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   VISIT_SYNC: ['visits:write'],
   TRANSACTION_SYNC: ['transactions:write'],
   LOYALTY_EVENT: ['events:publish'],
+  WEBHOOK_SUBSCRIPTION: ['webhooks:manage'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

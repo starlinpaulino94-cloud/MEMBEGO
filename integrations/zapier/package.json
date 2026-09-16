@@ -1,0 +1,17 @@
+{
+  "name": "membego-zapier",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App de MembeGo para Zapier. No forma parte del despliegue de MembeGo.",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test src/*.test.js"
+  },
+  "dependencies": {
+    "zapier-platform-core": "16.4.1"
+  },
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  }
+}

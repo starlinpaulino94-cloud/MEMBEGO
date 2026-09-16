@@ -480,6 +480,44 @@ las dos.**
 
 </details>
 
+### ✅ B-2 · App de Zapier — RESUELTO (16/09/2026)
+
+> Cerrado. La app vive en `integrations/zapier/`: proyecto aparte, corre en la
+> infraestructura de Zapier y llama a nuestra API pública. Está en este
+> repositorio porque su contrato es el nuestro, y una prueba compara sus eventos
+> y sus rutas con el catálogo real — así un cambio de nombre rompe la CI en vez
+> del Zap de un cliente tres semanas después.
+>
+> **Cinco disparadores por REST Hook**, no por sondeo: Zapier crea la
+> suscripción al encender el Zap y la retira al apagarlo, así que el aviso llega
+> en el momento y hereda la firma, la escalera de reintentos y el registro de
+> entregas que ya existían. Era la apuesta del hallazgo («la base ya está») y se
+> cumplió.
+>
+> **Lo que faltaba del lado MembeGo:** `GET/POST /webhooks` y
+> `DELETE /webhooks/{id}`, con un principal nuevo —`empresa`, solo claves de
+> empresa— y el scope `webhooks:manage`. Un satélite no entra: atiende a muchas
+> empresas y no le corresponde decidir a quién avisan ellas, ni apuntar sus
+> avisos a una dirección suya.
+>
+> **La política de escrituras NO se tocó.** La API v1 reserva las escrituras de
+> negocio a la credencial de un satélite, así que la app trae disparadores y una
+> búsqueda, y ninguna acción `create`. La otra mitad —«cuando pase algo fuera,
+> avisa a MembeGo»— ya la cubre el webhook entrante de B-1, sin que Zapier
+> necesite saber nada de nuestra API.
+>
+> **Sin `performList`:** no existe «dame los últimos clientes», solo una
+> búsqueda que exige término. Llamarla con una letra cualquiera y presentar eso
+> como datos reales funcionaría en una demo y fallaría para el primer negocio
+> cuyos clientes no la lleven en el nombre. Se declara una muestra, que Zapier
+> marca como tal. Cuando exista el listado paginado (B-6) son tres líneas.
+>
+> **Make queda fuera a propósito:** el OpenAPI público ya se importa en Make, así
+> que el retorno de una segunda app es mucho menor que el de la primera.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟡 B-2 · Sin app de Zapier ni de Make
 
 Las tarjetas existen (`metadatos.ts:147,154`) y no hay nada detrás. Y sin embargo
@@ -487,6 +525,8 @@ Las tarjetas existen (`metadatos.ts:147,154`) y no hay nada detrás. Y sin embar
 claves de API por empresa y webhooks salientes. Una app de Zapier con 3 triggers
 y 3 actions es cuestión de días, no de meses, y es el atajo barato a «miles de
 integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
+
+</details>
 
 ### 🟡 B-3 · Sin salud activa de las conexiones
 
@@ -579,7 +619,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | Documentación de la API | **3** | 4 | OpenAPI generado del inventario (no se queda viejo) vs. portal completo de GHL |
 | **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
-| **Superficie de la API** | **2** | 5 | 24 rutas GET/POST vs. API v2 completa con CRUD |
+| **Superficie de la API** | **2** | 5 | 27 rutas; ya hay un DELETE, pero sigue sin PUT/PATCH ni listados paginados |
 | **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
 | **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
@@ -588,7 +628,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Correo con dominio propio** | **0** | 5 | Resend de plataforma (A-9) |
 | **Calendario bidireccional** | **1** | 5 | Solo escritura, solo Google (A-10) |
 | **Pasarelas de pago** | **2** | 5 | CardNET + Azul (buen encaje local) vs. Stripe/PayPal/Square/NMI/Authorize |
-| **Zapier / Make** | **0** | 5 | Tarjetas sin código (B-2) |
+| **Zapier / Make** | **4** | 5 | App de Zapier con REST Hooks; Make por OpenAPI (B-2) |
 | **Métricas de uso de la API** | **1** | 4 | `lastUsedAt` (B-7) |
 | **Salud activa de conexiones** | **1** | 4 | Pasiva (B-3) |
 
@@ -626,7 +666,7 @@ generar trabajo manual por cada cliente conectado.
 | # | Trabajo | Semanas | Hallazgo |
 |---|---|:-:|---|
 | ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
-| 9 | App de Zapier (3 triggers, 3 actions) sobre lo que ya existe | 1 | B-2 |
+| ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
 | 10 | Catálogo de eventos hasta ~20 tipos (citas, pagos, mensajes) | 2 | B-4 |
 | 11 | `PATCH`/`DELETE` en clientes, citas, membresías | 2 | B-5 |
 | 12 | Paginación por cursor en todas las listas | 1 | B-6 |
@@ -692,9 +732,14 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   Y dos cosas nuevas, pequeñas, que salieron al hacer el trabajo: avisar antes
   de que caduque una credencial de satélite, y sellar el secreto de webhook
   —hoy en claro por una razón que resultó ser falsa—.
-- **En alcance de integraciones: estamos a dos o tres trimestres**, y el atajo
-  real no es escribir treinta conectores: es el webhook entrante, la acción HTTP
-  y la app de Zapier (puntos 8 y 9). Tres semanas de trabajo que hacen por la
+- **En alcance de integraciones: el atajo ya está andado.** El webhook
+  entrante, la acción HTTP y la app de Zapier (puntos 8 y 9) están hechos, y con
+  ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir
+  que lo integremos a mano. Lo que queda de la Fase 2 son piezas de superficie
+  de API —`PATCH`/`DELETE` en los recursos principales (B-5), listados paginados
+  (B-6) y métricas de uso (B-7)—, y el catálogo de eventos (B-4).
+
+  La frase original decía que eran tres semanas de trabajo que hacen por la
   cobertura lo que treinta conectores harían en un año.
 - **En marketplace de terceros: estamos lejos, y está bien estarlo** mientras no
   haya desarrolladores externos esperando.
