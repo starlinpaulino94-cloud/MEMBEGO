@@ -61,8 +61,10 @@ export default async function HistorialPage({
         <p className="text-muted-foreground">Cada uso registrado de tu membresía.</p>
       </div>
 
-      {/* Resumen */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Resumen + lista: en escritorio el resumen va de columna lateral y la
+          lista ocupa el resto; en móvil apilan igual que antes. */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
         <Card>
           <CardContent className="flex items-center gap-3 py-5">
             <div className="rounded-lg bg-info/10 p-2">
@@ -87,6 +89,7 @@ export default async function HistorialPage({
         </Card>
       </div>
 
+      <div className="min-w-0 lg:col-span-2">
       {loadError ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="py-10 text-center">
@@ -211,6 +214,8 @@ export default async function HistorialPage({
           )}
         </div>
       )}
+      </div>
+      </div>
     </div>
   )
 }

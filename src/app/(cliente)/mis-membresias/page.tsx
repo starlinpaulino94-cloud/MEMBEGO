@@ -185,7 +185,13 @@ export default async function MisMembresias() {
       ) : (
         <div className="space-y-10">
           {/* Vistazo de la wallet */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              icon={CreditCard}
+              accent="brand"
+              label={`Tarjeta${memberships.length !== 1 ? 's' : ''} en total`}
+              value={<AnimatedCounter value={memberships.length} />}
+            />
             <StatCard
               icon={WalletCards}
               accent="success"

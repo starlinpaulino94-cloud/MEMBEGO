@@ -57,7 +57,7 @@ export function VibeRelacionado({
           Ver más{total > 0 ? ` (${total})` : ''}
         </Link>
       </div>
-      <ul className="grid grid-cols-2 gap-3">
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {planes.slice(0, 6).map((p) => (
           <li key={p.id} className="flex">
             <Link

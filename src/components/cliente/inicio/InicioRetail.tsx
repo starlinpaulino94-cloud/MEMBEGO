@@ -24,8 +24,8 @@ export function InicioRetail({
     // Margen negativo espejo del CustomerShell (`px-4 py-4 lg:px-6`): el
     // rediseño es a sangre — el héroe se asoma por el borde y las bandas
     // pintan de lado a lado. Segunda excepción legítima junto a /cliente/cerca.
-    // En escritorio la columna se centra a ancho de teléfono grande: el
-    // diseño es móvil y estirarlo a 7xl lo rompería.
+    // En móvil la columna se centra a ancho de teléfono grande; en escritorio
+    // ocupa todo el `main` (las rejillas interiores suben de columnas).
     <div className="retail -mx-4 -my-4 min-w-0 overflow-x-hidden bg-vibe-fondo pb-8 pt-4 text-foreground lg:-mx-6">
       {/* Felicitación por encima de la app tras registrarse. */}
       <CelebracionBienvenida />
@@ -35,7 +35,7 @@ export function InicioRetail({
         <PopupInteligente candidato={personal.popup} color={personal.engagement.color} />
       ) : null}
 
-      <div className="mx-auto w-full max-w-md md:max-w-xl">
+      <div className="mx-auto w-full max-w-md md:max-w-xl lg:max-w-7xl">
         {/* Widget superior compacto si tiene membresías activas */}
         {!personal.walletError && personal.wallet.length > 0 ? (
           <VibeMembresiasActivas wallet={personal.wallet} />

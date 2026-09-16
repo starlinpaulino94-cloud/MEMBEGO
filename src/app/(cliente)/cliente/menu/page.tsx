@@ -124,7 +124,7 @@ export default async function MenuPage() {
           <h2 className="px-1 pb-1 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
             {s.titulo}
           </h2>
-          <ul className="space-y-2">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {s.filas.map((f) => (
               <li key={f.href}>
                 <Link
