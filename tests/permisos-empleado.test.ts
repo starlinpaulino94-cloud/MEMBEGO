@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   resolverPermisosUsuario,
@@ -139,18 +139,15 @@ test('permisosDesdeSeleccion guarda SOLO diferencias contra el rol', () => {
 
 /**
  * DEUDA RECONOCIDA, no una excusa: rutas del menú que todavía no resuelven a
- * ninguna sección. Están aquí para que el invariante pueda existir hoy y para
- * que quien añada una nueva vea fallar la prueba en vez de colarla. Esta lista
- * se vacía, no crece.
+ * ninguna sección.
+ *
+ * HOY ESTÁ VACÍA, y ese es el objetivo. Llegó a tener tres —`/admin/facturas`,
+ * `/admin/sinonimos` y `/admin/crm`— y se vació gobernándolas, no tachándolas
+ * de aquí. El mecanismo se queda puesto: si mañana entra un módulo al menú sin
+ * sección, la prueba de abajo falla, y anotarlo aquí obliga a escribir por qué
+ * y deja a la segunda prueba vigilando que no se quede anotado de más.
  */
-const PENDIENTES: readonly string[] = [
-  // `/admin/crm` (Prospectos). Su subárbol YA se gobierna —las pantallas de
-  // /admin/crm/* piden `leads`, `conversaciones`, `pipeline` o `configuracion`—
-  // pero el enlace del menú apunta a la raíz `/admin/crm`, cuyo primer segmento
-  // no es sección de nada. Bajo cuál de las cuatro cae la raíz es una decisión
-  // del CRM, no de este módulo.
-  '/admin/crm',
-]
+const PENDIENTES: readonly string[] = []
 
 test('toda ruta /admin del menú resuelve a una sección conocida', () => {
   const roles: AppRole[] = [
@@ -279,4 +276,62 @@ test('las acciones de sinónimos piden la sección, no un rol', () => {
   )
   // Los sinónimos GLOBALES siguen siendo de la plataforma y de nadie más.
   assert.ok(src.includes("requireRole('SUPERADMIN')"))
+})
+
+// -- El CRM ------------------------------------------------------------------
+//
+// La última que quedaba. El caso era distinto a los dos anteriores: el módulo
+// SÍ estaba gobernado —su layout exige 'leads' para todo el subárbol, y sus
+// server actions también— pero `adminSectionForPath` no lo sabía, porque el
+// primer segmento de `/admin/crm/*` no es el nombre de ninguna sección. Para
+// el proxy y para el menú era una ruta desconocida.
+//
+// La salida NO fue inventar una sección `crm`: habría dado cinco casillas en
+// el formulario de Permisos para un módulo con una sola puerta. El prefijo
+// resuelve a `leads`, que es lo que de verdad se exige.
+
+test('/admin/crm y todo su subárbol resuelven a la sección leads', () => {
+  assert.equal(adminSectionForPath('/admin/crm'), 'leads')
+  for (const sub of [
+    '/admin/crm/leads',
+    '/admin/crm/conversaciones',
+    '/admin/crm/seguimientos',
+    '/admin/crm/metricas',
+    '/admin/crm/configuracion',
+    '/admin/crm/configuracion/auto-reply',
+    '/admin/crm/prospectos/abc123',
+  ]) {
+    assert.equal(adminSectionForPath(sub), 'leads', `${sub} debería colgar de leads`)
+  }
+  // El prefijo se aplica a la ruta, no a las que solo empiezan igual.
+  assert.equal(adminSectionForPath('/admin/crmx'), null)
+})
+
+test('negar leads cierra el CRM entero, menú incluido', () => {
+  const p = resolverPermisosUsuario({ v: 1, secciones: { leads: false } })
+  assert.equal(seccionPermitida('GERENTE', 'leads', p), false)
+  assert.equal(seccionPermitida('GERENTE', 'clientes', p), true)
+  // Antes este href no era alcanzable para esta función: sin sección, no había
+  // nada que negar y el enlace se quedaba en el menú.
+  assert.ok(hrefsNegadosPorPermisos('GERENTE', p).includes('/admin/crm'))
+})
+
+test('ninguna pantalla del CRM se guarda por rol', () => {
+  // Mismo problema que en los sinónimos, y por eso se revisa el directorio
+  // entero y no una lista: el layout ya exigía 'leads', pero cinco páginas
+  // llevaban además su propio `requireRole(ADMIN_ROLES)` —que admite MARKETING
+  // y SUPERVISOR—, que era el guard más flojo del par. Una página nueva que
+  // repita el patrón cae aquí.
+  const base = join(RAIZ, 'src/app/(admin)/admin/crm')
+  const malas = readdirSync(base, { recursive: true, encoding: 'utf8' })
+    .filter((p) => p.endsWith('.tsx'))
+    .filter((p) => readFileSync(join(base, p), 'utf8').includes('requireRole(ADMIN_ROLES)'))
+  assert.deepEqual(malas, [], 'estas pantallas del CRM siguen guardándose por rol')
+})
+
+test('el layout del CRM sigue siendo la puerta del subárbol', () => {
+  // Todo lo anterior descansa en que este guard exista: es el que cubre las
+  // rutas del CRM que no tienen página propia hoy.
+  const src = readFileSync(join(RAIZ, 'src/app/(admin)/admin/crm/layout.tsx'), 'utf8')
+  assert.ok(src.includes("await requireSection('leads')"))
 })
