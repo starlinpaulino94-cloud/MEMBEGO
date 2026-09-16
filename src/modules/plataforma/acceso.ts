@@ -84,11 +84,20 @@ export interface SistemaParaAcceso {
  * compatibilidad la declara quien registra el sistema, y la habilitación la
  * concede quien vende. Un `false` pelado obliga a adivinar a quién llamar.
  */
-export type MotivoDenegado =
-  | 'SISTEMA_NO_ACTIVO'
-  | 'VERTICAL_INCOMPATIBLE'
-  | 'SIN_HABILITACION'
-  | 'HABILITACION_REVOCADA'
+/**
+ * La lista como VALOR, y el tipo derivado de ella —no al revés—. Un tipo solo
+ * existe en compilación: una pantalla que traduzca cada motivo a una frase no
+ * puede recorrerlo, ni una prueba comprobar que no falta ninguno. Con la lista
+ * primero, añadir un motivo lo añade a los dos sitios a la vez.
+ */
+export const MOTIVOS_DENEGADO = [
+  'SISTEMA_NO_ACTIVO',
+  'VERTICAL_INCOMPATIBLE',
+  'SIN_HABILITACION',
+  'HABILITACION_REVOCADA',
+] as const
+
+export type MotivoDenegado = (typeof MOTIVOS_DENEGADO)[number]
 
 export type Decision = { permitido: true } | { permitido: false; motivo: MotivoDenegado }
 
