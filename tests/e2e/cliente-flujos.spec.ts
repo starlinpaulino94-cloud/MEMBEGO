@@ -156,30 +156,39 @@ async function captura(page: Page, nombre: string) {
 
 const unico = () => String(Date.now()).slice(-6)
 
+test('perfil: los campos editables se renderizan una sola vez', async ({ page }) => {
+  await page.goto('/cliente/ajustes', { waitUntil: 'domcontentloaded' })
+
+  await expect(page.locator('#nombre')).toHaveCount(1)
+  await expect(page.locator('#telefono')).toHaveCount(1)
+  await expect(page.locator('#ciudad')).toHaveCount(1)
+  await expect(page.locator('#genero')).toHaveCount(1)
+})
+
 test('perfil: guardar cambios y persistir tras recargar', async ({ page }) => {
   const telefono = `809-555-${unico()}`
   const ciudad = `Ciudad QA ${unico()}`
 
   await page.goto('/cliente/ajustes', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#nombre').first()).toBeVisible()
+  await expect(page.locator('#nombre')).toBeVisible()
 
-  await page.locator('#telefono').first().fill(telefono)
-  await page.locator('#ciudad').first().fill(ciudad)
-  await page.locator('#genero').first().selectOption('M')
+  await page.locator('#telefono').fill(telefono)
+  await page.locator('#ciudad').fill(ciudad)
+  await page.locator('#genero').selectOption('M')
   await page.getByRole('button', { name: /guardar cambios/i }).first().click()
 
   await expect(page.getByText('Perfil actualizado.').first()).toBeVisible({ timeout: 25_000 })
   await captura(page, '01-perfil-guardado')
 
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#telefono').first()).toHaveValue(telefono, { timeout: 25_000 })
-  await expect(page.locator('#ciudad').first()).toHaveValue(ciudad)
-  await expect(page.locator('#genero').first()).toHaveValue('M')
+  await expect(page.locator('#telefono')).toHaveValue(telefono, { timeout: 25_000 })
+  await expect(page.locator('#ciudad')).toHaveValue(ciudad)
+  await expect(page.locator('#genero')).toHaveValue('M')
 })
 
 test('perfil: un nombre vacío no se guarda', async ({ page }) => {
   await page.goto('/cliente/ajustes', { waitUntil: 'domcontentloaded' })
-  const nombre = page.locator('#nombre').first()
+  const nombre = page.locator('#nombre')
   await expect(nombre).toBeVisible()
 
   const original = await nombre.inputValue()
@@ -188,7 +197,7 @@ test('perfil: un nombre vacío no se guarda', async ({ page }) => {
 
   await expect(page.getByText('Perfil actualizado.')).toHaveCount(0)
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#nombre').first()).toHaveValue(original, { timeout: 25_000 })
+  await expect(page.locator('#nombre')).toHaveValue(original, { timeout: 25_000 })
   await captura(page, '02-perfil-nombre-vacio')
 })
 
@@ -324,17 +333,22 @@ test('vehículos: alta por asistente, marcar principal y baja', async ({ page })
   const hacerPrincipal = tarjeta.locator('button[aria-label^="Hacer principal"]')
   if (await hacerPrincipal.isVisible().catch(() => false)) {
     await hacerPrincipal.click()
+    await expect(page.getByText('Vehículo principal actualizado.')).toBeVisible({ timeout: 5_000 })
     await expect(tarjeta.getByText('Principal')).toBeVisible({ timeout: 25_000 })
   }
   await captura(page, '09-vehiculo-principal')
 
-  // La app confirma con `window.confirm()` nativo, no con un diálogo propio:
-  // Playwright los descarta por defecto y el preventDefault frena el borrado.
-  page.once('dialog', (d) => d.accept())
-  await tarjeta.locator('button[aria-label="Eliminar vehículo"]').click()
+  const eliminar = tarjeta.locator('button[aria-label="Eliminar vehículo"]')
+  await eliminar.click()
+  const dialogo = page.locator('[role="alertdialog"], [role="dialog"]')
+  await expect(dialogo).toContainText(`¿Eliminar "MarcaQA Modelo QA"?`)
+  await dialogo.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(dialogo).toHaveCount(0)
+  await expect(tarjeta).toBeVisible()
 
-  // Este flujo no muestra toast de éxito (ver informe), así que se verifica el
-  // efecto, que es más fuerte: comprueba que la baja llegó al servidor.
+  await eliminar.click()
+  await dialogo.getByRole('button', { name: 'Eliminar' }).click()
+  await expect(page.getByText('Vehículo eliminado.')).toBeVisible({ timeout: 5_000 })
   await expect(page.locator('li').filter({ hasText: placa })).toHaveCount(0, { timeout: 25_000 })
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.locator('li').filter({ hasText: placa })).toHaveCount(0, { timeout: 25_000 })
