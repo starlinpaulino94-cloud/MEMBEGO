@@ -116,6 +116,25 @@ export function exigeSistema(ctx: ContextoApi): {
   return ctx.principal
 }
 
+/**
+ * Exige una CLAVE DE EMPRESA. El espejo de `exigeSistema`.
+ *
+ * Lo usan los recursos que administran la configuración de una empresa —sus
+ * suscripciones de webhook—, donde un satélite no pinta nada: uno que atiende a
+ * veinte empresas no tiene por qué decidir a quién avisan ellas, ni mucho menos
+ * apuntar sus avisos a otro sitio.
+ *
+ * Lanza en vez de devolver un fallo, igual que su espejo: llegar aquí con el
+ * principal equivocado es un error de programación de la ruta —declaró un
+ * scope que solo tienen las claves de empresa— y no una petición mal formada.
+ */
+export function exigeEmpresa(ctx: ContextoApi): { claveId: string; companyId: string } {
+  if (ctx.principal.tipo !== 'empresa') {
+    throw new Error('Esta ruta requiere una clave de API de empresa.')
+  }
+  return { claveId: ctx.principal.claveId, companyId: ctx.principal.companyId }
+}
+
 type Fallo = { fallo: NextResponse; requestId: string }
 
 function esFallo(r: unknown): r is Fallo {

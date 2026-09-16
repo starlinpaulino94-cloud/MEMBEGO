@@ -62,16 +62,37 @@ export interface AccionState {
   prueba?: ResultadoPrueba
 }
 
+/**
+ * Lo que una clave de empresa puede administrar, además de leer.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ÉSTE SÍ, SI LOS DEMÁS DE ESCRITURA NO
+ *
+ * La regla de abajo («solo lectura») nace de que las escrituras de negocio
+ * exigen saber QUÉ sistema respalda la operación: un canje sin sistema no se
+ * audita. `webhooks:manage` no es eso. No crea clientes ni consume beneficios:
+ * cambia a quién avisa MembeGo, y ese «quién» es la propia empresa que presenta
+ * la clave. No hay operación que atribuir porque no hay operación de negocio.
+ *
+ * Y sin él, un constructor de flujos —Zapier, Make— no puede funcionar como se
+ * espera: al montar el flujo tiene que crear la suscripción y al apagarlo
+ * retirarla. Obligar a entrar al panel a mano cada vez es lo que hace que una
+ * integración se abandone en la primera prueba.
+ */
+const SCOPES_DE_ADMINISTRACION = ['webhooks:manage']
+
 /** Scopes que una empresa puede conceder a una clave suya. */
 const SCOPES_PERMITIDOS = [...new Set(Object.values(SCOPES_POR_CAPABILITY).flat())]
-  .filter((s) => s.endsWith(':read'))
+  .filter((s) => s.endsWith(':read') || SCOPES_DE_ADMINISTRACION.includes(s))
   .sort()
 
 /**
- * Solo scopes de LECTURA, y no por prudencia genérica: los recursos de
- * escritura de la API v1 exigen la credencial de un satélite (necesitan saber
- * qué sistema respalda un canje). Ofrecer aquí `benefits:redeem` sería listar
- * un permiso que la guardia va a rechazar después — un interruptor pintado.
+ * Lectura, MÁS los de administración de la propia configuración (arriba).
+ *
+ * Lo que sigue fuera son las escrituras de negocio: los recursos de escritura
+ * de la API v1 exigen la credencial de un satélite (necesitan saber qué sistema
+ * respalda un canje). Ofrecer aquí `benefits:redeem` sería listar un permiso
+ * que la guardia va a rechazar después — un interruptor pintado.
  */
 export async function scopesDisponibles(): Promise<string[]> {
   return SCOPES_PERMITIDOS

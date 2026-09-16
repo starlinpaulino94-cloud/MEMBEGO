@@ -81,6 +81,11 @@ function seguridadDe(r: RecursoApi): Record<string, string[]>[] {
       // Dos alternativas, no dos requisitos: en OpenAPI, entradas distintas
       // del array son un O lógico.
       return [{ tokenDeSistema: r.scope ? [r.scope] : [] }, { claveDeEmpresa: [] }]
+    case 'empresa':
+      // Una sola: aquí un satélite NO entra. Ofrecerlo en la especificación
+      // haría que un generador de clientes escribiera el camino que el servidor
+      // va a rechazar.
+      return [{ claveDeEmpresa: [] }]
     case 'superadmin':
       return [{ sesionDeSuperadmin: [] }]
   }

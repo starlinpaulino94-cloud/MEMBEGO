@@ -47,6 +47,15 @@ export const CODIGOS_ERROR = {
    * alguien capturó la URL.
    */
   SSO_TOKEN_ALREADY_USED: 409,
+  /**
+   * La empresa llegó al máximo que su plan le concede (webhooks, claves…).
+   *
+   * 403 y no 400: la petición está bien formada y el cliente no puede
+   * arreglarla cambiándola. Tampoco 429 —no es un problema de ritmo— ni 402,
+   * que promete una pasarela de pago que aquí no existe: lo resuelve el plan,
+   * no reintentar.
+   */
+  QUOTA_EXCEEDED: 403,
   // 429
   RATE_LIMITED: 429,
   // 5xx
