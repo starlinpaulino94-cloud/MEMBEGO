@@ -27,6 +27,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   crecimiento: 'Crecimiento',
   scanner: 'Escanear QR',
   pagos: 'Pagos',
+  facturas: 'Comprobantes',
   citas: 'Citas',
   ofertas: 'Regalos VIP',
   perfil: 'Perfil público',
