@@ -1297,15 +1297,20 @@ function seccionVisible(href: string, ctx: ContextoNav): boolean {
     /**
      * UNA RUTA `/admin/*` QUE NO MAPEA A NINGUNA SECCIÓN.
      *
-     * Hoy son dos, `/admin/crm` y `/admin/facturas`: están en el menú y su
-     * primer segmento no figura en `ADMIN_SECTIONS`. Se comportan como antes
-     * de esta fase — los roles con panel completo las ven, los acotados no —
-     * y esa asimetría se conserva A PROPÓSITO. Cambiarla movería quién puede
-     * abrir dos módulos reales, que es una decisión de autorización y no de
-     * navegación; se toma en el módulo de permisos, con sus pruebas, no aquí.
+     * Hoy queda una, `/admin/crm`: está en el menú y su primer segmento no
+     * figura en `ADMIN_SECTIONS`. Sus pantallas sí se gobiernan —por `leads`,
+     * `conversaciones`, `pipeline` y `configuracion`—; es el enlace a la raíz
+     * el que no cae en ninguna. Se comporta como antes de esta fase — los
+     * roles con panel completo la ven, los acotados no — y esa asimetría se
+     * conserva A PROPÓSITO: cambiarla movería quién puede abrir un módulo
+     * real, que es una decisión de autorización y no de navegación; se toma en
+     * el módulo de permisos, con sus pruebas, no aquí. Está fichada en
+     * `PENDIENTES` (tests/permisos-empleado.test.ts) para que no se olvide.
      *
-     * Lo que sí hace falta decir es que un ajuste por empleado NO puede
-     * regular estos dos: sin sección, no hay nada que conceder ni negar.
+     * `/admin/facturas` estaba en este mismo caso y ya salió: hoy es la
+     * sección `facturas`. Lo que sí hace falta decir es que un ajuste por
+     * empleado NO puede regular lo que quede aquí: sin sección, no hay nada
+     * que conceder ni negar.
      */
     return FULL_ADMIN_ROLES.includes(ctx.role)
   }
