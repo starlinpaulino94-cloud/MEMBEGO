@@ -10,6 +10,7 @@ import {
   puedeEditarPermisos,
   canAccessAdminSection,
   adminSectionForPath,
+  ADMIN_SECTIONS,
 } from '../src/lib/auth/permissions'
 import {
   navForRole,
@@ -334,4 +335,64 @@ test('el layout del CRM sigue siendo la puerta del subárbol', () => {
   // rutas del CRM que no tienen página propia hoy.
   const src = readFileSync(join(RAIZ, 'src/app/(admin)/admin/crm/layout.tsx'), 'utf8')
   assert.ok(src.includes("await requireSection('leads')"))
+})
+
+// -- Ninguna casilla pintada -------------------------------------------------
+
+/**
+ * TODA SECCIÓN SE EXIGE EN ALGÚN SITIO.
+ *
+ * Una sección de `ADMIN_SECTIONS` es una casilla en el formulario de Permisos
+ * por empleado. Si nada la exige, esa casilla miente: el panel dice «negado» y
+ * no se cierra ninguna puerta. Es la misma deshonestidad que `funciones.ts`
+ * prohíbe para las funciones, un piso más arriba.
+ *
+ * Se exige de una de dos maneras, y vale cualquiera:
+ *
+ *  · Con `requireSection('<seccion>')` en el código — la barrera real, la
+ *    única que cubre las server actions.
+ *  · Con una carpeta `/admin/<seccion>` — entonces `adminSectionForPath`
+ *    resuelve sus rutas y el proxy cierra la vista, aunque las páginas de
+ *    dentro todavía se guarden por rol.
+ *
+ * `leads` pasa por la primera sin tener carpeta: sus rutas son `/admin/crm/*`
+ * y llegan por `SECCION_POR_PREFIJO`.
+ *
+ * Esto salió de tres secciones —'conversaciones', 'pipeline' y
+ * 'configuracion'— que no cumplían ninguna de las dos y llevaban meses
+ * ofreciéndose en el formulario sin gobernar nada.
+ */
+test('toda sección se exige en algún sitio', () => {
+  const BASE_ADMIN = join(RAIZ, 'src/app/(admin)/admin')
+  const carpetas = new Set(
+    readdirSync(BASE_ADMIN, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+  )
+
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+    .map((f) => readFileSync(join(RAIZ, 'src', f), 'utf8'))
+    .join('\n')
+
+  const pintadas = ADMIN_SECTIONS.filter(
+    (s) => !carpetas.has(s) && !fuente.includes(`requireSection('${s}'`)
+  )
+  assert.deepEqual(
+    pintadas,
+    [],
+    'estas secciones salen en el formulario de Permisos y no cierran ninguna puerta: ' +
+      'dales una guardia o sácalas de ADMIN_SECTIONS'
+  )
+})
+
+test('el CRM tiene UNA sección, no cinco', () => {
+  // Concreta a propósito, además del invariante de arriba: si alguien vuelve a
+  // añadir 'conversaciones' o 'pipeline' junto con una guardia de adorno, el
+  // invariante pasaría y esta prueba explica por qué sigue estando mal.
+  const delCrm = (ADMIN_SECTIONS as readonly string[]).filter((s) =>
+    ['crm', 'leads', 'conversaciones', 'pipeline', 'configuracion'].includes(s)
+  )
+  assert.deepEqual(delCrm, ['leads'])
+  assert.equal(adminSectionForPath('/admin/crm/conversaciones'), 'leads')
 })
