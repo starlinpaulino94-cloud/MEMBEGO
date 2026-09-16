@@ -3,9 +3,10 @@
  * Ejecutar: npm test
  *
  * Protege el contrato del asistente: en un flujo car wash, el vehículo del
- * registro NUEVO llega COMPLETO (categoría, marca, modelo, año, color, placa
- * válida) o el alta se rechaza con mensaje — nunca el descarte silencioso del
- * formulario clásico. La normalización de placa es la del dominio.
+ * registro NUEVO llega con placa + categoría (marca, modelo, año y color son
+ * opcionales con defaults) o el alta se rechaza con mensaje — nunca el
+ * descarte silencioso del formulario clásico. La normalización de placa es
+ * la del dominio.
  */
 
 import { test } from 'node:test'
@@ -33,20 +34,23 @@ test('vehículo completo: pasa, normaliza placa y aplica país por defecto', () 
   }
 })
 
-test('cada campo faltante rechaza con mensaje propio (nunca descarte silencioso)', () => {
-  const casos: Array<[Partial<typeof completo>, RegExp]> = [
-    [{ tipoVehiculoId: '' }, /categoría/i],
-    [{ marca: '' }, /marca/i],
-    [{ modelo: '' }, /modelo/i],
-    [{ anioRaw: '' }, /año/i],
-    [{ color: '' }, /color/i],
-    [{ placa: '' }, /placa/i],
-  ]
-  for (const [cambio, patron] of casos) {
-    const r = validarVehiculoNuevo({ ...completo, ...cambio })
-    assert.equal(r.ok, false)
-    if (!r.ok) assert.match(r.error, patron)
+test('solo placa y categoría son obligatorias; marca, modelo, año y color usan defaults', () => {
+  const soloMinimo = validarVehiculoNuevo({ tipoVehiculoId: 'tv1', placa: 'a 123-456' })
+  assert.equal(soloMinimo.ok, true)
+  if (soloMinimo.ok) {
+    assert.equal(soloMinimo.vehiculo.marca, 'Sin marca')
+    assert.equal(soloMinimo.vehiculo.modelo, 'Sin modelo')
+    assert.equal(soloMinimo.vehiculo.anio, new Date().getFullYear())
+    assert.equal(soloMinimo.vehiculo.color, 'Sin color')
   }
+
+  const sinCategoria = validarVehiculoNuevo({ ...completo, tipoVehiculoId: '' })
+  assert.equal(sinCategoria.ok, false)
+  if (!sinCategoria.ok) assert.match(sinCategoria.error, /categoría/i)
+
+  const sinPlaca = validarVehiculoNuevo({ ...completo, placa: '' })
+  assert.equal(sinPlaca.ok, false)
+  if (!sinPlaca.ok) assert.match(sinPlaca.error, /placa/i)
 })
 
 test('placa inválida y año fuera de rango usan los mensajes del dominio', () => {
