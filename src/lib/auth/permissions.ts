@@ -17,8 +17,7 @@ import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
  * ni conceder ni negar, porque no hay casilla que marcar. Así se coló
  * `facturas` durante meses. Lo vigila la prueba «toda ruta /admin del menú
  * resuelve a una sección conocida» (tests/permisos-empleado.test.ts), que
- * lleva además la lista de las que siguen sin gobernar: hoy `/admin/crm` y
- * `/admin/sinonimos`.
+ * lleva además la lista de las que siguen sin gobernar: hoy solo `/admin/crm`.
  */
 export const ADMIN_SECTIONS = [
   'dashboard',
@@ -65,6 +64,14 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
+  // Sinónimos de búsqueda (`/admin/sinonimos`): las equivalencias con las que
+  // los clientes de la empresa encuentran su catálogo. Segundo caso destapado
+  // por la prueba del menú, y más serio que `facturas`: sus dos server actions
+  // (`guardarSinonimoEmpresa`, `eliminarSinonimoEmpresa`) pedían
+  // `requireRole(ADMIN_ROLES)`, que incluye MARKETING y SUPERVISOR. Como las
+  // actions se despachan por ID desde cualquier path permitido, el gate del
+  // proxy no las tapaba: se podían llamar sin poder abrir la pantalla.
+  'sinonimos',
   // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
   // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
   'excursiones',
@@ -107,6 +114,14 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 // gobernar — y que la pantalla dejó de fiarse solo del proxy: pasó de
 // `requireRole(ADMIN_ROLES)`, que incluye a Marketing y Supervisión, a
 // `requireSection('facturas')`, que no.
+//
+// `sinonimos` tampoco entra, y por el mismo motivo de fondo: el menú nunca se
+// lo enseñó a los roles acotados, y cambiarle el dueño a un módulo no se hace
+// de paso. La diferencia con `facturas` es que aquí sí había una puerta
+// abierta: sus server actions aceptaban `ADMIN_ROLES`, y a las actions el
+// proxy no las cubre. Ahora piden la sección, así que Marketing y Supervisión
+// dejan de poder tocar los sinónimos — que es lo que el menú ya daba a
+// entender.
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // 'riesgo' entra en los dos: Marketing lo necesita para saber a quién
   // dirigir una campaña de retención, y Supervisión para repartir las llamadas.

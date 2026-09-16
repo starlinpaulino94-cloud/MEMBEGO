@@ -1,5 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   resolverPermisosUsuario,
   seccionPermitida,
@@ -148,12 +150,6 @@ const PENDIENTES: readonly string[] = [
   // no es sección de nada. Bajo cuál de las cuatro cae la raíz es una decisión
   // del CRM, no de este módulo.
   '/admin/crm',
-  // `/admin/sinonimos` (Sinónimos de búsqueda). LO DESTAPÓ ESTA PRUEBA: nadie
-  // sabía que estaba en el mismo caso. Su guardia es `requireRole(ADMIN_ROLES)`,
-  // que deja pasar a MARKETING y SUPERVISOR aunque el menú no se lo enseñe.
-  // Darle sección es decidir de quién es el módulo, y eso no se decide de paso
-  // en el rescate de otro.
-  '/admin/sinonimos',
 ]
 
 test('toda ruta /admin del menú resuelve a una sección conocida', () => {
@@ -227,4 +223,60 @@ test('negar Comprobantes lo borra también del menú', () => {
   // era inalcanzable para esta función.
   const p = resolverPermisosUsuario({ v: 1, secciones: { facturas: false } })
   assert.ok(hrefsNegadosPorPermisos('CAJERO', p).includes('/admin/facturas'))
+})
+
+// -- Sinónimos de búsqueda ---------------------------------------------------
+//
+// Lo destapó la prueba del menú de arriba: estaba en el mismo caso que
+// Comprobantes, pero peor. La pantalla la tapaba el proxy; sus dos server
+// actions, no — y las actions se despachan por ID desde cualquier path
+// permitido, así que `requireRole(ADMIN_ROLES)` dejaba a MARKETING y
+// SUPERVISOR editar los sinónimos de la empresa sin poder abrir el módulo.
+
+const RAIZ = join(__dirname, '..')
+
+test('Sinónimos de búsqueda es una sección gobernable', () => {
+  const p = resolverPermisosUsuario({ v: 1, secciones: { sinonimos: false } })
+  assert.equal(seccionPermitida('GERENTE', 'sinonimos', p), false)
+  // Su vecina en el menú («Experiencia cliente») no se toca.
+  assert.equal(seccionPermitida('GERENTE', 'personalizacion', p), true)
+  // Y con la columna limpia sigue siendo lo que su rol dice.
+  assert.equal(seccionPermitida('GERENTE', 'sinonimos', null), true)
+})
+
+test('los sinónimos no se le conceden a ningún rol acotado', () => {
+  // El menú nunca se los enseñó; ahora la sección dice lo mismo, y las
+  // actions —que son la barrera real— también.
+  for (const role of ['MARKETING', 'SUPERVISOR'] as const) {
+    assert.equal(
+      canAccessAdminSection(role, 'sinonimos'),
+      false,
+      `${role} no debería traer sinonimos de serie`
+    )
+  }
+  assert.equal(canAccessAdminSection('ADMINISTRADOR', 'sinonimos'), true)
+  assert.equal(canAccessAdminSection('GERENTE', 'sinonimos'), true)
+})
+
+test('negar Sinónimos lo borra también del menú', () => {
+  const p = resolverPermisosUsuario({ v: 1, secciones: { sinonimos: false } })
+  assert.ok(hrefsNegadosPorPermisos('GERENTE', p).includes('/admin/sinonimos'))
+})
+
+test('las acciones de sinónimos piden la sección, no un rol', () => {
+  // La prueba de arriba solo comprueba la resolución pura. Esta fija la
+  // guardia en el código: es lo único que separa a un rol acotado de escribir
+  // en los sinónimos de la empresa, porque el proxy no ve las actions.
+  const src = readFileSync(join(RAIZ, 'src/modules/busqueda/actions.ts'), 'utf8')
+  assert.equal(
+    src.split("await requireSection('sinonimos')").length - 1,
+    2,
+    'las dos acciones de empresa (guardar y eliminar) tienen que pedir la sección'
+  )
+  assert.ok(
+    !src.includes('requireRole(ADMIN_ROLES)'),
+    'ADMIN_ROLES incluye MARKETING y SUPERVISOR: volvería a abrir la puerta'
+  )
+  // Los sinónimos GLOBALES siguen siendo de la plataforma y de nadie más.
+  assert.ok(src.includes("requireRole('SUPERADMIN')"))
 })

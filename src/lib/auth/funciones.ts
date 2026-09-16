@@ -53,6 +53,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   marketing: 'Marketing',
   gamificacion: 'Gamificación',
   personalizacion: 'Personalización',
+  sinonimos: 'Sinónimos de búsqueda',
   app: 'App Car Wash',
   excursiones: 'Excursiones',
   leads: 'Leads',
