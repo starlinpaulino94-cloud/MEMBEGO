@@ -1297,15 +1297,14 @@ function seccionVisible(href: string, ctx: ContextoNav): boolean {
     /**
      * UNA RUTA `/admin/*` QUE NO MAPEA A NINGUNA SECCIÓN.
      *
-     * Hoy queda una, `/admin/crm`: está en el menú y su primer segmento no
-     * figura en `ADMIN_SECTIONS`. Sus pantallas sí se gobiernan —por `leads`,
-     * `conversaciones`, `pipeline` y `configuracion`—; es el enlace a la raíz
-     * el que no cae en ninguna. Se comporta como antes de esta fase — los
-     * roles con panel completo la ven, los acotados no — y esa asimetría se
-     * conserva A PROPÓSITO: cambiarla movería quién puede abrir un módulo
-     * real, que es una decisión de autorización y no de navegación; se toma en
-     * el módulo de permisos, con sus pruebas, no aquí. Está fichada en
-     * `PENDIENTES` (tests/permisos-empleado.test.ts) para que no se olvide.
+     * Hoy NINGUNA ruta del menú cae aquí, y una prueba lo mantiene así
+     * («toda ruta /admin del menú resuelve a una sección conocida», en
+     * tests/permisos-empleado.test.ts). Las tres que caían —`/admin/facturas`,
+     * `/admin/sinonimos` y `/admin/crm`— ya son secciones o resuelven a una.
+     *
+     * La rama se queda igualmente: es el fail-closed para una ruta de /admin
+     * que llegue por URL sin pasar por el menú. Si vuelve a aparecer una en el
+     * menú, salta la prueba antes que esto.
      *
      * `/admin/facturas` estaba en este mismo caso y ya salió: hoy es la
      * sección `facturas`. Lo que sí hace falta decir es que un ajuste por

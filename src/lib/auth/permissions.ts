@@ -17,7 +17,7 @@ import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
  * ni conceder ni negar, porque no hay casilla que marcar. Así se coló
  * `facturas` durante meses. Lo vigila la prueba «toda ruta /admin del menú
  * resuelve a una sección conocida» (tests/permisos-empleado.test.ts), que
- * lleva además la lista de las que siguen sin gobernar: hoy solo `/admin/crm`.
+ * lleva además la lista de las que siguen sin gobernar, que hoy está vacía.
  */
 export const ADMIN_SECTIONS = [
   'dashboard',
@@ -268,6 +268,25 @@ export function permisosDesdeSeleccion(
 }
 
 /**
+ * Prefijos cuyo primer segmento NO da su nombre a una sección.
+ *
+ * Hoy solo el CRM. Sus pantallas viven bajo `/admin/crm/*` pero el módulo se
+ * gobierna por `leads`, que es lo que exige su layout para todo el subárbol
+ * (`src/app/(admin)/admin/crm/layout.tsx`) y lo que piden todas sus server
+ * actions. El catálogo de capacidades ya lo decía —«todo /admin/crm cuelga de
+ * la sección 'leads'»—; lo que faltaba era que `adminSectionForPath` lo
+ * supiera, porque hasta ahora devolvía null y el proxy trataba el módulo
+ * entero como una ruta desconocida.
+ *
+ * Inventar una sección `crm` habría sido la otra salida, y es peor: serían
+ * cinco casillas en el formulario de Permisos para un módulo con una sola
+ * puerta, y cuatro de ellas no harían nada.
+ */
+const SECCION_POR_PREFIJO: ReadonlyArray<readonly [string, AdminSection]> = [
+  ['/admin/crm', 'leads'],
+]
+
+/**
  * Deriva la sección de un path del panel: `/admin/promociones/nuevo` →
  * `promociones`. Solo `/admin` exacto → `dashboard`. Devuelve null si el path
  * no es de /admin, tiene un segmento vacío (p. ej. `/admin//x`) o la sección
@@ -276,6 +295,9 @@ export function permisosDesdeSeleccion(
 export function adminSectionForPath(path: string): AdminSection | null {
   if (path === '/admin') return 'dashboard'
   if (!path.startsWith('/admin/')) return null
+  for (const [prefijo, seccion] of SECCION_POR_PREFIJO) {
+    if (path === prefijo || path.startsWith(prefijo + '/')) return seccion
+  }
   const seg = path.split('/')[2]
   if (!seg) return null
   return (ADMIN_SECTIONS as readonly string[]).includes(seg) ? (seg as AdminSection) : null
