@@ -553,12 +553,44 @@ cliente actualizado, membresía cancelada/vencida.
 una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vaciarse.
 **Esfuerzo: 1–2 semanas.**
 
+### ◐ B-5 · Editar clientes HECHO; cancelar citas y borrar, pendientes (17/09/2026)
+
+> **Hecho, con una decisión de producto detrás.** La API ya no es solo lectura y
+> alta: `PATCH /customers/{id}` edita la ficha de contacto de un cliente, y
+> `GET /customers` la lista entera (paginada, B-6). El listado completa la R de
+> CRUD y es lo que una sincronización con un CRM necesita.
+>
+> **El fork que se preguntó y cómo se resolvió:** ¿quién puede escribir
+> clientes? La escritura de negocio estaba reservada a los satélites (necesitan
+> saber qué sistema la respalda; un canje sin sistema no se audita). Se eligió
+> «las dos, con scopes distintos»: el satélite conserva su **creación** auditada
+> (`customers:write`, con idempotencia y canal de origen), y una clave de
+> empresa —un Zapier— puede **editar** la ficha con un scope nuevo y separado,
+> `customers:manage`. Editar no mueve valor, así que no necesita un sistema
+> detrás; y ser un scope distinto impide que se confunda con la creación.
+>
+> **Detalles que costaban si se hacían mal:** ausente y vacío no son lo mismo
+> (no mandar `phone` es «déjalo», mandar `phone:""` es «bórralo»); un teléfono o
+> correo que ya es de otro cliente se rechaza con 409 para no partir un
+> historial; y el `nombreBusqueda` no se toca —un trigger de la base lo
+> recalcula, y escribirlo también aquí sería una segunda verdad que se olvida y
+> rompe la búsqueda.
+>
+> **Sigue pendiente:** cancelar una cita (una máquina de estados propia, no un
+> simple PATCH) y borrar un cliente (cascada + cumplimiento). Se dejaron fuera a
+> propósito: cada una es su propio riesgo y merece su propia conversación.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟡 B-5 · La API pública no puede modificar ni borrar
 
 Solo `GET` y `POST`. Un integrador no puede actualizar un cliente, cancelar una
 cita ni borrar nada. Para una API que se ofrece a terceros, eso obliga a
 soluciones raras (crear duplicados) o simplemente cierra el caso de uso.
 **Esfuerzo: 2–3 semanas** para los recursos principales.
+
+</details>
 
 ### ✅ B-6 · Paginación por cursor — RESUELTO (17/09/2026)
 
@@ -651,7 +683,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | Documentación de la API | **3** | 4 | OpenAPI generado del inventario (no se queda viejo) vs. portal completo de GHL |
 | **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
-| **Superficie de la API** | **3** | 5 | 27 rutas, listados paginados por cursor y un DELETE; sigue sin PUT/PATCH |
+| **Superficie de la API** | **4** | 5 | 29 rutas con GET/POST/PATCH/DELETE, listados paginados y un editar cliente; falta cancelar cita y borrar |
 | **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
 | **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
@@ -700,7 +732,7 @@ generar trabajo manual por cada cliente conectado.
 | ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
 | ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
 | 10 | Catálogo de eventos hasta ~20 tipos (citas, pagos, mensajes) | 2 | B-4 |
-| 11 | `PATCH`/`DELETE` en clientes, citas, membresías | 2 | B-5 |
+| ◐ 11 | `PATCH` cliente + `GET` listado ✅ hecho · cancelar cita y borrar, pendientes | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
 | 13 | Métricas de uso por credencial | 1 | B-7 |
 
@@ -768,8 +800,10 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   entrante, la acción HTTP y la app de Zapier (puntos 8 y 9) están hechos, y con
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir
   que lo integremos a mano. Lo que queda de la Fase 2 son piezas de superficie
-  de API —`PATCH`/`DELETE` en los recursos principales (B-5) y métricas de uso
-  (B-7)—, y el catálogo de eventos (B-4). La paginación (B-6) ya está.
+  de API que quedan: métricas de uso por credencial (B-7), el catálogo de
+  eventos (B-4), y las dos piezas de B-5 que se dejaron fuera a propósito
+  (cancelar cita, borrar cliente). La edición de clientes y la paginación ya
+  están.
 
   La frase original decía que eran tres semanas de trabajo que hacen por la
   cobertura lo que treinta conectores harían en un año.

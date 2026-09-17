@@ -105,7 +105,7 @@ test('el scope que la app necesita existe y se puede conceder', () => {
   )
   assert.match(
     codigo('src/modules/connect/adminActions.ts'),
-    /SCOPES_DE_ADMINISTRACION = \['webhooks:manage'\]/,
+    /SCOPES_DE_ADMINISTRACION = \[[^\]]*'webhooks:manage'[^\]]*\]/,
     'el servidor filtraría el permiso al crear la clave'
   )
 })

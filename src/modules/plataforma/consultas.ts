@@ -143,6 +143,42 @@ export async function buscarClientes(companyId: string, termino: string): Promis
   return filas.map(customerDTO)
 }
 
+/** Una fila de cliente cruda, con `id`, para poder colgar el cursor de ella. */
+export interface FilaCliente {
+  id: string
+  nombre: string
+  email: string
+  telefono: string | null
+}
+
+/**
+ * LISTA los clientes de una empresa, paginada (B-5 + B-6).
+ *
+ * A diferencia de `buscarClientes`, no filtra por término: recorre la clientela
+ * entera, que es lo que una sincronización con un CRM necesita («tráeme todos
+ * mis clientes»). Precisamente por eso va PAGINADA y nunca devuelve todo de
+ * golpe — y por eso vive detrás de `customers:read`, el mismo scope que ya deja
+ * resolver y buscar: no expone nada que ese permiso no alcanzara ya probando.
+ *
+ * Devuelve las filas crudas (con `id`) para que la ruta cuelgue el cursor de la
+ * última; el orden termina en `id` para que ese cursor no salte un cliente
+ * cuando dos comparten nombre.
+ */
+export async function listarClientes(
+  companyId: string,
+  pagina: { take: number; cursor?: { id: string }; skip?: number }
+): Promise<FilaCliente[]> {
+  return conEmpresa(companyId, (tx) =>
+    tx.cliente.findMany({
+      where: { companyId },
+      orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
+      select: { id: true, nombre: true, email: true, telefono: true },
+      take: pagina.take,
+      ...(pagina.cursor ? { cursor: pagina.cursor, skip: pagina.skip ?? 1 } : {}),
+    })
+  ).catch(() => [])
+}
+
 // ── Vehículos ───────────────────────────────────────────────────────────────
 
 /**

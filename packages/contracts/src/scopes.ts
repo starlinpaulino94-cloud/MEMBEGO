@@ -36,6 +36,22 @@ export const CAPABILITIES = [
    * avisos de quien presenta la clave, y de nadie más.
    */
   'WEBHOOK_SUBSCRIPTION',
+  /**
+   * EDITAR la ficha de contacto de un cliente que YA existe (nombre, teléfono,
+   * correo). No crea ni consume nada.
+   *
+   * Es escritura, pero de otra clase que `CUSTOMER_REGISTRATION`: aquélla la
+   * hace un satélite —el punto de venta que registra a quien llega sin cuenta—
+   * y queda atada al sistema que la respalda, para que se pueda auditar de
+   * dónde salió la ficha. Ésta la hace una clave de EMPRESA —una integración de
+   * trastienda, un Zapier que mantiene los datos al día— sobre clientes que la
+   * empresa ya tiene. No mueve valor, así que no necesita un sistema detrás.
+   *
+   * Por eso su scope es `customers:manage` y no `customers:write`: el `:write`
+   * es de los satélites y arrastra idempotencia y canal de origen; el `:manage`
+   * es «ordena tus propios registros», concedible a una clave de empresa.
+   */
+  'CUSTOMER_UPDATE',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -66,6 +82,10 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   TRANSACTION_SYNC: ['transactions:write'],
   LOYALTY_EVENT: ['events:publish'],
   WEBHOOK_SUBSCRIPTION: ['webhooks:manage'],
+  // `customers:read` va incluido por el mismo motivo que en el alta: la
+  // respuesta de una edición devuelve la ficha, así que conceder editar sin
+  // leer sería un scope que miente sobre lo que de verdad deja hacer.
+  CUSTOMER_UPDATE: ['customers:read', 'customers:manage'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

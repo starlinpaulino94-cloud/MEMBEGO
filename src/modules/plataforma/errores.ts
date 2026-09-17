@@ -77,6 +77,7 @@ const MENSAJES: Record<CodigoError, string> = {
   REDEMPTION_CONFLICT: 'The benefit changed while redeeming. Re-evaluate and retry.',
   SSO_TOKEN_INVALID: 'The SSO token does not verify with your secret, or it expired.',
   SSO_TOKEN_ALREADY_USED: 'This SSO token was already redeemed. Tokens are single use.',
+  CUSTOMER_CONFLICT: 'That phone or email already belongs to another customer of this company.',
   QUOTA_EXCEEDED: 'This company reached the limit its plan grants for this resource.',
   RATE_LIMITED: 'Too many requests. Slow down and retry later.',
   INTERNAL_ERROR: 'Unexpected error. Retry later; the requestId identifies this call.',

@@ -37,11 +37,14 @@ const SCOPES: { valor: string; label: string }[] = [
   { valor: 'promotions:read', label: 'Ver promociones' },
   { valor: 'appointments:read', label: 'Ver citas' },
   { valor: 'branches:read', label: 'Ver sucursales' },
-  // El único que no es de lectura. Se dice lo que HACE, no cómo se llama: quien
-  // marca esta casilla está dejando que una herramienta cambie a quién avisamos.
+  // Los dos que no son de lectura. Se dice lo que HACEN, no cómo se llaman.
   {
     valor: 'webhooks:manage',
     label: 'Crear y retirar avisos (necesario para Zapier y similares)',
+  },
+  {
+    valor: 'customers:manage',
+    label: 'Editar la ficha de tus clientes (nombre, teléfono, correo)',
   },
 ]
 

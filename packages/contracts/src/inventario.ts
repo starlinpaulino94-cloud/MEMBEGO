@@ -48,7 +48,7 @@ export interface RecursoApi {
    * un `/delete` al final de la ruta, en cambio, sería entrenar a quien importe
    * este OpenAPI a escribir una API que no es la que queremos tener.
    */
-  metodo: 'GET' | 'POST' | 'DELETE'
+  metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   /** Ruta bajo `/api/platform/v1`, con `{id}` para los parámetros. */
   ruta: string
   /** Scope exigido, o null si basta con estar autenticado. */
@@ -152,6 +152,21 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'customers:read',
     principal: 'sistema-o-empresa',
     resumen: 'Resuelve un cliente por su identificador exacto (teléfono, correo o QR).',
+  },
+  {
+    metodo: 'GET',
+    ruta: '/customers',
+    scope: 'customers:read',
+    principal: 'sistema-o-empresa',
+    resumen: 'Lista los clientes de la empresa, en orden alfabético.',
+    paginado: true,
+  },
+  {
+    metodo: 'PATCH',
+    ruta: '/customers/{id}',
+    scope: 'customers:manage',
+    principal: 'empresa',
+    resumen: 'Edita el nombre, el teléfono o el correo de un cliente existente.',
   },
   {
     metodo: 'POST',

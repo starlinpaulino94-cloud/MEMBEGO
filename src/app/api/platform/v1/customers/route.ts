@@ -3,8 +3,41 @@ import { altaCliente } from '@/modules/plataforma/alta-cliente'
 import { autenticarSobreEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { conIdempotencia } from '@/modules/plataforma/idempotencia'
+import { listarClientes } from '@/modules/plataforma/consultas'
+import { customerDTO } from '@/modules/plataforma/dto'
+import { leerPaginacion } from '@/modules/plataforma/paginacion'
+import { construirPagina } from '@/modules/plataforma/paginacionNucleo'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * GET /api/platform/v1/customers?companyId=… — la clientela de la empresa,
+ * paginada (B-5).
+ *
+ * Es el listado que una sincronización con un CRM necesita: no busca por un
+ * término, recorre todo. Va detrás de `customers:read` —el mismo scope que ya
+ * deja resolver y buscar— porque no expone nada que ese permiso no alcanzara ya
+ * probando términos; solo lo hace de una vez y ordenado.
+ */
+export async function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams
+  const auth = await autenticarSobreEmpresa(req, 'customers:read', params.get('companyId'), {
+    claveDeEmpresa: true,
+  })
+  if (esFallo(auth)) return auth.fallo
+
+  const pag = leerPaginacion(params, auth.ctx.requestId)
+  if (!pag.ok) return pag.fallo
+
+  // `...pag.cursor` añade `cursor`/`skip` cuando hay página previa, o nada en la
+  // primera. Mismo patrón que los demás listados paginados.
+  const filas = await listarClientes(auth.companyId, { take: pag.limite + 1, ...pag.cursor })
+  const { items, nextCursor } = construirPagina(filas, pag.limite)
+  return respuestaApi(
+    { customers: items.map(customerDTO), page: { limit: pag.limite, nextCursor } },
+    auth.ctx.requestId,
+  )
+}
 
 /**
  * POST /api/platform/v1/customers — el vertical registra a alguien que llegó

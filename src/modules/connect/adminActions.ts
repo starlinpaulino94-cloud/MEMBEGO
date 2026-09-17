@@ -78,8 +78,15 @@ export interface AccionState {
  * espera: al montar el flujo tiene que crear la suscripción y al apagarlo
  * retirarla. Obligar a entrar al panel a mano cada vez es lo que hace que una
  * integración se abandone en la primera prueba.
+ *
+ * `customers:manage` (B-5) entra por la misma puerta y con el mismo criterio:
+ * editar la ficha de contacto de un cliente que ya existe no consume ni otorga
+ * nada, así que no necesita un satélite detrás. Es «ordena tus propios
+ * registros», concedible a una integración de trastienda. NO es `customers:write`
+ * —crear, que sigue siendo de satélites y arrastra idempotencia y auditoría—:
+ * son dos scopes a propósito.
  */
-const SCOPES_DE_ADMINISTRACION = ['webhooks:manage']
+const SCOPES_DE_ADMINISTRACION = ['webhooks:manage', 'customers:manage']
 
 /** Scopes que una empresa puede conceder a una clave suya. */
 const SCOPES_PERMITIDOS = [...new Set(Object.values(SCOPES_POR_CAPABILITY).flat())]

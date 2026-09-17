@@ -132,14 +132,30 @@ test('las rutas marcadas como paginadas de verdad paginan', () => {
 test('cada listado paginado desempata su orden con `id`', () => {
   /**
    * La condición para que un cursor no salte ni repita: que el orden sea
-   * determinista. Un `orderBy` que no termina en `id` deja empates, y el
-   * cursor cae en medio de uno. Se comprueba que el `orderBy` de cada ruta
-   * paginada incluye `id`.
+   * determinista. Un `orderBy` que no termina en `id` deja empates, y el cursor
+   * cae en medio de uno.
+   *
+   * El `orderBy` de un listado puede vivir en la ruta (citas, membresías,
+   * promociones) o en el módulo al que la ruta delega la consulta (los clientes,
+   * en `consultas.ts`). Se busca primero en la ruta y, si allí no hay `orderBy`,
+   * en el módulo — pero SIEMPRE se exige encontrarlo, para que «no lo vi» no pase
+   * por «está bien».
    */
+  const fuentes = [
+    'src/modules/plataforma/consultas.ts',
+    'src/modules/plataforma/escrituras.ts',
+  ].map(codigo)
   for (const r of INVENTARIO_API.filter((x) => x.paginado)) {
     const src = codigo(`src/app/api/platform/v1/${r.ruta.replace(/^\//, '')}/route.ts`)
-    const orderBy = src.slice(src.indexOf('orderBy:'), src.indexOf('take:'))
-    assert.match(orderBy, /id: 'asc'/, `${r.ruta}: el orden no desempata con id`)
+    if (src.includes('orderBy:')) {
+      const orderBy = src.slice(src.indexOf('orderBy:'), src.indexOf('take:'))
+      assert.match(orderBy, /id: 'asc'/, `${r.ruta}: el orden no desempata con id`)
+    } else {
+      // La ruta delega: su consulta paginada tiene que estar en algún módulo, y
+      // su orden terminar en id.
+      const modulo = fuentes.find((f) => /orderBy: \[[^\]]*id: 'asc'[^\]]*\]/.test(f))
+      assert.ok(modulo, `${r.ruta}: delega la consulta y no se encontró un orden con id`)
+    }
   }
 })
 
