@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { EVENTOS_REENVIADOS } from '../src/modules/integraciones/nucleo'
+import { EVENTOS_EMITIDOS, EVENTOS_REENVIADOS } from '../src/modules/integraciones/nucleo'
 import { eventosDeSincronizacion } from '../src/modules/plataforma/proyecciones'
 import {
   TIPO_INTERNO,
@@ -100,10 +100,20 @@ test('las claves de legado son duplicados, no datos distintos', () => {
 })
 
 test('todo evento del bus tiene nombre v2 en forma `recurso.accion`', () => {
-  for (const interno of EVENTOS_REENVIADOS) {
+  // Sobre EVENTOS_EMITIDOS —todo lo que el bus dispara—, no solo los de satélite:
+  // desde B-4 un evento que se emite sin traducir saldría a un webhook de empresa
+  // con su nombre interno en español, y esta guardia lo para en la CI.
+  for (const interno of EVENTOS_EMITIDOS) {
     const v2 = tipoV2(interno)
     assert.notEqual(v2, interno, `"${interno}" no se renombró`)
     assert.match(v2, /^[a-z]+\.[a-z_]+$/, `"${v2}" no tiene forma de identificador de protocolo`)
+  }
+  // Y todo lo que se entrega a un satélite es, por fuerza, algo que el bus emite.
+  for (const interno of EVENTOS_REENVIADOS) {
+    assert.ok(
+      (EVENTOS_EMITIDOS as readonly string[]).includes(interno),
+      `"${interno}" se reenvía a un satélite pero no está en EVENTOS_EMITIDOS`
+    )
   }
 })
 

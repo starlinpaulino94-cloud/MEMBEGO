@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TIPO_V2 } from '@membego/contracts'
-import { EVENTOS_REENVIADOS } from '../src/modules/integraciones/nucleo'
+import { EVENTOS_EMITIDOS } from '../src/modules/integraciones/nucleo'
 import {
   COMODIN,
   esFamilia,
@@ -106,8 +106,12 @@ test('se ofrece exactamente lo que el bus emite, ni más ni menos', () => {
    * Una lista escrita a mano falla de las dos formas y las dos son caras:
    * ofrecer un evento que nadie recibirá nunca (y nadie sabrá por qué), u
    * olvidarse de uno nuevo (y que no se pueda elegir).
+   *
+   * Sale de `EVENTOS_EMITIDOS` —todo lo que el bus dispara— y no de
+   * `EVENTOS_REENVIADOS` —lo que llega a un satélite—: el webhook de empresa
+   * puede recibir cualquier evento que ocurra, no solo los de satélite (B-4).
    */
-  const delBus = [...new Set(EVENTOS_REENVIADOS.map((e) => TIPO_V2[e] ?? e))].sort()
+  const delBus = [...new Set(EVENTOS_EMITIDOS.map((e) => TIPO_V2[e] ?? e))].sort()
   assert.deepEqual(eventosDeNegocio().map((e) => e.valor), delBus)
 })
 
@@ -190,7 +194,7 @@ test('la lista enseña las frases, no los identificadores', () => {
 
 test('el catálogo se calcula en el servidor, no en el navegador', () => {
   /**
-   * `eventosSuscribibles` deriva de `EVENTOS_REENVIADOS`, que vive junto al
+   * `eventosSuscribibles` deriva de `EVENTOS_EMITIDOS`, que vive junto al
    * núcleo de firmas y arrastra `node:crypto`. Importarlo desde un componente
    * de cliente se lo llevaría al bundle.
    */

@@ -3,6 +3,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { customerDTO, type CustomerDTO } from '@/modules/plataforma/dto'
 import { mismoTelefono } from '@/modules/plataforma/consultas-nucleo'
 import { normalizarEdicion, type EntradaEdicion } from '@/modules/plataforma/alta-cliente-nucleo'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 
 /**
  * ESCRITURAS de la API que edita registros de la propia empresa (B-5).
@@ -49,7 +50,7 @@ export async function editarCliente(
   if (!norm.ok) return { ok: false, motivo: 'validacion', detalle: norm.motivo }
   const { campos } = norm
 
-  return conEmpresa(companyId, async (tx) => {
+  const resultado = await conEmpresa(companyId, async (tx) => {
     // Acotado por empresa: el id viaja en la URL. Sin el `companyId` en el
     // `where`, un id de otra empresa se editaría con solo conocerlo.
     const actual = await tx.cliente.findFirst({
@@ -87,4 +88,25 @@ export async function editarCliente(
     })
     return { ok: true, cliente: customerDTO(cliente) } as const
   }).catch(() => ({ ok: false, motivo: 'no_existe' }) as const)
+
+  /**
+   * AVISA de que la ficha cambió (B-4 · `customer.updated`).
+   *
+   * Un satélite que mantiene su copia local de `Customer` (proyección CORE) la
+   * refresca con este evento; sin él, su copia se quedaba con el dato viejo tras
+   * cada edición. Va FUERA de la transacción y nunca lanza: el bus no puede
+   * convertir un fallo de aviso en un fallo de la edición, que ya está escrita.
+   * Se manda la ficha ya guardada —los mismos campos que el contrato de
+   * proyección permite— para que quien la reciba no tenga que volver a pedirla.
+   */
+  if (resultado.ok) {
+    const c = resultado.cliente
+    await emitirEventoEstrategia({
+      companyId,
+      type: 'cliente.actualizado',
+      subjectId: c.id,
+      payload: { cliente: { id: c.id, nombre: c.nombre, email: c.email, telefono: c.telefono } },
+    })
+  }
+  return resultado
 }

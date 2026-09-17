@@ -6,15 +6,82 @@ import { createHmac, timingSafeEqual } from 'crypto'
  * contrato (el satélite implementa EXACTAMENTE estas mismas operaciones).
  */
 
-/** Eventos del bus que se reenvían a los sistemas conectados. */
+/**
+ * Eventos del bus que se ENTREGAN A LOS SATÉLITES conectados.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTA LISTA ES MÁS ESTRECHA QUE `EVENTOS_EMITIDOS` (B-4)
+ *
+ * `despacho.ts` filtra por esta lista antes de crear una fila en el outbox de
+ * cada satélite: un satélite recibe SOLO lo que está aquí. Por eso no es «todo
+ * lo que el bus emite» —eso inundaría a Car Wash con `promocion.creada` y
+ * `mensaje.recibido`, que no atiende, y le llenaría la cola de entregas muertas.
+ *
+ * Aquí va lo que un satélite necesita para operar: los hechos de negocio que ya
+ * atendía, MÁS los eventos que alimentan una PROYECCIÓN CORE que él mantiene.
+ * `cliente.actualizado` es de estos últimos: el contrato de proyección (§Fase
+ * 1a) dice que un satélite refresca su copia de `Customer` con
+ * `customer.created` Y `customer.updated`. Recibía el alta y no la edición, así
+ * que su copia se quedaba con el teléfono viejo y nadie sabía por qué. Añadirlo
+ * no es ruido: cierra ese hueco.
+ *
+ * La superficie ANCHA —lo que un Zapier de empresa puede recibir— es
+ * `EVENTOS_EMITIDOS`, y viaja por otro canal (los webhooks de empresa) que no
+ * filtra por esta lista.
+ */
 export const EVENTOS_REENVIADOS = [
   'cliente.registrado',
+  'cliente.actualizado',
   'cliente.primera_visita',
   'cliente.visita',
   'cliente.compro_servicio',
   'cliente.primera_compra',
   'membresia.activada',
   'referido.convirtio',
+] as const
+
+/**
+ * TODO evento interno que el bus EMITE DE VERDAD hoy, con emisor real.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA VERDAD SOBRE QUÉ EVENTOS EXISTEN (B-4)
+ *
+ * `EVENTOS_REENVIADOS` es el subconjunto que llega a los satélites;
+ * `EVENTOS_EMITIDOS` es la lista completa de lo que ocurre en el bus, y es la
+ * que alimenta la superficie de INTEGRACIÓN de una empresa: el selector de un
+ * webhook (A-5), el catálogo de documentación (`catalogoV2`) y el cálculo de
+ * qué eventos de proyección aún no tienen emisor.
+ *
+ * Los webhooks de empresa (`repartirEventoAWebhooks`) NO filtran por
+ * `EVENTOS_REENVIADOS`, así que estos eventos ya llegaban a quien se suscribía a
+ * «todo» — pero con su nombre interno en español y sin poder elegirlos uno a
+ * uno. Nombrarlos y ofrecerlos es lo que cierra B-4: la lista deja de ser «los
+ * siete que atiende un satélite» y pasa a ser «todo lo que tu negocio puede
+ * avisar», que es lo que un integrador espera de una plataforma como GoHighLevel.
+ *
+ * REGLA DE ORO: un evento entra aquí SOLO cuando tiene un emisor real en el
+ * código (una llamada a `emitirEventoEstrategia`). Meter un nombre sin emisor
+ * recrea el mismo problema de B-4 al revés: una casilla que no recibe nada y una
+ * tarde buscando por qué. `EVENTOS_REENVIADOS` es, por construcción, un
+ * subconjunto de esta lista (un satélite no puede recibir algo que no se emite).
+ */
+export const EVENTOS_EMITIDOS = [
+  ...EVENTOS_REENVIADOS,
+  // Journey de referidos: el invitado se registró (antes de convertir).
+  'referido.invitado_registrado',
+  // Mensajería (Meta): entra un mensaje, y de un primer mensaje nace un prospecto.
+  'mensaje.recibido',
+  'prospecto.creado',
+  // Ciclo de vida de las promociones (emitido por el puente de promociones).
+  'promocion.creada',
+  'promocion.actualizada',
+  'promocion.eliminada',
+  'promocion.duplicada',
+  'promocion.activada',
+  'promocion.pausada',
+  'promocion.archivada',
+  // Reservas de excursión: una reserva quedó pagada.
+  'reserva.pagada',
 ] as const
 
 /** Firma HMAC-SHA256 (hex) de un cuerpo, con el secreto compartido. */

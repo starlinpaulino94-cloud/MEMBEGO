@@ -1,5 +1,5 @@
 import { TIPO_V2 } from '@membego/contracts'
-import { EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
+import { EVENTOS_EMITIDOS, EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
 import { COMODIN } from '@/modules/connect/webhooksNucleo'
 
 /**
@@ -44,17 +44,38 @@ export interface EventoSuscribible {
  */
 const ETIQUETAS: Record<string, string> = {
   'customer.created': 'Un cliente se registra en tu negocio',
+  'customer.updated': 'Se actualizan los datos de un cliente',
   'visit.first_completed': 'Un cliente te visita por primera vez',
   'visit.completed': 'Se registra una visita o un canje',
   'purchase.first_completed': 'Un cliente te compra por primera vez',
   'purchase.completed': 'Un cliente compra una membresía o una oferta',
   'membership.activated': 'Una membresía queda activa',
   'referral.converted': 'Un referido completa su conversión',
+  'referral.registered': 'Un invitado se registra con un código de referido',
+  'message.received': 'Un cliente te escribe por WhatsApp u otro canal',
+  'prospect.created': 'Un primer mensaje crea un nuevo prospecto',
+  'promotion.created': 'Se crea una promoción nueva',
+  'promotion.updated': 'Se edita una promoción existente',
+  'promotion.deleted': 'Se elimina una promoción',
+  'promotion.duplicated': 'Se duplica una promoción existente',
+  'promotion.activated': 'Se activa una promoción',
+  'promotion.paused': 'Se pausa una promoción activa',
+  'promotion.archived': 'Se archiva una promoción',
+  'reservation.paid': 'Se paga una reserva de excursión',
 }
 
-/** Los eventos del negocio que el bus emite hoy, con su nombre v2 y su frase. */
+/**
+ * Los eventos del negocio que el bus emite hoy, con su nombre v2 y su frase.
+ *
+ * Sale de `EVENTOS_EMITIDOS` —todo lo que el bus dispara— y no de
+ * `EVENTOS_REENVIADOS` —lo que llega a un satélite— porque el webhook de empresa
+ * NO filtra por esa lista estrecha: puede recibir cualquier evento que ocurra.
+ * Ofrecer solo los siete de satélite (B-4) escondía la promoción creada o el
+ * mensaje entrante, que ya llegaban a quien se suscribía a «todo» pero con su
+ * nombre interno en español y sin poder elegirlos.
+ */
 export function eventosDeNegocio(): EventoSuscribible[] {
-  return [...new Set(EVENTOS_REENVIADOS.map((e) => TIPO_V2[e] ?? e))]
+  return [...new Set(EVENTOS_EMITIDOS.map((e) => TIPO_V2[e] ?? e))]
     .sort()
     .map((valor) => ({ valor, label: ETIQUETAS[valor] ?? valor }))
 }

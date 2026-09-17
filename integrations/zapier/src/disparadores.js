@@ -38,6 +38,12 @@ const EVENTOS = [
     descripcion: 'Se dispara cuando alguien se registra en tu negocio.',
   },
   {
+    clave: 'clienteActualizado',
+    evento: 'customer.updated',
+    nombre: 'Cliente actualizado',
+    descripcion: 'Se dispara cuando cambian el nombre, el teléfono o el correo de un cliente.',
+  },
+  {
     clave: 'visita',
     evento: 'visit.completed',
     nombre: 'Visita registrada',

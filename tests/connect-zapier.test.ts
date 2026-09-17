@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { INVENTARIO_API, SCOPES, TIPO_V2 } from '@membego/contracts'
-import { EVENTOS_REENVIADOS } from '../src/modules/integraciones/nucleo'
+import { EVENTOS_EMITIDOS } from '../src/modules/integraciones/nucleo'
 
 /**
  * APP DE ZAPIER · hallazgo B-2 de la auditoría.
@@ -39,7 +39,11 @@ test('todo evento que escucha la app EXISTE en el catálogo de MembeGo', () => {
    * valida contra un catálogo cerrado— y el Zap no dispara nunca. Nadie se
    * entera hasta que un cliente escribe.
    */
-  const reales = new Set(EVENTOS_REENVIADOS.map((e) => TIPO_V2[e] ?? e))
+  // La app se suscribe por WEBHOOKS DE EMPRESA, cuyo catálogo válido es todo lo
+  // que el bus emite (`EVENTOS_EMITIDOS`), no el subconjunto de satélite: por eso
+  // un disparador de `promotion.created` es legítimo aunque no llegue a ningún
+  // satélite (B-4).
+  const reales = new Set(EVENTOS_EMITIDOS.map((e) => TIPO_V2[e] ?? e))
   for (const e of eventosDeLaApp()) {
     assert.ok(reales.has(e), `la app escucha «${e}», que MembeGo no emite`)
   }
@@ -50,7 +54,7 @@ test('la app usa los nombres del CABLE (v2), no los internos del bus', () => {
   // suscripción con el nombre interno se guardaría sin error y no recibiría
   // nada — el mismo error que las reglas de B-1, aquí con un cliente delante.
   for (const e of eventosDeLaApp()) {
-    assert.ok(!(EVENTOS_REENVIADOS as readonly string[]).includes(e), `«${e}» es el nombre interno`)
+    assert.ok(!(EVENTOS_EMITIDOS as readonly string[]).includes(e), `«${e}» es el nombre interno`)
     assert.match(e, /^[a-z]+\.[a-z_]+$/)
   }
 })
