@@ -31,6 +31,31 @@ Altos de la §3 lo llevaría a ~55 % con unas 6–8 semanas de trabajo. La parid
 real (§5) es un programa de 6–9 meses, y buena parte de él no debería hacerse:
 la §6 propone qué copiar y qué no.
 
+### 0.1 · Estado de los hallazgos (actualizado 2026-09-17)
+
+Casi todos los hallazgos de la §3 quedaron cerrados en las tandas posteriores a
+la auditoría. El detalle vive en cada sección (`✅ RESUELTO`); este es el mapa.
+
+| Grupo | Estado |
+|---|---|
+| **A-1 … A-7** (reintentos, firma+timestamp, panel de entregas, selector de eventos, fan-out paralelo, rotación de secretos) | ✅ cerrados |
+| **A-8/A-9/A-10** (SMS, correo desde el dominio, calendario bidireccional) | 🔵 Fase 3 (canales), pendientes |
+| **B-1, B-2, B-6** (webhook entrante + acción HTTP, app de Zapier, paginación por cursor) | ✅ cerrados |
+| **B-3** (salud activa de conexiones) | ◐ hecho por caducidad local; falta la inspección activa vía `debug_token` |
+| **B-4** (catálogo de eventos) | ◐ ampliado (7→~20) y con ciclo de membresía y `cita.cancelada`; citas/pagos esperan su flujo |
+| **B-5** (CRUD de la API pública) | ✅ cerrado — editar, listar, **cancelar cita** (`POST …/cancel`) y **borrar** (`DELETE`) |
+| **B-7** (métricas de uso por credencial) | ✅ cerrado — integrador Y vista del superadmin (pestaña «Uso de la API») |
+| **B-8** (deuda legado `SistemaConectado`) | 🟡 documentada; contracción no programada |
+| **Barrido de bugs ocultos** (SSRF, listados que callaban, guard por-petición, rate-limit, fan-out idempotente + lease, compare-and-set) | ✅ cerrados (#1–#5, #7, #8) |
+| **Seguridad · concurrencia de salida por empresa** | ✅ cerrado (`enParaleloPorClave`) |
+| **Seguridad · alerta de fuga de clave** | ✅ cerrado (endpoint firmado de GitHub Secret Scanning) |
+| **Aislamiento RLS en base** | ◐ código listo (Fase 0); falta el cutover operativo — `docs/runbooks/rls-encender.md` |
+
+**Lo que queda, por tamaño:** B-3 (`debug_token`, poco valor incremental), el
+cutover de RLS (operativo, con runbook), la «versión fuerte» de RLS (segundo rol
+para `sinEmpresa`), y las Fases 3–4 (canales SMS/correo/calendario y el
+marketplace de terceros), que son el grueso del camino a paridad.
+
 ---
 
 ## 1. Lo que está bien, y hay que proteger
@@ -853,7 +878,8 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 |---|---|
 | Secretos hasheados/sellados | ✅ scrypt, AES-256-GCM con AAD y rotación de claves maestras |
 | SSRF en webhooks salientes | ✅ `webhooksNucleo.ts:31` por nombre y rango, y `redirect: 'manual'` en los cinco caminos de salida |
-| Aislamiento multiempresa | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio, RLS con pruebas de cobertura |
+| Aislamiento multiempresa (aplicación) | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio; cobertura completa verificada por gate en CI |
+| Aislamiento multiempresa (RLS en base) | ◐ políticas escritas, probadas (`rls:probar` 6/6) y encendidas en las 137 tablas; el CÓDIGO está listo (Fase 0: drift de `conectores` cerrado + preflight como gate de CI). Falta el cutover operativo —cambiar `DATABASE_URL` al rol `membego_app`—, con runbook en `docs/runbooks/rls-encender.md`. Hasta entonces el aislamiento depende solo de la aplicación |
 | Uso único de token SSO | ✅ por clave primaria, sin ventana de carrera |
 | Idempotencia de escrituras | ✅ `ClaveIdempotencia` con huella SHA-256 del cuerpo |
 | Rate limit de la API | ✅ distribuido con Upstash, fail-open al local (`lib/rate-limit.ts:4`) |
