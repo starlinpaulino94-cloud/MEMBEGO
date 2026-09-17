@@ -778,7 +778,7 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 
 </details>
 
-### ◐ B-7 · Métricas de uso por credencial — HECHO para el integrador (17/09/2026)
+### ✅ B-7 · Métricas de uso por credencial — RESUELTO (integrador + superadmin) (17/09/2026)
 
 > **Hecho.** De cada credencial se sabía una sola cosa —`lastUsedAt`, cuándo se
 > usó por última vez—. Ahora hay un AGREGADO DIARIO por credencial: peticiones
@@ -809,14 +809,19 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 > la petición, como `anotarUsoClave` y la bitácora. Un fallo de telemetría no
 > añade latencia ni tumba una llamada de la API.
 >
-> **Falta, a propósito:** la vista del SUPERADMIN sobre las credenciales de
-> satélite. El dato ya se recoge (`origen: 'SISTEMA'`) y la lectura existe
-> (`usoDeSistema`), pero la PANTALLA del superadmin se dejó fuera de este corte:
-> la superficie de más valor —y la que la auditoría citaba con su nota— es la del
-> integrador, y es la que se cerró. Tampoco se capturan los 4xx/5xx del cuerpo del
-> handler (validación, no encontrado): se miden en el borde de auth, que es lo que
-> caracteriza la salud de UNA credencial; añadir el estado del handler exigiría
-> envolver las ~25 rutas, y eso es su propio cambio.
+> **Cerrada la vista del SUPERADMIN (17/09/2026).** Nueva pestaña «Uso de la API»
+> en el hub de integraciones (`/superadmin/integraciones/uso`): una tarjeta por
+> satélite con sus llamadas, su tasa de error y sus endpoints más usados, en una
+> ventana de 7/30/90 días. Agrega POR SISTEMA —un satélite puede tener varias
+> credenciales por rotación— con `usoDeSatelites`: dos consultas (credenciales +
+> agregado del periodo) y el cruce en memoria, por el camino omnisciente porque
+> un satélite no es de una empresa. Reusa el mismo `resumirUso` puro que la vista
+> del integrador, así que los números se calculan en un solo sitio.
+>
+> **Sigue fuera, a propósito:** los 4xx/5xx del CUERPO del handler (validación, no
+> encontrado). Se mide el desenlace en el borde de auth (OK / permiso
+> insuficiente), que es lo que caracteriza la salud de UNA credencial; capturar el
+> estado del handler exigiría envolver las ~25 rutas, y eso es su propio cambio.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -927,7 +932,7 @@ generar trabajo manual por cada cliente conectado.
 | ◐ 10 | Catálogo de eventos ✅ ampliado (7→~20, `customer.updated` y ciclo de membresía emitidos) · citas/pagos pendientes de su flujo | 2 | B-4 |
 | ~~11~~ | ~~`PATCH`/`GET` cliente, cancelar cita (`POST …/cancel`) y borrar (`DELETE`)~~ ✅ hecho | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
-| ◐ 13 | Métricas de uso por credencial ✅ hechas para el integrador · falta la vista del superadmin | 1 | B-7 |
+| ~~13~~ | ~~Métricas de uso por credencial: integrador Y vista del superadmin (pestaña «Uso de la API»)~~ ✅ hecho | 1 | B-7 |
 
 **Resultado: ~58 %.** Aquí es donde la curva de valor por semana es más alta:
 los puntos 8 y 9 juntos cuestan tres semanas y abren, en la práctica, la
