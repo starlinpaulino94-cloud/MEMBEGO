@@ -448,6 +448,12 @@ model EntregaWebhook {
 
   createdAt DateTime @default(now())
 
+  /// Una entrega por (suscripción, evento de dominio): el fan-out es idempotente
+  /// (barrido de bugs ocultos). Re-repartir un evento reclamado tras un kill no
+  /// duplica la entrega a la empresa. `eventoId` es null para los avisos de
+  /// automatización (`automation.*`), y el `unique` de Postgres trata los null
+  /// como distintos, así que ésos no chocan ni entre sí ni con la migración.
+  @@unique([suscripcionId, eventoId])
   @@index([estado, createdAt])
   @@index([companyId, createdAt])
   @@index([suscripcionId, createdAt])

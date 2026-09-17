@@ -1,6 +1,6 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, esViolacionUnica } from '@/lib/prisma-errors'
 import { getPlatformEventPrivateKey } from '@/lib/env'
 import { firmarHmac, EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
 import { sistemasDeEmpresa } from '@/modules/plataforma/registro'
@@ -58,6 +58,15 @@ interface EventoParaEnviar {
   payload?: Record<string, unknown>
   /** Hilo de la operación. Sin él, cada evento es su propio hilo. */
   traceId?: string | null
+  /**
+   * Clave de idempotencia del fan-out: el id del `DomainEvent` que originó este
+   * reenvío. Con él, re-despachar el mismo evento (cuando el barrido reclama uno
+   * que quedó a medias) reusa la MISMA fila de outbox por (satélite, evento de
+   * dominio) en vez de acuñar una nueva con id/eventId distintos —que al satélite
+   * le llegaría como un evento nuevo imposible de deduplicar—. Sin él (avisos de
+   * automatización, llamadas legadas) el reenvío es como antes: no idempotente.
+   */
+  domainEventId?: string | null
 }
 
 /**
@@ -233,6 +242,13 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
     // diez segundos. Un satélite lento retrasaba la entrega a los demás sin
     // tener nada que ver con ellos.
     await enParalelo(sistemas, CONCURRENCIA, async (sistema) => {
+      // IDEMPOTENTE POR (satélite, evento de dominio): si el barrido reclama un
+      // evento que quedó a medias, este create choca con el UNIQUE
+      // (sistemaId, domainEventId) y lanza P2002 —señal de «este satélite ya
+      // recibió su fila para este evento»—. Se salta sin anotarlo como fallo: no
+      // lo es. Un `domainEventId` null (avisos de automatización, llamadas
+      // legadas) nunca choca porque el UNIQUE trata los null como distintos, así
+      // que esos flujos siguen acuñando fila nueva como siempre.
       const fila = await conEmpresa(evento.companyId, (tx) =>
         tx.eventoSaliente.create({
           data: {
@@ -240,13 +256,18 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
             companyId: evento.companyId,
             tipo: evento.tipo,
             traceId: evento.traceId ?? null,
+            domainEventId: evento.domainEventId ?? null,
             payload: {
               ...(evento.payload ?? {}),
               ...(evento.subjectId ? { clienteId: evento.subjectId } : {}),
             } as object,
           },
         })
-      ).catch(anotarFallo('integraciones:outbox', { tipo: evento.tipo }))
+      ).catch((e) => {
+        if (esViolacionUnica(e)) return undefined // ya se repartió a este satélite
+        anotarFallo('integraciones:outbox', { tipo: evento.tipo })(e)
+        return undefined
+      })
       if (!fila) return
 
       const error = await entregar(sistema.urlWebhook, sistema.secreto, cuerpoDe(fila), fila.id)

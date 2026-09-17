@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, esViolacionUnica } from '@/lib/prisma-errors'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
 import {
   CABECERA_ENTREGA,
@@ -266,6 +266,12 @@ export async function repartirEventoAWebhooks(input: {
     // 300 s, y el número de suscripciones lo acota el entitlement. Aquí no hay
     // presupuesto que apurar; en el barrido sí.
     await enParalelo(interesadas, CONCURRENCIA, async (s) => {
+      // IDEMPOTENTE POR (suscripción, evento de dominio): re-repartir el mismo
+      // evento (cuando el barrido del bus reclama uno que quedó a medias) choca
+      // con el UNIQUE (suscripcionId, eventoId) y lanza P2002 —«esta suscripción
+      // ya tiene su entrega para este evento»—: se salta sin anotarlo como fallo.
+      // Los avisos de automatización van con `eventoId` null y nunca chocan, así
+      // que ese flujo acuña entrega nueva como siempre.
       const entrega = await conEmpresa(input.companyId, (tx) =>
         tx.entregaWebhook.create({
           data: {
@@ -277,7 +283,11 @@ export async function repartirEventoAWebhooks(input: {
           },
           select: { id: true, createdAt: true },
         })
-      ).catch(anotarFallo('connect:webhook:outbox', { evento: input.evento }))
+      ).catch((e) => {
+        if (esViolacionUnica(e)) return undefined // ya se repartió a esta suscripción
+        anotarFallo('connect:webhook:outbox', { evento: input.evento })(e)
+        return undefined
+      })
       if (!entrega) return
 
       const sobre: SobreWebhook = {

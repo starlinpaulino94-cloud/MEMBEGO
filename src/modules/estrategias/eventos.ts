@@ -117,6 +117,9 @@ export async function despacharEventoEstrategia(
       subjectId: evento.subjectId ?? null,
       payload,
       traceId: evento.traceId,
+      // La clave de idempotencia del fan-out: re-despachar este evento (cuando el
+      // barrido reclama uno que quedó a medias) reusa las mismas filas de outbox.
+      domainEventId: evento.id,
     })
 
     // 3. Y a los webhooks que la propia EMPRESA haya suscrito (Connect · F3).
@@ -135,6 +138,16 @@ export async function despacharEventoEstrategia(
       datos: { ...payload, ...(evento.subjectId ? { customerId: evento.subjectId } : {}) },
     })
 
+    // EL REPARTO TERMINÓ: se marca para que el barrido no lo reclame. Si esta
+    // escritura fallara, el evento parecería a medias y el barrido lo reabriría
+    // —un re-despacho, que ahora es idempotente y no duplica nada—; por eso no
+    // se relanza el error aquí.
+    await sinEmpresa('estrategias: marcar evento como despachado (worker, cross-tenant)', (tx) =>
+      tx.domainEvent
+        .updateMany({ where: { id: eventoId }, data: { despachadoAt: new Date() } })
+        .catch((err) => console.error('[estrategias] no se pudo marcar despachadoAt', err))
+    )
+
     return { procesados: 1 }
   } catch (e) {
     // Reabrir el evento para que el reintento (o el barrido) lo vuelva a tomar.
@@ -148,15 +161,33 @@ export async function despacharEventoEstrategia(
 }
 
 /**
- * Barrido de resiliencia del bus (cron diario): re-encola eventos que quedaron
- * `processed:false` — QStash caído en el momento del emit, worker que falló más
- * allá de sus reintentos, o un proceso muerto entre el create y el flip. El
- * flip atómico de `despacharEventoEstrategia` evita dobles despachos con una
+ * Barrido de resiliencia del bus (cron diario). Recoge DOS clases de eventos
+ * varados y los vuelve a poner en la cola:
+ *
+ *   1. `processed:false` — nunca se despacharon: QStash caído en el momento del
+ *      emit, worker que falló más allá de sus reintentos, o un proceso muerto
+ *      entre el create y el flip.
+ *
+ *   2. RECLAMO CON LEASE (#4): `processed:true` con `despachadoAt` null pasado el
+ *      lease. Son los que se flipearon a «procesado» y murieron a mitad del
+ *      reparto —timeout serverless, OOM— entre el flip y el `despachadoAt` que
+ *      marca su final. El `catch` de reapertura de `despacharEventoEstrategia`
+ *      solo cubre un `throw` de JS, no un kill del proceso; sin este reclamo,
+ *      esos eventos se perdían para siempre (procesados a medias, invisibles al
+ *      barrido, que solo miraba `processed:false`). Se reabren de forma atómica
+ *      —solo si siguen sin `despachadoAt`, para no pisar un reparto vivo que
+ *      esté a punto de terminar— y se re-encolan. El re-despacho ya es
+ *      idempotente por (destino, evento de dominio), así que repetir el reparto
+ *      no duplica ninguna entrega.
+ *
+ * El flip atómico de `despacharEventoEstrategia` evita dobles despachos con una
  * entrega de QStash en curso; y si la cola sigue caída, `encolar` degrada a
  * ejecución en línea. Acotado: solo eventos viejos y un lote máximo por barrido.
  */
 export async function barrerEventosEstrategia(): Promise<{ reencolados: number }> {
   const corte = new Date(Date.now() - 6 * 60 * 60 * 1000)
+
+  // 1. Nunca despachados: re-encolar tal cual (el flip vive en el worker).
   const pendientes = await sinEmpresa('estrategias: barrido global de eventos pendientes (cron)', (tx) =>
     tx.domainEvent.findMany({
       where: { processed: false, occurredAt: { lt: corte } },
@@ -175,5 +206,39 @@ export async function barrerEventosEstrategia(): Promise<{ reencolados: number }
       console.error('[estrategias] barrido: no se pudo re-encolar el evento', ev.id, e)
     }
   }
+
+  // 2. Procesados a medias (kill entre el flip y el `despachadoAt`): reabrir con
+  // lease y re-encolar. El lease es el mismo `corte`: ningún despacho serverless
+  // vive seis horas, así que un `processed:true` sin `despachadoAt` tan viejo
+  // está muerto, no en curso.
+  const varados = await sinEmpresa('estrategias: barrido de eventos procesados a medias (cron)', (tx) =>
+    tx.domainEvent.findMany({
+      where: { processed: true, despachadoAt: null, occurredAt: { lt: corte } },
+      select: { id: true, companyId: true },
+      orderBy: { occurredAt: 'asc' },
+      take: 100,
+    })
+  )
+
+  for (const ev of varados) {
+    try {
+      // Reapertura atómica: solo si SIGUE sin despachar. Si un reparto vivo
+      // (improbable pasado el lease, pero posible) acaba de marcar `despachadoAt`
+      // entre el findMany y este update, `count` es 0 y no lo tocamos —no se
+      // reabre algo ya terminado—.
+      const reabierto = await sinEmpresa('estrategias: reabrir evento varado (cron, cross-tenant)', (tx) =>
+        tx.domainEvent.updateMany({
+          where: { id: ev.id, processed: true, despachadoAt: null },
+          data: { processed: false },
+        })
+      )
+      if (reabierto.count === 0) continue
+      await encolar({ tipo: 'evento-estrategia', eventoId: ev.id, companyId: ev.companyId })
+      reencolados++
+    } catch (e) {
+      console.error('[estrategias] barrido: no se pudo reclamar el evento varado', ev.id, e)
+    }
+  }
+
   return { reencolados }
 }
