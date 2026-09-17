@@ -66,6 +66,7 @@ export type CuerpoWebhook = SobreEvento & ClavesLegado
 export const TIPO_V2: Record<string, string> = {
   'cliente.registrado': 'customer.created',
   'cliente.actualizado': 'customer.updated',
+  'cliente.eliminado': 'customer.deleted',
   'cliente.primera_visita': 'visit.first_completed',
   'cliente.visita': 'visit.completed',
   'cliente.compro_servicio': 'purchase.completed',

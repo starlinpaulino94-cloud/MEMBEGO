@@ -169,6 +169,13 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     resumen: 'Edita el nombre, el teléfono o el correo de un cliente existente.',
   },
   {
+    metodo: 'DELETE',
+    ruta: '/customers/{id}',
+    scope: 'customers:delete',
+    principal: 'empresa',
+    resumen: 'Borra un cliente y purga en cascada todos sus datos en la empresa.',
+  },
+  {
     metodo: 'POST',
     ruta: '/customers',
     scope: 'customers:write',

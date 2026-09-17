@@ -32,6 +32,11 @@ import { createHmac, timingSafeEqual } from 'crypto'
 export const EVENTOS_REENVIADOS = [
   'cliente.registrado',
   'cliente.actualizado',
+  // Completa el ciclo de la proyección de Customer (B-5): un satélite que
+  // mantiene su copia con created/updated necesita que se le diga cuándo se
+  // borró, o se queda con un cliente fantasma para siempre. Por eso va a
+  // satélites, como created/updated, y no solo a los webhooks de empresa.
+  'cliente.eliminado',
   'cliente.primera_visita',
   'cliente.visita',
   'cliente.compro_servicio',

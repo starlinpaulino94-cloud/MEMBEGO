@@ -683,7 +683,7 @@ una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vacia
 
 </details>
 
-### ◐ B-5 · Editar clientes HECHO; cancelar citas y borrar, pendientes (17/09/2026)
+### ✅ B-5 · CRUD completo de la API pública — RESUELTO (17/09/2026)
 
 > **Hecho, con una decisión de producto detrás.** La API ya no es solo lectura y
 > alta: `PATCH /customers/{id}` edita la ficha de contacto de un cliente, y
@@ -706,9 +706,27 @@ una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vacia
 > recalcula, y escribirlo también aquí sería una segunda verdad que se olvida y
 > rompe la búsqueda.
 >
-> **Sigue pendiente:** cancelar una cita (una máquina de estados propia, no un
-> simple PATCH) y borrar un cliente (cascada + cumplimiento). Se dejaron fuera a
-> propósito: cada una es su propio riesgo y merece su propia conversación.
+> **Cerrado (17/09/2026):** las dos piezas que faltaban, cada una con su riesgo.
+>
+> **Cancelar una cita** (`POST /appointments/{id}/cancel`, scope
+> `appointments:manage`) es una transición de la máquina de estados, no un
+> borrado —por eso una acción con nombre y no un `DELETE`—: pasa a `CANCELADA`
+> conservando quién y por qué, es idempotente (repetir devuelve `applied:false`),
+> y un estado terminal (COMPLETADA/NO_ASISTIO) es `no_cancelable`. La decisión
+> que evita divergencia: un SOLO emisor del evento `cita.cancelada`, lo cancele
+> quien lo cancele —el panel, el cliente o la API—, con el mismo helper (como el
+> ciclo de membresía en B-4). No se reenvía a satélites: no hay contrato de
+> proyección de agenda como el de Customer.
+>
+> **Borrar un cliente** (`DELETE /customers/{id}`, scope PROPIO `customers:delete`,
+> separado de `:manage` porque borrar no es editar) purga la ficha y todo lo suyo
+> en cascada y anula sus transacciones (reusa `purgarClienteRow`, el mismo
+> cumplimiento que el borrado del superadmin). La frontera clave: borra la
+> RELACIÓN de la empresa, NO la cuenta global de la persona —una clave de empresa
+> no alcanza la identidad de alguien que quizá es cliente de otro negocio; eso es
+> del superadmin—. Emite `customer.deleted` a satélites, cerrando el ciclo
+> created/updated/deleted de la proyección de Customer para que nadie se quede con
+> un cliente fantasma.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -907,7 +925,7 @@ generar trabajo manual por cada cliente conectado.
 | ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
 | ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
 | ◐ 10 | Catálogo de eventos ✅ ampliado (7→~20, `customer.updated` y ciclo de membresía emitidos) · citas/pagos pendientes de su flujo | 2 | B-4 |
-| ◐ 11 | `PATCH` cliente + `GET` listado ✅ hecho · cancelar cita y borrar, pendientes | 2 | B-5 |
+| ~~11~~ | ~~`PATCH`/`GET` cliente, cancelar cita (`POST …/cancel`) y borrar (`DELETE`)~~ ✅ hecho | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
 | ◐ 13 | Métricas de uso por credencial ✅ hechas para el integrador · falta la vista del superadmin | 1 | B-7 |
 

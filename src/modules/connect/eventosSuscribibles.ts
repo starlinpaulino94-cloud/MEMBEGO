@@ -45,6 +45,7 @@ export interface EventoSuscribible {
 const ETIQUETAS: Record<string, string> = {
   'customer.created': 'Un cliente se registra en tu negocio',
   'customer.updated': 'Se actualizan los datos de un cliente',
+  'customer.deleted': 'Se elimina un cliente y todos sus datos',
   'visit.first_completed': 'Un cliente te visita por primera vez',
   'visit.completed': 'Se registra una visita o un canje',
   'purchase.first_completed': 'Un cliente te compra por primera vez',
