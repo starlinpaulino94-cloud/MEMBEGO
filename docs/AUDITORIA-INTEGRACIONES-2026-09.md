@@ -838,9 +838,9 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
 | Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
 | Rotación de secretos | ✅ webhooks y secreto de satélite con solape de 7 días (A-7) |
-| **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
+| Concurrencia de salida por empresa | ✅ los dos barridos acotan la concurrencia GLOBAL y POR EMPRESA (`enParaleloPorClave`, `CONCURRENCIA_POR_EMPRESA`): un inquilino con el endpoint caído ya no acapara el trabajador compartido ni amplifica contra un tercero |
 | Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; el cron de salud (B-3) AVISA antes de que venza (credenciales sin refresco) |
-| **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
+| Alerta de fuga de clave | ✅ endpoint firmado del GitHub Secret Scanning Partner Program (`/api/connect/secret-scanning`): revoca sola la clave filtrada tras verificar la firma ECDSA de GitHub; solo el secreto completo revoca (nunca el prefijo público) |
 
 ---
 

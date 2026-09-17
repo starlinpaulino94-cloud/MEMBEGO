@@ -30,7 +30,10 @@ interface ClaveGithub {
  * se refresca una vez, por si acaba de rotar.
  */
 let cache: { claves: ClaveGithub[]; hasta: number } | null = null
+let ultimoRefresco = 0
 const TTL_MS = 60 * 60 * 1000
+/** Mínimo entre refrescos por identificador desconocido (anti-sondeo). */
+const MIN_REFRESCO_MS = 60 * 1000
 
 async function traerClavesGithub(): Promise<ClaveGithub[]> {
   const res = await fetch(URL_CLAVES_GITHUB, {
@@ -48,11 +51,16 @@ export async function clavePublicaGithub(identificador: string): Promise<string 
   const ahora = Date.now()
   if (!cache || cache.hasta < ahora) {
     cache = { claves: await traerClavesGithub(), hasta: ahora + TTL_MS }
+    ultimoRefresco = ahora
   }
   let clave = cache.claves.find((k) => k.key_identifier === identificador)
-  if (!clave) {
-    // Puede haber rotado justo ahora: refresca una vez antes de rendirse.
+  if (!clave && ahora - ultimoRefresco >= MIN_REFRESCO_MS) {
+    // Puede haber rotado justo ahora: refresca una vez antes de rendirse — pero
+    // como mucho una vez por minuto. Sin ese freno, un identificador inventado
+    // (quien sondea el endpoint) forzaría una llamada a GitHub POR PETICIÓN. Si
+    // una rotación real cae en esa ventana, GitHub reintenta la alerta.
     cache = { claves: await traerClavesGithub(), hasta: ahora + TTL_MS }
+    ultimoRefresco = ahora
     clave = cache.claves.find((k) => k.key_identifier === identificador)
   }
   return clave?.key ?? null
