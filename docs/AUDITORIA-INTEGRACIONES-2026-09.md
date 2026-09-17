@@ -381,10 +381,16 @@ paralelizar con `Promise.allSettled` y un tope de concurrencia.
 > **Corrección al aviso de caducidad de credencial.** Ya está: el cron de salud
 > (B-3) avisa antes de que venza una credencial sin refresco.
 >
-> **Descubierto al hacerlo:** el secreto de webhook nunca se pudo volver a ver,
-> pese a que tres comentarios lo afirmaban — y el del esquema usaba esa
-> afirmación para justificar guardarlo en claro. Sellarlo queda como migración
-> pendiente; los comentarios ya están corregidos.
+> **Descubierto al hacerlo, y ya resuelto:** el secreto de webhook nunca se pudo
+> volver a ver, pese a que tres comentarios lo afirmaban — y el del esquema usaba
+> esa afirmación para justificar guardarlo en claro. Ahora se SELLA (AES-256-GCM,
+> `secreto-webhook.ts`), atado a la empresa como AAD, con la misma clave maestra
+> que las credenciales de conector. Con una diferencia deliberada: FALLA ABIERTO
+> —sin clave maestra se guarda en claro y se firma igual—, porque un webhook no
+> es una credencial de acceso sino un HMAC de integridad, y no puede quedarse sin
+> poder firmarse. Los dos formatos conviven en la columna (`whs_…` en claro,
+> `cn1.…` sellado), así que no hizo falta migrar el tipo; el backfill de las filas
+> existentes es `scripts/sellar-secretos-webhook.ts`, idempotente.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -955,9 +961,10 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   el token SSO es una firma única que no admite lista—, y su revisión aparte, que
   era el motivo de separarlo, ya se hizo. Con esto **la Fase 1 queda cerrada**.
 
-  Y una cosa nueva, pequeña, que sigue pendiente: sellar el secreto de webhook
-  —hoy en claro por una razón que resultó ser falsa—. El aviso de caducidad de
-  credencial de satélite ya lo cubre B-3.
+  Y la cosa nueva que salió al hacerlo ya está hecha: el secreto de webhook, que
+  estaba en claro por una razón que resultó falsa, ahora se sella (falla abierto,
+  para no dejar sin firmar a un despliegue sin clave maestra). El aviso de
+  caducidad de credencial de satélite lo cubre B-3.
 - **En alcance de integraciones: el atajo ya está andado.** El webhook
   entrante, la acción HTTP y la app de Zapier (puntos 8 y 9) están hechos, y con
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir

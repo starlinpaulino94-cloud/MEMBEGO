@@ -27,6 +27,11 @@ import { programarReintento } from '@/modules/integraciones/programador'
 import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
 import { esEventoEntrante } from '@/modules/connect/entrantesNucleo'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
+import {
+  abrirSecretosFirma,
+  estaSellado,
+  sellarSecretoWebhook,
+} from '@/modules/connect/secreto-webhook'
 
 /**
  * WEBHOOKS SALIENTES a cualquier URL (Membego Connect · Fase 3).
@@ -86,6 +91,8 @@ export async function crearSuscripcion(input: {
     return { ok: false, motivo: 'limite_alcanzado' }
   }
 
+  // Se GENERA en claro (es lo que se le enseña una vez al integrador) y se
+  // GUARDA sellado (A-7): las dos cosas del mismo valor, en momentos distintos.
   const secreto = `whs_${randomBytes(24).toString('hex')}`
   const fila = await conEmpresa(input.companyId, (tx) =>
     tx.suscripcionWebhook.create({
@@ -94,7 +101,7 @@ export async function crearSuscripcion(input: {
         nombre: input.nombre.slice(0, 120),
         url: url.url,
         eventos: input.eventos ?? [],
-        secreto,
+        secreto: sellarSecretoWebhook(input.companyId, secreto),
         creadoPor: input.creadoPor ?? null,
       },
       select: { id: true },
@@ -280,7 +287,9 @@ export async function repartirEventoAWebhooks(input: {
         createdAt: entrega.createdAt.toISOString(),
         data: input.datos,
       }
-      const resultado = await entregar(s.url, s, sobre)
+      // Se abre el secreto (A-7) justo antes de firmar: a partir de aquí es
+      // texto en claro en memoria, como antes de sellar.
+      const resultado = await entregar(s.url, abrirSecretosFirma(input.companyId, s), sobre)
       await registrarResultado(input.companyId, entrega.id, s.id, resultado, 1)
     })
   } catch (e) {
@@ -511,7 +520,11 @@ async function intentarEntrega(e: FilaEntrega): Promise<'enviado' | 'fallido' | 
     createdAt: e.createdAt.toISOString(),
     data: (e.payload ?? {}) as Record<string, unknown>,
   }
-  const r = await entregar(e.suscripcion.url, e.suscripcion, sobre)
+  const r = await entregar(
+    e.suscripcion.url,
+    abrirSecretosFirma(e.companyId, e.suscripcion),
+    sobre
+  )
   const intentos = e.intentos + 1
   await registrarResultado(e.companyId, e.id, e.suscripcion.id, r, intentos)
   if (r.ok) return 'enviado'
@@ -611,8 +624,14 @@ export async function rotarSecretoSuscripcion(
     tx.suscripcionWebhook.updateMany({
       where: { id, companyId },
       data: {
-        secreto: nuevo,
-        secretoAnterior: actual.secreto,
+        // El nuevo se sella (A-7). El que pasa a «anterior» se guarda como
+        // estaba: si ya venía sellado, se deja; si aún estaba en claro —una fila
+        // anterior al sellado que no pasó por el backfill—, se sella ahora, para
+        // no dejar un secreto en claro viviendo los siete días del solape.
+        secreto: sellarSecretoWebhook(companyId, nuevo),
+        secretoAnterior: estaSellado(actual.secreto)
+          ? actual.secreto
+          : sellarSecretoWebhook(companyId, actual.secreto),
         secretoAnteriorHasta: anteriorHasta,
       },
     })

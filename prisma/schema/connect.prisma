@@ -345,12 +345,15 @@ model SuscripcionWebhook {
   /// Secreto para firmar (HMAC-SHA256). Se enseña una vez al crear; con él, el
   /// receptor comprueba que el webhook viene de nosotros y nadie más.
   ///
-  /// A diferencia de las credenciales de conector, este NO va cifrado con la
-  /// clave maestra. La razón que se dio aquí —«tiene que poder enseñarse de
-  /// nuevo en el panel»— resultó ser FALSA al revisarlo en la Fase A-7: no hay,
-  /// ni hubo nunca, pantalla que lo vuelva a enseñar. Así que hoy está en claro
-  /// sin una razón que lo sostenga, y sellarlo es una migración pendiente
-  /// anotada en la auditoría.
+  /// SELLADO (A-7): se guarda cifrado con la clave maestra (AES-256-GCM,
+  /// `secreto-webhook.ts`), atado a la empresa como AAD. Antes iba en claro con
+  /// una excusa —«tiene que poder reenseñarse en el panel»— que resultó falsa: no
+  /// hay ni hubo pantalla que lo reenseñe. A diferencia de las credenciales de
+  /// conector, el sellado FALLA ABIERTO: sin clave maestra se guarda en claro y
+  /// se firma igual, porque un webhook no puede quedarse sin poder firmarse. Los
+  /// dos formatos (`whs_…` en claro, `cn1.…` sellado) conviven en la columna, así
+  /// que no hizo falta migrar el tipo; el backfill lo hace
+  /// `scripts/sellar-secretos-webhook.ts`.
   ///
   /// Lo que sí se puede, ya de verdad, es rotarlo: ver `secretoAnterior`.
   secreto String
