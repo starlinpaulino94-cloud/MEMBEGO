@@ -560,11 +560,43 @@ cita ni borrar nada. Para una API que se ofrece a terceros, eso obliga a
 soluciones raras (crear duplicados) o simplemente cierra el caso de uso.
 **Esfuerzo: 2–3 semanas** para los recursos principales.
 
+### ✅ B-6 · Paginación por cursor — RESUELTO (17/09/2026)
+
+> Cerrado. Los tres listados de colección que crecen sin techo —`appointments`,
+> `memberships`, `promotions`— aceptan `?limit=` (defecto 50, máx 200) y
+> `?cursor=`, y devuelven `page.nextCursor`. El tope silencioso de 500 citas se
+> retiró: ahora un integrador con 3.000 citas las recorre todas, y «no hay más»
+> deja de confundirse con «no cabe más».
+>
+> **Cursor y no `offset`:** una inserción entre página y página no descoloca lo
+> ya leído. La condición para que eso funcione es un orden determinista, así que
+> cada listado termina su `orderBy` en `id` — sin ese desempate, un cursor salta
+> o repite una fila cuando dos citas caen a la misma hora. La lógica vive en un
+> núcleo puro con pruebas, incluida una que pagina una lista entera de tres en
+> tres y verifica que sale completa, en orden y sin dobles.
+>
+> **Lo que NO se paginó, a propósito:** `/vehicles` (exige `customerId`, es la
+> lista de un cliente, no de la empresa) y los catálogos pequeños y acotados
+> (`/branches`, `/vehicle-types`). Marcarlos paginados invitaría a recorrer una
+> lista que nunca tendrá segunda página. El inventario lleva un flag `paginado`
+> que dice cuáles sí, y el OpenAPI documenta los dos parámetros solo en ésos.
+>
+> **Riesgo controlado:** el SDK no consume estos tres como volcado completo
+> (usa `/memberships/active?customerId` y `/vehicles?customerId`, ambos
+> acotados), así que bajar el tope de 500 a 50 por defecto no rompe a ningún
+> consumidor existente — solo hace explícito, con `nextCursor`, lo que antes se
+> perdía en silencio.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟡 B-6 · Sin paginación por cursor
 
 Límites fijos y silenciosos: la búsqueda de clientes devuelve `MAX_BUSQUEDA`, las
 citas `take: 500` sin decir que hay más. Un integrador con 3.000 citas en el mes
 se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
+
+</details>
 
 ### 🟡 B-7 · Sin métricas de uso por credencial
 
@@ -619,7 +651,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | Documentación de la API | **3** | 4 | OpenAPI generado del inventario (no se queda viejo) vs. portal completo de GHL |
 | **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
-| **Superficie de la API** | **2** | 5 | 27 rutas; ya hay un DELETE, pero sigue sin PUT/PATCH ni listados paginados |
+| **Superficie de la API** | **3** | 5 | 27 rutas, listados paginados por cursor y un DELETE; sigue sin PUT/PATCH |
 | **Catálogo de eventos** | **2** | 5 | 7 vs. ~35 |
 | **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
@@ -669,7 +701,7 @@ generar trabajo manual por cada cliente conectado.
 | ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
 | 10 | Catálogo de eventos hasta ~20 tipos (citas, pagos, mensajes) | 2 | B-4 |
 | 11 | `PATCH`/`DELETE` en clientes, citas, membresías | 2 | B-5 |
-| 12 | Paginación por cursor en todas las listas | 1 | B-6 |
+| ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
 | 13 | Métricas de uso por credencial | 1 | B-7 |
 
 **Resultado: ~58 %.** Aquí es donde la curva de valor por semana es más alta:
@@ -736,8 +768,8 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   entrante, la acción HTTP y la app de Zapier (puntos 8 y 9) están hechos, y con
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir
   que lo integremos a mano. Lo que queda de la Fase 2 son piezas de superficie
-  de API —`PATCH`/`DELETE` en los recursos principales (B-5), listados paginados
-  (B-6) y métricas de uso (B-7)—, y el catálogo de eventos (B-4).
+  de API —`PATCH`/`DELETE` en los recursos principales (B-5) y métricas de uso
+  (B-7)—, y el catálogo de eventos (B-4). La paginación (B-6) ya está.
 
   La frase original decía que eran tres semanas de trabajo que hacen por la
   cobertura lo que treinta conectores harían en un año.

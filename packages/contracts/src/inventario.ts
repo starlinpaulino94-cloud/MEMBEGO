@@ -58,6 +58,16 @@ export interface RecursoApi {
   resumen: string
   /** ¿Escribe? Las escrituras exigen `Idempotency-Key`. */
   idempotente?: boolean
+  /**
+   * ¿Es un listado paginado por cursor? (B-6.)
+   *
+   * Marca las colecciones que pueden crecer sin techo: acepta `?limit=` y
+   * `?cursor=`, y su respuesta trae `page.nextCursor`. Los catálogos pequeños y
+   * acotados (sucursales, tipos de vehículo) NO lo llevan: se devuelven enteros
+   * en una llamada, y decirlo aquí evita que un cliente pagine una lista que
+   * nunca tendrá una segunda página.
+   */
+  paginado?: boolean
 }
 
 export const INVENTARIO_API: readonly RecursoApi[] = [
@@ -111,6 +121,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'promotions:read',
     principal: 'sistema-o-empresa',
     resumen: 'Promociones vigentes de la empresa.',
+    paginado: true,
   },
   {
     metodo: 'GET',
@@ -172,6 +183,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'memberships:read',
     principal: 'sistema-o-empresa',
     resumen: 'Membresías de la empresa.',
+    paginado: true,
   },
   {
     metodo: 'GET',
@@ -193,6 +205,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'appointments:read',
     principal: 'sistema-o-empresa',
     resumen: 'Citas de la empresa en un rango de fechas.',
+    paginado: true,
   },
 
   // ── Escrituras (solo satélites) ─────────────────────────────────────────

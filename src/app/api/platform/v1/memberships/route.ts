@@ -3,6 +3,8 @@ import { conEmpresa } from '@/lib/tenant'
 import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
 import { membershipSummaryDTO } from '@/modules/plataforma/dto'
 import { respuestaApi } from '@/modules/plataforma/errores'
+import { leerPaginacion } from '@/modules/plataforma/paginacion'
+import { construirPagina } from '@/modules/plataforma/paginacionNucleo'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +35,9 @@ export async function GET(req: NextRequest) {
   )
   if (esFallo(auth)) return auth.fallo
 
+  const pag = leerPaginacion(req.nextUrl.searchParams, auth.ctx.requestId)
+  if (!pag.ok) return pag.fallo
+
   const membresias = await conEmpresa(auth.companyId, (tx) =>
     tx.membership.findMany({
       where: { companyId: auth.companyId, estado: 'ACTIVA' },
@@ -44,12 +49,20 @@ export async function GET(req: NextRequest) {
         fechaVencimiento: true,
         plan: { select: { nombre: true } },
       },
-      orderBy: { fechaVencimiento: 'desc' },
+      // El `id` cierra el orden: sin él, dos membresías con el mismo vencimiento
+      // empatan y el cursor podría saltarse una o repetirla.
+      orderBy: [{ fechaVencimiento: 'desc' }, { id: 'asc' }],
+      take: pag.limite + 1,
+      ...pag.cursor,
     }),
   ).catch(() => [])
 
+  const { items, nextCursor } = construirPagina(membresias, pag.limite)
   return respuestaApi(
-    { memberships: membresias.map((m) => membershipSummaryDTO({ ...m, estado: String(m.estado) })) },
+    {
+      memberships: items.map((m) => membershipSummaryDTO({ ...m, estado: String(m.estado) })),
+      page: { limit: pag.limite, nextCursor },
+    },
     auth.ctx.requestId,
   )
 }
