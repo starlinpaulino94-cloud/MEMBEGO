@@ -122,6 +122,15 @@ model ConexionEmpresa {
   ultimoErrorAt DateTime?
   ultimoError   String?
 
+  /// SALUD ACTIVA (auditoría B-3): desde cuándo el chequeo proactivo marcó esta
+  /// conexión como «hay que reautorizar», antes de que un envío falle. Null =
+  /// sana. A diferencia de `ultimoErrorAt` —que es un fallo TRANSITORIO y se
+  /// enfría en 24 h—, esto es una condición PERSISTENTE: una credencial sin
+  /// refresco (Facebook Login, una API key con caducidad) que se acerca a su
+  /// fin solo la arregla reconectar, así que el aviso no puede desaparecer solo.
+  /// El cron la pone y la quita; reconectar la limpia en la siguiente pasada.
+  reautorizarAt DateTime?
+
   /// POR QUÉ falló, en vocabulario cerrado (Fase 10):
   /// AUTH | PERMISSIONS | RATE_LIMIT | NETWORK | PROVIDER | CONFIGURATION | UNKNOWN.
   /// Existe porque cada clase implica una conducta distinta: AUTH pide

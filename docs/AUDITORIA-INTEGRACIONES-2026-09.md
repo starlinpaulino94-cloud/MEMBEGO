@@ -536,6 +536,44 @@ integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
 
 </details>
 
+### ◐ B-3 · Salud activa de las conexiones — HECHO por caducidad local (17/09/2026)
+
+> **Hecho.** El estado de una conexión ya no cambia solo cuando un envío falla:
+> un chequeo diario mira la caducidad de las credenciales SIN refresco de
+> servidor y marca las que se acercan a su fin, para que la empresa reconecte
+> ANTES de que se caiga. `meta/salud.ts` existía y ningún cron lo llamaba; ahora
+> el cron de integraciones llama a `comprobarSaludConexiones` cada día.
+>
+> **La decisión que lo hace barato y correcto: mirar la CADUCIDAD YA GUARDADA, no
+> inspeccionar el token en vivo.** Al conectar, la caducidad del acceso
+> (`expiresAt`, el mínimo entre el token y el `data_access_expires_at` de Meta) y
+> si la credencial tiene refresco (`metadata.tieneRefresh`) se guardan en COLUMNAS
+> NO SECRETAS. Así el chequeo es una consulta y una comparación de fechas: no abre
+> ningún sello ni gasta una llamada al proveedor por conexión y día. Y solo mira
+> las TERMINALES —las sin refresco, como Facebook Login o una API key con fecha—:
+> avisar de la caducidad horaria de un token de Google, que se renueva solo, sería
+> una falsa alarma diaria.
+>
+> **El aviso es PERSISTENTE, en su propia columna (`reautorizarAt`), no en la
+> ventana transitoria de `degradada`.** Una caducidad no se cura sola en 24 h como
+> un fallo pasajero: solo reconectar la arregla, así que el aviso no puede
+> desaparecer por sí mismo. La conexión sigue CONNECTED y funcionando mientras
+> tanto; lo único que cambia es que la UI la enseña como «Vuelve a conectar tu
+> cuenta» —el estado `REAUTORIZAR` que ya existía y nadie encendía a tiempo—, con
+> su botón «Reconectar», antes de que se rompa. El cron limpia el aviso cuando la
+> conexión vuelve a estar sana.
+>
+> **Falta, a propósito:** la inspección ACTIVA vía `debug_token` para las
+> conexiones cuya caducidad NO se guardó (el token de sistema de WhatsApp, que se
+> guarda sin `expiresAt`). Requiere descifrar el token y llamar a Meta por
+> conexión —una dependencia externa y frágil dentro de un cron—, y su valor
+> incremental sobre el chequeo local es pequeño: la mayoría de lo que caduca de
+> verdad (Facebook Login, acceso a datos) ya se cubre por la fecha guardada. Las
+> piezas para hacerlo existen (`inspeccionarToken`, `pideReautorizar`).
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟡 B-3 · Sin salud activa de las conexiones
 
 `modules/connect/meta/salud.ts` existe, pero **ningún cron lo llama** (los tres
@@ -549,6 +587,8 @@ a los 90. Hoy eso se descubre cuando un mensaje no sale.
 
 El estado `REAUTORIZAR` ya existe en el vocabulario (`catalogo.ts:detalleDe`) y
 no hay nada que lo encienda a tiempo. **Esfuerzo: 3–4 días.**
+
+</details>
 
 ### ◐ B-4 · Catálogo de eventos ampliado — el bus emitía mucho más de lo que ofrecía (17/09/2026)
 
@@ -767,7 +807,7 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
 | Rotación de secretos | ◐ webhooks con solape de 7 días; el secreto de satélite, pendiente |
 | **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
-| Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; falta AVISAR antes de que venza |
+| Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; el cron de salud (B-3) AVISA antes de que venza (credenciales sin refresco) |
 | **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
 
 ---
@@ -797,7 +837,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Pasarelas de pago** | **2** | 5 | CardNET + Azul (buen encaje local) vs. Stripe/PayPal/Square/NMI/Authorize |
 | **Zapier / Make** | **4** | 5 | App de Zapier con REST Hooks; Make por OpenAPI (B-2) |
 | **Métricas de uso de la API** | **3** | 4 | Agregado diario por credencial: peticiones/día, por endpoint y tasa de error, visible en cada clave; falta la vista del superadmin (B-7) |
-| **Salud activa de conexiones** | **1** | 4 | Pasiva (B-3) |
+| **Salud activa de conexiones** | **3** | 4 | Cron diario avisa por caducidad local antes de que un envío falle; falta la inspección activa vía `debug_token` (B-3) |
 
 **Media ponderada ≈ 35 % de la superficie de GHL**, con una distribución muy
 marcada: MembeGo **gana** en los cimientos y **pierde** en todo lo que es
@@ -823,7 +863,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
 | ~~5~~ | ~~Fan-out encolado y en paralelo con tope~~ ✅ hecho | 2 | A-6 |
 | ◐ 6 | Rotación con solapamiento — hecha para webhooks; queda el secreto de satélite | 4 | A-7 |
-| 7 | Cron de salud: Meta, OAuth, caducidades → `REAUTORIZAR` | 3 | B-3 |
+| ◐ 7 | Cron de salud ✅ por caducidad local → `REAUTORIZAR`; falta la inspección activa vía `debug_token` | 3 | B-3 |
 
 **Resultado: el módulo pasa de ~35 % a ~45 %** y —más importante— deja de
 generar trabajo manual por cada cliente conectado.
@@ -892,9 +932,11 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   de admitir un replay con el timestamp refrescado; una empresa puede por fin
   recibir solo lo que le interesa; rotar un secreto de webhook dejó de exigir un
   corte; y el barrido dejó de drenar su primer 6 % y parecer que funcionaba.
-  Queda **B-3** (salud activa de las conexiones, 3 días) y la mitad de A-7 que
-  falta: el secreto compartido con los satélites, que se separó porque toca la
-  verificación de SSO en dos sitios y merece su propia revisión (2–3 días).
+  **B-3** (salud activa de las conexiones) ya avisa por caducidad antes de que un
+  envío falle; queda su rabo, la inspección activa vía `debug_token` para el token
+  de WhatsApp sin fecha guardada. Y la mitad de A-7 que falta: el secreto
+  compartido con los satélites, que se separó porque toca la verificación de SSO
+  en dos sitios y merece su propia revisión (2–3 días).
 
   Y dos cosas nuevas, pequeñas, que salieron al hacer el trabajo: avisar antes
   de que caduque una credencial de satélite, y sellar el secreto de webhook
