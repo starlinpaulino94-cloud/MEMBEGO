@@ -628,3 +628,70 @@ model WebhookEntrante {
   @@index([companyId, estado])
   @@map("webhooks_entrantes")
 }
+
+/// MÉTRICAS DE USO POR CREDENCIAL (auditoría de integraciones · B-7).
+///
+/// Hasta aquí, de cada credencial se sabía una sola cosa: `lastUsedAt`, cuándo
+/// se usó por última vez. No había forma de responder «¿cuánto la usa?, ¿contra
+/// qué endpoints?, ¿está fallando?» —ni para el integrador que la creó ni para
+/// el superadmin—. Esta tabla la responde.
+///
+/// ---------------------------------------------------------------------------
+/// AGREGADO POR DÍA, NO UNA FILA POR PETICIÓN
+///
+/// Una fila por llamada crecería sin techo y obligaría a purgar millones de
+/// registros. Aquí una fila es (día, credencial, endpoint, método, resultado) y
+/// lleva un CONTADOR: la escritura es un upsert que incrementa, y la lectura no
+/// tiene que agrupar nada caro. El coste es perder el detalle petición a
+/// petición, que para «¿cómo va esta integración?» no hace falta.
+///
+/// ---------------------------------------------------------------------------
+/// NI SECRETOS NI IDS DE CLIENTE
+///
+/// `endpoint` es la ruta NORMALIZADA (`/customers/{id}`, nunca
+/// `/customers/cus_abc`): así la cardinalidad queda acotada y ningún id de un
+/// cliente entra en una tabla de telemetría. `resultado` es el desenlace en el
+/// borde de autenticación (OK, permiso insuficiente…), no el cuerpo.
+///
+/// Sin claves foráneas, igual que `RegistroConector`: el historial de uso tiene
+/// que sobrevivir a la credencial que lo generó. Una purga por antigüedad la
+/// hace `purgarMetricasViejas`.
+model MetricaUsoCredencial {
+  id String @id @default(cuid())
+
+  /// Día (a medianoche, en UTC) al que se agregan las peticiones.
+  dia DateTime @db.Date
+
+  /// Qué clase de credencial: CLAVE_API (clave de empresa) | SISTEMA (satélite).
+  origen String
+
+  /// Id de la credencial (`claves_api_empresa.id` o `credenciales_sistema.id`).
+  credencialId String
+
+  /// La empresa dueña de la CLAVE_API. Null para SISTEMA: un satélite atiende a
+  /// muchas y su uso no es de ninguna en particular —se agrega por el satélite—.
+  companyId String?
+
+  /// Ruta normalizada, sin ids: "/customers/{id}". Acota la cardinalidad y
+  /// mantiene los ids de cliente fuera de la telemetría.
+  endpoint String
+
+  /// GET | POST | PATCH | DELETE.
+  metodo String
+
+  /// Desenlace en el borde de auth: OK | SCOPE (permiso insuficiente). Lo que
+  /// no se puede atribuir a una credencial concreta (token inválido, límite)
+  /// no llega hasta aquí.
+  resultado String
+
+  /// Cuántas peticiones cayeron en esta combinación ese día.
+  peticiones Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  /// La clave del upsert-incremento: una fila por combinación y día.
+  @@unique([dia, origen, credencialId, endpoint, metodo, resultado], name: "combinacion")
+  @@index([credencialId, dia])
+  @@index([companyId, dia])
+  @@map("metricas_uso_credencial")
+}

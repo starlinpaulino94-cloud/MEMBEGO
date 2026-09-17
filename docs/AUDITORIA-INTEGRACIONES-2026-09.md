@@ -688,6 +688,49 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 
 </details>
 
+### ◐ B-7 · Métricas de uso por credencial — HECHO para el integrador (17/09/2026)
+
+> **Hecho.** De cada credencial se sabía una sola cosa —`lastUsedAt`, cuándo se
+> usó por última vez—. Ahora hay un AGREGADO DIARIO por credencial: peticiones
+> por día, por endpoint y tasa de error. La pantalla de cada clave del hub de
+> desarrolladores ya lo enseña («1 240 llamadas · 0,8 % con error · 30 d · más
+> usado: GET /customers»), y la nota de honestidad que confirmaba el hueco pasa a
+> decir lo que sí se mide.
+>
+> **La decisión de forma que sostiene todo: agregado, no fila-por-petición.** Una
+> tabla con una fila por llamada crece sin techo y obliga a purgar millones de
+> registros. Aquí una fila es `(día, credencial, endpoint, método, resultado)`
+> con un CONTADOR: la escritura es un upsert que incrementa —atómico por el índice
+> único—, y la lectura no agrupa nada caro. Se pierde el detalle petición a
+> petición, que para «¿cómo va esta integración?» no hace falta. Una purga por
+> antigüedad (`purgarMetricasViejas`) evita guardarlo para siempre.
+>
+> **Dos reglas que no se aflojan:** el endpoint se NORMALIZA antes de guardarse
+> (`/customers/cus_abc` → `/customers/{id}`), y por dos motivos a la vez: acota la
+> cardinalidad y mantiene los ids de cliente FUERA de una tabla de telemetría. Y
+> el resultado es el desenlace en el borde de autenticación (OK, permiso
+> insuficiente), no el cuerpo: una petición que no se identifica —token inválido,
+> límite— no se le puede atribuir a ninguna credencial, así que no se cuenta. La
+> señal más útil de «tasa de error por credencial» es justo la del permiso
+> insuficiente: una integración mal configurada golpeando con un scope que no
+> tiene.
+>
+> **La escritura no puede costar nada:** best-effort y sin `await` en el camino de
+> la petición, como `anotarUsoClave` y la bitácora. Un fallo de telemetría no
+> añade latencia ni tumba una llamada de la API.
+>
+> **Falta, a propósito:** la vista del SUPERADMIN sobre las credenciales de
+> satélite. El dato ya se recoge (`origen: 'SISTEMA'`) y la lectura existe
+> (`usoDeSistema`), pero la PANTALLA del superadmin se dejó fuera de este corte:
+> la superficie de más valor —y la que la auditoría citaba con su nota— es la del
+> integrador, y es la que se cerró. Tampoco se capturan los 4xx/5xx del cuerpo del
+> handler (validación, no encontrado): se miden en el borde de auth, que es lo que
+> caracteriza la salud de UNA credencial; añadir el estado del handler exigiría
+> envolver las ~25 rutas, y eso es su propio cambio.
+
+<details>
+<summary>El hallazgo original</summary>
+
 ### 🟡 B-7 · Sin métricas de uso por credencial
 
 `CredencialSistema.lastUsedAt` y `anotarUsoClave` son todo lo que hay. No hay
@@ -695,6 +738,8 @@ peticiones por día, por endpoint, ni tasa de error; ni para el integrador ni pa
 el superadmin. El propio hub de desarrolladores lo dice con honestidad
 («MembeGo no mide hoy esa señal», `desarrolladores/page.tsx:27`), que es la
 actitud correcta y a la vez la confirmación del hueco. **Esfuerzo: 1 semana.**
+
+</details>
 
 ### 🟡 B-8 · Deuda declarada de la migración expansiva
 
@@ -751,7 +796,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Calendario bidireccional** | **1** | 5 | Solo escritura, solo Google (A-10) |
 | **Pasarelas de pago** | **2** | 5 | CardNET + Azul (buen encaje local) vs. Stripe/PayPal/Square/NMI/Authorize |
 | **Zapier / Make** | **4** | 5 | App de Zapier con REST Hooks; Make por OpenAPI (B-2) |
-| **Métricas de uso de la API** | **1** | 4 | `lastUsedAt` (B-7) |
+| **Métricas de uso de la API** | **3** | 4 | Agregado diario por credencial: peticiones/día, por endpoint y tasa de error, visible en cada clave; falta la vista del superadmin (B-7) |
 | **Salud activa de conexiones** | **1** | 4 | Pasiva (B-3) |
 
 **Media ponderada ≈ 35 % de la superficie de GHL**, con una distribución muy
@@ -792,7 +837,7 @@ generar trabajo manual por cada cliente conectado.
 | ◐ 10 | Catálogo de eventos ✅ ampliado (7→~18, `customer.updated` emitido) · citas/pagos/membresía pendientes de su flujo | 2 | B-4 |
 | ◐ 11 | `PATCH` cliente + `GET` listado ✅ hecho · cancelar cita y borrar, pendientes | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
-| 13 | Métricas de uso por credencial | 1 | B-7 |
+| ◐ 13 | Métricas de uso por credencial ✅ hechas para el integrador · falta la vista del superadmin | 1 | B-7 |
 
 **Resultado: ~58 %.** Aquí es donde la curva de valor por semana es más alta:
 los puntos 8 y 9 juntos cuestan tres semanas y abren, en la práctica, la
@@ -857,14 +902,15 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
 - **En alcance de integraciones: el atajo ya está andado.** El webhook
   entrante, la acción HTTP y la app de Zapier (puntos 8 y 9) están hechos, y con
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir
-  que lo integremos a mano. Lo que queda de la Fase 2 son piezas de superficie
-  de API que quedan: métricas de uso por credencial (B-7), y las dos piezas de
-  B-5 que se dejaron fuera a propósito (cancelar cita, borrar cliente). El
-  catálogo de eventos (B-4) ya está ampliado —un Zapier de empresa pasa de 7 a
-  ~18 eventos elegibles y `customer.updated` por fin se emite—; lo que resta de
-  B-4 (citas, pagos, membresía cancelada) espera a que su flujo exista para no
-  ofrecer una casilla sin emisor. La edición de clientes y la paginación ya
-  están.
+  que lo integremos a mano. De la Fase 2, la superficie de API está casi
+  entera: la edición de clientes y la paginación hechas, el catálogo de eventos
+  (B-4) ampliado —un Zapier de empresa pasa de 7 a ~18 eventos elegibles y
+  `customer.updated` por fin se emite—, y las métricas de uso por credencial
+  (B-7) medidas y visibles en cada clave. Lo que queda son rabos: la vista del
+  superadmin sobre esas métricas, lo que resta de B-4 (citas, pagos, membresía
+  cancelada, que esperan a que su flujo exista para no ofrecer una casilla sin
+  emisor) y las dos piezas de B-5 que se dejaron fuera a propósito (cancelar
+  cita, borrar cliente).
 
   La frase original decía que eran tres semanas de trabajo que hacen por la
   cobertura lo que treinta conectores harían en un año.
