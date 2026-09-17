@@ -10,7 +10,7 @@ import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { validarImagenPlan } from '@/modules/planes/imagen'
-import { registrarEventoMembresia } from '@/modules/membresia/eventos'
+import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 async function requireSuperAdmin() {
   const user = await getUser()
@@ -532,6 +532,15 @@ export async function cancelarMembresia(
       })
     })
 
+    // Fuera de la transacción (B-4): que un satélite marque la baja en su copia.
+    await emitirCambioMembresiaAlBus({
+      tipo: 'CANCELADA',
+      companyId: m.cliente.companyId,
+      clienteId: m.clienteId,
+      membershipId: m.id,
+      planId: m.planId,
+    })
+
     revalidatePath('/superadmin/membresias')
     revalidatePath('/admin/clientes')
     return { success: true }
@@ -614,6 +623,16 @@ export async function desactivarMembresia(
         ocurridoEn: ahora,
         payload: { manual: true, vencimientoAnterior: m.fechaVencimiento?.toISOString() ?? null },
       })
+    })
+
+    // Fuera de la transacción (B-4): desactivar termina en VENCIDA igual que el
+    // vencimiento por fecha; el bus recibe el mismo evento en los dos casos.
+    await emitirCambioMembresiaAlBus({
+      tipo: 'VENCIDA',
+      companyId: m.cliente.companyId,
+      clienteId: m.clienteId,
+      membershipId: m.id,
+      planId: m.planId,
     })
 
     revalidatePath('/superadmin/membresias')

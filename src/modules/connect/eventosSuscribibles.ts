@@ -50,6 +50,8 @@ const ETIQUETAS: Record<string, string> = {
   'purchase.first_completed': 'Un cliente te compra por primera vez',
   'purchase.completed': 'Un cliente compra una membresía o una oferta',
   'membership.activated': 'Una membresía queda activa',
+  'membership.cancelled': 'Se cancela una membresía',
+  'membership.expired': 'Una membresía vence por fecha',
   'referral.converted': 'Un referido completa su conversión',
   'referral.registered': 'Un invitado se registra con un código de referido',
   'message.received': 'Un cliente te escribe por WhatsApp u otro canal',

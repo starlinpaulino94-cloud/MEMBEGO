@@ -2,7 +2,7 @@ import 'server-only'
 
 import { sinEmpresa } from '@/lib/tenant'
 import { membresiaCaducada } from '@/modules/membresia/vigencia'
-import { registrarEventoMembresia } from '@/modules/membresia/eventos'
+import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 /**
  * El JOB que pone al día el estado de las membresías. Las reglas puras —qué es
@@ -30,7 +30,12 @@ export interface ResultadoVencimiento {
  */
 export async function vencerMembresias(ahora: Date = new Date()): Promise<ResultadoVencimiento> {
   try {
-    return await sinEmpresa('membresías: vencimiento diario', async (tx) => {
+    // Las que vencieron se capturan aquí para AVISAR AL BUS después del commit
+    // (B-4): `emitirEventoEstrategia` abre su propia transacción y es best-effort,
+    // así que no puede ir dentro de la del vencimiento —ni retrasarla, ni tumbarla—.
+    let caducadasParaBus: { id: string; companyId: string; clienteId: string; planId: string | null }[] = []
+
+    const resultado = await sinEmpresa('membresías: vencimiento diario', async (tx) => {
       // Se leen primero para poder auditar QUÉ venció, no solo cuántas.
       const caducadas = await tx.membership.findMany({
         where: membresiaCaducada(ahora),
@@ -40,6 +45,7 @@ export async function vencerMembresias(ahora: Date = new Date()): Promise<Result
         select: { id: true, companyId: true, clienteId: true, planId: true },
       })
       if (caducadas.length === 0) return { vencidas: 0, empresas: 0 }
+      caducadasParaBus = caducadas
 
       const { count } = await tx.membership.updateMany({
         where: { id: { in: caducadas.map((m) => m.id) } },
@@ -103,6 +109,21 @@ export async function vencerMembresias(ahora: Date = new Date()): Promise<Result
 
       return { vencidas: count, empresas: porEmpresa.size }
     })
+
+    // Fuera de la transacción (B-4): un satélite que mantiene su copia de la
+    // membresía la marca como vencida con este aviso, en vez de quedarse diciendo
+    // «activa» algo que ya no lo está. Best-effort, uno por membresía.
+    for (const m of caducadasParaBus) {
+      await emitirCambioMembresiaAlBus({
+        tipo: 'VENCIDA',
+        companyId: m.companyId,
+        clienteId: m.clienteId,
+        membershipId: m.id,
+        planId: m.planId,
+      })
+    }
+
+    return resultado
   } catch (e) {
     console.error('[membresias/vigencia] vencerMembresias', e)
     // El job puede fallar sin consecuencias visibles: `membresiaVigente()` ya

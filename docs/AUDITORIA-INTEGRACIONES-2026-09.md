@@ -114,12 +114,13 @@ que prometen.
 
 ### 2.3 Eventos
 
-- **8 eventos se reenvían a satélites** (`integraciones/nucleo.ts`,
+- **10 eventos se reenvían a satélites** (`integraciones/nucleo.ts`,
   `EVENTOS_REENVIADOS`): registro, edición de cliente, primera visita, visita,
-  compra, primera compra, membresía activada, referido convertido. Estrecho a
-  propósito: un satélite no debe recibir lo que no atiende.
-- **~18 eventos son elegibles por un webhook de empresa** (B-4,
-  `EVENTOS_EMITIDOS`): los ocho de arriba más las promociones
+  compra, primera compra, membresía activada/cancelada/vencida, referido
+  convertido. Estrecho a propósito: solo los hechos que un satélite atiende y las
+  proyecciones CORE que mantiene.
+- **~20 eventos son elegibles por un webhook de empresa** (B-4,
+  `EVENTOS_EMITIDOS`): los de arriba más las promociones
   (creada/actualizada/eliminada/duplicada/activada/pausada/archivada), el mensaje
   entrante, el prospecto creado, el invitado registrado y la reserva pagada.
   Antes de B-4 estos ya llegaban a quien se suscribía a «todo», pero con su
@@ -128,8 +129,7 @@ que prometen.
   quedan reservados en el mapa hasta que su flujo los dispare.
 - El propio código sigue listando lo que falta: `eventosDeProyeccionSinEmisor()`
   (`modules/plataforma/eventos.ts`) enumera los eventos que el contrato de
-  proyección exige y el bus aún no emite (citas, sucursales, empresa, membresía
-  cancelada/vencida, vehículos).
+  proyección exige y el bus aún no emite (citas, sucursales, empresa, vehículos).
 - GoHighLevel expone del orden de **30–40 tipos** de webhook.
 
 ---
@@ -645,17 +645,27 @@ no hay nada que lo encienda a tiempo. **Esfuerzo: 3–4 días.**
 > una edición y desfasada tras la otra, el peor de los mundos porque parece que
 > funciona. Es el único de la lista que además se reenvía a satélites, por eso.
 >
-> **Sigue pendiente, a propósito:** cita creada/movida/cancelada, pago
-> recibido/fallido y membresía cancelada/vencida NO se conectaron. La razón es la
-> regla que este mismo hallazgo defiende: un evento entra al catálogo solo cuando
-> tiene un emisor REAL en el código. Esos flujos aún no disparan nada en el bus
-> (`membresia.cancelada` es una constante que nadie emite; no hay módulo de citas
-> que emita), y meter su nombre sin emisor recrea el problema de B-4 al revés —una
-> casilla que no recibe nada y una tarde buscando por qué—. Se emitirán cuando el
-> flujo que los produce exista. `eventosDeProyeccionSinEmisor()` los sigue listando
-> para que ese hueco sea visible y no una sorpresa. `reserva.creada` y
-> `venta.generada` quedan igual: nombres reservados en el mapa, fuera del catálogo
-> hasta que su flujo los dispare.
+> **Después se conectó la membresía (18/09/2026).** `membresia.cancelada` y
+> `membresia.vencida` YA se emiten: la baja de una membresía se registraba en su
+> historia y nunca llegaba a un satélite ni a un webhook, así que la proyección
+> `MembershipSummary` se quedaba diciendo «activa» algo cancelado o vencido. Se
+> emiten desde los CUATRO flujos que producen la baja —el vencimiento automático
+> del cron (el más común), la cancelación desde el panel de empresa, la
+> cancelación desde superadmin y la desactivación manual— por un mapa único
+> (`emitirCambioMembresiaAlBus`) para que ninguno diga algo distinto del mismo
+> hecho. Como `customer.updated`, van también a satélites: son proyección CORE.
+> `ACTIVADA` no entra en ese mapa —ya la emite el punto de activación con su
+> payload rico, y meterla ahí la emitiría dos veces—.
+>
+> **Sigue pendiente, a propósito:** cita creada/movida/cancelada y pago
+> recibido/fallido. La razón es la regla que este hallazgo defiende: un evento
+> entra al catálogo solo cuando tiene un emisor REAL. Esos flujos aún no existen
+> en el bus (no hay módulo de citas ni de pagos que emita), y meter su nombre sin
+> emisor recrea el problema al revés —una casilla que no recibe nada—. Se emitirán
+> cuando el flujo que los produce exista; `eventosDeProyeccionSinEmisor()` los
+> sigue listando para que el hueco sea visible. `reserva.creada` y `venta.generada`
+> quedan igual: nombres reservados en el mapa, fuera del catálogo hasta que su
+> flujo los dispare.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -849,7 +859,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
 | **Superficie de la API** | **4** | 5 | 29 rutas con GET/POST/PATCH/DELETE, listados paginados y un editar cliente; falta cancelar cita y borrar |
-| **Catálogo de eventos** | **3** | 5 | ~18 elegibles (bus separado de reenvío a satélite, `customer.updated` emitido); faltan citas/pagos/membresía por su flujo (B-4) |
+| **Catálogo de eventos** | **4** | 5 | ~20 elegibles; ciclo de membresía (cancelada/vencida) y `customer.updated` emitidos; faltan citas y pagos por su flujo (B-4) |
 | **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
 | Webhook entrante / acción HTTP en flujos | **4** | 5 | Circuito completo; falta el constructor de reglas con condiciones (B-1) |
@@ -896,7 +906,7 @@ generar trabajo manual por cada cliente conectado.
 |---|---|:-:|---|
 | ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
 | ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
-| ◐ 10 | Catálogo de eventos ✅ ampliado (7→~18, `customer.updated` emitido) · citas/pagos/membresía pendientes de su flujo | 2 | B-4 |
+| ◐ 10 | Catálogo de eventos ✅ ampliado (7→~20, `customer.updated` y ciclo de membresía emitidos) · citas/pagos pendientes de su flujo | 2 | B-4 |
 | ◐ 11 | `PATCH` cliente + `GET` listado ✅ hecho · cancelar cita y borrar, pendientes | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
 | ◐ 13 | Métricas de uso por credencial ✅ hechas para el integrador · falta la vista del superadmin | 1 | B-7 |
@@ -970,13 +980,13 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir
   que lo integremos a mano. De la Fase 2, la superficie de API está casi
   entera: la edición de clientes y la paginación hechas, el catálogo de eventos
-  (B-4) ampliado —un Zapier de empresa pasa de 7 a ~18 eventos elegibles y
-  `customer.updated` por fin se emite—, y las métricas de uso por credencial
-  (B-7) medidas y visibles en cada clave. Lo que queda son rabos: la vista del
-  superadmin sobre esas métricas, lo que resta de B-4 (citas, pagos, membresía
-  cancelada, que esperan a que su flujo exista para no ofrecer una casilla sin
-  emisor) y las dos piezas de B-5 que se dejaron fuera a propósito (cancelar
-  cita, borrar cliente).
+  (B-4) ampliado —un Zapier de empresa pasa de 7 a ~20 eventos elegibles, y
+  `customer.updated` y el ciclo de membresía (cancelada/vencida) por fin se
+  emiten—, y las métricas de uso por credencial (B-7) medidas y visibles en cada
+  clave. Lo que queda son rabos: la vista del superadmin sobre esas métricas, lo
+  que resta de B-4 (citas y pagos, que esperan a que su flujo exista para no
+  ofrecer una casilla sin emisor) y las dos piezas de B-5 que se dejaron fuera a
+  propósito (cancelar cita, borrar cliente).
 
   La frase original decía que eran tres semanas de trabajo que hacen por la
   cobertura lo que treinta conectores harían en un año.
