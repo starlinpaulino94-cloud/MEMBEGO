@@ -305,27 +305,56 @@ interface FilaEvento {
  * el sistema pudo suspenderse: entregarlo entonces sería mandar datos a un
  * sistema al que esa empresa ya no pertenece. Con el destino resuelto de nuevo,
  * revocar deja de ser una promesa a futuro y vacía también la cola.
+ *
+ * CERROJO POR COMPARE-AND-SET (#5): antes de enviar se RECLAMA el intento con un
+ * `updateMany` guardado por `intentos = ev.intentos` que lo sube a `+1`. Es
+ * atómico: si dos caminos —el barrido, el botón del panel, y un reintento de
+ * QStash sobre el mismo trabajo— empiezan a la vez con la misma fila, solo uno
+ * gana el `count:1`; el resto ve `count:0` y devuelve `omitido` sin enviar ni
+ * anotar. El chequeo de solo-lectura de `reintentarEventoSaliente` es un
+ * early-out barato, pero deja una ventana entre el read y el write; este cerrojo
+ * la cierra. Sin él, dos reintentos solapados gastaban un intento que nadie
+ * contaba (el evento moría antes de tiempo) y hacían un POST doble al satélite.
  */
 async function intentarEvento(
   ev: FilaEvento,
   destino: { urlWebhook: string; secreto: string } | undefined
-): Promise<'enviado' | 'fallido' | 'agotado'> {
+): Promise<'enviado' | 'fallido' | 'agotado' | 'omitido'> {
   if (!destino) {
-    await sinEmpresa('integraciones: cerrar evento sin destino (cron/cola global)', (tx) =>
-      tx.eventoSaliente.update({
-        where: { id: ev.id },
+    // El cierre por destino ausente también se reclama: solo cierra quien
+    // gane el compare-and-set, para no pisar a otro camino que aún atiende
+    // la fila. Sin destino no hay envío, así que basta con el claim que cierra.
+    const cerrado = await sinEmpresa('integraciones: cerrar evento sin destino (cron/cola global)', (tx) =>
+      tx.eventoSaliente.updateMany({
+        where: { id: ev.id, estado: 'PENDIENTE', intentos: ev.intentos },
         data: {
           estado: DESCARTADO,
           ultimoError: 'Sistema no habilitado para esta empresa, inactivo o sin webhook.',
           proximoIntentoAt: null,
         },
       })
-    ).catch(anotarFallo('integraciones:cerrar', { id: ev.id }))
-    return 'agotado'
+    ).catch((e) => {
+      anotarFallo('integraciones:cerrar', { id: ev.id })(e)
+      return { count: 0 }
+    })
+    return cerrado.count === 0 ? 'omitido' : 'agotado'
   }
 
-  const error = await entregar(destino.urlWebhook, destino.secreto, cuerpoDe(ev), ev.id)
   const intentos = ev.intentos + 1
+  // RECLAMO ATÓMICO antes de gastar la red: subir `intentos` de `ev.intentos` a
+  // `+1` solo si sigue en ese valor y PENDIENTE. Gana uno; el resto se omite.
+  const claim = await sinEmpresa('integraciones: reclamar intento del evento (cron/cola global)', (tx) =>
+    tx.eventoSaliente.updateMany({
+      where: { id: ev.id, estado: 'PENDIENTE', intentos: ev.intentos },
+      data: { intentos },
+    })
+  ).catch((e) => {
+    anotarFallo('integraciones:reclamar', { id: ev.id })(e)
+    return { count: 0 }
+  })
+  if (claim.count === 0) return 'omitido' // lo atendió otro camino entre medias
+
+  const error = await entregar(destino.urlWebhook, destino.secreto, cuerpoDe(ev), ev.id)
   await anotarResultado({
     companyId: ev.companyId,
     eventoId: ev.id,
@@ -340,11 +369,12 @@ async function intentarEvento(
 /**
  * EL REINTENTO PROGRAMADO (trabajo `reintento-entrega`, cola `satelite`).
  *
- * `intentosEsperados` es un cerrojo optimista: si la fila ya no tiene ese
- * número de intentos, la atendió alguien entre medias —el barrido, el botón del
- * panel, o un reintento de QStash sobre este mismo trabajo— y aquí no hay nada
- * que hacer. Sin el cerrojo, ese solapamiento gastaría un intento que nadie
- * contó y el evento moriría antes de tiempo.
+ * `intentosEsperados` es el early-out barato: si la fila ya no tiene ese número
+ * de intentos, la atendió alguien entre medias —el barrido, el botón del panel,
+ * o un reintento de QStash sobre este mismo trabajo— y aquí no hay nada que
+ * hacer. La GARANTÍA de verdad es el compare-and-set atómico de `intentarEvento`
+ * (#5), que reclama el intento antes de enviar; este chequeo solo evita resolver
+ * el destino y abrir el socket cuando ya se ve que otro va por delante.
  */
 export async function reintentarEventoSaliente(
   eventoId: string,

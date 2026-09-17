@@ -95,6 +95,31 @@ test('el despacho enhebra domainEventId y marca despachadoAt al terminar el repa
   assert.match(src, /despachadoAt:\s*new Date\(\)/, 'no marca despachadoAt cuando el reparto termina')
 })
 
+// ─── #5 · el reintento reclama el intento antes de enviar (compare-and-set) ─
+
+test('intentarEvento reclama el intento con un compare-and-set antes de enviar', () => {
+  const src = codigo('src/modules/integraciones/despacho.ts')
+  const i = src.indexOf('async function intentarEvento')
+  const cuerpo = src.slice(i, src.indexOf('\nexport async function reintentarEventoSaliente', i))
+  assert.ok(cuerpo.length > 0, 'no se pudo acotar el cuerpo de intentarEvento')
+
+  // El claim es un updateMany guardado por (id, PENDIENTE, intentos) que sube el
+  // contador: un solo camino gana; el resto ve count:0.
+  assert.match(
+    cuerpo,
+    /updateMany\(\{[\s\S]*?where:\s*\{\s*id:\s*ev\.id,\s*estado:\s*'PENDIENTE',\s*intentos:\s*ev\.intentos\s*\}/,
+    'el reintento no reclama el intento con compare-and-set'
+  )
+  // El claim ocurre ANTES de tocar la red: la posición del reclamo precede a la
+  // del `entregar(`.
+  const posClaim = cuerpo.indexOf('reclamar intento del evento')
+  const posEnvio = cuerpo.indexOf('await entregar(')
+  assert.ok(posClaim !== -1 && posEnvio !== -1, 'faltan el claim o el envío')
+  assert.ok(posClaim < posEnvio, 'el envío ocurre antes del reclamo: la carrera sigue abierta')
+  // Si el claim no gana, se omite sin enviar.
+  assert.match(cuerpo, /claim\.count === 0\)\s*return 'omitido'/, 'un claim perdido no se omite')
+})
+
 // ─── #4 · el barrido reclama los procesados a medias (lease) ────────────────
 
 test('barrerEventosEstrategia reclama los processed:true sin despachadoAt pasado el lease', () => {
