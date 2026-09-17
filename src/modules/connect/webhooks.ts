@@ -24,7 +24,13 @@ import {
   type SecretosDeFirma,
 } from '@/modules/connect/webhooksNucleo'
 import { programarReintento } from '@/modules/integraciones/programador'
-import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
+import {
+  CONCURRENCIA,
+  CONCURRENCIA_POR_EMPRESA,
+  antesDe,
+  enParalelo,
+  enParaleloPorClave,
+} from '@/modules/integraciones/concurrencia'
 import { esEventoEntrante } from '@/modules/connect/entrantesNucleo'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 import {
@@ -835,22 +841,32 @@ export async function reintentarWebhooksPendientes(
       })
   ).catch(() => [])
 
-  // Acotado por concurrencia Y por tiempo (A-6). En serie, con un receptor
-  // caído, cada fila costaba sus diez segundos de timeout: el cron procesaba
-  // unas seis de cien y la plataforma lo mataba, sin error y sin traza. Al día
-  // siguiente repetía con las mismas seis.
-  const { sinEmpezar } = await enParalelo(
+  // Acotado por concurrencia (global Y POR EMPRESA) y por tiempo (A-6). En serie,
+  // con un receptor caído, cada fila costaba sus diez segundos de timeout: el
+  // cron procesaba unas seis de cien y la plataforma lo mataba, sin error y sin
+  // traza. Al día siguiente repetía con las mismas seis.
+  //
+  // El tope POR EMPRESA es lo que impide que un inquilino con el endpoint caído
+  // —y por eso con muchas filas acumuladas— se lleve los seis huecos del
+  // trabajador compartido y deje sin reintento a las empresas cuyo destino está
+  // sano. `enParaleloPorClave` salta las filas de una empresa que ya está a tope
+  // y atiende las de otra, en vez de bloquearse.
+  const { sinEmpezar } = await enParaleloPorClave(
     pendientes,
-    CONCURRENCIA,
     async (e) => {
       const r = await intentarEntrega(e)
       if (r === 'enviado') enviados++
       else if (r === 'agotado') agotados++
     },
-    // El margen es para que lo que esté en vuelo termine de escribir su
-    // resultado. Que nos maten a mitad de un `update` deja la fila diciendo
-    // algo que no pasó.
-    { continuar: antesDe(presupuestoMs, 12_000) }
+    {
+      limiteGlobal: CONCURRENCIA,
+      limitePorClave: CONCURRENCIA_POR_EMPRESA,
+      clave: (e) => e.companyId,
+      // El margen es para que lo que esté en vuelo termine de escribir su
+      // resultado. Que nos maten a mitad de un `update` deja la fila diciendo
+      // algo que no pasó.
+      continuar: antesDe(presupuestoMs, 12_000),
+    }
   )
 
   return { enviados, agotados, sinTiempo: sinEmpezar }

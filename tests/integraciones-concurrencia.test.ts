@@ -2,7 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CONCURRENCIA, antesDe, enParalelo } from '../src/modules/integraciones/concurrencia'
+import {
+  CONCURRENCIA,
+  CONCURRENCIA_POR_EMPRESA,
+  antesDe,
+  enParalelo,
+  enParaleloPorClave,
+} from '../src/modules/integraciones/concurrencia'
 
 /**
  * FAN-OUT Y BARRIDO EN PARALELO · hallazgo A-6 de la auditoría.
@@ -95,6 +101,130 @@ test('si `fn` lanza, el error sale por donde entró y no se traga', async () => 
       throw new Error('revienta')
     }),
     /revienta/
+  )
+})
+
+// ─── Tope por empresa: justicia entre inquilinos en el barrido ───────────────
+
+/** Corre el scheduler midiendo el pico de concurrencia global y por clave. */
+async function medir<T extends { k: string; id: number }>(
+  items: T[],
+  limiteGlobal: number,
+  limitePorClave: number,
+  msPorClave: (k: string) => number = () => 5
+) {
+  let global = 0
+  let picoGlobal = 0
+  const enClave = new Map<string, number>()
+  const picoClave = new Map<string, number>()
+  const orden: number[] = []
+  const { resultados, sinEmpezar } = await enParaleloPorClave(
+    items,
+    async (it) => {
+      global++
+      picoGlobal = Math.max(picoGlobal, global)
+      const c = (enClave.get(it.k) ?? 0) + 1
+      enClave.set(it.k, c)
+      picoClave.set(it.k, Math.max(picoClave.get(it.k) ?? 0, c))
+      await esperar(msPorClave(it.k))
+      orden.push(it.id)
+      global--
+      enClave.set(it.k, (enClave.get(it.k) ?? 1) - 1)
+      return it.id
+    },
+    { limiteGlobal, limitePorClave, clave: (it) => it.k }
+  )
+  return { resultados, sinEmpezar, picoGlobal, picoClave, orden }
+}
+
+test('nunca hay más de `limitePorClave` de la MISMA clave en vuelo', async () => {
+  // Diez filas de una empresa con un tope global holgado: sin el tope por clave
+  // saldrían de seis en seis contra su (único) receptor.
+  const items = Array.from({ length: 10 }, (_, i) => ({ k: 'a', id: i }))
+  const { picoClave, picoGlobal, resultados } = await medir(items, 6, 2)
+  assert.equal(picoClave.get('a'), 2, 'se pasó del tope por empresa')
+  assert.equal(picoGlobal, 2, 'sin más claves, el pico global no puede superar el de la clave')
+  assert.equal(resultados.length, 10, 'dejó filas sin procesar')
+})
+
+test('respeta el tope global aun con varias claves por debajo del suyo', async () => {
+  // Cuatro empresas, tope por clave 3, global 6: 4×3=12 querría el por-clave,
+  // pero el global lo corta en 6.
+  const items = ['a', 'b', 'c', 'd'].flatMap((k) =>
+    Array.from({ length: 5 }, (_, i) => ({ k, id: Number(`${k.charCodeAt(0)}${i}`) }))
+  )
+  const { picoGlobal, picoClave, resultados } = await medir(items, 6, 3)
+  assert.ok(picoGlobal <= 6, `pico global ${picoGlobal} > 6`)
+  for (const k of ['a', 'b', 'c', 'd']) {
+    assert.ok((picoClave.get(k) ?? 0) <= 3, `la clave ${k} se pasó de 3`)
+  }
+  assert.equal(resultados.length, 20)
+})
+
+test('una empresa con el destino caído NO deja sin turno a las demás', async () => {
+  // 'a' es lentísima (endpoint caído); 'b' responde rápido. Con tope por clave,
+  // 'a' ocupa como mucho 2 huecos y 'b' sigue avanzando: todas las 'b' terminan
+  // antes que la última 'a'. Sin el tope, las 'a' llenarían el pool y 'b'
+  // esperaría a la siguiente vuelta del cron.
+  const items = [
+    ...Array.from({ length: 5 }, (_, i) => ({ k: 'a', id: 100 + i })),
+    ...Array.from({ length: 5 }, (_, i) => ({ k: 'b', id: 200 + i })),
+  ]
+  const { orden } = await medir(items, 6, 2, (k) => (k === 'a' ? 40 : 3))
+  const ultimaB = Math.max(...orden.map((id, i) => (id >= 200 ? i : -1)))
+  const ultimaA = Math.max(...orden.map((id, i) => (id < 200 ? i : -1)))
+  assert.ok(ultimaB < ultimaA, 'una empresa sana esperó a que terminara la caída')
+})
+
+test('devuelve un resultado por elemento y en el orden de entrada', async () => {
+  const items = ['a', 'b', 'a', 'b', 'c'].map((k, i) => ({ k, id: i }))
+  const { resultados } = await medir(items, 6, 2)
+  assert.deepEqual(resultados, [0, 1, 2, 3, 4])
+})
+
+test('lista vacía: ni cuelga ni lanza', async () => {
+  const r = await enParaleloPorClave([], async () => 1, {
+    limiteGlobal: 6,
+    limitePorClave: 3,
+    clave: () => 'x',
+  })
+  assert.deepEqual(r, { resultados: [], sinEmpezar: 0 })
+})
+
+test('al parar por presupuesto, deja lo no empezado y lo dice', async () => {
+  let hechos = 0
+  const items = Array.from({ length: 12 }, (_, i) => ({ k: i % 3 === 0 ? 'a' : 'b', id: i }))
+  const { resultados, sinEmpezar } = await enParaleloPorClave(
+    items,
+    async () => {
+      hechos++
+      await esperar(2)
+    },
+    {
+      limiteGlobal: 4,
+      limitePorClave: 2,
+      clave: (it) => it.k,
+      continuar: () => hechos < 5,
+    }
+  )
+  assert.ok(resultados.length >= 5 && resultados.length < 12, `hizo ${resultados.length}`)
+  assert.equal(resultados.length + sinEmpezar, 12, 'las cuentas no cuadran')
+})
+
+test('si `fn` lanza, el error sale por donde entró', async () => {
+  await assert.rejects(
+    enParaleloPorClave([{ k: 'a', id: 1 }], async () => {
+      throw new Error('revienta')
+    }, { limiteGlobal: 4, limitePorClave: 2, clave: (it) => it.k }),
+    /revienta/
+  )
+})
+
+test('el tope por empresa es menor que el global (si no, no acota nada)', () => {
+  assert.ok(CONCURRENCIA_POR_EMPRESA >= 1, 'con cero no saldría ninguna entrega')
+  assert.ok(
+    CONCURRENCIA_POR_EMPRESA < CONCURRENCIA,
+    'un tope por empresa igual o mayor que el global no limita a nadie'
   )
 })
 
@@ -204,9 +334,27 @@ test('las cuatro rutas de salida recorren en paralelo, no en serie', () => {
     const hasta = cuerpo.indexOf('\n}\n')
     assert.match(
       cuerpo.slice(0, hasta > 0 ? hasta : 3000),
-      /enParalelo\(/,
+      // Los dos barridos (rutas compartidas entre inquilinos) usan la variante
+      // con tope por empresa; los dos fan-out, la simple. Cualquiera vale aquí.
+      /enParalelo(PorClave)?\(/,
       `${fn} sigue recorriendo su lista en serie`
     )
+  }
+})
+
+test('los DOS barridos acotan la concurrencia POR EMPRESA, no solo global', () => {
+  // El trabajador del barrido es el único compartido entre inquilinos: sin tope
+  // por empresa, uno con el endpoint caído acapara los seis huecos y deja sin
+  // reintento a los demás. Los fan-out son de una sola empresa: no lo necesitan.
+  for (const [ruta, fn] of [
+    ['src/modules/connect/webhooks.ts', 'reintentarWebhooksPendientes'],
+    ['src/modules/integraciones/despacho.ts', 'reintentarPendientes'],
+  ] as const) {
+    const src = codigo(ruta)
+    const cuerpo = src.slice(src.indexOf(`export async function ${fn}`))
+    assert.match(cuerpo, /enParaleloPorClave\(/, `${fn} no acota por empresa`)
+    assert.match(cuerpo, /limitePorClave:\s*CONCURRENCIA_POR_EMPRESA/, `${fn} no pasa el tope por empresa`)
+    assert.match(cuerpo, /clave:\s*\(\w+\)\s*=>\s*\w+\.companyId/, `${fn} no llavea por companyId`)
   }
 })
 

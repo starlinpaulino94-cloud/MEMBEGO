@@ -14,7 +14,13 @@ import {
 } from '@/modules/plataforma/firma'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 import { programarReintento } from '@/modules/integraciones/programador'
-import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
+import {
+  CONCURRENCIA,
+  CONCURRENCIA_POR_EMPRESA,
+  antesDe,
+  enParalelo,
+  enParaleloPorClave,
+} from '@/modules/integraciones/concurrencia'
 
 /**
  * DESPACHO DE EVENTOS a los sistemas satélite conectados.
@@ -492,17 +498,23 @@ export async function reintentarPendientes(
     return promesa
   }
 
-  // Acotado por concurrencia Y por tiempo (A-6): ver el mismo cambio en
-  // `reintentarWebhooksPendientes`.
-  const { sinEmpezar } = await enParalelo(
+  // Acotado por concurrencia (global Y POR EMPRESA) y por tiempo (A-6): ver el
+  // mismo cambio y su porqué en `reintentarWebhooksPendientes`. El tope por
+  // empresa impide que un satélite caído de un inquilino acapare el trabajador
+  // compartido y deje sin reintento a los demás.
+  const { sinEmpezar } = await enParaleloPorClave(
     pendientes,
-    CONCURRENCIA,
     async (ev) => {
       const r = await intentarEvento(ev, (await destinosDe(ev.companyId)).get(ev.sistemaId))
       if (r === 'enviado') enviados++
       else if (r === 'agotado') fallidos++
     },
-    { continuar: antesDe(presupuestoMs, 12_000) }
+    {
+      limiteGlobal: CONCURRENCIA,
+      limitePorClave: CONCURRENCIA_POR_EMPRESA,
+      clave: (ev) => ev.companyId,
+      continuar: antesDe(presupuestoMs, 12_000),
+    }
   )
   return { enviados, fallidos, sinTiempo: sinEmpezar }
 }
