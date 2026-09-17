@@ -105,6 +105,29 @@ export function generarOpenApi(servidor: string): Record<string, unknown> {
     const ruta = r.ruta
     paths[ruta] ??= {}
     const parametros = parametrosDeRuta(ruta)
+    if (r.paginado) {
+      // Los dos parámetros de página. Se describen aquí para que quien importe
+      // el OpenAPI —Zapier, Make, Postman— sepa que la lista puede tener más de
+      // una página y cómo pedir la siguiente, en vez de asumir que una llamada
+      // trae todo.
+      parametros.push(
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          description: 'Cuántas filas devolver (1–200). Por defecto 50.',
+          schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+        },
+        {
+          name: 'cursor',
+          in: 'query',
+          required: false,
+          description:
+            'Para pedir la siguiente página, el valor de `page.nextCursor` de la respuesta anterior. Es opaco: no lo construyas a mano.',
+          schema: { type: 'string' },
+        }
+      )
+    }
     if (r.idempotente) {
       parametros.push({
         name: 'Idempotency-Key',

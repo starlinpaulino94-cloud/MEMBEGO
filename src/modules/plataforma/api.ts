@@ -10,6 +10,8 @@ import { tokenDeCabecera, verificarToken } from '@/modules/plataforma/token'
 import { accesoASistema } from '@/modules/plataforma/registro'
 import { pareceClaveEmpresa, partirClave } from '@/modules/connect/clavesApiNucleo'
 import { anotarUsoClave, resolverClaveApi } from '@/modules/connect/clavesApi'
+import { registrarUso } from '@/modules/plataforma/metricas'
+import { RESULTADO } from '@/modules/plataforma/metricas-nucleo'
 
 /**
  * PLATAFORMA · Fase 2 — LA GUARDIA DE LA API v1.
@@ -181,6 +183,13 @@ export async function autenticar(
     requestId,
   })
 
+  // Para las métricas de uso por credencial (B-7). Se leen una vez y se pasan a
+  // `registrarUso` en los puntos donde ya se sabe QUÉ credencial llama; una
+  // petición que no se identifica (token inválido, límite) no se le puede
+  // atribuir a nadie, así que no se cuenta.
+  const endpoint = req.nextUrl.pathname
+  const metodo = req.method
+
   const cabecera = req.headers.get('authorization')
 
   // ── Principal 2: clave de API de empresa ───────────────────────────────
@@ -202,10 +211,26 @@ export async function autenticar(
     if (!clave) return negar('INVALID_TOKEN')
 
     if (scopeRequerido !== null && !clave.scopes.includes(scopeRequerido)) {
+      registrarUso({
+        origen: 'CLAVE_API',
+        credencialId: clave.id,
+        companyId: clave.companyId,
+        endpoint,
+        metodo,
+        resultado: RESULTADO.SCOPE,
+      })
       return negar('INSUFFICIENT_SCOPE', { requiredScope: scopeRequerido })
     }
 
     anotarUsoClave(clave.id, clave.companyId)
+    registrarUso({
+      origen: 'CLAVE_API',
+      credencialId: clave.id,
+      companyId: clave.companyId,
+      endpoint,
+      metodo,
+      resultado: RESULTADO.OK,
+    })
 
     return {
       requestId,
@@ -246,8 +271,25 @@ export async function autenticar(
 
   const scopes = scopesEfectivos(verificado.datos.scopes, credencial.scopes)
   if (scopeRequerido !== null && !scopes.includes(scopeRequerido)) {
+    registrarUso({
+      origen: 'SISTEMA',
+      credencialId: credencial.id,
+      companyId: null,
+      endpoint,
+      metodo,
+      resultado: RESULTADO.SCOPE,
+    })
     return negar('INSUFFICIENT_SCOPE', { requiredScope: scopeRequerido })
   }
+
+  registrarUso({
+    origen: 'SISTEMA',
+    credencialId: credencial.id,
+    companyId: null,
+    endpoint,
+    metodo,
+    resultado: RESULTADO.OK,
+  })
 
   return {
     requestId,

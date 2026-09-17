@@ -122,6 +122,15 @@ model ConexionEmpresa {
   ultimoErrorAt DateTime?
   ultimoError   String?
 
+  /// SALUD ACTIVA (auditoría B-3): desde cuándo el chequeo proactivo marcó esta
+  /// conexión como «hay que reautorizar», antes de que un envío falle. Null =
+  /// sana. A diferencia de `ultimoErrorAt` —que es un fallo TRANSITORIO y se
+  /// enfría en 24 h—, esto es una condición PERSISTENTE: una credencial sin
+  /// refresco (Facebook Login, una API key con caducidad) que se acerca a su
+  /// fin solo la arregla reconectar, así que el aviso no puede desaparecer solo.
+  /// El cron la pone y la quita; reconectar la limpia en la siguiente pasada.
+  reautorizarAt DateTime?
+
   /// POR QUÉ falló, en vocabulario cerrado (Fase 10):
   /// AUTH | PERMISSIONS | RATE_LIMIT | NETWORK | PROVIDER | CONFIGURATION | UNKNOWN.
   /// Existe porque cada clase implica una conducta distinta: AUTH pide
@@ -336,12 +345,15 @@ model SuscripcionWebhook {
   /// Secreto para firmar (HMAC-SHA256). Se enseña una vez al crear; con él, el
   /// receptor comprueba que el webhook viene de nosotros y nadie más.
   ///
-  /// A diferencia de las credenciales de conector, este NO va cifrado con la
-  /// clave maestra. La razón que se dio aquí —«tiene que poder enseñarse de
-  /// nuevo en el panel»— resultó ser FALSA al revisarlo en la Fase A-7: no hay,
-  /// ni hubo nunca, pantalla que lo vuelva a enseñar. Así que hoy está en claro
-  /// sin una razón que lo sostenga, y sellarlo es una migración pendiente
-  /// anotada en la auditoría.
+  /// SELLADO (A-7): se guarda cifrado con la clave maestra (AES-256-GCM,
+  /// `secreto-webhook.ts`), atado a la empresa como AAD. Antes iba en claro con
+  /// una excusa —«tiene que poder reenseñarse en el panel»— que resultó falsa: no
+  /// hay ni hubo pantalla que lo reenseñe. A diferencia de las credenciales de
+  /// conector, el sellado FALLA ABIERTO: sin clave maestra se guarda en claro y
+  /// se firma igual, porque un webhook no puede quedarse sin poder firmarse. Los
+  /// dos formatos (`whs_…` en claro, `cn1.…` sellado) conviven en la columna, así
+  /// que no hizo falta migrar el tipo; el backfill lo hace
+  /// `scripts/sellar-secretos-webhook.ts`.
   ///
   /// Lo que sí se puede, ya de verdad, es rotarlo: ver `secretoAnterior`.
   secreto String
@@ -627,4 +639,71 @@ model WebhookEntrante {
   @@unique([companyId, slug])
   @@index([companyId, estado])
   @@map("webhooks_entrantes")
+}
+
+/// MÉTRICAS DE USO POR CREDENCIAL (auditoría de integraciones · B-7).
+///
+/// Hasta aquí, de cada credencial se sabía una sola cosa: `lastUsedAt`, cuándo
+/// se usó por última vez. No había forma de responder «¿cuánto la usa?, ¿contra
+/// qué endpoints?, ¿está fallando?» —ni para el integrador que la creó ni para
+/// el superadmin—. Esta tabla la responde.
+///
+/// ---------------------------------------------------------------------------
+/// AGREGADO POR DÍA, NO UNA FILA POR PETICIÓN
+///
+/// Una fila por llamada crecería sin techo y obligaría a purgar millones de
+/// registros. Aquí una fila es (día, credencial, endpoint, método, resultado) y
+/// lleva un CONTADOR: la escritura es un upsert que incrementa, y la lectura no
+/// tiene que agrupar nada caro. El coste es perder el detalle petición a
+/// petición, que para «¿cómo va esta integración?» no hace falta.
+///
+/// ---------------------------------------------------------------------------
+/// NI SECRETOS NI IDS DE CLIENTE
+///
+/// `endpoint` es la ruta NORMALIZADA (`/customers/{id}`, nunca
+/// `/customers/cus_abc`): así la cardinalidad queda acotada y ningún id de un
+/// cliente entra en una tabla de telemetría. `resultado` es el desenlace en el
+/// borde de autenticación (OK, permiso insuficiente…), no el cuerpo.
+///
+/// Sin claves foráneas, igual que `RegistroConector`: el historial de uso tiene
+/// que sobrevivir a la credencial que lo generó. Una purga por antigüedad la
+/// hace `purgarMetricasViejas`.
+model MetricaUsoCredencial {
+  id String @id @default(cuid())
+
+  /// Día (a medianoche, en UTC) al que se agregan las peticiones.
+  dia DateTime @db.Date
+
+  /// Qué clase de credencial: CLAVE_API (clave de empresa) | SISTEMA (satélite).
+  origen String
+
+  /// Id de la credencial (`claves_api_empresa.id` o `credenciales_sistema.id`).
+  credencialId String
+
+  /// La empresa dueña de la CLAVE_API. Null para SISTEMA: un satélite atiende a
+  /// muchas y su uso no es de ninguna en particular —se agrega por el satélite—.
+  companyId String?
+
+  /// Ruta normalizada, sin ids: "/customers/{id}". Acota la cardinalidad y
+  /// mantiene los ids de cliente fuera de la telemetría.
+  endpoint String
+
+  /// GET | POST | PATCH | DELETE.
+  metodo String
+
+  /// Desenlace en el borde de auth: OK | SCOPE (permiso insuficiente). Lo que
+  /// no se puede atribuir a una credencial concreta (token inválido, límite)
+  /// no llega hasta aquí.
+  resultado String
+
+  /// Cuántas peticiones cayeron en esta combinación ese día.
+  peticiones Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  /// La clave del upsert-incremento: una fila por combinación y día.
+  @@unique([dia, origen, credencialId, endpoint, metodo, resultado], name: "combinacion")
+  @@index([credencialId, dia])
+  @@index([companyId, dia])
+  @@map("metricas_uso_credencial")
 }

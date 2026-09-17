@@ -33,6 +33,10 @@ export const metadata = { title: 'Desarrolladores' }
  * base de la API y dónde está la especificación. Cuando exista una medición
  * de verdad, entra aquí y se dice de dónde sale.
  *
+ * Lo que SÍ se mide ya (B-7) es el uso por clave —cuántas llamadas y con qué
+ * tasa de error— y vive donde se decide, en la pantalla de cada clave, no
+ * como un porcentaje global inventado aquí.
+ *
  * ────────────────────────────────────────────────────────────────────────────
  * LA BASE DE LA API SALE DE `appUrl()`
  *

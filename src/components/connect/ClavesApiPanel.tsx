@@ -37,11 +37,14 @@ const SCOPES: { valor: string; label: string }[] = [
   { valor: 'promotions:read', label: 'Ver promociones' },
   { valor: 'appointments:read', label: 'Ver citas' },
   { valor: 'branches:read', label: 'Ver sucursales' },
-  // El único que no es de lectura. Se dice lo que HACE, no cómo se llama: quien
-  // marca esta casilla está dejando que una herramienta cambie a quién avisamos.
+  // Los dos que no son de lectura. Se dice lo que HACEN, no cómo se llaman.
   {
     valor: 'webhooks:manage',
     label: 'Crear y retirar avisos (necesario para Zapier y similares)',
+  },
+  {
+    valor: 'customers:manage',
+    label: 'Editar la ficha de tus clientes (nombre, teléfono, correo)',
   },
 ]
 
@@ -54,6 +57,36 @@ export interface ClaveVista {
   expiresAt: string | null
   lastUsedAt: string | null
   createdAt: string
+}
+
+/** Uso de una clave en la ventana (B-7). Ya resumido en el servidor. */
+export interface UsoVista {
+  total: number
+  /** Fracción 0..1. */
+  tasaError: number
+  /** Endpoint más usado, "GET /customers/{id}", o null si no hubo tráfico. */
+  topEndpoint: string | null
+}
+
+/** «1 234» en vez de «1234»: en un panel se lee de un vistazo. */
+function miles(n: number): string {
+  return n.toLocaleString('es')
+}
+
+/** La línea de uso de una clave. Solo aparece cuando hubo tráfico. */
+function UsoClave({ uso, dias }: { uso: UsoVista | undefined; dias: number }) {
+  if (!uso || uso.total === 0) {
+    return (
+      <span className="text-caption text-muted-foreground">Sin llamadas en {dias} días</span>
+    )
+  }
+  const pct = (uso.tasaError * 100).toFixed(uso.tasaError > 0 && uso.tasaError < 0.001 ? 2 : 1)
+  return (
+    <span className="text-caption text-muted-foreground">
+      {miles(uso.total)} {uso.total === 1 ? 'llamada' : 'llamadas'} · {pct} % con error · {dias} d
+      {uso.topEndpoint ? ` · más usado: ${uso.topEndpoint}` : ''}
+    </span>
+  )
 }
 
 function ClaveNueva({ clave }: { clave: string }) {
@@ -92,9 +125,15 @@ function ClaveNueva({ clave }: { clave: string }) {
 
 export function ClavesApiPanel({
   claves,
+  uso = {},
+  diasUso = 30,
   limite,
 }: {
   claves: ClaveVista[]
+  /** Uso por id de clave (B-7). Vacío = aún no se mide o no hubo tráfico. */
+  uso?: Record<string, UsoVista>
+  /** Ventana de las métricas, para rotularla en la pantalla. */
+  diasUso?: number
   /** Null = sin límite. Cero = la empresa no tiene la función concedida. */
   limite: number | null
 }) {
@@ -190,6 +229,9 @@ export function ClavesApiPanel({
                   {c.lastUsedAt
                     ? `Último uso: ${formatDateTime(new Date(c.lastUsedAt))}`
                     : 'Sin usar todavía'}
+                </span>
+                <span className="w-full basis-full sm:pl-0">
+                  <UsoClave uso={uso[c.id]} dias={diasUso} />
                 </span>
                 {c.estado === 'ACTIVE' && (
                   <span className="sm:ml-auto">

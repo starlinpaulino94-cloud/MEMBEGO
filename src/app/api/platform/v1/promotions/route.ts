@@ -3,6 +3,8 @@ import { conEmpresa } from '@/lib/tenant'
 import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
 import { promotionDTO } from '@/modules/plataforma/dto'
 import { respuestaApi } from '@/modules/plataforma/errores'
+import { leerPaginacion } from '@/modules/plataforma/paginacion'
+import { construirPagina } from '@/modules/plataforma/paginacionNucleo'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,6 +33,9 @@ export async function GET(req: NextRequest) {
   )
   if (esFallo(auth)) return auth.fallo
 
+  const pag = leerPaginacion(req.nextUrl.searchParams, auth.ctx.requestId)
+  if (!pag.ok) return pag.fallo
+
   const promociones = await conEmpresa(auth.companyId, (tx) =>
     tx.promocion.findMany({
       where: { companyId: auth.companyId, archivada: false },
@@ -43,9 +48,17 @@ export async function GET(req: NextRequest) {
         vigenciaDesde: true,
         vigenciaHasta: true,
       },
-      orderBy: [{ prioridad: 'desc' }, { publicadaEn: 'desc' }],
+      // `id` al final: dos promociones con la misma prioridad y fecha empatan,
+      // y el cursor necesita un desempate estable para no saltarse ninguna.
+      orderBy: [{ prioridad: 'desc' }, { publicadaEn: 'desc' }, { id: 'asc' }],
+      take: pag.limite + 1,
+      ...pag.cursor,
     }),
   ).catch(() => [])
 
-  return respuestaApi({ promotions: promociones.map(promotionDTO) }, auth.ctx.requestId)
+  const { items, nextCursor } = construirPagina(promociones, pag.limite)
+  return respuestaApi(
+    { promotions: items.map(promotionDTO), page: { limit: pag.limite, nextCursor } },
+    auth.ctx.requestId,
+  )
 }

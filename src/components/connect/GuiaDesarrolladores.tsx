@@ -92,6 +92,7 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
                           {r.scope}
                         </span>
                       )}
+                      {r.paginado && <Badge variant="outline">paginado</Badge>}
                       <span className="w-full text-caption text-muted-foreground">{r.resumen}</span>
                     </li>
                   ))}
@@ -99,6 +100,25 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
               </li>
             ))}
           </ul>
+          <p className="mt-3 text-caption text-muted-foreground">
+            Los listados marcados <strong>paginado</strong> devuelven como mucho 50 filas (hasta
+            200 con <code className="font-mono">?limit=</code>) y un bloque{' '}
+            <code className="font-mono">page</code>. Si trae{' '}
+            <code className="font-mono">page.nextCursor</code>, hay más: vuelve a pedir la misma
+            ruta con <code className="font-mono">?cursor=</code> ese valor hasta que{' '}
+            <code className="font-mono">nextCursor</code> sea <code className="font-mono">null</code>.
+            No construyas el cursor a mano: es opaco y su formato puede cambiar.
+          </p>
+          <BloqueCodigo
+            codigo={`# Primera página
+curl -H "Authorization: Bearer mbk_xxxxxxxxxxxx.tu-secreto" \\
+  "${base}/api/platform/v1/appointments?limit=50"
+
+# La respuesta: { "appointments": [...], "page": { "limit": 50, "nextCursor": "mbc1..." } }
+# Siguiente página (si nextCursor no es null):
+curl -H "Authorization: Bearer mbk_xxxxxxxxxxxx.tu-secreto" \\
+  "${base}/api/platform/v1/appointments?limit=50&cursor=mbc1..."`}
+          />
         </Bloque>
 
         <Bloque titulo="3. Especificación completa (OpenAPI)">

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { verificarTokenSSOEntrante } from '@/modules/integraciones/nucleo'
 import { accesoASistema, sistemaParaVerificarFirma } from '@/modules/plataforma/registro'
+import { secretosVivos, verificarConVivos } from '@/modules/plataforma/rotacion-secreto-nucleo'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createRouteClient, redirectWithCookies } from '@/lib/supabase/route-client'
 import { getAppUrl } from '@/lib/site'
@@ -65,7 +66,12 @@ export async function GET(req: NextRequest) {
       return rechazar('sistema')
     }
 
-    const datos = verificarTokenSSOEntrante(sistema.secreto, token)
+    // Se acepta el token firmado con CUALQUIERA de los secretos vivos (A-7):
+    // durante una rotación con solape valen el de siempre y el nuevo, así el
+    // satélite cambia su .env cuando puede y no cuando le obligamos.
+    const datos = verificarConVivos(secretosVivos(sistema), (secreto) =>
+      verificarTokenSSOEntrante(secreto, token)
+    )
     if (!datos) {
       console.warn('[sso-entrar] token inválido o vencido (sistema:', slug, ')')
       return rechazar('token')

@@ -68,7 +68,15 @@ test('panel: no se ofrece NINGUNA escritura de negocio', () => {
    */
   const excepciones = [...ACCIONES.matchAll(/SCOPES_DE_ADMINISTRACION = \[([^\]]*)\]/g)]
     .flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]))
-  assert.deepEqual(excepciones, ['webhooks:manage'], 'cambió la lista de excepciones')
+  // La lista puede crecer, pero SOLO con permisos que no mueven valor de
+  // negocio (config de avisos, editar la propia ficha de un cliente). Un
+  // `:write`/`:redeem`/`:publish` aquí sería abrir una escritura de satélite a
+  // una clave de empresa, que es lo que la guardia de abajo impide.
+  assert.deepEqual(
+    excepciones.slice().sort(),
+    ['customers:manage', 'webhooks:manage'],
+    'cambió la lista de excepciones'
+  )
 
   const permitido = (v: string) => v.endsWith(':read') || excepciones.includes(v)
 

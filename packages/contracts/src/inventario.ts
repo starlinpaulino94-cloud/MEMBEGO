@@ -48,7 +48,7 @@ export interface RecursoApi {
    * un `/delete` al final de la ruta, en cambio, sería entrenar a quien importe
    * este OpenAPI a escribir una API que no es la que queremos tener.
    */
-  metodo: 'GET' | 'POST' | 'DELETE'
+  metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   /** Ruta bajo `/api/platform/v1`, con `{id}` para los parámetros. */
   ruta: string
   /** Scope exigido, o null si basta con estar autenticado. */
@@ -58,6 +58,16 @@ export interface RecursoApi {
   resumen: string
   /** ¿Escribe? Las escrituras exigen `Idempotency-Key`. */
   idempotente?: boolean
+  /**
+   * ¿Es un listado paginado por cursor? (B-6.)
+   *
+   * Marca las colecciones que pueden crecer sin techo: acepta `?limit=` y
+   * `?cursor=`, y su respuesta trae `page.nextCursor`. Los catálogos pequeños y
+   * acotados (sucursales, tipos de vehículo) NO lo llevan: se devuelven enteros
+   * en una llamada, y decirlo aquí evita que un cliente pagine una lista que
+   * nunca tendrá una segunda página.
+   */
+  paginado?: boolean
 }
 
 export const INVENTARIO_API: readonly RecursoApi[] = [
@@ -111,6 +121,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'promotions:read',
     principal: 'sistema-o-empresa',
     resumen: 'Promociones vigentes de la empresa.',
+    paginado: true,
   },
   {
     metodo: 'GET',
@@ -143,6 +154,21 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     resumen: 'Resuelve un cliente por su identificador exacto (teléfono, correo o QR).',
   },
   {
+    metodo: 'GET',
+    ruta: '/customers',
+    scope: 'customers:read',
+    principal: 'sistema-o-empresa',
+    resumen: 'Lista los clientes de la empresa, en orden alfabético.',
+    paginado: true,
+  },
+  {
+    metodo: 'PATCH',
+    ruta: '/customers/{id}',
+    scope: 'customers:manage',
+    principal: 'empresa',
+    resumen: 'Edita el nombre, el teléfono o el correo de un cliente existente.',
+  },
+  {
     metodo: 'POST',
     ruta: '/customers',
     scope: 'customers:write',
@@ -172,6 +198,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'memberships:read',
     principal: 'sistema-o-empresa',
     resumen: 'Membresías de la empresa.',
+    paginado: true,
   },
   {
     metodo: 'GET',
@@ -193,6 +220,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'appointments:read',
     principal: 'sistema-o-empresa',
     resumen: 'Citas de la empresa en un rango de fechas.',
+    paginado: true,
   },
 
   // ── Escrituras (solo satélites) ─────────────────────────────────────────

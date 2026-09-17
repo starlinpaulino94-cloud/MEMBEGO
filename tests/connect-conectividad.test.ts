@@ -109,15 +109,30 @@ test('api: el límite por clave se cuenta ANTES de verificar el secreto', () => 
   assert.ok(i > -1 && iLimite > i && iResolver > iLimite, 'probar secretos al azar saldría gratis')
 })
 
-test('api: ninguna ruta de escritura se abrió a claves de empresa', () => {
-  // Las escrituras necesitan saber QUÉ sistema respalda la operación; una
-  // clave de empresa no puede decirlo, y un canje sin sistema no se audita.
+test('api: ninguna ESCRITURA DE NEGOCIO se abrió a claves de empresa', () => {
+  /**
+   * Las escrituras que crean o consumen valor necesitan saber QUÉ sistema las
+   * respalda; una clave de empresa no puede decirlo, y un canje sin sistema no
+   * se audita.
+   *
+   * Se mira el HANDLER concreto y no el archivo entero: desde B-5,
+   * `customers/route.ts` tiene un POST de satélite (crear) Y un GET de clave de
+   * empresa (listar), así que buscar `claveDeEmpresa` en el archivo saltaría
+   * por la lectura, que es legítima. Lo que no puede abrirse es el POST.
+   */
+  const handler = (src: string, verbo: string) => {
+    const i = src.indexOf(`export async function ${verbo}(`)
+    return i < 0 ? '' : src.slice(i, src.indexOf('\nexport ', i + 1) + 1 || src.length)
+  }
   for (const ruta of [
     'src/app/api/platform/v1/redemptions/route.ts',
     'src/app/api/platform/v1/transactions/route.ts',
     'src/app/api/platform/v1/customers/route.ts',
   ]) {
-    assert.ok(!leer(ruta).includes('claveDeEmpresa'), `${ruta} se abrió a claves de empresa`)
+    const post = handler(leer(ruta), 'POST')
+    assert.ok(post.length > 0, `${ruta}: no se encontró el POST`)
+    assert.ok(!post.includes('claveDeEmpresa'), `${ruta}: el POST se abrió a claves de empresa`)
+    assert.ok(post.includes('exigeSistema'), `${ruta}: el POST no exige un satélite`)
   }
 })
 
