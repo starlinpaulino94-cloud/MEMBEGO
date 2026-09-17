@@ -339,14 +339,33 @@ paralelizar con `Promise.allSettled` y un tope de concurrencia.
 
 </details>
 
-### ◐ A-7 · Rotación de secretos — RESUELTO PARA WEBHOOKS (20/09/2026)
+### ✅ A-7 · Rotación de secretos — RESUELTO (webhooks + satélite) (17/09/2026)
 
-> **Hecho:** el secreto de una suscripción de webhook se rota con solape de 7
-> días. Se firma con el viejo y el nuevo a la vez, y el receptor valida con el
-> que tenga — para lo cual la cabecera v2 pasó a llevar una **lista** de firmas.
-> Ese cambio de formato se hizo ahora a propósito: la v2 es de esta misma semana
-> y su ventana de adopción sigue abierta; dentro de seis meses habría costado
-> una segunda migración con receptores ya escritos.
+> **Cerrado del todo.** La mitad de webhooks ya estaba; ahora también el secreto
+> compartido de satélite (`SistemaConectado.secreto`), que se había separado por
+> tocar la verificación de SSO en dos sitios.
+>
+> **Y el solape del satélite es AL REVÉS que el de los webhooks, a propósito.** El
+> de webhooks firma lo saliente con una LISTA de secretos y el receptor acepta
+> cualquiera. Aquí no sirve: el token SSO es una firma única (`cuerpo.firma`, no
+> admite lista) y el `X-Membego-Firma` de los satélites en producción se lee como
+> UN valor —meterle una lista rompería a Car Wash—. Así que lo SALIENTE se sigue
+> firmando con el secreto de siempre (nada se rompe) y lo ENTRANTE se ACEPTA
+> firmado con el viejo O con el nuevo durante la ventana de 7 días. El operador
+> instala el nuevo en el satélite y `--promover` lo mueve a primario; lo que
+> nadie promueve dentro de la ventana, el cron lo descarta —nunca se promueve
+> solo, porque cambiar el saliente a un secreto que el satélite quizá no instaló
+> sería el corte que todo esto evita—. Las dos rutas delicadas (`/sso/entrar`,
+> `/sso/redeem`) verifican contra `secretosVivos`, con una prueba que confirma
+> que un token firmado con el nuevo se acepta durante el solape y se rechaza
+> fuera de él. La rotación se opera con `scripts/rotar-secreto-sistema.ts`.
+>
+> **Antes (webhooks):** el secreto de una suscripción de webhook se rota con
+> solape de 7 días. Se firma con el viejo y el nuevo a la vez, y el receptor
+> valida con el que tenga — para lo cual la cabecera v2 pasó a llevar una **lista**
+> de firmas. Ese cambio de formato se hizo entonces a propósito: la v2 era de esa
+> misma semana y su ventana de adopción seguía abierta; dentro de seis meses
+> habría costado una segunda migración con receptores ya escritos.
 >
 > **Corrección al hallazgo original.** Decía que `CredencialSistema.expiresAt`
 > «existe y nadie lo hace cumplir». Es falso: se comprueba en las dos rutas que
@@ -359,11 +378,8 @@ paralelizar con `Promise.allSettled` y un tope de concurrencia.
 > la vieja es un solape real. Solo se bloquea si `api_keys.max` vale
 > exactamente 1, y eso se arregla subiendo el límite, no con código.
 >
-> **Pendiente:** `SistemaConectado.secreto`. Se deja aparte y no por tiempo: lo
-> usan cinco caminos, y dos son de VERIFICACIÓN de SSO (`/sso/entrar` y
-> `/sso/redeem`), donde el solape significa «aceptar cualquiera de los dos».
-> Tocar la verificación de identidad en el mismo cambio que la firma de
-> webhooks daría un diff que nadie puede revisar con la atención que merece.
+> **Corrección al aviso de caducidad de credencial.** Ya está: el cron de salud
+> (B-3) avisa antes de que venza una credencial sin refresco.
 >
 > **Descubierto al hacerlo:** el secreto de webhook nunca se pudo volver a ver,
 > pese a que tres comentarios lo afirmaban — y el del esquema usaba esa
@@ -805,7 +821,7 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | Firma Ed25519 a satélites | ✅ sobre `timestamp.eventId.cuerpo` |
 | `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
 | Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
-| Rotación de secretos | ◐ webhooks con solape de 7 días; el secreto de satélite, pendiente |
+| Rotación de secretos | ✅ webhooks y secreto de satélite con solape de 7 días (A-7) |
 | **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
 | Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; el cron de salud (B-3) AVISA antes de que venza (credenciales sin refresco) |
 | **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
@@ -862,7 +878,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~3~~ | ~~Pantalla de entregas: log, cuerpo, reenviar, evento de prueba~~ ✅ hecho | 5 | A-4 |
 | ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
 | ~~5~~ | ~~Fan-out encolado y en paralelo con tope~~ ✅ hecho | 2 | A-6 |
-| ◐ 6 | Rotación con solapamiento — hecha para webhooks; queda el secreto de satélite | 4 | A-7 |
+| ~~6~~ | ~~Rotación con solapamiento — webhooks y secreto de satélite~~ ✅ hecho | 4 | A-7 |
 | ◐ 7 | Cron de salud ✅ por caducidad local → `REAUTORIZAR`; falta la inspección activa vía `debug_token` | 3 | B-3 |
 
 **Resultado: el módulo pasa de ~35 % a ~45 %** y —más importante— deja de
@@ -934,13 +950,14 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   corte; y el barrido dejó de drenar su primer 6 % y parecer que funcionaba.
   **B-3** (salud activa de las conexiones) ya avisa por caducidad antes de que un
   envío falle; queda su rabo, la inspección activa vía `debug_token` para el token
-  de WhatsApp sin fecha guardada. Y la mitad de A-7 que falta: el secreto
-  compartido con los satélites, que se separó porque toca la verificación de SSO
-  en dos sitios y merece su propia revisión (2–3 días).
+  de WhatsApp sin fecha guardada. Y **A-7 está entero**: el secreto compartido con
+  los satélites ya rota con solape de 7 días —al revés que el de webhooks, porque
+  el token SSO es una firma única que no admite lista—, y su revisión aparte, que
+  era el motivo de separarlo, ya se hizo. Con esto **la Fase 1 queda cerrada**.
 
-  Y dos cosas nuevas, pequeñas, que salieron al hacer el trabajo: avisar antes
-  de que caduque una credencial de satélite, y sellar el secreto de webhook
-  —hoy en claro por una razón que resultó ser falsa—.
+  Y una cosa nueva, pequeña, que sigue pendiente: sellar el secreto de webhook
+  —hoy en claro por una razón que resultó ser falsa—. El aviso de caducidad de
+  credencial de satélite ya lo cubre B-3.
 - **En alcance de integraciones: el atajo ya está andado.** El webhook
   entrante, la acción HTTP y la app de Zapier (puntos 8 y 9) están hechos, y con
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir

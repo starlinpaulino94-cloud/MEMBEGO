@@ -4,6 +4,7 @@ import { reintentarPendientes } from '@/modules/integraciones/despacho'
 import { reintentarWebhooksPendientes } from '@/modules/connect/webhooks'
 import { purgarEstadosOauth } from '@/modules/connect/oauth'
 import { comprobarSaludConexiones } from '@/modules/connect/salud-conexiones'
+import { limpiarRotacionesVencidas } from '@/modules/plataforma/rotacion-secreto'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -62,5 +63,17 @@ export async function GET(req: NextRequest) {
   // que un envío falle. Es una consulta local y barata —no abre sellos ni llama
   // a ningún proveedor—, así que no compite por el presupuesto de las colas.
   const salud = await comprobarSaludConexiones()
-  return NextResponse.json({ ok: true, satelites, webhooks, estadosOauthPurgados, salud })
+  // ROTACIÓN DE SECRETO (A-7): descarta las rotaciones de secreto de satélite que
+  // nadie promovió dentro de su ventana. Se descartan, no se promueven solas:
+  // cambiar el secreto saliente a uno que el satélite quizá no instaló sería el
+  // corte que la rotación existe para evitar.
+  const rotacionesVencidas = await limpiarRotacionesVencidas()
+  return NextResponse.json({
+    ok: true,
+    satelites,
+    webhooks,
+    estadosOauthPurgados,
+    salud,
+    rotacionesVencidas,
+  })
 }

@@ -293,31 +293,57 @@ export async function accesoASistema(
  * ACTIVE) y nada más. El acceso de la empresa se decide DESPUÉS de abrir el
  * token, con `accesoASistema`.
  */
-export async function sistemaParaVerificarFirma(
-  slug: string
-): Promise<{ id: string; secreto: string } | null> {
+export interface SistemaParaFirma {
+  id: string
+  secreto: string
+  /** Rotación con solape (A-7): el secreto nuevo y hasta cuándo vale, o null. */
+  secretoSiguiente: string | null
+  secretoSiguienteHasta: Date | null
+}
+
+export async function sistemaParaVerificarFirma(slug: string): Promise<SistemaParaFirma | null> {
   const leer = async <T>(select: object): Promise<T | null> =>
     sinEmpresa('sso entrante: sistema por slug antes de conocer la empresa (catálogo global)', (tx) =>
       tx.sistemaConectado.findUnique({ where: { slug }, select })
     ) as Promise<T | null>
 
+  // Los campos de rotación (A-7) van en el select: la verificación de entrada
+  // acepta el token firmado con el secreto de siempre O con el nuevo mientras
+  // dure el solape, así el satélite puede cambiar su .env sin coordinar el minuto.
+  const rotacion = { secretoSiguiente: true, secretoSiguienteHasta: true }
+
   try {
-    const s = await leer<{ id: string; secreto: string; estado: string }>({
-      id: true,
-      secreto: true,
-      estado: true,
-    })
+    const s = await leer<{
+      id: string
+      secreto: string
+      estado: string
+      secretoSiguiente: string | null
+      secretoSiguienteHasta: Date | null
+    }>({ id: true, secreto: true, estado: true, ...rotacion })
     if (!s) return null
-    return normalizarEstado(s.estado) === 'ACTIVE' ? { id: s.id, secreto: s.secreto } : null
+    if (normalizarEstado(s.estado) !== 'ACTIVE') return null
+    return {
+      id: s.id,
+      secreto: s.secreto,
+      secretoSiguiente: s.secretoSiguiente,
+      secretoSiguienteHasta: s.secretoSiguienteHasta,
+    }
   } catch {
     try {
-      const s = await leer<{ id: string; secreto: string; activo: boolean }>({
-        id: true,
-        secreto: true,
-        activo: true,
-      })
+      const s = await leer<{
+        id: string
+        secreto: string
+        activo: boolean
+        secretoSiguiente: string | null
+        secretoSiguienteHasta: Date | null
+      }>({ id: true, secreto: true, activo: true, ...rotacion })
       if (!s?.activo) return null
-      return { id: s.id, secreto: s.secreto }
+      return {
+        id: s.id,
+        secreto: s.secreto,
+        secretoSiguiente: s.secretoSiguiente,
+        secretoSiguienteHasta: s.secretoSiguienteHasta,
+      }
     } catch (e) {
       console.error('[plataforma] no se pudo leer el sistema por slug:', e)
       return null
