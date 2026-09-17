@@ -75,11 +75,19 @@ export const ADMIN_SECTIONS = [
   // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
   // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
   'excursiones',
-  // CRM: gestión de leads, seguimiento y pipeline comercial.
+  // CRM (`/admin/crm/*`). UNA sección para el módulo entero, y a propósito:
+  // su layout exige 'leads' para todo el subárbol y `SECCION_POR_PREFIJO` le
+  // manda las rutas, así que negarla cierra de una vez prospectos,
+  // conversaciones, seguimientos, métricas y configuración.
+  //
+  // Aquí hubo también 'conversaciones', 'pipeline' y 'configuracion'. Ninguna
+  // se exigió nunca en ningún sitio —cero `requireSection`, y sin ruta propia
+  // que el proxy pudiera cerrar—, así que eran tres casillas del formulario de
+  // Permisos que no cambiaban ningún acceso: exactamente el «interruptor
+  // pintado» que `funciones.ts` prohíbe para las funciones. Si el CRM llega a
+  // necesitar permisos finos, se añaden CON su guardia y no antes; lo vigila
+  // la prueba «toda sección se exige en algún sitio».
   'leads',
-  'conversaciones',
-  'pipeline',
-  'configuracion',
   // Membego Connect (Fase 4): claves de API, webhooks y actividad de las
   // integraciones de la empresa. Es una sección de CONFIGURACIÓN sensible —
   // una clave de API abre los datos de la empresa a un tercero— así que no
