@@ -37,6 +37,13 @@ export const EVENTOS_REENVIADOS = [
   'cliente.compro_servicio',
   'cliente.primera_compra',
   'membresia.activada',
+  // Ciclo de vida de la membresía: como `cliente.actualizado`, alimentan una
+  // PROYECCIÓN CORE (`MembershipSummary`) que un satélite mantiene. Recibía el
+  // alta y no la baja, así que su copia se quedaba diciendo «activa» una membresía
+  // que ya había caducado o se había cancelado. Cerrarlo es la razón de que vayan
+  // a satélites y no solo a los webhooks de empresa (B-4).
+  'membresia.cancelada',
+  'membresia.vencida',
   'referido.convirtio',
 ] as const
 

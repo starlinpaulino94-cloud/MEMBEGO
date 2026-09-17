@@ -1,6 +1,7 @@
 import 'server-only'
 import type { Prisma } from '@prisma/client'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import type { TipoEventoMembresia, OrigenEventoMembresia } from '@/modules/membresia/eventosNucleo'
 
 export type { TipoEventoMembresia, OrigenEventoMembresia, ClaseCambioPlan } from '@/modules/membresia/eventosNucleo'
@@ -103,4 +104,54 @@ export async function registrarEventoMembresia(
     })
     .then(() => undefined)
     .catch(anotarFallo('membresia:evento', { tipo: entrada.tipo }))
+}
+
+/**
+ * Qué eventos del ciclo de vida de la membresía SALEN al bus de integraciones
+ * (B-4), con su nombre interno.
+ *
+ * `ACTIVADA` NO está aquí: ya la emite el punto de activación (`pagos/activacion`)
+ * con su payload rico (cliente + membresía). Estas dos son las que faltaban: la
+ * baja se registraba en la historia de la membresía pero nunca llegaba a un
+ * satélite ni a un webhook, así que una proyección se quedaba diciendo «activa»
+ * una membresía ya cancelada o vencida.
+ */
+const BUS_POR_TIPO: Partial<Record<TipoEventoMembresia, string>> = {
+  CANCELADA: 'membresia.cancelada',
+  VENCIDA: 'membresia.vencida',
+}
+
+/**
+ * Avisa al bus de que una membresía cambió de estado (B-4). Va FUERA de la
+ * transacción que hizo el cambio y NUNCA lanza: el bus no puede convertir un
+ * fallo de aviso en un fallo de la cancelación, que ya está escrita. Un `tipo`
+ * que no sale al bus (una renovación, un cambio de plan) no hace nada.
+ *
+ * Se manda lo mínimo que una proyección necesita para marcar la baja: el id de
+ * la membresía y el nuevo estado. El `subjectId` es el cliente, así que el sobre
+ * ya lleva su `customerId`.
+ */
+export async function emitirCambioMembresiaAlBus(input: {
+  tipo: TipoEventoMembresia
+  companyId: string
+  clienteId: string
+  membershipId: string
+  planId?: string | null
+  motivo?: string | null
+}): Promise<void> {
+  const type = BUS_POR_TIPO[input.tipo]
+  if (!type) return
+  await emitirEventoEstrategia({
+    companyId: input.companyId,
+    type,
+    subjectId: input.clienteId,
+    payload: {
+      membresia: {
+        id: input.membershipId,
+        planId: input.planId ?? null,
+        estado: input.tipo,
+        ...(input.motivo ? { motivo: input.motivo } : {}),
+      },
+    },
+  })
 }

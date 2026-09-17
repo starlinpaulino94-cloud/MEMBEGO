@@ -71,6 +71,8 @@ export const TIPO_V2: Record<string, string> = {
   'cliente.compro_servicio': 'purchase.completed',
   'cliente.primera_compra': 'purchase.first_completed',
   'membresia.activada': 'membership.activated',
+  'membresia.cancelada': 'membership.cancelled',
+  'membresia.vencida': 'membership.expired',
   'referido.convirtio': 'referral.converted',
   'referido.invitado_registrado': 'referral.registered',
   'mensaje.recibido': 'message.received',

@@ -16,7 +16,7 @@ import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { validarCobroMembresia } from '@/modules/membresias/cobro'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
-import { registrarEventoMembresia } from '@/modules/membresia/eventos'
+import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -595,6 +595,17 @@ export async function cancelarMembresia(
         motivo: motivo || null,
         actorUserId: user.metadata.dbUserId ?? null,
       })
+    })
+
+    // Fuera de la transacción (B-4): avisa al bus para que un satélite marque la
+    // baja en su copia. Best-effort; no puede tumbar una cancelación ya escrita.
+    await emitirCambioMembresiaAlBus({
+      tipo: 'CANCELADA',
+      companyId: membership.cliente.companyId,
+      clienteId: membership.clienteId,
+      membershipId: membership.id,
+      planId: membership.planId,
+      motivo: motivo || null,
     })
 
     revalidatePath(`/admin/clientes/${membership.clienteId}`)

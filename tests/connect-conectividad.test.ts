@@ -70,11 +70,30 @@ test('webhooks: no se entrega a la red interna (SSRF)', () => {
     'https://172.16.0.9/hook',
     'https://172.31.255.1/hook',
     'https://algo.internal/hook',
+    // ── Bypasses que un guard ingenuo dejaba pasar (barrido de bugs ocultos) ──
+    // IPv6: loopback, ULA, enlace local, y la IPv4 MAPEADA al metadato de la nube
+    // —el peor, porque leería credenciales de infraestructura—.
+    'https://[::1]/hook',
+    'https://[fd00::1]/hook',
+    'https://[fe80::1]/hook',
+    'https://[::ffff:169.254.169.254]/latest/meta-data/',
+    // Loopback entero, no solo 127.0.0.1: 127/8 es todo loopback.
+    'https://127.0.0.2/hook',
+    'https://127.1.2.3/admin',
+    // «Este host» (0/8).
+    'https://0.0.0.0/hook',
+    // Punto DNS final: el MISMO host, escrito para esquivar el `endsWith`.
+    'https://metadata.google.internal./x',
+    'https://localhost./hook',
   ]) {
     assert.deepEqual(validarUrlWebhook(url), { ok: false, motivo: 'host_interno' }, url)
   }
   // 172.32 ya está FUERA del rango privado: no se puede bloquear de más.
   assert.equal(validarUrlWebhook('https://172.32.0.1/hook').ok, true)
+  // Un host público con IP decimal/hex que Node normaliza a pública sigue pasando;
+  // y un dominio normal, también. No se bloquea de más.
+  assert.equal(validarUrlWebhook('https://ejemplo.com/hook').ok, true)
+  assert.equal(validarUrlWebhook('https://hooks.zapier.com/abc').ok, true)
 })
 
 test('webhooks: sin eventos elegidos, se reciben todos', () => {
