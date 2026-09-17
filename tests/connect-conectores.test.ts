@@ -153,7 +153,8 @@ test('permisos: conectar y desconectar tienen su guardia cableada', () => {
 // ─── Citas → Calendario ──────────────────────────────────────────────────────
 
 test('citas: confirmar no puede romperse porque Google esté caído', () => {
-  const src = leer('src/modules/citas/actions.ts')
+  // Las operaciones del evento de Google viven en googleAgenda.ts desde B-5.
+  const src = leer('src/modules/citas/googleAgenda.ts')
   assert.match(src, /crearEventoCalendario\(/)
   // El fallo se traga a propósito: la cita YA está confirmada y guardada.
   assert.match(src, /no se pudo crear el evento en Google/)

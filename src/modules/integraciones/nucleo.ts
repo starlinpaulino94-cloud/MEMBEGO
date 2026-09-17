@@ -89,6 +89,12 @@ export const EVENTOS_EMITIDOS = [
   'promocion.archivada',
   // Reservas de excursión: una reserva quedó pagada.
   'reserva.pagada',
+  // Agenda de citas (B-5): una cita se canceló (el panel, el cliente o la API).
+  // Va a la superficie de integración de la empresa (webhooks/Zapier) pero NO a
+  // `EVENTOS_REENVIADOS`: no hay contrato de proyección de agenda hacia los
+  // satélites como sí lo hay para Customer/Membership, y esa lista se mantiene
+  // estrecha a propósito (B-4).
+  'cita.cancelada',
 ] as const
 
 /** Firma HMAC-SHA256 (hex) de un cuerpo, con el secreto compartido. */

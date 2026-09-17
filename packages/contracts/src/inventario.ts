@@ -222,6 +222,13 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     resumen: 'Citas de la empresa en un rango de fechas.',
     paginado: true,
   },
+  {
+    metodo: 'POST',
+    ruta: '/appointments/{id}/cancel',
+    scope: 'appointments:manage',
+    principal: 'empresa',
+    resumen: 'Cancela una cita. Idempotente: repetirla la deja cancelada sin volver a avisar.',
+  },
 
   // ── Escrituras (solo satélites) ─────────────────────────────────────────
   {

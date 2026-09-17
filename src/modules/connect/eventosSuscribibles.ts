@@ -64,6 +64,7 @@ const ETIQUETAS: Record<string, string> = {
   'promotion.paused': 'Se pausa una promoción activa',
   'promotion.archived': 'Se archiva una promoción',
   'reservation.paid': 'Se paga una reserva de excursión',
+  'appointment.cancelled': 'Se cancela una cita de la agenda',
 }
 
 /**

@@ -52,6 +52,18 @@ export const CAPABILITIES = [
    * es «ordena tus propios registros», concedible a una clave de empresa.
    */
   'CUSTOMER_UPDATE',
+  /**
+   * CANCELAR una cita que YA existe (B-5).
+   *
+   * No crea la cita ni mueve valor: cambia su estado a CANCELADA dentro de la
+   * máquina de estados de la agenda. Como `CUSTOMER_UPDATE`, es «ordena tus
+   * propios registros» —una integración de agenda que sincroniza cancelaciones—,
+   * así que su scope es `appointments:manage`, separado del `:read` con el que se
+   * pinta la agenda. Incluye `:read` por lo mismo que las demás: la respuesta de
+   * la cancelación devuelve la cita, y conceder cancelar sin leer sería un scope
+   * que miente sobre lo que deja hacer.
+   */
+  'APPOINTMENT_MANAGE',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -86,6 +98,10 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   // respuesta de una edición devuelve la ficha, así que conceder editar sin
   // leer sería un scope que miente sobre lo que de verdad deja hacer.
   CUSTOMER_UPDATE: ['customers:read', 'customers:manage'],
+  // `appointments:read` incluido por el mismo motivo que en las demás
+  // escrituras: la cancelación devuelve la cita, así que conceder cancelar sin
+  // leer sería un scope que miente.
+  APPOINTMENT_MANAGE: ['appointments:read', 'appointments:manage'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

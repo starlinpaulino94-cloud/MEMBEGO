@@ -87,6 +87,10 @@ export const TIPO_V2: Record<string, string> = {
   'reserva.creada': 'reservation.created',
   'reserva.pagada': 'reservation.paid',
   'venta.generada': 'sale.created',
+  // Agenda de citas (B-5): la cancelación ya tiene emisor real (el panel, el
+  // propio cliente y la API pública). `cita.creada`/`cita.movida` quedan sin
+  // nombrar hasta que su flujo las emita, por la misma regla de oro.
+  'cita.cancelada': 'appointment.cancelled',
 }
 
 export const TIPO_INTERNO: Record<string, string> = Object.fromEntries(
