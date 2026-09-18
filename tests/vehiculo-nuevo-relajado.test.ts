@@ -164,7 +164,8 @@ test('alta del portal es una sola pantalla y autoselecciona la única categoría
 
   assert.doesNotMatch(wizard, /Paso \{idx \+ 1\}|const PASOS|setIdx/)
   assert.match(wizard, /<form action=\{dispatch\}/)
-  assert.match(wizard, /defaultChecked=\{tiposVehiculo\.length === 1\}/)
+  assert.match(wizard, /tiposVehiculo\.length === 1/)
+  assert.match(wizard, /input type="hidden" name="tipoVehiculoId"/)
 })
 
 // ── Orden de las guardias con BD ────────────────────────────────────────────
