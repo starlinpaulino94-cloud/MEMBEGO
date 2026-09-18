@@ -91,6 +91,15 @@ export default async function ReportesPage({
             >
               Operación y canjes <ArrowRight className="h-4 w-4" />
             </Link>
+            {/* La agenda tampoco cabía en el resumen: un canje es alguien que
+                vino, y una cita es alguien que dijo que vendría. Mezclarlas
+                daría una pantalla donde no se sabe cuál de las dos se mira. */}
+            <Link
+              href={`/admin/reportes/citas${qs}`}
+              className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+            >
+              Citas y asistencia <ArrowRight className="h-4 w-4" />
+            </Link>
             {verFinancieros && (
               <Link
                 href={`/admin/reportes/finanzas${qs}`}
