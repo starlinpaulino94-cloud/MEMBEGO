@@ -59,21 +59,22 @@ test('los tres mapas consumen el basemap compartido', () => {
   }
 })
 
-test('el basemap claro tiene color y el oscuro sigue siendo oscuro', () => {
-  // Positron (`light_all`) dejaba el país como una mancha blanca en cuanto se
-  // alejaba el zoom: un mapa sin agua azul no se lee como un mapa, se lee como
-  // un error de carga. Voyager mantiene el fondo tranquilo pero con color.
-  assert.match(urlTeselas(false), /rastertiles\/voyager/)
-  assert.ok(!urlTeselas(false).includes('light_all'), 'el claro volvió a Positron')
-  assert.match(urlTeselas(true), /dark_all/)
+test('el basemap no exige API key', () => {
+  // CARTO empezó a servir las teselas sin key con la marca de agua "API KEY
+  // REQUIRED" en agosto de 2026. OpenStreetMap no pide ninguna llave. Si alguien
+  // devuelve aquí una URL de cartocdn o con `key=`, el mapa vuelve a salir
+  // marcado para todos.
+  for (const oscuro of [false, true]) {
+    const url = urlTeselas(oscuro)
+    assert.match(url, /^https:\/\/tile\.openstreetmap\.org\//)
+    assert.ok(!/cartocdn|apiKey|key=/i.test(url), url)
+  }
 })
 
-test('las teselas piden la versión de alta densidad', () => {
-  // `{r}` lo resuelve Leaflet como `@2x`. Sin él, el mapa se ve borroso en
-  // móvil, que es donde más se usa.
-  for (const oscuro of [false, true]) {
-    assert.ok(urlTeselas(oscuro).includes('{r}'), 'falta el marcador {r} de densidad')
-  }
+test('las teselas claras se oscurecen con el tema', () => {
+  // OpenStreetMap no publica un estilo oscuro; sin esto, el mapa claro dentro
+  // de la app en oscuro repite el destello que la Fase 5 quitó.
+  assert.match(OPCIONES_TESELAS.className, /dark:invert/)
 })
 
 test('el marcador nunca se queda sin nada que enseñar', () => {
@@ -93,11 +94,10 @@ test('el marcador nunca se queda sin nada que enseñar', () => {
   assert.ok(bloque.includes('z-index'), 'el logo debe pintarse por encima de la inicial')
 })
 
-test('la atribución cita a OpenStreetMap y a CARTO', () => {
-  // Son datos de OSM servidos por CARTO: citar a los dos es la licencia, no
-  // una cortesía. Es el tipo de cosa que se cae en una refactorización y nadie
-  // echa de menos hasta que llega un aviso.
+test('la atribución cita a OpenStreetMap', () => {
+  // Son datos de OSM: citarlos es la licencia, no una cortesía. CARTO ya no se
+  // usa, así que no debe seguir apareciendo como si sirviera las teselas.
   assert.match(ATRIBUCION_MAPA, /openstreetmap/i)
-  assert.match(ATRIBUCION_MAPA, /carto/i)
+  assert.ok(!/carto/i.test(ATRIBUCION_MAPA), 'CARTO ya no sirve las teselas')
   assert.equal(OPCIONES_TESELAS.attribution, ATRIBUCION_MAPA)
 })

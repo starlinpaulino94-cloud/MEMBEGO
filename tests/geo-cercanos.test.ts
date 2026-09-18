@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { calcularDistanciaM, formatearDistancia } from '../src/modules/geo/cercanos/distancia'
 import {
   DIAS_HORARIO,
@@ -56,7 +57,19 @@ test('formatearDistancia nunca inventa un número', () => {
   assert.equal(formatearDistancia(undefined), 'a poca distancia')
 })
 
-// ─── Horario (zona America/Santo_Domingo, UTC-4) ─────────────────────────────
+// ─── Contrato de la ruta: degradar con 200, nunca 422 ────────────────────────
+
+test('la búsqueda sin ubicación responde 200 con motivo, no 422', () => {
+  // Que falte la vivienda o el consentimiento es un estado esperado de la
+  // pantalla, no un error de la petición. El 422 obligaba a la UI a tratarlo
+  // como fallo y, con GEOAPIFY_API_KEY vacía, el mapa no podía recibir otra
+  // cosa. Si alguien reintroduce el 422, el aviso de la pantalla se degrada a
+  // un error de red y este test lo para.
+  const src = readFileSync('src/app/api/geo/cercanos/route.ts', 'utf8')
+  assert.ok(!/jsonError\(\s*422/.test(src), 'la ruta volvió a responder 422')
+  assert.match(src, /motivo: \{ codigo, mensaje \}/, 'la degradación perdió el motivo')
+  assert.match(src, /ubicacion: null/, 'la degradación debe viajar sin ancla')
+})
 
 test('diaLocal resuelve el día de la zona horaria, no el de la máquina', () => {
   // 2026-08-06T12:00Z = 08:00 en Santo Domingo (jueves) → ISO 4.
