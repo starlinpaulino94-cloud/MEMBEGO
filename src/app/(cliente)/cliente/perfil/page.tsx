@@ -17,6 +17,7 @@ import {
   TicketPercent,
 } from 'lucide-react'
 import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi cuenta' }
@@ -170,7 +171,7 @@ export default async function PerfilPage({
       </section>
 
       {/* ── Pestañas con conteos reales ────────────────────────────────── */}
-      <div className="relative">
+      <RailOverflowHint className="from-background via-background/90 to-transparent text-primary">
         <nav aria-label="Filtrar membresías" className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 pr-12">
           {TABS.map((t) => {
             const activo = t.id === 'todas' ? tab === 'todas' : tab === t.id
@@ -192,14 +193,7 @@ export default async function PerfilPage({
             )
           })}
         </nav>
-        <span
-          data-overflow-affordance="end"
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 flex w-11 items-center justify-end bg-gradient-to-l from-background via-background/90 to-transparent pr-1 text-primary lg:hidden"
-        >
-          <ChevronRight className="size-4" />
-        </span>
-      </div>
+      </RailOverflowHint>
 
       {/* ── Tus membresías (tarjeta del contrato: estado, tesela, pase) ── */}
       <section>

@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Star } from 'lucide-react'
+import { Star, ChevronRight, ArrowRight, Sparkles } from 'lucide-react'
 import type { InicioVista } from '@/modules/home/vista'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 import { RetailEmptyState } from './RetailEmptyState'
 
 /** Cinco estrellas rellenas según la valoración (violeta, como el diseño). */
@@ -21,12 +22,10 @@ function Estrellas({ valoracion }: { valoracion: number }) {
 }
 
 /**
- * «Relacionado con los artículos que viste» — la rejilla 2×N del rediseño
- * violeta. Los «artículos» son las membresías recomendadas del marketplace
- * (mismo dato del bloque MEMBRESIAS de siempre): imagen, «Empresa ·
- * Plan», estrellas de la empresa con conteo, precio con su periodo y el
- * botón «Aprovechar». Tarjeta entera enlace; sin tachados ni sellos que el
- * dato no respalde.
+ * «Membresías recomendadas para ti» — carrusel horizontal en scroll continuo
+ * (no-wrap) del rediseño violeta: imagen, «Empresa · Plan», estrellas de la
+ * empresa con conteo, precio con periodo, botón «Aprovechar» y tarjeta final
+ * para «Explorar todas».
  */
 export function VibeRelacionado({
   planes,
@@ -47,61 +46,85 @@ export function VibeRelacionado({
   return (
     <section className="mt-6 px-4" aria-labelledby="vibe-relacionado">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 id="vibe-relacionado" className="min-w-0 text-h2 text-foreground">
-          Membresías recomendadas para ti
-        </h3>
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-5 text-vibe-violet" aria-hidden />
+          <h3 id="vibe-relacionado" className="min-w-0 text-h2 text-foreground">
+            Membresías recomendadas para ti
+          </h3>
+        </div>
         <Link
           href="/cliente/planes?todos=1"
-          className="shrink-0 text-label-sm font-bold text-vibe-violet hover:underline"
+          className="flex shrink-0 items-center gap-0.5 text-label-sm font-bold text-vibe-violet hover:underline"
         >
-          Ver más{total > 0 ? ` (${total})` : ''}
+          <span>Ver más{total > 0 ? ` (${total})` : ''}</span>
+          <ChevronRight className="size-4" />
         </Link>
       </div>
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {planes.slice(0, 6).map((p) => (
-          <li key={p.id} className="flex">
+
+      <RailOverflowHint className="from-vibe-fondo via-vibe-fondo/90 to-transparent text-vibe-violet">
+        <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
+          {planes.map((p) => (
             <Link
+              key={p.id}
               href={p.href}
-              className="flex w-full flex-col justify-between rounded-xl border border-vibe-borde bg-card p-3 elevation-1 outline-none transition-transform duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-[0.99]"
+              className="group flex w-56 shrink-0 flex-col justify-between rounded-xl border border-vibe-borde bg-card p-3 elevation-1 outline-none transition-transform duration-fast hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-[0.99] sm:w-60 lg:w-64"
             >
-              <span className="space-y-2">
-                <span className="relative block h-32 w-full overflow-hidden rounded-lg bg-vibe-niebla">
+              <div className="space-y-2">
+                <div className="relative block h-32 w-full overflow-hidden rounded-lg bg-vibe-niebla">
                   {p.imagen ? (
-                    <Image src={p.imagen} alt="" fill sizes="(min-width: 640px) 20rem, 45vw" className="object-cover" />
+                    <Image
+                      src={p.imagen}
+                      alt=""
+                      fill
+                      sizes="(min-width: 1024px) 16rem, 14rem"
+                      className="object-cover transition-transform duration-normal group-hover:scale-105"
+                    />
                   ) : (
-                    <span aria-hidden className="flex size-full items-center justify-center text-h1 text-vibe-violet">
+                    <span aria-hidden className="flex size-full items-center justify-center text-h1 font-bold text-vibe-violet">
                       {p.empresa.slice(0, 1).toUpperCase()}
                     </span>
                   )}
                   {p.motivoRecomendacion ? (
-                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-bold text-vibe-violet backdrop-blur-sm shadow-sm">
+                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-card/90 px-2 py-0.5 text-xs font-bold text-vibe-violet shadow-sm backdrop-blur-sm">
                       {p.motivoRecomendacion}
                     </span>
                   ) : null}
-                </span>
-                <span className="line-clamp-2 block text-label-md font-bold leading-tight text-foreground">
+                </div>
+                <h4 className="line-clamp-2 block text-label-md font-bold leading-tight text-foreground transition-colors group-hover:text-vibe-violet">
                   {p.empresa} · {p.nombre}
-                </span>
+                </h4>
                 {p.valoracion != null && Number.isFinite(Number(p.valoracion)) ? (
-                  <span className="flex items-center gap-1">
+                  <div className="flex items-center gap-1">
                     <Estrellas valoracion={Number(p.valoracion)} />
-                    <span className="text-label-sm font-medium text-muted-foreground tabular-nums">
+                    <span className="text-label-sm font-medium tabular-nums text-muted-foreground">
                       {p.resenas.toLocaleString('es-DO')}
                     </span>
-                  </span>
+                  </div>
                 ) : null}
-                <span className="block pt-1">
+                <div className="pt-1">
                   <span className="text-h3 tabular-nums text-foreground">{p.precio}</span>{' '}
                   <span className="text-small text-muted-foreground">{p.periodo}</span>
-                </span>
-              </span>
-              <span className="grad-vibe mt-3 block w-full rounded-full py-2 text-center text-label-sm font-bold text-white">
+                </div>
+              </div>
+              <span className="grad-vibe mt-3 block w-full rounded-full py-2 text-center text-label-sm font-bold text-white shadow-sm">
                 Aprovechar
               </span>
             </Link>
-          </li>
-        ))}
-      </ul>
+          ))}
+
+          {/* Tarjeta de acción 'Explorar todas' */}
+          <Link
+            href="/cliente/planes?todos=1"
+            className="flex w-36 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-vibe-borde bg-card/40 p-4 text-center transition-colors hover:border-vibe-violet/50 hover:bg-card sm:w-40 lg:w-44"
+          >
+            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-vibe-lavanda text-vibe-violet">
+              <ArrowRight className="size-5" />
+            </div>
+            <span className="text-label-sm font-bold text-foreground">Explorar todas</span>
+            <span className="text-xs text-muted-foreground">+{total} membresías</span>
+          </Link>
+        </div>
+      </RailOverflowHint>
     </section>
   )
 }

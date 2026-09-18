@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Sparkles, Clock, Tag, Flame, ArrowRight } from 'lucide-react'
 import type { PromocionesNovedadesVista, PromoNovedadItem } from '@/modules/home/vista'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 
 type TabKey = 'paraTi' | 'exclusivas' | 'descuentos' | 'porVencer'
 
@@ -42,37 +43,39 @@ export function VibePromocionesNovedades({
       </div>
 
       {/* Chips de filtro interactivo */}
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-        {TABS.map((tab) => {
-          const count = promociones[tab.key]?.length ?? 0
-          const Icon = tab.icon
-          const isActive = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-label-sm font-bold transition-all ${
-                isActive
-                  ? 'grad-vibe text-white shadow-sm'
-                  : 'border border-vibe-borde bg-card text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Icon className="size-3.5" />
-              <span>{tab.label}</span>
-              {count > 0 ? (
-                <span
-                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-vibe-chip text-muted-foreground'
-                  }`}
-                >
-                  {count}
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
+      <RailOverflowHint className="from-vibe-fondo via-vibe-fondo/90 to-transparent text-vibe-violet">
+        <div className="flex gap-2 overflow-x-auto pb-2 pr-10 scrollbar-none">
+          {TABS.map((tab) => {
+            const count = promociones[tab.key]?.length ?? 0
+            const Icon = tab.icon
+            const isActive = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-label-sm font-bold transition-all ${
+                  isActive
+                    ? 'grad-vibe text-white shadow-sm'
+                    : 'border border-vibe-borde bg-card text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Icon className="size-3.5" />
+                <span>{tab.label}</span>
+                {count > 0 ? (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-label-sm font-bold ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-vibe-chip text-muted-foreground'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      </RailOverflowHint>
 
       {/* Lista de promociones activas */}
       {items.length === 0 ? (
@@ -80,64 +83,66 @@ export function VibePromocionesNovedades({
           No hay promociones en esta sección en este momento.
         </div>
       ) : (
-        <div className="mt-2 flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-          {items.map((p) => (
-            <Link
-              key={p.id}
-              href={p.href}
-              className="group flex w-60 shrink-0 flex-col justify-between rounded-xl border border-vibe-borde bg-card p-3 elevation-1 transition-transform duration-fast hover:scale-[1.01] active:scale-[0.99]"
-            >
-              <div>
-                <div className="relative mb-2.5 h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
-                  {p.imagenUrl ? (
-                    <Image src={p.imagenUrl} alt="" fill sizes="15rem" className="object-cover" />
-                  ) : (
-                    <span className="flex size-full items-center justify-center text-h2 font-bold text-vibe-violet">
-                      {p.empresa.nombre.slice(0, 1).toUpperCase()}
+        <RailOverflowHint className="mt-2 from-vibe-fondo via-vibe-fondo/90 to-transparent text-vibe-violet">
+          <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
+            {items.map((p) => (
+              <Link
+                key={p.id}
+                href={p.href}
+                className="group flex w-60 shrink-0 flex-col justify-between rounded-xl border border-vibe-borde bg-card p-3 elevation-1 transition-transform duration-fast hover:scale-[1.01] active:scale-[0.99]"
+              >
+                <div>
+                  <div className="relative mb-2.5 h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
+                    {p.imagenUrl ? (
+                      <Image src={p.imagenUrl} alt="" fill sizes="15rem" className="object-cover" />
+                    ) : (
+                      <span className="flex size-full items-center justify-center text-h2 font-bold text-vibe-violet">
+                        {p.empresa.nombre.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                    {p.descuentoTexto ? (
+                      <span className="absolute bottom-1.5 left-1.5 rounded bg-vibe-violet px-2 py-0.5 text-label-sm font-bold text-white shadow">
+                        {p.descuentoTexto}
+                      </span>
+                    ) : null}
+                    {p.esPrivadaMiembros ? (
+                      <span className="absolute top-1.5 right-1.5 rounded-full bg-black/75 px-2 py-0.5 text-label-sm font-bold text-amber-300 backdrop-blur-sm">
+                        Exclusivo
+                      </span>
+                    ) : null}
+                    {p.diasRestantes != null && p.diasRestantes <= 3 ? (
+                      <span className="absolute top-1.5 left-1.5 rounded-full bg-red-600/90 px-2 py-0.5 text-label-sm font-bold text-white backdrop-blur-sm">
+                        {p.diasRestantes === 0 ? 'Vence hoy' : `${p.diasRestantes}d restantes`}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="line-clamp-1 block text-small text-muted-foreground">
+                      {p.empresa.nombre}
                     </span>
-                  )}
-                  {p.descuentoTexto ? (
-                    <span className="absolute bottom-1.5 left-1.5 rounded bg-vibe-violet px-2 py-0.5 text-label-sm font-bold text-white shadow">
-                      {p.descuentoTexto}
-                    </span>
-                  ) : null}
-                  {p.esPrivadaMiembros ? (
-                    <span className="absolute top-1.5 right-1.5 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-bold text-amber-300 backdrop-blur-sm">
-                      Exclusivo
-                    </span>
-                  ) : null}
-                  {p.diasRestantes != null && p.diasRestantes <= 3 ? (
-                    <span className="absolute top-1.5 left-1.5 rounded-full bg-red-600/90 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
-                      {p.diasRestantes === 0 ? 'Vence hoy' : `${p.diasRestantes}d restantes`}
-                    </span>
-                  ) : null}
+                    <h4 className="line-clamp-2 text-label-md font-bold leading-snug text-foreground transition-colors group-hover:text-vibe-violet">
+                      {p.titulo}
+                    </h4>
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="line-clamp-1 block text-small text-muted-foreground">
-                    {p.empresa.nombre}
+                <div className="mt-3 flex items-center justify-between border-t border-vibe-borde/50 pt-2 text-small text-muted-foreground">
+                  <span className="truncate font-medium">
+                    {p.precioTexto ? (
+                      <span className="text-label-md font-bold text-vibe-violet">{p.precioTexto}</span>
+                    ) : (
+                      <span className="text-caption">Ver beneficio</span>
+                    )}
                   </span>
-                  <h4 className="line-clamp-2 text-label-md font-bold leading-snug text-foreground transition-colors group-hover:text-vibe-violet">
-                    {p.titulo}
-                  </h4>
+                  <span className="inline-flex items-center gap-1 text-label-sm font-semibold text-vibe-violet">
+                    Aprovechar <ArrowRight className="size-3" />
+                  </span>
                 </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between border-t border-vibe-borde/50 pt-2 text-small text-muted-foreground">
-                <span className="truncate font-medium">
-                  {p.precioTexto ? (
-                    <span className="text-label-md font-bold text-vibe-violet">{p.precioTexto}</span>
-                  ) : (
-                    <span className="text-[11px]">Ver beneficio</span>
-                  )}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-vibe-violet">
-                  Aprovechar <ArrowRight className="size-3" />
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        </RailOverflowHint>
       )}
     </section>
   )
