@@ -17,7 +17,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { leerRango, PRESETS, COMPARACIONES } from '../src/modules/reportes/rango'
 import { FUNCIONES_POR_SECCION } from '../src/lib/auth/funciones'
@@ -36,23 +36,61 @@ function rango(params: Record<string, string>) {
   return leerRango(params, TZ, RELOJ)
 }
 
+/** Todos los .ts/.tsx bajo `src`, para comprobar que una función está cableada. */
+function archivos(dir: string, acc: string[] = []): string[] {
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e)
+    if (statSync(p).isDirectory()) archivos(p, acc)
+    else if (/\.tsx?$/.test(p)) acc.push(p)
+  }
+  return acc
+}
+
+const FUENTES = archivos(join(__dirname, '..', 'src'))
+
 // ── Permisos ─────────────────────────────────────────────────────────────────
 
 test('la sección de reportes declara sus funciones', () => {
-  // `ver_empleados` entró con el reporte de operación (Fase 5), que es el
-  // primero que desglosa por persona.
+  // `ver_empleados` entró con el reporte de operación, que es el primero que
+  // desglosa por persona; `ver_datos_personales` con el de clientes, que es el
+  // primero que pone nombres de personas en una tabla.
   const codigos = (FUNCIONES_POR_SECCION.reportes ?? []).map((f) => f.codigo)
-  assert.deepEqual(codigos, ['ver', 'ver_financieros', 'ver_empleados', 'exportar'])
+  assert.deepEqual(codigos, [
+    'ver',
+    'ver_financieros',
+    'ver_empleados',
+    'ver_datos_personales',
+    'exportar',
+  ])
 })
 
-test('solo se declaran funciones que existen cableadas', () => {
-  // La regla de honestidad del catálogo. `ver_datos_personales` y
-  // `ver_auditoria` están diseñadas en docs/REPORTES.md pero todavía no tienen
-  // reporte que las haga cumplir: no deben estar aquí.
+test('TODA función declarada existe cableada de verdad', () => {
+  // La regla de honestidad del catálogo: listar una función sin su guardia es
+  // un interruptor pintado —el panel diría «negado» y la acción pasaría igual—.
+  //
+  // Antes esto era una lista a mano de las dos que faltaban por cablear, y
+  // había que acordarse de tacharlas al estrenarlas. Ahora se comprueba la
+  // regla entera: cada código declarado tiene que aparecer en una guardia real
+  // en alguna parte de `src`, así que una función nueva sin cablear falla sola.
   const codigos = (FUNCIONES_POR_SECCION.reportes ?? []).map((f) => f.codigo)
-  for (const sinCablear of ['ver_datos_personales', 'ver_auditoria']) {
-    assert.ok(!codigos.includes(sinCablear), `${sinCablear} no está cableada todavía`)
-  }
+  const src = FUENTES.map((f) => readFileSync(f, 'utf8')).join('\n')
+  const pintadas = codigos.filter(
+    (c) => !new RegExp(`(requireSection|puedeFuncion)\\(\\s*'reportes',\\s*'${c}'`).test(src)
+  )
+  assert.deepEqual(
+    pintadas,
+    [],
+    'estas funciones están en el catálogo y ninguna guardia las hace cumplir:\n' +
+      pintadas.map((c) => `  · ${c}`).join('\n')
+  )
+})
+
+test('ver_auditoria sigue fuera hasta que tenga su reporte', () => {
+  // La otra mitad de la regla: no se lista lo que todavía no existe. Cuando
+  // llegue su reporte, esta prueba se da la vuelta como se dio la de
+  // `ver_datos_personales`.
+  const codigos = (FUNCIONES_POR_SECCION.reportes ?? []).map((f) => f.codigo)
+  assert.ok(!codigos.includes('ver_auditoria'), 'ver_auditoria no está cableada todavía')
 })
 
 test('la pantalla de reportes exige la función, no solo el rol', () => {

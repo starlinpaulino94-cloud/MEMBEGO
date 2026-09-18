@@ -91,6 +91,15 @@ export default async function ReportesPage({
             >
               Operación y canjes <ArrowRight className="h-4 w-4" />
             </Link>
+            {/* Los clientes responden otra pregunta distinta de todas las
+                anteriores: no cuánto se hizo, sino cuánta gente hay detrás y
+                si vuelve. */}
+            <Link
+              href={`/admin/reportes/clientes${qs}`}
+              className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+            >
+              Clientes: altas, actividad y origen <ArrowRight className="h-4 w-4" />
+            </Link>
             {/* La agenda tampoco cabía en el resumen: un canje es alguien que
                 vino, y una cita es alguien que dijo que vendría. Mezclarlas
                 daría una pantalla donde no se sabe cuál de las dos se mira. */}

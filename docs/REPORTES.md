@@ -12,6 +12,7 @@ porque los fallos de un reporte no se notan: se ven como un número.
 | `/superadmin/reportes/[id]` | Superadmin | `modules/reportes/queries.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes` | Dueño del negocio | `modules/reportes/queries.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/citas` | Dueño del negocio | `modules/reportes/citas.ts` | presets + a mano | ✅ CSV | ✅ |
+| `/admin/reportes/clientes` | Dueño del negocio | `modules/reportes/clientes.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/app/carwash/reportes` | Encargado | `modules/apps/reportes.ts` | desde/hasta | ✅ CSV | ✅ |
 | `/admin/retencion` | Dueño del negocio | `modules/riesgo/retencion.ts` | ventana fija (90 d) | ✅ CSV | ✅ |
 | `/admin/riesgo` | Dueño del negocio | `modules/riesgo/` | filtros | ✅ CSV | ✅ |
@@ -271,7 +272,30 @@ subidas en bajadas. Por eso el evento guarda precios, no solo ids.
 el cliente. Nunca sus membresías, visitas ni gasto en otra empresa. `Cliente`
 lleva `companyId`, así que el aislamiento es directo; lo que hay que vigilar es
 no cruzar por `User` —que sí es global— y reconstruir por detrás lo que la
-frontera prohíbe.
+frontera prohíbe. `tests/reporte-clientes.test.ts` comprueba que el motor no
+nombra `User` ni una vez.
+
+**Implementada.** Además de la tabla de arriba, el reporte añade:
+
+| Métrica | Fuente |
+| --- | --- |
+| Tasa de activación | De las altas del periodo, cuántas llegaron a tener una visita (`EXISTS` en la base) |
+| Por dónde llegaron | `Cliente.canalOrigen`, la atribución que captura `docs/ADQUISICION.md` |
+| De dónde son | `Cliente.ciudad` |
+| Consentimiento | `notifPromos` / `notifRecordatorios`, foto de hoy |
+| Los que más dejaron 🔒👤 | `Membership.montoPagado` agrupado por cliente |
+
+**Dos relojes, separados en pantalla.** Las cifras del periodo se fechan por
+cuándo pasó la cosa; las de **foto de hoy** —base, con membresía vigente, nunca
+tuvieron— no dependen del rango y **no se comparan** contra el periodo anterior:
+el pasado de una foto de hoy no existe, y una variación ahí sería inventada. Van
+en su propio bloque, rotulado, también en el CSV.
+
+**No estrena una definición de «activo».** El semáforo vive en
+`modules/riesgo/semaforo.ts` y tiene su pantalla en `/admin/riesgo`. Este
+reporte usa por su nombre los dos ingredientes que el vocabulario distingue
+—«con membresía vigente» y «con actividad»— y enlaza al semáforo en vez de
+repetirlo.
 
 ### Operación
 
@@ -406,7 +430,7 @@ todo. Se separa en:
 | --- | --- |
 | `ver` | Reportes operativos |
 | `ver_financieros` | Todo lo marcado 🔒 |
-| `ver_datos_personales` | Todo lo marcado 👤 |
+| `ver_datos_personales` | Todo lo marcado 👤 — **en vigor** desde el reporte de clientes |
 | `exportar` | Las rutas `export`/`exportar` |
 | `ver_empleados` | Actividad por empleado |
 | `ver_auditoria` | Diagnósticos de calidad de datos |

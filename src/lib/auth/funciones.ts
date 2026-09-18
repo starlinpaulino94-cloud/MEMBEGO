@@ -174,10 +174,11 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
    * necesita el reporte de operación; no necesita saber cuánto factura el
    * negocio.
    *
-   * Solo están las que HOY se hacen cumplir de verdad. `ver_empleados` entra
-   * con el reporte de operación de la Fase 5, que es el primero que desglosa
-   * por persona. `ver_datos_personales` y `ver_auditoria` siguen diseñadas en
-   * `docs/REPORTES.md` y esperan a sus reportes: listarlas antes sería un
+   * Solo están las que HOY se hacen cumplir de verdad. `ver_empleados` entró
+   * con el reporte de operación, que fue el primero que desglosa por persona,
+   * y `ver_datos_personales` con el de clientes, que es el primero que pone
+   * nombres de personas en una tabla. `ver_auditoria` sigue diseñada en
+   * `docs/REPORTES.md` y espera a su reporte: listarla antes sería un
    * interruptor pintado, que es justo lo que la regla de arriba prohíbe.
    */
   reportes: [
@@ -188,6 +189,11 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     // cada quien son dos permisos distintos, y el segundo no lo necesita un
     // encargado de turno para hacer su trabajo.
     { codigo: 'ver_empleados', label: 'Ver el desglose de operación por empleado' },
+    // Nombres de clientes dentro de un reporte. Va aparte de `ver` porque
+    // saber cuántos clientes hay y saber QUIÉNES son no son la misma
+    // pregunta: la primera la necesita cualquiera que mire el negocio, la
+    // segunda solo quien trata con ellos.
+    { codigo: 'ver_datos_personales', label: 'Ver nombres de clientes en los reportes' },
     { codigo: 'exportar', label: 'Descargar los reportes' },
   ],
 }
