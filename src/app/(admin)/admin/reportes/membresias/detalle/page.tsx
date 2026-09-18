@@ -22,7 +22,28 @@ const TIPOS = {
   CANCELADA: 'Cancelaciones',
   VENCIDA: 'Vencimientos',
   CAMBIO_PLAN: 'Cambios de plan',
+  // El resto del ciclo (F3): el enum tenía siete tipos y aquí solo se
+  // enseñaban cinco — CREADA y RECHAZADA existían y no se podían abrir; los
+  // ajustes ni siquiera se escribían (Fase 2 los estrenó).
+  AJUSTADA: 'Ajustes (vigencia y lavados)',
+  CREADA: 'Creadas (pendientes)',
+  RECHAZADA: 'Pagos rechazados',
 } as const
+
+/** Tipos cuya fila enseña el motivo escrito al hacerlos. */
+const CON_MOTIVO = new Set<TipoDetalle>(['CANCELADA', 'AJUSTADA', 'RECHAZADA'])
+
+/** Qué se ajustó, leído del payload del evento AJUSTADA. Nunca lanza. */
+function detalleAjuste(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const p = payload as { ajuste?: unknown; antes?: unknown; despues?: unknown; delta?: unknown }
+  const que =
+    p.ajuste === 'VENCIMIENTO' ? 'Vigencia' : p.ajuste === 'LAVADOS' ? 'Lavados' : null
+  if (!que) return null
+  const antes = p.antes == null ? '—' : String(p.antes)
+  const despues = p.despues == null ? '—' : String(p.despues)
+  return `${que}: ${antes} → ${despues}`
+}
 
 type TipoDetalle = keyof typeof TIPOS
 
@@ -91,6 +112,7 @@ export default async function DetalleCicloVidaPage({
           membershipId: true,
           precioAnterior: true,
           precioNuevo: true,
+          payload: true,
           membership: { select: { cliente: { select: { id: true, nombre: true } } } },
           actor: { select: { name: true, email: true } },
         },
@@ -154,8 +176,9 @@ export default async function DetalleCicloVidaPage({
                 {tipo === 'CAMBIO_PLAN' && (
                   <th className="px-3 py-2 text-right text-overline">Precio</th>
                 )}
+                {tipo === 'AJUSTADA' && <th className="px-3 py-2 text-overline">Qué cambió</th>}
                 <th className="px-3 py-2 text-overline">Quién</th>
-                {tipo === 'CANCELADA' && <th className="px-3 py-2 text-overline">Motivo</th>}
+                {CON_MOTIVO.has(tipo) && <th className="px-3 py-2 text-overline">Motivo</th>}
               </tr>
             </thead>
             <tbody>
@@ -192,10 +215,15 @@ export default async function DetalleCicloVidaPage({
                       {dinero(f.precioAnterior)} → {dinero(f.precioNuevo)}
                     </td>
                   )}
+                  {tipo === 'AJUSTADA' && (
+                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                      {detalleAjuste(f.payload) ?? '—'}
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-muted-foreground">
                     {f.actor?.name ?? f.actor?.email ?? '—'}
                   </td>
-                  {tipo === 'CANCELADA' && (
+                  {CON_MOTIVO.has(tipo) && (
                     <td className="px-3 py-2 text-muted-foreground">{f.motivo ?? '—'}</td>
                   )}
                 </tr>

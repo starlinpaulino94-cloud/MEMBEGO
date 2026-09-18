@@ -43,7 +43,14 @@ export function ReporteMembresiasVista({
     `/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`
 
   const hayMovimiento =
-    r.activadas.valor + r.renovadas.valor + r.canceladas.valor + r.vencidas.valor > 0
+    r.activadas.valor +
+      r.renovadas.valor +
+      r.canceladas.valor +
+      r.vencidas.valor +
+      r.creadas.valor +
+      r.rechazadas.valor +
+      r.ajustadas.valor >
+    0
   const cambios = r.cambiosDePlan
   const totalCambios = cambios.subida + cambios.bajada + cambios.lateral + cambios.desconocido
 
@@ -83,6 +90,26 @@ export function ReporteMembresiasVista({
         <KpiReporte label="Renovaciones" kpi={r.renovadas} formato={entero} />
         <KpiReporte label="Cancelaciones" kpi={r.canceladas} formato={entero} invertido />
         <KpiReporte label="Vencimientos" kpi={r.vencidas} formato={entero} invertido />
+      </div>
+
+      {/* El RESTO del ciclo, que la tabla ya guardaba y el reporte callaba:
+          nacimientos pendientes, pagos rechazados y ajustes manuales (vigencia
+          extendida, lavados corregidos). */}
+      <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <KpiReporte label="Creadas (pendientes de pago)" kpi={r.creadas} formato={entero} />
+        <KpiReporte label="Pagos rechazados" kpi={r.rechazadas} formato={entero} invertido />
+        <KpiReporte label="Ajustes manuales" kpi={r.ajustadas} formato={entero} />
+      </div>
+
+      {/* El detalle no puede vivir escondido en una nota al pie: es LA pantalla
+          que responde «¿cuándo, a quién y quién lo hizo?». */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('RENOVADA')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle evento por evento: quién, cuándo y por qué →
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
@@ -199,6 +226,18 @@ export function ReporteMembresiasVista({
         {' · '}
         <Link href={detalle('CAMBIO_PLAN')} className="underline">
           cambios de plan
+        </Link>
+        {' · '}
+        <Link href={detalle('AJUSTADA')} className="underline">
+          ajustes
+        </Link>
+        {' · '}
+        <Link href={detalle('CREADA')} className="underline">
+          creadas
+        </Link>
+        {' · '}
+        <Link href={detalle('RECHAZADA')} className="underline">
+          rechazadas
         </Link>
       </p>
     </ReporteImprimible>
