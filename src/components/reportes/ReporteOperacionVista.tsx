@@ -37,6 +37,18 @@ export function ReporteOperacionVista({
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
 
+  // El recorte se lee con NOMBRES, y viene del reporte, no de la URL: si un id
+  // pedido no se aplicó (inventado, de otra empresa, sin permiso), aquí no
+  // sale, y así la pantalla nunca dice un filtro que los números no llevan.
+  const filtroEtiqueta = r.filtro
+    ? [
+        r.filtro.sucursal && `la sucursal «${r.filtro.sucursal.nombre}»`,
+        r.filtro.empleado && `el empleado «${r.filtro.empleado.nombre}»`,
+      ]
+        .filter(Boolean)
+        .join(' y ')
+    : null
+
   return (
     <ReporteImprimible
       titulo={`Operación · ${empresa}`}
@@ -53,6 +65,15 @@ export function ReporteOperacionVista({
       }
     >
       {eyebrow && <div className="print:hidden">{eyebrow}</div>}
+
+      {/* Se imprime a propósito: un papel con cifras filtradas y sin la línea
+          que lo dice sería indistinguible del reporte de toda la empresa. */}
+      {filtroEtiqueta && (
+        <p className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-small text-foreground print:border-black">
+          <span className="font-semibold">Filtrado:</span> solo {filtroEtiqueta}. Todas las
+          cifras, la comparación y la serie llevan el recorte.
+        </p>
+      )}
 
       {r.incompleto && (
         <StatusBanner variant="warning" title="El reporte está incompleto">
@@ -138,15 +159,24 @@ export function ReporteOperacionVista({
           title="Códigos QR"
           description="Sale de la bitácora, no de las visitas: por eso puede no cuadrar con los canjes de arriba. Un QR se genera al activar una membresía y al terminar cada canje."
         />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
-          <Celda label="Generados" valor={entero(r.qrGenerados)} />
-          <Celda label="Usados" valor={entero(r.qrUsados)} />
-          <Celda
-            label="Compartidos"
-            valor={entero(r.qrCompartidos)}
-            nota="Compartir no consume el código"
-          />
-        </div>
+        {r.filtro ? (
+          // Un total de empresa pintado bajo un reporte filtrado sería un
+          // número mentiroso; mejor decir por qué no está.
+          <p className="text-small text-muted-foreground">
+            Con un filtro activo los QR no se enseñan: la bitácora no guarda ni la sucursal ni el
+            empleado, así que no hay forma de repartirlos. Quita el filtro para verlos.
+          </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+            <Celda label="Generados" valor={entero(r.qrGenerados)} />
+            <Celda label="Usados" valor={entero(r.qrUsados)} />
+            <Celda
+              label="Compartidos"
+              valor={entero(r.qrCompartidos)}
+              nota="Compartir no consume el código"
+            />
+          </div>
+        )}
       </section>
 
       <section>
