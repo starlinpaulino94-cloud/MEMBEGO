@@ -41,7 +41,7 @@ la auditoría. El detalle vive en cada sección (`✅ RESUELTO`); este es el map
 | **A-1 … A-7** (reintentos, firma+timestamp, panel de entregas, selector de eventos, fan-out paralelo, rotación de secretos) | ✅ cerrados |
 | **A-8/A-9/A-10** (SMS, correo desde el dominio, calendario bidireccional) | 🔵 Fase 3 (canales), pendientes |
 | **B-1, B-2, B-6** (webhook entrante + acción HTTP, app de Zapier, paginación por cursor) | ✅ cerrados |
-| **B-3** (salud activa de conexiones) | ◐ hecho por caducidad local; falta la inspección activa vía `debug_token` |
+| **B-3** (salud activa de conexiones) | ✅ cerrado — caducidad local + inspección activa vía `debug_token` para el token de sistema de WhatsApp |
 | **B-4** (catálogo de eventos) | ◐ ampliado (7→~20) y con ciclo de membresía y `cita.cancelada`; citas/pagos esperan su flujo |
 | **B-5** (CRUD de la API pública) | ✅ cerrado — editar, listar, **cancelar cita** (`POST …/cancel`) y **borrar** (`DELETE`) |
 | **B-7** (métricas de uso por credencial) | ✅ cerrado — integrador Y vista del superadmin (pestaña «Uso de la API») |
@@ -51,10 +51,10 @@ la auditoría. El detalle vive en cada sección (`✅ RESUELTO`); este es el map
 | **Seguridad · alerta de fuga de clave** | ✅ cerrado (endpoint firmado de GitHub Secret Scanning) |
 | **Aislamiento RLS en base** | ◐ código listo (Fase 0); falta el cutover operativo — `docs/runbooks/rls-encender.md` |
 
-**Lo que queda, por tamaño:** B-3 (`debug_token`, poco valor incremental), el
-cutover de RLS (operativo, con runbook), la «versión fuerte» de RLS (segundo rol
-para `sinEmpresa`), y las Fases 3–4 (canales SMS/correo/calendario y el
-marketplace de terceros), que son el grueso del camino a paridad.
+**Lo que queda, por tamaño:** el cutover de RLS (operativo, con runbook), la
+«versión fuerte» de RLS (segundo rol para `sinEmpresa`), y las Fases 3–4 (canales
+SMS/correo/calendario y el marketplace de terceros), que son el grueso del camino
+a paridad.
 
 ---
 
@@ -583,7 +583,7 @@ integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
 
 </details>
 
-### ◐ B-3 · Salud activa de las conexiones — HECHO por caducidad local (17/09/2026)
+### ✅ B-3 · Salud activa de las conexiones — RESUELTO (caducidad local + `debug_token`) (18/09/2026)
 
 > **Hecho.** El estado de una conexión ya no cambia solo cuando un envío falla:
 > un chequeo diario mira la caducidad de las credenciales SIN refresco de
@@ -610,13 +610,20 @@ integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
 > su botón «Reconectar», antes de que se rompa. El cron limpia el aviso cuando la
 > conexión vuelve a estar sana.
 >
-> **Falta, a propósito:** la inspección ACTIVA vía `debug_token` para las
-> conexiones cuya caducidad NO se guardó (el token de sistema de WhatsApp, que se
-> guarda sin `expiresAt`). Requiere descifrar el token y llamar a Meta por
-> conexión —una dependencia externa y frágil dentro de un cron—, y su valor
-> incremental sobre el chequeo local es pequeño: la mayoría de lo que caduca de
-> verdad (Facebook Login, acceso a datos) ya se cubre por la fecha guardada. Las
-> piezas para hacerlo existen (`inspeccionarToken`, `pideReautorizar`).
+> **Cerrada la inspección ACTIVA (18/09/2026).** El token de sistema de WhatsApp
+> se guarda sin `expiresAt` —no vence por fecha, pero SÍ se invalida si quien lo
+> emitió pierde el acceso—, así que el chequeo local no puede juzgarlo. Ahora
+> `inspeccionarSaludWhatsapp` (`salud-whatsapp.ts`) le pregunta a Meta con
+> `debug_token` y marca `reautorizarAt` con la MISMA máquina que el chequeo local
+> (`transicionSalud` sobre `pideReautorizar`). Vive en su propio archivo, aparte
+> del chequeo local, para que la promesa de aquel —«nunca llama a un proveedor»—
+> siga siendo cierta y comprobable.
+>
+> Por ser externa y frágil, va acotada como los barridos: **nunca decide sin
+> respuesta de Meta** (un apagón de Meta no traduce a «reconéctate» para todas las
+> empresas: se reintenta mañana), corre acotada por concurrencia y por tiempo, y
+> va la ÚLTIMA del cron —si la plataforma corta la función, lo único que se pierde
+> es esto, lo menos urgente—.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -918,7 +925,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Pasarelas de pago** | **2** | 5 | CardNET + Azul (buen encaje local) vs. Stripe/PayPal/Square/NMI/Authorize |
 | **Zapier / Make** | **4** | 5 | App de Zapier con REST Hooks; Make por OpenAPI (B-2) |
 | **Métricas de uso de la API** | **3** | 4 | Agregado diario por credencial: peticiones/día, por endpoint y tasa de error, visible en cada clave; falta la vista del superadmin (B-7) |
-| **Salud activa de conexiones** | **3** | 4 | Cron diario avisa por caducidad local antes de que un envío falle; falta la inspección activa vía `debug_token` (B-3) |
+| **Salud activa de conexiones** | **4** | 4 | Cron diario avisa antes de que un envío falle: caducidad local para todas y `debug_token` en vivo para el token de sistema de WhatsApp (B-3) |
 
 **Media ponderada ≈ 35 % de la superficie de GHL**, con una distribución muy
 marcada: MembeGo **gana** en los cimientos y **pierde** en todo lo que es
@@ -944,7 +951,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
 | ~~5~~ | ~~Fan-out encolado y en paralelo con tope~~ ✅ hecho | 2 | A-6 |
 | ~~6~~ | ~~Rotación con solapamiento — webhooks y secreto de satélite~~ ✅ hecho | 4 | A-7 |
-| ◐ 7 | Cron de salud ✅ por caducidad local → `REAUTORIZAR`; falta la inspección activa vía `debug_token` | 3 | B-3 |
+| ~~7~~ | ~~Cron de salud → `REAUTORIZAR`: caducidad local + inspección activa vía `debug_token`~~ ✅ hecho | 3 | B-3 |
 
 **Resultado: el módulo pasa de ~35 % a ~45 %** y —más importante— deja de
 generar trabajo manual por cada cliente conectado.
@@ -1013,9 +1020,10 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   de admitir un replay con el timestamp refrescado; una empresa puede por fin
   recibir solo lo que le interesa; rotar un secreto de webhook dejó de exigir un
   corte; y el barrido dejó de drenar su primer 6 % y parecer que funcionaba.
-  **B-3** (salud activa de las conexiones) ya avisa por caducidad antes de que un
-  envío falle; queda su rabo, la inspección activa vía `debug_token` para el token
-  de WhatsApp sin fecha guardada. Y **A-7 está entero**: el secreto compartido con
+  **B-3** (salud activa de las conexiones) ya avisa antes de que un envío falle,
+  y entero: caducidad local para todas las conexiones y `debug_token` en vivo para
+  el token de sistema de WhatsApp, que no lleva fecha guardada. Y **A-7 está
+  entero**: el secreto compartido con
   los satélites ya rota con solape de 7 días —al revés que el de webhooks, porque
   el token SSO es una firma única que no admite lista—, y su revisión aparte, que
   era el motivo de separarlo, ya se hizo. Con esto **la Fase 1 queda cerrada**.

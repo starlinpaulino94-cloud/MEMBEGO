@@ -4,6 +4,7 @@ import { reintentarPendientes } from '@/modules/integraciones/despacho'
 import { reintentarWebhooksPendientes } from '@/modules/connect/webhooks'
 import { purgarEstadosOauth } from '@/modules/connect/oauth'
 import { comprobarSaludConexiones } from '@/modules/connect/salud-conexiones'
+import { inspeccionarSaludWhatsapp } from '@/modules/connect/salud-whatsapp'
 import { limpiarRotacionesVencidas } from '@/modules/plataforma/rotacion-secreto'
 
 export const dynamic = 'force-dynamic'
@@ -68,6 +69,13 @@ export async function GET(req: NextRequest) {
   // cambiar el secreto saliente a uno que el satélite quizá no instaló sería el
   // corte que la rotación existe para evitar.
   const rotacionesVencidas = await limpiarRotacionesVencidas()
+  // INSPECCIÓN ACTIVA de WhatsApp (B-3): va la ÚLTIMA, y a propósito. A
+  // diferencia de todo lo anterior llama a Meta por conexión, así que es lo más
+  // frágil y lo más caro; ponerla al final significa que si la plataforma corta
+  // la función por tiempo, lo único que se pierde es esto —lo menos urgente, y lo
+  // que se reintenta mañana igual—. Se corta sola por presupuesto para no
+  // arriesgar el minuto del cron.
+  const whatsapp = await inspeccionarSaludWhatsapp()
   return NextResponse.json({
     ok: true,
     satelites,
@@ -75,5 +83,6 @@ export async function GET(req: NextRequest) {
     estadosOauthPurgados,
     salud,
     rotacionesVencidas,
+    whatsapp,
   })
 }
