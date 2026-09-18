@@ -52,6 +52,12 @@ test('el reporte expone creadas, rechazadas y ajustadas como cifras propias', ()
   assert.match(vista, /r\.ajustadas/, 'la vista no pinta los ajustes')
   assert.match(vista, /r\.creadas/, 'la vista no pinta las creadas')
   assert.match(vista, /r\.rechazadas/, 'la vista no pinta los rechazos')
+  // Y el CSV las lleva IGUAL: un archivo al que le faltan cifras que la
+  // pantalla sí enseña es otro reporte, y nadie lo nota una vez descargado.
+  const csv = leer('src/app/(admin)/admin/reportes/membresias/export/route.ts')
+  for (const campo of ['r.creadas.valor', 'r.rechazadas.valor', 'r.ajustadas.valor']) {
+    assert.ok(csv.includes(campo), `el CSV de membresías no exporta ${campo}`)
+  }
 })
 
 test('el detalle evento-por-evento está enlazado a la vista, no escondido', () => {
