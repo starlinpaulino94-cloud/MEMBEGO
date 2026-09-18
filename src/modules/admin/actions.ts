@@ -17,6 +17,8 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { validarCobroMembresia } from '@/modules/membresias/cobro'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { registrarEventoMembresia } from '@/modules/membresia/eventos'
+import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
+import { motivoCambioDirectoBloqueado } from '@/modules/membresia/cambio-plan-pendiente'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -63,6 +65,121 @@ export interface AdminActionState {
 }
 
 /**
+ * Aplica un cambio de plan pendiente con el importe PRORRATEADO.
+ *
+ * Es la ÚNICA vía que registra un cambio: la comparten la aprobación del admin
+ * y la confirmación de un pago por transferencia, para que el mismo cambio no
+ * deje dos importes distintos según qué botón se pulse. El caller ya autorizó
+ * y ya comprobó que existe `planIdSolicitado`.
+ */
+async function aplicarCambioPlanPendiente(
+  membership: NonNullable<Awaited<ReturnType<typeof assertOwnership>>>,
+  user: NonNullable<Awaited<ReturnType<typeof requireAdminUser>>>
+): Promise<AdminActionState> {
+  const companyId = membership.cliente.companyId
+  const planIdSolicitado = membership.planIdSolicitado
+  if (!planIdSolicitado) {
+    return { error: 'Esta membresía no tiene un cambio de plan pendiente.' }
+  }
+
+  const nuevoPlan = await conEmpresa(companyId, (tx) =>
+    tx.plan.findUnique({
+      where: { id: planIdSolicitado },
+    })
+  )
+  if (!nuevoPlan) return { error: 'El plan solicitado ya no existe.' }
+
+  // El cliente pagó la DIFERENCIA prorrateada, no el plan completo: el mismo
+  // cálculo que la pantalla y los cobros, para que el asiento cuadre.
+  const pagoCambio = calcularPagoCambioPlan({
+    precioNuevo: Number(nuevoPlan.precio),
+    precioVigente: Number(membership.plan.precio),
+    fechaVencimiento: membership.fechaVencimiento,
+    vigenciaDias: membership.plan.vigenciaDias,
+  })
+
+  const now = new Date()
+  await conEmpresa(companyId, (tx) =>
+    tx.membership.update({
+      where: { id: membership.id },
+      data: {
+        planId: nuevoPlan.id,
+        planIdSolicitado: null,
+        estado: 'ACTIVA',
+        pagoConfirmado: true,
+        montoPagado: pagoCambio.aPagar,
+        fechaPago: now,
+        fechaInicio: now,
+        fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
+        lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
+        rechazadoReason: null,
+      },
+    })
+  )
+
+  await conEmpresa(companyId, (tx) =>
+    tx.auditLog.create({
+      data: {
+        companyId,
+        userId: user.metadata.dbUserId ?? null,
+        accion: 'PAGO_APROBADO',
+        entidadTipo: 'Membership',
+        entidadId: membership.id,
+        payload: {
+          cambioDePlan: true,
+          planAnterior: membership.planId,
+          planNuevo: nuevoPlan.id,
+          monto: pagoCambio.aPagar,
+        },
+      },
+    })
+  )
+
+  // Venta oficial del cambio cobrado: ticket + factura imprimible.
+  const sucursalPagoId = membership.sucursalPagoId
+  const sucursalPago = sucursalPagoId
+    ? await conEmpresa(companyId, (tx) =>
+        tx.sucursal.findUnique({
+          where: { id: sucursalPagoId },
+          select: { id: true, nombre: true },
+        })
+      )
+    : null
+  await registrarVentaConfirmada({
+    companyId,
+    clienteId: membership.cliente.id,
+    clienteNombre: membership.cliente.nombre,
+    empleadoId: user.metadata.dbUserId ?? null,
+    detalle: `Cambio a ${nuevoPlan.nombre}`,
+    monto: pagoCambio.aPagar,
+    metodoCobro: membership.comprobanteUrl != null ? 'TRANSFERENCIA' : 'OTRO',
+    metodoCobroLabel:
+      membership.comprobanteUrl != null ? 'Transferencia' : 'Confirmado por el negocio',
+    sucursalId: sucursalPago?.id ?? null,
+    sucursalNombre: sucursalPago?.nombre ?? null,
+    membershipId: membership.id,
+  })
+
+  const clienteUser = await conEmpresa(companyId, (tx) =>
+    tx.user.findUnique({
+      where: { supabaseId: membership.cliente.supabaseId },
+      select: { id: true },
+    })
+  )
+  if (clienteUser) {
+    await crearNotificacion({
+      userId: clienteUser.id,
+      tipo: 'PAGO_APROBADO',
+      titulo: 'Cambio de plan aprobado',
+      mensaje: `Tu cambio al plan "${nuevoPlan.nombre}" fue aprobado y ya está activo.`,
+      href: '/mis-membresias',
+    })
+  }
+
+  return { success: true }
+}
+
+/**
  * Confirmar pago: PENDIENTE | PENDIENTE_PAGO -> ACTIVA.
  * Genera el QR del cliente si todavía no tiene uno activo.
  * Registra auditoría.
@@ -88,23 +205,33 @@ export async function confirmarPago(
     if (!membership) return { error: 'Membresía no encontrada.' }
     const companyId = membership.cliente.companyId
 
-    // Datos del cobro ANTES de activar (la activación aplica el cambio de
-    // plan y limpia planIdSolicitado): plan efectivo, descuento y método.
+    // Un cambio pendiente no se "activa" (activarMembresia rechaza ACTIVA
+    // porque el cliente conserva el acceso mientras se procesa): se aplica por
+    // la misma vía que la aprobación, con la diferencia prorrateada.
+    if (membership.estado === 'ACTIVA' && membership.planIdSolicitado != null) {
+      const res = await aplicarCambioPlanPendiente(membership, user)
+      if (res.error) return res
+      revalidatePath(`/admin/clientes/${membership.cliente.id}`)
+      revalidatePath('/admin/clientes')
+      revalidatePath('/admin/dashboard')
+      revalidatePath('/admin/pagos')
+      revalidatePath('/superadmin/membresias')
+      return res
+    }
+
+    // Datos del cobro ANTES de activar: descuento y método.
     const extras = await conEmpresa(companyId, (tx) =>
       tx.membership.findUnique({
         where: { id: membershipId },
         select: {
-          planSolicitado: { select: { nombre: true, precio: true } },
           metodoPago: { select: { tipo: true, nombre: true } },
           sucursalPago: { select: { id: true, nombre: true } },
           comprobanteNota: true,
         },
       })
     )
-    const esCambio = membership.estado === 'ACTIVA' && membership.planIdSolicitado != null
-    const planCobrado = esCambio ? extras?.planSolicitado : membership.plan
     const descuento = membership.fechaInicio == null ? Number(membership.descuentoBienvenida ?? 0) : 0
-    const monto = Math.max(0, Number(planCobrado?.precio ?? 0) - descuento)
+    const monto = Math.max(0, Number(membership.plan.precio) - descuento)
     const esTransferencia =
       extras?.metodoPago?.tipo === 'TRANSFERENCIA' ||
       (!extras?.metodoPago && membership.comprobanteUrl != null)
@@ -120,7 +247,7 @@ export async function confirmarPago(
       clienteId: membership.cliente.id,
       clienteNombre: membership.cliente.nombre,
       empleadoId: user.metadata.dbUserId ?? null,
-      detalle: `${esCambio ? 'Cambio a ' : 'Plan '}${planCobrado?.nombre ?? ''}`.trim(),
+      detalle: `Plan ${membership.plan.nombre}`.trim(),
       monto,
       metodoCobro: esTransferencia ? 'TRANSFERENCIA' : 'OTRO',
       metodoCobroLabel: esTransferencia
@@ -189,98 +316,13 @@ export async function aprobarCambioPlan(
     if (!membership.planIdSolicitado) {
       return { error: 'Esta membresía no tiene un cambio de plan pendiente.' }
     }
-    const companyId = membership.cliente.companyId
-    const planIdSolicitado = membership.planIdSolicitado
 
-    const nuevoPlan = await conEmpresa(companyId, (tx) =>
-      tx.plan.findUnique({
-        where: { id: planIdSolicitado },
-      })
-    )
-    if (!nuevoPlan) return { error: 'El plan solicitado ya no existe.' }
-
-    const now = new Date()
-    await conEmpresa(companyId, (tx) =>
-      tx.membership.update({
-        where: { id: membership.id },
-        data: {
-          planId: nuevoPlan.id,
-          planIdSolicitado: null,
-          estado: 'ACTIVA',
-          pagoConfirmado: true,
-          montoPagado: nuevoPlan.precio,
-          fechaPago: now,
-          fechaInicio: now,
-          fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
-          lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
-          rechazadoReason: null,
-        },
-      })
-    )
-
-    await conEmpresa(companyId, (tx) =>
-      tx.auditLog.create({
-        data: {
-          companyId,
-          userId: user.metadata.dbUserId ?? null,
-          accion: 'PAGO_APROBADO',
-          entidadTipo: 'Membership',
-          entidadId: membership.id,
-          payload: {
-            cambioDePlan: true,
-            planAnterior: membership.planId,
-            planNuevo: nuevoPlan.id,
-            monto: Number(nuevoPlan.precio),
-          },
-        },
-      })
-    )
-
-    // Venta oficial del cambio cobrado: ticket + factura imprimible.
-    const sucursalPagoId = membership.sucursalPagoId
-    const sucursalPago = sucursalPagoId
-      ? await conEmpresa(companyId, (tx) =>
-          tx.sucursal.findUnique({
-            where: { id: sucursalPagoId },
-            select: { id: true, nombre: true },
-          })
-        )
-      : null
-    await registrarVentaConfirmada({
-      companyId,
-      clienteId: membership.cliente.id,
-      clienteNombre: membership.cliente.nombre,
-      empleadoId: user.metadata.dbUserId ?? null,
-      detalle: `Cambio a ${nuevoPlan.nombre}`,
-      monto: Number(nuevoPlan.precio),
-      metodoCobro: membership.comprobanteUrl != null ? 'TRANSFERENCIA' : 'OTRO',
-      metodoCobroLabel:
-        membership.comprobanteUrl != null ? 'Transferencia' : 'Confirmado por el negocio',
-      sucursalId: sucursalPago?.id ?? null,
-      sucursalNombre: sucursalPago?.nombre ?? null,
-      membershipId: membership.id,
-    })
-
-    const clienteUser = await conEmpresa(companyId, (tx) =>
-      tx.user.findUnique({
-        where: { supabaseId: membership.cliente.supabaseId },
-        select: { id: true },
-      })
-    )
-    if (clienteUser) {
-      await crearNotificacion({
-        userId: clienteUser.id,
-        tipo: 'PAGO_APROBADO',
-        titulo: 'Cambio de plan aprobado',
-        mensaje: `Tu cambio al plan "${nuevoPlan.nombre}" fue aprobado y ya está activo.`,
-        href: '/mis-membresias',
-      })
-    }
-
+    const res = await aplicarCambioPlanPendiente(membership, user)
+    if (res.error) return res
     revalidatePath('/admin/pagos')
     revalidatePath('/admin/clientes')
     revalidatePath('/mis-membresias')
-    return { success: true }
+    return res
   } catch (e) {
     console.error('[admin] aprobarCambioPlan error:', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
@@ -306,6 +348,11 @@ export async function cambiarPlanDeMembresia(
 
     const membership = await assertOwnership(membershipId, user)
     if (!membership) return { error: 'Membresía no encontrada.' }
+    // Un cambio que el cliente ya pidió solo se aplica por la aprobación
+    // (importe prorrateado). La vía directa cobra el plan completo: no puede
+    // pasar por encima o el mismo cambio tendría dos importes.
+    const bloqueo = motivoCambioDirectoBloqueado(membership.planIdSolicitado)
+    if (bloqueo) return { error: bloqueo }
     if (membership.planId === planId) {
       return { error: 'Ese ya es el plan actual de esta membresía.' }
     }
