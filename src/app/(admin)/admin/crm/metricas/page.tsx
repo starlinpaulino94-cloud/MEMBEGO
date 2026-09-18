@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { BarChart3 } from 'lucide-react'
-import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { metricasCrm } from '@/modules/crm/metricas'
@@ -36,7 +35,7 @@ function Cifra({ etiqueta, valor, nota }: { etiqueta: string; valor: string; not
 }
 
 export default async function MetricasPage() {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('leads')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const m = await metricasCrm(user.metadata.companyId)
 

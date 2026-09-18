@@ -190,10 +190,11 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   SEGUIMIENTO: ['seguimiento'],
   RULETA: ['gamificacion'],
   EXCURSIONES: ['excursiones'],
-  // 'seguimiento' sigue siendo de SEGUIMIENTO (beneficios); las secciones del
-  // CRM son las que esta capacidad controla de verdad (todo /admin/crm cuelga
-  // de la sección 'leads').
-  CRM: ['leads', 'conversaciones', 'pipeline', 'configuracion'],
+  // 'seguimiento' sigue siendo de SEGUIMIENTO (beneficios). El CRM entero
+  // cuelga de 'leads' —una sola sección para todo /admin/crm—, así que apagar
+  // la capacidad apaga esa y con ella el módulo completo. Antes se listaban
+  // aquí cuatro; las otras tres no existían en ninguna guardia.
+  CRM: ['leads'],
 }
 
 /** Índice inverso sección → capacidad que la controla (o undefined). */
@@ -215,10 +216,7 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   citas: 'Citas',
   seguimiento: 'Seguimiento de beneficios',
   gamificacion: 'Ruleta y gamificación',
-  leads: 'Leads',
-  conversaciones: 'Conversaciones',
-  pipeline: 'Pipeline comercial',
-  configuracion: 'Configuración CRM',
+  leads: 'Prospectos (todo el CRM)',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */

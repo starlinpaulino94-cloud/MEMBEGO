@@ -27,6 +27,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   crecimiento: 'Crecimiento',
   scanner: 'Escanear QR',
   pagos: 'Pagos',
+  facturas: 'Comprobantes',
   citas: 'Citas',
   ofertas: 'Regalos VIP',
   perfil: 'Perfil público',
@@ -52,12 +53,10 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   marketing: 'Marketing',
   gamificacion: 'Gamificación',
   personalizacion: 'Personalización',
+  sinonimos: 'Sinónimos de búsqueda',
   app: 'App Car Wash',
   excursiones: 'Excursiones',
-  leads: 'Leads',
-  conversaciones: 'Conversaciones',
-  pipeline: 'Pipeline comercial',
-  configuracion: 'Configuración CRM',
+  leads: 'Prospectos (todo el CRM)',
   integraciones: 'Integraciones',
 }
 

@@ -1,5 +1,5 @@
-import { requireRole } from '@/lib/auth/guards'
-import { ADMIN_ROLES } from '@/types'
+import { redirect } from 'next/navigation'
+import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
@@ -17,7 +17,8 @@ export const metadata = { title: 'Sinónimos de búsqueda' }
  * está publicado el catálogo.
  */
 export default async function SinonimosAdminPage() {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('sinonimos')
+  if (!user) redirect('/admin/dashboard')
   const companyId = await resolveCompanyId(user)
   if (!companyId) {
     return <SinEmpresaActiva seccion="los sinónimos de búsqueda" />

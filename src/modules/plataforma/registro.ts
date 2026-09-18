@@ -260,6 +260,32 @@ export async function sistemasDeEmpresa(
 }
 
 /**
+ * TODOS los sistemas del registro, con la decisión razonada para esta empresa.
+ *
+ * `sistemasDeEmpresa` devuelve solo los que entran, y para el lanzador es lo
+ * correcto: un botón que no abre nada es peor que ningún botón. Quien
+ * administra la empresa necesita justo lo contrario —ver el sistema que está
+ * registrado y NO aparece, y por qué—, porque si no, diagnosticar por qué falta
+ * significa abrir la base de datos a mano.
+ *
+ * El motivo es información sobre la configuración de la plataforma: quien llama
+ * decide si lo enseña, y la pantalla solo se lo enseña a administración.
+ */
+export async function sistemasConDecision(
+  companyId: string
+): Promise<{ sistema: SistemaRegistrado; decision: Decision }[]> {
+  const { tipoNegocio, sistemas } = await leerContexto(companyId, false)
+  return sistemas.map((sistema) => ({
+    sistema,
+    // Sin vertical resuelto no hay nada que comparar: cerrado, y con el motivo
+    // que apunta a lo que de verdad falta.
+    decision: tipoNegocio
+      ? decidirAcceso(sistema, tipoNegocio, sistema.habilitacion)
+      : { permitido: false, motivo: 'VERTICAL_INCOMPATIBLE' },
+  }))
+}
+
+/**
  * Decisión razonada sobre UN sistema identificado por su slug.
  *
  * Devuelve el motivo del rechazo además del veredicto: quien llama lo escribe
