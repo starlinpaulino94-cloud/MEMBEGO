@@ -110,6 +110,9 @@ export default async function ReporteOperacionPage({
       rango={rango}
       empresa={empresa?.name ?? 'Tu negocio'}
       generadoEn={formatDateTime(new Date(), prefs)}
+      // El detalle abre con EL MISMO periodo y los MISMOS filtros: es la misma
+      // query string que se lleva la exportación.
+      qs={qsExport}
       eyebrow={
         <div className="space-y-3">
           <RangoFechas rango={rango} accion="/admin/reportes/operacion" extra={extra} />

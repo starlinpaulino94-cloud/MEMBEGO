@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import type { FilaOperacion, ReporteOperacion } from '@/modules/reportes/operacion'
@@ -25,6 +26,7 @@ export function ReporteOperacionVista({
   rango,
   empresa,
   generadoEn,
+  qs,
   eyebrow,
   controles,
 }: {
@@ -32,10 +34,14 @@ export function ReporteOperacionVista({
   rango: Rango
   empresa: string
   generadoEn: string
+  /** Query string del rango y los filtros, para que el detalle abra igual. */
+  qs?: string
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const detalle = (vista: string) =>
+    `/admin/reportes/operacion/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
 
   // El recorte se lee con NOMBRES, y viene del reporte, no de la URL: si un id
   // pedido no se aplicó (inventado, de otra empresa, sin permiso), aquí no
@@ -104,6 +110,18 @@ export function ReporteOperacionVista({
           valor={entero(r.clientesAtendidos)}
           nota="Distintos, no canjes"
         />
+      </div>
+
+      {/* El detalle no puede vivir escondido: es LA pantalla que responde
+          «¿quién canjeó, cuándo y qué servicio?». Un número que no se puede
+          abrir hasta sus filas es una afirmación, no un reporte. */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('CANJES')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle canje por canje: quién, cuándo y qué servicio →
+        </Link>
       </div>
 
       {r.canjes.valor === 0 ? (
@@ -188,6 +206,25 @@ export function ReporteOperacionVista({
           <Celda label="Revertidas en el periodo" valor={entero(r.revertidas)} />
         </div>
       </section>
+
+      <p className="print:hidden text-caption text-muted-foreground">
+        Abre el detalle de cada cifra:{' '}
+        <Link href={detalle('CANJES')} className="underline">
+          canjes
+        </Link>
+        {' · '}
+        <Link href={detalle('DESCONTADOS')} className="underline">
+          descontaron un uso
+        </Link>
+        {' · '}
+        <Link href={detalle('SIN_DESCONTAR')} className="underline">
+          sin descontar
+        </Link>
+        {' · '}
+        <Link href={detalle('REVERTIDAS')} className="underline">
+          revertidas
+        </Link>
+      </p>
     </ReporteImprimible>
   )
 }
