@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { Rango } from '@/modules/reportes/rango'
@@ -38,6 +39,7 @@ export function ReporteFinanzasVista({
   prefs,
   empresa,
   generadoEn,
+  qs,
   eyebrow,
   controles,
 }: {
@@ -46,10 +48,14 @@ export function ReporteFinanzasVista({
   prefs: RegionalPrefs | null
   empresa: string
   generadoEn: string
+  /** Query string del periodo y del filtro, para que el detalle abra igual. */
+  qs?: string
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
 }) {
   const dinero = (n: number) => formatMoney(n, prefs)
+  const detalle = (vista: string) =>
+    `/admin/reportes/finanzas/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
 
   return (
@@ -94,9 +100,24 @@ export function ReporteFinanzasVista({
           {dinero(r.cobradoSinEntregar.monto)} ya se cobraron y su entrega sigue pendiente. No
           depende del periodo elegido{r.filtro ? ' ni del filtro de sucursal: es de toda la empresa' : ''}:
           se revisa todo lo que quede abierto, porque un pago atascado en marzo sigue siendo un
-          problema hoy — y es el único descuadre que el cliente descubre antes que el negocio.
+          problema hoy — y es el único descuadre que el cliente descubre antes que el negocio.{' '}
+          <Link href={detalle('SIN_ENTREGAR')} className="print:hidden font-semibold underline">
+            Ver cuáles son
+          </Link>
         </StatusBanner>
       )}
+
+      {/* El detalle no puede vivir escondido: es LA pantalla con la que se
+          cuadra contra el arqueo del día. Un número que no se puede abrir
+          hasta sus filas es una afirmación, no un reporte. */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('CAJA')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle cobro por cobro: quién pagó, cuándo y por qué vía →
+        </Link>
+      </div>
 
       <section>
         <SectionHeader title="Lo que entró" description="Dinero cobrado en el periodo." />
@@ -216,6 +237,33 @@ export function ReporteFinanzasVista({
           </div>
         )}
       </section>
+
+      <p className="print:hidden text-caption text-muted-foreground">
+        Abre el detalle de cada cifra:{' '}
+        <Link href={detalle('CAJA')} className="underline">
+          ingreso de caja
+        </Link>
+        {' · '}
+        <Link href={detalle('MEMBRESIAS')} className="underline">
+          cobros de membresías
+        </Link>
+        {' · '}
+        <Link href={detalle('DESCUENTOS')} className="underline">
+          descuentos
+        </Link>
+        {' · '}
+        <Link href={detalle('DESHECHAS')} className="underline">
+          anuladas y revertidas
+        </Link>
+        {' · '}
+        <Link href={detalle('INTENTOS')} className="underline">
+          intentos en línea
+        </Link>
+        {' · '}
+        <Link href={detalle('RECHAZADOS')} className="underline">
+          rechazados
+        </Link>
+      </p>
     </ReporteImprimible>
   )
 }
