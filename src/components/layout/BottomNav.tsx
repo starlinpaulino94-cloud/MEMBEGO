@@ -6,6 +6,7 @@ import {
   Home,
   User,
   QrCode,
+  Sparkles,
   Menu,
   type LucideIcon,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ const ICONOS: Record<string, LucideIcon> = {
   '/cliente/inicio': Home,
   '/cliente/perfil': User,
   '/cliente/qr': QrCode,
+  '/cliente/promociones': Sparkles,
   '/cliente/menu': Menu,
 }
 

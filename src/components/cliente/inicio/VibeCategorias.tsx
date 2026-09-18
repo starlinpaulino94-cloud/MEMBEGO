@@ -5,17 +5,16 @@ import {
   Dumbbell,
   HeartPulse,
   LayoutGrid,
-  Pizza,
   Scissors,
   ShoppingBag,
   Sparkles,
   UtensilsCrossed,
-  Wine,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import type { InicioVista } from '@/modules/home/vista'
 import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
+import { cn } from '@/lib/utils'
 import { RetailEmptyState } from './RetailEmptyState'
 
 /**
@@ -42,14 +41,14 @@ const ICONOS: Record<string, LucideIcon> = {
   tienda: ShoppingBag, tiendas: ShoppingBag, comercio: ShoppingBag,
 }
 
-/** La gama de las píldoras: tinte, borde e icono del mismo color, en ciclo. */
-const GAMA = [
-  'border-vibe-violet/40 bg-vibe-violet/15 text-vibe-violet',
-  'border-retail-cyan/40 bg-retail-cyan/15 text-retail-cyan',
-  'border-retail-star/40 bg-retail-star/15 text-retail-star',
-  'border-vibe-cobalt/40 bg-vibe-cobalt/15 text-vibe-cobalt',
-  'border-retail-lagoon/40 bg-retail-lagoon/15 text-retail-lagoon',
-  'border-vibe-sky/40 bg-vibe-sky/15 text-vibe-sky',
+const CLASE_BOTON = 'flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-label-sm font-bold text-white shadow-sm outline-none transition-[box-shadow,transform] duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-95'
+const COLORES = [
+  'bg-gradient-to-r from-vibe-violet to-vibe-cobalt',
+  'bg-gradient-to-r from-cyan-500 to-sky-500',
+  'bg-gradient-to-r from-amber-500 to-orange-500',
+  'bg-gradient-to-r from-pink-500 to-rose-500',
+  'bg-gradient-to-r from-emerald-500 to-teal-500',
+  'bg-gradient-to-r from-indigo-500 to-blue-500',
 ] as const
 
 export function VibeCategorias({ categorias }: { categorias: InicioVista['categorias'] }) {
@@ -68,7 +67,12 @@ export function VibeCategorias({ categorias }: { categorias: InicioVista['catego
         <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 py-1 pr-12">
           <Link
             href="/cliente/explorar"
-            className="flex shrink-0 items-center gap-2 rounded-full bg-vibe-violet px-4 py-2 text-label-sm font-bold text-white outline-none transition-transform duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-95"
+            aria-current="page"
+            className={cn(
+              CLASE_BOTON,
+              COLORES[0],
+              'border-2 border-white ring-2 ring-white ring-offset-2 ring-offset-vibe-fondo'
+            )}
           >
             <LayoutGrid className="size-4" aria-hidden />
             Todos
@@ -79,10 +83,10 @@ export function VibeCategorias({ categorias }: { categorias: InicioVista['catego
               <Link
                 key={c.id}
                 href={`/cliente/explorar?category=${encodeURIComponent(c.slug)}`}
-                className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 elevation-1 outline-none transition-transform duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-95 ${GAMA[i % GAMA.length]}`}
+                className={cn(CLASE_BOTON, COLORES[i % COLORES.length])}
               >
                 <Icono className="size-4" aria-hidden />
-                <span className="text-label-sm font-bold text-foreground">{c.name}</span>
+                <span className="text-label-sm font-bold text-white">{c.name}</span>
               </Link>
             )
           })}
