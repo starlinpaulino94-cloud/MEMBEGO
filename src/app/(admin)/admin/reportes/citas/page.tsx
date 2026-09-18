@@ -42,10 +42,12 @@ export default async function ReporteCitasPage({
   const companyId = await requireCompanyContext(user)
 
   const sp = await searchParams
-  const servicioPedido = (() => {
-    const v = Array.isArray(sp.servicio) ? sp.servicio[0] : sp.servicio
+  const leerParam = (k: string) => {
+    const v = Array.isArray(sp[k]) ? sp[k][0] : sp[k]
     return typeof v === 'string' ? v.trim() : ''
-  })()
+  }
+  const servicioPedido = leerParam('servicio')
+  const sucursalPedida = leerParam('sucursal')
 
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company
@@ -59,14 +61,18 @@ export default async function ReporteCitasPage({
   const verEmpleados = await puedeFuncion('reportes', 'ver_empleados')
   const r = await getReporteCitas(companyId, rango, timeZone, {
     verEmpleados,
-    filtro: { servicio: servicioPedido || undefined },
+    filtro: {
+      servicio: servicioPedido || undefined,
+      sucursalId: sucursalPedida || undefined,
+    },
   })
 
   // Lo que viaja pegado a los enlaces es el filtro APLICADO, no el pedido: un
   // servicio que la consulta descartó no sobrevive en los presets ni en el
   // enlace de exportación.
   const extra = new URLSearchParams()
-  if (r.filtro) extra.set('servicio', r.filtro.servicio)
+  if (r.filtro?.servicio) extra.set('servicio', r.filtro.servicio)
+  if (r.filtro?.sucursal) extra.set('sucursal', r.filtro.sucursal.id)
   const qs = paramsDeRango(rango)
   const spExport = new URLSearchParams(qs ? qs.slice(1) : '')
   for (const [k, v] of extra) spExport.set(k, v)
@@ -84,7 +90,7 @@ export default async function ReporteCitasPage({
       eyebrow={
         <div className="space-y-3">
           <RangoFechas rango={rango} accion="/admin/reportes/citas" extra={extra} />
-          {r.serviciosDisponibles.length > 0 && (
+          {(r.serviciosDisponibles.length > 0 || r.sucursalesDisponibles.length > 1) && (
             <Form
               action="/admin/reportes/citas"
               className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
@@ -92,19 +98,38 @@ export default async function ReporteCitasPage({
               {[...new URLSearchParams(qs ? qs.slice(1) : '').entries()].map(([k, v]) => (
                 <input key={k} type="hidden" name={k} value={v} />
               ))}
-              <select
-                name="servicio"
-                defaultValue={r.filtro?.servicio ?? ''}
-                aria-label="Filtrar por servicio"
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-              >
-                <option value="">Todos los servicios</option>
-                {r.serviciosDisponibles.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+              {/* Con una sola sucursal el desplegable sobra: todas las citas
+                  son de esa. Aparece cuando de verdad hay que elegir. */}
+              {r.sucursalesDisponibles.length > 1 && (
+                <select
+                  name="sucursal"
+                  defaultValue={r.filtro?.sucursal?.id ?? ''}
+                  aria-label="Filtrar por sucursal"
+                  className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="">Todas las sucursales</option>
+                  {r.sucursalesDisponibles.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {r.serviciosDisponibles.length > 0 && (
+                <select
+                  name="servicio"
+                  defaultValue={r.filtro?.servicio ?? ''}
+                  aria-label="Filtrar por servicio"
+                  className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                >
+                  <option value="">Todos los servicios</option>
+                  {r.serviciosDisponibles.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              )}
               <Button type="submit" variant="secondary" size="sm">
                 Filtrar
               </Button>

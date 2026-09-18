@@ -56,8 +56,7 @@ export function ReporteCitasVista({
         <>
           Las citas se cuentan por el día en que ESTABAN AGENDADAS. «Reservadas en el periodo» es
           la otra pregunta —cuántas se pidieron— y por eso va en su propia cifra: una reserva de
-          hoy para el mes que viene no es una cita de hoy. No hay desglose por sucursal porque la
-          reserva todavía no guarda en cuál se hace; en cuanto lo haga, aparece aquí.
+          hoy para el mes que viene no es una cita de hoy.
         </>
       }
     >
@@ -81,8 +80,14 @@ export function ReporteCitasVista({
 
       {r.filtro && (
         <p className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-small text-foreground print:border-black">
-          <span className="font-semibold">Filtrado:</span> solo el servicio «{r.filtro.servicio}».
-          Todas las cifras, la comparación y el día a día llevan el recorte.
+          <span className="font-semibold">Filtrado:</span> solo{' '}
+          {[
+            r.filtro.sucursal && `la sucursal «${r.filtro.sucursal.nombre}»`,
+            r.filtro.servicio && `el servicio «${r.filtro.servicio}»`,
+          ]
+            .filter(Boolean)
+            .join(' y ')}
+          . Todas las cifras, la comparación y el día a día llevan el recorte.
         </p>
       )}
 
@@ -210,6 +215,17 @@ export function ReporteCitasVista({
               />
             </section>
           )}
+
+          {/* La sucursal empezó a guardarse el día que la reserva la pidió;
+              las citas anteriores caen en «(sin asignar)» y no se esconden,
+              porque esconderlas rompería la suma de los subtotales. */}
+          <section>
+            <SectionHeader
+              title="Por sucursal"
+              description="Dónde se atiende cada cita. Las reservadas antes de que la app preguntara por la sucursal salen como «(sin asignar)»: no se rellenan hacia atrás porque no hay de dónde sacarlo, y con el tiempo esa fila se vacía sola."
+            />
+            <TablaCitas filas={r.porSucursal} columna="Sucursal" entero={entero} />
+          </section>
 
           <section>
             <SectionHeader
