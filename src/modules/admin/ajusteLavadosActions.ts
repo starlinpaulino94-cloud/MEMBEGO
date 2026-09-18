@@ -26,6 +26,7 @@ import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 export interface AjusteLavadosState {
   error?: string
@@ -120,6 +121,21 @@ export async function ajustarLavados(
         },
         select: { id: true },
       })
+
+      // La HISTORIA de la membresía, además del asiento: el ciclo de vida
+      // (reportes) lee `membresia_eventos`, y sin esta fila el ajuste no
+      // existía para quien pregunta «¿cuándo le sumaron ese lavado?».
+      await registrarEventoMembresia(tx, {
+        companyId: membership.companyId,
+        membershipId: membership.id,
+        clienteId: membership.cliente.id,
+        tipo: 'AJUSTADA',
+        origen: 'ADMIN',
+        motivo,
+        actorUserId: user.metadata.dbUserId ?? null,
+        payload: { ajuste: 'LAVADOS', delta, antes, despues, comprobanteId: asiento.id },
+      })
+
       return asiento.id
     })
 

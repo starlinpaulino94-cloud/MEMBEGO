@@ -218,8 +218,8 @@ export async function aprobarCambioPlan(
       })
     )
 
-    await conEmpresa(companyId, (tx) =>
-      tx.auditLog.create({
+    await conEmpresa(companyId, async (tx) => {
+      await tx.auditLog.create({
         data: {
           companyId,
           userId: user.metadata.dbUserId ?? null,
@@ -234,7 +234,33 @@ export async function aprobarCambioPlan(
           },
         },
       })
-    )
+
+      // El MISMO evento que escribe el cambio directo (`cambiarPlanDeMembresia`):
+      // este camino —el cliente lo pidió, el negocio lo aprobó— no lo escribía,
+      // así que sus cambios de plan no existían para el reporte de ciclo de
+      // vida. Dos caminos del mismo hecho no pueden dejar historias distintas.
+      await registrarEventoMembresia(tx, {
+        companyId,
+        membershipId: membership.id,
+        clienteId: membership.clienteId,
+        tipo: 'CAMBIO_PLAN',
+        origen: 'ADMIN',
+        estadoAnterior: membership.estado,
+        estadoNuevo: 'ACTIVA',
+        planAnteriorId: membership.planId,
+        planNuevoId: nuevoPlan.id,
+        precioAnterior: Number(membership.plan.precio),
+        precioNuevo: Number(nuevoPlan.precio),
+        monto: Number(nuevoPlan.precio),
+        actorUserId: user.metadata.dbUserId ?? null,
+        ocurridoEn: now,
+        payload: {
+          planAnteriorNombre: membership.plan.nombre,
+          planNuevoNombre: nuevoPlan.nombre,
+          solicitadoPorCliente: true,
+        },
+      })
+    })
 
     // Venta oficial del cambio cobrado: ticket + factura imprimible.
     const sucursalPagoId = membership.sucursalPagoId
@@ -446,12 +472,32 @@ export async function rechazarCambioPlan(
     }
     const companyId = membership.cliente.companyId
 
-    await conEmpresa(companyId, (tx) =>
-      tx.membership.update({
+    await conEmpresa(companyId, async (tx) => {
+      await tx.membership.update({
         where: { id: membership.id },
         data: { planIdSolicitado: null },
       })
-    )
+
+      // Rechazar también es una decisión: sin este asiento, la solicitud
+      // desaparecía sin dejar quién la negó ni por qué (cero rastro).
+      await tx.auditLog
+        .create({
+          data: {
+            companyId,
+            userId: user.metadata.dbUserId ?? null,
+            accion: 'NOTA_INTERNA',
+            entidadTipo: 'Membership',
+            entidadId: membership.id,
+            payload: {
+              tipo: 'CAMBIO_PLAN_RECHAZADO',
+              planSolicitado: membership.planIdSolicitado,
+              motivo: motivo || null,
+              cliente: membership.cliente.nombre,
+            },
+          },
+        })
+        .catch(anotarFallo('admin:rechazar-cambio-plan:auditoria'))
+    })
 
     const clienteUser = await conEmpresa(companyId, (tx) =>
       tx.user.findUnique({
@@ -511,8 +557,8 @@ export async function crearMembresia(
       return { error: 'Plan no válido.' }
     }
 
-    await conEmpresa(companyId, (tx) =>
-      tx.membership.create({
+    await conEmpresa(companyId, async (tx) => {
+      const creada = await tx.membership.create({
         data: {
           clienteId,
           companyId,
@@ -520,8 +566,26 @@ export async function crearMembresia(
           estado: 'PENDIENTE',
           lavadosRestantes: plan.esIlimitado ? 0 : plan.lavadosIncluidos,
         },
+        select: { id: true },
       })
-    )
+
+      // El NACIMIENTO de la membresía era silencioso: la historia empezaba en
+      // la activación, y una PENDIENTE que nunca se pagó no existía para nadie.
+      // `CREADA` es la primera línea de su historia (el tipo ya existía en el
+      // enum y ningún flujo lo escribía).
+      await registrarEventoMembresia(tx, {
+        companyId,
+        membershipId: creada.id,
+        clienteId,
+        tipo: 'CREADA',
+        origen: 'ADMIN',
+        estadoNuevo: 'PENDIENTE',
+        planNuevoId: planId,
+        precioNuevo: Number(plan.precio),
+        actorUserId: user.metadata.dbUserId ?? null,
+        payload: { planNombre: plan.nombre },
+      })
+    })
 
     revalidatePath(`/admin/clientes/${clienteId}`)
     revalidatePath('/admin/clientes')
