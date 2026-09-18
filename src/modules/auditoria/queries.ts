@@ -148,6 +148,7 @@ export const SUBTIPO_LABEL: Record<string, string> = {
   EVIDENCIA_SUBIDA: 'Foto de evidencia subida',
   AJUSTE_LAVADOS: 'Lavados de membresía ajustados',
   AJUSTE_VENCIMIENTO: 'Vigencia de membresía extendida o ajustada',
+  CAMBIO_PLAN_RECHAZADO: 'Cambio de plan rechazado',
   RECORDATORIO_SEGUIMIENTO: 'Recordatorio de recompensa enviado',
   PERMISOS_ACTUALIZADOS: 'Permisos de un empleado actualizados',
   UMBRALES_RETENCION: 'Umbrales de retención actualizados',

@@ -14,6 +14,7 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { fechaInputLocal, finDelDiaLocal } from '@/lib/periodos'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
+import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 export async function ajustarLavadosMembresia(input: {
   membershipId: string
@@ -39,6 +40,7 @@ export async function ajustarLavadosMembresia(input: {
         select: {
           id: true,
           companyId: true,
+          clienteId: true,
           lavadosRestantes: true,
           cliente: { select: { nombre: true } },
           plan: { select: { esIlimitado: true } },
@@ -79,6 +81,20 @@ export async function ajustarLavadosMembresia(input: {
           },
         })
         .catch(anotarFallo('superadmin:auditoria-membresia'))
+
+      // La HISTORIA de la membresía, además de la nota: el ciclo de vida
+      // (reportes) lee `membresia_eventos`, y sin esta fila el ajuste no
+      // existía para quien pregunta «¿cuándo le corrigieron los lavados?».
+      await registrarEventoMembresia(tx, {
+        companyId: membership.companyId,
+        membershipId: membership.id,
+        clienteId: membership.clienteId,
+        tipo: 'AJUSTADA',
+        origen: 'SUPERADMIN',
+        motivo,
+        actorUserId: session.metadata.dbUserId ?? null,
+        payload: { ajuste: 'LAVADOS', antes: membership.lavadosRestantes, despues: lavados },
+      })
     })
 
     revalidatePath('/superadmin/membresias')
@@ -195,6 +211,28 @@ export async function ajustarVencimientoMembresia(input: {
           },
         })
         .catch(anotarFallo('superadmin:auditoria-vencimiento-membresia'))
+
+      // La historia de la membresía: «extender la fecha» es el ajuste que más
+      // se busca en los reportes y no dejaba evento de ciclo de vida.
+      await registrarEventoMembresia(tx, {
+        companyId: membership.companyId,
+        membershipId: membership.id,
+        clienteId: membership.clienteId,
+        tipo: 'AJUSTADA',
+        origen: 'SUPERADMIN',
+        estadoAnterior: membership.estado,
+        estadoNuevo: 'ACTIVA',
+        motivo,
+        actorUserId: session.metadata.dbUserId ?? null,
+        payload: {
+          ajuste: 'VENCIMIENTO',
+          antes: membership.fechaVencimiento
+            ? fechaInputLocal(membership.fechaVencimiento, zonaHoraria)
+            : null,
+          despues: fechaInputLocal(nuevaFecha, zonaHoraria),
+          ...(qrEmitidoId ? { qrEmitido: qrEmitidoId } : {}),
+        },
+      })
     })
 
     revalidatePath('/superadmin/membresias')

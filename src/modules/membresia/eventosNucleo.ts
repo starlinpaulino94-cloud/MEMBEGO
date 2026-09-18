@@ -14,6 +14,8 @@ export type TipoEventoMembresia =
   | 'CANCELADA'
   | 'VENCIDA'
   | 'RECHAZADA'
+  /** Ajuste manual: vigencia extendida/movida o lavados corregidos. */
+  | 'AJUSTADA'
 
 /**
  * El CAMINO por el que entró el evento, no el rol de quien lo hizo. Es lo que
