@@ -11,6 +11,7 @@ porque los fallos de un reporte no se notan: se ven como un número.
 | `/superadmin/reportes` | Superadmin | `modules/reportes/globales.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/superadmin/reportes/[id]` | Superadmin | `modules/reportes/queries.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes` | Dueño del negocio | `modules/reportes/queries.ts` | presets + a mano | ✅ CSV | ✅ |
+| `/admin/reportes/citas` | Dueño del negocio | `modules/reportes/citas.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/app/carwash/reportes` | Encargado | `modules/apps/reportes.ts` | desde/hasta | ✅ CSV | ✅ |
 | `/admin/retencion` | Dueño del negocio | `modules/riesgo/retencion.ts` | ventana fija (90 d) | ✅ CSV | ✅ |
 | `/admin/riesgo` | Dueño del negocio | `modules/riesgo/` | filtros | ✅ CSV | ✅ |
@@ -317,6 +318,53 @@ Los reportes de empleado miden **operaciones, no personas**: van detrás de su
 propio permiso y no incluyen métricas de ritmo individual que no sirvan a una
 decisión operativa.
 
+### Citas
+
+| Métrica | Fuente |
+| --- | --- |
+| Citas agendadas | `Cita` por `inicio` (el día en que estaban agendadas) |
+| Completadas / canceladas / no asistió | `Cita.estado` **actual** |
+| Reservadas en el periodo | `Cita.createdAt` — otra pregunta, otra cifra |
+| Tasa de asistencia | Completadas ÷ (completadas + no asistió) |
+| Quién cancela / motivos | `Cita.canceladaPor`, `Cita.motivoCancelacion` |
+| Quién atendió | `Cita.atendidaPorId` (solo lo escribe «completar») 🔒`ver_empleados` |
+
+**Tres limitaciones, y las tres se dicen en pantalla y en el CSV:**
+
+1. **El estado es el de HOY, no el del día de la cita.** `citas` no guarda un
+   sello de tiempo por transición: confirmar, completar, marcar no-asistió y
+   cancelar escriben el mismo campo `estado` encima del anterior, y no hay
+   bitácora de citas — los `CITA_CANCELADA` del código son tipos de
+   **notificación**, no de auditoría. Una cita del 3 de marzo cancelada el 10
+   de abril sale como cancelada en el reporte de **marzo**. El reporte responde
+   «cómo quedó la agenda de este periodo», nunca «cuántas se cancelaron esta
+   semana».
+
+   El bus de automatizaciones sí guarda un `cita.cancelada` con fecha, y aun
+   así **no se cuenta**: `emitirEventoEstrategia` es best-effort —fuera de la
+   transacción y se traga sus fallos a propósito, para que el bus nunca deshaga
+   una cancelación ya guardada—, así que contar con él daría un número que va
+   por debajo sin avisar. La salida honesta es la otra: columnas de transición
+   en `citas`, como las que `ColaVehiculo` ya tiene (`inicioAt`, `listoAt`,
+   `entregadoAt`).
+
+2. **No hay desglose por sucursal, y no es un olvido.** `citas.sucursalId`
+   existe en el esquema y **ningún código lo escribe**: el único `cita.create`
+   del producto no lo pone. Un desglose sería una tabla con una sola fila «(sin
+   asignar)» y un filtro por sucursal solo podría devolver reportes vacíos —
+   una trampa que parece un reporte roto. Mientras la reserva no guarde la
+   sucursal, la dimensión no se ofrece y el reporte dice por qué.
+
+3. **La tasa de asistencia solo vale si la agenda se cierra.** Sale de las
+   citas **cerradas**, nunca del total: sobre el total, una agenda a medio
+   cerrar daría una asistencia baja que no existió. Por eso «ya pasaron sin
+   cerrar» es una cifra de primera fila con su banner, y no una nota al pie.
+
+El filtro es **por servicio y solo por servicio**: es la única dimensión con
+datos hoy. Filtrar por persona pondría canceladas y no-asistió en cero por
+construcción —solo las completadas registran quién atendió—, y ese cero parece
+un dato cuando es un artefacto.
+
 ## Lo que hoy NO se puede medir
 
 **Ningún reporte va a inventar estos datos.**
@@ -332,6 +380,8 @@ decisión operativa.
 | Cambio de precio | No se versiona |
 | Reembolsos | No existe el concepto en el modelo |
 | Aperturas y clics | El proveedor no devuelve evidencia |
+| Cuándo se confirmó, completó o canceló una cita | `citas` sobreescribe `estado` y no guarda sello de tiempo por transición. Ver la ficha de Citas |
+| Citas por sucursal | `citas.sucursalId` existe y ningún `cita.create` lo escribe |
 
 **Sobre el histórico:** se podrá reconstruir parcialmente desde `AuditLog`
 —renovaciones y cancelaciones sí están—, pero vencimientos, activaciones y
