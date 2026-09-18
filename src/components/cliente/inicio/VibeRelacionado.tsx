@@ -48,7 +48,7 @@ export function VibeRelacionado({
     <section className="mt-6 px-4" aria-labelledby="vibe-relacionado">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 id="vibe-relacionado" className="min-w-0 text-h2 text-foreground">
-          Relacionado con los artículos que viste
+          Membresías recomendadas para ti
         </h3>
         <Link
           href="/cliente/planes?todos=1"
@@ -58,7 +58,7 @@ export function VibeRelacionado({
         </Link>
       </div>
       <ul className="grid grid-cols-2 gap-3">
-        {planes.slice(0, 4).map((p) => (
+        {planes.slice(0, 6).map((p) => (
           <li key={p.id} className="flex">
             <Link
               href={p.href}
@@ -73,6 +73,11 @@ export function VibeRelacionado({
                       {p.empresa.slice(0, 1).toUpperCase()}
                     </span>
                   )}
+                  {p.motivoRecomendacion ? (
+                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-bold text-vibe-violet backdrop-blur-sm shadow-sm">
+                      {p.motivoRecomendacion}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="line-clamp-2 block text-label-md font-bold leading-tight text-foreground">
                   {p.empresa} · {p.nombre}

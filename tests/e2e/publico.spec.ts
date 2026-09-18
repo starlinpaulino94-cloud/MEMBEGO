@@ -153,3 +153,93 @@ test.describe('Cabeceras de seguridad', () => {
     expect(h['referrer-policy']).toBeTruthy()
   })
 })
+
+test.describe('Excursiones (regresión del 404 del catálogo)', () => {
+  test('cada enlace de excursión del catálogo abre su detalle con 200 y su nombre', async ({
+    page,
+    request,
+  }) => {
+    const empresas: string[] = await page.goto('/empresas').then(async (respuesta) => {
+      expect(respuesta?.status()).toBe(200)
+      return page
+        .locator('a[href^="/empresas/"]')
+        .evaluateAll((els) =>
+          [...new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href') ?? ''))]
+            .map((h) => h.split('?')[0])
+            .filter((h) => /^\/empresas\/[^/]+$/.test(h))
+        )
+    })
+    test.skip(empresas.length === 0, 'sin empresas publicadas: no hay catálogo que recorrer')
+
+    const enlaces: { href: string; nombre: string }[] = []
+    for (const empresa of empresas) {
+      const respuesta = await page.goto(`${empresa}/excursiones`)
+      expect(respuesta?.status(), `${empresa}/excursiones tiene que responder 200`).toBe(200)
+      const deLista: { href: string; nombre: string }[] = await page
+        .locator('a[href*="/excursiones/"]')
+        .evaluateAll((els) =>
+          [...new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href') ?? ''))]
+            .map((h) => h.split('?')[0])
+            .filter((h) => /^\/empresas\/[^/]+\/excursiones\/[^/]+$/.test(h))
+            .map((href) => ({
+              href,
+              nombre: (
+                els.find((e) => (e as HTMLAnchorElement).getAttribute('href') === href)
+                  ?.textContent ?? ''
+              ).trim(),
+            }))
+        )
+      enlaces.push(...deLista)
+    }
+    test.skip(
+      enlaces.length === 0,
+      'ninguna empresa sirve excursiones: no hay enlaces de detalle que recorrer'
+    )
+
+    for (const { href, nombre } of enlaces) {
+      const r = await request.get(href)
+      expect(r.status(), `${href} tiene que responder 200`).toBe(200)
+      const cuerpo = await r.text()
+      const h1 = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(cuerpo)?.[1]?.replace(/<[^>]*>/g, '').trim() ?? ''
+      const normalizar = (s: string) =>
+        s.replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase()
+      expect(h1.length, `${href} debe pintar un h1`).toBeGreaterThan(0)
+      if (normalizar(nombre).length > 0) {
+        expect(
+          normalizar(h1).includes(normalizar(nombre).slice(0, 20)),
+          `${href} debe pintar el nombre de la excursión en su h1`
+        ).toBe(true)
+      }
+    }
+  })
+
+  test('una excursión que no existe enseña la página de no encontrada', async ({
+    page,
+    request,
+  }) => {
+    const respuesta = await page.goto('/empresas')
+    expect(respuesta?.status()).toBe(200)
+    const empresas: string[] = await page
+      .locator('a[href^="/empresas/"]')
+      .evaluateAll((els) =>
+        [...new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href') ?? ''))]
+          .map((h) => h.split('?')[0])
+          .filter((h) => /^\/empresas\/[^/]+$/.test(h))
+      )
+    test.skip(
+      empresas.length === 0,
+      'sin empresas publicadas: no hay empresa real de la que derivar el caso negativo'
+    )
+    const empresa = empresas[0].split('/')[2]
+    const r = await request.get(`/empresas/${empresa}/excursiones/no-existe-xyz-12345-t13`)
+    const cuerpo = await r.text()
+    expect(
+      cuerpo.includes('Página no encontrada'),
+      'un slug inexistente debe enseñar la página de no encontrada, no un 200 con contenido'
+    ).toBe(true)
+    expect(
+      cuerpo.includes('seccion-reserva') || cuerpo.includes('Reservar Ahora'),
+      'la página de no encontrada no debe traer el formulario de reserva'
+    ).toBe(false)
+  })
+})
