@@ -106,7 +106,7 @@ test('los enlaces arrastran el filtro APLICADO, no el pedido', () => {
   // colarse en el enlace de exportación: lo que viaja es lo que se validó.
   const page = leer('src/app/(admin)/admin/reportes/operacion/page.tsx')
   assert.match(page, /r\.filtro\?\.sucursal/, 'los enlaces no salen del filtro aplicado')
-  const form = leer('src/components/reportes/FiltroOperacionForm.tsx')
+  const form = leer('src/components/reportes/FiltroReporteForm.tsx')
   assert.match(form, /aria-label="Filtrar por sucursal"/, 'el desplegable de sucursal no tiene nombre accesible')
   assert.match(form, /aria-label="Filtrar por empleado"/, 'el desplegable de empleado no tiene nombre accesible')
 })

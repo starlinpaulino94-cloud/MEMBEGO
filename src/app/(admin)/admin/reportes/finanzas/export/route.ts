@@ -39,7 +39,11 @@ export async function GET(req: NextRequest) {
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const rango = leerRango(sp, timeZone)
-  const r = await getReporteFinanzas(companyId, rango)
+  // El filtro viaja en la misma query string que el rango: el archivo sale con
+  // EL MISMO corte que la pantalla. La validación del id vive en la consulta.
+  const r = await getReporteFinanzas(companyId, rango, new Date(), {
+    filtro: { sucursalId: sp.sucursal?.trim() || undefined },
+  })
 
   const csv = armarCsvBloques([
     {
@@ -50,10 +54,15 @@ export async function GET(req: NextRequest) {
         ['Periodo', `${rango.desdeDia} a ${rango.hastaDia}`],
         ['Dias', rango.dias],
         ['Comparado contra', rango.etiquetaComparacion],
+        // El filtro APLICADO, con nombre: un CSV filtrado sin esta línea es
+        // indistinguible del reporte completo una vez descargado.
+        ['Filtro por sucursal', r.filtro ? r.filtro.sucursal.nombre : '(todas)'],
         ['Datos completos', r.incompleto ? 'NO - alguna consulta fallo' : 'Si'],
         [
           'Cobrado sin entregar',
-          'No depende del periodo: cubre todo lo que siga abierto',
+          r.filtro
+            ? 'No depende del periodo NI del filtro: cubre toda la empresa'
+            : 'No depende del periodo: cubre todo lo que siga abierto',
         ],
         [
           'Recurrente estimado',
@@ -77,19 +86,28 @@ export async function GET(req: NextRequest) {
       encabezados: ['Metodo', 'Operaciones', 'Monto'],
       filas: r.porMetodo.map((m) => [m.metodo, m.operaciones, m.monto.toFixed(2)]),
     },
+    // Con filtro la pasarela NO va vacía: no va, con su porqué en una fila.
+    // Un bloque con encabezados y sin filas se leería como «no hubo intentos»,
+    // que es una afirmación sobre la pasarela y no sobre el filtro.
     {
       titulo: 'Intentos de pago en linea',
       encabezados: ['Estado', 'Intentos', 'Monto'],
-      filas: [
-        ...r.intentos.map((i) => [i.estado, i.total, i.monto.toFixed(2)]),
-        ['TASA DE APROBACION %', r.tasaAprobacion ?? 'sin dato', ''],
-      ],
+      filas: r.filtro
+        ? [['OMITIDO - un pago en linea no pertenece a ninguna sucursal', '', '']]
+        : [
+            ...r.intentos.map((i) => [i.estado, i.total, i.monto.toFixed(2)]),
+            ['TASA DE APROBACION %', r.tasaAprobacion ?? 'sin dato', ''],
+          ],
     },
-    {
-      titulo: 'Motivos de rechazo',
-      encabezados: ['Motivo', 'Veces'],
-      filas: r.motivosRechazo.map((m) => [m.motivo, m.total]),
-    },
+    ...(r.filtro
+      ? []
+      : [
+          {
+            titulo: 'Motivos de rechazo',
+            encabezados: ['Motivo', 'Veces'],
+            filas: r.motivosRechazo.map((m) => [m.motivo, m.total] as (string | number)[]),
+          },
+        ]),
     {
       titulo: 'Pendientes y deshechas',
       encabezados: ['Concepto', 'Operaciones', 'Monto'],
@@ -101,10 +119,12 @@ export async function GET(req: NextRequest) {
     {
       titulo: 'Recurrente estimado (NO es dinero cobrado)',
       encabezados: ['Concepto', 'Valor'],
-      filas: [
-        ['Estimacion a 30 dias', r.recurrenteEstimado.monto.toFixed(2)],
-        ['Membresias vigentes', r.recurrenteEstimado.membresias],
-      ],
+      filas: r.filtro
+        ? [['OMITIDO - la estimacion es de la empresa entera, no de una sucursal', '']]
+        : [
+            ['Estimacion a 30 dias', r.recurrenteEstimado.monto.toFixed(2)],
+            ['Membresias vigentes', r.recurrenteEstimado.membresias],
+          ],
     },
   ])
 
