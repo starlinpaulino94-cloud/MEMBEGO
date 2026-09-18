@@ -82,8 +82,12 @@ export const ESTADOS_CITA = [
 
 export type EstadoCita = (typeof ESTADOS_CITA)[number]
 
-/** Citas que siguen abiertas: ni se dieron ni se descartaron. */
-const ABIERTOS: EstadoCita[] = ['PENDIENTE', 'CONFIRMADA']
+/**
+ * Citas que siguen abiertas: ni se dieron ni se descartaron. Se exporta para
+ * que el detalle abra EXACTAMENTE las mismas filas que el reporte cuenta; dos
+ * listas iguales escritas en dos sitios se separan en cuanto nace un estado.
+ */
+export const ABIERTOS: EstadoCita[] = ['PENDIENTE', 'CONFIRMADA']
 
 export interface FilaCitas {
   clave: string

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import type { FilaCitas, ReporteCitas } from '@/modules/reportes/citas'
@@ -26,6 +27,7 @@ export function ReporteCitasVista({
   rango,
   empresa,
   generadoEn,
+  qs,
   eyebrow,
   controles,
 }: {
@@ -33,10 +35,14 @@ export function ReporteCitasVista({
   rango: Rango
   empresa: string
   generadoEn: string
+  /** Query string del periodo y del filtro, para que el detalle abra igual. */
+  qs?: string
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const detalle = (vista: string) =>
+    `/admin/reportes/citas/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
   const totalCancela =
     r.quienCancela.cliente + r.quienCancela.negocio + r.quienCancela.sinRegistrar
 
@@ -87,7 +93,10 @@ export function ReporteCitasVista({
         >
           Son citas que un cliente ya reservó para una hora que todavía no llega y que el negocio
           no ha confirmado. No depende del periodo elegido: una cita sin confirmar para el jueves
-          es un problema hoy, se esté mirando el mes que se esté mirando.
+          es un problema hoy, se esté mirando el mes que se esté mirando.{' '}
+          <Link href={detalle('POR_CONFIRMAR')} className="print:hidden font-semibold underline">
+            Ver cuáles son
+          </Link>
         </StatusBanner>
       )}
 
@@ -98,7 +107,10 @@ export function ReporteCitasVista({
         >
           Su hora venció y nadie las marcó como completadas ni como no-asistió, así que no entran
           en la tasa de asistencia. Mientras queden muchas sin cerrar, esa tasa mide solo la parte
-          de la agenda que sí se cierra.
+          de la agenda que sí se cierra.{' '}
+          <Link href={detalle('SIN_CERRAR')} className="print:hidden font-semibold underline">
+            Ver cuáles son
+          </Link>
         </StatusBanner>
       )}
 
@@ -142,6 +154,18 @@ export function ReporteCitasVista({
           valor={entero(r.abiertas)}
           nota="Pendientes o confirmadas, sin cerrar"
         />
+      </div>
+
+      {/* El detalle no puede vivir escondido: es LA pantalla que responde «¿a
+          quién se le canceló, cuándo y por qué?». Un número que no se puede
+          abrir hasta sus filas es una afirmación, no un reporte. */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('TODAS')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle cita por cita: quién, cuándo y en qué quedó →
+        </Link>
       </div>
 
       {r.agendadas.valor === 0 ? (
@@ -226,6 +250,33 @@ export function ReporteCitasVista({
               vacio="Sin citas diarias en el periodo."
             />
           </section>
+
+          <p className="print:hidden text-caption text-muted-foreground">
+            Abre el detalle de cada cifra:{' '}
+            <Link href={detalle('TODAS')} className="underline">
+              agendadas
+            </Link>
+            {' · '}
+            <Link href={detalle('COMPLETADAS')} className="underline">
+              completadas
+            </Link>
+            {' · '}
+            <Link href={detalle('CANCELADAS')} className="underline">
+              canceladas
+            </Link>
+            {' · '}
+            <Link href={detalle('NO_ASISTIO')} className="underline">
+              no asistió
+            </Link>
+            {' · '}
+            <Link href={detalle('ABIERTAS')} className="underline">
+              todavía abiertas
+            </Link>
+            {' · '}
+            <Link href={detalle('RESERVADAS')} className="underline">
+              reservadas en el periodo
+            </Link>
+          </p>
         </>
       )}
     </ReporteImprimible>
