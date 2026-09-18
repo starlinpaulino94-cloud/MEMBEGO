@@ -73,22 +73,37 @@ test('el reporte AVISA de que el estado es el de hoy, no el del día de la cita'
   )
 })
 
-test('no se ofrece dimensión de sucursal mientras la columna esté muerta', () => {
-  // `citas.sucursalId` existe en el esquema y ningún `cita.create` lo escribe.
-  // Un desglose daría una tabla con una sola fila «(sin asignar)» y un filtro
-  // solo devolvería reportes vacíos: las dos cosas parecen un reporte roto.
+test('la RESERVA guarda la sucursal: sin eso, el desglose sería una trampa', () => {
+  // Esta guardia nació al revés —prohibía el desglose mientras la columna
+  // estuviera muerta— y se dio la vuelta cuando `reservarCita` empezó a
+  // escribirla. Lo que vigila ahora es la causa, no el síntoma: si la reserva
+  // dejara de guardarla, el desglose volvería a ser una tabla con una sola
+  // fila «(sin asignar)» y un filtro que solo devuelve vacío.
+  const acciones = leer('src/modules/citas/actions.ts')
+  const create = acciones.slice(acciones.indexOf('tx.cita.create('))
+  assert.match(
+    create.slice(0, 600),
+    /^\s*sucursalId,$/m,
+    'la cita se vuelve a crear sin sucursal: el reporte por sucursal quedaría vacío'
+  )
+  // Con una sola activa se asigna sola; con varias, el id se valida contra la
+  // empresa — si no, el id de otro negocio entraría tal cual desde el formulario.
+  assert.match(acciones, /sucursalesActivas\.length === 1/)
+  assert.match(acciones, /!sucursalesActivas\.some\(\(s\) => s\.id === pedida\)/)
+})
+
+test('el desglose por sucursal existe y no esconde las citas sin asignar', () => {
   const motor = leer(MOTOR)
+  assert.match(motor, /porSucursal: FilaCitas\[\]/, 'falta el desglose por sucursal')
+  assert.match(motor, /conElResto\(sucursales, actual\)/)
+  // Las anteriores a que la reserva la pidiera caen en «(sin asignar)» y se
+  // enseñan: esconderlas rompería la suma de los subtotales.
   assert.ok(
-    !/porSucursal/.test(motor),
-    'volvió el desglose por sucursal: compruébese antes que la reserva la guarde'
+    !/sucursalId: \{ not: null \}/.test(motor),
+    'el reporte esconde las citas sin sucursal y sus subtotales dejarían de sumar'
   )
-  assert.ok(
-    !/sucursalId: filtro/.test(motor),
-    'volvió el filtro por sucursal: solo podría devolver reportes vacíos'
-  )
-  // Y se dice por qué no está, en vez de dejar el hueco sin explicación.
-  assert.match(leer(VISTA), /No hay desglose por sucursal|no guarda en cuál/)
-  assert.match(leer(EXPORTA), /NO DISPONIBLE - la reserva todavia no guarda/)
+  assert.match(leer(VISTA), /sin asignar/)
+  assert.match(leer(EXPORTA), /no se rellenan hacia atras/)
 })
 
 test('la tasa de asistencia sale de las CERRADAS, no del total', () => {
@@ -145,20 +160,36 @@ test('las agrupaciones van con tope y lo recortado se declara', () => {
   assert.match(motor, /conElResto\(servicios, actual\)/)
 })
 
-test('el filtro por servicio se valida contra la empresa y va parametrizado', () => {
+test('los filtros se validan contra la empresa y van parametrizados', () => {
   const motor = leer(MOTOR)
   const cuerpo = motor.slice(
     motor.indexOf('async function resolverFiltro'),
-    motor.indexOf('async function serviciosDeLaEmpresa')
+    motor.indexOf('/** Las sucursales activas de la empresa')
   )
-  assert.match(cuerpo, /where: \{ companyId, servicio \}/, 'un servicio inventado filtraría a ciegas')
-  assert.match(cuerpo, /return existe \? \{ servicio \} : null/)
+  // Un servicio o una sucursal inventados NO filtran a ciegas: se descartan,
+  // porque aplicar un id que no existe pintaría toda la agenda en cero y el
+  // cero es una afirmación sobre el negocio, no sobre la URL.
+  assert.match(cuerpo, /where: \{ companyId, servicio: pedidoServicio \}/, 'el servicio no se valida')
+  assert.match(cuerpo, /where: \{ id: pedido\.sucursalId, companyId \}/, 'la sucursal no se valida')
+  assert.match(cuerpo, /if \(!servicio && !sucursal\) return null/)
   assert.match(motor, /Prisma\.sql`AND "servicio" = \$\{/, 'el servicio no viaja como parámetro')
+  assert.match(motor, /Prisma\.sql`AND "sucursalId" = \$\{/, 'la sucursal no viaja como parámetro')
 })
 
 test('un fallo se dice, no se enseña como cero', () => {
   assert.match(leer(MOTOR), /incompleto: fallos\.n > 0/)
   assert.match(leer(VISTA), /r\.incompleto &&/)
+})
+
+test('al cliente solo se le pregunta la sucursal cuando hay más de una', () => {
+  // Un desplegable con una sola opción es una pregunta sin pregunta, en un
+  // formulario que se rellena desde el teléfono. Con una sola, la asigna el
+  // servidor; el selector aparece solo cuando de verdad hay que elegir, y va
+  // obligatorio: una cita sin local en un negocio con varios es justo el
+  // agujero que esto viene a cerrar.
+  const form = leer('src/components/citas/ReservarCita.tsx')
+  assert.match(form, /sucursales\.length > 1 && \(/, 'el selector no se condiciona a que haya varias')
+  assert.match(form, /name="sucursalId"\n\s*required/, 'el selector de sucursal no es obligatorio')
 })
 
 test('el reporte se alcanza desde la pantalla de reportes', () => {

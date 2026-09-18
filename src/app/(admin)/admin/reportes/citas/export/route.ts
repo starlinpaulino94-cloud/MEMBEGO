@@ -44,7 +44,10 @@ export async function GET(req: NextRequest) {
   const verEmpleados = await puedeFuncion('reportes', 'ver_empleados')
   const r = await getReporteCitas(companyId, rango, timeZone, {
     verEmpleados,
-    filtro: { servicio: sp.servicio?.trim() || undefined },
+    filtro: {
+      servicio: sp.servicio?.trim() || undefined,
+      sucursalId: sp.sucursal?.trim() || undefined,
+    },
   })
 
   const csv = armarCsvBloques([
@@ -56,7 +59,8 @@ export async function GET(req: NextRequest) {
         ['Periodo', `${rango.desdeDia} a ${rango.hastaDia}`],
         ['Dias', rango.dias],
         ['Comparado contra', rango.etiquetaComparacion],
-        ['Filtro por servicio', r.filtro ? r.filtro.servicio : '(todos)'],
+        ['Filtro por servicio', r.filtro?.servicio ?? '(todos)'],
+        ['Filtro por sucursal', r.filtro?.sucursal?.nombre ?? '(todas)'],
         ['Datos completos', r.incompleto ? 'NO - alguna consulta fallo' : 'Si'],
         // LA LÍNEA que hace que este archivo se pueda leer dentro de un mes.
         [
@@ -67,7 +71,10 @@ export async function GET(req: NextRequest) {
           'Citas contadas por',
           'El dia en que ESTABAN AGENDADAS. "Reservadas en el periodo" va por la fecha de reserva y es otra pregunta',
         ],
-        ['Desglose por sucursal', 'NO DISPONIBLE - la reserva todavia no guarda en que sucursal se hace'],
+        [
+          'Desglose por sucursal',
+          'Incluido. Las citas reservadas ANTES de que la app preguntara por la sucursal salen como "(sin asignar)": no se rellenan hacia atras',
+        ],
         [
           'Desglose por persona',
           r.porEmpleado === null ? 'OMITIDO - sin permiso ver_empleados' : 'Incluido',
@@ -103,6 +110,17 @@ export async function GET(req: NextRequest) {
       titulo: 'Motivos de cancelacion',
       encabezados: ['Motivo', 'Veces'],
       filas: r.motivosCancelacion.map((m) => [m.motivo, m.total]),
+    },
+    {
+      titulo: 'Por sucursal',
+      encabezados: ['Sucursal', 'Agendadas', 'Completadas', 'Canceladas', 'No asistio'],
+      filas: r.porSucursal.map((f) => [
+        f.nombre,
+        f.agendadas,
+        f.completadas,
+        f.canceladas,
+        f.noAsistio,
+      ]),
     },
     {
       titulo: 'Por servicio',

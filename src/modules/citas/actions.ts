@@ -109,6 +109,41 @@ export async function reservarCita(
       if (!veh) return { error: 'Vehículo no válido.' }
     }
 
+    // DÓNDE SE ATIENDE LA CITA.
+    //
+    // La columna existía desde siempre y nadie la escribía, así que estaba
+    // vacía en todas las filas: el panel enseñaba la sucursal en blanco y el
+    // reporte de citas no podía desglosar por local —lo dejó documentado en
+    // `docs/REPORTES.md`—. Se llena aquí, en el único sitio donde nace una
+    // cita.
+    //
+    // Con UNA sola sucursal activa se asigna sola: preguntar algo que tiene
+    // una única respuesta posible es ruido en un formulario que el cliente
+    // rellena desde el teléfono. Con varias, elige él, y el id se valida
+    // contra la empresa — sin eso, el id de otro negocio pegado en el
+    // formulario entraría tal cual.
+    //
+    // El cupo y el horario siguen siendo de la EMPRESA, no de la sucursal
+    // (`AgendaConfig` es 1:1 con la empresa): esto registra dónde se atiende,
+    // no abre una agenda por local.
+    const sucursalesActivas = await conEmpresa(companyId, (tx) =>
+      tx.sucursal.findMany({
+        where: { companyId, activa: true },
+        select: { id: true },
+        orderBy: { nombre: 'asc' },
+      })
+    )
+    let sucursalId: string | null = null
+    if (sucursalesActivas.length === 1) {
+      sucursalId = sucursalesActivas[0].id
+    } else if (sucursalesActivas.length > 1) {
+      const pedida = String(formData.get('sucursalId') ?? '').trim()
+      if (!sucursalesActivas.some((s) => s.id === pedida)) {
+        return { error: 'Elige la sucursal donde quieres tu cita.' }
+      }
+      sucursalId = pedida
+    }
+
     // La recompensa (si viene) debe ser del cliente y estar disponible.
     let compraTitulo: string | null = null
     if (compraId) {
@@ -174,6 +209,7 @@ export async function reservarCita(
           companyId,
           clienteId: cliente.id,
           vehiculoId,
+          sucursalId,
           inicio: slot.inicio,
           duracionMin: cfg.duracionMin,
           servicio,

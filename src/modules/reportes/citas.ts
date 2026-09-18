@@ -36,14 +36,18 @@ import type { Kpi } from '@/modules/reportes/queries'
  * `ColaVehiculo` ya tiene (`inicioAt`, `listoAt`, `entregadoAt`).
  *
  * ────────────────────────────────────────────────────────────────────────────
- * NO HAY DESGLOSE POR SUCURSAL, Y TAMPOCO ES UN OLVIDO
+ * EL DESGLOSE POR SUCURSAL EMPIEZA EL DÍA QUE LA RESERVA LA GUARDA
  *
- * `citas.sucursalId` existe en el esquema y NINGÚN código lo escribe: el único
- * `cita.create` del producto no lo pone. La columna está siempre vacía. Un
- * desglose por sucursal sería una tabla con una sola fila «(sin asignar)», y un
- * filtro por sucursal solo podría devolver reportes vacíos — una trampa que
- * parece un reporte roto. Mientras la reserva no guarde la sucursal, este
- * reporte no ofrece esa dimensión y dice por qué.
+ * `citas.sucursalId` existía en el esquema y ningún código lo escribía: la
+ * columna estaba vacía en todas las filas, así que este reporte NO ofrecía la
+ * dimensión —un desglose habría sido una tabla con una sola fila «(sin
+ * asignar)» y un filtro que solo devuelve vacío—. Ya se escribe: `reservarCita`
+ * asigna la única sucursal activa o pide elegir cuando hay varias.
+ *
+ * LAS CITAS ANTERIORES SIGUEN SIN SUCURSAL, y salen en su fila «(sin
+ * asignar)» sin esconderse. No se rellenan hacia atrás porque no hay de dónde
+ * sacarlo: inventar la sucursal de una cita vieja sería fabricar un dato. La
+ * fila lo dice y la pantalla lo explica; con el tiempo se vacía sola.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * DOS EJES, Y NO SE MEZCLAN
@@ -107,20 +111,21 @@ export interface PuntoCitas {
 }
 
 /**
- * Lo que la URL pide filtrar.
+ * Lo que la URL pide filtrar: servicio y sucursal.
  *
- * Solo el servicio, y es la única dimensión que hoy tiene datos: la sucursal
- * nunca se escribe (ver la cabecera) y quién atendió solo queda registrado en
- * las completadas, así que filtrar por persona pondría canceladas y no-asistió
- * en cero por construcción — un cero que parece un dato y es un artefacto.
+ * NO por persona: quién atendió solo queda registrado en las completadas, así
+ * que filtrar por alguien pondría canceladas y no-asistió en cero por
+ * construcción — un cero que parece un dato y es un artefacto.
  */
 export interface FiltroCitas {
   servicio?: string
+  sucursalId?: string
 }
 
-/** El filtro que de verdad se aplicó. */
+/** El filtro que de verdad se aplicó, con el nombre ya resuelto. */
 export interface FiltroCitasAplicado {
-  servicio: string
+  servicio?: string
+  sucursal?: { id: string; nombre: string }
 }
 
 export interface ReporteCitas {
@@ -164,6 +169,14 @@ export interface ReporteCitas {
    */
   porEmpleado: FilaCitas[] | null
   porServicio: FilaCitas[]
+  /**
+   * Por sucursal. Las citas anteriores a que la reserva la guardara caen en
+   * «(sin asignar)» y NO se esconden: si se escondieran, los subtotales
+   * dejarían de sumar el total y nadie sabría por qué.
+   */
+  porSucursal: FilaCitas[]
+  /** Las sucursales activas, para el desplegable del filtro. */
+  sucursalesDisponibles: { id: string; nombre: string }[]
   serie: PuntoCitas[]
   /** Los servicios distintos del periodo, para el desplegable del filtro. */
   serviciosDisponibles: string[]
@@ -192,7 +205,8 @@ function enRango(
   return {
     companyId,
     [campo]: { gte: desde, lt: hasta },
-    ...(filtro ? { servicio: filtro.servicio } : {}),
+    ...(filtro?.servicio ? { servicio: filtro.servicio } : {}),
+    ...(filtro?.sucursal ? { sucursalId: filtro.sucursal.id } : {}),
   }
 }
 
@@ -202,7 +216,13 @@ function enRango(
  * servicio viene de la URL y viaja como parámetro, no pegado al texto.
  */
 function filtroSql(filtro: FiltroCitasAplicado | null): Prisma.Sql {
-  return filtro ? Prisma.sql`AND "servicio" = ${filtro.servicio}` : Prisma.empty
+  const porServicio = filtro?.servicio
+    ? Prisma.sql`AND "servicio" = ${filtro.servicio}`
+    : Prisma.empty
+  const porSucursal = filtro?.sucursal
+    ? Prisma.sql`AND "sucursalId" = ${filtro.sucursal.id}`
+    : Prisma.empty
+  return Prisma.sql`${porServicio} ${porSucursal}`
 }
 
 /** Cuántas citas por estado, fechadas por `inicio`. */
@@ -231,7 +251,7 @@ async function contarPorEstado(
  * servicio podría salir con sus completadas y sin sus canceladas — un número
  * mal, no un número de menos.
  *
- * `campo` no viene de fuera: es una de dos constantes del propio módulo, así
+ * `campo` no viene de fuera: es una de tres constantes del propio módulo, así
  * que el `Prisma.raw` no abre una inyección.
  */
 async function agrupar(
@@ -239,7 +259,7 @@ async function agrupar(
   companyId: string,
   rango: { desde: Date; hasta: Date },
   filtro: FiltroCitasAplicado | null,
-  campo: 'atendidaPorId' | 'servicio',
+  campo: 'atendidaPorId' | 'servicio' | 'sucursalId',
   nombres: (ids: string[]) => Promise<Map<string, string>>
 ): Promise<FilaCitas[]> {
   const columna = Prisma.raw(`"${campo}"`)
@@ -422,13 +442,37 @@ async function resolverFiltro(
   companyId: string,
   pedido: FiltroCitas
 ): Promise<FiltroCitasAplicado | null> {
-  const servicio = pedido.servicio?.trim()
-  if (!servicio) return null
-  const existe = await tx.cita.findFirst({
-    where: { companyId, servicio },
-    select: { id: true },
+  const pedidoServicio = pedido.servicio?.trim()
+  const [servicio, sucursal] = await Promise.all([
+    pedidoServicio
+      ? tx.cita
+          .findFirst({ where: { companyId, servicio: pedidoServicio }, select: { id: true } })
+          .then((existe) => (existe ? pedidoServicio : null))
+      : null,
+    pedido.sucursalId
+      ? tx.sucursal.findFirst({
+          where: { id: pedido.sucursalId, companyId },
+          select: { id: true, nombre: true },
+        })
+      : null,
+  ])
+  if (!servicio && !sucursal) return null
+  return {
+    ...(servicio ? { servicio } : {}),
+    ...(sucursal ? { sucursal } : {}),
+  }
+}
+
+/** Las sucursales activas de la empresa, para el desplegable del filtro. */
+async function sucursalesDeLaEmpresa(
+  tx: Tx,
+  companyId: string
+): Promise<{ id: string; nombre: string }[]> {
+  return tx.sucursal.findMany({
+    where: { companyId, activa: true },
+    select: { id: true, nombre: true },
+    orderBy: { nombre: 'asc' },
   })
-  return existe ? { servicio } : null
 }
 
 /** Los servicios distintos de la empresa, para el desplegable. */
@@ -486,8 +530,10 @@ export async function getReporteCitas(
     motivos,
     empleados,
     servicios,
+    sucursales,
     serie,
     disponibles,
+    sucursalesActivas,
   } = await conEmpresa(companyId, async (tx) => {
     // El filtro se resuelve ANTES que todo, porque todo lo demás lo lleva
     // dentro. Si la validación falla, se sigue SIN filtro y con el aviso de
@@ -508,8 +554,10 @@ export async function getReporteCitas(
       motivos,
       empleados,
       servicios,
+      sucursales,
       serie,
       disponibles,
+      sucursalesActivas,
     ] = await Promise.all([
       seguro(contarPorEstado(tx, companyId, rango.desde, rango.hasta, filtro), vacio, fallos),
       seguro(
@@ -603,8 +651,21 @@ export async function getReporteCitas(
         [] as FilaCitas[],
         fallos
       ),
+      seguro(
+        agrupar(tx, companyId, rango, filtro, 'sucursalId', async (ids) => {
+          if (ids.length === 0) return new Map()
+          const filas = await tx.sucursal.findMany({
+            where: { id: { in: ids }, companyId },
+            select: { id: true, nombre: true },
+          })
+          return new Map(filas.map((s) => [s.id, s.nombre]))
+        }),
+        [] as FilaCitas[],
+        fallos
+      ),
       seguro(serieDiaria(tx, companyId, rango, timeZone, filtro), [] as PuntoCitas[], fallos),
       seguro(serviciosDeLaEmpresa(tx, companyId), [] as string[], fallos),
+      seguro(sucursalesDeLaEmpresa(tx, companyId), [] as { id: string; nombre: string }[], fallos),
     ])
 
     return {
@@ -619,8 +680,10 @@ export async function getReporteCitas(
       motivos,
       empleados,
       servicios,
+      sucursales,
       serie,
       disponibles,
+      sucursalesActivas,
     }
   })
 
@@ -650,8 +713,10 @@ export async function getReporteCitas(
     // de que la última fila sea exacta en vez de un número que no cuadra.
     porEmpleado: empleados && conElResto(empleados, actual),
     porServicio: conElResto(servicios, actual),
+    porSucursal: conElResto(sucursales, actual),
     serie,
     serviciosDisponibles: disponibles,
+    sucursalesDisponibles: sucursalesActivas,
     filtro,
     incompleto: fallos.n > 0,
   }

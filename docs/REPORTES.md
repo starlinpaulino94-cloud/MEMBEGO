@@ -328,6 +328,7 @@ decisión operativa.
 | Tasa de asistencia | Completadas ÷ (completadas + no asistió) |
 | Quién cancela / motivos | `Cita.canceladaPor`, `Cita.motivoCancelacion` |
 | Quién atendió | `Cita.atendidaPorId` (solo lo escribe «completar») 🔒`ver_empleados` |
+| Por sucursal | `Cita.sucursalId`, desde que `reservarCita` la guarda (ver la limitación 2) |
 
 **Tres limitaciones, y las tres se dicen en pantalla y en el CSV:**
 
@@ -348,22 +349,32 @@ decisión operativa.
    en `citas`, como las que `ColaVehiculo` ya tiene (`inicioAt`, `listoAt`,
    `entregadoAt`).
 
-2. **No hay desglose por sucursal, y no es un olvido.** `citas.sucursalId`
-   existe en el esquema y **ningún código lo escribe**: el único `cita.create`
-   del producto no lo pone. Un desglose sería una tabla con una sola fila «(sin
-   asignar)» y un filtro por sucursal solo podría devolver reportes vacíos —
-   una trampa que parece un reporte roto. Mientras la reserva no guarde la
-   sucursal, la dimensión no se ofrece y el reporte dice por qué.
+2. ~~**No hay desglose por sucursal**~~ — **resuelto.** `citas.sucursalId`
+   existía y ningún código lo escribía, así que la dimensión no se ofrecía (un
+   desglose habría sido una tabla con una sola fila «(sin asignar)» y un filtro
+   que solo devuelve vacío). Ahora `reservarCita` la guarda: con **una** sola
+   sucursal activa la asigna el servidor —preguntar algo con una única
+   respuesta es ruido—, y con **varias** el cliente elige, con el id validado
+   contra la empresa.
+
+   **Las citas anteriores siguen sin sucursal** y salen en su fila «(sin
+   asignar)», que no se esconde: esconderla rompería la suma de los subtotales.
+   No se rellenan hacia atrás porque no hay de dónde sacarlo — inventar la
+   sucursal de una cita vieja sería fabricar un dato—, y esa fila se vacía sola
+   con el tiempo.
+
+   El cupo y el horario siguen siendo **de la empresa**, no de la sucursal:
+   `AgendaConfig` es 1:1 con la empresa. Esto registra dónde se atiende; no
+   abre una agenda por local.
 
 3. **La tasa de asistencia solo vale si la agenda se cierra.** Sale de las
    citas **cerradas**, nunca del total: sobre el total, una agenda a medio
    cerrar daría una asistencia baja que no existió. Por eso «ya pasaron sin
    cerrar» es una cifra de primera fila con su banner, y no una nota al pie.
 
-El filtro es **por servicio y solo por servicio**: es la única dimensión con
-datos hoy. Filtrar por persona pondría canceladas y no-asistió en cero por
-construcción —solo las completadas registran quién atendió—, y ese cero parece
-un dato cuando es un artefacto.
+Se filtra **por servicio y por sucursal**, no por persona: filtrar por alguien
+pondría canceladas y no-asistió en cero por construcción —solo las completadas
+registran quién atendió—, y ese cero parece un dato cuando es un artefacto.
 
 ## Lo que hoy NO se puede medir
 
@@ -381,7 +392,6 @@ un dato cuando es un artefacto.
 | Reembolsos | No existe el concepto en el modelo |
 | Aperturas y clics | El proveedor no devuelve evidencia |
 | Cuándo se confirmó, completó o canceló una cita | `citas` sobreescribe `estado` y no guarda sello de tiempo por transición. Ver la ficha de Citas |
-| Citas por sucursal | `citas.sucursalId` existe y ningún `cita.create` lo escribe |
 
 **Sobre el histórico:** se podrá reconstruir parcialmente desde `AuditLog`
 —renovaciones y cancelaciones sí están—, pero vencimientos, activaciones y

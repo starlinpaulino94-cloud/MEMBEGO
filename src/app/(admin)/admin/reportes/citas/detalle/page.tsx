@@ -101,6 +101,7 @@ export default async function DetalleCitasPage({
   const vista: VistaDetalle = pedida in VISTAS ? (pedida as VistaDetalle) : 'TODAS'
   const q = leerParam('q')
   const servicio = leerParam('servicio')
+  const sucursalPedida = leerParam('sucursal')
 
   const verEmpleados = await puedeFuncion('reportes', 'ver_empleados')
 
@@ -126,6 +127,7 @@ export default async function DetalleCitasPage({
     companyId,
     ...(q ? { cliente: { nombreBusqueda: { contains: normalizarBusqueda(q) } } } : {}),
     ...(servicio ? { servicio } : {}),
+    ...(sucursalPedida ? { sucursalId: sucursalPedida } : {}),
   }
   const where: Prisma.CitaWhereInput = {
     ...base,
@@ -161,6 +163,7 @@ export default async function DetalleCitasPage({
           canceladaPor: true,
           motivoCancelacion: true,
           cliente: { select: { id: true, nombre: true } },
+          sucursal: { select: { nombre: true } },
           // El nombre de quien atendió SOLO se pide con el permiso: esconder la
           // columna en la vista dejaría el dato viajando igual.
           ...(verEmpleados ? { atendidaPor: { select: { name: true } } } : {}),
@@ -190,13 +193,15 @@ export default async function DetalleCitasPage({
     const params = new URLSearchParams(qs ? qs.slice(1) : '')
     if (q) params.set('q', q)
     if (servicio) params.set('servicio', servicio)
+    if (sucursalPedida) params.set('sucursal', sucursalPedida)
     for (const [k, v] of Object.entries(extra ?? {})) params.set(k, v)
     return params.toString()
   }
   const volver = new URLSearchParams(qs ? qs.slice(1) : '')
   if (servicio) volver.set('servicio', servicio)
+  if (sucursalPedida) volver.set('sucursal', sucursalPedida)
 
-  const hayFiltro = Boolean(q || servicio)
+  const hayFiltro = Boolean(q || servicio || sucursalPedida)
   const esCanceladas = vista === 'CANCELADAS'
   const nota = FUERA_DEL_EJE[vista]
 
@@ -311,6 +316,7 @@ export default async function DetalleCitasPage({
                 <th className="px-3 py-2 text-overline">Se reservó</th>
                 <th className="px-3 py-2 text-overline">Cliente</th>
                 <th className="px-3 py-2 text-overline">Servicio</th>
+                <th className="px-3 py-2 text-overline">Sucursal</th>
                 <th className="px-3 py-2 text-overline">Estado hoy</th>
                 {verEmpleados && <th className="px-3 py-2 text-overline">Atendió</th>}
                 {esCanceladas && <th className="px-3 py-2 text-overline">Canceló</th>}
@@ -336,6 +342,9 @@ export default async function DetalleCitasPage({
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {f.servicio || '(sin especificar)'}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {f.sucursal?.nombre ?? '(sin asignar)'}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {ESTADO_LABEL[f.estado] ?? f.estado}
