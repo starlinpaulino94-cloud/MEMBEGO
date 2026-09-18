@@ -1,6 +1,9 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import Form from 'next/form'
+import { ArrowLeft, Search } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
+import { Input } from '@/components/ui/input'
 import { requireRole, requireSection } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -84,6 +87,13 @@ export default async function DetalleCicloVidaPage({
   const pedido = String(Array.isArray(sp.tipo) ? sp.tipo[0] : (sp.tipo ?? ''))
   const tipo: TipoDetalle = pedido in TIPOS ? (pedido as TipoDetalle) : 'RENOVADA'
 
+  // Filtros de verdad (F4): cliente y origen, no solo el rango. «¿Cuándo le
+  // extendieron la membresía a ESTE cliente?» era imposible de responder sin
+  // exportar y buscar a mano.
+  const q = String(Array.isArray(sp.q) ? sp.q[0] : (sp.q ?? '')).trim()
+  const origenPedido = String(Array.isArray(sp.origen) ? sp.origen[0] : (sp.origen ?? ''))
+  const origen = origenPedido in ORIGEN_LABEL ? origenPedido : ''
+
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company
       .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
@@ -93,14 +103,28 @@ export default async function DetalleCicloVidaPage({
   const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
 
+  // El mismo `where` para las filas y el total: si difirieran, el encabezado
+  // diría un número y la tabla enseñaría otro.
+  const where = {
+    companyId,
+    tipo,
+    ocurridoEn: { gte: rango.desde, lt: rango.hasta },
+    ...(origen ? { origen: origen as never } : {}),
+    ...(q
+      ? {
+          membership: {
+            cliente: {
+              nombreBusqueda: { contains: normalizarBusqueda(q) },
+            },
+          },
+        }
+      : {}),
+  }
+
   const [filas, total] = await conEmpresa(companyId, (tx) =>
     Promise.all([
       tx.membresiaEvento.findMany({
-        where: {
-          companyId,
-          tipo,
-          ocurridoEn: { gte: rango.desde, lt: rango.hasta },
-        },
+        where,
         orderBy: { ocurridoEn: 'desc' },
         take: MAX,
         select: {
@@ -119,9 +143,7 @@ export default async function DetalleCicloVidaPage({
       }),
       // El total sale de un `count`, no del largo de la lista recortada: si no,
       // el detalle diría 300 cuando hubo 4.000.
-      tx.membresiaEvento.count({
-        where: { companyId, tipo, ocurridoEn: { gte: rango.desde, lt: rango.hasta } },
-      }),
+      tx.membresiaEvento.count({ where }),
     ])
   )
 
@@ -145,25 +167,82 @@ export default async function DetalleCicloVidaPage({
       />
 
       <div className="flex flex-wrap gap-2">
-        {(Object.keys(TIPOS) as TipoDetalle[]).map((t) => (
-          <Button
-            key={t}
-            asChild
-            size="sm"
-            variant={t === tipo ? 'default' : 'outline'}
-            className="rounded-full"
-          >
-            <Link href={`/admin/reportes/membresias/detalle?tipo=${t}${qs ? `&${qs.slice(1)}` : ''}`}>
-              {TIPOS[t]}
+        {(Object.keys(TIPOS) as TipoDetalle[]).map((t) => {
+          // Cambiar de pestaña conserva el resto de filtros: quien busca a un
+          // cliente en «Ajustes» y salta a «Renovaciones» sigue mirándolo a él.
+          const params = new URLSearchParams(qs ? qs.slice(1) : '')
+          params.set('tipo', t)
+          if (q) params.set('q', q)
+          if (origen) params.set('origen', origen)
+          return (
+            <Button
+              key={t}
+              asChild
+              size="sm"
+              variant={t === tipo ? 'default' : 'outline'}
+              className="rounded-full"
+            >
+              <Link href={`/admin/reportes/membresias/detalle?${params.toString()}`}>
+                {TIPOS[t]}
+              </Link>
+            </Button>
+          )
+        })}
+      </div>
+
+      {/* Filtros de verdad (F4): cliente y origen. El rango viaja en campos
+          ocultos para que filtrar no lo pierda. */}
+      <Form
+        action="/admin/reportes/membresias/detalle"
+        className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-3"
+      >
+        <input type="hidden" name="tipo" value={tipo} />
+        {[...new URLSearchParams(qs ? qs.slice(1) : '').entries()].map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+        <div className="relative min-w-52 flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            name="q"
+            defaultValue={q}
+            placeholder="Buscar por cliente…"
+            aria-label="Buscar por cliente"
+            className="pl-9"
+          />
+        </div>
+        <select
+          name="origen"
+          defaultValue={origen}
+          aria-label="Filtrar por origen"
+          className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+        >
+          <option value="">Cualquier origen</option>
+          {Object.entries(ORIGEN_LABEL).map(([valor, label]) => (
+            <option key={valor} value={valor}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" variant="secondary" size="sm">
+          Filtrar
+        </Button>
+        {(q || origen) && (
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`}>
+              Limpiar
             </Link>
           </Button>
-        ))}
-      </div>
+        )}
+      </Form>
 
       {filas.length === 0 ? (
         <EmptyState
           title="Nada que mostrar"
-          description="No hubo eventos de este tipo en el periodo elegido."
+          description={
+            q || origen
+              ? 'Ningún evento de este tipo coincide con esos filtros en el periodo.'
+              : 'No hubo eventos de este tipo en el periodo elegido.'
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border">

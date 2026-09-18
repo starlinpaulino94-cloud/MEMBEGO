@@ -65,3 +65,13 @@ test('un ajuste enseña QUÉ cambió (vigencia o lavados, antes → después)', 
   assert.match(detalle, /'VENCIMIENTO'/, 'no distingue el ajuste de vigencia')
   assert.match(detalle, /'LAVADOS'/, 'no distingue el ajuste de lavados')
 })
+
+test('el detalle filtra por cliente y por origen, con el MISMO where para filas y total', () => {
+  // «¿Cuándo le extendieron la membresía a ESTE cliente?» era imposible sin
+  // exportar y buscar a mano (F4). Y filas/total comparten el where: si
+  // difirieran, el encabezado diría un número y la tabla enseñaría otro.
+  const detalle = leer('src/app/(admin)/admin/reportes/membresias/detalle/page.tsx')
+  assert.match(detalle, /nombreBusqueda: \{ contains: normalizarBusqueda\(q\) \}/, 'no busca por cliente')
+  assert.match(detalle, /name="origen"/, 'no ofrece el filtro por origen')
+  assert.match(detalle, /count\(\{ where \}\)/, 'el total no usa el mismo where que las filas')
+})
