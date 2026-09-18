@@ -46,6 +46,7 @@ test('tipos de vista del inicio enriquecido soportan novedades, empresas y membr
     href: '/cliente/empresas/autospa-pro',
     valoracion: 4.8,
     resenas: 25,
+    planes: 3,
     esMia: true,
     etiquetaRelacion: 'Miembro',
   }

@@ -117,6 +117,7 @@ export interface EmpresaScrollItem {
   readonly href: string
   readonly valoracion: number | null
   readonly resenas: number
+  readonly planes?: number
   readonly esMia: boolean
   readonly etiquetaRelacion: string | null
 }

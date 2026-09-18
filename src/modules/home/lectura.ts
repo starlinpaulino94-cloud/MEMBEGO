@@ -4,7 +4,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { LocationConsentService } from '@/modules/geo/consentimiento/service'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
-import { getCategoriesPublic, getFeaturedCompanies, getPlanesPublic, getFeaturedPromotions, getPromotionsPublic } from '@/modules/marketplace/cached'
+import { getCategoriesPublic, getCompaniesPublic, getPlanesPublic, getFeaturedPromotions, getPromotionsPublic } from '@/modules/marketplace/cached'
 import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-queries'
 import { getMisEmpresas, getPromoFeed } from '@/modules/social/queries'
 import { formatMoney } from '@/lib/format'
@@ -163,7 +163,7 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     planesActivosIds,
   ] = await Promise.all([
     tipos.includes('CATEGORIAS') ? getCategoriesPublic() : Promise.resolve([]),
-    getFeaturedCompanies(10),
+    getCompaniesPublic({ limit: 10 }),
     getPlanesPublic({ limit: 20 }),
     tipos.includes('EXPERIENCIAS') ? excursionesDestacadas(4) : Promise.resolve([]),
     // Las promociones activas (públicas y destacadas) alimentan el hero, novedades y relámpago
@@ -240,6 +240,7 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     ...e,
     valoracion: e.valoracion ?? null,
     resenas: hechos.get(e.id)?.resenas ?? e.resenas,
+    planes: hechos.get(e.id)?.planes ?? 0,
   }))
 
   // 1. Excluir planes activos del usuario para no ofrecer lo que ya compró
@@ -274,7 +275,7 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     empresa: p.company.name,
     descripcion: p.descripcion,
     imagen: p.imagenUrl ?? p.company.logoUrl,
-    href: `/cliente/planes?todos=1`,
+    href: `/cliente/planes/${p.id}`,
     precio: formatMoney(p.precio, p.company),
     periodo: `/ ${p.vigenciaDias} días`,
     valoracion: p.company.averageRating,
