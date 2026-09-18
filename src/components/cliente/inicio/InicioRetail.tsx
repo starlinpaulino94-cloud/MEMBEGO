@@ -37,9 +37,9 @@ export function InicioRetail({
 
       <div className="mx-auto w-full max-w-md md:max-w-xl lg:max-w-7xl">
         {/* Widget superior compacto si tiene membresías activas */}
-        {!personal.walletError && personal.wallet.length > 0 ? (
+        {/* {!personal.walletError && personal.wallet.length > 0 ? (
           <VibeMembresiasActivas wallet={personal.wallet} />
-        ) : null}
+        ) : null} */}
 
         <InicioComercial data={comercial} />
 

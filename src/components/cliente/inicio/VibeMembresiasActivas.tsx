@@ -32,13 +32,13 @@ export function VibeMembresiasActivas({ wallet }: { wallet: readonly WalletStack
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-vibe-violet uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1 text-overline text-vibe-violet">
                   <ShieldCheck className="size-3" /> Membresía Activa
                 </span>
                 {activas.length > 1 ? (
                   <Link
                     href="/mis-membresias"
-                    className="rounded-full bg-vibe-chip px-1.5 py-0.2 text-[10px] font-bold text-muted-foreground hover:text-foreground"
+                    className="rounded-full bg-vibe-chip px-1.5 py-0.2 text-label-sm font-bold text-muted-foreground hover:text-foreground"
                   >
                     +{activas.length - 1} más
                   </Link>

@@ -15,8 +15,8 @@ function assertNever(value: never): never {
 /**
  * REDISEÑO VIOLETA (Stitch «amazon style» enriquecido):
  *
- * - HERO → héroe a foto completa con asomo.
- * - CATEGORIAS → chips violeta + Novedades con promociones activas por afinidad.
+ * - CATEGORIAS → chips violeta (solo las píldoras, van arriba del todo).
+ * - HERO → héroe a foto completa con asomo + Novedades y promociones debajo.
  * - DESTACADAS → scroll horizontal de empresas (híbrido mis empresas + destacadas) con botón "Ver más".
  * - MEMBRESIAS → «Membresías recomendadas para ti» con badges contextuales.
  * - EXPERIENCIAS → cabecera de excursiones + tarjeta «Ofertas Relámpago» con timer.
@@ -26,16 +26,16 @@ function renderBlock(tipo: TipoBloque, data: InicioVista): ReactNode {
     case 'CABECERA':
       return null
     case 'HERO':
-      return <VibeHero heroes={data.heroes} />
-    case 'CATEGORIAS':
       return (
         <>
-          <VibeCategorias categorias={data.categorias} />
+          <VibeHero heroes={data.heroes} />
           {data.promocionesNovedades ? (
             <VibePromocionesNovedades promociones={data.promocionesNovedades} />
           ) : null}
         </>
       )
+    case 'CATEGORIAS':
+      return <VibeCategorias categorias={data.categorias} />
     case 'DESTACADAS':
       return (
         <VibeEmpresasScroll

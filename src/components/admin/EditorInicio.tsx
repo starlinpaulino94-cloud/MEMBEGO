@@ -33,8 +33,8 @@ import {
 
 export const TIPOS_BLOQUE = [
   'CABECERA',
-  'HERO',
   'CATEGORIAS',
+  'HERO',
   'DESTACADAS',
   'MEMBRESIAS',
   'BANNER_QR',
