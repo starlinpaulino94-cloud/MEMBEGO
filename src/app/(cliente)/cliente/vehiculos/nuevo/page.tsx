@@ -1,6 +1,8 @@
 import { requireRole } from '@/lib/auth/guards'
 import { conEmpresa } from '@/lib/tenant'
 import { AgregarVehiculoWizard, type TipoVehiculoOpcion } from '@/components/cliente/AgregarVehiculoWizard'
+import { EmptyState } from '@/components/system/EmptyState'
+import { Car } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -44,13 +46,13 @@ export default async function NuevoVehiculoPage({
   ).catch(() => [])
 
   if (tiposVehiculo.length === 0) {
-    // Sin categorías configuradas no hay asistente que ofrecer: aviso honesto
-    // en vez de un paso imposible de completar.
     return (
       <main className="container max-w-lg py-8">
-        <p className="text-muted-foreground">
-          El negocio aún no configuró sus categorías de vehículo. Inténtalo más tarde.
-        </p>
+        <EmptyState
+          icon={Car}
+          title="Sin categorías de vehículo"
+          description="El negocio aún no configuró sus categorías. Inténtalo más tarde."
+        />
       </main>
     )
   }

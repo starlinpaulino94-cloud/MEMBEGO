@@ -4,6 +4,7 @@ import { SEED_COMPANIES } from './data/companies'
 import { BUSINESS_CATEGORIES } from './data/categories'
 import { seedCatalogoGeo } from '@/modules/geo/catalogo/seed'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
+import { normalizarPlaca, PAIS_PLACA_DEFECTO } from '@/modules/onboarding/vehiculo'
 
 /**
  * Seed idempotente de MembeGo: empresas, sucursal, métodos de pago, planes y
@@ -294,8 +295,25 @@ export async function runSeed(): Promise<SeedResult> {
           where: { clienteId: cliente.id, placa: u.vehiculo.placa },
         })
         if (!existingVeh) {
+          // Onboarding v2: la fila nace con la MISMA identidad que captura la
+          // app (placa normalizada + categoría), no como un histórico sin
+          // normalizar. Si se escribe solo `placa`, el motor de elegibilidad
+          // (`modules/elegibilidad/decidir.ts`) la trata como "sin vehículo" y
+          // le pide registrar uno que ya tiene.
+          const categoria = await prisma.tipoVehiculo.findFirst({
+            where: { companyId, activo: true },
+            orderBy: { orden: 'asc' },
+            select: { id: true },
+          })
           await prisma.vehiculo.create({
-            data: { clienteId: cliente.id, ...u.vehiculo },
+            data: {
+              clienteId: cliente.id,
+              ...u.vehiculo,
+              placaNormalizada: normalizarPlaca(u.vehiculo.placa),
+              pais: PAIS_PLACA_DEFECTO,
+              esPrincipal: true,
+              ...(categoria ? { tipoVehiculoId: categoria.id } : {}),
+            },
           })
         }
       }
