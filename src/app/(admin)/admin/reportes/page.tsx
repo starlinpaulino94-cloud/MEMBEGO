@@ -57,6 +57,11 @@ export default async function ReportesPage({
   // usa esta misma función, así que esconder la columna en la vista dejaría el
   // dato saliendo por el archivo.
   const verFinancieros = await puedeFuncion('reportes', 'ver_financieros')
+  // La bitácora responde la pregunta que los agregados no pueden —«¿QUÉ pasó,
+  // cuándo y quién lo hizo?»— y vivía desconectada de Reportes: quien buscaba
+  // «la extensión de vigencia que le hice a este cliente» no tenía cómo llegar.
+  // Se enlaza solo si la persona tiene la sección (permiso aparte de reportes).
+  const verActividad = (await requireSection('actividad')) !== null
   const r = await getReporte(companyId, rango, timeZone, { verFinancieros })
   const qs = paramsDeRango(rango)
 
@@ -92,6 +97,14 @@ export default async function ReportesPage({
                 className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
               >
                 Finanzas y cobros <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
+            {verActividad && (
+              <Link
+                href="/admin/actividad"
+                className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
+              >
+                Actividad: todo lo que pasó, acción por acción <ArrowRight className="h-4 w-4" />
               </Link>
             )}
           </div>

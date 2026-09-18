@@ -129,8 +129,16 @@ export const ACCION_LABEL: Record<string, string> = {
 
 /**
  * Sub-tipos guardados en `payload.tipo` para las acciones que reutilizan
- * NOTA_INTERNA como contenedor genérico. Permite leer la bitácora sin
- * adivinar qué pasó.
+ * NOTA_INTERNA (u otra acción) como contenedor genérico. Permite leer la
+ * bitácora sin adivinar qué pasó.
+ *
+ * TIENE QUE ESTAR COMPLETO, igual que `ACCION_LABEL`, y
+ * `tests/bitacora-etiquetas.test.ts` lo obliga: recorre los `tipo: '...'` que el
+ * código escribe en payloads de auditoría y falla si alguno no tiene etiqueta.
+ * Sin esa guardia, «extender la vigencia de una membresía» salía en la bitácora
+ * como `AJUSTE_VENCIMIENTO` en crudo — y como la acción de arriba dice solo
+ * «Nota interna», la operación era ilegible e infiltrable justo para quien
+ * pregunta «¿cuándo le extendieron el lavado a este cliente?».
  */
 export const SUBTIPO_LABEL: Record<string, string> = {
   CAPACIDADES_ACTUALIZADAS: 'Capacidades del negocio actualizadas',
@@ -138,8 +146,37 @@ export const SUBTIPO_LABEL: Record<string, string> = {
   COLA_TRANSICION: 'Vehículo avanzó de estado',
   INVENTARIO_MOVIMIENTO: 'Movimiento de inventario',
   EVIDENCIA_SUBIDA: 'Foto de evidencia subida',
-  AJUSTE_LAVADOS: 'Ajuste de lavados de membresía',
+  AJUSTE_LAVADOS: 'Lavados de membresía ajustados',
+  AJUSTE_VENCIMIENTO: 'Vigencia de membresía extendida o ajustada',
   RECORDATORIO_SEGUIMIENTO: 'Recordatorio de recompensa enviado',
+  PERMISOS_ACTUALIZADOS: 'Permisos de un empleado actualizados',
+  UMBRALES_RETENCION: 'Umbrales de retención actualizados',
+  VENCIMIENTO_AUTOMATICO: 'Membresía vencida automáticamente',
+  RESERVA_CREADA_POR_VENDEDOR: 'Reserva creada por un vendedor',
+  EMPRESA_CREADA_DESDE_SOLICITUD: 'Empresa creada desde una solicitud',
+  DEMO_EXCURSIONES_SEMBRADA: 'Datos de práctica de excursiones sembrados',
+}
+
+/**
+ * Prefijo de los valores de filtro que apuntan a un SUB-TIPO y no a una acción.
+ *
+ * El desplegable de la bitácora mezcla las dos cosas a propósito: para quien
+ * filtra, «Vigencia de membresía extendida» es una acción como cualquier otra —
+ * que por dentro viva como `NOTA_INTERNA` + `payload.tipo` es un detalle de
+ * almacenamiento que no tiene por qué aprenderse.
+ */
+export const PREFIJO_SUBTIPO = 'sub:'
+
+/** Las opciones del filtro de acción: acciones de primer nivel + sub-tipos. */
+export function opcionesDeAccion(): { valor: string; label: string }[] {
+  const acciones = Object.entries(ACCION_LABEL).map(([valor, label]) => ({ valor, label }))
+  const subtipos = Object.entries(SUBTIPO_LABEL).map(([tipo, label]) => ({
+    valor: `${PREFIJO_SUBTIPO}${tipo}`,
+    label,
+  }))
+  // Un solo orden alfabético: quien busca «Vigencia…» no sabe (ni debe saber)
+  // si eso es una acción o un sub-tipo.
+  return [...acciones, ...subtipos].sort((a, b) => a.label.localeCompare(b.label, 'es'))
 }
 
 export interface AuditoriaFiltro {
@@ -214,11 +251,21 @@ export async function getAuditoria(
   const hasta = filtro.hasta ? limiteDia(filtro.hasta, true) : null
   const q = filtro.q?.trim()
 
+  // `sub:X` filtra por el sub-tipo del payload, venga bajo la acción que venga
+  // (los ajustes viven bajo NOTA_INTERNA hoy; si mañana ganan acción propia, el
+  // filtro por payload sigue encontrando el historial viejo).
+  const esSubtipo = filtro.accion?.startsWith(PREFIJO_SUBTIPO) ?? false
+  const subtipo = esSubtipo ? filtro.accion!.slice(PREFIJO_SUBTIPO.length) : null
+
   const fn = (tx: Tx) =>
     tx.auditLog.findMany({
       where: {
         ...(companyId ? { companyId } : filtro.empresa ? { companyId: filtro.empresa } : {}),
-        ...(filtro.accion ? { accion: filtro.accion as never } : {}),
+        ...(subtipo
+          ? { payload: { path: ['tipo'], equals: subtipo } }
+          : filtro.accion
+            ? { accion: filtro.accion as never }
+            : {}),
         ...(desde || hasta
           ? { createdAt: { ...(desde ? { gte: desde } : {}), ...(hasta ? { lte: hasta } : {}) } }
           : {}),
