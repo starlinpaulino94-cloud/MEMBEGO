@@ -62,8 +62,8 @@ export default async function MenuPage() {
     getCategoriesPublic().catch(() => []),
     user.metadata.clienteId
       ? getNavOcultoClienteCached(user.metadata.clienteId, user.metadata.companyId).catch(
-          () => [] as string[]
-        )
+        () => [] as string[]
+      )
       : Promise.resolve([] as string[]),
     user.metadata.clienteId
       ? getClientePerfil(user.metadata.clienteId).catch(() => null)
@@ -147,19 +147,21 @@ export default async function MenuPage() {
 
       <form
         action={logout}
-        className="flex items-center gap-3 rounded-xl border border-border bg-card p-4"
+        className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-destructive/30 active:scale-[0.99] focus-within:ring-2 focus-within:ring-destructive"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <LogOut className="h-5 w-5" aria-hidden />
-        </span>
-        <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
-          ¿No eres {nombre}? Cerrar sesión
-        </p>
         <button
           type="submit"
           aria-label="Cerrar sesión"
-                className="rounded-lg p-1 text-muted-foreground outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+          className="rounded-lg p-1 text-muted-foreground outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary flex items-center justify-between w-full hover:cursor-pointer"
         >
+          <div className="flex gap-3 items-center">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <LogOut className="h-5 w-5" aria-hidden />
+            </span>
+            <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
+              ¿No eres {nombre}? Cerrar sesión
+            </p>
+          </div>
           <ChevronRight className="h-4 w-4" aria-hidden />
         </button>
       </form>
