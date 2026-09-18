@@ -7,7 +7,7 @@ import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
 import { getReporteOperacion } from '@/modules/reportes/operacion'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
-import { FiltroOperacionForm } from '@/components/reportes/FiltroOperacionForm'
+import { FiltroReporteForm } from '@/components/reportes/FiltroReporteForm'
 import { ReporteOperacionVista } from '@/components/reportes/ReporteOperacionVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { BotonExportar } from '@/components/ui/boton-exportar'
@@ -113,7 +113,8 @@ export default async function ReporteOperacionPage({
       eyebrow={
         <div className="space-y-3">
           <RangoFechas rango={rango} accion="/admin/reportes/operacion" extra={extra} />
-          <FiltroOperacionForm
+          <FiltroReporteForm
+            accion="/admin/reportes/operacion"
             rango={rango}
             sucursales={sucursales}
             sucursalId={r.filtro?.sucursal?.id ?? ''}
