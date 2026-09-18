@@ -113,6 +113,11 @@ export default async function ReportesPage({
                 href: `/admin/reportes/operacion${qs}`,
               },
               {
+                titulo: 'Crecimiento',
+                pregunta: '¿Quién trae gente nueva y dónde se cae el embudo?',
+                href: `/admin/reportes/crecimiento${qs}`,
+              },
+              {
                 titulo: 'Citas y asistencia',
                 pregunta: '¿Cómo quedó la agenda y cuántos se presentaron?',
                 href: `/admin/reportes/citas${qs}`,

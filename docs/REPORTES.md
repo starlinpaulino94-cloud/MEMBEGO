@@ -13,6 +13,7 @@ porque los fallos de un reporte no se notan: se ven como un número.
 | `/admin/reportes` | Dueño del negocio | `modules/reportes/queries.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/citas` | Dueño del negocio | `modules/reportes/citas.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/clientes` | Dueño del negocio | `modules/reportes/clientes.ts` | presets + a mano | ✅ CSV | ✅ |
+| `/admin/reportes/crecimiento` | Dueño del negocio | `modules/reportes/crecimiento.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/app/carwash/reportes` | Encargado | `modules/apps/reportes.ts` | desde/hasta | ✅ CSV | ✅ |
 | `/admin/retencion` | Dueño del negocio | `modules/riesgo/retencion.ts` | ventana fija (90 d) | ✅ CSV | ✅ |
 | `/admin/riesgo` | Dueño del negocio | `modules/riesgo/` | filtros | ✅ CSV | ✅ |
@@ -296,6 +297,48 @@ en su propio bloque, rotulado, también en el CSV.
 reporte usa por su nombre los dos ingredientes que el vocabulario distingue
 —«con membresía vigente» y «con actividad»— y enlaza al semáforo en vez de
 repetirlo.
+
+### Crecimiento 👤
+
+Quién trae gente nueva, por dónde entra y en qué paso se cae.
+
+| Métrica | Fuente |
+| --- | --- |
+| Clics en invitaciones | `ReferralEvent` tipo `CLICK` — ya sin bots ni autoclics (los descarta `/r/[code]`) |
+| Registros atribuidos | `ReferralEvent` tipo `REGISTRO` |
+| Referidos completados | `Referido.completadoEn`, excluyendo `sospechoso` |
+| Invitados con membresía | `ReferralEvent` tipo `MEMBRESIA` |
+| Visitas únicas | `count(DISTINCT visitorId)` sobre los clics; la cookie la siembra el clic |
+| El embudo | `ReferralEvent` agrupado por `tipo`: eventos y referentes distintos |
+| Por dónde entra | `ReferralEvent.canal`, compartidos y clics en la misma fila |
+| Quién trae más gente 👤 | `Referido` completados agrupados por referente |
+| Enlaces de invitación | `GrowthLink` creados en el periodo; vigentes es **foto de hoy** |
+| Lo que apartó el antifraude | `Referido.sospechoso` + eventos `FRAUDE` |
+| Recompensas | `ReferralRecompensa` y `GrowthReward` por estado, **separadas** |
+| Campañas «Invita y Gana» | `InvitacionEvento` por campaña — **embudo aparte** |
+
+**El embudo es un suelo, no un conteo exacto.** `logReferralEvent` traga sus
+errores a propósito —«el tracking jamás debe romper el flujo principal»—, así
+que una escritura fallida pierde el evento en silencio. El aviso viaja en la
+pantalla **y dentro del CSV**: descargado, un embudo sin esa línea es
+indistinguible de un conteo exacto.
+
+**Dos embudos paralelos que NO se suman.** `ReferralEventTipo` e
+`InvitacionEventoTipo` miden los mismos hitos con otros nombres (el esquema
+lista las equivalencias). Quien pasó por una campaña puede dejar huella en los
+dos, así que sumarlos contaría dos veces a la misma persona. Van en secciones
+distintas, cada una con sus nombres.
+
+**Lo que el reporte NO cuenta, y por qué.** `PRIMER_USO` está declarado en el
+enum y **no lo escribe nadie**: como etapa daría un cero permanente que se
+leería como «nadie canjea». `FRAUDE`, `REGISTRO_GLOBAL` y `MEMBRESIA_GLOBAL` no
+son etapas del embudo y se cuentan aparte. La lista sale en pantalla y en el
+CSV, y `tests/reporte-crecimiento.test.ts` vigila **la causa**: el día que
+alguien escriba `PRIMER_USO`, la prueba exige subirlo al embudo.
+
+**`clienteId` siempre es el referente**, nunca el invitado. Por eso la columna
+del embudo se llama «referentes distintos»: decir «personas» mezclaría a quien
+invita con quien llega.
 
 ### Operación
 
