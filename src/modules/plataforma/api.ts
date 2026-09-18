@@ -334,11 +334,18 @@ export async function leerCredencial(clientId: string): Promise<CredencialViva |
             estado: true,
             scopes: true,
             expiresAt: true,
-            sistema: { select: { slug: true } },
+            // El ESTADO del sistema, no solo su slug (barrido de bugs ocultos): la
+            // emisión del token ya lo exige ACTIVE, pero el guard por-petición no lo
+            // miraba, así que suspender un sistema no cortaba los tokens ya vivos
+            // (hasta 15 min) en las rutas sin scope de empresa. Se re-lee en cada
+            // petición, igual que el estado y los scopes de la credencial: revocar
+            // por suspensión del sistema tiene que cerrar la puerta ya.
+            sistema: { select: { slug: true, estado: true } },
           },
         })
     )
     if (!c || c.estado !== 'ACTIVE') return null
+    if (c.sistema.estado !== 'ACTIVE') return null
     if (c.expiresAt && c.expiresAt.getTime() <= Date.now()) return null
     return {
       id: c.id,

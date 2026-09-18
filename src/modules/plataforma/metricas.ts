@@ -182,6 +182,72 @@ export async function usoDeSistema(credencialId: string, dias = 30): Promise<Res
   return resumirUso(filas.map(aFila))
 }
 
+/** El uso agregado de un satélite (todas sus credenciales), para el superadmin. */
+export interface UsoSatelite {
+  sistemaId: string
+  slug: string
+  nombre: string
+  estado: string
+  resumen: ResumenUso
+}
+
+/**
+ * El uso de TODOS los satélites en los últimos `dias`, agregado por sistema.
+ *
+ * Es la pantalla del superadmin (B-7): el dato ya se recogía (`origen:'SISTEMA'`)
+ * y `usoDeSistema` leía UNA credencial, pero faltaba la vista de todos a la vez.
+ *
+ * Agrega POR SISTEMA y no por credencial porque un satélite puede tener varias
+ * (una rotación deja la vieja un tiempo): al superadmin le importa «cuánto usa
+ * Car Wash la API», no cada llave por separado. Dos consultas y no una por
+ * satélite: la lista de credenciales y el agregado del periodo, y el cruce se
+ * hace en memoria. Cruza inquilinos por naturaleza (un satélite atiende a muchas
+ * empresas), así que va por el camino omnisciente con su motivo.
+ */
+export async function usoDeSatelites(dias = 30): Promise<UsoSatelite[]> {
+  const desde = inicioDeVentana(dias, new Date())
+  return sinEmpresa('métricas: uso de todos los satélites (superadmin)', async (tx) => {
+    const credenciales = await tx.credencialSistema.findMany({
+      select: {
+        id: true,
+        sistemaId: true,
+        sistema: { select: { slug: true, nombre: true, estado: true } },
+      },
+    })
+    if (credenciales.length === 0) return []
+
+    const filas = await tx.metricaUsoCredencial.findMany({
+      where: { origen: 'SISTEMA', dia: { gte: desde } },
+      select: { ...SELECT_FILA, credencialId: true },
+    })
+
+    // credencialId → sistemaId, para agregar todas las llaves de un satélite.
+    const sistemaDeCred = new Map(credenciales.map((c) => [c.id, c.sistemaId]))
+    const filasPorSistema = new Map<string, FilaMetrica[]>()
+    for (const f of filas) {
+      const sid = sistemaDeCred.get(f.credencialId)
+      if (!sid) continue // una métrica de una credencial ya borrada: se ignora
+      const lista = filasPorSistema.get(sid) ?? []
+      lista.push(aFila(f))
+      filasPorSistema.set(sid, lista)
+    }
+
+    // Un satélite puede tener varias credenciales: se deduplica por sistemaId.
+    const sistemas = new Map<string, { slug: string; nombre: string; estado: string }>()
+    for (const c of credenciales) {
+      if (!sistemas.has(c.sistemaId)) sistemas.set(c.sistemaId, c.sistema)
+    }
+
+    return [...sistemas.entries()].map(([sistemaId, s]) => ({
+      sistemaId,
+      slug: s.slug,
+      nombre: s.nombre,
+      estado: s.estado,
+      resumen: resumirUso(filasPorSistema.get(sistemaId) ?? []),
+    }))
+  }).catch(() => [] as UsoSatelite[])
+}
+
 /**
  * Purga el agregado más viejo que `dias`. Lo llama un cron: aunque cada fila sea
  * un contador y no una petición, un año de días × endpoints × credenciales no

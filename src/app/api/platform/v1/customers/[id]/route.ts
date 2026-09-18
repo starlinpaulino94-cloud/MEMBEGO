@@ -4,6 +4,7 @@ import { autenticarSobreEmpresa, esFallo, exigeEmpresa } from '@/modules/platafo
 import { customerDTO } from '@/modules/plataforma/dto'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { editarCliente } from '@/modules/plataforma/escrituras'
+import { eliminarClienteDeEmpresa } from '@/modules/plataforma/eliminarCliente'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,4 +105,41 @@ export async function PATCH(req: NextRequest, ctxRuta: { params: Promise<{ id: s
   }
 
   return respuestaApi(res.cliente, auth.ctx.requestId)
+}
+
+/**
+ * DELETE /api/platform/v1/customers/{id} — borrar un cliente (B-5).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA OPERACIÓN MÁS PELIGROSA DE LA API, Y POR ESO SU PROPIO SCOPE
+ *
+ * Borra la ficha del cliente y purga en cascada todo lo suyo (visitas,
+ * membresías, vehículos, tickets, referidos) anulando sus transacciones. Exige
+ * `customers:delete`, un scope SEPARADO de `customers:manage` (editar): borrar no
+ * es editar, y una integración que mantiene datos al día no debería poder
+ * borrarlos por llevar el scope de editar. Solo claves de empresa (`exigeEmpresa`).
+ *
+ * Borra SOLO la relación de esta empresa, no la cuenta global de la persona: eso
+ * es del superadmin. Detalle en `eliminarClienteDeEmpresa`.
+ *
+ * Sin `Idempotency-Key`: borrar un id que ya no existe devuelve el MISMO 404 que
+ * un id inventado, así que un reintento tras un timeout es inofensivo por
+ * construcción —no hay una segunda cosa que borrar—.
+ */
+export async function DELETE(req: NextRequest, ctxRuta: { params: Promise<{ id: string }> }) {
+  const { id } = await ctxRuta.params
+  const auth = await autenticarSobreEmpresa(req, 'customers:delete', null, {
+    claveDeEmpresa: true,
+  })
+  if (esFallo(auth)) return auth.fallo
+  exigeEmpresa(auth.ctx)
+
+  if (!id?.trim()) {
+    return errorApi('INVALID_REQUEST', auth.ctx.requestId, { message: 'customerId is required.' })
+  }
+
+  const res = await eliminarClienteDeEmpresa(auth.companyId, id.trim())
+  if (!res.ok) return errorApi('NOT_FOUND', auth.ctx.requestId)
+
+  return respuestaApi({ id: id.trim(), deleted: true }, auth.ctx.requestId)
 }

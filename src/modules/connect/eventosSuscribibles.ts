@@ -45,6 +45,7 @@ export interface EventoSuscribible {
 const ETIQUETAS: Record<string, string> = {
   'customer.created': 'Un cliente se registra en tu negocio',
   'customer.updated': 'Se actualizan los datos de un cliente',
+  'customer.deleted': 'Se elimina un cliente y todos sus datos',
   'visit.first_completed': 'Un cliente te visita por primera vez',
   'visit.completed': 'Se registra una visita o un canje',
   'purchase.first_completed': 'Un cliente te compra por primera vez',
@@ -64,6 +65,7 @@ const ETIQUETAS: Record<string, string> = {
   'promotion.paused': 'Se pausa una promoción activa',
   'promotion.archived': 'Se archiva una promoción',
   'reservation.paid': 'Se paga una reserva de excursión',
+  'appointment.cancelled': 'Se cancela una cita de la agenda',
 }
 
 /**

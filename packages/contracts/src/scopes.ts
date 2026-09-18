@@ -52,6 +52,33 @@ export const CAPABILITIES = [
    * es «ordena tus propios registros», concedible a una clave de empresa.
    */
   'CUSTOMER_UPDATE',
+  /**
+   * CANCELAR una cita que YA existe (B-5).
+   *
+   * No crea la cita ni mueve valor: cambia su estado a CANCELADA dentro de la
+   * máquina de estados de la agenda. Como `CUSTOMER_UPDATE`, es «ordena tus
+   * propios registros» —una integración de agenda que sincroniza cancelaciones—,
+   * así que su scope es `appointments:manage`, separado del `:read` con el que se
+   * pinta la agenda. Incluye `:read` por lo mismo que las demás: la respuesta de
+   * la cancelación devuelve la cita, y conceder cancelar sin leer sería un scope
+   * que miente sobre lo que deja hacer.
+   */
+  'APPOINTMENT_MANAGE',
+  /**
+   * BORRAR un cliente y todos sus datos en la empresa (B-5, derecho al olvido).
+   *
+   * Es la operación más peligrosa de la API: purga la ficha del cliente y todo
+   * lo que cuelga de ella (visitas, membresías, vehículos, tickets, referidos) y
+   * anula sus transacciones. Por eso su scope es PROPIO —`customers:delete`— y no
+   * se mezcla con `customers:manage`: editar y borrar no son el mismo permiso, y
+   * una integración que mantiene datos al día no debería poder borrarlos por
+   * llevar el scope de editar. Se concede aparte, a conciencia.
+   *
+   * BORRA solo la ficha de ESTA empresa, no la cuenta de la persona: una clave de
+   * empresa no puede alcanzar la identidad global de alguien que quizá también es
+   * cliente de otro negocio. Eso —y la cuenta de acceso— es cosa del superadmin.
+   */
+  'CUSTOMER_DELETION',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -86,6 +113,14 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   // respuesta de una edición devuelve la ficha, así que conceder editar sin
   // leer sería un scope que miente sobre lo que de verdad deja hacer.
   CUSTOMER_UPDATE: ['customers:read', 'customers:manage'],
+  // `appointments:read` incluido por el mismo motivo que en las demás
+  // escrituras: la cancelación devuelve la cita, así que conceder cancelar sin
+  // leer sería un scope que miente.
+  APPOINTMENT_MANAGE: ['appointments:read', 'appointments:manage'],
+  // `customers:read` incluido como en editar: borrar por id exige poder haberlo
+  // localizado. `customers:delete` es propio y NO incluye `:manage`: borrar no es
+  // editar, y no debe llegar por arrastre de otro permiso.
+  CUSTOMER_DELETION: ['customers:read', 'customers:delete'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

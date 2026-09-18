@@ -32,6 +32,11 @@ import { createHmac, timingSafeEqual } from 'crypto'
 export const EVENTOS_REENVIADOS = [
   'cliente.registrado',
   'cliente.actualizado',
+  // Completa el ciclo de la proyección de Customer (B-5): un satélite que
+  // mantiene su copia con created/updated necesita que se le diga cuándo se
+  // borró, o se queda con un cliente fantasma para siempre. Por eso va a
+  // satélites, como created/updated, y no solo a los webhooks de empresa.
+  'cliente.eliminado',
   'cliente.primera_visita',
   'cliente.visita',
   'cliente.compro_servicio',
@@ -89,6 +94,12 @@ export const EVENTOS_EMITIDOS = [
   'promocion.archivada',
   // Reservas de excursión: una reserva quedó pagada.
   'reserva.pagada',
+  // Agenda de citas (B-5): una cita se canceló (el panel, el cliente o la API).
+  // Va a la superficie de integración de la empresa (webhooks/Zapier) pero NO a
+  // `EVENTOS_REENVIADOS`: no hay contrato de proyección de agenda hacia los
+  // satélites como sí lo hay para Customer/Membership, y esa lista se mantiene
+  // estrecha a propósito (B-4).
+  'cita.cancelada',
 ] as const
 
 /** Firma HMAC-SHA256 (hex) de un cuerpo, con el secreto compartido. */

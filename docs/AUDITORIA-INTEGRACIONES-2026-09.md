@@ -31,6 +31,31 @@ Altos de la §3 lo llevaría a ~55 % con unas 6–8 semanas de trabajo. La parid
 real (§5) es un programa de 6–9 meses, y buena parte de él no debería hacerse:
 la §6 propone qué copiar y qué no.
 
+### 0.1 · Estado de los hallazgos (actualizado 2026-09-17)
+
+Casi todos los hallazgos de la §3 quedaron cerrados en las tandas posteriores a
+la auditoría. El detalle vive en cada sección (`✅ RESUELTO`); este es el mapa.
+
+| Grupo | Estado |
+|---|---|
+| **A-1 … A-7** (reintentos, firma+timestamp, panel de entregas, selector de eventos, fan-out paralelo, rotación de secretos) | ✅ cerrados |
+| **A-8/A-9/A-10** (SMS, correo desde el dominio, calendario bidireccional) | 🔵 Fase 3 (canales), pendientes |
+| **B-1, B-2, B-6** (webhook entrante + acción HTTP, app de Zapier, paginación por cursor) | ✅ cerrados |
+| **B-3** (salud activa de conexiones) | ◐ hecho por caducidad local; falta la inspección activa vía `debug_token` |
+| **B-4** (catálogo de eventos) | ◐ ampliado (7→~20) y con ciclo de membresía y `cita.cancelada`; citas/pagos esperan su flujo |
+| **B-5** (CRUD de la API pública) | ✅ cerrado — editar, listar, **cancelar cita** (`POST …/cancel`) y **borrar** (`DELETE`) |
+| **B-7** (métricas de uso por credencial) | ✅ cerrado — integrador Y vista del superadmin (pestaña «Uso de la API») |
+| **B-8** (deuda legado `SistemaConectado`) | 🟡 documentada; contracción no programada |
+| **Barrido de bugs ocultos** (SSRF, listados que callaban, guard por-petición, rate-limit, fan-out idempotente + lease, compare-and-set) | ✅ cerrados (#1–#5, #7, #8) |
+| **Seguridad · concurrencia de salida por empresa** | ✅ cerrado (`enParaleloPorClave`) |
+| **Seguridad · alerta de fuga de clave** | ✅ cerrado (endpoint firmado de GitHub Secret Scanning) |
+| **Aislamiento RLS en base** | ◐ código listo (Fase 0); falta el cutover operativo — `docs/runbooks/rls-encender.md` |
+
+**Lo que queda, por tamaño:** B-3 (`debug_token`, poco valor incremental), el
+cutover de RLS (operativo, con runbook), la «versión fuerte» de RLS (segundo rol
+para `sinEmpresa`), y las Fases 3–4 (canales SMS/correo/calendario y el
+marketplace de terceros), que son el grueso del camino a paridad.
+
 ---
 
 ## 1. Lo que está bien, y hay que proteger
@@ -683,7 +708,7 @@ una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vacia
 
 </details>
 
-### ◐ B-5 · Editar clientes HECHO; cancelar citas y borrar, pendientes (17/09/2026)
+### ✅ B-5 · CRUD completo de la API pública — RESUELTO (17/09/2026)
 
 > **Hecho, con una decisión de producto detrás.** La API ya no es solo lectura y
 > alta: `PATCH /customers/{id}` edita la ficha de contacto de un cliente, y
@@ -706,9 +731,27 @@ una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vacia
 > recalcula, y escribirlo también aquí sería una segunda verdad que se olvida y
 > rompe la búsqueda.
 >
-> **Sigue pendiente:** cancelar una cita (una máquina de estados propia, no un
-> simple PATCH) y borrar un cliente (cascada + cumplimiento). Se dejaron fuera a
-> propósito: cada una es su propio riesgo y merece su propia conversación.
+> **Cerrado (17/09/2026):** las dos piezas que faltaban, cada una con su riesgo.
+>
+> **Cancelar una cita** (`POST /appointments/{id}/cancel`, scope
+> `appointments:manage`) es una transición de la máquina de estados, no un
+> borrado —por eso una acción con nombre y no un `DELETE`—: pasa a `CANCELADA`
+> conservando quién y por qué, es idempotente (repetir devuelve `applied:false`),
+> y un estado terminal (COMPLETADA/NO_ASISTIO) es `no_cancelable`. La decisión
+> que evita divergencia: un SOLO emisor del evento `cita.cancelada`, lo cancele
+> quien lo cancele —el panel, el cliente o la API—, con el mismo helper (como el
+> ciclo de membresía en B-4). No se reenvía a satélites: no hay contrato de
+> proyección de agenda como el de Customer.
+>
+> **Borrar un cliente** (`DELETE /customers/{id}`, scope PROPIO `customers:delete`,
+> separado de `:manage` porque borrar no es editar) purga la ficha y todo lo suyo
+> en cascada y anula sus transacciones (reusa `purgarClienteRow`, el mismo
+> cumplimiento que el borrado del superadmin). La frontera clave: borra la
+> RELACIÓN de la empresa, NO la cuenta global de la persona —una clave de empresa
+> no alcanza la identidad de alguien que quizá es cliente de otro negocio; eso es
+> del superadmin—. Emite `customer.deleted` a satélites, cerrando el ciclo
+> created/updated/deleted de la proyección de Customer para que nadie se quede con
+> un cliente fantasma.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -760,7 +803,7 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 
 </details>
 
-### ◐ B-7 · Métricas de uso por credencial — HECHO para el integrador (17/09/2026)
+### ✅ B-7 · Métricas de uso por credencial — RESUELTO (integrador + superadmin) (17/09/2026)
 
 > **Hecho.** De cada credencial se sabía una sola cosa —`lastUsedAt`, cuándo se
 > usó por última vez—. Ahora hay un AGREGADO DIARIO por credencial: peticiones
@@ -791,14 +834,19 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 > la petición, como `anotarUsoClave` y la bitácora. Un fallo de telemetría no
 > añade latencia ni tumba una llamada de la API.
 >
-> **Falta, a propósito:** la vista del SUPERADMIN sobre las credenciales de
-> satélite. El dato ya se recoge (`origen: 'SISTEMA'`) y la lectura existe
-> (`usoDeSistema`), pero la PANTALLA del superadmin se dejó fuera de este corte:
-> la superficie de más valor —y la que la auditoría citaba con su nota— es la del
-> integrador, y es la que se cerró. Tampoco se capturan los 4xx/5xx del cuerpo del
-> handler (validación, no encontrado): se miden en el borde de auth, que es lo que
-> caracteriza la salud de UNA credencial; añadir el estado del handler exigiría
-> envolver las ~25 rutas, y eso es su propio cambio.
+> **Cerrada la vista del SUPERADMIN (17/09/2026).** Nueva pestaña «Uso de la API»
+> en el hub de integraciones (`/superadmin/integraciones/uso`): una tarjeta por
+> satélite con sus llamadas, su tasa de error y sus endpoints más usados, en una
+> ventana de 7/30/90 días. Agrega POR SISTEMA —un satélite puede tener varias
+> credenciales por rotación— con `usoDeSatelites`: dos consultas (credenciales +
+> agregado del periodo) y el cruce en memoria, por el camino omnisciente porque
+> un satélite no es de una empresa. Reusa el mismo `resumirUso` puro que la vista
+> del integrador, así que los números se calculan en un solo sitio.
+>
+> **Sigue fuera, a propósito:** los 4xx/5xx del CUERPO del handler (validación, no
+> encontrado). Se mide el desenlace en el borde de auth (OK / permiso
+> insuficiente), que es lo que caracteriza la salud de UNA credencial; capturar el
+> estado del handler exigiría envolver las ~25 rutas, y eso es su propio cambio.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -830,7 +878,8 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 |---|---|
 | Secretos hasheados/sellados | ✅ scrypt, AES-256-GCM con AAD y rotación de claves maestras |
 | SSRF en webhooks salientes | ✅ `webhooksNucleo.ts:31` por nombre y rango, y `redirect: 'manual'` en los cinco caminos de salida |
-| Aislamiento multiempresa | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio, RLS con pruebas de cobertura |
+| Aislamiento multiempresa (aplicación) | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio; cobertura completa verificada por gate en CI |
+| Aislamiento multiempresa (RLS en base) | ◐ políticas escritas, probadas (`rls:probar` 6/6) y encendidas en las 137 tablas; el CÓDIGO está listo (Fase 0: drift de `conectores` cerrado + preflight como gate de CI). Falta el cutover operativo —cambiar `DATABASE_URL` al rol `membego_app`—, con runbook en `docs/runbooks/rls-encender.md`. Hasta entonces el aislamiento depende solo de la aplicación |
 | Uso único de token SSO | ✅ por clave primaria, sin ventana de carrera |
 | Idempotencia de escrituras | ✅ `ClaveIdempotencia` con huella SHA-256 del cuerpo |
 | Rate limit de la API | ✅ distribuido con Upstash, fail-open al local (`lib/rate-limit.ts:4`) |
@@ -838,9 +887,9 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
 | Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
 | Rotación de secretos | ✅ webhooks y secreto de satélite con solape de 7 días (A-7) |
-| **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
+| Concurrencia de salida por empresa | ✅ los dos barridos acotan la concurrencia GLOBAL y POR EMPRESA (`enParaleloPorClave`, `CONCURRENCIA_POR_EMPRESA`): un inquilino con el endpoint caído ya no acapara el trabajador compartido ni amplifica contra un tercero |
 | Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; el cron de salud (B-3) AVISA antes de que venza (credenciales sin refresco) |
-| **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
+| Alerta de fuga de clave | ✅ endpoint firmado del GitHub Secret Scanning Partner Program (`/api/connect/secret-scanning`): revoca sola la clave filtrada tras verificar la firma ECDSA de GitHub; solo el secreto completo revoca (nunca el prefijo público) |
 
 ---
 
@@ -907,9 +956,9 @@ generar trabajo manual por cada cliente conectado.
 | ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
 | ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
 | ◐ 10 | Catálogo de eventos ✅ ampliado (7→~20, `customer.updated` y ciclo de membresía emitidos) · citas/pagos pendientes de su flujo | 2 | B-4 |
-| ◐ 11 | `PATCH` cliente + `GET` listado ✅ hecho · cancelar cita y borrar, pendientes | 2 | B-5 |
+| ~~11~~ | ~~`PATCH`/`GET` cliente, cancelar cita (`POST …/cancel`) y borrar (`DELETE`)~~ ✅ hecho | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
-| ◐ 13 | Métricas de uso por credencial ✅ hechas para el integrador · falta la vista del superadmin | 1 | B-7 |
+| ~~13~~ | ~~Métricas de uso por credencial: integrador Y vista del superadmin (pestaña «Uso de la API»)~~ ✅ hecho | 1 | B-7 |
 
 **Resultado: ~58 %.** Aquí es donde la curva de valor por semana es más alta:
 los puntos 8 y 9 juntos cuestan tres semanas y abren, en la práctica, la
