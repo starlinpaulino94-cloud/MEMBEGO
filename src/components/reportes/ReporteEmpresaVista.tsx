@@ -4,12 +4,23 @@ import type { Rango } from '@/modules/reportes/rango'
 import { calcularInsights } from '@/modules/reportes/insights'
 import { TIPO_TX_LABEL, METODO_LABEL, type Reporte } from '@/modules/reportes/queries'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoDistribucion } from '@/components/reportes/graficos/GraficoDistribucion'
+import { GraficoRanking } from '@/components/reportes/graficos/GraficoRanking'
 import { ReporteImprimible, TablaReporte } from '@/components/ui/reporte-imprimible'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
-import { ReporteChart } from '@/components/charts/ReporteChart'
-import { Lightbulb } from 'lucide-react'
+import { Lightbulb, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+
+/** A dónde lleva investigar cada cifra. Vacío en el montaje del superadmin. */
+export interface EnlacesReporte {
+  finanzas?: string
+  operacion?: string
+  clientes?: string
+  membresias?: string
+}
 
 /**
  * EL REPORTE DE UNA EMPRESA, montado en dos sitios.
@@ -20,8 +31,33 @@ import { Lightbulb } from 'lucide-react'
  * y el superadmin y el cliente discutirían sobre cifras distintas del mismo
  * negocio — que es exactamente el problema que este módulo venía arrastrando.
  *
- * Lo único que cambia entre los dos montajes es la cabecera y los enlaces, que
- * llegan por props.
+ * ────────────────────────────────────────────────────────────────────────────
+ * ESTA PANTALLA ES UN TABLERO, NO UN REPORTE
+ *
+ * Y la diferencia decide qué entra. Un TABLERO responde «¿cómo va el negocio?»
+ * en diez segundos y señala a dónde ir; un REPORTE responde «¿por qué pasó
+ * esto?» y para eso hace falta profundidad. Meter aquí todo lo que se puede
+ * medir convierte la primera pantalla en un vertedero de cifras donde ninguna
+ * destaca — que es de donde venimos.
+ *
+ * Así que el orden es deliberado, de lo general a lo concreto:
+ *
+ *   1. CINCO cifras, no quince. Cada una con contra qué se compara, qué forma
+ *      tuvo el periodo y a qué reporte lleva.
+ *   2. Una gráfica grande: la evolución, que es la pregunta que ninguna tarjeta
+ *      puede contestar.
+ *   3. Dos repartos: de dónde viene el dinero y en qué se va el trabajo.
+ *   4. Lo que los números significan, en frases.
+ *   5. Los detalles, en tablas, al final.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LOS GRÁFICOS NO IMPRIMEN, Y POR ESO NUNCA VAN SOLOS
+ *
+ * `ResponsiveContainer` de Recharts mide el contenedor al pintar; en la hoja no
+ * hay contenedor que medir y sale un hueco. `PanelGrafico` obliga a entregar
+ * también la tabla equivalente, así que la regla dejó de depender de que quien
+ * escribe la pantalla se acuerde. Esa tabla es además la alternativa textual
+ * para un lector de pantalla.
  */
 export function ReporteEmpresaVista({
   reporte: r,
@@ -31,6 +67,7 @@ export function ReporteEmpresaVista({
   eyebrow,
   controles,
   generadoEn,
+  enlaces,
 }: {
   reporte: Reporte
   rango: Rango
@@ -40,16 +77,29 @@ export function ReporteEmpresaVista({
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
   generadoEn: string
+  /** Rutas de drill-down. El superadmin no las pasa: sus reportes viven en otro sitio. */
+  enlaces?: EnlacesReporte
 }) {
   const dinero = (n: number) => formatMoney(n, prefs)
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
   const insights = calcularInsights(r)
   const hayActividad = r.serie.some((p) => p.ventas > 0 || p.entregas > 0)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
+
+  // Las series de las tarjetas salen de los datos que YA se consultan. Donde no
+  // hay dato por día no se pinta sparkline: dibujar una línea inventada para
+  // que las cinco tarjetas se vean iguales sería exactamente lo contrario de un
+  // reporte.
+  const serieIngresos = r.serie.map((p) => p.ingresos)
+  const serieVentas = r.serie.map((p) => p.ventas)
+  const serieEntregas = r.serie.map((p) => p.entregas)
+
+  const ingresoTotal = (r.ingresosCaja?.valor ?? 0) + (r.ingresosMembresias?.valor ?? 0)
 
   return (
     <ReporteImprimible
       titulo={`Reportes · ${empresa}`}
-      subtitulo={`${rango.etiqueta} · ${rango.desdeDia} a ${rango.hastaDia} (${plural(rango.dias, 'día', 'días')})`}
+      subtitulo={`${rango.etiqueta} · ${periodo} (${plural(rango.dias, 'día', 'días')}) · vs. ${rango.etiquetaComparacion.toLowerCase()}`}
       generadoEn={generadoEn}
       controles={controles}
       pie={
@@ -69,115 +119,126 @@ export function ReporteEmpresaVista({
         </StatusBanner>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 print:grid-cols-5 print:gap-2">
-        <KpiReporte label="Ingresos de caja" kpi={r.ingresosCaja} formato={dinero} />
-        <KpiReporte label="Cobros de membresías" kpi={r.ingresosMembresias} formato={dinero} />
-        <KpiReporte label="Ventas" kpi={r.operaciones} formato={entero} />
-        <KpiReporte label="Entregas sin cobro" kpi={r.entregas} formato={entero} />
-        <KpiReporte label="Clientes nuevos" kpi={r.clientesNuevos} formato={entero} />
-      </div>
+      {/* ── 1 · Resumen ejecutivo ───────────────────────────────────────── */}
+      <section>
+        <SectionHeader
+          title="Resumen ejecutivo"
+          description="Las cinco cifras que dicen cómo va el negocio. Cada una abre el reporte que la explica."
+        />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 print:grid-cols-5 print:gap-2">
+          <KpiReporte
+            label="Ingresos de caja"
+            kpi={r.ingresosCaja}
+            formato={dinero}
+            serie={serieIngresos}
+            href={enlaces?.finanzas}
+            definicion="Dinero cobrado por el mostrador en el periodo. Solo transacciones aprobadas o aplicadas: una intención de pago no es un ingreso."
+          />
+          <KpiReporte
+            label="Cobros de membresías"
+            kpi={r.ingresosMembresias}
+            formato={dinero}
+            href={enlaces?.finanzas}
+            definicion="Lo cobrado por activaciones y renovaciones, fechado por la fecha de pago. Va aparte de la caja porque entra por otro camino."
+          />
+          <KpiReporte
+            label="Ventas"
+            kpi={r.operaciones}
+            formato={entero}
+            serie={serieVentas}
+            href={enlaces?.operacion}
+            definicion="Operaciones cobradas en el periodo. No incluye las entregas sin cobro, que se cuentan aparte."
+          />
+          <KpiReporte
+            label="Entregas sin cobro"
+            kpi={r.entregas}
+            formato={entero}
+            serie={serieEntregas}
+            href={enlaces?.operacion}
+            definicion="Beneficios entregados sin cobrar: canjes de membresía, recompensas y regalos. Es trabajo hecho, no dinero perdido."
+          />
+          <KpiReporte
+            label="Clientes nuevos"
+            kpi={r.clientesNuevos}
+            formato={entero}
+            href={enlaces?.clientes}
+            definicion="Clientes dados de alta en el periodo, por su fecha de registro. No mide si llegaron a venir: eso lo dice la tasa de activación del reporte de clientes."
+          />
+        </div>
+      </section>
 
-      {insights.length > 0 && (
-        <section>
-          <SectionHeader title="Qué dicen estos números" />
-          <ul className="space-y-2">
-            {insights.map((i) => (
-              <li
-                key={i.texto}
-                className="flex items-start gap-2.5 rounded-xl border border-border bg-card p-4 print:border-black print:p-2"
-              >
-                <Lightbulb
-                  className={`print:hidden mt-0.5 h-5 w-5 shrink-0 ${
-                    i.tono === 'bueno'
-                      ? 'text-success'
-                      : i.tono === 'malo'
-                        ? 'text-warning'
-                        : 'text-primary'
-                  }`}
-                  aria-hidden
-                />
-                <p className="text-small text-foreground print:text-xs">{i.texto}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <Card className="print:border-black">
-        <CardHeader>
-          <CardTitle className="text-h4">Actividad por día</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {hayActividad ? (
-            <>
-              {/* LA GRÁFICA NO IMPRIME. `ResponsiveContainer` de Recharts mide
-                  el contenedor al pintar; en `@media print` el navegador
-                  reordena el layout y la barra sale en blanco o cortada. En vez
-                  de dejar un hueco en el papel, la misma información va como
-                  tabla — que además es la alternativa textual que la gráfica
-                  nunca tuvo para un lector de pantalla. */}
-              <div className="print:hidden">
-                <ReporteChart data={r.serie} />
-              </div>
-              <div className="hidden print:block">
-                <TablaReporte
-                  titulo="Actividad por día"
-                  columnas={[
-                    { clave: 'dia', titulo: 'Día' },
-                    { clave: 'ventas', titulo: 'Ventas', alinearDerecha: true },
-                    { clave: 'entregas', titulo: 'Entregas', alinearDerecha: true },
-                    { clave: 'ingresos', titulo: 'Ingresos de caja', alinearDerecha: true },
-                  ]}
-                  // Solo los días con algo: en papel, treinta filas de ceros
-                  // gastan una hoja para no decir nada.
-                  filas={r.serie
-                    .filter((p) => p.ventas > 0 || p.entregas > 0 || p.ingresos > 0)
-                    .map((p) => ({
-                      __clave: p.dia,
-                      dia: p.dia,
-                      ventas: entero(p.ventas),
-                      entregas: entero(p.entregas),
-                      ingresos: dinero(p.ingresos),
-                    }))}
-                />
-              </div>
-            </>
+      {/* ── 2 · La evolución ────────────────────────────────────────────── */}
+      <PanelGrafico
+        titulo="Rendimiento en el tiempo"
+        pregunta="¿La cifra del periodo es una tendencia o el ruido de una semana?"
+        periodo={periodo}
+        accion={
+          enlaces?.finanzas ? (
+            <a href={enlaces.finanzas} className="text-caption text-primary hover:underline">
+              Ver finanzas →
+            </a>
+          ) : undefined
+        }
+        grafico={
+          hayActividad ? (
+            <GraficoTendencia
+              datos={r.serie.map((p) => ({ dia: p.dia, valor: p.ingresos }))}
+              etiqueta="Ingresos de caja"
+              formato={dinero}
+            />
           ) : (
-            <p className="py-10 text-center text-sm text-muted-foreground">
+            <p className="py-10 text-center text-small text-muted-foreground">
               Sin operaciones registradas en este periodo.
             </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
-        <Card className="print:border-black">
-          <CardHeader>
-            <CardTitle className="text-h4">Operaciones por tipo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TablaReporte
-              vacio="Sin operaciones en el periodo."
-              columnas={[
-                { clave: 'tipo', titulo: 'Tipo' },
-                { clave: 'operaciones', titulo: 'Operaciones', alinearDerecha: true },
-                { clave: 'ingresos', titulo: 'Ingresos', alinearDerecha: true },
-              ]}
-              filas={r.porTipo.map((t) => ({
-                __clave: t.tipo,
-                tipo: TIPO_TX_LABEL[t.tipo] ?? t.tipo,
-                operaciones: entero(t.operaciones),
-                ingresos: t.ingresos > 0 ? dinero(t.ingresos) : '—',
+          )
+        }
+        tabla={
+          <TablaReporte
+            vacio="Sin operaciones registradas en este periodo."
+            columnas={[
+              { clave: 'dia', titulo: 'Día' },
+              { clave: 'ventas', titulo: 'Ventas', alinearDerecha: true },
+              { clave: 'entregas', titulo: 'Entregas', alinearDerecha: true },
+              { clave: 'ingresos', titulo: 'Ingresos de caja', alinearDerecha: true },
+            ]}
+            // Solo los días con algo: en papel, treinta filas de ceros gastan
+            // una hoja para no decir nada.
+            filas={r.serie
+              .filter((p) => p.ventas > 0 || p.entregas > 0 || p.ingresos > 0)
+              .map((p) => ({
+                __clave: p.dia,
+                dia: p.dia,
+                ventas: entero(p.ventas),
+                entregas: entero(p.entregas),
+                ingresos: dinero(p.ingresos),
               }))}
-            />
-          </CardContent>
-        </Card>
+          />
+        }
+      />
 
-        <Card className="print:border-black">
-          <CardHeader>
-            <CardTitle className="text-h4">Cómo pagaron</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* ── 3 · Los dos repartos ────────────────────────────────────────── */}
+      <div className="grid gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
+        <PanelGrafico
+          titulo="De dónde viene el dinero"
+          pregunta="¿Por qué vía está entrando lo que se cobra?"
+          periodo={periodo}
+          grafico={
+            r.porMetodo.length > 0 ? (
+              <GraficoDistribucion
+                datos={r.porMetodo.map((m) => ({
+                  nombre: METODO_LABEL[m.metodo] ?? m.metodo,
+                  valor: m.ingresos,
+                }))}
+                total={r.porMetodo.reduce((s, m) => s + m.ingresos, 0)}
+                formato={dinero}
+              />
+            ) : (
+              <p className="py-10 text-center text-small text-muted-foreground">
+                Sin cobros registrados en el periodo.
+              </p>
+            )
+          }
+          tabla={
             <TablaReporte
               vacio="Sin cobros registrados en el periodo."
               columnas={[
@@ -192,9 +253,102 @@ export function ReporteEmpresaVista({
                 operaciones: entero(m.operaciones),
               }))}
             />
-          </CardContent>
-        </Card>
+          }
+          nota={
+            ingresoTotal > 0
+              ? `El total cobrado del periodo, por las dos vías, fue ${dinero(ingresoTotal)}.`
+              : undefined
+          }
+        />
 
+        <PanelGrafico
+          titulo="En qué se va el trabajo"
+          pregunta="¿Qué tipo de operación ocupa al mostrador?"
+          periodo={periodo}
+          accion={
+            enlaces?.operacion ? (
+              <a href={enlaces.operacion} className="text-caption text-primary hover:underline">
+                Ver operación →
+              </a>
+            ) : undefined
+          }
+          grafico={
+            r.porTipo.length > 0 ? (
+              <GraficoRanking
+                filas={r.porTipo.map((t) => ({
+                  nombre: TIPO_TX_LABEL[t.tipo] ?? t.tipo,
+                  valor: t.operaciones,
+                }))}
+                formato={entero}
+              />
+            ) : (
+              <p className="py-10 text-center text-small text-muted-foreground">
+                Sin operaciones en el periodo.
+              </p>
+            )
+          }
+          tabla={
+            <TablaReporte
+              vacio="Sin operaciones en el periodo."
+              columnas={[
+                { clave: 'tipo', titulo: 'Tipo' },
+                { clave: 'operaciones', titulo: 'Operaciones', alinearDerecha: true },
+                { clave: 'ingresos', titulo: 'Ingresos', alinearDerecha: true },
+              ]}
+              filas={r.porTipo.map((t) => ({
+                __clave: t.tipo,
+                tipo: TIPO_TX_LABEL[t.tipo] ?? t.tipo,
+                operaciones: entero(t.operaciones),
+                ingresos: t.ingresos > 0 ? dinero(t.ingresos) : '—',
+              }))}
+            />
+          }
+        />
+      </div>
+
+      {/* ── 4 · Qué significan ──────────────────────────────────────────── */}
+      {insights.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Qué dicen estos números"
+            description="Solo aparece lo que tiene algo que decir: una sección que siempre está encendida enseña a ignorarla."
+          />
+          <ul className="grid gap-3 sm:grid-cols-2 print:grid-cols-2">
+            {insights.map((i) => {
+              const Icono =
+                i.tono === 'bueno' ? TrendingUp : i.tono === 'malo' ? TrendingDown : Minus
+              return (
+                <li
+                  key={i.texto}
+                  className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 print:border-black print:p-2"
+                >
+                  <span
+                    className={`mt-0.5 shrink-0 rounded-lg p-1.5 print:hidden ${
+                      i.tono === 'bueno'
+                        ? 'bg-success/10 text-success'
+                        : i.tono === 'malo'
+                          ? 'bg-destructive/10 text-destructive'
+                          : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {/* El icono cambia con el significado, no solo el color: quien
+                        no distingue verde de rojo necesita otra señal. */}
+                    <Icono className="h-4 w-4" aria-hidden />
+                    <span className="sr-only">
+                      {i.tono === 'bueno' ? 'Buena señal:' : i.tono === 'malo' ? 'Atención:' : 'Dato:'}
+                    </span>
+                  </span>
+                  <Lightbulb className="hidden print:block h-4 w-4 shrink-0" aria-hidden />
+                  <p className="text-small text-foreground print:text-xs">{i.texto}</p>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* ── 5 · El detalle ──────────────────────────────────────────────── */}
+      <div className="grid gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
         <Card className="print:border-black">
           <CardHeader>
             <CardTitle className="text-h4">Clientes más activos</CardTitle>
