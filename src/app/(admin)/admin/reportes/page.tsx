@@ -118,6 +118,11 @@ export default async function ReportesPage({
                 href: `/admin/reportes/promociones${qs}`,
               },
               {
+                titulo: 'Códigos y regalos',
+                pregunta: '¿Qué le paga un cliente a otro, y llega a su destino?',
+                href: `/admin/reportes/regalos${qs}`,
+              },
+              {
                 titulo: 'Crecimiento',
                 pregunta: '¿Quién trae gente nueva y dónde se cae el embudo?',
                 href: `/admin/reportes/crecimiento${qs}`,
