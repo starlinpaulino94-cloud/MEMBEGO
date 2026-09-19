@@ -113,6 +113,11 @@ export default async function ReportesPage({
                 href: `/admin/reportes/operacion${qs}`,
               },
               {
+                titulo: 'Promociones',
+                pregunta: '¿Qué se vende, qué se entrega y qué se usa de verdad?',
+                href: `/admin/reportes/promociones${qs}`,
+              },
+              {
                 titulo: 'Crecimiento',
                 pregunta: '¿Quién trae gente nueva y dónde se cae el embudo?',
                 href: `/admin/reportes/crecimiento${qs}`,

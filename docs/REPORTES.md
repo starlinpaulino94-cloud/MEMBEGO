@@ -14,6 +14,7 @@ porque los fallos de un reporte no se notan: se ven como un número.
 | `/admin/reportes/citas` | Dueño del negocio | `modules/reportes/citas.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/clientes` | Dueño del negocio | `modules/reportes/clientes.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/crecimiento` | Dueño del negocio | `modules/reportes/crecimiento.ts` | presets + a mano | ✅ CSV | ✅ |
+| `/admin/reportes/promociones` | Dueño del negocio | `modules/reportes/promociones.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/app/carwash/reportes` | Encargado | `modules/apps/reportes.ts` | desde/hasta | ✅ CSV | ✅ |
 | `/admin/retencion` | Dueño del negocio | `modules/riesgo/retencion.ts` | ventana fija (90 d) | ✅ CSV | ✅ |
 | `/admin/riesgo` | Dueño del negocio | `modules/riesgo/` | filtros | ✅ CSV | ✅ |
@@ -297,6 +298,50 @@ en su propio bloque, rotulado, también en el CSV.
 reporte usa por su nombre los dos ingredientes que el vocabulario distingue
 —«con membresía vigente» y «con actividad»— y enlaza al semáforo en vez de
 repetirlo.
+
+### Promociones 🔒
+
+Qué se vende, qué se entrega y qué se usa de verdad.
+
+**Tres relojes, tres cifras.** Adquirir, entregar y usar son momentos distintos
+y casi nunca caen el mismo día; medirlos con la misma fecha daría un reporte que
+cuadra consigo mismo y no con el negocio.
+
+| Momento | Fuente | Qué significa |
+| --- | --- | --- |
+| **Adquirida** | `ProductoCompra.createdAt` | El cliente la pidió |
+| **Entregada** | transición a `ACTIVA` en `producto_compra_transiciones` | El beneficio quedó disponible con su QR |
+| **Usada** | `Transaction` tipo `PROMOTION_USE` | Canje real validado en el mostrador |
+
+| Métrica | Fuente |
+| --- | --- |
+| Dinero de promociones 🔒 | `ProductoCompra.montoPagado` con `pagoConfirmado`, **fechado por la entrega** |
+| Movimiento por estado | Transiciones agrupadas por `hacia` dentro del periodo |
+| Por promoción | Compras por `promocionId`; usos vía transacción → QR usado → compra → promoción |
+| Regalos P2P | `ProductoCompra.beneficiarioClienteId` no nulo |
+| Catálogo y cola de trabajo | `Promocion` y `ProductoCompra` — **foto de hoy** |
+| Vitrina | `viewCount` / `shareCount` — acumulado y topado, **es un suelo** |
+
+**«Canje» aquí no es «canje» en Operación.** Operación llama canjes a las
+**visitas de membresía** (`Visit`); estos son usos de una promoción comprada, que
+no generan visita y por lo tanto **no están contados allí**. Las dos cifras son
+disjuntas y ninguna incluye a la otra.
+
+**Los usos salen de la transacción, no de restar `usosRestantes`.** Regalar usos
+a un amigo también baja ese contador sin que nadie haya canjeado nada; contar por
+diferencias metería los regalos dentro de los canjes. La transacción solo existe
+cuando el mostrador validó el QR, y llega por los dos caminos que canjean: el
+escáner del panel y la API de plataforma.
+
+**El dinero se fecha por la ENTREGA**, y se dice. `ProductoCompra` no tiene
+`fechaPago` —a diferencia de `Membership`, que es lo que `whereCobrado` usa—, así
+que esta cifra **no se puede comparar de tú a tú con la de Finanzas**.
+
+**Lo que el reporte NO usa, aunque la columna exista:** `Promocion.canjes` está
+declarada, el marketplace la lee y **ningún código la escribe** — vale 0 para
+todas; `maxCanjes` y `limitePorCliente` son configuración, no medición.
+`tests/reporte-promociones.test.ts` vigila la causa: el día que alguien escriba
+`canjes`, la prueba obliga a decidir si el reporte pasa a usarla.
 
 ### Crecimiento 👤
 
