@@ -111,7 +111,8 @@ test('la tasa de aceptación sale de los CERRADOS y sin los retirados', () => {
   assert.match(motor, /cerrados === 0 \? null : Math\.round\(\(aceptados \/ cerrados\) \* 100\)/)
   assert.match(motor, /DESENLACES_REGALO\.filter\(\(d\) => d\.cierra\)/)
   // CANCELADO existe como desenlace pero NO cierra: lo retira el remitente.
-  assert.match(motor, /clave: 'CANCELADO'.*cierra: false/s)
+  // `[\s\S]` en vez del flag `s`: el target del proyecto no admite dotAll.
+  assert.match(motor, /clave: 'CANCELADO'[\s\S]*?cierra: false/)
   assert.match(leer(VISTA), /no entran en la tasa de aceptación/)
 })
 
