@@ -102,7 +102,23 @@ test('sin ver_empleados el nombre de quien atendió NI SE PIDE a la base', () =>
 test('«reservadas» se ordena por cuándo se reservó', () => {
   // Una lista fechada por un campo y ordenada por otro se lee como si le
   // faltaran filas.
-  assert.match(leer(DETALLE), /vista === 'RESERVADAS' \? \{ createdAt: 'desc' \}/)
+  //
+  // Desde que el orden se puede cambiar (Fase 7 del rediseño) esto ya no es un
+  // `orderBy` escrito en la consulta: es el PRIMER campo de la lista que
+  // `camposDe` devuelve para esa pestaña, que es el que se usa cuando la URL no
+  // pide otro. Se vigila ahí, que es donde se decide.
+  const src = leer(DETALLE)
+  const eleccion = src.slice(src.indexOf('return vista === '))
+  assert.match(
+    eleccion,
+    /return vista === 'RESERVADAS' \? \[reservada,/,
+    'la pestaña de reservadas ya no arranca ordenada por cuándo se reservó'
+  )
+  assert.match(
+    src,
+    /clave: 'reservada'[\s\S]{0,200}orderBy: \(d\) => \[\{ createdAt: d \}/,
+    'el campo «reservada» ya no ordena por createdAt'
+  )
 })
 
 test('el detalle está ENLAZADO desde el reporte, incluidas las dos alarmas', () => {

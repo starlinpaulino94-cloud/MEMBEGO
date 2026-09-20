@@ -36,7 +36,20 @@ test('las revertidas se fechan por cuándo se revirtieron, como la cifra del rep
   )
   // Y se ordenan por lo mismo: una lista de «revertidas este mes» ordenada por
   // la fecha de la visita pone arriba la más vieja de revertir.
-  assert.match(src, /vista === 'REVERTIDAS' \? \{ revertidaAt: 'desc' \}/)
+  //
+  // Desde que el orden se puede cambiar (Fase 7 del rediseño) eso ya no está
+  // escrito en la consulta: es el PRIMER campo que `camposDe` devuelve para esa
+  // pestaña, que es el que se usa mientras la URL no pida otro.
+  assert.match(
+    src.slice(src.indexOf('return vista === ')),
+    /return vista === 'REVERTIDAS' \? \[revertida,/,
+    'la pestaña de revertidas ya no arranca ordenada por cuándo se revirtió'
+  )
+  assert.match(
+    src,
+    /clave: 'revertida'[\s\S]{0,200}orderBy: \(d\) => \[\{ revertidaAt: d \}/,
+    'el campo «revertida» ya no ordena por revertidaAt'
+  )
 })
 
 test('cada pestaña recorta la cifra que dice abrir', () => {

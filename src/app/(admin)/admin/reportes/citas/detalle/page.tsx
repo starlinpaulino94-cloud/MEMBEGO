@@ -11,6 +11,14 @@ import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
+import {
+  leerOrden,
+  orderByDe,
+  resumenTope,
+  siguienteDireccion,
+  type CampoOrden,
+} from '@/modules/reportes/orden-detalle'
+import { ThOrden } from '@/components/reportes/ThOrden'
 import { ABIERTOS } from '@/modules/reportes/citas'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -65,6 +73,68 @@ const CANCELADA_POR: Record<string, string> = {
 /** Tope de filas. Un detalle no es una exportación: lo que no cabe, se dice. */
 const MAX = 300
 
+type OrdenCita = CampoOrden<Prisma.CitaOrderByWithRelationInput[]>
+
+/**
+ * Por qué se puede ordenar. El orden va a la CONSULTA, no al navegador: con el
+ * tope de 300, ordenar aquí cambia QUÉ filas se ven. La nota larga está en
+ * `modules/reportes/orden-detalle.ts`.
+ *
+ * El primero es el orden por defecto, y depende de la pestaña por la misma
+ * razón que el filtro: «Reservadas» se fecha por cuándo se reservó, y una lista
+ * fechada por un campo y ordenada por otro se lee como si le faltaran filas.
+ *
+ * **Quien atendió no está, a propósito**: esa columna la manda `ver_empleados`
+ * y ni siquiera se pide a la base sin el permiso.
+ */
+function camposDe(vista: VistaDetalle): readonly OrdenCita[] {
+  const cuando: OrdenCita = {
+    clave: 'cuando',
+    label: 'Cuándo era',
+    inicial: 'desc',
+    tope: (d) => (d === 'desc' ? 'las más recientes' : 'las más antiguas'),
+    orderBy: (d) => [{ inicio: d }],
+  }
+  const reservada: OrdenCita = {
+    clave: 'reservada',
+    label: 'Se reservó',
+    inicial: 'desc',
+    tope: (d) => (d === 'desc' ? 'las reservadas más tarde' : 'las reservadas antes'),
+    orderBy: (d) => [{ createdAt: d }, { inicio: 'desc' }],
+  }
+  const resto: OrdenCita[] = [
+    {
+      clave: 'cliente',
+      label: 'Cliente',
+      inicial: 'asc',
+      tope: (d) => `por cliente, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ cliente: { nombre: d } }, { inicio: 'desc' }],
+    },
+    {
+      clave: 'servicio',
+      label: 'Servicio',
+      inicial: 'asc',
+      tope: (d) => `por servicio, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ servicio: d }, { inicio: 'desc' }],
+    },
+    {
+      clave: 'sucursal',
+      label: 'Sucursal',
+      inicial: 'asc',
+      tope: (d) => `por sucursal, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ sucursal: { nombre: d } }, { inicio: 'desc' }],
+    },
+    {
+      clave: 'estado',
+      label: 'Estado hoy',
+      inicial: 'asc',
+      tope: (d) => `por estado, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ estado: d }, { inicio: 'desc' }],
+    },
+  ]
+  return vista === 'RESERVADAS' ? [reservada, cuando, ...resto] : [cuando, reservada, ...resto]
+}
+
 /**
  * LAS CITAS QUE PRODUJERON LA CIFRA.
  *
@@ -102,6 +172,9 @@ export default async function DetalleCitasPage({
   const q = leerParam('q')
   const servicio = leerParam('servicio')
   const sucursalPedida = leerParam('sucursal')
+
+  const campos = camposDe(vista)
+  const orden = leerOrden(campos, leerParam('o'), leerParam('d'))
 
   const verEmpleados = await puedeFuncion('reportes', 'ver_empleados')
 
@@ -150,9 +223,9 @@ export default async function DetalleCitasPage({
     Promise.all([
       tx.cita.findMany({
         where,
-        // «Reservadas» ordena por cuándo se reservó: una lista fechada por un
-        // campo y ordenada por otro se lee como si le faltaran filas.
-        orderBy: vista === 'RESERVADAS' ? { createdAt: 'desc' } : { inicio: 'desc' },
+        // El orden por defecto sigue al de la pestaña (ver `camposDe`), y
+        // quien mira puede cambiarlo: va al `orderBy`, no al navegador.
+        orderBy: orderByDe(campos, orden),
         take: MAX,
         select: {
           id: true,
@@ -194,9 +267,20 @@ export default async function DetalleCitasPage({
     if (q) params.set('q', q)
     if (servicio) params.set('servicio', servicio)
     if (sucursalPedida) params.set('sucursal', sucursalPedida)
+    params.set('o', orden.clave)
+    params.set('d', orden.direccion)
     for (const [k, v] of Object.entries(extra ?? {})) params.set(k, v)
     return params.toString()
   }
+  // El texto del tope se construye desde el orden vigente: decir «las 300 más
+  // recientes» con la tabla ordenada por cliente sería mentira.
+  const recorte = resumenTope(campos, orden, total, MAX)
+  const enlaceOrden = (clave: string) =>
+    `/admin/reportes/citas/detalle?${conFiltros({
+      vista,
+      o: clave,
+      d: siguienteDireccion(campos, orden, clave),
+    })}`
   const volver = new URLSearchParams(qs ? qs.slice(1) : '')
   if (servicio) volver.set('servicio', servicio)
   if (sucursalPedida) volver.set('sucursal', sucursalPedida)
@@ -217,7 +301,7 @@ export default async function DetalleCitasPage({
         title={VISTAS[vista]}
         description={`${
           vista === 'POR_CONFIRMAR' ? 'No depende del periodo' : `${rango.desdeDia} a ${rango.hastaDia}`
-        } · ${total} en total${total > MAX ? ` · se muestran las ${MAX} más recientes` : ''}`}
+        } · ${total} en total${recorte ? ` · ${recorte}` : ''}`}
       />
 
       {/* La misma advertencia que el reporte, y aquí importa más: una fila se
@@ -258,6 +342,8 @@ export default async function DetalleCitasPage({
         className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-3"
       >
         <input type="hidden" name="vista" value={vista} />
+        <input type="hidden" name="o" value={orden.clave} />
+        <input type="hidden" name="d" value={orden.direccion} />
         {[...new URLSearchParams(qs ? qs.slice(1) : '').entries()].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
@@ -312,12 +398,54 @@ export default async function DetalleCitasPage({
           <table className="w-full text-small">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-3 py-2 text-overline">Cuándo era</th>
-                <th className="px-3 py-2 text-overline">Se reservó</th>
-                <th className="px-3 py-2 text-overline">Cliente</th>
-                <th className="px-3 py-2 text-overline">Servicio</th>
-                <th className="px-3 py-2 text-overline">Sucursal</th>
-                <th className="px-3 py-2 text-overline">Estado hoy</th>
+                <ThOrden
+                  campo="cuando"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('cuando')}
+                >
+                  Cuándo era
+                </ThOrden>
+                <ThOrden
+                  campo="reservada"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('reservada')}
+                >
+                  Se reservó
+                </ThOrden>
+                <ThOrden
+                  campo="cliente"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('cliente')}
+                >
+                  Cliente
+                </ThOrden>
+                <ThOrden
+                  campo="servicio"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('servicio')}
+                >
+                  Servicio
+                </ThOrden>
+                <ThOrden
+                  campo="sucursal"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('sucursal')}
+                >
+                  Sucursal
+                </ThOrden>
+                <ThOrden
+                  campo="estado"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('estado')}
+                >
+                  Estado hoy
+                </ThOrden>
                 {verEmpleados && <th className="px-3 py-2 text-overline">Atendió</th>}
                 {esCanceladas && <th className="px-3 py-2 text-overline">Canceló</th>}
                 {esCanceladas && <th className="px-3 py-2 text-overline">Motivo</th>}

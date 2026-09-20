@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Form from 'next/form'
 import { ArrowLeft, Search } from 'lucide-react'
+import type { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,14 @@ import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
+import {
+  leerOrden,
+  orderByDe,
+  resumenTope,
+  siguienteDireccion,
+  type CampoOrden,
+} from '@/modules/reportes/orden-detalle'
+import { ThOrden } from '@/components/reportes/ThOrden'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -35,6 +44,66 @@ type VistaDetalle = keyof typeof VISTAS
 
 /** Tope de filas. Un detalle no es una exportación: lo que no cabe, se dice. */
 const MAX = 300
+
+type OrdenVisita = CampoOrden<Prisma.VisitOrderByWithRelationInput[]>
+
+/**
+ * Por qué se puede ordenar. El orden va a la CONSULTA, no al navegador: con el
+ * tope de 300, ordenar aquí cambia QUÉ filas se ven. La nota larga está en
+ * `modules/reportes/orden-detalle.ts`.
+ *
+ * El primero de la lista es el orden por defecto, y por eso depende de la
+ * pestaña: las revertidas se fechan por cuándo SE REVIRTIERON, el mismo
+ * criterio con el que el reporte las contó.
+ *
+ * **El empleado no está, a propósito.** Esa columna la manda `ver_empleados` y
+ * ni siquiera se pide a la base sin el permiso; un `?o=empleado` ordenaría por
+ * un dato que quien mira no puede ver.
+ *
+ * Todas menos la fecha llevan `fechaVisita` de segundo criterio: sin él, dos
+ * visitas del mismo servicio saldrían en el orden que le apeteciera a Postgres
+ * y la lista cambiaría sola entre dos recargas iguales.
+ */
+function camposDe(vista: VistaDetalle): readonly OrdenVisita[] {
+  const fecha: OrdenVisita = {
+    clave: 'fecha',
+    label: 'Cuándo',
+    inicial: 'desc',
+    tope: (d) => (d === 'desc' ? 'las más recientes' : 'las más antiguas'),
+    orderBy: (d) => [{ fechaVisita: d }],
+  }
+  const revertida: OrdenVisita = {
+    clave: 'revertida',
+    label: 'Cuándo se revirtió',
+    inicial: 'desc',
+    tope: (d) => (d === 'desc' ? 'las revertidas más recientes' : 'las revertidas más antiguas'),
+    orderBy: (d) => [{ revertidaAt: d }, { fechaVisita: 'desc' }],
+  }
+  const resto: OrdenVisita[] = [
+    {
+      clave: 'cliente',
+      label: 'Cliente',
+      inicial: 'asc',
+      tope: (d) => `por cliente, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ cliente: { nombre: d } }, { fechaVisita: 'desc' }],
+    },
+    {
+      clave: 'servicio',
+      label: 'Servicio',
+      inicial: 'asc',
+      tope: (d) => `por servicio, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ servicio: d }, { fechaVisita: 'desc' }],
+    },
+    {
+      clave: 'sucursal',
+      label: 'Sucursal',
+      inicial: 'asc',
+      tope: (d) => `por sucursal, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+      orderBy: (d) => [{ sucursal: { nombre: d } }, { fechaVisita: 'desc' }],
+    },
+  ]
+  return vista === 'REVERTIDAS' ? [revertida, fecha, ...resto] : [fecha, ...resto]
+}
 
 /** Forma de las filas; el `select` de abajo varía con el permiso. */
 type Fila = {
@@ -92,6 +161,9 @@ export default async function DetalleOperacionPage({
   // Sin el permiso el parámetro NI SE LEE, igual que en el reporte.
   const empleadoId = verEmpleados ? leerParam('empleado') : ''
 
+  const campos = camposDe(vista)
+  const orden = leerOrden(campos, leerParam('o'), leerParam('d'))
+
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company
       .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
@@ -123,7 +195,7 @@ export default async function DetalleOperacionPage({
     Promise.all([
       tx.visit.findMany({
         where,
-        orderBy: vista === 'REVERTIDAS' ? { revertidaAt: 'desc' } : { fechaVisita: 'desc' },
+        orderBy: orderByDe(campos, orden),
         take: MAX,
         select: {
           id: true,
@@ -178,9 +250,20 @@ export default async function DetalleOperacionPage({
     if (q) params.set('q', q)
     if (sucursalId) params.set('sucursal', sucursalId)
     if (empleadoId) params.set('empleado', empleadoId)
+    params.set('o', orden.clave)
+    params.set('d', orden.direccion)
     for (const [k, v] of Object.entries(extra ?? {})) params.set(k, v)
     return params.toString()
   }
+  // El texto del tope se construye desde el orden vigente: decir «las 300 más
+  // recientes» con la tabla ordenada por cliente sería mentira.
+  const recorte = resumenTope(campos, orden, total, MAX)
+  const enlaceOrden = (clave: string) =>
+    `/admin/reportes/operacion/detalle?${conFiltros({
+      vista,
+      o: clave,
+      d: siguienteDireccion(campos, orden, clave),
+    })}`
   const volver = new URLSearchParams(qs ? qs.slice(1) : '')
   if (sucursalId) volver.set('sucursal', sucursalId)
   if (empleadoId) volver.set('empleado', empleadoId)
@@ -199,7 +282,7 @@ export default async function DetalleOperacionPage({
       <PageHeader
         title={VISTAS[vista]}
         description={`${rango.desdeDia} a ${rango.hastaDia} · ${total} en total${
-          total > MAX ? ` · se muestran las ${MAX} más recientes` : ''
+          recorte ? ` · ${recorte}` : ''
         }`}
       />
 
@@ -226,6 +309,8 @@ export default async function DetalleOperacionPage({
         className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-3"
       >
         <input type="hidden" name="vista" value={vista} />
+        <input type="hidden" name="o" value={orden.clave} />
+        <input type="hidden" name="d" value={orden.direccion} />
         {[...new URLSearchParams(qs ? qs.slice(1) : '').entries()].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
@@ -275,7 +360,7 @@ export default async function DetalleOperacionPage({
         {hayFiltro && (
           <Button asChild variant="ghost" size="sm">
             <Link
-              href={`/admin/reportes/operacion/detalle?vista=${vista}${qs ? `&${qs.slice(1)}` : ''}`}
+              href={`/admin/reportes/operacion/detalle?vista=${vista}&o=${orden.clave}&d=${orden.direccion}${qs ? `&${qs.slice(1)}` : ''}`}
             >
               Limpiar
             </Link>
@@ -297,11 +382,46 @@ export default async function DetalleOperacionPage({
           <table className="w-full text-small">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-3 py-2 text-overline">Cuándo</th>
-                {esRevertidas && <th className="px-3 py-2 text-overline">Cuándo se revirtió</th>}
-                <th className="px-3 py-2 text-overline">Cliente</th>
-                <th className="px-3 py-2 text-overline">Servicio</th>
-                <th className="px-3 py-2 text-overline">Sucursal</th>
+                <ThOrden
+                  campo="fecha"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('fecha')}
+                >
+                  Cuándo
+                </ThOrden>
+                {esRevertidas && <ThOrden
+                  campo="revertida"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('revertida')}
+                >
+                  Cuándo se revirtió
+                </ThOrden>}
+                <ThOrden
+                  campo="cliente"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('cliente')}
+                >
+                  Cliente
+                </ThOrden>
+                <ThOrden
+                  campo="servicio"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('servicio')}
+                >
+                  Servicio
+                </ThOrden>
+                <ThOrden
+                  campo="sucursal"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('sucursal')}
+                >
+                  Sucursal
+                </ThOrden>
                 {verEmpleados && <th className="px-3 py-2 text-overline">Empleado</th>}
                 {!esRevertidas && <th className="px-3 py-2 text-overline">Descontó</th>}
                 {esRevertidas && <th className="px-3 py-2 text-overline">Motivo</th>}

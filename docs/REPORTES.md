@@ -164,6 +164,39 @@ como «33 %» se ordenan por lo que de verdad valen. Y cuando no hay base, escri
 «—» con `orden: null` — un hueco **no es un cero**, así que cae al final tanto
 ascendiendo como descendiendo.
 
+### Las tablas largas de los detalles se ordenan en la base
+
+Las de arriba son resúmenes de treinta o cincuenta filas y **están enteras en la
+página**: ordenarlas en el navegador no puede perder nada.
+
+Las de `/detalle` son otra cosa. Traen hasta **300 filas ya recortadas por la
+consulta**, y ese recorte lo decide el `orderBy`. Ordenarlas en el navegador
+daría «las 300 más recientes, ordenadas por monto» — que **no** son «las 300 de
+mayor monto». El cobro más grande del trimestre podría no estar en la lista
+mientras la tabla parece estar respondiendo a la pregunta.
+
+Por eso ahí el orden **viaja a la consulta**: se elige con un enlace
+(`components/reportes/ThOrden.tsx`), se lee de la URL (`?o=` y `?d=`) y entra en
+el `orderBy` de Prisma. Sin JavaScript, imprimible, y el enlace se puede pegar
+en un chat tal cual. Un `?o=` inventado a mano cae al orden por defecto: lo que
+no está en la lista de campos de esa pantalla no llega nunca a la consulta.
+
+Tres consecuencias que están escritas en el código:
+
+- **El subtítulo lo dice.** Con el tope puesto, cambiar el orden cambia *qué*
+  filas se ven. El texto sale de `resumenTope()` y nunca a mano: «se muestran 300
+  de 4.120: las de mayor monto».
+- **El orden por defecto sigue al de la pestaña.** «Revertidas» arranca por
+  `revertidaAt` y «Reservadas» por `createdAt`, el mismo criterio con el que el
+  reporte las contó.
+- **No se puede ordenar por un dato que el permiso esconde.** El nombre de quien
+  atendió lo manda `ver_empleados` y ni se pide a la base sin él, así que no hay
+  campo de orden para esa columna.
+
+Y todas las columnas que no son la fecha llevan la fecha de segundo criterio:
+sin él, dos filas iguales en la columna elegida saldrían en el orden que le
+apeteciera a Postgres y la lista cambiaría sola entre dos recargas idénticas.
+
 ### Lo que la tabla no hace, a propósito
 
 - **No pagina.** Los reportes agrupan hasta treinta o cincuenta filas y **se

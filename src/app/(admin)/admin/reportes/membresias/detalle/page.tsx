@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Form from 'next/form'
 import { ArrowLeft, Search } from 'lucide-react'
+import type { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,14 @@ import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
+import {
+  leerOrden,
+  orderByDe,
+  resumenTope,
+  siguienteDireccion,
+  type CampoOrden,
+} from '@/modules/reportes/orden-detalle'
+import { ThOrden } from '@/components/reportes/ThOrden'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -63,6 +72,41 @@ const ORIGEN_LABEL: Record<string, string> = {
 const MAX = 300
 
 /**
+ * Por qué se puede ordenar, y qué se le pide a la base en cada caso.
+ *
+ * El orden va a la CONSULTA y no al navegador: con el tope de 300, ordenar aquí
+ * cambia qué filas se ven, no solo en qué fila aparecen. La nota larga está en
+ * `modules/reportes/orden-detalle.ts`.
+ *
+ * Las columnas que no son la fecha llevan `ocurridoEn` de segundo criterio: sin
+ * él, dos eventos del mismo origen saldrían en el orden que le apeteciera a
+ * Postgres y la lista cambiaría sola entre dos recargas iguales.
+ */
+const CAMPOS: readonly CampoOrden<Prisma.MembresiaEventoOrderByWithRelationInput[]>[] = [
+  {
+    clave: 'fecha',
+    label: 'Cuándo',
+    inicial: 'desc',
+    tope: (d) => (d === 'desc' ? 'los más recientes' : 'los más antiguos'),
+    orderBy: (d) => [{ ocurridoEn: d }],
+  },
+  {
+    clave: 'cliente',
+    label: 'Cliente',
+    inicial: 'asc',
+    tope: (d) => `por cliente, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+    orderBy: (d) => [{ membership: { cliente: { nombre: d } } }, { ocurridoEn: 'desc' }],
+  },
+  {
+    clave: 'origen',
+    label: 'Origen',
+    inicial: 'asc',
+    tope: (d) => `por origen, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`,
+    orderBy: (d) => [{ origen: d }, { ocurridoEn: 'desc' }],
+  },
+]
+
+/**
  * LAS FILAS QUE PRODUJERON LA CIFRA.
  *
  * Es la mitad que faltaba del reporte. Un panel donde «12 cancelaciones» no se
@@ -93,6 +137,11 @@ export default async function DetalleCicloVidaPage({
   const q = String(Array.isArray(sp.q) ? sp.q[0] : (sp.q ?? '')).trim()
   const origenPedido = String(Array.isArray(sp.origen) ? sp.origen[0] : (sp.origen ?? ''))
   const origen = origenPedido in ORIGEN_LABEL ? origenPedido : ''
+  const orden = leerOrden(
+    CAMPOS,
+    String(Array.isArray(sp.o) ? sp.o[0] : (sp.o ?? '')),
+    String(Array.isArray(sp.d) ? sp.d[0] : (sp.d ?? ''))
+  )
 
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company
@@ -125,7 +174,7 @@ export default async function DetalleCicloVidaPage({
     Promise.all([
       tx.membresiaEvento.findMany({
         where,
-        orderBy: { ocurridoEn: 'desc' },
+        orderBy: orderByDe(CAMPOS, orden),
         take: MAX,
         select: {
           id: true,
@@ -148,6 +197,19 @@ export default async function DetalleCicloVidaPage({
   )
 
   const qs = paramsDeRango(rango)
+  // El texto del tope se construye desde el orden vigente: decir «las 300 más
+  // recientes» con la tabla ordenada por cliente sería mentira.
+  const recorte = resumenTope(CAMPOS, orden, total, MAX)
+  /** El resto de la URL, para que ordenar no pierda pestaña ni filtros. */
+  const enlaceOrden = (clave: string) => {
+    const params = new URLSearchParams(qs ? qs.slice(1) : '')
+    params.set('tipo', tipo)
+    if (q) params.set('q', q)
+    if (origen) params.set('origen', origen)
+    params.set('o', clave)
+    params.set('d', siguienteDireccion(CAMPOS, orden, clave))
+    return `/admin/reportes/membresias/detalle?${params.toString()}`
+  }
   const dinero = (v: unknown) =>
     v == null ? '—' : new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(Number(v))
 
@@ -162,7 +224,7 @@ export default async function DetalleCicloVidaPage({
       <PageHeader
         title={TIPOS[tipo]}
         description={`${rango.desdeDia} a ${rango.hastaDia} · ${total} en total${
-          total > MAX ? ` · se muestran las ${MAX} más recientes` : ''
+          recorte ? ` · ${recorte}` : ''
         }`}
       />
 
@@ -174,6 +236,8 @@ export default async function DetalleCicloVidaPage({
           params.set('tipo', t)
           if (q) params.set('q', q)
           if (origen) params.set('origen', origen)
+          params.set('o', orden.clave)
+          params.set('d', orden.direccion)
           return (
             <Button
               key={t}
@@ -197,6 +261,8 @@ export default async function DetalleCicloVidaPage({
         className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-3"
       >
         <input type="hidden" name="tipo" value={tipo} />
+        <input type="hidden" name="o" value={orden.clave} />
+        <input type="hidden" name="d" value={orden.direccion} />
         {[...new URLSearchParams(qs ? qs.slice(1) : '').entries()].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
@@ -228,7 +294,9 @@ export default async function DetalleCicloVidaPage({
         </Button>
         {(q || origen) && (
           <Button asChild variant="ghost" size="sm">
-            <Link href={`/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`}>
+            <Link
+              href={`/admin/reportes/membresias/detalle?tipo=${tipo}&o=${orden.clave}&d=${orden.direccion}${qs ? `&${qs.slice(1)}` : ''}`}
+            >
               Limpiar
             </Link>
           </Button>
@@ -249,9 +317,30 @@ export default async function DetalleCicloVidaPage({
           <table className="w-full text-small">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-3 py-2 text-overline">Cuándo</th>
-                <th className="px-3 py-2 text-overline">Cliente</th>
-                <th className="px-3 py-2 text-overline">Origen</th>
+                <ThOrden
+                  campo="fecha"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('fecha')}
+                >
+                  Cuándo
+                </ThOrden>
+                <ThOrden
+                  campo="cliente"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('cliente')}
+                >
+                  Cliente
+                </ThOrden>
+                <ThOrden
+                  campo="origen"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('origen')}
+                >
+                  Origen
+                </ThOrden>
                 {tipo === 'CAMBIO_PLAN' && (
                   <th className="px-3 py-2 text-right text-overline">Precio</th>
                 )}
