@@ -8,6 +8,8 @@ import {
   type FilaCampana,
   type ReporteCrecimiento,
 } from '@/modules/reportes/crecimiento'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num, porcentaje, razon } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
 import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
@@ -177,7 +179,7 @@ export function ReporteCrecimientoVista({
                 encabezados={['Día', 'Clics', 'Registros']}
                 filas={serie
                   .filter((p) => p.clics > 0 || p.registros > 0)
-                  .map((p) => [p.dia, entero(p.clics), entero(p.registros)])}
+                  .map((p) => [p.dia, num(p.clics, entero(p.clics)), num(p.registros, entero(p.registros))])}
                 vacio="Sin clics ni registros en el periodo."
               />
             }
@@ -202,9 +204,9 @@ export function ReporteCrecimientoVista({
                   const previo = i === 0 ? null : r.embudo[i - 1].eventos
                   return [
                     e.nombre,
-                    entero(e.eventos),
-                    entero(e.referentes),
-                    previo == null ? '—' : previo === 0 ? 'Sin dato' : `${Math.round((e.eventos / previo) * 100)} %`,
+                    num(e.eventos, entero(e.eventos)),
+                    num(e.referentes, entero(e.referentes)),
+                    porcentaje(e.eventos, previo, previo === 0 ? 'Sin dato' : '—'),
                   ]
                 })}
                 vacio="Sin eventos del embudo en el periodo."
@@ -241,7 +243,7 @@ export function ReporteCrecimientoVista({
         ) : (
           <Tabla
             encabezados={['Cliente', 'Referidos completados']}
-            filas={r.topReferentes.map((t) => [t.nombre, entero(t.completados)])}
+            filas={r.topReferentes.map((t) => [t.nombre, num(t.completados, entero(t.completados))])}
             vacio="Ningún vínculo se completó en el periodo."
           />
         )}
@@ -283,15 +285,15 @@ export function ReporteCrecimientoVista({
           filas={[
             [
               'Programa de referidos',
-              entero(r.recompensas.referidos.pendientes),
-              entero(r.recompensas.referidos.entregadas),
-              entero(r.recompensas.referidos.rechazadas),
+              num(r.recompensas.referidos.pendientes, entero(r.recompensas.referidos.pendientes)),
+              num(r.recompensas.referidos.entregadas, entero(r.recompensas.referidos.entregadas)),
+              num(r.recompensas.referidos.rechazadas, entero(r.recompensas.referidos.rechazadas)),
             ],
             [
               'Reglas de crecimiento',
-              entero(r.recompensas.growth.pendientes),
-              entero(r.recompensas.growth.entregadas),
-              entero(r.recompensas.growth.rechazadas),
+              num(r.recompensas.growth.pendientes, entero(r.recompensas.growth.pendientes)),
+              num(r.recompensas.growth.entregadas, entero(r.recompensas.growth.entregadas)),
+              num(r.recompensas.growth.rechazadas, entero(r.recompensas.growth.rechazadas)),
             ],
           ]}
           vacio=""
@@ -342,11 +344,11 @@ function TablaCanales({ filas, entero }: { filas: FilaCanal[]; entero: (n: numbe
       encabezados={['Canal', 'Compartidos', 'Clics', 'Clics por compartido']}
       filas={filas.map((f) => [
         f.nombre,
-        entero(f.compartidos),
-        entero(f.clics),
+        num(f.compartidos, entero(f.compartidos)),
+        num(f.clics, entero(f.clics)),
         // Sin compartidos no es «0»: son clics que llegaron por un enlace que
         // se compartió antes del periodo, o pegado a mano.
-        f.compartidos === 0 ? '—' : (f.clics / f.compartidos).toFixed(1),
+        razon(f.clics, f.compartidos),
       ])}
       vacio="Nadie compartió ni abrió un enlace en el periodo."
     />
@@ -357,7 +359,7 @@ function TablaCampanas({ filas, entero }: { filas: FilaCampana[]; entero: (n: nu
   return (
     <Tabla
       encabezados={['Campaña', 'Enlaces abiertos', 'Registros', 'Premios reclamados']}
-      filas={filas.map((f) => [f.nombre, entero(f.clics), entero(f.registros), entero(f.premios)])}
+      filas={filas.map((f) => [f.nombre, num(f.clics, entero(f.clics)), num(f.registros, entero(f.registros)), num(f.premios, entero(f.premios))])}
       vacio="Ninguna campaña de invitación tuvo movimiento en el periodo."
     />
   )
@@ -369,52 +371,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

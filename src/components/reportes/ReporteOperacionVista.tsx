@@ -3,6 +3,8 @@ import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaOperacion, ReporteOperacion } from '@/modules/reportes/operacion'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -171,7 +173,7 @@ export function ReporteOperacionVista({
               encabezados={['Día', 'Canjes', 'Descontaron']}
               filas={serie
                 .filter((p) => p.canjes > 0)
-                .map((p) => [p.dia, entero(p.canjes), entero(p.descontados)])}
+                .map((p) => [p.dia, num(p.canjes, entero(p.canjes)), num(p.descontados, entero(p.descontados))])}
               vacio="Sin canjes diarios en el periodo."
             />
           </section>
@@ -247,7 +249,7 @@ function TablaOperacion({
   return (
     <Tabla
       encabezados={[columna, 'Canjes', 'Descontaron']}
-      filas={filas.map((f) => [f.nombre, entero(f.canjes), entero(f.descontados)])}
+      filas={filas.map((f) => [f.nombre, num(f.canjes, entero(f.canjes)), num(f.descontados, entero(f.descontados))])}
       vacio="Sin canjes en el periodo."
     />
   )
@@ -259,52 +261,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

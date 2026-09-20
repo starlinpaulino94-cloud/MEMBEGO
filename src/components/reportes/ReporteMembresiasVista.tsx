@@ -3,6 +3,8 @@ import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { ReporteMembresias } from '@/modules/reportes/membresias'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -177,9 +179,9 @@ export function ReporteMembresiasVista({
               encabezados={['Plan', 'Activaciones', 'Renovaciones', 'Bajas']}
               filas={r.porPlan.map((p) => [
                 p.plan,
-                entero(p.activadas),
-                entero(p.renovadas),
-                entero(p.bajas),
+                num(p.activadas, entero(p.activadas)),
+                num(p.renovadas, entero(p.renovadas)),
+                num(p.bajas, entero(p.bajas)),
               ])}
               vacio="Ningún plan tuvo movimiento en el periodo."
             />
@@ -193,7 +195,7 @@ export function ReporteMembresiasVista({
               />
               <Tabla
                 encabezados={['Motivo', 'Veces']}
-                filas={r.motivos.map((m) => [m.motivo, entero(m.total)])}
+                filas={r.motivos.map((m) => [m.motivo, num(m.total, entero(m.total))])}
                 vacio=""
               />
             </section>
@@ -205,7 +207,7 @@ export function ReporteMembresiasVista({
               encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
               filas={serie
                 .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
-                .map((p) => [p.dia, entero(p.activadas), entero(p.renovadas), entero(p.bajas)])}
+                .map((p) => [p.dia, num(p.activadas, entero(p.activadas)), num(p.renovadas, entero(p.renovadas)), num(p.bajas, entero(p.bajas))])}
               vacio="Sin movimiento diario en el periodo."
             />
           </section>
@@ -256,52 +258,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

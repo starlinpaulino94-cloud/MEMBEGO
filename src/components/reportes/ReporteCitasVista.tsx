@@ -3,6 +3,8 @@ import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaCitas, ReporteCitas } from '@/modules/reportes/citas'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -216,7 +218,7 @@ export function ReporteCitasVista({
               />
               <Tabla
                 encabezados={['Motivo', 'Veces']}
-                filas={r.motivosCancelacion.map((m) => [m.motivo, entero(m.total)])}
+                filas={r.motivosCancelacion.map((m) => [m.motivo, num(m.total, entero(m.total))])}
                 vacio=""
               />
             </section>
@@ -264,10 +266,10 @@ export function ReporteCitasVista({
                 .filter((p) => p.agendadas > 0)
                 .map((p) => [
                   p.dia,
-                  entero(p.agendadas),
-                  entero(p.completadas),
-                  entero(p.canceladas),
-                  entero(p.noAsistio),
+                  num(p.agendadas, entero(p.agendadas)),
+                  num(p.completadas, entero(p.completadas)),
+                  num(p.canceladas, entero(p.canceladas)),
+                  num(p.noAsistio, entero(p.noAsistio)),
                 ])}
               vacio="Sin citas diarias en el periodo."
             />
@@ -319,10 +321,10 @@ function TablaCitas({
       encabezados={[columna, 'Agendadas', 'Completadas', 'Canceladas', 'No asistió']}
       filas={filas.map((f) => [
         f.nombre,
-        entero(f.agendadas),
-        entero(f.completadas),
-        entero(f.canceladas),
-        entero(f.noAsistio),
+        num(f.agendadas, entero(f.agendadas)),
+        num(f.completadas, entero(f.completadas)),
+        num(f.canceladas, entero(f.canceladas)),
+        num(f.noAsistio, entero(f.noAsistio)),
       ])}
       vacio="Sin citas en el periodo."
     />
@@ -335,52 +337,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }
