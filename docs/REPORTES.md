@@ -15,6 +15,7 @@ porque los fallos de un reporte no se notan: se ven como un número.
 | `/admin/reportes/clientes` | Dueño del negocio | `modules/reportes/clientes.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/crecimiento` | Dueño del negocio | `modules/reportes/crecimiento.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/reportes/promociones` | Dueño del negocio | `modules/reportes/promociones.ts` | presets + a mano | ✅ CSV | ✅ |
+| `/admin/reportes/regalos` | Dueño del negocio | `modules/reportes/regalos.ts` | presets + a mano | ✅ CSV | ✅ |
 | `/admin/app/carwash/reportes` | Encargado | `modules/apps/reportes.ts` | desde/hasta | ✅ CSV | ✅ |
 | `/admin/retencion` | Dueño del negocio | `modules/riesgo/retencion.ts` | ventana fija (90 d) | ✅ CSV | ✅ |
 | `/admin/riesgo` | Dueño del negocio | `modules/riesgo/` | filtros | ✅ CSV | ✅ |
@@ -298,6 +299,47 @@ en su propio bloque, rotulado, también en el CSV.
 reporte usa por su nombre los dos ingredientes que el vocabulario distingue
 —«con membresía vigente» y «con actividad»— y enlaza al semáforo en vez de
 repetirlo.
+
+### Códigos y regalos 🔒👤
+
+Lo que un cliente le paga a otro. **Sustituye a la categoría «Cupones» del plan
+original**, que no se puede construir: no hay modelo `Cupon` en el esquema, y
+`BeneficioTipo.COUPON` y `TransactionTipo.COUPON_USE` están declarados sin que
+ningún código los escriba. Un reporte de cupones daría cero en todas sus cifras.
+
+| Métrica | Fuente |
+| --- | --- |
+| Regalos enviados | `Regalo.createdAt` |
+| Aceptados | `Regalo.resueltoAt` con estado `ACEPTADO` |
+| Tasa de aceptación | Aceptados ÷ **cerrados**, sin los `CANCELADO` |
+| Qué se regala | `Regalo.tipo` (usos, promoción, membresía) |
+| A quien no tiene cuenta | `Regalo.destinatarioId` nulo |
+| Gift cards emitidas / activadas | `GiftCard.createdAt` / `activadaAt` |
+| Vendido en gift cards 🔒 | `GiftCard.monto` de las activadas en el periodo |
+| Saldo vivo 🔒 | `GiftCard.saldo` de las activas — **foto de hoy** |
+| Quién más regala 👤 | `Regalo` agrupado por remitente |
+
+**Dos cosas distintas que no se suman.** Un regalo lo tiene que **aceptar**
+alguien —puede rechazarse o vencerse—; una gift card es **dinero que ya entró**.
+Ninguna cifra del reporte los combina.
+
+**El saldo vivo es un PASIVO, no un ingreso.** Ese dinero se cobró al vender la
+gift card y el servicio todavía se debe: sumarlo a los ingresos del mes lo
+contaría dos veces, una al venderse y otra al consumirse. Va en su propio bloque
+y rotulado, también en el CSV.
+
+**La tasa de aceptación sale de los cerrados, y sin los retirados.** Sobre el
+total, una tanda recién enviada daría una aceptación baja que no fue. Y un
+`CANCELADO` lo retira quien envía, no lo rechaza quien recibe: meterlo en el
+denominador castigaría al negocio por una decisión del remitente.
+
+**Lo que no se puede fechar:** el **consumo de una gift card**. Baja `saldo` con
+un `decrement` sin dejar fila propia, y la transacción que emite es
+`BENEFIT_USE`, tipo que comparten cuatro flujos (ofertas privadas, gift cards,
+regalos). Por eso lo consumido va como **acumulado** (`monto − saldo`) y nunca
+como cifra del periodo. `tests/reporte-regalos.test.ts` vigila la causa: si
+`BENEFIT_USE` pasara a ser exclusivo de gift cards, el consumo sí se podría
+fechar.
 
 ### Promociones 🔒
 
