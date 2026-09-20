@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaOperacion, ReporteOperacion } from '@/modules/reportes/operacion'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
@@ -40,6 +41,11 @@ export function ReporteOperacionVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const detalle = (vista: string) =>
     `/admin/reportes/operacion/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
 
@@ -163,7 +169,7 @@ export function ReporteOperacionVista({
             <SectionHeader title="Día a día" />
             <Tabla
               encabezados={['Día', 'Canjes', 'Descontaron']}
-              filas={r.serie
+              filas={serie
                 .filter((p) => p.canjes > 0)
                 .map((p) => [p.dia, entero(p.canjes), entero(p.descontados)])}
               vacio="Sin canjes diarios en el periodo."

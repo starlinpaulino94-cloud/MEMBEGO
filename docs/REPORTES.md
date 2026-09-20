@@ -63,6 +63,42 @@ mezclen sin decirlo. El Resumen y los Reportes tienen que dar la misma cifra.
 Cada motor devuelve `incompleto: boolean` y la pantalla lo pinta. Cuatro
 tarjetas en `RD$0` porque una consulta no respondió es peor que un error.
 
+## Granularidad de la serie
+
+Una serie diaria de 365 puntos no es una tendencia: es ruido con forma de
+gráfica. Cada reporte agrupa su serie **por día, por semana o por mes**, y el
+valor por defecto es **automático** según el largo del periodo:
+
+| Días del periodo | Granularidad |
+| --- | --- |
+| hasta 62 | Por día |
+| 63 a 400 | Por semana |
+| más de 400 | Por mes |
+
+**Se pliega en TypeScript, no en SQL**, y es a propósito. Las series ya salen de
+la base agrupadas por día **y cortadas en la zona horaria del negocio**
+(`AT TIME ZONE`), que es la parte difícil. Plegar esos días es una suma, y
+hacerlo fuera de la consulta tiene tres ventajas: no se toca ni un motor, la
+semana **nunca puede discrepar del día** porque sale de los mismos números, y si
+la agrupación bajara a `date_trunc` habría que volver a pasarle la zona a cada
+consulta — una que se olvidara cortaría en UTC sin avisar.
+
+**Solo sirve para cifras aditivas.** Plegar suma cada campo del punto: correcto
+para conteos y para dinero, y **mentira para una media o una tasa** (la media de
+una semana no es la suma de las medias de sus días). `tests/reportes-granularidad.test.ts`
+comprueba que ninguna serie del módulo meta una tasa; si hace falta una media
+semanal, se calcula sobre los totales plegados.
+
+**La granularidad viaja en la URL** (`g`), como todo en esta pantalla, y solo
+cuando se eligió a mano: la automática se recalcula sola. Cambiar de periodo no
+la pierde, y la exportación se la lleva.
+
+**El recorte de la serie larga se dice.** Un rango de más de `MAX_DIAS_SERIE`
+(370) días enseña los primeros 370 en la gráfica y la tabla — antes se recortaba
+en silencio. Ahora hay un aviso, **y ese aviso se imprime**: en papel, una serie
+corta sin nota es indistinguible de un periodo sin datos. Las cifras del resumen
+siempre cubren el periodo entero.
+
 ## Exportar
 
 - Siempre en el **servidor** (una ruta `export`/`exportar`), nunca en el

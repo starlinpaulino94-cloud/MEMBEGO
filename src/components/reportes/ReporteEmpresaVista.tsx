@@ -1,6 +1,7 @@
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import { calcularInsights } from '@/modules/reportes/insights'
 import { TIPO_TX_LABEL, METODO_LABEL, type Reporte } from '@/modules/reportes/queries'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
@@ -82,17 +83,22 @@ export function ReporteEmpresaVista({
 }) {
   const dinero = (n: number) => formatMoney(n, prefs)
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const insights = calcularInsights(r)
-  const hayActividad = r.serie.some((p) => p.ventas > 0 || p.entregas > 0)
+  const hayActividad = serie.some((p) => p.ventas > 0 || p.entregas > 0)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
 
   // Las series de las tarjetas salen de los datos que YA se consultan. Donde no
   // hay dato por día no se pinta sparkline: dibujar una línea inventada para
   // que las cinco tarjetas se vean iguales sería exactamente lo contrario de un
   // reporte.
-  const serieIngresos = r.serie.map((p) => p.ingresos)
-  const serieVentas = r.serie.map((p) => p.ventas)
-  const serieEntregas = r.serie.map((p) => p.entregas)
+  const serieIngresos = serie.map((p) => p.ingresos)
+  const serieVentas = serie.map((p) => p.ventas)
+  const serieEntregas = serie.map((p) => p.entregas)
 
   const ingresoTotal = (r.ingresosCaja?.valor ?? 0) + (r.ingresosMembresias?.valor ?? 0)
 
@@ -182,7 +188,7 @@ export function ReporteEmpresaVista({
         grafico={
           hayActividad ? (
             <GraficoTendencia
-              datos={r.serie.map((p) => ({ dia: p.dia, valor: p.ingresos }))}
+              datos={serie.map((p) => ({ dia: p.dia, valor: p.ingresos }))}
               etiqueta="Ingresos de caja"
               formato={dinero}
             />
@@ -203,7 +209,7 @@ export function ReporteEmpresaVista({
             ]}
             // Solo los días con algo: en papel, treinta filas de ceros gastan
             // una hoja para no decir nada.
-            filas={r.serie
+            filas={serie
               .filter((p) => p.ventas > 0 || p.entregas > 0 || p.ingresos > 0)
               .map((p) => ({
                 __clave: p.dia,

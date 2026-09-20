@@ -1,6 +1,7 @@
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaRegalo, ReporteRegalos } from '@/modules/reportes/regalos'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
@@ -45,6 +46,11 @@ export function ReporteRegalosVista({
 }) {
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
   const dinero = (n: number) => formatMoney(n, prefs)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
   const hayMovimiento = r.enviados.valor > 0 || r.aceptados.valor > 0 || r.emitidas.valor > 0
 
@@ -97,14 +103,14 @@ export function ReporteRegalosVista({
             kpi={r.enviados}
             formato={entero}
             definicion="Regalos creados en el periodo, fechados el día que se enviaron."
-            serie={r.serie.map((p) => p.enviados)}
+            serie={serie.map((p) => p.enviados)}
           />
           <KpiReporte
             label="Aceptados"
             kpi={r.aceptados}
             formato={entero}
             definicion="Regalos que el receptor aceptó DENTRO del periodo. Pueden haberse enviado antes."
-            serie={r.serie.map((p) => p.aceptados)}
+            serie={serie.map((p) => p.aceptados)}
           />
           <Celda
             label="Tasa de aceptación"
@@ -137,7 +143,7 @@ export function ReporteRegalosVista({
             nota="Los aceptados van punteados. No son los mismos regalos: lo que se acepta hoy pudo enviarse días atrás."
             grafico={
               <GraficoTendencia
-                datos={r.serie.map((p) => ({ dia: p.dia, valor: p.enviados, anterior: p.aceptados }))}
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.enviados, anterior: p.aceptados }))}
                 etiqueta="Enviados"
                 etiquetaAnterior="Aceptados"
                 formato={entero}
@@ -146,7 +152,7 @@ export function ReporteRegalosVista({
             tabla={
               <Tabla
                 encabezados={['Día', 'Enviados', 'Aceptados']}
-                filas={r.serie
+                filas={serie
                   .filter((p) => p.enviados > 0 || p.aceptados > 0)
                   .map((p) => [p.dia, entero(p.enviados), entero(p.aceptados)])}
                 vacio="Sin movimiento diario en el periodo."

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaCitas, ReporteCitas } from '@/modules/reportes/citas'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
@@ -41,6 +42,11 @@ export function ReporteCitasVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const detalle = (vista: string) =>
     `/admin/reportes/citas/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
   const totalCancela =
@@ -254,7 +260,7 @@ export function ReporteCitasVista({
             <SectionHeader title="Día a día" />
             <Tabla
               encabezados={['Día', 'Agendadas', 'Completadas', 'Canceladas', 'No asistió']}
-              filas={r.serie
+              filas={serie
                 .filter((p) => p.agendadas > 0)
                 .map((p) => [
                   p.dia,

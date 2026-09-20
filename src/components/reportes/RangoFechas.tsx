@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import Form from 'next/form'
-import { CalendarDays, GitCompareArrows, RotateCcw } from 'lucide-react'
+import { BarChart3, CalendarDays, GitCompareArrows, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   COMPARACIONES,
+  GRANULARIDADES,
+  MAX_DIAS_SERIE,
   COMPARACION_POR_DEFECTO,
   PRESET_POR_DEFECTO,
   PRESETS,
@@ -64,12 +66,17 @@ export function RangoFechas({
     // La comparación sobrevive al cambio de preset: quien estaba mirando
     // «contra el año pasado» no vuelve solo al periodo anterior.
     if (rango.comparacion !== COMPARACION_POR_DEFECTO) sp.set('comparar', rango.comparacion)
+    // Y la granularidad elegida a mano: cambiar de periodo no debe devolver la
+    // serie a la automática sin que nadie lo haya pedido.
+    if (rango.granularidadPedida) sp.set('g', rango.granularidad)
     for (const [k, v] of Object.entries(cambios)) sp.set(k, v)
     return `${accion}?${sp.toString()}`
   }
 
   const comparacionActual =
     COMPARACIONES.find((c) => c.clave === rango.comparacion) ?? COMPARACIONES[0]
+  const granularidadActual =
+    GRANULARIDADES.find((g) => g.clave === rango.granularidad) ?? GRANULARIDADES[0]
 
   // Los presets, agrupados como se piensan. «Rápidos» son ventanas móviles que
   // terminan hoy; «calendario» son periodos cerrados con nombre propio.
@@ -78,10 +85,24 @@ export function RangoFechas({
   const calendario = PRESETS.filter((p) => !RAPIDOS.includes(p.clave))
 
   const hayFiltros =
-    rango.preset !== PRESET_POR_DEFECTO || rango.comparacion !== COMPARACION_POR_DEFECTO
+    rango.preset !== PRESET_POR_DEFECTO ||
+    rango.comparacion !== COMPARACION_POR_DEFECTO ||
+    rango.granularidadPedida
 
   return (
-    <div className="print:hidden flex flex-wrap items-center gap-2">
+    <>
+      {/* El recorte de la serie se DICE. Antes se hacía en silencio: la gráfica
+          enseñaba los primeros 370 días de un rango más largo y nada avisaba de
+          que el final faltaba. Este aviso sí se imprime: en papel, una serie
+          corta sin nota es indistinguible de un periodo sin datos. */}
+      {rango.serieRecortada && (
+        <p className="mb-2 rounded-lg border border-dashed border-border px-3 py-2 text-caption">
+          El periodo es más largo de lo que cabe en una serie: la gráfica y la tabla del día a día
+          enseñan los primeros {MAX_DIAS_SERIE} días. Las cifras del resumen sí cubren el periodo
+          entero.
+        </p>
+      )}
+      <div className="print:hidden flex flex-wrap items-center gap-2">
       {/* ── Periodo ─────────────────────────────────────────────────────── */}
       <details className="group relative">
         <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-card px-3 text-small font-semibold text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -167,6 +188,38 @@ export function RangoFechas({
         </div>
       </details>
 
+      {/* ── Cada cuánto ─────────────────────────────────────────────────── */}
+      <details className="group relative">
+        <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-card px-3 text-small text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <BarChart3 className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <span className="font-semibold">{granularidadActual.label.toLowerCase()}</span>
+          {!rango.granularidadPedida && <span className="text-caption font-normal">(auto)</span>}
+        </summary>
+        <div className="absolute left-0 z-dropdown mt-2 w-[min(92vw,22rem)] rounded-xl border border-border bg-popover p-3 elevation-2">
+          <p className="text-overline">Agrupar la serie</p>
+          <div className="mt-2 flex flex-col gap-1">
+            {GRANULARIDADES.map((g) => (
+              <Chip
+                key={g.clave}
+                href={con(
+                  rango.preset === 'personalizado'
+                    ? { desde: rango.desdeDia, hasta: rango.hastaDia, g: g.clave }
+                    : { rango: rango.preset, g: g.clave }
+                )}
+                activo={rango.granularidad === g.clave}
+                bloque
+              >
+                {g.label}
+              </Chip>
+            ))}
+          </div>
+          <p className="mt-2 text-caption">
+            Sin elegir nada se ajusta sola al periodo: un año en días son 365 barras y no se lee
+            ninguna. Solo cambia cómo se AGRUPA la gráfica, nunca las cifras del resumen.
+          </p>
+        </div>
+      </details>
+
       {hayFiltros && (
         <Button asChild variant="ghost" size="sm">
           <Link href={accion}>
@@ -174,7 +227,8 @@ export function RangoFechas({
           </Link>
         </Button>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
