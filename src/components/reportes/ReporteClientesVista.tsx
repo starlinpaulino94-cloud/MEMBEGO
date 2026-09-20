@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaClientes, ReporteClientes } from '@/modules/reportes/clientes'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
@@ -45,6 +46,11 @@ export function ReporteClientesVista({
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
   const dinero = (n: number) => formatMoney(n, prefs)
   const pct = (n: number, de: number) => (de === 0 ? '—' : `${Math.round((n / de) * 100)} %`)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
 
   return (
     <ReporteImprimible
@@ -166,7 +172,7 @@ export function ReporteClientesVista({
             <SectionHeader title="Altas día a día" />
             <Tabla
               encabezados={['Día', 'Altas']}
-              filas={r.serie.filter((p) => p.nuevos > 0).map((p) => [p.dia, entero(p.nuevos)])}
+              filas={serie.filter((p) => p.nuevos > 0).map((p) => [p.dia, entero(p.nuevos)])}
               vacio="Sin altas diarias en el periodo."
             />
           </section>

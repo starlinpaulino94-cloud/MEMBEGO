@@ -1,6 +1,7 @@
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaPromocion, ReportePromociones } from '@/modules/reportes/promociones'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
@@ -46,6 +47,11 @@ export function ReportePromocionesVista({
 }) {
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
   const dinero = (n: number) => formatMoney(n, prefs)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
   const hayMovimiento =
     r.adquiridas.valor > 0 || r.entregadas.valor > 0 || r.usadas.valor > 0
@@ -96,7 +102,7 @@ export function ReportePromocionesVista({
             kpi={r.adquiridas}
             formato={entero}
             definicion="Compras de promoción creadas en el periodo, sin importar si llegaron a pagarse."
-            serie={r.serie.map((p) => p.adquiridas)}
+            serie={serie.map((p) => p.adquiridas)}
           />
           <KpiReporte
             label="Entregadas"
@@ -109,7 +115,7 @@ export function ReportePromocionesVista({
             kpi={r.usadas}
             formato={entero}
             definicion="Canjes reales validados con QR. No incluye los usos que se regalaron a otra persona."
-            serie={r.serie.map((p) => p.usadas)}
+            serie={serie.map((p) => p.usadas)}
           />
           {r.ingresos ? (
             <KpiReporte
@@ -164,7 +170,7 @@ export function ReportePromocionesVista({
             nota="Los usos van punteados. No son los mismos beneficios: lo que se usa hoy pudo entregarse semanas atrás."
             grafico={
               <GraficoTendencia
-                datos={r.serie.map((p) => ({ dia: p.dia, valor: p.adquiridas, anterior: p.usadas }))}
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.adquiridas, anterior: p.usadas }))}
                 etiqueta="Adquiridas"
                 etiquetaAnterior="Usadas"
                 formato={entero}
@@ -173,7 +179,7 @@ export function ReportePromocionesVista({
             tabla={
               <Tabla
                 encabezados={['Día', 'Adquiridas', 'Usadas']}
-                filas={r.serie
+                filas={serie
                   .filter((p) => p.adquiridas > 0 || p.usadas > 0)
                   .map((p) => [p.dia, entero(p.adquiridas), entero(p.usadas)])}
                 vacio="Sin movimiento diario en el periodo."

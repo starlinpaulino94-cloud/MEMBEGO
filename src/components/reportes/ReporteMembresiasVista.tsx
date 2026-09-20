@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { ReporteMembresias } from '@/modules/reportes/membresias'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
@@ -39,6 +40,11 @@ export function ReporteMembresiasVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const detalle = (tipo: string) =>
     `/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`
 
@@ -197,7 +203,7 @@ export function ReporteMembresiasVista({
             <SectionHeader title="Día a día" />
             <Tabla
               encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
-              filas={r.serie
+              filas={serie
                 .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
                 .map((p) => [p.dia, entero(p.activadas), entero(p.renovadas), entero(p.bajas)])}
               vacio="Sin movimiento diario en el periodo."

@@ -1,6 +1,7 @@
 import type { RegionalPrefs } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import {
   FUERA_DEL_EMBUDO,
   type FilaCanal,
@@ -50,6 +51,11 @@ export function ReporteCrecimientoVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
 
   const primeraEtapa = r.embudo[0]?.eventos ?? 0
@@ -90,14 +96,14 @@ export function ReporteCrecimientoVista({
             kpi={r.clics}
             formato={entero}
             definicion="Veces que alguien abrió un enlace de invitación. No cuenta bots ni al propio dueño del enlace."
-            serie={r.serie.map((p) => p.clics)}
+            serie={serie.map((p) => p.clics)}
           />
           <KpiReporte
             label="Registros atribuidos"
             kpi={r.registros}
             formato={entero}
             definicion="Cuentas creadas con una invitación detrás, fechadas el día del registro."
-            serie={r.serie.map((p) => p.registros)}
+            serie={serie.map((p) => p.registros)}
             href={hrefClientes}
             hrefLabel="Ver clientes"
           />
@@ -160,7 +166,7 @@ export function ReporteCrecimientoVista({
             nota="Los registros van punteados. Un día con muchos clics y ningún registro suele apuntar al formulario, no al enlace."
             grafico={
               <GraficoTendencia
-                datos={r.serie.map((p) => ({ dia: p.dia, valor: p.clics, anterior: p.registros }))}
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.clics, anterior: p.registros }))}
                 etiqueta="Clics"
                 etiquetaAnterior="Registros"
                 formato={entero}
@@ -169,7 +175,7 @@ export function ReporteCrecimientoVista({
             tabla={
               <Tabla
                 encabezados={['Día', 'Clics', 'Registros']}
-                filas={r.serie
+                filas={serie
                   .filter((p) => p.clics > 0 || p.registros > 0)
                   .map((p) => [p.dia, entero(p.clics), entero(p.registros)])}
                 vacio="Sin clics ni registros en el periodo."

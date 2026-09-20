@@ -50,6 +50,44 @@ export const PRESET_POR_DEFECTO: PresetRango = '30d'
 /** Tope de puntos de la serie diaria: un año de barras no se lee. */
 export const MAX_DIAS_SERIE = 370
 
+/**
+ * CADA CUÁNTO SE AGRUPA LA SERIE.
+ *
+ * Una serie diaria de 365 puntos no es una tendencia: es ruido con forma de
+ * gráfica. Y una semanal de 7 días tampoco dice nada, porque cada barra sería
+ * un punto. La granularidad no es una preferencia estética — decide si la
+ * línea responde «¿cómo voy?» o solo dibuja el ruido del día a día.
+ *
+ * Por eso el valor por defecto es AUTOMÁTICO y depende de cuántos días se
+ * están mirando. Quien quiera otra cosa la pide y viaja en la URL, como todo
+ * en esta pantalla.
+ */
+export const GRANULARIDADES = [
+  { clave: 'dia', label: 'Por día' },
+  { clave: 'semana', label: 'Por semana' },
+  { clave: 'mes', label: 'Por mes' },
+] as const
+
+export type Granularidad = (typeof GRANULARIDADES)[number]['clave']
+
+/** Hasta aquí el día a día se lee bien; a partir de ahí, se agrupa. */
+export const DIAS_MAX_DIARIO = 62
+/** Por encima de esto ni la semana alcanza: un año en semanas son 52 barras. */
+export const DIAS_MAX_SEMANAL = 400
+
+/**
+ * La granularidad que le queda bien a un rango de N días.
+ *
+ * Los cortes no son arbitrarios: dos meses en días son ~62 barras, que todavía
+ * se leen; un año en semanas son 52, que también. Un año en días son 365 y no
+ * se lee ninguno.
+ */
+export function granularidadAutomatica(dias: number): Granularidad {
+  if (dias <= DIAS_MAX_DIARIO) return 'dia'
+  if (dias <= DIAS_MAX_SEMANAL) return 'semana'
+  return 'mes'
+}
+
 export interface Rango {
   /** Preset elegido, o 'personalizado' si vinieron fechas a mano. */
   preset: PresetRango | 'personalizado'
@@ -70,6 +108,16 @@ export interface Rango {
   anterior: { desde: Date; hasta: Date; desdeDia: string; hastaDia: string }
   /** Cómo se lee la comparación en pantalla («vs. periodo anterior»). */
   etiquetaComparacion: string
+  /** Cada cuánto se agrupa la serie, ya resuelta (automática o pedida). */
+  granularidad: Granularidad
+  /** `true` si quien mira la eligió a mano, en vez de dejar la automática. */
+  granularidadPedida: boolean
+  /**
+   * `true` cuando el rango es más largo que `MAX_DIAS_SERIE` y la serie se
+   * queda corta. Antes se recortaba en silencio: la gráfica enseñaba los
+   * primeros 370 días de un rango de 500 sin decir que faltaba el resto.
+   */
+  serieRecortada: boolean
 }
 
 const ES_DIA = /^\d{4}-\d{2}-\d{2}$/
@@ -295,6 +343,8 @@ export function leerRango(
     antDesdeDia = sumarDias(antHastaDia, -(dias - 1))
   }
 
+  const gPedida = GRANULARIDADES.find((g) => g.clave === leer('g'))?.clave
+
   return {
     preset,
     desdeDia,
@@ -306,6 +356,9 @@ export function leerRango(
     comparacion,
     etiquetaComparacion:
       COMPARACIONES.find((c) => c.clave === comparacion)?.label ?? 'Periodo anterior',
+    granularidad: gPedida ?? granularidadAutomatica(dias),
+    granularidadPedida: gPedida != null,
+    serieRecortada: dias > MAX_DIAS_SERIE,
     anterior: {
       desdeDia: antDesdeDia,
       hastaDia: antHastaDia,
@@ -346,6 +399,13 @@ export function paramsDeRango(rango: Rango): string {
   // contra el año pasado, y el archivo diría otra cosa que la vista.
   if (rango.comparacion !== COMPARACION_POR_DEFECTO) {
     sp.set('comparar', rango.comparacion)
+  }
+  // La granularidad también: sin esto, cambiar de reporte o exportar volvería
+  // a la automática y la serie saldría con otra forma que la que se miraba.
+  // Solo viaja si se pidió a mano; la automática se recalcula sola y así el
+  // enlace no se llena de parámetros que no hacen falta.
+  if (rango.granularidadPedida) {
+    sp.set('g', rango.granularidad)
   }
   const q = sp.toString()
   return q ? `?${q}` : ''
