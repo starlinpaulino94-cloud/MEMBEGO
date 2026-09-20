@@ -99,6 +99,25 @@ en silencio. Ahora hay un aviso, **y ese aviso se imprime**: en papel, una serie
 corta sin nota es indistinguible de un periodo sin datos. Las cifras del resumen
 siempre cubren el periodo entero.
 
+## Mientras carga
+
+Cada pantalla de reportes tiene su propio `loading.tsx`
+(`components/reportes/EsqueletoReporte.tsx`). No es un adorno: antes caían en el
+`loading.tsx` genérico de `/admin`, que pinta **seis tarjetas iguales en
+rejilla** — una forma que no llega nunca, así que al aparecer el reporte de
+verdad **todo se movía de sitio**. Un esqueleto que no calca la página no reduce
+la espera, la hace más brusca.
+
+El esqueleto calca la forma real y en su orden: barra del periodo → fila de
+cifras → paneles de gráfico → secciones de tabla. **Las cantidades de cada
+pantalla salen de contar su vista** (`<KpiReporte`, `<PanelGrafico`), y
+`tests/reportes-carga.test.ts` las compara en cada ejecución: si un reporte gana
+una cifra o un gráfico y el esqueleto se queda atrás, la prueba falla.
+
+Los **detalles** usan otro (`EsqueletoDetalleReporte`): son pestañas y una tabla
+larga, no cifras. Y el esqueleto lleva `role="status"` con texto oculto, porque
+sin él un lector de pantalla solo encuentra silencio.
+
 ## Exportar
 
 - Siempre en el **servidor** (una ruta `export`/`exportar`), nunca en el
