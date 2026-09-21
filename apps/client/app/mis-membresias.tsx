@@ -228,17 +228,28 @@ export default function MisMembresiasScreen() {
           variant="card"
           icon={<CreditCard size={40} color="#0284c7" />}
           title="Tu wallet está lista"
-          description="Activa tu primera membresía para empezar a disfrutar beneficios con tu QR."
+          description="Explora las empresas disponibles y activa tu primera membresía para empezar a disfrutar beneficios con tu QR."
           action={
-            <Button onPress={() => router.push('/planes')}>
-              Ver planes disponibles
-            </Button>
+            <View className="gap-3 w-full">
+              <Button onPress={() => router.push('/planes')}>
+                Ver planes disponibles
+              </Button>
+              <Button variant="outline" onPress={() => router.push('/promociones')}>
+                Ver ofertas
+              </Button>
+            </View>
           }
         />
       ) : (
         <View>
           {/* ── Stats ── */}
           <View className="gap-3 mb-8">
+            <StatCard
+              icon={<CreditCard size={20} color="#0284c7" />}
+              accent="brand"
+              label={`Tarjeta${membresias.length !== 1 ? 's' : ''} en total`}
+              value={String(membresias.length)}
+            />
             <StatCard
               icon={<WalletCards size={20} color="#0284c7" />}
               accent="success"
@@ -264,7 +275,7 @@ export default function MisMembresiasScreen() {
             <View className="mb-8">
               <SectionHeader
                 title="Por vencer"
-                description={`Se ${porVencer.length === 1 ? 'agota' : 'agotan'} en los próximos ${DIAS_POR_VENCER} días.`}
+                description={`Se ${porVencer.length === 1 ? 'agota' : 'agotan'} en los próximos ${DIAS_POR_VENCER} días. Renuévala${porVencer.length === 1 ? '' : 's'} para no quedarte sin beneficios.`}
               />
               <View className="mt-3">
                 <WalletStack

@@ -74,6 +74,11 @@ export default function QrScreen() {
   const memberships = data?.memberships ?? []
   const sinBeneficio = data?.sinBeneficio
 
+  // Reconstruct elegida for intermediate state (pending/expired)
+  const elegida = !usable && memberships.length > 0
+    ? (selectedId ? memberships.find((m: any) => m.id === selectedId) : null) ?? memberships[0]
+    : null
+
   return (
     <ScrollView
       className="flex-1 bg-vibe-fondo"
@@ -124,7 +129,7 @@ export default function QrScreen() {
 
             {/* ── CTA: grad-vibe-cta ─────────────────────────────────── */}
             <TouchableOpacity
-              onPress={() => {}}
+              onPress={() => router.push(`/membresia/${usable.id}`)}
               activeOpacity={0.85}
               className="mt-4 w-full"
             >
@@ -168,6 +173,77 @@ export default function QrScreen() {
                         <Text className="text-label-md text-muted-foreground">
                           {m.estado}
                         </Text>
+                      </View>
+                      <ChevronRight size={16} color="#4b5563" />
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : elegida ? (
+        /* ── Intermediate state: membership exists but not usable ──── */
+        <View className="gap-4">
+          <Card className="items-center overflow-hidden rounded-xl border border-border bg-card p-5">
+            <Text className="text-label-md text-muted-foreground">{elegida.companyName}</Text>
+            <Text className="mt-0.5 text-center text-h2 font-inter-bold text-foreground" numberOfLines={2}>
+              {elegida.planNombre}
+            </Text>
+            <View className="my-5 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 p-6">
+              <View className="rounded-full bg-vibe-lavanda px-3 py-1">
+                <Text className="text-xs font-inter-semibold text-vibe-violet">{elegida.estado}</Text>
+              </View>
+              <Text className="mt-3 text-center text-small text-muted-foreground px-2">
+                {elegida.estado === 'PENDIENTE' || elegida.estado === 'PENDIENTE_PAGO'
+                  ? 'Esta membresía está pendiente de pago. Completa el pago para activar tu código QR de acceso.'
+                  : elegida.estado === 'VENCIDA'
+                    ? 'Esta membresía se encuentra vencida. Renueva tu plan para volver a generar tu código QR.'
+                    : 'El código QR no está disponible en este momento.'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push(`/membresia/${elegida.id}`)}
+              activeOpacity={0.85}
+              className="w-full"
+            >
+              <LinearGradient
+                colors={CTA_GRADIENT}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ borderRadius: 9999, minHeight: 44 }}
+                className="items-center justify-center px-4"
+              >
+                <Text className="text-label-lg font-inter-bold text-white">
+                  {elegida.estado === 'PENDIENTE' || elegida.estado === 'PENDIENTE_PAGO'
+                    ? 'Completar pago y activar pase'
+                    : 'Ver detalle y gestionar'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </Card>
+
+          {memberships.length > 1 ? (
+            <View>
+              <Text className="px-1 text-h4 font-inter-semibold text-foreground">Tus pases</Text>
+              <View className="mt-2 gap-2">
+                {memberships.map((m: any) => {
+                  const isCurrent = m.id === elegida.id
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      onPress={() => setSelectedId(m.id)}
+                      activeOpacity={0.7}
+                      className={cn(
+                        'flex-row items-center justify-between rounded-xl border bg-card p-4',
+                        isCurrent ? 'border-vibe-violet' : 'border-border',
+                      )}
+                    >
+                      <View className="flex-1 mr-2">
+                        <Text className="text-label-lg text-foreground" numberOfLines={1}>
+                          {m.companyName} · {m.planNombre}
+                        </Text>
+                        <Text className="text-label-md text-muted-foreground">{m.estado}</Text>
                       </View>
                       <ChevronRight size={16} color="#4b5563" />
                     </TouchableOpacity>

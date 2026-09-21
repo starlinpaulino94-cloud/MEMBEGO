@@ -18,6 +18,15 @@ import { useHistorial } from '../../src/hooks/useHistorial'
 import { Button } from '../../src/components/ui/Button'
 import { Skeleton } from '../../src/components/ui/Skeleton'
 
+const ESTADO_LABEL: Record<string, string> = {
+  ACTIVA: 'Activa',
+  PENDIENTE: 'Esperando pago',
+  PENDIENTE_PAGO: 'Esperando pago',
+  VENCIDA: 'Vencida',
+  CANCELADA: 'Cancelada',
+  RECHAZADA: 'Rechazada',
+}
+
 interface Membership {
   id: string
   planNombre: string
@@ -86,29 +95,29 @@ function getDaysRemaining(fechaVencimiento: string | null | undefined): number |
 function getStatusChipStyle(estado: string) {
   const upper = estado.toUpperCase()
   if (upper === 'ACTIVA') {
-    return 'bg-[#16a34a]/15 border-[#16a34a]/30'
+    return 'bg-success/15 border-success/30'
   }
   if (upper.startsWith('PENDIENTE')) {
-    return 'bg-[#d97706]/15 border-[#d97706]/30'
+    return 'bg-warning/15 border-warning/30'
   }
   if (upper === 'VENCIDA' || upper === 'CANCELADA') {
-    return 'bg-[#dc2626]/10 border-[#dc2626]/30'
+    return 'bg-destructive/10 border-destructive/30'
   }
-  return 'bg-slate-500/15 border-slate-500/30'
+  return 'bg-muted border-border'
 }
 
 function getStatusTextColor(estado: string) {
   const upper = estado.toUpperCase()
   if (upper === 'ACTIVA') {
-    return 'text-[#16a34a]'
+    return 'text-success'
   }
   if (upper.startsWith('PENDIENTE')) {
-    return 'text-[#d97706]'
+    return 'text-warning'
   }
   if (upper === 'VENCIDA' || upper === 'CANCELADA') {
-    return 'text-[#dc2626]'
+    return 'text-destructive'
   }
-  return 'text-slate-600'
+  return 'text-muted-foreground'
 }
 
 function isUnlimited(m: Membership): boolean {
@@ -144,7 +153,7 @@ export default function MembresiaDetailScreen() {
   if (!isAuthenticated) {
     return (
       <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
-        <Text className="text-lg font-bold text-slate-900 mb-4">
+        <Text className="text-lg font-bold text-foreground mb-4">
           Inicia sesión para ver el detalle
         </Text>
         <Button onPress={() => router.push('/(auth)/login')}>
@@ -178,11 +187,11 @@ export default function MembresiaDetailScreen() {
           onPress={() => router.back()}
           className="flex-row items-center gap-1.5 mb-4"
         >
-          <ArrowLeft size={20} color="#64748b" />
-          <Text className="text-sm text-slate-500">Volver</Text>
+          <ArrowLeft size={20} color="#4b5563" />
+          <Text className="text-sm text-muted-foreground">Volver</Text>
         </Pressable>
         <View className="flex-1 items-center justify-center py-16">
-          <Text className="text-lg font-semibold text-slate-500">
+          <Text className="text-lg font-semibold text-muted-foreground">
             Membresía no encontrada
           </Text>
         </View>
@@ -194,11 +203,9 @@ export default function MembresiaDetailScreen() {
   const statusTextColor = getStatusTextColor(membresia.estado)
   const unlimited = isUnlimited(membresia)
   const daysRemaining = getDaysRemaining(membresia.fechaVencimiento)
-  const estadoLabel = membresia.estado === 'ACTIVA' ? 'Activa'
-    : membresia.estado === 'PENDIENTE' ? 'Pendiente'
-    : membresia.estado === 'VENCIDA' ? 'Vencida'
-    : membresia.estado === 'CANCELADA' ? 'Cancelada'
-    : membresia.estado
+  const estadoLabel = ESTADO_LABEL[membresia.estado] ?? membresia.estado
+  const isActive = membresia.estado === 'ACTIVA' && (!membresia.fechaVencimiento || new Date(membresia.fechaVencimiento) > new Date())
+  const showQr = isActive && !!membresia.qrToken
 
   const handleShare = async () => {
     try {
@@ -234,17 +241,17 @@ export default function MembresiaDetailScreen() {
           onPress={() => router.back()}
           className="flex-row items-center gap-1.5 mb-4"
         >
-          <ArrowLeft size={20} color="#64748b" />
-          <Text className="text-sm text-slate-500">Mis membresías</Text>
+          <ArrowLeft size={20} color="#4b5563" />
+          <Text className="text-sm text-muted-foreground">Mis membresías</Text>
         </Pressable>
 
         {/* Header */}
         <View className="flex-row items-start justify-between mb-6">
           <View className="flex-1 mr-4">
-            <Text className="text-xs uppercase tracking-widest text-slate-500 mb-1 font-inter-semibold">
+            <Text className="text-xs uppercase tracking-widest text-muted-foreground mb-1 font-inter-semibold">
               {membresia.companyName}
             </Text>
-            <Text className="text-[28px] font-inter-extrabold text-slate-900 leading-tight">
+            <Text className="text-[28px] font-inter-extrabold text-foreground leading-tight">
               {membresia.planNombre}
             </Text>
           </View>
@@ -255,78 +262,104 @@ export default function MembresiaDetailScreen() {
           </View>
         </View>
 
-        <View className="rounded-2xl border border-slate-200/60 bg-white py-6 px-5 items-center mb-6">
-          <Text className="text-lg font-inter-bold text-slate-900 mb-1.5 text-center">
+        <View className="rounded-2xl border border-border/60 bg-card py-6 px-5 items-center mb-6">
+          <Text className="text-lg font-inter-bold text-foreground mb-1.5 text-center">
             Tu llave de acceso
           </Text>
-          <Text className="text-sm text-slate-500 text-center mb-4 leading-5 px-2">
+          <Text className="text-sm text-muted-foreground text-center mb-4 leading-5 px-2">
             Muéstralo en {membresia.companyName} y listo: tu membresía se valida al instante.
           </Text>
 
-          {daysRemaining !== null && (
-            <View className="flex-row items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/60 px-3.5 py-1.5 mb-5">
-              <Clock size={14} color="#d97706" />
-              <Text className="text-sm font-inter-semibold text-amber-700">
-                Te quedan {daysRemaining} {daysRemaining === 1 ? 'día' : 'días'}
+          {daysRemaining !== null && daysRemaining <= 7 && (
+            <View className="flex-row items-center gap-1.5 rounded-full bg-warning/10 border border-warning/30 px-3.5 py-1.5 mb-5">
+              <Clock size={14} color="#ab6300" />
+              <Text className="text-sm font-inter-semibold text-warning">
+                {daysRemaining === 0 ? 'Vence hoy' : `Te quedan ${daysRemaining} ${daysRemaining === 1 ? 'día' : 'días'}`}
               </Text>
             </View>
           )}
 
-          {/* QR Frame */}
-          <View className="rounded-[28px] p-[3px] mb-5">
-            <LinearGradient
-              colors={['#10b981', '#2dd4bf', '#059669']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ borderRadius: 28, padding: 3 }}
-            >
-              <View className="bg-white rounded-2xl p-4 items-center justify-center">
-                <QRCode
-                  value={membresia.qrToken || membresia.id}
-                  size={220}
-                  color="#0f172a"
-                  backgroundColor="#ffffff"
-                />
+          {showQr ? (
+            <>
+              {/* QR Frame */}
+              <View className="rounded-[28px] p-[3px] mb-5">
+                <LinearGradient
+                  colors={['#10b981', '#2dd4bf', '#059669']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ borderRadius: 28, padding: 3 }}
+                >
+                  <View className="bg-card rounded-2xl p-4 items-center justify-center">
+                    <QRCode
+                      value={membresia.qrToken!}
+                      size={220}
+                      color="#0f172a"
+                      backgroundColor="#ffffff"
+                    />
+                  </View>
+                </LinearGradient>
               </View>
-            </LinearGradient>
-          </View>
 
-          <View className="flex-row gap-3 w-full">
-            <Pressable
-              onPress={handleShare}
-              className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl bg-slate-900 active:opacity-90"
-            >
-              <Share2 size={16} color="#ffffff" />
-              <Text className="text-sm font-inter-semibold text-white">Compartir</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleDownload}
-              className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl border border-slate-300 bg-white active:bg-slate-50"
-            >
-              <Download size={16} color="#334155" />
-              <Text className="text-sm font-inter-semibold text-slate-700">Descargar</Text>
-            </Pressable>
-          </View>
+              <View className="flex-row gap-3 w-full">
+                <Pressable
+                  onPress={handleShare}
+                  className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl bg-foreground active:opacity-90"
+                >
+                  <Share2 size={16} color="#ffffff" />
+                  <Text className="text-sm font-inter-semibold text-background">Compartir</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleDownload}
+                  className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card active:bg-muted"
+                >
+                  <Download size={16} color="#334155" />
+                  <Text className="text-sm font-inter-semibold text-foreground">Descargar</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : isActive && !unlimited && (membresia.lavadosRestantes ?? 0) <= 0 ? (
+            <View className="py-6 px-4 items-center">
+              <Text className="text-sm text-muted-foreground text-center">
+                Sin usos disponibles en este período. Renueva tu membresía para seguir usando tus beneficios.
+              </Text>
+            </View>
+          ) : isActive ? (
+            <View className="py-6 px-4 items-center">
+              <Text className="text-sm text-muted-foreground text-center">
+                Tu código para canjear se está generando. Vuelve a cargar la página en un momento.
+              </Text>
+            </View>
+          ) : (
+            <View className="py-6 px-4 items-center">
+              <Text className="text-sm text-muted-foreground text-center">
+                {membresia.estado === 'PENDIENTE' || membresia.estado === 'PENDIENTE_PAGO'
+                  ? 'Esta membresía está pendiente de pago. Completa el pago para activar tu código QR.'
+                  : membresia.estado === 'VENCIDA' || membresia.estado === 'CANCELADA'
+                    ? 'Esta membresía no se encuentra activa. Renueva tu plan para volver a generar tu código QR.'
+                    : 'El código QR no está disponible en este momento.'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Visits Section */}
         <View className="mb-6">
           <View className="flex-row items-center gap-2 mb-3">
-            <View className="h-7 w-7 rounded-lg bg-violet-500/10 items-center justify-center">
+            <View className="h-7 w-7 rounded-lg bg-vibe-violet/10 items-center justify-center">
               <History size={14} color="#7c3aed" />
             </View>
-            <Text className="text-base font-inter-bold text-slate-900">
+            <Text className="text-base font-inter-bold text-foreground">
               Visitas
             </Text>
           </View>
           {visitas.length > 0 ? (
-            <View className="rounded-xl border border-slate-200 bg-white p-4">
+            <View className="rounded-xl border border-border bg-card p-4">
               {visitas.slice(0, 5).map((visita, idx) => (
                 <View
                   key={visita.id}
                   className={`flex-row gap-3 py-3 ${
                     idx < Math.min(visitas.length, 5) - 1
-                      ? 'border-b border-slate-200/50'
+                      ? 'border-b border-border/50'
                       : ''
                   }`}
                 >
@@ -338,14 +371,14 @@ export default function MembresiaDetailScreen() {
                     )}
                   </View>
                   <View className="flex-1">
-                    <Text className="text-sm font-inter-semibold text-slate-900">
+                    <Text className="text-sm font-inter-semibold text-foreground">
                       {visita.servicio || 'Servicio'}
                     </Text>
-                    <Text className="text-xs text-slate-500">
+                    <Text className="text-xs text-muted-foreground">
                       {formatDate(visita.fecha)}
                     </Text>
                     {visita.sucursal && (
-                      <Text className="text-xs text-slate-400 mt-0.5">
+                      <Text className="text-xs text-muted-foreground mt-0.5">
                         {visita.sucursal}
                       </Text>
                     )}
@@ -354,23 +387,23 @@ export default function MembresiaDetailScreen() {
               ))}
             </View>
           ) : (
-            <View className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 px-4 items-center">
-              <View className="h-10 w-10 rounded-xl bg-slate-100 items-center justify-center mb-3">
+            <View className="rounded-xl border border-dashed border-border bg-muted/20 py-8 px-4 items-center">
+              <View className="h-10 w-10 rounded-xl bg-muted items-center justify-center mb-3">
                 <Clock size={20} color="#94a3b8" />
               </View>
-              <Text className="text-sm text-slate-500 text-center leading-5">
+              <Text className="text-sm text-muted-foreground text-center leading-5">
                 Cuando uses tu membresía, tus visitas aparecerán aquí.
               </Text>
             </View>
           )}
         </View>
 
-        <View className="rounded-xl border border-slate-200 bg-white p-5 mb-6">
+        <View className="rounded-xl border border-border bg-card p-5 mb-6">
           <View className="flex-row items-center gap-2 mb-4">
-            <View className="h-7 w-7 rounded-lg bg-slate-500/10 items-center justify-center">
+            <View className="h-7 w-7 rounded-lg bg-muted items-center justify-center">
               <Calendar size={14} color="#64748b" />
             </View>
-            <Text className="text-base font-inter-bold text-slate-900">
+            <Text className="text-base font-inter-bold text-foreground">
               Detalles de la membresía
             </Text>
           </View>
@@ -397,7 +430,7 @@ export default function MembresiaDetailScreen() {
           onPress={handleCancel}
           className="items-center py-3"
         >
-          <Text className="text-sm font-inter-semibold text-red-600">
+          <Text className="text-sm font-inter-semibold text-destructive">
             Cancelar membresía
           </Text>
         </Pressable>
@@ -418,11 +451,11 @@ function DetailRow({
   return (
     <View
       className={`flex-row justify-between py-3 ${
-        !isLast ? 'border-b border-slate-200/50' : ''
+        !isLast ? 'border-b border-border/50' : ''
       }`}
     >
-      <Text className="text-sm text-slate-500">{label}</Text>
-      <Text className="text-sm font-medium text-slate-900">{value}</Text>
+      <Text className="text-sm text-muted-foreground">{label}</Text>
+      <Text className="text-sm font-medium text-foreground">{value}</Text>
     </View>
   )
 }
