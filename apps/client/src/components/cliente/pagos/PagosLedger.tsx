@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import { View, Text, Pressable, ScrollView, Linking } from 'react-native';
 import { CalendarClock, ExternalLink, FileText, Wallet } from 'lucide-react-native';
 import { cn } from '../../../lib/cn';
 import { formatMoney, formatDateTime } from '../../../lib/format';
@@ -197,7 +197,6 @@ function ReceiptDrawer({
               </Text>
               <Pressable
                 onPress={() => {
-                  const { Linking } = require('react-native');
                   Linking.openURL(item.comprobanteUrl!).catch(() => {});
                 }}
                 className="flex-row items-center gap-2 rounded-xl border border-border/60 p-3 active:opacity-70"

@@ -112,7 +112,6 @@ function RuletaWheel({
   const cy = WHEEL_SIZE / 2
   const r = WHEEL_SIZE / 2 - 8
 
-  const color = (k: number) => premios[k]?.color || PALETA[k % PALETA.length]
   const puedeGirar = saldo >= costo && n > 0 && !spinning
 
   // When result arrives from parent, animate wheel to the winning sector
@@ -123,7 +122,7 @@ function RuletaWheel({
     // Target: bring sector center to top (pointer at -PI/2)
     const targetAngle = -(idx * seg + seg / 2) - Math.PI / 2
     const currentMod = ((rotation.value % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
-    let delta = ((targetAngle - currentMod) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
+    const delta = ((targetAngle - currentMod) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
     const vueltas = 5 * 2 * Math.PI
     rotation.value = withTiming(rotation.value + vueltas + delta, {
       duration: SPIN_DURATION,
@@ -153,7 +152,7 @@ function RuletaWheel({
         <G key={p.id}>
           <Path
             d={sectorPath(cx, cy, r, startAngle, endAngle)}
-            fill={color(k)}
+            fill={premios[k]?.color || PALETA[k % PALETA.length]}
             stroke="#ffffff"
             strokeWidth={2}
           />

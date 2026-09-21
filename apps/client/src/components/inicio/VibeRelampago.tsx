@@ -17,30 +17,29 @@ function fechaCorta(d: string) {
 }
 
 function VibeCountdown({ hasta }: { hasta: string }) {
-  const [timeLeft, setTimeLeft] = useState('')
+  const calculateTimeLeft = () => {
+    const now = new Date().getTime()
+    const end = new Date(hasta).getTime()
+    const distance = end - now
 
-  useEffect(() => {
-    const calculateTimeLeft = () => {
-      const now = new Date().getTime()
-      const end = new Date(hasta).getTime()
-      const distance = end - now
-
-      if (distance < 0) {
-        return 'Expirado'
-      }
-
-      const hours = Math.floor(distance / (1000 * 60 * 60))
-      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))
-      const seconds = Math.floor((distance % (1000 * 60)) / 1000)
-
-      const dH = hours < 10 ? '0' + hours : hours
-      const dM = minutes < 10 ? '0' + minutes : minutes
-      const dS = seconds < 10 ? '0' + seconds : seconds
-
-      return `${dH}:${dM}:${dS}`
+    if (distance < 0) {
+      return 'Expirado'
     }
 
-    setTimeLeft(calculateTimeLeft())
+    const hours = Math.floor(distance / (1000 * 60 * 60))
+    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))
+    const seconds = Math.floor((distance % (1000 * 60)) / 1000)
+
+    const dH = hours < 10 ? '0' + hours : hours
+    const dM = minutes < 10 ? '0' + minutes : minutes
+    const dS = seconds < 10 ? '0' + seconds : seconds
+
+    return `${dH}:${dM}:${dS}`
+  }
+
+  const [timeLeft, setTimeLeft] = useState(calculateTimeLeft)
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft(calculateTimeLeft())
     }, 1000)

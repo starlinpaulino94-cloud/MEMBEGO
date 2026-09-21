@@ -66,12 +66,11 @@ export default function EmpresaDetalleScreen() {
   const [sigoLocal, setSigoLocal] = useState(false)
   const [sigoInitialized, setSigoInitialized] = useState(false)
 
-  useEffect(() => {
-    if (data?.sigo !== undefined && !sigoInitialized) {
-      setSigoLocal(data.sigo)
-      setSigoInitialized(true)
-    }
-  }, [data?.sigo, sigoInitialized])
+  // Sync from server data (state adjustment during render, no extra commit)
+  if (data?.sigo !== undefined && !sigoInitialized) {
+    setSigoLocal(data.sigo)
+    setSigoInitialized(true)
+  }
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {

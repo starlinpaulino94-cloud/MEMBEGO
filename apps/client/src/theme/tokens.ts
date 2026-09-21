@@ -1,6 +1,13 @@
 /**
- * Tokens de diseño para NativeWind en apps/client
- * Sincronizados exactamente con packages/ui/src/tokens.ts
+ * Tokens de diseño para apps/client (React Native).
+ *
+ * Alineados al contrato canónico: docs/design/client-design-contract.md
+ * Fuente canónica RN: apps/client/tailwind.config.js (F4).
+ *
+ * Este módulo es un reflejo en TS del tailwind config para consumidores que
+ * necesitan los valores en JS (ej. estilos inline, animaciones). NativeWind
+ * consume directamente tailwind.config.js; este archivo NO es la fuente de
+ * verdad de las clases CSS.
  */
 export const colors = {
   primary: {
@@ -14,16 +21,29 @@ export const colors = {
     700: '#0059ce',
     800: '#0049a7',
     900: '#004087',
-    DEFAULT: '#006bed',
+    DEFAULT: '#0284c7',
+  },
+  retail: {
+    blue: '#0284c7',
+    deep: '#0369a1',
+    cyan: '#06b6d4',
+    mist: '#f0f9ff',
+    star: '#f59e0b',
+    lagoon: '#00687a',
   },
   vibe: {
-    purple: '#7c3aed',
-    headerPurple: '#5b21b6',
-    blue: '#2563eb',
-    cyan: '#06b6d4',
-    fondo: '#0b0f19',
-    card: '#131927',
-    cardBorder: 'rgba(255, 255, 255, 0.1)',
+    violet: '#7c3aed',
+    deep: '#5b21b6',
+    ink: '#630ed4',
+    cobalt: '#2563eb',
+    lavanda: '#dce9ff',
+    niebla: '#e5eeff',
+    borde: '#e0e7ff',
+    chip: '#ddd6fe',
+    fondo: '#f8f9ff',
+    celeste: '#c7d2fe',
+    sky: '#38bdf8',
+    aqua: '#67e8f9',
   },
   state: {
     success: '#00864d',

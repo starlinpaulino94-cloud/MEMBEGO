@@ -53,21 +53,22 @@ export function ReservarCita({
   const [servicio, setServicio] = useState('')
   const crearCita = useCrearCita()
 
-  // Reset form when sheet closes
-  useEffect(() => {
-    if (!horaSeleccionada) {
-      setVehiculoId(vehiculos.length === 1 ? vehiculos[0].id : '')
-      setServicio('')
-    }
-  }, [horaSeleccionada, vehiculos])
+  // Reset form when sheet closes (inline in the close handler, not in an effect)
+  const resetForm = () => {
+    setVehiculoId(vehiculos.length === 1 ? vehiculos[0].id : '')
+    setServicio('')
+  }
 
-  // Toast-like feedback on success/error
-  useEffect(() => {
-    if (crearCita.isSuccess) {
-      Alert.alert('Cita reservada', crearCita.data.mensaje ?? 'Tu cita ha sido reservada.')
-      setHoraSeleccionada(null)
-    }
-  }, [crearCita.isSuccess, crearCita.data])
+  // Close sheet and reset on success (state adjustment during render)
+  const [handledSuccess, setHandledSuccess] = useState(false)
+  if (crearCita.isSuccess && !handledSuccess) {
+    setHandledSuccess(true)
+    Alert.alert('Cita reservada', crearCita.data.mensaje ?? 'Tu cita ha sido reservada.')
+    setHoraSeleccionada(null)
+  }
+  if (!crearCita.isSuccess) {
+    setHandledSuccess(false)
+  }
 
   useEffect(() => {
     if (crearCita.isError) {
@@ -152,7 +153,7 @@ export function ReservarCita({
       {/* Sheet de confirmacion */}
       <Sheet
         visible={horaSeleccionada != null}
-        onClose={() => setHoraSeleccionada(null)}
+        onClose={() => { setHoraSeleccionada(null); resetForm() }}
         title="Confirmar cita"
       >
         <View className="gap-4">

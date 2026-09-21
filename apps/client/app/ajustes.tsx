@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -42,18 +42,18 @@ export default function AjustesScreen() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
 
-  // Hydrate form when data loads
-  useEffect(() => {
-    if (data?.cliente) {
-      setNombre(data.cliente.nombre ?? '')
-      setTelefono(data.cliente.telefono ?? '')
-      setFechaNacimiento(data.cliente.fechaNacimiento ?? '')
-      setCiudad(data.cliente.ciudad ?? '')
-      setGenero(data.cliente.genero ?? '')
-      setNotifPromos(data.cliente.notifPromos)
-      setNotifRecordatorios(data.cliente.notifRecordatorios)
-    }
-  }, [data])
+  // Hydrate form when data loads (state adjustment during render, no extra commit)
+  const [hydratedData, setHydratedData] = useState<typeof data | null>(null)
+  if (data && data !== hydratedData && data.cliente) {
+    setHydratedData(data)
+    setNombre(data.cliente.nombre ?? '')
+    setTelefono(data.cliente.telefono ?? '')
+    setFechaNacimiento(data.cliente.fechaNacimiento ?? '')
+    setCiudad(data.cliente.ciudad ?? '')
+    setGenero(data.cliente.genero ?? '')
+    setNotifPromos(data.cliente.notifPromos)
+    setNotifRecordatorios(data.cliente.notifRecordatorios)
+  }
 
   // Auth gate
   if (authLoading) {

@@ -1,4 +1,4 @@
-declare var process: {
+declare const process: {
   env: {
     NODE_ENV?: 'development' | 'production' | 'test'
     EXPO_PUBLIC_SUPABASE_URL?: string

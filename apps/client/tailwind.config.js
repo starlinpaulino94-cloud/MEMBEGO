@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+// Tailwind config is loaded by Tailwind/Metro as CJS; require() is mandatory.
+/* eslint-disable @typescript-eslint/no-require-imports */
 module.exports = {
   content: ['./app/**/*.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
