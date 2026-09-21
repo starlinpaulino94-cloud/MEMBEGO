@@ -36,7 +36,17 @@ export const MEMBRESIA_ESTADO: Record<MembershipEstado, MembresiaEstadoUi> = {
   ACTIVA: { label: 'Activa', labelCliente: 'Activa', variant: 'success' },
   VENCIDA: { label: 'Vencida', labelCliente: 'Vencida', variant: 'secondary' },
   RECHAZADA: { label: 'Rechazada', labelCliente: 'Rechazada', variant: 'destructive' },
-  CANCELADA: { label: 'Cancelada', labelCliente: 'Cancelada', variant: 'secondary' },
+  /**
+   * «Cancelada» es lenguaje de administración: dice que ALGUIEN la canceló, y
+   * al cliente eso solo le plantea una pregunta que la pantalla no le responde
+   * —¿quién?, ¿por qué?—. Lo que necesita saber es que se acabó y que puede
+   * volver a adquirirla, y eso es lo que le ofrece la pantalla debajo.
+   *
+   * El panel sigue diciendo «Cancelada», que es lo correcto ahí: para el
+   * equipo la diferencia entre vencer y cancelar es exactamente lo que hay que
+   * ver, y el historial ya dice quién la canceló y cuándo.
+   */
+  CANCELADA: { label: 'Cancelada', labelCliente: 'Finalizada', variant: 'secondary' },
 }
 
 export function membresiaEstadoUi(estado: string): MembresiaEstadoUi {

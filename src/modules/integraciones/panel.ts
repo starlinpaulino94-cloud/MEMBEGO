@@ -319,7 +319,13 @@ export async function getPanelIntegraciones(): Promise<ResumenSistema[]> {
 /** Un toque a la URL, sin lanzar nunca: los fallos de red son un resultado. */
 async function tocar(url: string, init: RequestInit): Promise<RespuestaSonda> {
   try {
-    const resp = await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_SONDA_MS) })
+    const resp = await fetch(url, {
+      ...init,
+      // Igual que las entregas: sin esto, una URL que redirige a la red interna
+      // convierte la sonda en un lector del servicio de metadatos de la nube.
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_SONDA_MS),
+    })
     const cuerpo = await resp.text().catch(() => '')
     return { status: resp.status, cuerpo: cuerpo.slice(0, MAX_CUERPO) }
   } catch (e) {
@@ -435,7 +441,10 @@ export async function revivirFallidos(sistemaId: string): Promise<number> {
     const r = await tx.eventoSaliente
       .updateMany({
         where: { sistemaId, estado: { in: ['DEAD_LETTER', 'FALLIDO'] } },
-        data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null },
+        // `proximoIntentoAt: null` = «vencido, ya toca». Un evento revivido que
+        // conservara la fecha de su último descarte volvería a la cola con una
+        // espera de 24 h colgando, y quien pulsó el botón no vería nada moverse.
+        data: { estado: 'PENDIENTE', intentos: 0, ultimoError: null, proximoIntentoAt: null },
       })
       .catch(() => ({ count: 0 }))
     return r.count

@@ -101,6 +101,26 @@ export function rutaEvidencia(
 }
 
 /**
+ * Imagen de un plan: `<companyId>/planes/<planId|nueva>/<archivo>`.
+ *
+ * Va en el bucket `promociones` y no en uno propio a propósito: la política de
+ * ese bucket solo mira el primer segmento, así que esta ruta ya está cubierta
+ * sin escribir una línea de SQL de Storage. Un bucket nuevo habría significado
+ * una migración manual más que alguien tendría que acordarse de aplicar — y el
+ * archivo es exactamente lo mismo que una imagen de promoción: material
+ * público de una empresa.
+ */
+export function rutaPlan(
+  companyId: string,
+  planId: string | null | undefined,
+  archivo: string
+): string {
+  const empresa = exigirSegmento(companyId, 'companyId')
+  const carpeta = planId ? exigirSegmento(planId, 'planId') : CARPETA_SIN_GUARDAR
+  return `${empresa}/planes/${carpeta}/${exigirSegmento(archivo, 'archivo')}`
+}
+
+/**
  * Imagen de una excursión: `<companyId>/excursiones/<excursionId|nueva>/<archivo>`.
  */
 export function rutaExcursion(

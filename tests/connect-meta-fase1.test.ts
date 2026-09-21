@@ -283,12 +283,23 @@ test('desconectar: se avisa a Meta antes de borrar la credencial y los activos s
 
 test('crm: ninguna pantalla enseña datos inventados ni corre en el navegador', () => {
   const CRM = 'src/app/(admin)/admin/crm'
-  for (const p of ['page.tsx', 'conversaciones/page.tsx', 'seguimientos/page.tsx', 'metricas/page.tsx', 'configuracion/page.tsx']) {
+  // Las páginas que PINTAN datos muestran un estado vacío hasta tenerlos.
+  // Configuración no: tras la reconciliación es un formulario con los paneles
+  // reales (pipeline de leads + auto-reply), así que se verifica aparte sin
+  // exigirle EmptyState.
+  for (const p of ['page.tsx', 'conversaciones/page.tsx', 'seguimientos/page.tsx', 'metricas/page.tsx']) {
     const ruta = `${CRM}/${p}`
     assert.ok(existsSync(join(raiz, ruta)), `${ruta} no existe`)
     const src = leer(ruta)
     assert.ok(!/INITIAL_|MOCK_|const STATS|const FUENTES/.test(src), `${ruta} vuelve a llevar datos inventados`)
     assert.ok(!src.startsWith("'use client'"), `${ruta} vuelve a ser un componente de cliente con estado`)
     assert.match(src, /<EmptyState/)
+  }
+  for (const p of ['configuracion/page.tsx']) {
+    const ruta = `${CRM}/${p}`
+    assert.ok(existsSync(join(raiz, ruta)), `${ruta} no existe`)
+    const src = leer(ruta)
+    assert.ok(!/INITIAL_|MOCK_|const STATS|const FUENTES/.test(src), `${ruta} vuelve a llevar datos inventados`)
+    assert.ok(!src.startsWith("'use client'"), `${ruta} vuelve a ser un componente de cliente con estado`)
   }
 })

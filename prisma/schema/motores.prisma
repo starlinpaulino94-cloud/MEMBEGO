@@ -922,6 +922,18 @@ model DomainEvent {
   processed   Boolean  @default(false)
   occurredAt  DateTime @default(now())
 
+  /// DESPACHO TERMINADO (barrido de bugs ocultos · reclamo con lease).
+  ///
+  /// `processed` se pone a true al RECLAMAR el evento (el flip), no al terminar
+  /// de repartirlo. Un kill del proceso entre el flip y el final del despacho
+  /// dejaba el evento «procesado» a medio repartir y nadie lo recogía —el `catch`
+  /// de reapertura solo cubre un `throw` JS, no un kill, y el barrido solo miraba
+  /// `processed:false`—. Esta fecha se pone al TERMINAR el reparto; el barrido
+  /// reclama lo que quedó `processed:true` con `despachadoAt` null pasado el
+  /// lease y lo reabre. El re-despacho es seguro porque el fan-out es idempotente
+  /// por evento (`EventoSaliente`/`EntregaWebhook` son únicos por evento+destino).
+  despachadoAt DateTime?
+
   /// Hilo que une los eventos de una misma operación de negocio. El outbox de
   /// satélites (`EventoSaliente.traceId`) ya lo soportaba, pero el bus lo
   /// PERDÍA en este salto: el emisor no podía declararlo y el despacho no lo

@@ -100,9 +100,21 @@ export default async function CitasClientePage({
    * la de la empresa abierta: una cita de otra región mostrada en la zona
    * equivocada da una hora falsa con toda la apariencia de ser correcta.
    */
-  const [cfg, citas] = await Promise.all([
+  const [cfg, citas, sucursales] = await Promise.all([
     getAgendaConfig(cliente.companyId),
     getCitasCliente(await misClienteIds(user.supabaseId)),
+    // Solo las ACTIVAS, y solo para preguntar cuando hay más de una: el
+    // servidor vuelve a resolverlas por su cuenta al reservar, así que esta
+    // lista decide qué se enseña, nunca qué se guarda.
+    conEmpresa(cliente.companyId, (tx) =>
+      tx.sucursal
+        .findMany({
+          where: { companyId: cliente.companyId, activa: true },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' },
+        })
+        .catch(() => [])
+    ),
   ])
 
   // Cita para canjear una recompensa gratis (?compra=): valida que sea suya
@@ -213,6 +225,7 @@ export default async function CitasClientePage({
               etiquetaFecha={etiquetaDia(fechaSel, tz, idioma)}
               slots={disponibilidad.slots}
               vehiculos={cliente.vehiculos}
+              sucursales={sucursales}
               limiteDiaAlcanzado={disponibilidad.limiteDiaAlcanzado}
               notas={cfg.notas}
               compraId={compraCanje?.id ?? null}

@@ -107,3 +107,68 @@ export function normalizarAlta(
 export function tieneIdentificador(datos: AltaNormalizada): boolean {
   return !!datos.email || !!datos.telefono
 }
+
+// ── EDICIÓN parcial de una ficha existente (B-5) ─────────────────────────────
+
+/** Lo que llega en un PATCH. Ausente = no se toca; presente = se pone a esto. */
+export interface EntradaEdicion {
+  nombre?: unknown
+  telefono?: unknown
+  email?: unknown
+}
+
+/**
+ * Solo los campos que SE VAN A ESCRIBIR. Un campo ausente no aparece aquí, para
+ * que el `update` no lo pise: PATCH edita lo que se le pasa y deja intacto lo
+ * demás.
+ */
+export interface CamposEdicion {
+  nombre?: string
+  telefono?: string | null
+  email?: string
+}
+
+/**
+ * Valida una edición parcial.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * AUSENTE Y VACÍO NO SON LO MISMO
+ *
+ * No mandar `telefono` significa «déjalo como está»; mandar `telefono: ""`
+ * significa «bórralo». Confundirlos haría que una integración que solo quiere
+ * corregir el nombre borrara sin querer el teléfono que no incluyó. Por eso se
+ * mira `k in entrada`, no si el valor es falsy.
+ *
+ * El nombre, si se toca, NO puede quedar vacío: es el único campo obligatorio
+ * de un cliente, y una ficha sin nombre no la sabría mostrar ninguna pantalla.
+ * El teléfono y el correo sí se pueden vaciar.
+ */
+export function normalizarEdicion(
+  entrada: EntradaEdicion
+): { ok: true; campos: CamposEdicion } | { ok: false; motivo: string } {
+  const campos: CamposEdicion = {}
+
+  if ('nombre' in entrada) {
+    const nombre = texto(entrada.nombre, MAX_NOMBRE)
+    if (!nombre) return { ok: false, motivo: 'name cannot be empty.' }
+    campos.nombre = nombre
+  }
+
+  if ('email' in entrada) {
+    const email = texto(entrada.email, MAX_EMAIL).toLowerCase()
+    if (email && !email.includes('@')) {
+      return { ok: false, motivo: 'email is not a valid address.' }
+    }
+    campos.email = email
+  }
+
+  if ('telefono' in entrada) {
+    campos.telefono = texto(entrada.telefono, MAX_TELEFONO) || null
+  }
+
+  if (Object.keys(campos).length === 0) {
+    return { ok: false, motivo: 'Send at least one field to update: name, phone or email.' }
+  }
+  return { ok: true, campos }
+}
+

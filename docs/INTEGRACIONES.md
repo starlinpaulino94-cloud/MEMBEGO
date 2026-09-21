@@ -155,6 +155,15 @@ Reglas para el satélite:
 - **Aislamiento:** persiste TODO con el `companyId` del evento. Un admin del
   satélite solo ve datos de SU empresa. Jamás muestres datos cruzados.
 
+**`membego.test` — el evento de prueba.** Desde el panel de la empresa se puede
+mandar un aviso de prueba a la URL de un webhook. Va con la MISMA forma, las
+mismas cabeceras y la misma firma que uno real, para que pasar la prueba
+signifique de verdad que los avisos van a llegar. Se distingue solo por su
+nombre, `membego.test`, y su `data` es `{ "prueba": true }`.
+
+**Ignóralo.** Responde 2xx y no hagas nada más: si tu servidor lo tratara como
+un evento de negocio, cada prueba daría de alta algo que no existe.
+
 **Catálogo de eventos (v1):**
 
 | `tipo`                    | Cuándo | Claves útiles en `payload` |

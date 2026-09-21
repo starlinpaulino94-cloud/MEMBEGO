@@ -137,3 +137,20 @@ export async function requireSection(
   }
   return user
 }
+
+/**
+ * ¿Puede esta persona usar ESTA función, sin negarle la pantalla entera?
+ *
+ * `requireSection` responde sí/no al acceso: si falta el permiso, no hay
+ * página. Esto responde otra pregunta, la que hace falta DENTRO de una
+ * pantalla que sí se puede ver: «además de entrar, ¿puede ver las cifras de
+ * dinero?». Un encargado de turno tiene que poder abrir el reporte de
+ * operación sin ver cuánto factura el negocio.
+ *
+ * Devuelve `false` ante cualquier duda —sin sesión, sin permisos legibles, un
+ * fallo de la consulta—. Negar por defecto es la única respuesta segura
+ * cuando no se sabe.
+ */
+export async function puedeFuncion(section: AdminSection, funcion: string): Promise<boolean> {
+  return (await requireSection(section, funcion)) !== null
+}

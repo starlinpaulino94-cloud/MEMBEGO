@@ -6,6 +6,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { ExternalLink } from 'lucide-react'
 import { DataTable } from '@/components/ui/data-table'
 import { EstadoBadge } from '@/components/EstadoBadge'
+import { AjustarLavadosDialog } from '@/components/admin/AjustarLavadosDialog'
 import { CambiarPlanDialog, type PlanOption } from '@/components/admin/CambiarPlanDialog'
 import type { MembershipEstado } from '@/types'
 
@@ -96,6 +97,12 @@ export function MembresíasTable({
               planActualId={row.original.planId}
               planActualNombre={row.original.plan.nombre}
               planes={planes}
+            />
+            <AjustarLavadosDialog
+              membershipId={row.original.id}
+              clienteNombre={row.original.cliente.nombre}
+              lavados={row.original.lavadosRestantes ?? 0}
+              esIlimitado={row.original.plan.esIlimitado}
             />
             <Link
               href={`/admin/clientes/${row.original.cliente.id}`}

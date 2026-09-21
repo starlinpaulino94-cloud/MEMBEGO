@@ -10,6 +10,8 @@ import { tokenDeCabecera, verificarToken } from '@/modules/plataforma/token'
 import { accesoASistema } from '@/modules/plataforma/registro'
 import { pareceClaveEmpresa, partirClave } from '@/modules/connect/clavesApiNucleo'
 import { anotarUsoClave, resolverClaveApi } from '@/modules/connect/clavesApi'
+import { registrarUso } from '@/modules/plataforma/metricas'
+import { RESULTADO } from '@/modules/plataforma/metricas-nucleo'
 
 /**
  * PLATAFORMA · Fase 2 — LA GUARDIA DE LA API v1.
@@ -116,6 +118,25 @@ export function exigeSistema(ctx: ContextoApi): {
   return ctx.principal
 }
 
+/**
+ * Exige una CLAVE DE EMPRESA. El espejo de `exigeSistema`.
+ *
+ * Lo usan los recursos que administran la configuración de una empresa —sus
+ * suscripciones de webhook—, donde un satélite no pinta nada: uno que atiende a
+ * veinte empresas no tiene por qué decidir a quién avisan ellas, ni mucho menos
+ * apuntar sus avisos a otro sitio.
+ *
+ * Lanza en vez de devolver un fallo, igual que su espejo: llegar aquí con el
+ * principal equivocado es un error de programación de la ruta —declaró un
+ * scope que solo tienen las claves de empresa— y no una petición mal formada.
+ */
+export function exigeEmpresa(ctx: ContextoApi): { claveId: string; companyId: string } {
+  if (ctx.principal.tipo !== 'empresa') {
+    throw new Error('Esta ruta requiere una clave de API de empresa.')
+  }
+  return { claveId: ctx.principal.claveId, companyId: ctx.principal.companyId }
+}
+
 type Fallo = { fallo: NextResponse; requestId: string }
 
 function esFallo(r: unknown): r is Fallo {
@@ -162,6 +183,13 @@ export async function autenticar(
     requestId,
   })
 
+  // Para las métricas de uso por credencial (B-7). Se leen una vez y se pasan a
+  // `registrarUso` en los puntos donde ya se sabe QUÉ credencial llama; una
+  // petición que no se identifica (token inválido, límite) no se le puede
+  // atribuir a nadie, así que no se cuenta.
+  const endpoint = req.nextUrl.pathname
+  const metodo = req.method
+
   const cabecera = req.headers.get('authorization')
 
   // ── Principal 2: clave de API de empresa ───────────────────────────────
@@ -183,10 +211,26 @@ export async function autenticar(
     if (!clave) return negar('INVALID_TOKEN')
 
     if (scopeRequerido !== null && !clave.scopes.includes(scopeRequerido)) {
+      registrarUso({
+        origen: 'CLAVE_API',
+        credencialId: clave.id,
+        companyId: clave.companyId,
+        endpoint,
+        metodo,
+        resultado: RESULTADO.SCOPE,
+      })
       return negar('INSUFFICIENT_SCOPE', { requiredScope: scopeRequerido })
     }
 
     anotarUsoClave(clave.id, clave.companyId)
+    registrarUso({
+      origen: 'CLAVE_API',
+      credencialId: clave.id,
+      companyId: clave.companyId,
+      endpoint,
+      metodo,
+      resultado: RESULTADO.OK,
+    })
 
     return {
       requestId,
@@ -227,8 +271,25 @@ export async function autenticar(
 
   const scopes = scopesEfectivos(verificado.datos.scopes, credencial.scopes)
   if (scopeRequerido !== null && !scopes.includes(scopeRequerido)) {
+    registrarUso({
+      origen: 'SISTEMA',
+      credencialId: credencial.id,
+      companyId: null,
+      endpoint,
+      metodo,
+      resultado: RESULTADO.SCOPE,
+    })
     return negar('INSUFFICIENT_SCOPE', { requiredScope: scopeRequerido })
   }
+
+  registrarUso({
+    origen: 'SISTEMA',
+    credencialId: credencial.id,
+    companyId: null,
+    endpoint,
+    metodo,
+    resultado: RESULTADO.OK,
+  })
 
   return {
     requestId,
@@ -273,11 +334,18 @@ export async function leerCredencial(clientId: string): Promise<CredencialViva |
             estado: true,
             scopes: true,
             expiresAt: true,
-            sistema: { select: { slug: true } },
+            // El ESTADO del sistema, no solo su slug (barrido de bugs ocultos): la
+            // emisión del token ya lo exige ACTIVE, pero el guard por-petición no lo
+            // miraba, así que suspender un sistema no cortaba los tokens ya vivos
+            // (hasta 15 min) en las rutas sin scope de empresa. Se re-lee en cada
+            // petición, igual que el estado y los scopes de la credencial: revocar
+            // por suspensión del sistema tiene que cerrar la puerta ya.
+            sistema: { select: { slug: true, estado: true } },
           },
         })
     )
     if (!c || c.estado !== 'ACTIVE') return null
+    if (c.sistema.estado !== 'ACTIVE') return null
     if (c.expiresAt && c.expiresAt.getTime() <= Date.now()) return null
     return {
       id: c.id,

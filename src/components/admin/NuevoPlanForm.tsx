@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { crearPlan } from '@/modules/admin/planActions'
@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FormSection, FormActions } from '@/components/ui/form-section'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PlanImagenUpload } from '@/components/admin/PlanImagenUpload'
 
 interface Company {
   id: string
@@ -36,14 +37,26 @@ export interface PlanPrefillValues {
  */
 export function NuevoPlanForm({
   companies,
+  companyId,
   prefill,
   redirectTo = '/superadmin/planes',
 }: {
   companies?: Company[]
+  /**
+   * Empresa del panel. La necesita la subida de la imagen, que ocurre ANTES
+   * de guardar: el archivo se escribe en `<companyId>/planes/nueva/` y sin
+   * ese prefijo quedaría fuera del alcance de la política del bucket.
+   */
+  companyId?: string | null
   prefill?: PlanPrefillValues
   redirectTo?: string
 }) {
   const [state, action, pending] = useActionState(crearPlan, {})
+  // Con selector de empresa (superadmin) la ruta de la imagen depende de lo
+  // que se elija ahí, así que hay que seguirlo: subir antes de elegir dejaría
+  // el archivo en la carpeta de otra empresa.
+  const [empresaElegida, setEmpresaElegida] = useState('')
+  const empresaDeLaImagen = companies ? empresaElegida || null : (companyId ?? null)
   const router = useRouter()
 
   useEffect(() => {
@@ -69,6 +82,8 @@ export function NuevoPlanForm({
               id="companyId"
               name="companyId"
               required
+              value={empresaElegida}
+              onChange={(e) => setEmpresaElegida(e.target.value)}
               className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Seleccionar empresa…</option>
@@ -99,6 +114,15 @@ export function NuevoPlanForm({
             placeholder="Descripción breve del plan"
           />
           <p className="text-caption">Opcional. Se ve en la tarjeta del plan.</p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Imagen del plan (opcional)</Label>
+          <PlanImagenUpload companyId={empresaDeLaImagen} planId={null} currentUrl={null} />
+          <p className="text-caption">
+            La verán tus clientes al mirar el plan y su membresía. Si no pones
+            ninguna, se sigue usando el color.
+          </p>
         </div>
 
         <div className="space-y-1.5">

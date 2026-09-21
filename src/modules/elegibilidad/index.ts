@@ -111,6 +111,8 @@ export interface PlanElegible {
   beneficios: string[]
   vigenciaDias: number
   condiciones: string | null
+  /** Imagen subida por el negocio; null = la tarjeta va como hasta ahora. */
+  imagenUrl: string | null
 }
 
 export interface ResultadoPlanes {
@@ -199,6 +201,7 @@ export async function planesElegibles(args: {
         beneficios: true,
         vigenciaDias: true,
         condiciones: true,
+        imagenUrl: true,
         preciosPorCategoria: vehiculo?.tipoVehiculoId
           ? {
               where: { tipoVehiculoId: vehiculo.tipoVehiculoId, activo: true },
@@ -224,6 +227,7 @@ export async function planesElegibles(args: {
         beneficios: p.beneficios,
         vigenciaDias: p.vigenciaDias,
         condiciones: p.condiciones,
+        imagenUrl: p.imagenUrl,
         decision: decidirPlan(
           {
             id: p.id,

@@ -65,13 +65,21 @@ export async function GET(req: NextRequest) {
   }
 
   const [clave, valor] = puestos[0]
-  const cliente =
-    clave === 'email'
-      ? await clientePorEmail(auth.companyId, valor)
-      : clave === 'phone'
-        ? await clientePorTelefono(auth.companyId, valor)
-        : await clientePorPlaca(auth.companyId, valor)
+  try {
+    const cliente =
+      clave === 'email'
+        ? await clientePorEmail(auth.companyId, valor)
+        : clave === 'phone'
+          ? await clientePorTelefono(auth.companyId, valor)
+          : await clientePorPlaca(auth.companyId, valor)
 
-  if (!cliente) return errorApi('NOT_FOUND', auth.ctx.requestId)
-  return respuestaApi(cliente, auth.ctx.requestId)
+    if (!cliente) return errorApi('NOT_FOUND', auth.ctx.requestId)
+    return respuestaApi(cliente, auth.ctx.requestId)
+  } catch (e) {
+    // Un fallo de la base NO puede salir como un 404: el satélite lo leería como
+    // «este cliente no existe» y el empleado cobraría el precio completo a un
+    // socio. Se responde un 500 reintenable, que dice la verdad: no lo sabemos.
+    console.error('[platform] resolver cliente:', e)
+    return errorApi('INTERNAL_ERROR', auth.ctx.requestId)
+  }
 }

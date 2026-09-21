@@ -1,0 +1,13 @@
+-- Imagen del plan, subida desde el dispositivo.
+--
+-- Una columna nullable y nada más: no hay tabla nueva ni bucket nuevo. El
+-- archivo vive en el bucket `promociones` bajo `<companyId>/planes/<planId>/`,
+-- y la política de escritura de ese bucket ya cubre esa ruta sin tocar nada —
+-- su camino rápido solo comprueba que el PRIMER segmento sea una empresa del
+-- usuario (ver 2026-08-storage-medios-prefijo-empresa.sql). Reutilizarlo evita
+-- un paso manual de Storage que alguien tendría que acordarse de aplicar.
+--
+-- Sin valor por defecto: los planes que ya existen quedan en NULL, que es
+-- «sin imagen», y sus tarjetas siguen pintando el degradado de `color` igual
+-- que hasta ahora.
+ALTER TABLE "plans" ADD COLUMN IF NOT EXISTS "imagenUrl" TEXT;

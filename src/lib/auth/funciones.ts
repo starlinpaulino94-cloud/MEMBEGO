@@ -27,6 +27,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   crecimiento: 'Crecimiento',
   scanner: 'Escanear QR',
   pagos: 'Pagos',
+  facturas: 'Comprobantes',
   citas: 'Citas',
   ofertas: 'Regalos VIP',
   perfil: 'Perfil público',
@@ -52,8 +53,10 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   marketing: 'Marketing',
   gamificacion: 'Gamificación',
   personalizacion: 'Personalización',
+  sinonimos: 'Sinónimos de búsqueda',
   app: 'App Car Wash',
   excursiones: 'Excursiones',
+  leads: 'Prospectos (todo el CRM)',
   integraciones: 'Integraciones',
 }
 
@@ -63,6 +66,12 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'clave_revocar', label: 'Revocar claves de API' },
     { codigo: 'webhook_crear', label: 'Crear webhooks' },
     { codigo: 'webhook_estado', label: 'Pausar y reactivar webhooks' },
+    { codigo: 'webhook_probar', label: 'Mandar eventos de prueba a un webhook' },
+    { codigo: 'webhook_reenviar', label: 'Reenviar entregas de webhook' },
+    { codigo: 'webhook_rotar', label: 'Rotar el secreto de un webhook' },
+    { codigo: 'entrante_crear', label: 'Crear webhooks entrantes (URLs para recibir)' },
+    { codigo: 'entrante_gestionar', label: 'Pausar y eliminar webhooks entrantes' },
+    { codigo: 'regla_http', label: 'Crear y gestionar reglas que llaman a otra app' },
     { codigo: 'app_conectar', label: 'Conectar aplicaciones (WhatsApp, Google…)' },
     { codigo: 'app_desconectar', label: 'Desconectar aplicaciones' },
   ],
@@ -88,6 +97,7 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
   membresias: [
     { codigo: 'cambiar_plan', label: 'Cambiar el plan de una membresía' },
     { codigo: 'renovar', label: 'Renovar membresías' },
+    { codigo: 'ajustar_lavados', label: 'Sumar o restar lavados a una membresía' },
   ],
   clientes: [
     { codigo: 'nota_crear', label: 'Agregar notas al cliente' },
@@ -157,5 +167,33 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'meta_definir', label: 'Poner y archivar metas de vendedores' },
     { codigo: 'reporte_exportar', label: 'Exportar reportes de excursiones' },
     { codigo: 'checkin_registrar', label: 'Hacer check-in de pasajeros' },
+  ],
+  /**
+   * REPORTES. Hasta ahora la sección era todo o nada: quien entraba veía las
+   * cifras de facturación y se las podía descargar. Un encargado de turno
+   * necesita el reporte de operación; no necesita saber cuánto factura el
+   * negocio.
+   *
+   * Solo están las que HOY se hacen cumplir de verdad. `ver_empleados` entró
+   * con el reporte de operación, que fue el primero que desglosa por persona,
+   * y `ver_datos_personales` con el de clientes, que es el primero que pone
+   * nombres de personas en una tabla. `ver_auditoria` sigue diseñada en
+   * `docs/REPORTES.md` y espera a su reporte: listarla antes sería un
+   * interruptor pintado, que es justo lo que la regla de arriba prohíbe.
+   */
+  reportes: [
+    { codigo: 'ver', label: 'Ver los reportes' },
+    { codigo: 'ver_financieros', label: 'Ver ingresos y cifras de dinero' },
+    // Mide OPERACIONES, no personas: cuántos canjes registró cada mostrador.
+    // Va aparte porque saber cuánto trabaja el negocio y saber cuánto trabaja
+    // cada quien son dos permisos distintos, y el segundo no lo necesita un
+    // encargado de turno para hacer su trabajo.
+    { codigo: 'ver_empleados', label: 'Ver el desglose de operación por empleado' },
+    // Nombres de clientes dentro de un reporte. Va aparte de `ver` porque
+    // saber cuántos clientes hay y saber QUIÉNES son no son la misma
+    // pregunta: la primera la necesita cualquiera que mire el negocio, la
+    // segunda solo quien trata con ellos.
+    { codigo: 'ver_datos_personales', label: 'Ver nombres de clientes en los reportes' },
+    { codigo: 'exportar', label: 'Descargar los reportes' },
   ],
 }

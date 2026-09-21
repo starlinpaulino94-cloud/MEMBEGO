@@ -103,17 +103,33 @@ export async function reintentarPendientesAction(
    * entregados» de vuelta mezclaba los de todos, así que ni siquiera servía
    * para saber si lo que se acababa de arreglar funcionaba.
    */
-  const { enviados, fallidos } = await reintentarPendientes(100, sistemaId)
+  const { enviados, fallidos, sinTiempo } = await reintentarPendientes(100, sistemaId, {
+    soloVencidos: false,
+  })
   await auditarIntegracion('INTEGRACION_REINTENTADA', sistemaId, quien.dbUserId, {
     enviados,
     agotados: fallidos,
+    sinTiempo,
   })
   revalidatePath('/superadmin/integraciones')
 
+  /**
+   * `sinTiempo` SE DICE, y no es un detalle.
+   *
+   * Desde la Fase A-6 el reintento se corta por presupuesto en vez de dejar que
+   * la plataforma mate la función a mitad de una entrega. Eso significa que
+   * puede quedar trabajo sin hacer — y si el mensaje siguiera diciendo solo «12
+   * entregados» con cuarenta filas sin tocar, quien pulsó el botón se iría
+   * convencido de que la cola quedó vacía. Volver a pulsar es justo la acción
+   * correcta, y para eso hay que saberlo.
+   */
   const partes = [
     revividos > 0 ? `${plural(revividos, 'evento devuelto', 'eventos devueltos')} a la cola` : '',
     plural(enviados, 'entregado', 'entregados'),
     fallidos > 0 ? `${plural(fallidos, 'agotó', 'agotaron')} sus intentos` : '',
+    sinTiempo > 0
+      ? `${plural(sinTiempo, 'quedó', 'quedaron')} sin intentar por tiempo — vuelve a pulsar`
+      : '',
   ].filter(Boolean)
 
   return { mensaje: partes.join(' · ') }

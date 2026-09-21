@@ -128,12 +128,38 @@ export function sumarDias(ymd: string, dias: number): string {
 }
 
 /** Etiqueta corta de un ymd para chips de día ("lun 20 jul"). */
+/**
+ * Etiqueta corta de un día ("mié, 18 sept") en una zona horaria e idioma.
+ *
+ * NUNCA lanza: es un helper de PRESENTACIÓN, y se usa dentro del render de la
+ * agenda (admin y cliente). Una zona horaria inválida —un dato corrupto, o dos
+ * argumentos intercambiados— hacía que `Intl.DateTimeFormat({ timeZone })`
+ * lanzara `RangeError` y tumbara la sección ENTERA con «No se pudo cargar»,
+ * justo al abrir la agenda que tenía una cita que pintar. Ante una zona inválida
+ * degrada a la del negocio por defecto; si ni así (un `ymd` roto), devuelve el
+ * crudo. Pintar una fecha regular es infinitamente mejor que una pantalla en
+ * blanco.
+ */
 export function etiquetaDia(ymd: string, timeZone: string, idioma = 'es-DO'): string {
-  const instante = utcDesdeLocal(ymd, '12:00', timeZone)
-  return new Intl.DateTimeFormat(idioma, {
-    timeZone,
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).format(instante)
+  try {
+    const instante = utcDesdeLocal(ymd, '12:00', timeZone)
+    return new Intl.DateTimeFormat(idioma, {
+      timeZone,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    }).format(instante)
+  } catch {
+    try {
+      const instante = utcDesdeLocal(ymd, '12:00', 'America/Santo_Domingo')
+      return new Intl.DateTimeFormat('es-DO', {
+        timeZone: 'America/Santo_Domingo',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      }).format(instante)
+    } catch {
+      return ymd
+    }
+  }
 }

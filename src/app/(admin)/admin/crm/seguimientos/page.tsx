@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ListChecks } from 'lucide-react'
-import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { formatDateTime } from '@/lib/format'
 import type { RegionalPrefs } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -49,7 +48,7 @@ function Fila({ s, prefs }: { s: SeguimientoEnLista; prefs: RegionalPrefs | null
 }
 
 export default async function SeguimientosPage() {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('leads')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const companyId = user.metadata.companyId
 

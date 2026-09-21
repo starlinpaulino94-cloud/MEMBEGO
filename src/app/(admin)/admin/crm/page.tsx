@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Contact } from 'lucide-react'
-import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -24,7 +23,7 @@ export const metadata = { title: 'Prospectos' }
 const PUNTO: Record<Etapa, string> = { ...ETAPA_PUNTO, perdido: 'bg-destructive' }
 
 export default async function ProspectosPage({ searchParams }: { searchParams: Promise<{ canal?: string }> }) {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('leads')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const companyId = user.metadata.companyId
   const sp = await searchParams

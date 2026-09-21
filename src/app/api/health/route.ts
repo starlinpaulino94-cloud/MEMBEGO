@@ -100,7 +100,10 @@ export async function GET(req: NextRequest) {
         UNION ALL SELECT 'caja_sesiones.esquema', to_regclass('public.caja_sesiones') IS NOT NULL
         UNION ALL SELECT 'movimientos_caja.esquema', to_regclass('public.movimientos_caja') IS NOT NULL
         UNION ALL SELECT 'ofertas_privadas.esquema', to_regclass('public.ofertas_privadas') IS NOT NULL
-        UNION ALL SELECT 'citas.esquema', to_regclass('public.citas') IS NOT NULL`
+        UNION ALL SELECT 'citas.esquema', to_regclass('public.citas') IS NOT NULL
+        UNION ALL SELECT 'entregas_webhook.proximoIntentoAt', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'entregas_webhook' AND column_name = 'proximoIntentoAt')`
       const faltantes = centinelas.filter((c) => !c.ok).map((c) => c.objeto)
       checks.schema = faltantes.length === 0 ? 'ok' : 'DRIFT'
       if (faltantes.length > 0) {

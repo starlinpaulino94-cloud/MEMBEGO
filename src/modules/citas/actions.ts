@@ -19,84 +19,14 @@ import {
 } from '@/modules/citas/disponibilidad'
 import { ESTADOS_ACTIVOS, getAgendaConfig } from '@/modules/citas/queries'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
+import { llevarCitaAGoogle, quitarCitaDeGoogle } from '@/modules/citas/googleAgenda'
+import { emitirCitaCanceladaAlBus } from '@/modules/citas/cancelacion'
 import { anotarFallo } from '@/lib/prisma-errors'
 
 export interface CitaActionState {
   error?: string
   success?: boolean
   mensaje?: string
-}
-
-/**
- * ─── Google Calendar ─────────────────────────────────────────────────────────
- *
- * Las dos operaciones del ciclo de vida del evento de una cita, en UN sitio:
- * llevarla a la agenda al confirmarse —venga de donde venga la confirmación—
- * y quitarla al cancelarse, la cancele quien la cancele. Best-effort las dos:
- * la cita ya cambió de estado y está guardada; que Google esté caído no puede
- * deshacerlo ni devolver un error a quien pulsó el botón — el fallo queda en
- * la salud de la conexión, que es donde se mira.
- *
- * La importación es dinámica para no cargar el conector —y su cliente HTTP—
- * en cada acción de citas que no lo necesita.
- */
-interface CitaParaGoogle {
-  id: string
-  companyId: string
-  googleEventId: string | null
-  inicio: Date
-  duracionMin: number
-  servicio: string | null
-  clienteNombre: string | null
-  tz: string
-}
-
-async function llevarCitaAGoogle(cita: CitaParaGoogle): Promise<void> {
-  // Con id guardado no se vuelve a crear: primera línea de defensa contra el
-  // duplicado (la segunda es el id determinista, que Google rechaza con 409).
-  if (cita.googleEventId) return
-  const { tz } = cita
-  try {
-    const { crearEventoCalendario } = await import('@/modules/connect/googleCalendar')
-    const res = await crearEventoCalendario({
-      companyId: cita.companyId,
-      citaId: cita.id,
-      evento: {
-        titulo: `${cita.servicio ?? 'Cita'} · ${cita.clienteNombre ?? 'Cliente'}`,
-        descripcion: 'Cita confirmada desde MembeGo.',
-        inicio: cita.inicio,
-        fin: new Date(cita.inicio.getTime() + cita.duracionMin * 60_000),
-        zonaHoraria: tz,
-      },
-    })
-    if (!res.ok || !res.eventoId) return
-    const eventoId = res.eventoId
-    // El id se guarda para poder borrarlo al cancelar y no crearlo dos veces.
-    await conEmpresa(cita.companyId, (tx) =>
-      tx.cita.update({ where: { id: cita.id }, data: { googleEventId: eventoId } })
-    )
-  } catch (e) {
-    console.error('[citas] no se pudo crear el evento en Google:', e)
-  }
-}
-
-async function quitarCitaDeGoogle(
-  cita: Pick<CitaParaGoogle, 'id' | 'companyId' | 'googleEventId'>
-): Promise<void> {
-  if (!cita.googleEventId) return
-  try {
-    const { eliminarEventoCalendario } = await import('@/modules/connect/googleCalendar')
-    const res = await eliminarEventoCalendario({
-      companyId: cita.companyId,
-      eventoId: cita.googleEventId,
-    })
-    if (!res.ok) return
-    await conEmpresa(cita.companyId, (tx) =>
-      tx.cita.update({ where: { id: cita.id }, data: { googleEventId: null } })
-    )
-  } catch (e) {
-    console.error('[citas] no se pudo quitar el evento de Google:', e)
-  }
 }
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -179,6 +109,41 @@ export async function reservarCita(
       if (!veh) return { error: 'Vehículo no válido.' }
     }
 
+    // DÓNDE SE ATIENDE LA CITA.
+    //
+    // La columna existía desde siempre y nadie la escribía, así que estaba
+    // vacía en todas las filas: el panel enseñaba la sucursal en blanco y el
+    // reporte de citas no podía desglosar por local —lo dejó documentado en
+    // `docs/REPORTES.md`—. Se llena aquí, en el único sitio donde nace una
+    // cita.
+    //
+    // Con UNA sola sucursal activa se asigna sola: preguntar algo que tiene
+    // una única respuesta posible es ruido en un formulario que el cliente
+    // rellena desde el teléfono. Con varias, elige él, y el id se valida
+    // contra la empresa — sin eso, el id de otro negocio pegado en el
+    // formulario entraría tal cual.
+    //
+    // El cupo y el horario siguen siendo de la EMPRESA, no de la sucursal
+    // (`AgendaConfig` es 1:1 con la empresa): esto registra dónde se atiende,
+    // no abre una agenda por local.
+    const sucursalesActivas = await conEmpresa(companyId, (tx) =>
+      tx.sucursal.findMany({
+        where: { companyId, activa: true },
+        select: { id: true },
+        orderBy: { nombre: 'asc' },
+      })
+    )
+    let sucursalId: string | null = null
+    if (sucursalesActivas.length === 1) {
+      sucursalId = sucursalesActivas[0].id
+    } else if (sucursalesActivas.length > 1) {
+      const pedida = String(formData.get('sucursalId') ?? '').trim()
+      if (!sucursalesActivas.some((s) => s.id === pedida)) {
+        return { error: 'Elige la sucursal donde quieres tu cita.' }
+      }
+      sucursalId = pedida
+    }
+
     // La recompensa (si viene) debe ser del cliente y estar disponible.
     let compraTitulo: string | null = null
     if (compraId) {
@@ -244,6 +209,7 @@ export async function reservarCita(
           companyId,
           clienteId: cliente.id,
           vehiculoId,
+          sucursalId,
           inicio: slot.inicio,
           duracionMin: cfg.duracionMin,
           servicio,
@@ -349,6 +315,17 @@ export async function cancelarCitaCliente(
       companyId: cita.companyId,
       googleEventId: cita.googleEventId,
     })
+    // Al bus, con el mismo helper que el panel y la API: una cancelación del
+    // cliente es el mismo hecho que una del negocio, solo cambia quién (B-5).
+    await emitirCitaCanceladaAlBus({
+      companyId: cita.companyId,
+      citaId: cita.id,
+      clienteId: cita.clienteId,
+      inicio: cita.inicio,
+      servicio: cita.servicio,
+      canceladaPor: 'CLIENTE',
+      motivo: null,
+    })
 
     const tz = cita.company.zonaHoraria
     await notificarAdmins(cita.companyId, {
@@ -453,6 +430,17 @@ export async function actualizarEstadoCita(
         id: cita.id,
         companyId: cita.companyId,
         googleEventId: cita.googleEventId,
+      })
+      // Al bus, con el MISMO helper que usan el cliente y la API: que la
+      // cancelación salga del panel no puede darle un nombre distinto (B-5).
+      await emitirCitaCanceladaAlBus({
+        companyId: cita.companyId,
+        citaId: cita.id,
+        clienteId: cita.clienteId,
+        inicio: cita.inicio,
+        servicio: cita.servicio,
+        canceladaPor: 'NEGOCIO',
+        motivo,
       })
       notifCliente = {
         tipo: 'CITA_CANCELADA',

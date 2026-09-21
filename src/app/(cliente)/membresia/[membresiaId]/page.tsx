@@ -232,7 +232,9 @@ export default async function MembershipDetail({
       ]))
     : [[], []]
 
-  const estadoLabel = membresiaEstadoUi(membership.estado).label
+  // `labelCliente`, no `label`: esta pantalla es del cliente. Usar la etiqueta
+  // de administración aquí anulaba el motivo de que existan las dos.
+  const estadoLabel = membresiaEstadoUi(membership.estado).labelCliente
   const company = membership.cliente.company
 
   // Tono del chip de estado en la cabecera.
@@ -261,6 +263,20 @@ export default async function MembershipDetail({
       >
         <ArrowLeft className="h-4 w-4" /> {retornoParam ? 'Volver' : 'Mis membresías'}
       </Link>
+
+      {/* Imagen del plan, si el negocio subió una. Es lo primero que se ve
+          porque es lo que el cliente reconoce: el nombre del plan se lo sabe,
+          la foto de lo que compró le dice que está en el sitio correcto. */}
+      {membership.plan.imagenUrl && (
+        <div className="mb-6 overflow-hidden rounded-2xl border border-border/60">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={membership.plan.imagenUrl}
+            alt=""
+            className="aspect-[16/9] w-full max-w-full object-cover"
+          />
+        </div>
+      )}
 
       {/* Cabecera simple: la tarjeta visual vive en Mis membresías */}
       <header className="mb-8 flex items-start justify-between gap-4">

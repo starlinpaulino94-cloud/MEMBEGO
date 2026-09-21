@@ -37,9 +37,20 @@ const sinComentarios = (src: string) =>
 test('el botón de reenviar acota al sistema de su tarjeta', () => {
   assert.match(
     sinComentarios(ACCIONES),
-    /reintentarPendientes\(\s*100\s*,\s*sistemaId\s*\)/,
+    /reintentarPendientes\(\s*100\s*,\s*sistemaId\s*,/,
     'sin acotar, pulsar en un satélite despacha también la cola de los demás'
   )
+})
+
+test('y despacha YA, sin esperar a que toque el próximo intento', () => {
+  /**
+   * Desde los reintentos programados (A-1) cada entrega fallida tiene fecha
+   * para su siguiente intento, y el cron la respeta. El botón NO: quien acaba
+   * de arreglar la ruta del satélite y pulsa «reintentar» está diciendo
+   * «ahora», y responderle que toca dentro de seis horas sería devolverle su
+   * propia espera.
+   */
+  assert.match(sinComentarios(ACCIONES), /soloVencidos:\s*false/)
 })
 
 test('y el despacho de verdad filtra por ese sistema', () => {
@@ -60,9 +71,21 @@ test('pero el cron sigue drenándolo TODO', () => {
     const src = sinComentarios(readFileSync(cron, 'utf8'))
     const llamadas = [...src.matchAll(/reintentarPendientes\(([^)]*)\)/g)].map((m) => m[1].trim())
     for (const args of llamadas) {
+      /**
+       * Se mira el SEGUNDO argumento —el `sistemaId`— y no si hay comas.
+       *
+       * Antes bastaba con que no hubiera ninguna, lo que era cierto mientras la
+       * función tuviera un solo parámetro. En cuanto el cron pasó su presupuesto
+       * de tiempo (A-6), la guardia empezó a fallar por la coma de un argumento
+       * que no tiene nada que ver con lo que vigila. El invariante sigue siendo
+       * el mismo y sigue importando: si el cron acotara a un sistema, el resto
+       * de las colas dejaría de salir y nadie se enteraría hasta que se
+       * llenaran.
+       */
+      const segundo = (args.split(',')[1] ?? '').trim()
       assert.ok(
-        !/,/.test(args),
-        `${cron} acota el reintento a un sistema; el cron tiene que despacharlos todos`
+        segundo === '' || segundo === 'undefined',
+        `${cron} acota el reintento a «${segundo}»; el cron tiene que despacharlos todos`
       )
     }
   }

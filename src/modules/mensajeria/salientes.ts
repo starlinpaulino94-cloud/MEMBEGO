@@ -133,7 +133,7 @@ export async function enviarTextoEnConversacion(input: {
   texto: string
   /** Quién lo envió desde la bandeja; null si fue una automatización. */
   enviadoPorId: string | null
-  origen?: 'bandeja' | 'automatizacion'
+  origen?: 'bandeja' | 'automatizacion' | 'auto-reply'
 }): Promise<ResultadoEnvioConversacion> {
   const c = await conversacionDe(input.companyId, input.conversacionId)
   if (!c) return { ok: false, motivo: 'no_existe' }
@@ -167,7 +167,7 @@ export async function enviarPlantillaEnConversacion(input: {
   plantillaId: string
   parametros: string[]
   enviadoPorId: string | null
-  origen?: 'bandeja' | 'automatizacion'
+  origen?: 'bandeja' | 'automatizacion' | 'auto-reply'
 }): Promise<ResultadoEnvioConversacion> {
   const c = await conversacionDe(input.companyId, input.conversacionId)
   if (!c) return { ok: false, motivo: 'no_existe' }

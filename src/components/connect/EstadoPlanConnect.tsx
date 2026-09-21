@@ -75,10 +75,17 @@ export function LimiteAlcanzado({
   que,
   limite,
 }: {
-  que: 'claves' | 'webhooks'
+  que: 'claves' | 'webhooks' | 'entrantes'
   limite: number
 }) {
-  const nombre = que === 'claves' ? 'claves de API' : 'webhooks'
+  // Un mapa y no un ternario encadenado: con tres casos, el ternario ya empieza
+  // a esconder cuál es cuál, y el compilador exige que estén los tres.
+  const NOMBRES: Record<typeof que, string> = {
+    claves: 'claves de API',
+    webhooks: 'webhooks',
+    entrantes: 'webhooks entrantes',
+  }
+  const nombre = NOMBRES[que]
   return (
     <StatusBanner variant="info" title={`Llegaste al máximo de ${nombre}`}>
       Tu plan incluye {limite} {limite === 1 ? 'activa' : 'activas'}. Para crear otra, revoca

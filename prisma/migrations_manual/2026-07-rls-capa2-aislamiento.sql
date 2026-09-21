@@ -260,6 +260,32 @@ BEGIN
     EXIT WHEN nuevas = 0 OR ronda > 10;
   END LOOP;
 
+  -- ── `visits`: companyId propio pero NULLABLE (Fase 5 de reportes) ─────────
+  --
+  -- La columna llegó en 2026-09 COPIADA de la membresía, para que el reporte
+  -- de operación no recorra la tabla que más crece del sistema, y es NULLABLE
+  -- a propósito: las visitas anteriores al backfill la tienen en null hasta
+  -- que el lote las alcanza. El Nivel 0 reclama la tabla por tener `companyId`,
+  -- pero la igualdad a secas convierte ese null en invisibilidad: la empresa
+  -- deja de ver sus propias visitas antiguas y no puede marcar la reversa de
+  -- ninguna de ellas. La empresa de una visita es su `companyId` SI está
+  -- escrito, y si no, la de su membresía — que es exactamente lo que documenta
+  -- el modelo. Cuando el backfill termine, la rama del null no encontrará
+  -- filas y la política queda, en la práctica, igual que la del Nivel 0.
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='visits') THEN
+    DROP POLICY IF EXISTS membego_inquilino ON public.visits;
+    cond := '(current_setting(''app.omnisciente'', true) = ''on'''
+         || ' OR "companyId" = current_setting(''app.company_id'', true)'
+         || ' OR ("companyId" IS NULL AND EXISTS ('
+         ||     'SELECT 1 FROM public.memberships m'
+         ||     ' WHERE m.id = public.visits."membershipId"'
+         ||     ' AND m."companyId" = current_setting(''app.company_id'', true))))';
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.visits FOR ALL TO membego_app USING (%s) WITH CHECK (%s)',
+      cond, cond);
+    RAISE NOTICE 'visits: companyId propio, con respaldo por membresía mientras dure el backfill.';
+  END IF;
+
   -- ── Las que no tienen inquilino porque no les toca ────────────────────────
   --
   -- Estas tablas se quedaron sin camino, y se miraron una por una. No se dejan
@@ -276,9 +302,15 @@ BEGIN
   -- contra esa relación, así que una lectura vacía no daría una lista vacía en
   -- pantalla — cerraría TODOS los accesos a TODOS los satélites, y el motivo
   -- que quedaría en el log sería «vertical incompatible».
+  --
+  -- `conectores` (Membego Connect) es el CATÁLOGO de conectores disponibles:
+  -- slug, nombre, categoría, scopes. No tiene `companyId` porque no es de nadie;
+  -- lo administra MembeGo y lo lee toda empresa que abre el hub de integraciones.
+  -- Se añadió después de escribir esta capa, así que el preflight la marcaba
+  -- «sin ruta»: sin esta decisión, con `membego_app` el catálogo saldría vacío.
   FOREACH cond IN ARRAY ARRAY[
     'business_categories', 'campanas_globales', 'sistemas_conectados',
-    'tipos_negocio', 'sistemas_tipos_negocio'
+    'tipos_negocio', 'sistemas_tipos_negocio', 'conectores'
   ] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);

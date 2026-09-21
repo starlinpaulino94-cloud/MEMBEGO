@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useState } from 'react'
-import { CalendarCheck2, Car, Loader2 } from 'lucide-react'
+import { CalendarCheck2, Car, Loader2, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { reservarCita, type CitaActionState } from '@/modules/citas/actions'
 import type { SlotDisponible } from '@/modules/citas/queries'
@@ -21,6 +21,11 @@ interface VehiculoOption {
   modelo: string
 }
 
+interface SucursalOption {
+  id: string
+  nombre: string
+}
+
 const init: CitaActionState = {}
 
 /**
@@ -33,6 +38,7 @@ export function ReservarCita({
   etiquetaFecha,
   slots,
   vehiculos,
+  sucursales,
   limiteDiaAlcanzado,
   notas,
   compraId,
@@ -42,6 +48,11 @@ export function ReservarCita({
   etiquetaFecha: string
   slots: SlotDisponible[]
   vehiculos: VehiculoOption[]
+  /**
+   * Sucursales activas del negocio. Con una sola NO se pregunta —el servidor
+   * la asigna—; el selector solo aparece cuando de verdad hay que elegir.
+   */
+  sucursales: SucursalOption[]
   limiteDiaAlcanzado: boolean
   notas: string | null
   /** Recompensa gratis a canjear: al reservar se habilita su QR. */
@@ -135,6 +146,31 @@ export function ReservarCita({
                 Esta cita es para canjear tu <strong>{compraTitulo}</strong> gratis.
                 Al confirmarla, tu QR quedará habilitado.
               </p>
+            )}
+
+            {/* Solo con varias: con una sola la asigna el servidor, y un
+                desplegable de una opción es una pregunta sin pregunta. */}
+            {sucursales.length > 1 && (
+              <label className="block text-sm font-medium text-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-muted-foreground" /> ¿En cuál sucursal?
+                </span>
+                <select
+                  name="sucursalId"
+                  required
+                  defaultValue=""
+                  className="mt-1.5 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="" disabled>
+                    Elige una
+                  </option>
+                  {sucursales.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
 
             {vehiculos.length > 0 && (

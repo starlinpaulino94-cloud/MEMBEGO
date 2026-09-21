@@ -223,7 +223,7 @@ export default async function CitasAdminPage({
             {[...porDia.entries()].map(([ymd, delDia]) => (
               <section key={ymd} className="space-y-3">
                 <h2 className="sticky top-0 z-10 -mx-1 bg-background/95 px-1 py-1.5 text-sm font-bold text-foreground backdrop-blur">
-                  {etiquetaDia(ymd, idioma, tz)}
+                  {etiquetaDia(ymd, tz, idioma)}
                   <span className="ml-2 font-normal text-muted-foreground">
                     · {delDia.length} cita{delDia.length !== 1 ? 's' : ''}
                   </span>

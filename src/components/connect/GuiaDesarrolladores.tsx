@@ -1,4 +1,12 @@
-import { INVENTARIO_API, TIPO_V2 } from '@membego/contracts'
+import {
+  CABECERA_ENTREGA,
+  CABECERA_FIRMA_EMPRESA,
+  CABECERA_FIRMA_EMPRESA_V2,
+  CABECERA_TIMESTAMP,
+  INVENTARIO_API,
+  TIPO_V2,
+  VENTANA_REPLAY_SEGUNDOS,
+} from '@membego/contracts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BloqueCodigo } from '@/components/connect/BloqueCodigo'
@@ -84,6 +92,7 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
                           {r.scope}
                         </span>
                       )}
+                      {r.paginado && <Badge variant="outline">paginado</Badge>}
                       <span className="w-full text-caption text-muted-foreground">{r.resumen}</span>
                     </li>
                   ))}
@@ -91,6 +100,25 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
               </li>
             ))}
           </ul>
+          <p className="mt-3 text-caption text-muted-foreground">
+            Los listados marcados <strong>paginado</strong> devuelven como mucho 50 filas (hasta
+            200 con <code className="font-mono">?limit=</code>) y un bloque{' '}
+            <code className="font-mono">page</code>. Si trae{' '}
+            <code className="font-mono">page.nextCursor</code>, hay más: vuelve a pedir la misma
+            ruta con <code className="font-mono">?cursor=</code> ese valor hasta que{' '}
+            <code className="font-mono">nextCursor</code> sea <code className="font-mono">null</code>.
+            No construyas el cursor a mano: es opaco y su formato puede cambiar.
+          </p>
+          <BloqueCodigo
+            codigo={`# Primera página
+curl -H "Authorization: Bearer mbk_xxxxxxxxxxxx.tu-secreto" \\
+  "${base}/api/platform/v1/appointments?limit=50"
+
+# La respuesta: { "appointments": [...], "page": { "limit": 50, "nextCursor": "mbc1..." } }
+# Siguiente página (si nextCursor no es null):
+curl -H "Authorization: Bearer mbk_xxxxxxxxxxxx.tu-secreto" \\
+  "${base}/api/platform/v1/appointments?limit=50&cursor=mbc1..."`}
+          />
         </Bloque>
 
         <Bloque titulo="3. Especificación completa (OpenAPI)">
@@ -106,21 +134,59 @@ export function GuiaDesarrolladores({ base }: { base: string }) {
             contenido — sin esta comprobación, cualquiera que conozca tu URL puede mandarte datos
             falsos.
           </p>
+          <p className="text-caption text-muted-foreground">
+            La firma cubre el momento del envío y el identificador de la entrega, además del
+            cuerpo. Por eso hay que comprobar también que el aviso es <strong>reciente</strong>:
+            sin eso, un aviso tuyo que alguien capture hoy se te puede volver a mandar mañana.
+          </p>
           <BloqueCodigo
             codigo={`import { createHmac, timingSafeEqual } from 'node:crypto'
 
 // El cuerpo CRUDO, tal cual llegó: si lo parseas y lo vuelves a serializar,
 // cualquier diferencia de formato rompe la firma de un aviso legítimo.
-function firmaValida(cuerpoCrudo, cabecera, secreto) {
-  const esperada = createHmac('sha256', secreto).update(cuerpoCrudo, 'utf8').digest()
-  const recibida = Buffer.from(cabecera ?? '', 'hex')
-  return (
-    recibida.length === esperada.length && timingSafeEqual(recibida, esperada)
-  )
-}
+// En Express: express.raw({ type: 'application/json' }) ANTES de express.json().
+function avisoValido(cuerpoCrudo, cabeceras, secreto) {
+  const ts = Number(cabeceras['${CABECERA_TIMESTAMP.toLowerCase()}'])
+  const entrega = cabeceras['${CABECERA_ENTREGA.toLowerCase()}']
+  if (!ts || !entrega) return false
 
-// cabecera: X-Membego-Signature`}
+  // 1. ¿Es reciente? ${VENTANA_REPLAY_SEGUNDOS} s de margen, por si los relojes no coinciden.
+  if (Math.abs(Math.floor(Date.now() / 1000) - ts) > ${VENTANA_REPLAY_SEGUNDOS}) return false
+
+  // 2. ¿La firma cuadra? Se firma el timestamp, la entrega y el cuerpo, unidos
+  //    por puntos y en ese orden.
+  const material = \`\${ts}.\${entrega}.\${cuerpoCrudo}\`
+  const esperada = createHmac('sha256', secreto).update(material, 'utf8').digest()
+
+  // La cabecera trae una LISTA separada por comas. Normalmente una sola firma;
+  // durante una rotación de secreto, dos. Acepta si alguna cuadra con el
+  // secreto que tengas: así una rotación no te obliga a desplegar a la vez que
+  // nosotros. Recórrela desde el primer día aunque hoy venga una.
+  const firmas = (cabeceras['${CABECERA_FIRMA_EMPRESA_V2.toLowerCase()}'] ?? '').split(',')
+  const alguna = firmas.some((f) => {
+    const recibida = Buffer.from(f.trim(), 'hex')
+    return recibida.length === esperada.length && timingSafeEqual(recibida, esperada)
+  })
+  if (!alguna) return false
+
+  // 3. ¿Ya lo procesaste? Guarda los ids de entrega que ya viste: reintentamos,
+  //    así que el mismo aviso puede llegarte más de una vez.
+  return true
+}`}
           />
+          <p className="text-caption text-muted-foreground">
+            Si ya verificabas con <code className="font-mono">{CABECERA_FIRMA_EMPRESA}</code> (el
+            cuerpo a secas), sigue funcionando: mandamos las dos mientras dure el cambio. Pero esa
+            no protege contra un aviso repetido, así que migra a la de arriba y avísanos cuando lo
+            hayas hecho.
+          </p>
+          <p className="text-caption text-muted-foreground">
+            <strong>Y una razón más para migrar:</strong> la cabecera de arriba admite varias
+            firmas, así que cuando rotes el secreto te seguimos firmando con el viejo y con el
+            nuevo durante unos días y no se te cae nada. La antigua solo lleva una firma —la del
+            secreto vigente—, de modo que con ella una rotación sí te corta el día que vence el
+            plazo.
+          </p>
         </Bloque>
 
         <Bloque titulo="5. Eventos que puedes recibir">

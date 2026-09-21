@@ -40,6 +40,16 @@ mientras todos los checks decían que estaba bien. Se corrigió poniéndolo rojo
 **condicionalmente**, no siempre: un check rojo permanente entrena a ignorar los
 checks, que es peor que no tenerlo.
 
+**Y volvió a pasar por otra puerta.** El run 202 del 14-09-2026 terminó en
+verde diciendo «✅ Migraciones aplicadas» mientras su propio log decía
+`P1001: Can't reach database server`. La causa: `cmd | tee archivo` devuelve el
+estado de `tee`, y GitHub corre cada `run:` con `bash -e`, que no lleva
+`pipefail`. El fallo de `migrate deploy` se perdía en la tubería. Se arregló
+con `set -o pipefail` y lo vigila `tests/flujos-pipefail.test.ts`, que recorre
+todos los flujos. Merece recordarse porque es la **segunda** vez que este
+flujo dice verde con la base sin migrar: la primera fue de diseño, la segunda
+de una tubería.
+
 **Qué trae el resumen del job.** Con el secreto puesto, la salida de
 `prisma migrate status` antes de migrar y la de `migrate deploy` después. Sin
 él, y solo si hay algo pendiente, **el SQL de cada migración listo para pegar**
@@ -51,6 +61,12 @@ que detecta las migraciones nuevas comparando este push con el anterior. Eso
 solo ve lo de ESTE push: una migración que quedó sin aplicar hace tres semanas
 no vuelve a avisar hoy. La única forma de cerrar ese hueco es configurar el
 secreto, y entonces la verdad la da `migrate status` contra la base real.
+
+Ese hueco **está cerrado desde el 14-09-2026**: el secreto existe, así que el
+paso de detección por diff ya no decide nada y `migrate deploy` corre en cada
+push. Lo que el flujo no puede vigilar solo es que `_prisma_migrations` siga
+cuadrando si alguien vuelve a aplicar una migración a mano — eso es disciplina,
+y está escrito en «El registro se desactualiza solo».
 
 ## Configuración manual pendiente (sin esto, los flujos no protegen)
 
@@ -74,19 +90,32 @@ secreto, y entonces la verdad la da `migrate status` contra la base real.
    `Esquema de base de datos` es el que detecta una migración que la base no
    tiene. Es el que habría evitado los cuatro incidentes de agosto de 2026.
 2. **Dos secretos del repositorio** (Settings → Secrets and variables →
-   Actions). Es lo único que separa a este proyecto de tener las migraciones
-   automatizadas de verdad:
+   Actions):
    - `MIGRATIONS_DATABASE_URL` — la **DIRECT_URL** de Supabase (puerto 5432,
      sin `pgbouncer`). El pooler no sirve para migrar: las sentencias DDL
-     necesitan conexión directa.
-   - `VERCEL_DEPLOY_HOOK_URL` — el deploy hook del proyecto en Vercel.
+     necesitan conexión directa. **CONFIGURADO el 14-09-2026.** Si el host
+     `db.<ref>.supabase.co` no resuelve desde Actions —los runners son solo
+     IPv4 y en proyectos nuevos ese host es solo IPv6—, sirve el **Session
+     pooler**, que también escucha en el 5432 y admite DDL. El que nunca
+     sirve es el 6543.
+   - `VERCEL_DEPLOY_HOOK_URL` — el deploy hook del proyecto en Vercel. Si
+     falta, el flujo migra igual y avisa sin desplegar.
 3. **Desactivar el auto-deploy de Vercel desde Git** para `main`, o el
    despliegue saldría en paralelo a la migración y se perdería el orden.
 
-   ⚠️ Los tres puntos van **juntos**. Hoy el punto 2 no está hecho, así que el
-   flujo no dispara el despliegue: si además se hiciera el punto 3, `main` se
-   mezclaría y **no se desplegaría nada**. Configura el secreto ANTES de tocar
-   el auto-deploy de Vercel.
+   ⚠️ **NO toques todavía el auto-deploy de Vercel.** De los dos secretos del
+   punto 2 solo está `MIGRATIONS_DATABASE_URL`; `VERCEL_DEPLOY_HOOK_URL` sigue
+   vacío —verificado en el run 202 del 14-09-2026, que avisó «sin configurar;
+   se omite el despliegue»—. Con el hook vacío, desactivar el auto-deploy
+   dejaría a `main` mezclando y **sin desplegar nada por ningún camino**.
+
+   ⚠️ **Desde que el secreto existe, TODO push a `main` ejecuta
+   `migrate deploy`**, traiga migraciones o no: el paso solo mira si el secreto
+   está puesto. Es lo que se quiere —la verdad la da la base, no el diff— pero
+   tiene una consecuencia que conviene saber: si `_prisma_migrations` está
+   desactualizada, el fallo no espera al siguiente PR con migraciones; llega
+   con el próximo cambio de una coma en un README. Ver «El registro se
+   desactualiza solo» más abajo.
 
 ## Lo que sigue siendo manual, a propósito
 
@@ -204,6 +233,8 @@ cae». No se puede acotar mirando qué hace la migración.
 **Lo que lo cierra** no es revisar consultas una a una, es que la migración se
 aplique: `MIGRATIONS_DATABASE_URL` configurado y el check `Esquema de base de
 datos` obligatorio en `main`. Mientras falte cualquiera de los dos, esto vuelve.
+El secreto está puesto desde el 14-09-2026; **el check obligatorio, no** — la
+mitad que falta es la del punto 1 de «Configuración manual pendiente».
 
 **Para comprobar si hay deriva ahora mismo**, con la `DIRECT_URL` a mano:
 
@@ -256,9 +287,12 @@ SQL Editor, que no escribe en `_prisma_migrations`. Sin el baseline,
 `migrate deploy` habría intentado crear tablas que ya existen, habría fallado, y
 **el despliegue habría quedado bloqueado**.
 
-Estado actual, verificado contra producción: **103 de 103 registradas,
+Estado al cerrarlo, verificado contra producción: **103 de 103 registradas,
 `20260770_reconciliacion` y `20260771_rls_barrera_publica` aplicadas, cero
 tablas de `public` sin RLS y cero alcanzables por `anon`/`authenticated`**.
+
+Ese 103 es de agosto y no se ha vuelto a cumplir desde entonces; lo que pasó
+después está en la sección siguiente.
 
 Se hizo desde el SQL Editor y no con `npm run migraciones:baseline`, porque el
 script necesita un checkout local y `psql`, y quien opera este proyecto trabaja
@@ -303,6 +337,74 @@ No es para hacerlo un sábado a mediodía; cualquier momento tranquilo sirve.
 ```sql
 delete from _prisma_migrations where migration_name = '<nombre>';
 ```
+
+### El registro se desactualiza solo — re-registro del 14-09-2026
+
+El baseline no es un acto único que quede hecho para siempre. **Cada migración
+que se aplica en el SQL Editor vuelve a separar la base de su registro**,
+porque el SQL Editor no escribe en `_prisma_migrations`. Es el mismo problema
+del 17-08, y volvió por el mismo camino.
+
+El 14-09-2026, al configurar `MIGRATIONS_DATABASE_URL`, el recuento era:
+
+| | |
+|---|---|
+| Migraciones en el repositorio | 139 |
+| Registradas en `_prisma_migrations` | 121 |
+| Aplicadas a mano y sin registrar | **18** (de `20260901_connect_conectores` en adelante) |
+
+Ninguna a medias ni revertida: la base estaba bien, lo único desalineado era la
+libreta. Pero con el secreto ya puesto, el siguiente push a `main` —cualquiera—
+habría intentado aplicar esas 18 sobre una base que ya las tenía, habría
+fallado en la primera con «already exists», y habría dejado una fila FALLIDA
+que bloquea todos los despliegues siguientes hasta resolverla a mano.
+
+**Cómo se diagnostica sin checkout local.** Quien opera este proyecto trabaja
+desde GitHub, así que `npm run migraciones:baseline` (que necesita `psql` y un
+clon) no es el camino. Esta consulta cruza la lista del repositorio con la
+tabla de control y devuelve solo lo que falta. Solo lee:
+
+```sql
+WITH repo(nombre) AS (VALUES
+  ('0_genesis'), ('20260705_add_multi_membership_support') /* …las 139… */
+)
+SELECT r.nombre
+FROM repo r
+LEFT JOIN _prisma_migrations m
+  ON m.migration_name = r.nombre AND m.finished_at IS NOT NULL
+WHERE m.migration_name IS NULL
+ORDER BY r.nombre;
+```
+
+La lista de nombres sale de `ls prisma/migrations`.
+
+**Cómo se registra lo que falta.** Un `INSERT` en `_prisma_migrations` por cada
+migración, con `WHERE NOT EXISTS` para que sea idempotente. No ejecuta una sola
+sentencia sobre los datos: es lo mismo que hace
+`prisma migrate resolve --applied <nombre>`, una por una.
+
+El único campo delicado es `checksum`: es el **SHA-256 del `migration.sql`**
+correspondiente (`sha256sum prisma/migrations/<nombre>/migration.sql`), y es lo
+que Prisma compara en cada despliegue para detectar un historial alterado. Si
+se pone mal, el siguiente `migrate deploy` falla con «migration has been
+modified» y el bloqueo vuelve por otra puerta.
+
+Que el algoritmo es ése se comprobó, no se supuso: se aplicaron las 139
+migraciones sobre un Postgres 16 vacío con `prisma migrate deploy`, y los
+checksums que escribió Prisma coinciden con los `sha256sum` del repositorio.
+
+Resultado del 14-09-2026, verificado contra producción: **139 de 139
+registradas, 0 sin terminar, 0 revertidas.**
+
+**La regla a partir de aquí.** Con el secreto configurado, las migraciones de
+`prisma/migrations/` **ya no se aplican a mano**: las aplica el flujo al
+mezclar. Si alguna vez hay que hacerlo a mano —una urgencia, un entorno
+nuevo—, hay que registrarla **en la misma sesión**. Una migración aplicada y
+sin registrar no avisa de nada hasta que rompe el despliegue siguiente, que es
+justo lo que pasó dos veces.
+
+Lo de `prisma/migrations_manual/` sigue siendo a mano y no cuenta aquí: toca el
+esquema `storage` de Supabase, que Prisma no gestiona ni registra.
 
 ### Por qué existe `prisma.config.ts`
 

@@ -50,6 +50,13 @@ jobs:
         run: npm test
       - name: Cobertura RLS (envoltorio de tenant)
         run: node scripts/rls-cobertura.mjs
+      - name: Preflight RLS Capa 2 (tablas sin ruta al inquilino)
+        # Falla si una tabla nueva se quedaría DENEGADA con membego_app y nadie lo
+        # decidió en el SQL. `rls:probar` no lo ve —solo siembra ciertas tablas—,
+        # así que sin este gate el drift solo se descubre en el cutover, como una
+        # pantalla en blanco. Es justo el «✓ verde que mentía» que documenta
+        # docs/RLS.md; aquí el drift rompe el PR, no la producción.
+        run: node scripts/rls-capa2-preflight.mjs
 
   construir:
     name: Build de producción

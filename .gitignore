@@ -60,7 +60,12 @@ next-env.d.ts
 
 # --- Herramientas de desarrollo ---
 .vercel
-.claude
+# Se ignora la configuración LOCAL de Claude Code (settings.local.json, estado),
+# pero SÍ se versionan las skills del proyecto: son parte del flujo de trabajo
+# del equipo y las sesiones web las necesitan.
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 .z-ai-config
 local-*
 
@@ -86,6 +91,12 @@ bun.lockb
 .zscripts/
 mini-services/
 skills/
+# ...salvo las skills de agente del proyecto: van bajo `.claude/skills/` y SÍ se
+# versionan (las usa el equipo y las sesiones web). El `skills/` de arriba es
+# para el scratch de la raíz, no para éstas. La excepción va DESPUÉS para ganar
+# por orden (en .gitignore, la última regla que coincide manda).
+!.claude/skills/
+!.claude/skills/**
 examples/*
 # ...salvo los manifiestos de satélite: son fixtures que las pruebas LEEN, no
 # scratch. `examples/` entero ignorado se tragó restaurant.json en la Fase 7 y

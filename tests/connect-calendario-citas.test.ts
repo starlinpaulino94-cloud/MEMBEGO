@@ -30,6 +30,9 @@ const codigo = (r: string) =>
   leer(r).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
 const ACCIONES = 'src/modules/citas/actions.ts'
+// Las dos operaciones del evento de Google viven aquí desde B-5 (antes en
+// actions.ts): un módulo normal que comparten el panel, el cliente y la API.
+const AGENDA = 'src/modules/citas/googleAgenda.ts'
 const CALENDARIO = 'src/modules/connect/googleCalendar.ts'
 const REGISTRO = 'src/modules/connect/registro.ts'
 
@@ -112,14 +115,14 @@ test('citas: al cancelar —el cliente o el negocio— el evento se borra de la 
 })
 
 test('citas: el id que devuelve Google se guarda, y no se crea dos veces', () => {
-  const src = codigo(ACCIONES)
+  const src = codigo(AGENDA)
   assert.match(src, /googleEventId: /, 'el id del evento no se guarda en la cita')
   // Con id guardado no se vuelve a crear: es la primera línea de defensa
   // contra el duplicado (la segunda es el id determinista y el 409).
   assert.match(src, /if \(cita\.googleEventId\) return/)
   // Y nada de esto puede romper la cita: todo es best-effort.
-  assert.match(leer(ACCIONES), /no se pudo crear el evento en Google/)
-  assert.match(leer(ACCIONES), /no se pudo quitar el evento de Google/)
+  assert.match(leer(AGENDA), /no se pudo crear el evento en Google/)
+  assert.match(leer(AGENDA), /no se pudo quitar el evento de Google/)
 })
 
 // ─── El conector ─────────────────────────────────────────────────────────────

@@ -177,6 +177,7 @@ export default async function PlanesPage({
     beneficios: p.beneficios,
     vigenciaDias: p.vigenciaDias,
     condiciones: p.condiciones,
+    imagenUrl: p.imagenUrl,
     comprable: p.decision.puedeComprar,
     nivelSuperior: !p.decision.puedeComprar,
     precioDeCategoria: p.decision.precioOrigen === 'CATEGORIA',

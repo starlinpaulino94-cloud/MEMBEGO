@@ -49,6 +49,14 @@ const FEATURES: { clave: string; label: string; ayuda: string }[] = [
     label: 'Webhooks',
     ayuda: 'A cuántas direcciones suyas podemos avisar.',
   },
+  {
+    clave: 'entrantes.max',
+    label: 'Entrantes',
+    // La diferencia con el de arriba importa al conceder: un webhook saliente
+    // manda datos a una dirección que la empresa controla; uno entrante abre
+    // una URL pública que ESCRIBE en su base.
+    ayuda: 'Cuántas URLs públicas puede abrir para que le avisen a ella.',
+  },
 ]
 
 /** Las iniciales para el avatar: primera letra de las dos primeras palabras. */
@@ -94,6 +102,7 @@ function FilaEmpresa({ empresa }: { empresa: EmpresaConnect }) {
         <td className={cn(CELDA, 'font-mono text-caption')}>{limite(empresa.limites['conexiones.max'])}</td>
         <td className={cn(CELDA, 'font-mono text-caption')}>{limite(empresa.limites['api_keys.max'])}</td>
         <td className={cn(CELDA, 'font-mono text-caption')}>{limite(empresa.limites['webhooks.max'])}</td>
+        <td className={cn(CELDA, 'font-mono text-caption')}>{limite(empresa.limites['entrantes.max'])}</td>
         <td className={cn(CELDA, 'text-caption text-muted-foreground')}>
           {empresa.conexionesVivas} apps · {empresa.clavesActivas} claves ·{' '}
           {empresa.webhooksActivos} webhooks
@@ -208,6 +217,7 @@ export function ConcesionesPanel({ empresas }: { empresas: EmpresaConnect[] }) {
                   <th scope="col" className={CELDA}>Aplicaciones</th>
                   <th scope="col" className={CELDA}>Claves de API</th>
                   <th scope="col" className={CELDA}>Webhooks</th>
+                  <th scope="col" className={CELDA}>Entrantes</th>
                   <th scope="col" className={CELDA}>En uso</th>
                   <th scope="col" className={cn(CELDA, 'text-right')}>Acciones</th>
                 </tr>

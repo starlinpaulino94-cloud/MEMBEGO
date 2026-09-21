@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, MessageSquare, UserCheck } from 'lucide-react'
-import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { formatDateTime } from '@/lib/format'
 import { Avatar } from '@/components/ui/avatar'
 import { StatusChip } from '@/components/ui/status-chip'
@@ -20,7 +19,7 @@ const ID_VALIDO = /^[a-z0-9]{10,40}$/i
 
 /** FICHA DEL PROSPECTO (Meta · Fase 6): de dónde llegó, en qué va, qué se ha hecho. */
 export default async function ProspectoPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('leads')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const { id } = await params
   if (!ID_VALIDO.test(id)) notFound()

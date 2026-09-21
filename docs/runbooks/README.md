@@ -20,6 +20,7 @@ cortos que se atacaron por el sitio equivocado.
 | Un cliente pagó y su membresía no se activó | [`pagos-cardnet.md`](pagos-cardnet.md) |
 | Una clave o secreto quedó expuesto | [`credencial-filtrada.md`](credencial-filtrada.md) |
 | Necesito cerrar la aplicación para trabajar tranquilo | [`modo-mantenimiento.md`](modo-mantenimiento.md) |
+| Voy a encender el aislamiento RLS (operación planificada, no incidente) | [`rls-encender.md`](rls-encender.md) |
 
 ## Antes de abrir cualquiera de ellos
 

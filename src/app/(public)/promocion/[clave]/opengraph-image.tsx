@@ -1,5 +1,5 @@
 import { getPromotionOg } from '@/modules/marketplace/cached'
-import { originalImageResponse, OG_SIZE, tarjetaOg } from '@/lib/share/og'
+import { fetchImageDataUrl, originalImageResponse, OG_SIZE, tarjetaOg } from '@/lib/share/og'
 import { SITE_NAME } from '@/lib/site'
 
 // Fase E8 · Imagen dinámica de vista previa (Open Graph / Twitter Card) por
@@ -84,6 +84,25 @@ export default async function Image({ params }: { params: Promise<{ clave: strin
   const descuento = og.descuento && og.descuento > 0 ? `-${og.descuento}%` : null
   const descripcion = (og.descripcion || '').slice(0, 140)
 
+  // LA IMAGEN SE DESCARGA AQUÍ, NO LA BUSCA SATORI.
+  //
+  // Es la regla que `fetchImageDataUrl` documenta y que esta ruta era la única
+  // que se saltaba: pasaba `og.imagenUrl` directo al `<img>` de la tarjeta. Si
+  // esa URL no responde —bucket sin lectura pública, formato que satori no
+  // rasteriza, enlace caducado, host lento— satori LANZA, la ruta devuelve 500
+  // y quien mira ve una imagen rota: en la vista previa del panel y, peor, en
+  // WhatsApp.
+  //
+  // Y el fallo estaba encadenado: arriba ya se intentó `originalImageResponse`
+  // con ESTA MISMA URL. Si llegamos hasta aquí con `imagenUrl`, es justamente
+  // porque esa descarga no sirvió — así que volver a pedírsela a satori estaba
+  // condenado a fallar siempre, exactamente en los casos en los que hacía falta
+  // un plan B.
+  //
+  // Con la descarga controlada, cualquier problema da `null` y la tarjeta cae
+  // al panel de degradado: se pierde la foto, no la tarjeta.
+  const fondo = og.imagenUrl ? await fetchImageDataUrl(og.imagenUrl) : null
+
   return tarjetaOg(
     (
       <div style={{ width: '100%', height: '100%', display: 'flex', background: '#FFFFFF' }}>
@@ -97,9 +116,9 @@ export default async function Image({ params }: { params: Promise<{ clave: strin
             position: 'relative',
           }}
         >
-          {og.imagenUrl ? (
+          {fondo ? (
             <img
-              src={og.imagenUrl}
+              src={fondo}
               alt=""
               width={679}
               height={910}

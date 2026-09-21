@@ -619,6 +619,8 @@ export interface PlanLanding {
   vigenciaDias: number
   condiciones: string | null
   color: string | null
+  /** Imagen que subió el negocio; null = la landing va como hasta ahora. */
+  imagenUrl: string | null
   company: { id: string; name: string; slug: string; logoUrl: string | null }
 }
 
@@ -631,7 +633,7 @@ export async function getPlanPublic(planId: string): Promise<PlanLanding | null>
         select: {
           id: true, nombre: true, descripcion: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, beneficios: true, vigenciaDias: true, condiciones: true,
-          color: true, activo: true,
+          color: true, imagenUrl: true, activo: true,
           company: {
             select: { id: true, name: true, slug: true, logoUrl: true, isPublished: true, isActive: true },
           },
@@ -646,6 +648,7 @@ export async function getPlanPublic(planId: string): Promise<PlanLanding | null>
       precio: Number(plan.precio), esIlimitado: plan.esIlimitado,
       lavadosIncluidos: plan.lavadosIncluidos, beneficios: plan.beneficios,
       vigenciaDias: plan.vigenciaDias, condiciones: plan.condiciones, color: plan.color,
+      imagenUrl: plan.imagenUrl,
       company,
     }
   } catch (e) {
@@ -846,6 +849,8 @@ export interface PlanPublic {
   descripcion: string | null
   beneficios: string[]
   vigenciaDias: number
+  /** Imagen que subió el negocio. Null = quien pinte decide su respaldo. */
+  imagenUrl: string | null
 }
 
 /** Un plan con el negocio que lo ofrece, para el catálogo global. */
@@ -918,6 +923,7 @@ export async function getPlanesPublic(
         select: {
           id: true, nombre: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
+          imagenUrl: true,
           company: {
             select: {
               id: true, name: true, slug: true, logoUrl: true, ciudad: true,
@@ -936,6 +942,7 @@ export async function getPlanesPublic(
       descripcion: p.descripcion,
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
+      imagenUrl: p.imagenUrl,
       // Number() en el borde: Decimal serializado tras unstable_cache es string.
       company: { ...p.company, averageRating: p.company.averageRating != null ? Number(p.company.averageRating) : null },
     }))
@@ -955,6 +962,7 @@ export async function getCompanyPlanesPublic(companyId: string): Promise<PlanPub
         select: {
           id: true, nombre: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
+          imagenUrl: true,
         },
       })
     )
@@ -967,6 +975,7 @@ export async function getCompanyPlanesPublic(companyId: string): Promise<PlanPub
       descripcion: p.descripcion,
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
+      imagenUrl: p.imagenUrl,
     }))
   } catch (error) {
     console.error('[getCompanyPlanesPublic] Error:', error)

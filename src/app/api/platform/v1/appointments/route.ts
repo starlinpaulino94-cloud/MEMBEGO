@@ -3,11 +3,10 @@ import { conEmpresa } from '@/lib/tenant'
 import { autenticarSobreEmpresa, esFallo } from '@/modules/plataforma/api'
 import { appointmentDTO } from '@/modules/plataforma/dto'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
+import { leerPaginacion } from '@/modules/plataforma/paginacion'
+import { construirPagina } from '@/modules/plataforma/paginacionNucleo'
 
 export const dynamic = 'force-dynamic'
-
-/** Techo de filas: la agenda de un satélite no necesita traerse el histórico. */
-const LIMITE = 500
 
 /**
  * GET /api/platform/v1/appointments?companyId=…&desde=ISO&hasta=ISO
@@ -17,8 +16,12 @@ const LIMITE = 500
  *
  * Por defecto trae desde AHORA hacia adelante (la agenda que importa es la que
  * queda por atender); `desde`/`hasta` acotan una ventana concreta para pintar
- * un día o una semana. Se ordena por hora ascendente y se limita a 500 filas:
- * un satélite pinta la agenda próxima, no descarga el histórico entero.
+ * un día o una semana. Se ordena por hora ascendente.
+ *
+ * PAGINADO (B-6): antes traía 500 filas y callaba si había más. Ahora `?limit=`
+ * y `?cursor=` la recorren entera, y `page.nextCursor` dice cuándo queda más.
+ * El orden termina en `id` para que el cursor no salte una cita cuando dos caen
+ * a la misma hora.
  *
  * Sin `notaInterna`, `notaCliente` ni quién la atendió: eso es de MembeGo (§69).
  */
@@ -34,6 +37,9 @@ export async function GET(req: NextRequest) {
     { claveDeEmpresa: true }
   )
   if (esFallo(auth)) return auth.fallo
+
+  const pag = leerPaginacion(params, auth.ctx.requestId)
+  if (!pag.ok) return pag.fallo
 
   // Ventana temporal. `desde` por defecto = ahora; fechas inválidas se rechazan
   // en vez de ignorarse en silencio, que llevaría a una agenda que no cuadra.
@@ -67,13 +73,18 @@ export async function GET(req: NextRequest) {
         servicio: true,
         estado: true,
       },
-      orderBy: { inicio: 'asc' },
-      take: LIMITE,
+      orderBy: [{ inicio: 'asc' }, { id: 'asc' }],
+      take: pag.limite + 1,
+      ...pag.cursor,
     }),
   ).catch(() => [])
 
+  const { items, nextCursor } = construirPagina(citas, pag.limite)
   return respuestaApi(
-    { appointments: citas.map((c) => appointmentDTO({ ...c, estado: String(c.estado) })) },
+    {
+      appointments: items.map((c) => appointmentDTO({ ...c, estado: String(c.estado) })),
+      page: { limit: pag.limite, nextCursor },
+    },
     auth.ctx.requestId,
   )
 }

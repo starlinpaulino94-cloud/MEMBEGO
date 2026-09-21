@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ArrowRight, ExternalLink, KeyRound, ScrollText, Webhook } from 'lucide-react'
+import { ArrowRight, ExternalLink, Inbox, KeyRound, ScrollText, Waypoints, Webhook } from 'lucide-react'
 import { requireSection } from '@/lib/auth/guards'
 import { appUrl } from '@/lib/site'
 import { clavesDeEmpresa } from '@/modules/connect/clavesApi'
@@ -33,6 +33,10 @@ export const metadata = { title: 'Desarrolladores' }
  * base de la API y dónde está la especificación. Cuando exista una medición
  * de verdad, entra aquí y se dice de dónde sale.
  *
+ * Lo que SÍ se mide ya (B-7) es el uso por clave —cuántas llamadas y con qué
+ * tasa de error— y vive donde se decide, en la pantalla de cada clave, no
+ * como un porcentaje global inventado aquí.
+ *
  * ────────────────────────────────────────────────────────────────────────────
  * LA BASE DE LA API SALE DE `appUrl()`
  *
@@ -53,6 +57,18 @@ const CAMINOS = [
     icono: Webhook,
     titulo: 'Webhooks',
     texto: 'Para que te avisemos a ti en el momento en que algo pasa.',
+  },
+  {
+    href: '/admin/integraciones/desarrolladores/entrantes',
+    icono: Inbox,
+    titulo: 'Webhooks entrantes',
+    texto: 'Para que tu herramienta nos avise a nosotros. La dirección es el secreto.',
+  },
+  {
+    href: '/admin/integraciones/desarrolladores/reglas',
+    icono: Waypoints,
+    titulo: 'Reglas',
+    texto: 'Cuando pase algo, llamar a otra app. Aunque no esté en el catálogo.',
   },
   {
     href: '/admin/integraciones/desarrolladores/registros',

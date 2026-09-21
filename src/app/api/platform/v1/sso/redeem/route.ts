@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { verificarTokenSSO } from '@/modules/integraciones/nucleo'
+import { secretosVivos, verificarConVivos } from '@/modules/plataforma/rotacion-secreto-nucleo'
 import { autenticar, autorizarEmpresa, esFallo, exigeSistema } from '@/modules/plataforma/api'
 import { errorApi, respuestaApi } from '@/modules/plataforma/errores'
 import { marcarTokenUsado } from '@/modules/plataforma/sso'
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     (tx) =>
       tx.sistemaConectado.findUnique({
         where: { id: sistema.sistemaId },
-        select: { secreto: true },
+        select: { secreto: true, secretoSiguiente: true, secretoSiguienteHasta: true },
       })
   ).catch(() => null)
   if (!secreto) return errorApi('INTERNAL_ERROR', ctx.requestId)
@@ -63,7 +64,11 @@ export async function POST(req: NextRequest) {
   // Se verifica con el secreto de QUIEN LLAMA, no con el del sistema que
   // aparezca en el token. Un sistema no puede canjear un token emitido para
   // otro: no lo verificaría, porque no es su firma.
-  const datos = verificarTokenSSO(secreto.secreto, token)
+  //
+  // Y con CUALQUIERA de los secretos vivos (A-7): durante una rotación con solape
+  // valen el de siempre y el nuevo, para no cortar el canje mientras el satélite
+  // actualiza su .env.
+  const datos = verificarConVivos(secretosVivos(secreto), (s) => verificarTokenSSO(s, token))
   if (!datos) {
     console.warn('[sso-redeem] token inválido o vencido:', sistema.sistemaSlug, ctx.requestId)
     return errorApi('SSO_TOKEN_INVALID', ctx.requestId)

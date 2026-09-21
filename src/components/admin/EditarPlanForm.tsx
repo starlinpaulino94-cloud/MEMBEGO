@@ -7,9 +7,12 @@ import { actualizarPlan } from '@/modules/admin/planActions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PlanImagenUpload } from '@/components/admin/PlanImagenUpload'
 
 interface Plan {
   id: string
+  /** Empresa dueña: va en el primer segmento de la ruta de la imagen. */
+  companyId: string
   nombre: string
   precio: unknown
   lavadosIncluidos: number
@@ -20,6 +23,7 @@ interface Plan {
   vigenciaDias: number
   condiciones: string | null
   color: string | null
+  imagenUrl: string | null
   orden: number
 }
 
@@ -78,6 +82,19 @@ export function EditarPlanForm({
       <div className="flex items-center gap-2">
         <input type="checkbox" id="activo" name="activo" defaultChecked={plan.activo} className="h-4 w-4 rounded border-border" />
         <Label htmlFor="activo">Plan activo (visible para clientes)</Label>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Imagen del plan (opcional)</Label>
+        <PlanImagenUpload
+          companyId={plan.companyId}
+          planId={plan.id}
+          currentUrl={plan.imagenUrl}
+        />
+        <p className="text-caption text-muted-foreground">
+          La verán tus clientes al mirar el plan y su membresía. Si no pones
+          ninguna, se sigue usando el color.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

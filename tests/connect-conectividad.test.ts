@@ -8,6 +8,7 @@ import {
   suscripcionQuiere,
   validarUrlWebhook,
 } from '../src/modules/connect/webhooksNucleo'
+import { MAX_INTENTOS } from '../src/modules/integraciones/reintentos'
 
 /**
  * MEMBEGO CONNECT · Fase 3 — Universal Connectivity.
@@ -69,11 +70,30 @@ test('webhooks: no se entrega a la red interna (SSRF)', () => {
     'https://172.16.0.9/hook',
     'https://172.31.255.1/hook',
     'https://algo.internal/hook',
+    // ── Bypasses que un guard ingenuo dejaba pasar (barrido de bugs ocultos) ──
+    // IPv6: loopback, ULA, enlace local, y la IPv4 MAPEADA al metadato de la nube
+    // —el peor, porque leería credenciales de infraestructura—.
+    'https://[::1]/hook',
+    'https://[fd00::1]/hook',
+    'https://[fe80::1]/hook',
+    'https://[::ffff:169.254.169.254]/latest/meta-data/',
+    // Loopback entero, no solo 127.0.0.1: 127/8 es todo loopback.
+    'https://127.0.0.2/hook',
+    'https://127.1.2.3/admin',
+    // «Este host» (0/8).
+    'https://0.0.0.0/hook',
+    // Punto DNS final: el MISMO host, escrito para esquivar el `endsWith`.
+    'https://metadata.google.internal./x',
+    'https://localhost./hook',
   ]) {
     assert.deepEqual(validarUrlWebhook(url), { ok: false, motivo: 'host_interno' }, url)
   }
   // 172.32 ya está FUERA del rango privado: no se puede bloquear de más.
   assert.equal(validarUrlWebhook('https://172.32.0.1/hook').ok, true)
+  // Un host público con IP decimal/hex que Node normaliza a pública sigue pasando;
+  // y un dominio normal, también. No se bloquea de más.
+  assert.equal(validarUrlWebhook('https://ejemplo.com/hook').ok, true)
+  assert.equal(validarUrlWebhook('https://hooks.zapier.com/abc').ok, true)
 })
 
 test('webhooks: sin eventos elegidos, se reciben todos', () => {
@@ -108,15 +128,30 @@ test('api: el límite por clave se cuenta ANTES de verificar el secreto', () => 
   assert.ok(i > -1 && iLimite > i && iResolver > iLimite, 'probar secretos al azar saldría gratis')
 })
 
-test('api: ninguna ruta de escritura se abrió a claves de empresa', () => {
-  // Las escrituras necesitan saber QUÉ sistema respalda la operación; una
-  // clave de empresa no puede decirlo, y un canje sin sistema no se audita.
+test('api: ninguna ESCRITURA DE NEGOCIO se abrió a claves de empresa', () => {
+  /**
+   * Las escrituras que crean o consumen valor necesitan saber QUÉ sistema las
+   * respalda; una clave de empresa no puede decirlo, y un canje sin sistema no
+   * se audita.
+   *
+   * Se mira el HANDLER concreto y no el archivo entero: desde B-5,
+   * `customers/route.ts` tiene un POST de satélite (crear) Y un GET de clave de
+   * empresa (listar), así que buscar `claveDeEmpresa` en el archivo saltaría
+   * por la lectura, que es legítima. Lo que no puede abrirse es el POST.
+   */
+  const handler = (src: string, verbo: string) => {
+    const i = src.indexOf(`export async function ${verbo}(`)
+    return i < 0 ? '' : src.slice(i, src.indexOf('\nexport ', i + 1) + 1 || src.length)
+  }
   for (const ruta of [
     'src/app/api/platform/v1/redemptions/route.ts',
     'src/app/api/platform/v1/transactions/route.ts',
     'src/app/api/platform/v1/customers/route.ts',
   ]) {
-    assert.ok(!leer(ruta).includes('claveDeEmpresa'), `${ruta} se abrió a claves de empresa`)
+    const post = handler(leer(ruta), 'POST')
+    assert.ok(post.length > 0, `${ruta}: no se encontró el POST`)
+    assert.ok(!post.includes('claveDeEmpresa'), `${ruta}: el POST se abrió a claves de empresa`)
+    assert.ok(post.includes('exigeSistema'), `${ruta}: el POST no exige un satélite`)
   }
 })
 
@@ -159,9 +194,19 @@ test('bus: el mismo evento va a satélites Y a webhooks de empresa', () => {
 
 test('webhooks: dos umbrales distintos, uno por mensaje y otro por destino', () => {
   const src = leer('src/modules/connect/webhooks.ts')
-  assert.match(src, /intentos >= MAX_INTENTOS \? \{ estado: 'DEAD_LETTER' \}/)
+  /**
+   * Desde los reintentos programados (A-1), quién decide que una entrega está
+   * muerta ES el programador: devuelve `fecha: null` cuando ya no queda
+   * escalera. La guardia sigue vigilando lo mismo —que agotar los intentos
+   * marque DEAD_LETTER— sobre la forma nueva de decirlo.
+   */
+  assert.match(src, /proximo\?\.fecha \? \{\} : \{ estado: 'DEAD_LETTER' \}/)
   assert.match(src, /fallosSeguidos >= FALLOS_PARA_APAGAR/)
-  assert.equal(FALLOS_PARA_APAGAR > 8, true, 'apagar el destino no puede ser más fácil que rendirse con un mensaje')
+  assert.equal(
+    FALLOS_PARA_APAGAR > MAX_INTENTOS,
+    true,
+    'apagar el destino no puede ser más fácil que rendirse con un mensaje'
+  )
 })
 
 test('webhooks: el destino se vuelve a resolver en cada reintento', () => {
@@ -172,12 +217,32 @@ test('webhooks: el destino se vuelve a resolver en cada reintento', () => {
 })
 
 test('webhooks: la bitácora nunca anota el secreto de firma', () => {
-  // Se quitan los comentarios ANTES de mirar: el propio comentario que explica
-  // «el secreto jamás» contiene la palabra, y una guardia que se dispara con su
-  // propia documentación es una guardia que se acaba desactivando.
-  const src = leer('src/modules/connect/webhooks.ts').replace(/\/\/.*$/gm, '')
+  /**
+   * Se quitan los comentarios ANTES de mirar: el propio comentario que explica
+   * «el secreto jamás» contiene la palabra, y una guardia que se dispara con su
+   * propia documentación es una guardia que se acaba desactivando.
+   *
+   * Y se mira SOLO el `detalle`, que es lo que este apunte promete. Antes se
+   * miraba el bloque entero, y eso incluía el nombre del evento: en cuanto
+   * apareció `webhook.secreto_rotado` —un nombre perfectamente legítimo— la
+   * guardia empezó a fallar por la palabra, no por el dato. Una guardia que
+   * salta con un nombre correcto enseña a ignorarla, y esta protege algo que no
+   * se puede permitir ignorar.
+   */
+  const src = leer('src/modules/connect/webhooks.ts')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+  let mirados = 0
   for (const bloque of src.split('anotarConector({').slice(1)) {
-    const detalle = bloque.slice(0, bloque.indexOf('})'))
-    assert.ok(!/secreto/.test(detalle), 'la bitácora estaría anotando el secreto de firma')
+    const llamada = bloque.slice(0, bloque.indexOf('})'))
+    const i = llamada.indexOf('detalle:')
+    if (i < 0) continue
+    mirados++
+    assert.ok(
+      !/secreto/.test(llamada.slice(i)),
+      'la bitácora estaría anotando el secreto de firma'
+    )
   }
+  // Que el bucle no pase por no tener nada que recorrer.
+  assert.ok(mirados > 0, 'no se encontró ningún `detalle` que vigilar')
 })

@@ -371,9 +371,25 @@ test('la gráfica tiene una tabla equivalente para la hoja', () => {
   // `ResponsiveContainer` mide el contenedor al pintar; en `@media print` sale
   // en blanco. Y de paso la tabla es la alternativa textual que la gráfica no
   // tenía para un lector de pantalla.
+  //
+  // Antes esto se comprobaba viendo que la vista envolviera el gráfico a mano
+  // en `print:hidden` y pintara una tabla al lado — es decir, que quien la
+  // escribió se hubiera ACORDADO. Ahora la regla es estructural: todo gráfico
+  // entra por `PanelGrafico`, que exige las dos piezas en su firma, así que
+  // olvidarse ya no compila. La guardia vigila eso.
   const vista = leer('src', 'components', 'reportes', 'ReporteEmpresaVista.tsx')
-  assert.match(vista, /<div className="print:hidden">\s*<ReporteChart/)
-  assert.match(vista, /<div className="hidden print:block">/)
+  const paneles = vista.match(/<PanelGrafico/g) ?? []
+  assert.ok(paneles.length >= 1, 'la vista dejó de usar PanelGrafico para sus gráficos')
+  const conTabla = vista.match(/tabla=\{/g) ?? []
+  assert.equal(
+    conTabla.length,
+    paneles.length,
+    `hay ${paneles.length} gráficos y ${conTabla.length} tablas equivalentes: en la hoja faltaría una`
+  )
+  // Y el marco sigue escondiendo el gráfico del papel.
+  const marco = leer('src', 'components', 'reportes', 'graficos', 'PanelGrafico.tsx')
+  assert.match(marco, /print:hidden/, 'el gráfico volvería a salir en blanco en la hoja')
+  assert.match(marco, /tabla: ReactNode/, 'la tabla equivalente dejó de ser obligatoria')
 })
 
 // ───────────── Insights ─────────────

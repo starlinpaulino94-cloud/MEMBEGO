@@ -6,9 +6,10 @@ import { TabsNav } from '@/components/ui/tabs-nav'
 
 const TABS = [
   { href: '/admin/crm', label: 'Prospectos', exacto: true },
+  { href: '/admin/crm/leads', label: 'Leads', exacto: false },
   { href: '/admin/crm/conversaciones', label: 'Conversaciones', exacto: false },
-  { href: '/admin/crm/metricas', label: 'Métricas', exacto: false },
   { href: '/admin/crm/seguimientos', label: 'Seguimientos', exacto: false },
+  { href: '/admin/crm/metricas', label: 'Métricas', exacto: false },
   { href: '/admin/crm/configuracion', label: 'Configuración', exacto: false },
 ]
 

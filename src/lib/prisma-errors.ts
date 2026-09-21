@@ -87,6 +87,15 @@ export function clasificarErrorPrisma(e: unknown): PrismaErrorInfo {
   return { tipo: 'OTRO', codigo: null, mensaje, remedio: 'Revisa el mensaje del error.' }
 }
 
+/**
+ * ¿Es un choque de UNICIDAD (P2002)? Lo usan los outbox idempotentes: crear una
+ * fila de reparto que ya existe para el mismo (destino, evento) no es un error,
+ * es la señal de «ya se repartió» — se salta, no se reintenta.
+ */
+export function esViolacionUnica(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
+}
+
 /** Log estructurado y accionable de un error de BD, con contexto del caller. */
 export function logErrorBd(contexto: string, e: unknown, extra?: Record<string, unknown>) {
   const info = clasificarErrorPrisma(e)

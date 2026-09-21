@@ -192,6 +192,11 @@ export function CelebracionOverlay({
           !data.pendingVerification && (
             <Button
               onClick={() => {
+                // Carga completa a propósito: se sale de una campaña pública
+                // hacia el login, cruzando la frontera de sesión. Con
+                // `router.push` la caché de cliente de la landing viaja
+                // detrás y el login puede renderizarse con el estado de antes.
+                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                 window.location.href = '/login?next=/mis-membresias'
               }}
               variant="outline"
