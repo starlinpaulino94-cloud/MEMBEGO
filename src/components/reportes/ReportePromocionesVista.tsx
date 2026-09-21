@@ -3,6 +3,8 @@ import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaPromocion, ReportePromociones } from '@/modules/reportes/promociones'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num, porcentaje } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
 import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
@@ -181,7 +183,7 @@ export function ReportePromocionesVista({
                 encabezados={['Día', 'Adquiridas', 'Usadas']}
                 filas={serie
                   .filter((p) => p.adquiridas > 0 || p.usadas > 0)
-                  .map((p) => [p.dia, entero(p.adquiridas), entero(p.usadas)])}
+                  .map((p) => [p.dia, num(p.adquiridas, entero(p.adquiridas)), num(p.usadas, entero(p.usadas))])}
                 vacio="Sin movimiento diario en el periodo."
               />
             }
@@ -210,7 +212,7 @@ export function ReportePromocionesVista({
             />
             <Tabla
               encabezados={['Estado', 'Veces que entró']}
-              filas={r.porEstado.map((e) => [e.nombre, entero(e.movimientos)])}
+              filas={r.porEstado.map((e) => [e.nombre, num(e.movimientos, entero(e.movimientos))])}
               vacio="Ninguna compra cambió de estado en el periodo."
             />
           </section>
@@ -298,11 +300,11 @@ function TablaPromociones({
       encabezados={['Promoción', 'Adquiridas', 'Usadas', 'Usadas ÷ adquiridas']}
       filas={filas.map((f) => [
         f.titulo,
-        entero(f.adquiridas),
-        entero(f.usadas),
+        num(f.adquiridas, entero(f.adquiridas)),
+        num(f.usadas, entero(f.usadas)),
         // Sin adquisiciones en el periodo no es «0 %»: son usos de beneficios
         // entregados antes, que es justo lo normal en una promoción.
-        f.adquiridas === 0 ? '—' : `${Math.round((f.usadas / f.adquiridas) * 100)} %`,
+        porcentaje(f.usadas, f.adquiridas),
       ])}
       vacio="Ninguna promoción tuvo movimiento en el periodo."
     />
@@ -315,52 +317,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

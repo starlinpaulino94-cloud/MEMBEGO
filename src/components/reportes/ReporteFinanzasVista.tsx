@@ -3,6 +3,8 @@ import { plural } from '@/lib/plural'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { Rango } from '@/modules/reportes/rango'
 import type { ReporteFinanzas } from '@/modules/reportes/finanzas'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -135,8 +137,8 @@ export function ReporteFinanzasVista({
           encabezados={['Método', 'Operaciones', 'Monto']}
           filas={r.porMetodo.map((m) => [
             METODO[m.metodo] ?? m.metodo,
-            entero(m.operaciones),
-            dinero(m.monto),
+            num(m.operaciones, entero(m.operaciones)),
+            num(m.monto, dinero(m.monto)),
           ])}
           vacio="No hubo cobros de caja en el periodo."
         />
@@ -178,8 +180,8 @@ export function ReporteFinanzasVista({
             encabezados={['Estado', 'Intentos', 'Monto']}
             filas={r.intentos.map((i) => [
               ESTADO_INTENTO[i.estado] ?? i.estado,
-              entero(i.total),
-              dinero(i.monto),
+              num(i.total, entero(i.total)),
+              num(i.monto, dinero(i.monto)),
             ])}
             vacio="No hubo intentos de pago en línea en el periodo."
           />
@@ -194,7 +196,7 @@ export function ReporteFinanzasVista({
           />
           <Tabla
             encabezados={['Motivo', 'Veces']}
-            filas={r.motivosRechazo.map((m) => [m.motivo, entero(m.total)])}
+            filas={r.motivosRechazo.map((m) => [m.motivo, num(m.total, entero(m.total))])}
             vacio=""
           />
         </section>
@@ -274,52 +276,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

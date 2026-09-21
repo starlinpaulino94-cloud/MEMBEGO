@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Form from 'next/form'
 import { ArrowLeft, Search } from 'lucide-react'
+import type { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 import { whereCobrado } from '@/modules/pagos/cobrado'
@@ -11,6 +12,14 @@ import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { formatDateTime, formatMoney, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
+import {
+  leerOrden,
+  resumenTope,
+  siguienteDireccion,
+  type MetaCampo,
+  type OrdenDetalle,
+} from '@/modules/reportes/orden-detalle'
+import { ThOrden } from '@/components/reportes/ThOrden'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -87,6 +96,134 @@ const DESHECHOS = ['CANCELLED', 'REVERTED'] as const
 /** Tope de filas. Un detalle no es una exportación: lo que no cabe, se dice. */
 const MAX = 300
 
+/**
+ * POR QUÉ SE PUEDE ORDENAR, Y POR QUÉ EL ORDEN VA A LA CONSULTA.
+ *
+ * Con el tope de 300, ordenar en el navegador daría «las 300 más recientes,
+ * ordenadas por monto» — que NO son «las 300 de mayor monto». En finanzas eso
+ * es grave: el cobro más grande del trimestre podría no estar en la lista y la
+ * tabla parecería estar respondiendo a la pregunta. La nota larga está en
+ * `modules/reportes/orden-detalle.ts`.
+ *
+ * Aquí las claves se comparten pero el `orderBy` no: son TRES tablas distintas
+ * —`Transaction`, `Membership` y `PagoIntento`— y cada una llama a lo mismo por
+ * su nombre. «Concepto» es el método de cobro en caja, el plan en membresías y
+ * el proveedor en la pasarela; la sucursal ni siquiera existe en la pasarela.
+ * Por eso cada rama arma el suyo, abajo.
+ *
+ * Todas menos la fecha llevan la fecha de segundo criterio: sin él, dos cobros
+ * del mismo método saldrían en el orden que le apeteciera a Postgres y la lista
+ * cambiaría sola entre dos recargas iguales.
+ */
+function camposDe(
+  tabla: 'caja' | 'membresias' | 'pasarela',
+  /** «Descuentos» enseña y ordena el descuento, no lo pagado. */
+  descuentos: boolean
+): readonly MetaCampo[] {
+  const alfabetico = (que: string) => (d: string) =>
+    `por ${que}, de la ${d === 'asc' ? 'A a la Z' : 'Z a la A'}`
+  const campos: MetaCampo[] = [
+    {
+      clave: 'fecha',
+      label: 'Cuándo',
+      inicial: 'desc',
+      tope: (d) => (d === 'desc' ? 'las más recientes' : 'las más antiguas'),
+    },
+    {
+      clave: 'monto',
+      label: descuentos ? 'Descuento' : 'Monto',
+      inicial: 'desc',
+      tope: (d) =>
+        `las de ${d === 'desc' ? 'mayor' : 'menor'} ${descuentos ? 'descuento' : 'monto'}`,
+    },
+    {
+      clave: 'cliente',
+      label: 'Cliente',
+      inicial: 'asc',
+      tope: alfabetico('cliente'),
+    },
+    {
+      clave: 'concepto',
+      label: tabla === 'membresias' ? 'Plan' : tabla === 'pasarela' ? 'Pasarela' : 'Método',
+      inicial: 'asc',
+      tope: alfabetico(tabla === 'membresias' ? 'plan' : tabla === 'pasarela' ? 'pasarela' : 'método'),
+    },
+  ]
+  if (tabla !== 'pasarela') {
+    campos.push({
+      clave: 'sucursal',
+      label: 'Sucursal',
+      inicial: 'asc',
+      tope: alfabetico('sucursal'),
+    })
+  }
+  if (tabla !== 'membresias') {
+    campos.push({ clave: 'estado', label: 'Estado', inicial: 'asc', tope: alfabetico('estado') })
+  }
+  return campos
+}
+
+function ordenCaja(o: OrdenDetalle): Prisma.TransactionOrderByWithRelationInput[] {
+  const d = o.direccion
+  const despues = { createdAt: 'desc' } as const
+  switch (o.clave) {
+    case 'monto':
+      return [{ monto: d }, despues]
+    case 'cliente':
+      return [{ cliente: { nombre: d } }, despues]
+    case 'concepto':
+      return [{ metodoCobro: d }, despues]
+    case 'sucursal':
+      return [{ sucursal: { nombre: d } }, despues]
+    case 'estado':
+      return [{ estado: d }, despues]
+    default:
+      return [{ createdAt: d }]
+  }
+}
+
+function ordenMembresias(
+  o: OrdenDetalle,
+  descuentos: boolean
+): Prisma.MembershipOrderByWithRelationInput[] {
+  const d = o.direccion
+  // El respaldo a `updatedAt` es el mismo que usa `whereCobrado`: una membresía
+  // cobrada sin `fechaPago` se fecha por ahí, y ordenarla por otro campo la
+  // pondría donde no le toca.
+  const porFecha = [{ fechaPago: d }, { updatedAt: d }]
+  switch (o.clave) {
+    case 'monto':
+      // La columna enseña el descuento en esa pestaña: ordenar por lo pagado
+      // daría una tabla que no sigue a su propia columna.
+      return [descuentos ? { descuentoBienvenida: d } : { montoPagado: d }, ...porFecha]
+    case 'cliente':
+      return [{ cliente: { nombre: d } }, ...porFecha]
+    case 'concepto':
+      return [{ plan: { nombre: d } }, ...porFecha]
+    case 'sucursal':
+      return [{ sucursalPago: { nombre: d } }, ...porFecha]
+    default:
+      return porFecha
+  }
+}
+
+function ordenPasarela(o: OrdenDetalle): Prisma.PagoIntentoOrderByWithRelationInput[] {
+  const d = o.direccion
+  const despues = { createdAt: 'desc' } as const
+  switch (o.clave) {
+    case 'monto':
+      return [{ monto: d }, despues]
+    case 'cliente':
+      return [{ cliente: { nombre: d } }, despues]
+    case 'concepto':
+      return [{ proveedor: d }, despues]
+    case 'estado':
+      return [{ estado: d }, despues]
+    default:
+      return [{ createdAt: d }]
+  }
+}
+
 /** Forma común de una fila, vengan de la tabla que vengan. */
 interface FilaFinanzas {
   id: string
@@ -156,6 +293,8 @@ export default async function DetalleFinanzasPage({
   const prefs = await getRegionalPrefs(companyId)
 
   const tabla = TABLA[vista]
+  const campos = camposDe(tabla, vista === 'DESCUENTOS')
+  const orden = leerOrden(campos, leerParam('o'), leerParam('d'))
   const buscado = q ? normalizarBusqueda(q) : ''
   const porCliente = q ? { cliente: { nombreBusqueda: { contains: buscado } } } : {}
 
@@ -194,7 +333,7 @@ export default async function DetalleFinanzasPage({
         const [rows, agg] = await Promise.all([
           tx.transaction.findMany({
             where,
-            orderBy: { createdAt: 'desc' },
+            orderBy: ordenCaja(orden),
             take: MAX,
             select: {
               id: true,
@@ -242,7 +381,7 @@ export default async function DetalleFinanzasPage({
         const [rows, agg] = await Promise.all([
           tx.membership.findMany({
             where: whereCobrado(rango.desde, rango.hasta, acota),
-            orderBy: [{ fechaPago: 'desc' }, { updatedAt: 'desc' }],
+            orderBy: ordenMembresias(orden, vista === 'DESCUENTOS'),
             take: MAX,
             select: {
               id: true,
@@ -304,7 +443,7 @@ export default async function DetalleFinanzasPage({
       const [rows, agg] = await Promise.all([
         tx.pagoIntento.findMany({
           where,
-          orderBy: { createdAt: 'desc' },
+          orderBy: ordenPasarela(orden),
           take: MAX,
           select: {
             id: true,
@@ -344,9 +483,20 @@ export default async function DetalleFinanzasPage({
     const params = new URLSearchParams(qs ? qs.slice(1) : '')
     if (q) params.set('q', q)
     if (sucursal) params.set('sucursal', sucursal.id)
+    params.set('o', orden.clave)
+    params.set('d', orden.direccion)
     for (const [k, v] of Object.entries(extra ?? {})) params.set(k, v)
     return params.toString()
   }
+  // El texto del tope se construye desde el orden vigente: decir «las 300 más
+  // recientes» con la tabla ordenada por monto sería mentira.
+  const recorte = resumenTope(campos, orden, total, MAX)
+  const enlaceOrden = (clave: string) =>
+    `/admin/reportes/finanzas/detalle?${conFiltros({
+      vista,
+      o: clave,
+      d: siguienteDireccion(campos, orden, clave),
+    })}`
   const volver = new URLSearchParams(qs ? qs.slice(1) : '')
   if (sucursal) volver.set('sucursal', sucursal.id)
 
@@ -369,7 +519,7 @@ export default async function DetalleFinanzasPage({
         description={`${
           vista === 'SIN_ENTREGAR' ? 'No depende del periodo' : `${rango.desdeDia} a ${rango.hastaDia}`
         } · ${total} ${total === 1 ? 'fila' : 'filas'} · ${dinero(suma)} en total${
-          total > MAX ? ` · se muestran las ${MAX} más recientes` : ''
+          recorte ? ` · ${recorte}` : ''
         }`}
       />
 
@@ -413,6 +563,8 @@ export default async function DetalleFinanzasPage({
         className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/70 bg-card p-3"
       >
         <input type="hidden" name="vista" value={vista} />
+        <input type="hidden" name="o" value={orden.clave} />
+        <input type="hidden" name="d" value={orden.direccion} />
         {[...new URLSearchParams(qs ? qs.slice(1) : '').entries()].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
@@ -447,7 +599,7 @@ export default async function DetalleFinanzasPage({
         {hayFiltro && (
           <Button asChild variant="ghost" size="sm">
             <Link
-              href={`/admin/reportes/finanzas/detalle?vista=${vista}${qs ? `&${qs.slice(1)}` : ''}`}
+              href={`/admin/reportes/finanzas/detalle?vista=${vista}&o=${orden.clave}&d=${orden.direccion}${qs ? `&${qs.slice(1)}` : ''}`}
             >
               Limpiar
             </Link>
@@ -469,17 +621,56 @@ export default async function DetalleFinanzasPage({
           <table className="w-full text-small">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-3 py-2 text-overline">Cuándo</th>
-                <th className="px-3 py-2 text-overline">Cliente</th>
-                <th className="px-3 py-2 text-overline">
+                <ThOrden
+                  campo="fecha"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('fecha')}
+                >
+                  Cuándo
+                </ThOrden>
+                <ThOrden
+                  campo="cliente"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('cliente')}
+                >
+                  Cliente
+                </ThOrden>
+                <ThOrden
+                  campo="concepto"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('concepto')}
+                >
                   {tabla === 'membresias' ? 'Plan' : tabla === 'pasarela' ? 'Pasarela' : 'Método'}
-                </th>
-                {conSucursal && <th className="px-3 py-2 text-overline">Sucursal</th>}
-                {conEstado && <th className="px-3 py-2 text-overline">Estado</th>}
+                </ThOrden>
+                {conSucursal && <ThOrden
+                  campo="sucursal"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('sucursal')}
+                >
+                  Sucursal
+                </ThOrden>}
+                {conEstado && <ThOrden
+                  campo="estado"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('estado')}
+                >
+                  Estado
+                </ThOrden>}
                 {conMotivo && <th className="px-3 py-2 text-overline">Motivo</th>}
-                <th className="px-3 py-2 text-right text-overline">
+                <ThOrden
+                  campo="monto"
+                  activo={orden.clave}
+                  direccion={orden.direccion}
+                  href={enlaceOrden('monto')}
+                  derecha
+                >
                   {vista === 'DESCUENTOS' ? 'Descuento' : 'Monto'}
-                </th>
+                </ThOrden>
               </tr>
             </thead>
             <tbody>

@@ -3,6 +3,8 @@ import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaRegalo, ReporteRegalos } from '@/modules/reportes/regalos'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num, porcentaje } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
 import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
@@ -154,7 +156,7 @@ export function ReporteRegalosVista({
                 encabezados={['Día', 'Enviados', 'Aceptados']}
                 filas={serie
                   .filter((p) => p.enviados > 0 || p.aceptados > 0)
-                  .map((p) => [p.dia, entero(p.enviados), entero(p.aceptados)])}
+                  .map((p) => [p.dia, num(p.enviados, entero(p.enviados)), num(p.aceptados, entero(p.aceptados))])}
                 vacio="Sin movimiento diario en el periodo."
               />
             }
@@ -281,7 +283,7 @@ export function ReporteRegalosVista({
         ) : (
           <Tabla
             encabezados={['Cliente', 'Regalos enviados']}
-            filas={r.topRemitentes.map((t) => [t.nombre, entero(t.enviados)])}
+            filas={r.topRemitentes.map((t) => [t.nombre, num(t.enviados, entero(t.enviados))])}
             vacio="Nadie envió regalos en el periodo."
           />
         )}
@@ -325,8 +327,8 @@ function TablaTotales({
       encabezados={[columna, 'Total', '% del total']}
       filas={filas.map((f) => [
         f.nombre,
-        entero(f.total),
-        total === 0 ? '—' : `${Math.round((f.total / total) * 100)} %`,
+        num(f.total, entero(f.total)),
+        porcentaje(f.total, total),
       ])}
       vacio="Sin movimiento en el periodo."
     />
@@ -339,52 +341,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

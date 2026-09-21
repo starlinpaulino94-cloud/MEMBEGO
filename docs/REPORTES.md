@@ -99,6 +99,116 @@ en silencio. Ahora hay un aviso, **y ese aviso se imprime**: en papel, una serie
 corta sin nota es indistinguible de un periodo sin datos. Las cifras del resumen
 siempre cubren el periodo entero.
 
+## Mientras carga
+
+Cada pantalla de reportes tiene su propio `loading.tsx`
+(`components/reportes/EsqueletoReporte.tsx`). No es un adorno: antes caían en el
+`loading.tsx` genérico de `/admin`, que pinta **seis tarjetas iguales en
+rejilla** — una forma que no llega nunca, así que al aparecer el reporte de
+verdad **todo se movía de sitio**. Un esqueleto que no calca la página no reduce
+la espera, la hace más brusca.
+
+El esqueleto calca la forma real y en su orden: barra del periodo → fila de
+cifras → paneles de gráfico → secciones de tabla. **Las cantidades de cada
+pantalla salen de contar su vista** (`<KpiReporte`, `<PanelGrafico`), y
+`tests/reportes-carga.test.ts` las compara en cada ejecución: si un reporte gana
+una cifra o un gráfico y el esqueleto se queda atrás, la prueba falla.
+
+Los **detalles** usan otro (`EsqueletoDetalleReporte`): son pestañas y una tabla
+larga, no cifras. Y el esqueleto lleva `role="status"` con texto oculto, porque
+sin él un lector de pantalla solo encuentra silencio.
+
+## Las tablas
+
+Todas las tablas de los reportes son **una sola**:
+`components/reportes/TablaReporte.tsx`. Antes eran **ocho copias byte a byte** de
+la misma función `Tabla`, una pegada al final de cada vista, con veintiséis usos
+entre todas y **ni un control**: el orden era el que trajera la consulta y no
+había forma de cambiarlo.
+
+Lo que tiene:
+
+- **Ordenar por columna.** Se pulsa el encabezado: primero de mayor a menor —en
+  un reporte casi siempre se busca el mayor—, luego al revés, y a la tercera se
+  quita y vuelve el orden del motor. Los empates conservan ese orden, así que la
+  tabla nunca se mueve sola entre dos pulsaciones.
+- **Buscar**, sobre el texto que se ve, sin acentos ni mayúsculas (la misma
+  `normalizarBusqueda` que usa la base).
+- **Densidad** cómoda o compacta, guardada en el navegador y **compartida por
+  todas las tablas de reportes**: repetir la misma elección nueve veces en una
+  pantalla no es una preferencia, es una molestia.
+
+Buscador y densidad aparecen solo **por encima de `UMBRAL_CONTROLES` filas**:
+buscar en una tabla de cuatro filas es más trabajo que leerla.
+
+### Por qué una celda puede llevar un número escondido
+
+Las filas llegan ya formateadas — `dinero(142300)` → «RD$142.300,00». Ordenar
+**eso** como texto pone «RD$9,00» por encima de «RD$1.200,00», porque el carácter
+«9» va después del «1». Una tabla de finanzas ordenada al revés no es un defecto
+estético: es una cifra equivocada en una reunión.
+
+Por eso una celda es `string` o `{ texto, orden }`, y hay tres ayudas en
+`modules/reportes/tabla.ts` para construirla: `num(valor, texto)`,
+`porcentaje(parte, base)` y `razon(parte, base)`.
+
+De ahí sale la regla dura: **a partir de la segunda columna solo se puede ordenar
+lo que traiga `orden`**. Una columna de números formateados sin su valor crudo
+**no se vuelve ordenable** —su encabezado no se puede pulsar— en vez de ofrecer
+un orden que mentiría. `tests/reportes-tabla.test.ts` recorre los bloques
+`<Tabla>` de las ocho vistas y falla si encuentra un `entero(…)` o `dinero(…)`
+suelto, nombrando el fichero.
+
+`porcentaje()` guarda además el valor **sin redondear**: dos filas que se enseñan
+como «33 %» se ordenan por lo que de verdad valen. Y cuando no hay base, escribe
+«—» con `orden: null` — un hueco **no es un cero**, así que cae al final tanto
+ascendiendo como descendiendo.
+
+### Las tablas largas de los detalles se ordenan en la base
+
+Las de arriba son resúmenes de treinta o cincuenta filas y **están enteras en la
+página**: ordenarlas en el navegador no puede perder nada.
+
+Las de `/detalle` son otra cosa. Traen hasta **300 filas ya recortadas por la
+consulta**, y ese recorte lo decide el `orderBy`. Ordenarlas en el navegador
+daría «las 300 más recientes, ordenadas por monto» — que **no** son «las 300 de
+mayor monto». El cobro más grande del trimestre podría no estar en la lista
+mientras la tabla parece estar respondiendo a la pregunta.
+
+Por eso ahí el orden **viaja a la consulta**: se elige con un enlace
+(`components/reportes/ThOrden.tsx`), se lee de la URL (`?o=` y `?d=`) y entra en
+el `orderBy` de Prisma. Sin JavaScript, imprimible, y el enlace se puede pegar
+en un chat tal cual. Un `?o=` inventado a mano cae al orden por defecto: lo que
+no está en la lista de campos de esa pantalla no llega nunca a la consulta.
+
+Tres consecuencias que están escritas en el código:
+
+- **El subtítulo lo dice.** Con el tope puesto, cambiar el orden cambia *qué*
+  filas se ven. El texto sale de `resumenTope()` y nunca a mano: «se muestran 300
+  de 4.120: las de mayor monto».
+- **El orden por defecto sigue al de la pestaña.** «Revertidas» arranca por
+  `revertidaAt` y «Reservadas» por `createdAt`, el mismo criterio con el que el
+  reporte las contó.
+- **No se puede ordenar por un dato que el permiso esconde.** El nombre de quien
+  atendió lo manda `ver_empleados` y ni se pide a la base sin él, así que no hay
+  campo de orden para esa columna.
+
+Y todas las columnas que no son la fecha llevan la fecha de segundo criterio:
+sin él, dos filas iguales en la columna elegida saldrían en el orden que le
+apeteciera a Postgres y la lista cambiaría sola entre dos recargas idénticas.
+
+### Lo que la tabla no hace, a propósito
+
+- **No pagina.** Los reportes agrupan hasta treinta o cincuenta filas y **se
+  imprimen**: paginar escondería filas del papel sin decirlo.
+- **No tiene multi-selección.** Una tabla de reporte es de solo lectura: no hay
+  ninguna acción que aplicar a lo seleccionado. Una casilla que no lleva a
+  ningún sitio enseña a desconfiar de los controles que sí sirven.
+
+Al imprimir, los controles desaparecen y la tabla sale entera y en el orden que
+se esté mirando. Si hay una búsqueda puesta, **el aviso de «filtrado» también se
+imprime**: un papel con menos filas de las que hay tiene que decirlo.
+
 ## Exportar
 
 - Siempre en el **servidor** (una ruta `export`/`exportar`), nunca en el
