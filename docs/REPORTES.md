@@ -209,6 +209,41 @@ Al imprimir, los controles desaparecen y la tabla sale entera y en el orden que
 se esté mirando. Si hay una búsqueda puesta, **el aviso de «filtrado» también se
 imprime**: un papel con menos filas de las que hay tiene que decirlo.
 
+## Qué dicen estos números
+
+El índice de reportes cierra con unas frases que interpretan las cifras:
+«los ingresos de caja bajaron 18 % frente al periodo anterior». Viven en
+`modules/reportes/insights.ts`, que es **puro** — se prueba con números
+inventados y sin base de datos.
+
+**Regla de oro:** solo sale lo que tiene algo que decir. Hay umbrales
+(`UMBRAL_VARIACION`, `MINIMO_OPERACIONES`, `UMBRAL_ENTREGAS`) y por debajo de
+ellos la sección entera desaparece. Una sección que siempre está encendida
+enseña a ignorarla.
+
+### Cada frase dice a dónde ir
+
+Un titular sin sitio a donde ir deja a quien lo lee **peor que antes**: sabe que
+algo pasa y no tiene el siguiente paso. Así que cada frase declara un destino
+—`finanzas`, `clientes`, `operacion`, `membresias`— y una etiqueta que dice
+**qué se va a mirar**, nunca «ver más»: un enlace que no promete nada no se
+pulsa.
+
+El núcleo **no arma URLs**, y eso es deliberado por dos razones:
+
+- Se prueba sin base de datos ni router.
+- El mismo reporte se monta en **dos sitios**: `/admin/reportes` para el dueño
+  y `/superadmin/reportes/[id]` para soporte, donde esos enlaces no existen.
+
+Los destinos son las mismas claves que `EnlacesReporte`, que es lo que ya usan
+las tarjetas de KPI. De ahí salen gratis dos comportamientos: el enlace **lleva
+el mismo periodo** que se está mirando, y el de finanzas **no aparece sin
+`ver_financieros`**. Donde el montaje no tiene esa ruta, la frase se enseña
+igual y sin enlace roto.
+
+El enlace no se imprime —en el papel no hay nada que pulsar— pero la frase sí,
+entera.
+
 ## Gráficos
 
 Todo gráfico va dentro de `components/reportes/graficos/PanelGrafico.tsx`, que

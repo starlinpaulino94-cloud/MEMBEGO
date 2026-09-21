@@ -13,7 +13,7 @@ import { ReporteImprimible, TablaReporte } from '@/components/ui/reporte-imprimi
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
-import { Lightbulb, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { ArrowRight, Lightbulb, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 
 /** A dónde lleva investigar cada cifra. Vacío en el montaje del superadmin. */
 export interface EnlacesReporte {
@@ -345,7 +345,23 @@ export function ReporteEmpresaVista({
                     </span>
                   </span>
                   <Lightbulb className="hidden print:block h-4 w-4 shrink-0" aria-hidden />
-                  <p className="text-small text-foreground print:text-xs">{i.texto}</p>
+                  <div className="min-w-0">
+                    <p className="text-small text-foreground print:text-xs">{i.texto}</p>
+                    {/* El enlace solo aparece si ese montaje tiene a dónde ir:
+                        el reporte que abre soporte no lleva estos destinos, y
+                        un «ver más» que no lleva a nada es peor que ninguno.
+                        No se imprime —en el papel no hay nada que pulsar—,
+                        pero la frase sí, entera. */}
+                    {i.investigar && enlaces?.[i.investigar.destino] && (
+                      <a
+                        href={enlaces[i.investigar.destino]}
+                        className="mt-1.5 inline-flex items-center gap-1 text-caption text-primary hover:underline print:hidden"
+                      >
+                        {i.investigar.etiqueta}
+                        <ArrowRight className="h-3 w-3" aria-hidden />
+                      </a>
+                    )}
+                  </div>
                 </li>
               )
             })}
