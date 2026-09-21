@@ -201,7 +201,7 @@ export function ExcursionCard({
             {excursion.ubicacion && (
               <span className="inline-flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5 text-primary" aria-hidden />
-                <span className="truncate max-w-[140px]">{excursion.ubicacion}</span>
+                <span className="truncate max-w-[200px]">{excursion.ubicacion}</span>
               </span>
             )}
             {excursion.duracionMin && (

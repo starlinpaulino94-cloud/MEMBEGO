@@ -1,10 +1,15 @@
 import { z } from 'zod'
 
-/** Los 7 bloques del feed, en orden canónico (contrato Stitch A05). */
+/**
+ * Los 7 bloques del feed, en orden canónico (contrato Stitch A05).
+ *
+ * Las categorías van ANTES del hero: son la puerta de entrada al catálogo y
+ * el hero es una tarjeta alta que empuja todo lo demás fuera de pantalla.
+ */
 export const TIPOS_BLOQUE = [
   'CABECERA',
-  'HERO',
   'CATEGORIAS',
+  'HERO',
   'DESTACADAS',
   'MEMBRESIAS',
   'BANNER_QR',

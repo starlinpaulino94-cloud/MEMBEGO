@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { Car, Star, WalletCards } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Car, WalletCards } from 'lucide-react'
 import { DeleteVehiculoButton } from '@/components/cliente/DeleteVehiculoButton'
 import { SetPrincipalVehiculoButton } from '@/components/cliente/SetPrincipalVehiculoButton'
 import type { VehiculoCliente } from '@/modules/cliente/queries'
@@ -34,15 +33,14 @@ export function VehicleCard({ vehiculo }: { vehiculo: VehiculoCliente }) {
               {vehiculo.marca} {vehiculo.modelo}
             </h3>
             {/* Un estado o la forma de cambiarlo, nunca los dos: esta fila
-                siempre responde "¿es este mi vehículo de cabecera?". */}
-            {vehiculo.esPrincipal ? (
-              <Badge variant="secondary" className="gap-1">
-                <Star className="h-3 w-3 fill-current" aria-hidden />
-                Principal
-              </Badge>
-            ) : (
-              <SetPrincipalVehiculoButton vehiculoId={vehiculo.id} label={etiqueta} />
-            )}
+                siempre responde "¿es este mi vehículo de cabecera?". Las dos
+                caras las pinta el mismo componente para que la revalidación no
+                lo desmonte y su toast de éxito alcance a salir. */}
+            <SetPrincipalVehiculoButton
+              vehiculoId={vehiculo.id}
+              label={etiqueta}
+              esPrincipal={vehiculo.esPrincipal}
+            />
           </div>
 
           <p className="mt-0.5 text-caption">

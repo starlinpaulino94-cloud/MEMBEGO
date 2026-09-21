@@ -1,8 +1,9 @@
 'use client'
 
-import { Suspense, useCallback, useState, useSyncExternalStore } from 'react'
+import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { CLAVE_COMPACTO } from './nav-compacto'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppHeader } from '@/components/layout/AppHeader'
 import { NavProgress } from '@/components/layout/NavProgress'
@@ -54,14 +55,6 @@ import type { AppRole } from '@/types'
  * después, que es cuando empieza a hacer falta para el flyout.
  */
 
-const CLAVE_COMPACTO = 'membego.nav.compacto.v1'
-
-/**
- * Se ejecuta antes del primer pintado. Va en texto plano y sin dependencias a
- * propósito: cualquier import lo retrasaría hasta después del pintado, que es
- * exactamente lo que intenta evitar.
- */
-const SCRIPT_COMPACTO = `try{document.documentElement.dataset.navCompacto=localStorage.getItem('${CLAVE_COMPACTO}')==='1'?'1':'0'}catch(e){}`
 
 /**
  * LA PREFERENCIA SE LEE, NO SE COPIA A UN ESTADO.
@@ -185,10 +178,12 @@ export function AppShell({
     [pathname]
   )
 
+  useEffect(() => {
+    document.documentElement.dataset.navCompacto = leerCompacto() ? '1' : '0'
+  }, [])
+
   return (
     <>
-      <script dangerouslySetInnerHTML={{ __html: SCRIPT_COMPACTO }} />
-
       {/* `useSearchParams` obliga a un límite de suspensión; la barra es
           decorativa, así que su respaldo es nada. */}
       <Suspense fallback={null}>

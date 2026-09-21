@@ -17,6 +17,7 @@ import {
   TicketPercent,
 } from 'lucide-react'
 import { SinEmpresaTodavia } from '@/components/cliente/SinEmpresaTodavia'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi cuenta' }
@@ -157,7 +158,7 @@ export default async function PerfilPage({
       </section>
 
       {/* ── Accesos: teselas suaves, como en el diseño ─────────────────── */}
-      <section className="grid grid-cols-2 gap-2">
+      <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {tiles.map((t) => (
           <Link
             key={t.href + t.label}
@@ -170,27 +171,29 @@ export default async function PerfilPage({
       </section>
 
       {/* ── Pestañas con conteos reales ────────────────────────────────── */}
-      <nav aria-label="Filtrar membresías" className="relative no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {TABS.map((t) => {
-          const activo = t.id === 'todas' ? tab === 'todas' : tab === t.id
-          const n = t.id === 'todas' ? null : conteos[t.id]
-          return (
-            <Link
-              key={t.id}
-              href={t.href}
-              aria-current={activo ? 'page' : undefined}
-              className={
-                activo
-                  ? 'inline-flex min-h-10 shrink-0 items-center rounded-full bg-retail-deep px-4 text-label-lg text-white transition active:scale-[0.97]'
-                  : 'inline-flex min-h-10 shrink-0 items-center rounded-full border border-border bg-card px-4 text-label-lg text-muted-foreground transition hover:text-foreground active:scale-[0.97]'
-              }
-            >
-              {t.label}
-              {n !== null && <span className="ml-1 tabular-nums">({n})</span>}
-            </Link>
-          )
-        })}
-      </nav>
+      <RailOverflowHint className="from-background via-background/90 to-transparent text-primary">
+        <nav aria-label="Filtrar membresías" className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 pr-12">
+          {TABS.map((t) => {
+            const activo = t.id === 'todas' ? tab === 'todas' : tab === t.id
+            const n = t.id === 'todas' ? null : conteos[t.id]
+            return (
+              <Link
+                key={t.id}
+                href={t.href}
+                aria-current={activo ? 'page' : undefined}
+                className={
+                  activo
+                    ? 'inline-flex min-h-10 shrink-0 items-center rounded-full bg-retail-deep px-4 text-label-lg text-white transition active:scale-[0.97]'
+                    : 'inline-flex min-h-10 shrink-0 items-center rounded-full border border-border bg-card px-4 text-label-lg text-muted-foreground transition hover:text-foreground active:scale-[0.97]'
+                }
+              >
+                {t.label}
+                {n !== null && <span className="ml-1 tabular-nums">({n})</span>}
+              </Link>
+            )
+          })}
+        </nav>
+      </RailOverflowHint>
 
       {/* ── Tus membresías (tarjeta del contrato: estado, tesela, pase) ── */}
       <section>
@@ -302,7 +305,7 @@ export default async function PerfilPage({
               Visitar frecuentes
             </Link>
           </div>
-          <ul className="mt-3 grid grid-cols-2 gap-3">
+          <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {empresas.slice(0, 4).map((e) => {
               const esCarwash = e.type === 'carwash'
               return (

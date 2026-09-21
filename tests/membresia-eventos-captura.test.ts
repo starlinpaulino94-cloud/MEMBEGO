@@ -22,7 +22,7 @@ import { join } from 'node:path'
  */
 
 const raiz = join(__dirname, '..')
-const leer = (r: string) => readFileSync(join(raiz, r), 'utf8')
+const leer = (r: string) => readFileSync(join(raiz, r), 'utf8').replace(/\r\n/g, '\n')
 const codigo = (r: string) =>
   leer(r)
     .replace(/\/\*[\s\S]*?\*\//g, '')

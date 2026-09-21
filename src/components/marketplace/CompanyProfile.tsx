@@ -486,9 +486,10 @@ export function CompanyProfile({
                         </Link>
                     )}
 
-                    {/* Fase E8: página pública y compartible del plan */}
+                    {/* Fase E8: en la app, detalle del cliente; en la landing,
+                        la página pública y compartible del plan. */}
                     <Link
-                      href={`/plan/${plan.id}`}
+                      href={isApp ? `/cliente/planes/${plan.id}` : `/plan/${plan.id}`}
                       className="mt-2 inline-flex items-center justify-center gap-1.5 text-small font-semibold text-primary hover:underline"
                     >
                       Ver y compartir plan <ArrowRight className="h-3.5 w-3.5" aria-hidden />

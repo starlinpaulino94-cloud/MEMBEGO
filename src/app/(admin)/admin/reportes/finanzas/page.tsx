@@ -63,7 +63,7 @@ export default async function ReporteFinanzasPage({
 
   const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
-  const r = await getReporteFinanzas(companyId, rango, new Date(), {
+  const r = await getReporteFinanzas(companyId, rango, timeZone, new Date(), {
     filtro: { sucursalId: sucursalPedida || undefined },
   })
 

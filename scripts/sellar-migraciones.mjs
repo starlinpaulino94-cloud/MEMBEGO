@@ -23,15 +23,24 @@ import { fileURLToPath } from 'node:url'
 const RAIZ = fileURLToPath(new URL('../prisma/migrations', import.meta.url))
 export const ARCHIVO = join(RAIZ, 'SUMAS.txt')
 
-/** Nombre → sha256 del `migration.sql`, ordenado por nombre. */
+/**
+ * Nombre → sha256 del `migration.sql`, ordenado por nombre.
+ *
+ * La suma se calcula sobre el contenido con los saltos NORMALIZADOS a LF. El
+ * sello (`SUMAS.txt`) se generó en un entorno con LF, y en Windows
+ * (`core.autocrlf=true`) git convierte los saltos a CRLF al hacer checkout.
+ * Sumar los bytes crudos tal como quedan en disco hacía que las 146
+ * migraciones parecieran editadas a la vez, sin que nadie hubiera tocado una
+ * sola línea: un falso positivo de plataforma, no una edición real.
+ */
 export function sumasEnDisco() {
   const out = new Map()
   for (const nombre of readdirSync(RAIZ, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort()) {
-    const sql = readFileSync(join(RAIZ, nombre, 'migration.sql'))
-    out.set(nombre, createHash('sha256').update(sql).digest('hex'))
+    const sql = readFileSync(join(RAIZ, nombre, 'migration.sql'), 'utf8').replace(/\r\n/g, '\n')
+    out.set(nombre, createHash('sha256').update(sql, 'utf8').digest('hex'))
   }
   return out
 }

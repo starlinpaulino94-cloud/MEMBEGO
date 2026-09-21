@@ -3,6 +3,7 @@ import type { CompraEstado } from '@prisma/client'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { cardnetTokensConfigurado } from '@/lib/payments/cardnet-tokens'
 import { esEmpresaDemo } from '@/modules/demo'
+import { cardnetDisponible } from '@/modules/pagos/cardnetTokenGate'
 
 /**
  * QUÉ MÉTODOS DE PAGO SE OFRECEN, y a quién.
@@ -61,7 +62,15 @@ export async function getMetodosParaCompraNueva(companyId: string): Promise<Meto
   // entrenamiento es un cobro que hay que devolver. La transferencia sí se
   // deja: es manual, alguien tendría que ir al banco a propósito, y practicar
   // el flujo de subir y validar un comprobante es justo lo que se entrena.
-  if (cardnet && cardnetTokensConfigurado() && !demo) disponibles.push('CARDNET')
+  if (
+    cardnetDisponible({
+      capacidadActiva: cardnet,
+      credencialesCompletas: cardnetTokensConfigurado(),
+      empresaDemo: demo,
+    })
+  ) {
+    disponibles.push('CARDNET')
+  }
   if (transferencia) disponibles.push('TRANSFERENCIA')
 
   const cuentas = disponibles.includes('TRANSFERENCIA')

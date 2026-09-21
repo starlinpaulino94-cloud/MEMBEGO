@@ -7,6 +7,9 @@ import type { FilaClientes, ReporteClientes } from '@/modules/reportes/clientes'
 import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
 import { num, porcentaje } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoDistribucion } from '@/components/reportes/graficos/GraficoDistribucion'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -20,10 +23,13 @@ import { EmptyState } from '@/components/ui/empty-state'
  * vienen. Las cifras del periodo y la foto de hoy van SEPARADAS y rotuladas:
  * mezclarlas haría que alguien leyera «1.240 clientes» como si fueran del mes.
  *
- * Sin gráficas, y es una decisión: `ResponsiveContainer` de Recharts sale en
- * blanco en `@media print` —documentado en `docs/REPORTES.md`— y las tablas
- * dicen lo mismo, se imprimen bien y son la alternativa textual para un lector
- * de pantalla.
+ * Durante mucho tiempo esta pantalla NO tuvo gráficas, y estaba escrito aquí
+ * que era una decisión: `ResponsiveContainer` de Recharts sale en blanco en
+ * `@media print`.
+ *
+ * El problema era real; la conclusión, ya no. `PanelGrafico` **exige** la tabla
+ * equivalente además del gráfico, así que el papel sale igual que siempre. Las
+ * tablas no se han quitado de ningún sitio: están dentro del panel.
  */
 export function ReporteClientesVista({
   r,
@@ -53,6 +59,20 @@ export function ReporteClientesVista({
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
   // la base, así que la semana nunca puede discrepar del día.
   const serie = serieParaGrafico(r.serie, rango.granularidad)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
+
+  // Un anillo con treinta porciones no se lee: se enseñan los cinco mayores y
+  // el resto va junto, dicho con todas las letras. La tabla de debajo —que el
+  // panel exige— sigue trayendo la lista entera, así que no se esconde nada.
+  const TOPE_ANILLO = 5
+  const mayores = r.porCanal.slice(0, TOPE_ANILLO)
+  const cola = r.porCanal.slice(TOPE_ANILLO).reduce((s, c) => s + c.clientes, 0)
+  const canalesDelAnillo = [
+    ...mayores.map((c) => ({ nombre: c.nombre, valor: c.clientes })),
+    // «El resto» y no «otros N canales»: la última fila de `porCanal` puede ser
+    // ya una bolsa («(resto, agrupado)») de más canales de los que se cuentan.
+    ...(cola > 0 ? [{ nombre: 'El resto de los canales', valor: cola }] : []),
+  ]
 
   return (
     <ReporteImprimible
@@ -157,27 +177,55 @@ export function ReporteClientesVista({
         />
       ) : (
         <>
-          <section>
-            <SectionHeader
-              title="Por dónde llegaron"
-              description="Canal capturado antes del registro. «(directo o sin registrar)» son los que llegaron sin enlace de campaña."
-            />
-            <TablaClientes filas={r.porCanal} columna="Canal" total={r.nuevos.valor} entero={entero} />
-          </section>
+          <PanelGrafico
+            titulo="Por dónde llegaron"
+            pregunta="¿De dónde sale de verdad la gente nueva?"
+            periodo={periodo}
+            nota="El anillo enseña los cinco canales mayores; el resto va junto en una porción, y la tabla los lista uno a uno. «(directo o sin registrar)» son los que llegaron sin enlace de campaña: es un canal más, no un error."
+            grafico={
+              <GraficoDistribucion
+                datos={canalesDelAnillo}
+                formato={entero}
+                total={r.nuevos.valor}
+              />
+            }
+            tabla={
+              <TablaClientes
+                filas={r.porCanal}
+                columna="Canal"
+                total={r.nuevos.valor}
+                entero={entero}
+              />
+            }
+          />
 
           <section>
             <SectionHeader title="De dónde son" description="Ciudad declarada en su perfil." />
             <TablaClientes filas={r.porCiudad} columna="Ciudad" total={r.nuevos.valor} entero={entero} />
           </section>
 
-          <section>
-            <SectionHeader title="Altas día a día" />
-            <Tabla
-              encabezados={['Día', 'Altas']}
-              filas={serie.filter((p) => p.nuevos > 0).map((p) => [p.dia, num(p.nuevos, entero(p.nuevos))])}
-              vacio="Sin altas diarias en el periodo."
-            />
-          </section>
+          <PanelGrafico
+            titulo="Altas, día a día"
+            pregunta="¿El crecimiento es sostenido, o son dos días sueltos?"
+            periodo={periodo}
+            nota="Una campaña se ve como un pico; el boca a boca, como una línea que no baja. La cifra de arriba no distingue entre las dos."
+            grafico={
+              <GraficoTendencia
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.nuevos }))}
+                etiqueta="Altas"
+                formato={entero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Día', 'Altas']}
+                filas={serie
+                  .filter((p) => p.nuevos > 0)
+                  .map((p) => [p.dia, num(p.nuevos, entero(p.nuevos))])}
+                vacio="Sin altas diarias en el periodo."
+              />
+            }
+          />
         </>
       )}
 

@@ -303,11 +303,11 @@ export default async function PlanesPage({
                 <Car className="h-4.5 w-4.5 text-primary" aria-hidden />
               </span>
               <p className="text-small text-muted-foreground">
-                Registra tu vehículo para ver el precio exacto de tu categoría y comprar en línea.
+                El precio exacto y la compra en línea dependen de la categoría de tu vehículo.
               </p>
             </div>
             <Button asChild size="sm" variant="outline" className="shrink-0 rounded-full">
-              <Link href={vehiculoNext}>Registrar vehículo</Link>
+              <Link href={vehiculoNext}>Registrar mi vehículo</Link>
             </Button>
           </div>
         )}
@@ -333,8 +333,8 @@ export default async function PlanesPage({
            vacía (esto no es CSS). El asistente lo resuelve y regresa aquí. */
         <EmptyState
           icon={Car}
-          title="Registra tu vehículo para ver los planes"
-          description="Los planes y precios dependen de la categoría de tu vehículo. Regístralo en un minuto y te los mostramos al instante."
+          title="Los planes y precios dependen de la categoría de tu vehículo"
+          description="Regístralo en una pantalla y vuelve aquí."
           action={
             <Button asChild>
               <Link href={vehiculoNext}>Registrar mi vehículo</Link>

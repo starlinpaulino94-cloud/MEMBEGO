@@ -18,6 +18,7 @@ import {
 } from '@/lib/payments/cardnet-tokens-core'
 import { crearIntento, confirmarIntento } from '@/modules/pagos/intentos'
 import { montoDeObjetivo, type ObjetivoPago } from '@/modules/pagos/cardnet3ds'
+import { cardnetDisponible } from '@/modules/pagos/cardnetTokenGate'
 
 /**
  * ORQUESTACIÓN DEL COBRO CON TARJETA HOSPEDADA (CardNET Tokenización).
@@ -48,12 +49,17 @@ export type CobroTokenResultado =
 
 /** ¿Puede esta empresa cobrar con tarjeta hospedada ahora mismo? */
 export async function puedeCobrarToken(companyId: string): Promise<boolean> {
-  if (!cardnetTokensConfigurado()) return false
+  const credencialesCompletas = cardnetTokensConfigurado()
+  if (!credencialesCompletas) return false
   const [capacidad, demo] = await Promise.all([
     tieneCapacidad(companyId, 'PAGO_CARDNET').catch(() => false),
     esEmpresaDemo(companyId),
   ])
-  return capacidad && !demo
+  return cardnetDisponible({
+    capacidadActiva: capacidad,
+    credencialesCompletas,
+    empresaDemo: demo,
+  })
 }
 
 /**
@@ -74,7 +80,7 @@ export async function cobrarObjetivoConToken(input: {
   }
 
   const monto = await montoDeObjetivo(input.objetivo)
-  if (!monto) return { estado: 'error', motivo: 'No se encontró qué pagar, o ya no está pendiente.' }
+  if (!monto.ok) return { estado: 'rechazado', motivo: monto.motivo }
   if (monto.pesos <= 0) return { estado: 'error', motivo: 'El monto a pagar no es válido.' }
 
   const intento = await crearIntento({
@@ -236,7 +242,7 @@ export async function cobrarPendienteConPerfil(input: {
   // Si ya no hay nada pendiente (p. ej. el otro canal ya cobró y activó),
   // el sondeo termina sin error y sin doble cobro.
   const monto = await montoDeObjetivo(input.objetivo)
-  if (!monto || monto.pesos <= 0) return { estado: 'sin_pendiente' }
+  if (!monto.ok || monto.pesos <= 0) return { estado: 'sin_pendiente' }
 
   // Resolver el Customer SIN tocar la sesión de la ventana abierta: con el
   // customerId de la sesión se consulta por GET y se verifica la pertenencia

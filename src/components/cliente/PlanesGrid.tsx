@@ -460,7 +460,7 @@ export function PlanesGrid({
                     <div className="space-y-1.5">
                       <Button asChild variant="outline" className="min-h-12 w-full rounded-full">
                         <a href={vehiculoNext}>
-                          Registra tu vehículo para comprar
+                          Registrar mi vehículo para comprar
                         </a>
                       </Button>
                       <p className="text-center text-label-sm text-muted-foreground">

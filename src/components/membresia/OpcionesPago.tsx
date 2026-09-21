@@ -1,14 +1,16 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useState, type ReactNode } from 'react'
 import { Landmark, Store, CheckCircle2, Loader2, MapPin, CreditCard } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   avisarPagoPresencial,
   type PresencialState,
 } from '@/modules/membresia/actions'
-import { ComprobanteForm } from '@/components/membresia/ComprobanteForm'
-import { PagoTokenCardnet } from '@/components/membresia/PagoTokenCardnet'
+import {
+  PagoTokenCardnet,
+  type ObjetivoPagoCliente,
+} from '@/components/membresia/PagoTokenCardnet'
 import { Button } from '@/components/ui/button'
 import { cn } from '@membego/ui/cn'
 
@@ -34,16 +36,16 @@ interface SucursalOption {
 }
 
 interface Props {
-  membershipId: string
+  objetivo: ObjetivoPagoCliente
   companyName: string
   transferencias: MetodoTransferencia[]
-  presenciales: MetodoPresencial[]
+  presenciales?: MetodoPresencial[]
   /** Sucursales activas para elegir dónde pagar. */
-  sucursales: SucursalOption[]
+  sucursales?: SucursalOption[]
   /** true = el cliente ya avisó que pagará en la sucursal. */
-  avisoPresencialEnviado: boolean
+  avisoPresencialEnviado?: boolean
   /** Referencia ya generada (persistida en la orden). */
-  referencia: string | null
+  referencia?: string | null
   /**
    * false = la empresa retiró la transferencia y esta membresía no se había
    * comprometido con ella. Se oculta la pestaña entera: no es lo mismo "no hay
@@ -62,6 +64,11 @@ interface Props {
   tokensConfig?: { publicKey: string; captureUrl: string; scriptUrl: string } | null
   /** Logo de la empresa para la cabecera de la ventana de pago. */
   logoUrl?: string | null
+  /**
+   * Comprobante a montar en la pestaña de transferencia. Lo provee quien usa
+   * el selector para no atar este componente a una sola superficie de pago.
+   */
+  comprobanteForm: ReactNode
 }
 
 type Opcion = 'tarjeta' | 'transferencia' | 'presencial'
@@ -75,19 +82,21 @@ const initial: PresencialState = {}
  *    confirma el pago al recibirlo y el plan se activa.
  */
 export function OpcionesPago({
-  membershipId,
+  objetivo,
   companyName,
   transferencias,
-  presenciales,
-  sucursales,
-  avisoPresencialEnviado,
-  referencia,
+  presenciales = [],
+  sucursales = [],
+  avisoPresencialEnviado = false,
+  referencia = null,
   transferenciaDisponible,
   tarjetaDisponible,
   montoTexto,
   tokensConfig,
   logoUrl,
+  comprobanteForm,
 }: Props) {
+  const esMembresia = 'membershipId' in objetivo
   // Las opciones que existen para esta membresía, en orden de preferencia.
   // Presencial (efectivo en sucursal) SIEMPRE está. Tarjeta y transferencia
   // aparecen si están disponibles.
@@ -98,7 +107,9 @@ export function OpcionesPago({
     ...(transferenciaDisponible
       ? [{ key: 'transferencia' as const, icon: Landmark, titulo: 'Transferencia', detalle: 'Paga desde tu banco y sube el comprobante' }]
       : []),
-    { key: 'presencial' as const, icon: Store, titulo: 'En la sucursal', detalle: 'Paga en efectivo al visitar el local' },
+    ...(esMembresia
+      ? [{ key: 'presencial' as const, icon: Store, titulo: 'En la sucursal', detalle: 'Paga en efectivo al visitar el local' }]
+      : []),
   ]
 
   // Por defecto: tarjeta si está; si no, la primera disponible. Si el cliente
@@ -181,7 +192,7 @@ export function OpcionesPago({
 
       {opcion === 'tarjeta' && tokensConfig ? (
         <PagoTokenCardnet
-          membershipId={membershipId}
+          objetivo={objetivo}
           montoTexto={montoTexto}
           publicKey={tokensConfig.publicKey}
           captureUrl={tokensConfig.captureUrl}
@@ -225,10 +236,7 @@ export function OpcionesPago({
             </p>
           )}
 
-          <ComprobanteForm
-            membershipId={membershipId}
-            metodosPago={transferencias.map((m) => ({ id: m.id, nombre: m.nombre }))}
-          />
+          {comprobanteForm}
         </div>
       ) : avisado ? (
         <div className="rounded-2xl border border-success/25 bg-success/10 p-5">
@@ -269,7 +277,9 @@ export function OpcionesPago({
           </div>
 
           <form action={formAction} className="space-y-3">
-            <input type="hidden" name="membershipId" value={membershipId} />
+            {esMembresia && (
+              <input type="hidden" name="membershipId" value={objetivo.membershipId} />
+            )}
             {sucursal && <input type="hidden" name="metodoPagoId" value={sucursal.id} />}
             {sucursales.length > 1 ? (
               <div className="space-y-1.5">

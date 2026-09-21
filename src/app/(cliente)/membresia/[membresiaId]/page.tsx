@@ -21,12 +21,14 @@ import {
 } from 'lucide-react'
 import { QRShareCard } from '@/components/qr/QRShareCard'
 import { OpcionesPago } from '@/components/membresia/OpcionesPago'
+import { ComprobantePagoForm } from '@/components/cliente/ComprobantePagoForm'
 import { CancelarPagoBoton } from '@/components/membresia/CancelarPagoBoton'
 import { CancelarMembresiaBoton } from '@/components/membresia/CancelarMembresiaBoton'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
 import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
+import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
 
 export const metadata = {
   title: 'Detalles de Membresía',
@@ -158,7 +160,15 @@ export default async function MembershipDetail({
     ? differenceInCalendarDays(membership.fechaVencimiento, now)
     : null
 
-  const needsInitialPayment = ['PENDIENTE', 'RECHAZADA'].includes(membership.estado)
+  // `PENDIENTE_PAGO` también espera pago: el comprobante está enviado pero el
+  // cobro no se ha cerrado. Dejarla fuera era el callejón sin salida medido en
+  // F3 — el CTA de `/cliente/planes` promete pagar y la pantalla no ofrecía ni
+  // un método. Incluirla muestra la transferencia con su comprobante para
+  // completar o corregir el pago; una ACTIVA sin cambio pendiente NO entra aquí
+  // (ya está pagada y no se le vuelve a pedir dinero).
+  const needsInitialPayment = ['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'].includes(
+    membership.estado
+  )
   const isChangePending = isActive && membership.planIdSolicitado != null
   const needsPayment = needsInitialPayment || isChangePending
 
@@ -185,7 +195,14 @@ export default async function MembershipDetail({
     !isChangePending && membership.fechaInicio == null
       ? Number(membership.descuentoBienvenida ?? 0)
       : 0
-  const montoAPagar = Math.max(0, Number(planAPagar?.precio ?? 0) - descuentoBienvenida)
+  const montoAPagar = isChangePending
+    ? calcularPagoCambioPlan({
+        precioNuevo: Number(membership.planSolicitado?.precio ?? 0),
+        precioVigente: Number(membership.plan.precio),
+        fechaVencimiento: membership.fechaVencimiento,
+        vigenciaDias: membership.plan.vigenciaDias,
+      }).aPagar
+    : Math.max(0, Number(planAPagar?.precio ?? 0) - descuentoBienvenida)
 
   // La transferencia se ofrece si la empresa la tiene encendida O si esta
   // membresía ya se comprometió con ella (eligió cuenta o subió comprobante).
@@ -231,6 +248,17 @@ export default async function MembershipDetail({
         }),
       ]))
     : [[], []]
+
+  const transferencias = metodosPago
+    .filter((m) => m.tipo === 'TRANSFERENCIA')
+    .map((m) => ({
+      id: m.id,
+      nombre: m.nombre,
+      titular: m.titular,
+      numeroCuenta: m.numeroCuenta,
+      tipoCuenta: m.tipoCuenta,
+      instrucciones: m.instrucciones,
+    }))
 
   // `labelCliente`, no `label`: esta pantalla es del cliente. Usar la etiqueta
   // de administración aquí anulaba el motivo de que existan las dos.
@@ -382,21 +410,18 @@ export default async function MembershipDetail({
 
             <div className="mt-5">
               <OpcionesPago
-                membershipId={membership.id}
+                objetivo={{ membershipId: membership.id }}
                 companyName={company.name}
-                transferencias={metodosPago
-                  .filter((m) => m.tipo === 'TRANSFERENCIA')
-                  .map((m) => ({
-                    id: m.id,
-                    nombre: m.nombre,
-                    titular: m.titular,
-                    numeroCuenta: m.numeroCuenta,
-                    tipoCuenta: m.tipoCuenta,
-                    instrucciones: m.instrucciones,
-                  }))}
+                transferencias={transferencias}
                 presenciales={metodosPago
                   .filter((m) => m.tipo === 'PRESENCIAL')
                   .map((m) => ({ id: m.id, nombre: m.nombre, instrucciones: m.instrucciones }))}
+                comprobanteForm={
+                  <ComprobantePagoForm
+                    objetivo={{ membershipId: membership.id }}
+                    metodosPago={transferencias}
+                  />
+                }
                 sucursales={sucursales}
                 avisoPresencialEnviado={
                   membership.metodoPago?.tipo === 'PRESENCIAL' && !membership.comprobanteUrl

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { RegistrarSW } from '@/components/system/RegistrarSW'
+import { SCRIPT_COMPACTO } from '@/components/layout/nav-compacto'
 import { SITE_NAME, SITE_DESCRIPTION, getAppUrl } from '@/lib/site'
 import './globals.css'
 
@@ -133,6 +134,9 @@ export default function RootLayout({
     // suppressHydrationWarning: next-themes escribe la clase del tema en <html>
     // antes de hidratar (evita el flash de tema incorrecto).
     <html lang="es" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_COMPACTO }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${jakarta.variable} antialiased`}
       >

@@ -6,6 +6,9 @@ import type { FilaOperacion, ReporteOperacion } from '@/modules/reportes/operaci
 import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
 import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoRanking } from '@/components/reportes/graficos/GraficoRanking'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -14,11 +17,17 @@ import { EmptyState } from '@/components/ui/empty-state'
 /**
  * OPERACIÓN.
  *
- * Sin gráficas, y es una decisión, no una carencia: `ResponsiveContainer` de
- * Recharts sale en blanco en `@media print` —está documentado en
- * `docs/REPORTES.md`— y este reporte se imprime más de lo que se mira, porque
- * quien lo usa lo usa para cuadrar el turno. Las tablas dicen lo mismo, se
- * imprimen bien y son la alternativa textual para un lector de pantalla.
+ * Durante mucho tiempo esta pantalla NO tuvo gráficas, y estaba escrito aquí
+ * que era una decisión: `ResponsiveContainer` de Recharts sale en blanco en
+ * `@media print`, y este reporte se imprime más de lo que se mira porque quien
+ * lo usa lo usa para cuadrar el turno.
+ *
+ * El problema era real; la conclusión, ya no. `PanelGrafico` existe justo para
+ * eso: **exige** la tabla equivalente además del gráfico, así que la hoja sale
+ * con los mismos números de siempre y la pantalla gana la forma —un pico, una
+ * caída— que una columna de cifras no enseña. Las tablas no se han quitado de
+ * ningún sitio: están dentro del panel, y siguen siendo la alternativa textual
+ * para un lector de pantalla.
  *
  * El desglose por empleado puede no venir: sin el permiso `ver_empleados` la
  * consulta ni se lanza. En ese caso la sección no se pinta vacía —se dice por
@@ -43,6 +52,7 @@ export function ReporteOperacionVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
@@ -139,10 +149,47 @@ export function ReporteOperacionVista({
         />
       ) : (
         <>
-          <section>
-            <SectionHeader title="Por sucursal" />
-            <TablaOperacion filas={r.porSucursal} columna="Sucursal" entero={entero} />
-          </section>
+          <PanelGrafico
+            titulo="Canjes, día a día"
+            pregunta="¿El mostrador va parejo, o todo se acumula en dos días?"
+            periodo={periodo}
+            nota="La línea punteada son los canjes que descontaron un uso. La distancia entre las dos líneas son las cortesías y los planes ilimitados."
+            grafico={
+              <GraficoTendencia
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.canjes, anterior: p.descontados }))}
+                etiqueta="Canjes"
+                etiquetaAnterior="Descontaron un uso"
+                formato={entero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Día', 'Canjes', 'Descontaron']}
+                filas={serie
+                  .filter((p) => p.canjes > 0)
+                  .map((p) => [
+                    p.dia,
+                    num(p.canjes, entero(p.canjes)),
+                    num(p.descontados, entero(p.descontados)),
+                  ])}
+                vacio="Sin canjes diarios en el periodo."
+              />
+            }
+          />
+
+          <PanelGrafico
+            titulo="Dónde se canjea"
+            pregunta="¿Qué mostradores mueven el volumen?"
+            periodo={periodo}
+            nota="«(sin asignar)» son visitas registradas antes de que la app guardara la sucursal. No se esconden: si se escondieran, los subtotales dejarían de sumar el total."
+            grafico={
+              <GraficoRanking
+                filas={r.porSucursal.map((f) => ({ nombre: f.nombre, valor: f.canjes }))}
+                formato={entero}
+              />
+            }
+            tabla={<TablaOperacion filas={r.porSucursal} columna="Sucursal" entero={entero} />}
+          />
 
           <section>
             <SectionHeader
@@ -167,16 +214,6 @@ export function ReporteOperacionVista({
             <TablaOperacion filas={r.porServicio} columna="Beneficio" entero={entero} />
           </section>
 
-          <section>
-            <SectionHeader title="Día a día" />
-            <Tabla
-              encabezados={['Día', 'Canjes', 'Descontaron']}
-              filas={serie
-                .filter((p) => p.canjes > 0)
-                .map((p) => [p.dia, num(p.canjes, entero(p.canjes)), num(p.descontados, entero(p.descontados))])}
-              vacio="Sin canjes diarios en el periodo."
-            />
-          </section>
         </>
       )}
 

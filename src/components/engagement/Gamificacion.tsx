@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { GamificacionData, LogroData } from '@/modules/engagement/gamificacion'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 
 const ICONOS: Record<LogroData['icono'], LucideIcon> = {
   sparkles: Sparkles,
@@ -118,11 +119,13 @@ export function Gamificacion({ data, color }: { data: GamificacionData; color?: 
             {logros.filter((l) => l.desbloqueado).length}/{logros.length}
           </span>
         </div>
-        <div className="relative flex gap-3 overflow-x-auto pb-1 no-scrollbar">
-          {logros.map((l) => (
-            <LogroBadge key={l.id} logro={l} />
-          ))}
-        </div>
+        <RailOverflowHint className="from-card via-card/90 to-transparent text-primary">
+          <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1 pr-10">
+            {logros.map((l) => (
+              <LogroBadge key={l.id} logro={l} />
+            ))}
+          </div>
+        </RailOverflowHint>
       </div>
 
       {/* Ruleta: acceso solo si la empresa configuró premios (Fase 6B) */}
