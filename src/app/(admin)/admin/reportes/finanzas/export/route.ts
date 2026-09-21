@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   const rango = leerRango(sp, timeZone)
   // El filtro viaja en la misma query string que el rango: el archivo sale con
   // EL MISMO corte que la pantalla. La validación del id vive en la consulta.
-  const r = await getReporteFinanzas(companyId, rango, new Date(), {
+  const r = await getReporteFinanzas(companyId, rango, timeZone, new Date(), {
     filtro: { sucursalId: sp.sucursal?.trim() || undefined },
   })
 
@@ -115,6 +115,14 @@ export async function GET(req: NextRequest) {
         ['Cobrado sin entregar', r.cobradoSinEntregar.total, r.cobradoSinEntregar.monto.toFixed(2)],
         ['Anuladas o revertidas', r.deshechas.total, r.deshechas.monto.toFixed(2)],
       ],
+    },
+    {
+      // SOLO la caja: los cobros de membresia tienen otro reloj y mezclarlos
+      // en una serie daria una columna que no corresponde a ningun hecho. El
+      // titulo lo dice para que el archivo se defienda solo una vez bajado.
+      titulo: 'Ingreso de caja dia a dia (NO incluye cobros de membresia)',
+      encabezados: ['Dia', 'Operaciones', 'Ingreso de caja'],
+      filas: r.serie.map((p) => [p.dia, p.operaciones, p.monto.toFixed(2)]),
     },
     {
       titulo: 'Recurrente estimado (NO es dinero cobrado)',

@@ -6,6 +6,9 @@ import type { FilaCitas, ReporteCitas } from '@/modules/reportes/citas'
 import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
 import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoRanking } from '@/components/reportes/graficos/GraficoRanking'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -14,11 +17,16 @@ import { EmptyState } from '@/components/ui/empty-state'
 /**
  * CITAS.
  *
- * Sin gráficas, y es una decisión, no una carencia: `ResponsiveContainer` de
- * Recharts sale en blanco en `@media print` —está documentado en
- * `docs/REPORTES.md`— y este reporte se imprime para cuadrar la agenda. Las
- * tablas dicen lo mismo, se imprimen bien y son la alternativa textual para un
- * lector de pantalla.
+ * Durante mucho tiempo esta pantalla NO tuvo gráficas, y estaba escrito aquí
+ * que era una decisión: `ResponsiveContainer` de Recharts sale en blanco en
+ * `@media print`, y este reporte se imprime para cuadrar la agenda.
+ *
+ * El problema era real; la conclusión, ya no. `PanelGrafico` **exige** la tabla
+ * equivalente además del gráfico, así que el papel sale con los mismos números
+ * de siempre y la pantalla gana lo que una columna de cifras no enseña: si las
+ * canceladas suben en un día concreto o están repartidas por igual. Las tablas
+ * no se han quitado de ningún sitio —están dentro del panel— y siguen siendo la
+ * alternativa textual para un lector de pantalla.
  *
  * El aviso de que el estado es el de HOY se imprime a propósito y va ARRIBA:
  * es la única forma de que quien lea el papel dentro de un mes sepa qué está
@@ -44,6 +52,7 @@ export function ReporteCitasVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
@@ -235,13 +244,19 @@ export function ReporteCitasVista({
             <TablaCitas filas={r.porSucursal} columna="Sucursal" entero={entero} />
           </section>
 
-          <section>
-            <SectionHeader
-              title="Por servicio"
-              description="El servicio tal como quedó escrito al agendar."
-            />
-            <TablaCitas filas={r.porServicio} columna="Servicio" entero={entero} />
-          </section>
+          <PanelGrafico
+            titulo="Qué se pide"
+            pregunta="¿Qué servicios llenan la agenda?"
+            periodo={periodo}
+            nota="Ordenado por citas agendadas, que es la demanda. Un servicio muy agendado y poco completado se ve en la tabla, no en la barra."
+            grafico={
+              <GraficoRanking
+                filas={r.porServicio.map((f) => ({ nombre: f.nombre, valor: f.agendadas }))}
+                formato={entero}
+              />
+            }
+            tabla={<TablaCitas filas={r.porServicio} columna="Servicio" entero={entero} />}
+          />
 
           <section>
             <SectionHeader
@@ -258,22 +273,39 @@ export function ReporteCitasVista({
             )}
           </section>
 
-          <section>
-            <SectionHeader title="Día a día" />
-            <Tabla
-              encabezados={['Día', 'Agendadas', 'Completadas', 'Canceladas', 'No asistió']}
-              filas={serie
-                .filter((p) => p.agendadas > 0)
-                .map((p) => [
-                  p.dia,
-                  num(p.agendadas, entero(p.agendadas)),
-                  num(p.completadas, entero(p.completadas)),
-                  num(p.canceladas, entero(p.canceladas)),
-                  num(p.noAsistio, entero(p.noAsistio)),
-                ])}
-              vacio="Sin citas diarias en el periodo."
-            />
-          </section>
+          <PanelGrafico
+            titulo="La agenda, día a día"
+            pregunta="¿Se está llenando la agenda, y se está cumpliendo?"
+            periodo={periodo}
+            nota="La línea punteada son las completadas. El hueco entre las dos líneas son canceladas, no-asistió y las que siguen abiertas: la tabla las separa una por una."
+            grafico={
+              <GraficoTendencia
+                datos={serie.map((p) => ({
+                  dia: p.dia,
+                  valor: p.agendadas,
+                  anterior: p.completadas,
+                }))}
+                etiqueta="Agendadas"
+                etiquetaAnterior="Completadas"
+                formato={entero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Día', 'Agendadas', 'Completadas', 'Canceladas', 'No asistió']}
+                filas={serie
+                  .filter((p) => p.agendadas > 0)
+                  .map((p) => [
+                    p.dia,
+                    num(p.agendadas, entero(p.agendadas)),
+                    num(p.completadas, entero(p.completadas)),
+                    num(p.canceladas, entero(p.canceladas)),
+                    num(p.noAsistio, entero(p.noAsistio)),
+                  ])}
+                vacio="Sin citas diarias en el periodo."
+              />
+            }
+          />
 
           <p className="print:hidden text-caption text-muted-foreground">
             Abre el detalle de cada cifra:{' '}

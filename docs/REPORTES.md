@@ -209,6 +209,56 @@ Al imprimir, los controles desaparecen y la tabla sale entera y en el orden que
 se esté mirando. Si hay una búsqueda puesta, **el aviso de «filtrado» también se
 imprime**: un papel con menos filas de las que hay tiene que decirlo.
 
+## Gráficos
+
+Todo gráfico va dentro de `components/reportes/graficos/PanelGrafico.tsx`, que
+pide cuatro cosas: el **gráfico**, la **tabla con los mismos datos**, la
+**pregunta de negocio** que contesta y el **periodo**. La tabla no es opcional
+en el tipo, y eso es el punto: los gráficos de Recharts no se imprimen, y hasta
+que existió este marco la tabla dependía de que quien escribía la pantalla se
+acordara.
+
+Hay tres formas, y cada una responde a una pregunta distinta:
+
+| Forma | Componente | Para qué |
+|---|---|---|
+| Línea / área | `GraficoTendencia` | Cómo evolucionó algo en el periodo. Admite una segunda serie punteada para comparar. |
+| Barras horizontales | `GraficoRanking` | Quién va delante y por cuánto. CSS puro: pesa cero y **sí se imprime**. |
+| Anillo | `GraficoDistribucion` | De qué se compone un total, con **seis porciones como mucho**. |
+
+Cuando una agrupación trae más filas de las que el anillo aguanta, quien llama
+junta la cola en una porción rotulada («El resto de los canales») — nunca la
+recorta en silencio, y la tabla del panel sigue trayendo la lista entera.
+
+### Qué pantalla tiene qué
+
+Los cinco reportes que nacieron sin gráfico —finanzas, membresías, clientes,
+operación y citas— tienen dos cada uno: una **tendencia** sobre su serie diaria
+y un **desglose** (ranking o anillo) sobre la agrupación que más se mira. En
+cuatro de ellos la cabecera del archivo decía que no tener gráficos era una
+decisión, con su razón —Recharts no imprime, y esos reportes se imprimen—. La
+razón era cierta; la conclusión dejó de serlo cuando apareció `PanelGrafico`.
+Las cabeceras lo cuentan así, en vez de borrar la decisión anterior.
+
+**Ninguna tabla se quitó.** Las que estaban sueltas en su sección ahora viven
+dentro del panel, desplegables en pantalla y siempre presentes en el papel.
+`tests/reportes-graficos.test.ts` lo vigila por nombre de tabla.
+
+### La serie de finanzas es solo caja, y lo dice
+
+Es la única que podía mentir. El negocio cobra por dos caminos con **dos
+relojes distintos**: la caja se fecha por `Transaction.createdAt` y los cobros
+de membresía por `whereCobrado` (`fechaPago`, con respaldo a `updatedAt` solo
+cuando es null).
+
+Escribir esa segunda condición otra vez en el SQL de la serie sería crear una
+**cuarta copia** de una definición que vive en un solo sitio precisamente
+porque las copias anteriores se desincronizaron. Así que la línea es de caja, la
+pantalla lo dice con todas las letras, el título del bloque en el CSV también
+—para que el archivo se defienda solo una vez bajado— y el KPI de cobros de
+membresía sigue arriba con su cifra exacta. Una serie con dos relojes mezclados
+sería peor que no tenerla.
+
 ## Exportar
 
 - Siempre en el **servidor** (una ruta `export`/`exportar`), nunca en el
@@ -237,9 +287,11 @@ imprime**: un papel con menos filas de las que hay tiene que decirlo.
 - `soloPapel` para las pantallas que necesitan una versión distinta en papel
   (Registros: nueve columnas en pantalla, siete en A4).
 - **Las gráficas no imprimen.** `ResponsiveContainer` de Recharts mide el
-  contenedor al pintar y en `@media print` sale en blanco. Se acompañan de una
-  tabla equivalente con `hidden print:block`, que además es la alternativa
-  textual para lectores de pantalla.
+  contenedor al pintar y en `@media print` sale en blanco. Por eso todo gráfico
+  vive dentro de `PanelGrafico`, que **exige** la tabla equivalente como prop:
+  la regla dejó de depender de que quien escribe la pantalla se acuerde. Esa
+  tabla es además la alternativa textual para lectores de pantalla. Ver
+  «Gráficos», más abajo.
 
 **No cubre los tickets de 80 mm** (recibos de caja, comprobantes del escáner,
 facturas). Papel de rollo continuo con su ancho, su tipografía y su lógica de
