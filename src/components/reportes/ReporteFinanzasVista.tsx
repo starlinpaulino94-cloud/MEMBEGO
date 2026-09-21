@@ -2,10 +2,14 @@ import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { ReporteFinanzas } from '@/modules/reportes/finanzas'
 import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
 import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoDistribucion } from '@/components/reportes/graficos/GraficoDistribucion'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -34,6 +38,12 @@ const METODO: Record<string, string> = {
  * que pudo no entrar, y al final —separado y rotulado— lo que solo es una
  * estimación. Un panel que pone el recurrente estimado junto al ingreso
  * cobrado convierte una previsión en un hecho sin que nadie lo decida.
+ *
+ * Los dos gráficos siguen esa misma regla. La línea es SOLO la caja, y lo
+ * dice: los cobros de membresía tienen otro reloj (`whereCobrado`) y mezclar
+ * dos relojes en una línea daría una forma que no corresponde a ningún hecho.
+ * El anillo reparte el ingreso de caja por método, que es el reparto que de
+ * verdad suma ese total — y no el total cobrado, que incluye membresías.
  */
 export function ReporteFinanzasVista({
   r,
@@ -59,6 +69,26 @@ export function ReporteFinanzasVista({
   const detalle = (vista: string) =>
     `/admin/reportes/finanzas/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // puntos y no se lee ninguno. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
+
+  // El anillo reparte la caja por método. Con más de seis porciones deja de
+  // leerse: los cinco mayores y el resto junto, dicho con todas las letras. La
+  // tabla del panel sigue trayendo la lista entera.
+  const TOPE_ANILLO = 5
+  const cajaDelPeriodo = r.porMetodo.reduce((s, m) => s + m.monto, 0)
+  const colaMetodos = r.porMetodo.slice(TOPE_ANILLO).reduce((s, m) => s + m.monto, 0)
+  const metodosDelAnillo = [
+    ...r.porMetodo.slice(0, TOPE_ANILLO).map((m) => ({
+      nombre: METODO[m.metodo] ?? m.metodo,
+      valor: m.monto,
+    })),
+    ...(colaMetodos > 0 ? [{ nombre: 'El resto de los métodos', valor: colaMetodos }] : []),
+  ]
 
   return (
     <ReporteImprimible
@@ -131,18 +161,57 @@ export function ReporteFinanzasVista({
         </div>
       </section>
 
-      <section>
-        <SectionHeader title="Cómo pagaron" />
-        <Tabla
-          encabezados={['Método', 'Operaciones', 'Monto']}
-          filas={r.porMetodo.map((m) => [
-            METODO[m.metodo] ?? m.metodo,
-            num(m.operaciones, entero(m.operaciones)),
-            num(m.monto, dinero(m.monto)),
-          ])}
-          vacio="No hubo cobros de caja en el periodo."
-        />
-      </section>
+      <PanelGrafico
+        titulo="El ingreso de caja, día a día"
+        pregunta="¿De dónde salió el mes: de un ritmo, o de dos días buenos?"
+        periodo={periodo}
+        nota="SOLO la caja del mostrador. Los cobros de membresía no están en esta línea porque se fechan con otro reloj (por fecha de pago, con respaldo a la última modificación): mezclar los dos daría una forma que no corresponde a ningún hecho. Su cifra exacta está arriba, en «Cobros de membresías»."
+        grafico={
+          <GraficoTendencia
+            datos={serie.map((p) => ({ dia: p.dia, valor: p.monto }))}
+            etiqueta="Ingreso de caja"
+            formato={dinero}
+          />
+        }
+        tabla={
+          <Tabla
+            encabezados={['Día', 'Operaciones', 'Ingreso de caja']}
+            filas={serie
+              .filter((p) => p.operaciones > 0)
+              .map((p) => [
+                p.dia,
+                num(p.operaciones, entero(p.operaciones)),
+                num(p.monto, dinero(p.monto)),
+              ])}
+            vacio="Sin cobros de caja diarios en el periodo."
+          />
+        }
+      />
+
+      <PanelGrafico
+        titulo="Cómo pagaron"
+        pregunta="¿Por qué vía entra el dinero del mostrador?"
+        periodo={periodo}
+        nota="El anillo reparte el INGRESO DE CAJA, no el total cobrado: los cobros de membresía no llevan método de mostrador. «Sin registrar» son cobros anteriores a que la columna existiera — es una fila más, no un error."
+        grafico={
+          <GraficoDistribucion
+            datos={metodosDelAnillo}
+            formato={dinero}
+            total={cajaDelPeriodo}
+          />
+        }
+        tabla={
+          <Tabla
+            encabezados={['Método', 'Operaciones', 'Monto']}
+            filas={r.porMetodo.map((m) => [
+              METODO[m.metodo] ?? m.metodo,
+              num(m.operaciones, entero(m.operaciones)),
+              num(m.monto, dinero(m.monto)),
+            ])}
+            vacio="No hubo cobros de caja en el periodo."
+          />
+        }
+      />
 
       <section>
         <SectionHeader

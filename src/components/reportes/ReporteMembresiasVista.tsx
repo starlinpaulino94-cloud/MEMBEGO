@@ -7,6 +7,9 @@ import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
 import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoRanking } from '@/components/reportes/graficos/GraficoRanking'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -14,11 +17,16 @@ import { EmptyState } from '@/components/ui/empty-state'
 /**
  * CICLO DE VIDA DE LAS MEMBRESÍAS.
  *
- * Sin gráficas, y es una decisión, no una carencia: `ResponsiveContainer` de
- * Recharts sale en blanco en `@media print` —está documentado en
- * `docs/REPORTES.md`— y este reporte se imprime más de lo que se mira. Las
- * tablas dicen lo mismo, se imprimen bien y además son la alternativa textual
- * para un lector de pantalla.
+ * Durante mucho tiempo esta pantalla NO tuvo gráficas, y estaba escrito aquí
+ * que era una decisión: `ResponsiveContainer` de Recharts sale en blanco en
+ * `@media print`, y este reporte se imprime más de lo que se mira.
+ *
+ * El problema era real; la conclusión, ya no. `PanelGrafico` **exige** la tabla
+ * equivalente además del gráfico, así que el papel sale con los mismos números
+ * de siempre. Y aquí la forma importa de verdad: altas y bajas dibujadas juntas
+ * enseñan en un vistazo si el mes creció o solo se movió, que es lo que dos
+ * cifras sueltas no dicen. Las tablas no se han quitado de ningún sitio: están
+ * dentro del panel.
  *
  * Cada cifra lleva su enlace al detalle. Un número que no se puede abrir hasta
  * las filas que lo producen no es un reporte: es una afirmación.
@@ -47,6 +55,7 @@ export function ReporteMembresiasVista({
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
   // la base, así que la semana nunca puede discrepar del día.
   const serie = serieParaGrafico(r.serie, rango.granularidad)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
   const detalle = (tipo: string) =>
     `/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`
 
@@ -173,19 +182,33 @@ export function ReporteMembresiasVista({
             )}
           </section>
 
-          <section>
-            <SectionHeader title="Por plan" />
-            <Tabla
-              encabezados={['Plan', 'Activaciones', 'Renovaciones', 'Bajas']}
-              filas={r.porPlan.map((p) => [
-                p.plan,
-                num(p.activadas, entero(p.activadas)),
-                num(p.renovadas, entero(p.renovadas)),
-                num(p.bajas, entero(p.bajas)),
-              ])}
-              vacio="Ningún plan tuvo movimiento en el periodo."
-            />
-          </section>
+          <PanelGrafico
+            titulo="Qué planes se mueven"
+            pregunta="¿Dónde está pasando el ciclo de vida?"
+            periodo={periodo}
+            nota="La barra mide activaciones MÁS renovaciones —el movimiento de entrada—, que es el mismo orden en el que el motor devuelve la tabla. Las bajas no se restan de la barra: van en su columna, porque un plan con mucho movimiento en los dos sentidos no es lo mismo que uno tranquilo."
+            grafico={
+              <GraficoRanking
+                filas={r.porPlan.map((p) => ({
+                  nombre: p.plan,
+                  valor: p.activadas + p.renovadas,
+                }))}
+                formato={entero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Plan', 'Activaciones', 'Renovaciones', 'Bajas']}
+                filas={r.porPlan.map((p) => [
+                  p.plan,
+                  num(p.activadas, entero(p.activadas)),
+                  num(p.renovadas, entero(p.renovadas)),
+                  num(p.bajas, entero(p.bajas)),
+                ])}
+                vacio="Ningún plan tuvo movimiento en el periodo."
+              />
+            }
+          />
 
           {r.motivos.length > 0 && (
             <section>
@@ -201,16 +224,34 @@ export function ReporteMembresiasVista({
             </section>
           )}
 
-          <section>
-            <SectionHeader title="Día a día" />
-            <Tabla
-              encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
-              filas={serie
-                .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
-                .map((p) => [p.dia, num(p.activadas, entero(p.activadas)), num(p.renovadas, entero(p.renovadas)), num(p.bajas, entero(p.bajas))])}
-              vacio="Sin movimiento diario en el periodo."
-            />
-          </section>
+          <PanelGrafico
+            titulo="Altas y bajas, día a día"
+            pregunta="¿El mes creció, o solo se movió?"
+            periodo={periodo}
+            nota="La línea punteada son las bajas —canceladas y vencidas juntas—. Cuando se acerca a la de altas, el negocio está reponiendo, no creciendo. Las renovaciones no entran en el dibujo porque no cambian el tamaño de la base: van en la tabla."
+            grafico={
+              <GraficoTendencia
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.activadas, anterior: p.bajas }))}
+                etiqueta="Activaciones"
+                etiquetaAnterior="Bajas"
+                formato={entero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
+                filas={serie
+                  .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
+                  .map((p) => [
+                    p.dia,
+                    num(p.activadas, entero(p.activadas)),
+                    num(p.renovadas, entero(p.renovadas)),
+                    num(p.bajas, entero(p.bajas)),
+                  ])}
+                vacio="Sin movimiento diario en el periodo."
+              />
+            }
+          />
         </>
       )}
 

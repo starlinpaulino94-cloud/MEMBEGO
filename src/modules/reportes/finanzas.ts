@@ -1,9 +1,9 @@
 import 'server-only'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { whereCobrado } from '@/modules/pagos/cobrado'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
-import { variacion, type Rango } from '@/modules/reportes/rango'
+import { diasDelRango, variacion, type Rango } from '@/modules/reportes/rango'
 import type { Kpi } from '@/modules/reportes/queries'
 
 /**
@@ -70,6 +70,13 @@ const COBRADOS = ['APPROVED', 'APPLIED'] as const
 /** Deshechos. No restan del ingreso: se cuentan aparte y se miran. */
 const DESHECHOS = ['CANCELLED', 'REVERTED'] as const
 
+/** Un día del periodo, con lo que entró por caja ese día. */
+export interface PuntoFinanzas {
+  dia: string
+  operaciones: number
+  monto: number
+}
+
 /** Lo que la URL pide filtrar. Id sin validar: aquí se valida. */
 export interface FiltroFinanzas {
   sucursalId?: string
@@ -87,6 +94,11 @@ export interface ReporteFinanzas {
   ingresoTotal: Kpi
   operacionesCobradas: Kpi
   porMetodo: { metodo: string; operaciones: number; monto: number }[]
+  /**
+   * SOLO LA CAJA, día a día. Ver la nota de `serieDiaria`: los cobros de
+   * membresía no están en esta línea, y eso no es un olvido.
+   */
+  serie: PuntoFinanzas[]
   intentos: { estado: string; total: number; monto: number }[]
   /** Aprobados ÷ (aprobados + rechazados). `null` = no hubo intentos cerrados. */
   tasaAprobacion: number | null
@@ -181,6 +193,62 @@ async function porMetodo(
       monto: Number(f._sum.monto ?? 0),
     }))
     .sort((a, b) => b.monto - a.monto)
+}
+
+/**
+ * LA CAJA, DÍA A DÍA — y por qué solo la caja.
+ *
+ * El corte por día se hace en la BASE y en la zona del negocio: `AT TIME ZONE`
+ * es lo que evita que un cobro de las nueve de la noche caiga en el día
+ * siguiente. Agrupar en JavaScript obligaría además a traer una fila por cobro.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ * LOS COBROS DE MEMBRESÍA NO ESTÁN EN ESTA LÍNEA, A PROPÓSITO
+ *
+ * Tienen otro reloj: `whereCobrado` los fecha por `fechaPago`, con respaldo a
+ * `updatedAt` SOLO cuando `fechaPago` es null. Esa definición vive en un único
+ * sitio —`modules/pagos/cobrado.ts`— precisamente porque estuvo copiada tres
+ * veces y las copias se desincronizaron: dos pantallas daban cifras distintas
+ * del mismo mes y nadie sabía cuál creer.
+ *
+ * Escribir esa misma condición otra vez aquí, en SQL crudo, sería crear la
+ * cuarta copia. Así que la línea es de caja, la pantalla lo dice con todas las
+ * letras, y el KPI de cobros de membresía sigue estando arriba con su cifra
+ * exacta. Una serie con dos relojes mezclados sería peor que no tenerla.
+ */
+async function serieDiaria(
+  tx: Tx,
+  companyId: string,
+  rango: Rango,
+  timeZone: string,
+  filtro: FiltroFinanzasAplicado | null
+): Promise<PuntoFinanzas[]> {
+  // Los mismos dos estados y el mismo filtro que `whereCobros`: si esto se
+  // separara, la línea no sumaría la cifra de arriba. Una guardia lo vigila.
+  const porSucursal = filtro
+    ? Prisma.sql`AND "sucursalId" = ${filtro.sucursal.id}`
+    : Prisma.empty
+  const filas = await tx.$queryRaw<{ dia: string; operaciones: bigint; monto: unknown }[]>`
+    SELECT to_char(("createdAt" AT TIME ZONE ${timeZone}), 'YYYY-MM-DD') AS dia,
+           count(*) AS operaciones,
+           coalesce(sum("monto"), 0) AS monto
+      FROM "transactions"
+     WHERE "companyId" = ${companyId}
+       AND "estado"::text IN (${Prisma.join([...COBRADOS])})
+       AND "createdAt" >= ${rango.desde}
+       AND "createdAt" <  ${rango.hasta}
+       ${porSucursal}
+     GROUP BY 1
+  `
+  const porDia = new Map<string, PuntoFinanzas>()
+  for (const dia of diasDelRango(rango)) porDia.set(dia, { dia, operaciones: 0, monto: 0 })
+  for (const f of filas) {
+    const punto = porDia.get(f.dia)
+    if (!punto) continue
+    punto.operaciones = Number(f.operaciones)
+    punto.monto = Number(f.monto ?? 0)
+  }
+  return [...porDia.values()]
 }
 
 async function intentosPorEstado(
@@ -352,6 +420,9 @@ const kpi = (valor: number, anterior: number): Kpi => ({
 export async function getReporteFinanzas(
   companyId: string,
   rango: Rango,
+  /** La zona del negocio. Posicional como en los otros cuatro motores: el
+   *  corte por día se hace con ella y sin ella no se puede fechar nada. */
+  timeZone: string,
   ahora: Date = new Date(),
   opciones: { filtro?: FiltroFinanzas } = {}
 ): Promise<ReporteFinanzas> {
@@ -366,6 +437,7 @@ export async function getReporteFinanzas(
     membresias,
     membresiasAnt,
     metodos,
+    serie,
     intentos,
     motivos,
     sinEntregar,
@@ -386,6 +458,7 @@ export async function getReporteFinanzas(
       membresias,
       membresiasAnt,
       metodos,
+      serie,
       intentos,
       motivos,
       sinEntregar,
@@ -406,6 +479,7 @@ export async function getReporteFinanzas(
         fallos
       ),
       seguro(porMetodo(tx, companyId, rango.desde, rango.hasta, filtro), [], fallos),
+      seguro(serieDiaria(tx, companyId, rango, timeZone, filtro), [] as PuntoFinanzas[], fallos),
       // La pasarela no tiene sucursal: con filtro NI SE CONSULTA, y la vista
       // y el CSV dicen por qué falta. Un total de empresa bajo un título
       // filtrado sería un número mentiroso.
@@ -432,6 +506,7 @@ export async function getReporteFinanzas(
       membresias,
       membresiasAnt,
       metodos,
+      serie,
       intentos,
       motivos,
       sinEntregar,
@@ -451,6 +526,7 @@ export async function getReporteFinanzas(
     ingresoTotal: kpi(caja.monto + membresias, cajaAnt.monto + membresiasAnt),
     operacionesCobradas: kpi(caja.operaciones, cajaAnt.operaciones),
     porMetodo: metodos,
+    serie,
     intentos,
     // Sin intentos cerrados no es 0 %: es «sin dato». Un 0 % diría que se
     // rechazó todo, que es una afirmación sobre la pasarela.
