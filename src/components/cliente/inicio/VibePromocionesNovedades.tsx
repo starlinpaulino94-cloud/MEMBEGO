@@ -23,9 +23,9 @@ export function VibePromocionesNovedades({
   promociones: PromocionesNovedadesVista
   categoriaActiva?: string | null
 }) {
-  if (categoriaActiva && promociones.total === 0) return null
-
   const [activeTab, setActiveTab] = useState<TabKey>('paraTi')
+
+  if (categoriaActiva && promociones.total === 0) return null
 
   const items: readonly PromoNovedadItem[] = promociones[activeTab] ?? []
 
