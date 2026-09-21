@@ -3,11 +3,10 @@ import { View, Text, TouchableOpacity } from 'react-native'
 import { MapPin, ChevronDown } from 'lucide-react-native'
 
 interface PillUbicacionProps {
-  zonaLabel?: string | null
   onPress?: () => void
 }
 
-export function PillUbicacion({ zonaLabel, onPress }: PillUbicacionProps) {
+export function PillUbicacion({ onPress }: PillUbicacionProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -20,7 +19,7 @@ export function PillUbicacion({ zonaLabel, onPress }: PillUbicacionProps) {
           numberOfLines={1}
           className="ml-1.5 text-label-sm font-inter-bold text-white flex-1"
         >
-          {zonaLabel ? `Explorar cerca de ${zonaLabel}` : 'Explorar cerca de ti'} · Actualizar ubicación
+          Explorar cerca de ti · Actualizar ubicación
         </Text>
       </View>
       <View className="flex-row items-center">

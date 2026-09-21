@@ -7,12 +7,7 @@ import { PillUbicacion } from './PillUbicacion'
 import { useAuth } from '../../lib/auth-context'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-interface HeaderVibeProps {
-  zonaLabel?: string | null
-  onSearch?: (query: string) => void
-}
-
-export function HeaderVibe({ zonaLabel }: HeaderVibeProps) {
+export function HeaderVibe() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { user, isAuthenticated } = useAuth()
@@ -51,6 +46,7 @@ export function HeaderVibe({ zonaLabel }: HeaderVibeProps) {
         </TouchableOpacity>
 
         <TouchableOpacity
+          onPress={() => router.push('/novedades')}
           activeOpacity={0.8}
           className="h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-white/15"
         >
@@ -77,7 +73,7 @@ export function HeaderVibe({ zonaLabel }: HeaderVibeProps) {
       </View>
 
       <View className="mt-2">
-        <PillUbicacion zonaLabel={zonaLabel} />
+        <PillUbicacion onPress={() => router.push('/cerca')} />
       </View>
     </LinearGradient>
   )
