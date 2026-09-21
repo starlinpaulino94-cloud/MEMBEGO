@@ -8,7 +8,9 @@ import {
 } from 'react-native'
 import { useInicio } from '../../src/hooks/useInicio'
 import { VibeHero } from '../../src/components/inicio/VibeHero'
+import { VibePromocionesNovedades } from '../../src/components/inicio/VibePromocionesNovedades'
 import { VibeCategorias } from '../../src/components/inicio/VibeCategorias'
+import { VibeEmpresasScroll } from '../../src/components/inicio/VibeEmpresasScroll'
 import { VibeRelacionado } from '../../src/components/inicio/VibeRelacionado'
 import { VibeRelampago } from '../../src/components/inicio/VibeRelampago'
 import { VibeReferidos } from '../../src/components/inicio/VibeReferidos'
@@ -64,16 +66,29 @@ export default function InicioScreen() {
           {/* 1. Novedades (hero carousel or empty state) */}
           <VibeHero heroes={comercial.heroes} />
 
-          {/* 2. Category chips */}
+          {/* 2. Novedades y promociones con tabs (Para ti, Exclusivas, Descuentos, Por vencer) */}
+          {comercial.promocionesNovedades && (
+            <VibePromocionesNovedades promociones={comercial.promocionesNovedades} />
+          )}
+
+          {/* 3. Category chips */}
           <VibeCategorias categorias={comercial.categorias} />
 
-          {/* 3. Relacionado con los artículos que viste (2-col grid) */}
+          {/* 4. Empresas destacadas (scroll horizontal) */}
+          {comercial.empresasScroll && (
+            <VibeEmpresasScroll
+              empresas={comercial.empresasScroll}
+              total={comercial.empresasTotal}
+            />
+          )}
+
+          {/* 5. Relacionado con los artículos que viste (2-col grid) */}
           <VibeRelacionado
             planes={comercial.planes}
             total={comercial.planesTotal}
           />
 
-          {/* 4. Ofertas Relámpago (only if data exists) */}
+          {/* 6. Ofertas Relámpago (only if data exists) */}
           <VibeRelampago relampago={comercial.relampago} />
         </>
       ) : null}
