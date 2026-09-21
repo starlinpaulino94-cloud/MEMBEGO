@@ -56,6 +56,15 @@ interface Credenciales {
   scope: string | null
 }
 
+/**
+ * `req.formData()` resuelve en este programa al `FormData` que declara React
+ * Native (append/getAll/getParts): la app Expo comparte este proyecto de tipos
+ * y su augmentación global gana la resolución. En el servidor el valor real es
+ * el `FormData` web, que sí trae `get`; se cruza lo recibido con el `FormData`
+ * real. Solo tipos: en ejecución no cambia nada.
+ */
+type FormDataRecibida = Awaited<ReturnType<NextRequest['formData']>> & FormData
+
 async function leerCredenciales(req: NextRequest): Promise<Credenciales | null> {
   const tipo = req.headers.get('content-type') ?? ''
   try {
@@ -68,7 +77,7 @@ async function leerCredenciales(req: NextRequest): Promise<Credenciales | null> 
         scope: typeof b.scope === 'string' ? b.scope : null,
       }
     }
-    const f = await req.formData()
+    const f = (await req.formData()) as FormDataRecibida
     return {
       clientId: String(f.get('client_id') ?? ''),
       clientSecret: String(f.get('client_secret') ?? ''),
