@@ -6,7 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -222,7 +222,9 @@ export default function PlanesScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
+  const { from } = useLocalSearchParams<{ from?: string }>()
   const { data, isLoading, isError, refetch } = usePlanes(undefined, isAuthenticated)
+  const showPlanDetailFallback = from === 'plan-detail'
 
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
@@ -295,6 +297,23 @@ export default function PlanesScreen() {
               Registra tu vehículo para ver el precio exacto de tu categoría
               y comprar en línea.
             </Text>
+          </Card>
+        )}
+
+        {/* ── Banner fallback de detalle de plan ───────────────────── */}
+        {showPlanDetailFallback && (
+          <Card className="mb-4 flex-row items-center gap-3 border-primary/30 bg-primary/5 p-4">
+            <View className="h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Sparkles size={18} color="#0284c7" />
+            </View>
+            <View className="flex-1 gap-0.5">
+              <Text className="text-small font-inter-semibold text-foreground">
+                Detalle de plan no disponible en la app
+              </Text>
+              <Text className="text-caption text-muted-foreground">
+                Te redirigimos al listado de planes. El detalle completo está en la web.
+              </Text>
+            </View>
           </Card>
         )}
 

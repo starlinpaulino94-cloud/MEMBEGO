@@ -32,7 +32,7 @@ export function VibeCategorias({ categorias }: { categorias: any[] }) {
     return (
       <View className="px-4 py-8 items-center justify-center">
         <Text className="text-xl font-bold text-foreground">Categorías</Text>
-        <Text className="text-sm text-slate-500 mt-2 text-center">
+        <Text className="text-sm text-muted-foreground mt-2 text-center">
           No hay categorías disponibles para explorar ahora.
         </Text>
       </View>

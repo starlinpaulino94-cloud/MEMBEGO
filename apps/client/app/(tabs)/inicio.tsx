@@ -29,8 +29,8 @@ export default function InicioScreen() {
         <RefreshControl
           refreshing={isRefetching}
           onRefresh={refetch}
-          tintColor="#a855f7"
-          colors={['#a855f7']}
+          tintColor="#0284c7"
+          colors={['#0284c7']}
         />
       }
     >
@@ -47,12 +47,12 @@ export default function InicioScreen() {
         </View>
       ) : isError && !data ? (
         <View className="p-6 items-center">
-          <Text className="text-base text-slate-300 mb-3 text-center">
+          <Text className="text-base text-muted-foreground mb-3 text-center">
             No pudimos conectar con el servidor. Puedes seguir navegando los beneficios guardados.
           </Text>
           <TouchableOpacity
             onPress={() => refetch()}
-            className="rounded-xl bg-purple-600 px-5 py-2.5"
+            className="rounded-xl bg-primary px-5 py-2.5"
           >
             <Text className="text-sm font-inter-bold text-white">Reintentar</Text>
           </TouchableOpacity>
