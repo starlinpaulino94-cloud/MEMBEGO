@@ -157,6 +157,7 @@ export interface PromocionesNovedadesVista {
 export interface InicioVista {
   readonly revisionId: string | null
   readonly territorio: string | null
+  readonly categoriaActiva?: string | null
   readonly bloques: readonly TipoBloque[]
   readonly heroes: readonly HeroInicio[]
   readonly categorias: readonly CategoriaInicio[]

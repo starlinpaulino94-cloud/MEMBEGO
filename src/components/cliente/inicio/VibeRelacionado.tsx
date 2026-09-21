@@ -30,11 +30,14 @@ function Estrellas({ valoracion }: { valoracion: number }) {
 export function VibeRelacionado({
   planes,
   total,
+  categoriaActiva,
 }: {
   planes: InicioVista['planes']
   total: number
+  categoriaActiva?: string | null
 }) {
   if (planes.length === 0) {
+    if (categoriaActiva) return null
     return (
       <RetailEmptyState
         title="Relacionado contigo"
@@ -53,7 +56,11 @@ export function VibeRelacionado({
           </h3>
         </div>
         <Link
-          href="/cliente/planes?todos=1"
+          href={
+            categoriaActiva
+              ? `/cliente/planes?todos=1&categoria=${encodeURIComponent(categoriaActiva)}`
+              : '/cliente/planes?todos=1'
+          }
           className="flex shrink-0 items-center gap-0.5 text-label-sm font-bold text-vibe-violet hover:underline"
         >
           <span>Ver más{total > 0 ? ` (${total})` : ''}</span>

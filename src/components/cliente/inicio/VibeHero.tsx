@@ -16,8 +16,15 @@ import { RetailEmptyState } from './RetailEmptyState'
  * por defecto, las promociones destacadas del marketplace. La tarjeta entera
  * es el enlace; el botón es visual.
  */
-export function VibeHero({ heroes }: { heroes: InicioVista['heroes'] }) {
+export function VibeHero({
+  heroes,
+  categoriaActiva,
+}: {
+  heroes: InicioVista['heroes']
+  categoriaActiva?: string | null
+}) {
   if (heroes.length === 0) {
+    if (categoriaActiva) return null
     return (
       <RetailEmptyState
         title="Novedades"

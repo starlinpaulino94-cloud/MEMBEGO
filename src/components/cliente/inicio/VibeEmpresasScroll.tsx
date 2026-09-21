@@ -9,9 +9,11 @@ import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 export function VibeEmpresasScroll({
   empresas,
   total,
+  categoriaActiva,
 }: {
   empresas: readonly EmpresaScrollItem[]
   total: number
+  categoriaActiva?: string | null
 }) {
   if (empresas.length === 0) return null
 
@@ -25,7 +27,11 @@ export function VibeEmpresasScroll({
           </h3>
         </div>
         <Link
-          href="/cliente/explorar"
+          href={
+            categoriaActiva
+              ? `/cliente/explorar?category=${encodeURIComponent(categoriaActiva)}`
+              : '/cliente/explorar'
+          }
           className="flex items-center gap-0.5 text-label-sm font-bold text-vibe-violet hover:underline"
         >
           <span>Ver más</span>

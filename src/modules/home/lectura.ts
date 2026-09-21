@@ -145,7 +145,10 @@ async function heroesPorDefecto(
   })
 }
 
-export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
+export async function getInicioVista(
+  user: SessionUser,
+  categoriaSlug?: string
+): Promise<InicioVista> {
   const publicada = await composicionAdmitida(user).catch(() => null)
   const tipos: readonly TipoBloque[] = publicada?.tipos ?? TIPOS_BLOQUE
   const dbUserId = user.metadata.dbUserId
@@ -163,11 +166,15 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     planesActivosIds,
   ] = await Promise.all([
     tipos.includes('CATEGORIAS') ? getCategoriesPublic() : Promise.resolve([]),
-    getCompaniesPublic({ limit: 10 }),
-    getPlanesPublic({ limit: 20 }),
-    tipos.includes('EXPERIENCIAS') ? excursionesDestacadas(4) : Promise.resolve([]),
+    getCompaniesPublic({ category: categoriaSlug, limit: 10 }),
+    getPlanesPublic({ category: categoriaSlug, limit: 20 }),
+    tipos.includes('EXPERIENCIAS') && (!categoriaSlug || ['tours', 'turismo', 'excursiones'].includes(categoriaSlug.toLowerCase()))
+      ? excursionesDestacadas(4)
+      : Promise.resolve([]),
     // Las promociones activas (públicas y destacadas) alimentan el hero, novedades y relámpago
-    getPromotionsPublic({ limit: 20 }).catch(() => getFeaturedPromotions(10)),
+    getPromotionsPublic({ category: categoriaSlug, limit: 20 }).catch(() =>
+      categoriaSlug ? [] : getFeaturedPromotions(10)
+    ),
     totalesVitrina(),
     dbUserId ? getMisEmpresas(dbUserId).catch(() => []) : Promise.resolve([]),
     dbUserId ? getPromoFeed(dbUserId).catch(() => null) : Promise.resolve(null),
@@ -185,12 +192,14 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   ])
 
   const misEmpresasIds = new Set(misEmpresas.map((me) => me.company.id))
+  const empresasIdsDeCategoria = new Set(empresas.map((e) => e.id))
 
   // Scroll horizontal híbrido de empresas: primero las que sigue o donde es cliente,
   // completadas con empresas populares del marketplace (máx. 10).
   const scrollMap = new Map<string, EmpresaScrollItem>()
   for (const me of misEmpresas) {
     if (scrollMap.size >= 10) break
+    if (categoriaSlug && !empresasIdsDeCategoria.has(me.company.id)) continue
     scrollMap.set(me.company.id, {
       id: me.company.id,
       nombre: me.company.name,
@@ -325,11 +334,25 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
     }
   }
 
+  const promoFeedCandidatas = categoriaSlug
+    ? [
+        ...(promoFeed?.misEmpresas ?? []),
+        ...(promoFeed?.nuevas ?? []),
+        ...(promoFeed?.destacadas ?? []),
+        ...(promoFeed?.recomendadas ?? []),
+      ].filter((p: any) => {
+        const compId = p.company?.id ?? p.empresa?.id
+        return compId && empresasIdsDeCategoria.has(compId)
+      })
+    : [
+        ...(promoFeed?.misEmpresas ?? []),
+        ...(promoFeed?.nuevas ?? []),
+        ...(promoFeed?.destacadas ?? []),
+        ...(promoFeed?.recomendadas ?? []),
+      ]
+
   const poolPromos: any[] = [
-    ...(promoFeed?.misEmpresas ?? []),
-    ...(promoFeed?.nuevas ?? []),
-    ...(promoFeed?.destacadas ?? []),
-    ...(promoFeed?.recomendadas ?? []),
+    ...promoFeedCandidatas,
     ...promociones,
   ]
 
@@ -340,10 +363,7 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   const pool = [...uniquePoolMap.values()]
 
   const paraTiRaw = [
-    ...(promoFeed?.misEmpresas ?? []),
-    ...(promoFeed?.nuevas ?? []),
-    ...(promoFeed?.recomendadas ?? []),
-    ...(promoFeed?.destacadas ?? []),
+    ...promoFeedCandidatas,
     ...promociones,
   ]
   const paraTiVistos = new Set<string>()
@@ -427,13 +447,14 @@ export async function getInicioVista(user: SessionUser): Promise<InicioVista> {
   return {
     revisionId: publicada?.revision.id ?? null,
     territorio: publicada?.revision.territorio ?? null,
+    categoriaActiva: categoriaSlug ?? null,
     bloques: [...tipos],
     heroes,
     categorias,
-    empresasTotal: totales.empresas,
+    empresasTotal: categoriaSlug ? empresas.length : totales.empresas,
     empresasScroll,
     promocionesNovedades,
-    planesTotal: totales.planes,
+    planesTotal: categoriaSlug ? planesRecomendados.length : totales.planes,
     empresas: empresas.map((e): EmpresaInicio => ({
       id: e.id, nombre: e.name, rubro: e.description, ciudad: e.ciudad,
       imagen: e.bannerUrl ?? e.logoUrl, href: `/cliente/empresas/${e.slug}`,

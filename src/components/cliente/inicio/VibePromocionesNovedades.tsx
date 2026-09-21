@@ -18,9 +18,13 @@ const TABS: { key: TabKey; label: string; icon: typeof Sparkles }[] = [
 
 export function VibePromocionesNovedades({
   promociones,
+  categoriaActiva,
 }: {
   promociones: PromocionesNovedadesVista
+  categoriaActiva?: string | null
 }) {
+  if (categoriaActiva && promociones.total === 0) return null
+
   const [activeTab, setActiveTab] = useState<TabKey>('paraTi')
 
   const items: readonly PromoNovedadItem[] = promociones[activeTab] ?? []
@@ -31,7 +35,7 @@ export function VibePromocionesNovedades({
         <div className="flex items-center gap-2">
           <Sparkles className="size-5 text-vibe-violet" aria-hidden />
           <h3 id="novedades-promos-title" className="text-h2 text-foreground">
-            Novedades y promociones
+            Promociones
           </h3>
         </div>
         <Link
@@ -54,19 +58,17 @@ export function VibePromocionesNovedades({
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-label-sm font-bold transition-all ${
-                  isActive
-                    ? 'grad-vibe text-white shadow-sm'
-                    : 'border border-vibe-borde bg-card text-muted-foreground hover:text-foreground'
-                }`}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-label-sm font-bold transition-all ${isActive
+                  ? 'grad-vibe text-white shadow-sm'
+                  : 'border border-vibe-borde bg-card text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 <Icon className="size-3.5" />
                 <span>{tab.label}</span>
                 {count > 0 ? (
                   <span
-                    className={`rounded-full px-1.5 py-0.2 text-label-sm font-bold ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-vibe-chip text-muted-foreground'
-                    }`}
+                    className={`rounded-full px-1.5 py-0.2 text-label-sm font-bold ${isActive ? 'bg-white/20 text-white' : 'bg-vibe-chip text-muted-foreground'
+                      }`}
                   >
                     {count}
                   </span>
