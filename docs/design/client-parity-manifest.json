@@ -51,8 +51,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: split Cuenta; verify profile/password/location/ID forms have RN parity."
+      "status": "complete",
+      "action": "None: account settings reconciled (Todo 7); auth/loading/error/empty and preference forms match web."
     },
     {
       "webPath": "/cliente/ayuda",
@@ -77,7 +77,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 8: reconcile FAQ accordion, problem report form, ticket list parity."
+      "action": "Residual BFF gap: native cannot create tickets (BFF exposes only GET; web uses the crearTicket server action). See debt ledger."
     },
     {
       "webPath": "/cliente/ayuda/[id]",
@@ -99,8 +99,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify ticket thread, notFound handling and comprobante link parity."
+      "status": "complete",
+      "action": "None: ticket thread, attachment and notFound parity verified (Todo 8)."
     },
     {
       "webPath": "/cliente/bienvenida",
@@ -123,8 +123,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: confirm onboarding wizard step contract matches web."
+      "status": "complete",
+      "action": "None: onboarding wizard contract matches web (Todo 8)."
     },
     {
       "webPath": "/cliente/bienvenida-ref/[companySlug]",
@@ -147,8 +147,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify referral landing CTA destinations and company context."
+      "status": "complete",
+      "action": "None: referral landing CTAs and company context verified (Todo 8)."
     },
     {
       "webPath": "/cliente/buscar",
@@ -172,8 +172,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align unified search filters/results; RN lacks web pagination depth."
+      "status": "complete",
+      "action": "None: unified search filters and results reconciled (Todo 5)."
     },
     {
       "webPath": "/cliente/celebracion",
@@ -195,8 +195,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify confetti + return CTA parity."
+      "status": "complete",
+      "action": "None: auth gate added plus confetti/return CTA parity (Todo 8)."
     },
     {
       "webPath": "/cliente/cerca",
@@ -221,7 +221,7 @@
         "map": true
       },
       "status": "partial",
-      "action": "Todo 8: reconcile web server-derived location/demo context with native hooks; keep Leaflet vs react-native-maps split."
+      "action": "Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
     },
     {
       "webPath": "/cliente/citas",
@@ -245,8 +245,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify booking availability, cancel and filter parity."
+      "status": "complete",
+      "action": "None: booking availability, cancel and filters reconciled (Todo 7)."
     },
     {
       "webPath": "/cliente/dashboard",
@@ -268,7 +268,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 6: native root redirects to /(tabs)/inicio, web to /mis-membresias; reconcile landing target."
+      "action": "Residual divergence: native root redirects to /(tabs)/inicio while web /cliente/dashboard redirects to /mis-membresias. Accepted, not reconciled."
     },
     {
       "webPath": "/cliente/empresas",
@@ -291,8 +291,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align followed/known companies list and pagination."
+      "status": "complete",
+      "action": "None: followed/known companies list reconciled (Todo 5)."
     },
     {
       "webPath": "/cliente/empresas/[companySlug]",
@@ -317,8 +317,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: verify profile, reviews/resena form, eligibilidad and CTA parity."
+      "status": "complete",
+      "action": "None: profile, reviews and eligibility CTA parity (Todo 5)."
     },
     {
       "webPath": "/cliente/establecer-contrasena",
@@ -363,8 +363,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align catalog rails, categories and detail entry points."
+      "status": "complete",
+      "action": "None: catalog rails and categories reconciled (Todo 8)."
     },
     {
       "webPath": "/cliente/excursiones/buscar",
@@ -386,8 +386,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify filter/date/stock/pagination parity."
+      "status": "complete",
+      "action": "None: filter/date/stock parity verified (Todo 8)."
     },
     {
       "webPath": "/cliente/excursiones/[reservaId]",
@@ -433,8 +433,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align discovery filters/marcaUnica and pagination."
+      "status": "complete",
+      "action": "None: discovery filters and marcaUnica reconciled (Todo 5)."
     },
     {
       "webPath": "/cliente/historial",
@@ -456,8 +456,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify pagination + status badges parity (native paginator exists)."
+      "status": "complete",
+      "action": "None: pagination and status badges parity verified (Todo 7)."
     },
     {
       "webPath": "/cliente/inicio",
@@ -481,8 +481,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: reconcile InicioRetail composition with RN Vibe* sections and states."
+      "status": "complete",
+      "action": "None: InicioRetail composition reconciled, including PromocionesNovedades and EmpresasScroll (Todo 5)."
     },
     {
       "webPath": "/cliente/intereses",
@@ -504,8 +504,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: add RN error handling; verify category save parity."
+      "status": "complete",
+      "action": "None: category save parity verified (Todo 7); web also has no error state."
     },
     {
       "webPath": "/cliente/invita-y-gana",
@@ -529,8 +529,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align referral milestones, share button and counters."
+      "status": "complete",
+      "action": "None: milestones, share and counters reconciled (Todo 8)."
     },
     {
       "webPath": "/cliente/membresia",
@@ -577,7 +577,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 4/7: reconcile full directory with four persistent destinations and logout."
+      "action": "OPEN OWNER DECISION: native exposes 4 persistent destinations vs 5 on web (Beneficios, a19093cb); tests/cliente-retail.test.ts asserts 4. Deliberately not resolved. See debt ledger."
     },
     {
       "webPath": "/cliente/mis-excursiones",
@@ -600,8 +600,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align reservation status, modify/cancel and pagination."
+      "status": "complete",
+      "action": "None: reservation status, modify/cancel parity (Todo 8)."
     },
     {
       "webPath": "/cliente/mis-excursiones/[reservaId]",
@@ -624,8 +624,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify check-in QR, modification and ownership rules."
+      "status": "complete",
+      "action": "None: check-in QR, modification and ownership rules verified (Todo 8)."
     },
     {
       "webPath": "/cliente/mis-promociones",
@@ -649,8 +649,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align purchases/gifts grouping and status labels."
+      "status": "complete",
+      "action": "None: purchases/gifts grouping and status labels reconciled (Todo 6)."
     },
     {
       "webPath": "/cliente/mis-promociones/[id]",
@@ -674,8 +674,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: verify QR, payment options, comprobante and cancel parity."
+      "status": "complete",
+      "action": "None: QR, payment options, comprobante and cancel parity (Todo 6)."
     },
     {
       "webPath": "/cliente/mis-promociones/[id]/agendar",
@@ -698,8 +698,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: verify scheduling slot flow and retorno handling."
+      "status": "complete",
+      "action": "None: scheduling slot flow and retorno verified (Todo 6)."
     },
     {
       "webPath": "/cliente/mis-promociones/regalo/[invitadoId]",
@@ -723,8 +723,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6/8: verify guest gift claim + QR issuance parity."
+      "status": "complete",
+      "action": "None: guest gift claim and QR issuance parity (Todo 6/8)."
     },
     {
       "webPath": "/cliente/novedades",
@@ -747,8 +747,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align feed filters, empty and pagination."
+      "status": "complete",
+      "action": "None: feed filters and empty state reconciled (Todo 5)."
     },
     {
       "webPath": "/cliente/pagos",
@@ -772,8 +772,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify ledger, billing cycle header and comprobante parity."
+      "status": "complete",
+      "action": "None: ledger, billing cycle header and comprobante parity (Todo 7)."
     },
     {
       "webPath": "/cliente/perfil",
@@ -797,8 +797,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: profile is embedded in the overloaded (tabs)/cuenta.tsx; split into a focused route."
+      "status": "complete",
+      "action": "None: profile is served by the Cuenta index plus the /ajustes editor (Todo 7); capability preserved."
     },
     {
       "webPath": "/cliente/planes",
@@ -821,8 +821,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align global/company plan catalogs and eligibility CTA."
+      "status": "complete",
+      "action": "None: global/company plan catalogs reconciled (Todo 5)."
     },
     {
       "webPath": "/cliente/planes/[planId]",
@@ -845,7 +845,7 @@
         "map": false
       },
       "status": "missing",
-      "action": "Todo 5: no native plan-detail route; src/lib/rutas.ts falls back /plan/ → /planes. Build or explicitly accept fallback."
+      "action": "Accepted fallback: no native plan-detail route; src/lib/rutas.ts routes /plan/ to /planes with a ?from=plan-detail banner. See debt ledger."
     },
     {
       "webPath": "/cliente/promociones",
@@ -869,8 +869,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align promotion rails/feed and save-promo button behavior."
+      "status": "complete",
+      "action": "None: promotion rails/feed and save-promo button reconciled (Todo 5)."
     },
     {
       "webPath": "/cliente/promociones/[id]",
@@ -894,8 +894,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: verify purchase CTA, retorno and detail composition parity."
+      "status": "complete",
+      "action": "None: purchase CTA and retorno parity (Todo 5)."
     },
     {
       "webPath": "/cliente/qr",
@@ -919,8 +919,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align membership selection, QR expiration/ownership and empty state."
+      "status": "complete",
+      "action": "None: membership selection and QR ownership/expiration reconciled; BFF filters to the auth user (Todo 6)."
     },
     {
       "webPath": "/cliente/referidos",
@@ -966,7 +966,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 8: align received/sent gifts, pending counters and gift cards."
+      "action": "Residual BFF gap: native cannot accept/reject/cancel gifts (BFF exposes only GET; web uses server actions). See debt ledger."
     },
     {
       "webPath": "/cliente/regalos/enviar",
@@ -989,8 +989,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify send-gift form validation and destination search."
+      "status": "complete",
+      "action": "None: send-gift validation and destination search parity (Todo 8)."
     },
     {
       "webPath": "/cliente/regalos/giftcard",
@@ -1012,8 +1012,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify gift-card amount config min/max parity."
+      "status": "complete",
+      "action": "None: gift-card amount min/max parity (Todo 8)."
     },
     {
       "webPath": "/cliente/regalos/regalar",
@@ -1036,8 +1036,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify promo/plan gifting and balance/cost display."
+      "status": "complete",
+      "action": "None: promo/plan gifting and balance/cost parity (Todo 8)."
     },
     {
       "webPath": "/cliente/ruleta",
@@ -1061,8 +1061,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align wheel animation, prize mapping and gamification panel."
+      "status": "complete",
+      "action": "None: wheel, prize mapping and gamification reconciled (Todo 8)."
     },
     {
       "webPath": "/cliente/vehiculos",
@@ -1084,8 +1084,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: add loading/error parity; verify vehicle cards and principal flag."
+      "status": "complete",
+      "action": "None: loading/error plus vehicle cards and principal flag parity (Todo 7)."
     },
     {
       "webPath": "/cliente/vehiculos/nuevo",
@@ -1108,8 +1108,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify wizard step contract, plate validation and next redirect."
+      "status": "complete",
+      "action": "None: wizard step contract and plate validation parity (Todo 7)."
     },
     {
       "webPath": "/membresia/[membresiaId]",
@@ -1133,8 +1133,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align membership detail, QR share, payment options and cancel parity."
+      "status": "complete",
+      "action": "None: detail, QR, payment options and cancel reconciled; QR shown only when active and tokenized (Todo 6)."
     },
     {
       "webPath": "/mis-membresias",
@@ -1158,8 +1158,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align wallet grouping, status labels, counters and QR selection."
+      "status": "complete",
+      "action": "None: wallet grouping, status labels and counters reconciled (Todo 6)."
     }
   ],
   "nativeRoutes": [
@@ -1252,7 +1252,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 4: align header/desktop tabs/bottom dock with canonical shell."
+      "action": "Shell aligned (Todo 4/11): header bell routes to /novedades and the location pill to /cerca. Residual: 4 destinations vs 5 on web (open owner decision) and no demo-banner equivalent. See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/(tabs)/inicio.tsx",
@@ -1286,8 +1286,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: reconcile InicioRetail composition, refresh and empty/error states."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/(tabs)/menu.tsx",
@@ -1314,7 +1314,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 4/7: reconcile directory with four destinations and logout/login state."
+      "action": "Mirrors /cliente/menu: OPEN OWNER DECISION: native exposes 4 persistent destinations vs 5 on web (Beneficios, a19093cb); tests/cliente-retail.test.ts asserts 4. Deliberately not resolved. See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/(tabs)/cuenta.tsx",
@@ -1343,8 +1343,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: 403-line overloaded composite; split into focused account/operations routes."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/(tabs)/qr.tsx",
@@ -1373,8 +1373,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align wallet selection, QR ownership/expiration and empty state with web."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/index.tsx",
@@ -1398,7 +1398,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 6: web /cliente/dashboard redirects to /mis-membresias but native root goes to inicio; reconcile."
+      "action": "Mirrors /cliente/dashboard: Residual divergence: native root redirects to /(tabs)/inicio while web /cliente/dashboard redirects to /mis-membresias. Accepted, not reconciled."
     },
     {
       "nativeFile": "apps/client/app/ajustes.tsx",
@@ -1433,8 +1433,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify prefs/notifications/ID card parity; account family split."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/ayuda.tsx",
@@ -1467,7 +1467,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 8: align FAQ + ticket list + report problem form with web."
+      "action": "Mirrors /cliente/ayuda: Residual BFF gap: native cannot create tickets (BFF exposes only GET; web uses the crearTicket server action). See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/ayuda/[id].tsx",
@@ -1498,8 +1498,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify ticket thread and notFound parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/bienvenida.tsx",
@@ -1528,8 +1528,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify onboarding wizard step contract."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/bienvenida-ref/[companySlug].tsx",
@@ -1557,8 +1557,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify referral landing CTA and company context parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/buscar.tsx",
@@ -1592,8 +1592,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align unified search filters and add pagination depth."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/celebracion.tsx",
@@ -1623,8 +1623,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify confetti + CTA parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/cerca.tsx",
@@ -1646,8 +1646,8 @@
         "qr": false,
         "map": false
       },
-      "status": "complete",
-      "action": "None: correct Platform.OS dispatcher for cerca.web/native."
+      "status": "partial",
+      "action": "Mirrors /cliente/cerca: Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/cerca.web.tsx",
@@ -1678,7 +1678,7 @@
         "map": true
       },
       "status": "partial",
-      "action": "Todo 8: Leaflet map; reconcile location/demo context and error fallback."
+      "action": "Mirrors /cliente/cerca: Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/cerca.native.tsx",
@@ -1709,7 +1709,7 @@
         "map": true
       },
       "status": "partial",
-      "action": "Todo 8: react-native-maps; verify denied-location and unavailable-map fallbacks."
+      "action": "Mirrors /cliente/cerca: Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/citas.tsx",
@@ -1742,8 +1742,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify booking availability, cancel and retorno filters."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/empresas.tsx",
@@ -1774,8 +1774,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align followed/known companies list and pagination."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/empresas/[companySlug].tsx",
@@ -1808,8 +1808,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: verify profile, reviews/resena, eligibility and CTA parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/establecer-contrasena.tsx",
@@ -1836,7 +1836,7 @@
         "map": false
       },
       "status": "complete",
-      "action": "None: Supabase set-password flow matches web."
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/excursiones.tsx",
@@ -1867,8 +1867,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align catalog rails/categories and detail entry."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/excursiones/buscar.tsx",
@@ -1898,8 +1898,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify filter/date/stock parity (native has real pagination)."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/explorar.tsx",
@@ -1930,8 +1930,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align discovery filters/marcaUnica and pagination."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/historial.tsx",
@@ -1961,8 +1961,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify page paginator + status badges parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/intereses.tsx",
@@ -1992,8 +1992,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: add error handling; verify category save parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/invita-y-gana.tsx",
@@ -2026,8 +2026,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align milestones, share button and counters."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/membresia/[membresiaId].tsx",
@@ -2058,8 +2058,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: add empty state; verify QR share, payment options and cancel parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-excursiones.tsx",
@@ -2090,8 +2090,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align reservation status and pagination."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-excursiones/[reservaId].tsx",
@@ -2125,8 +2125,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify check-in QR, modification and ownership rules."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-membresias.tsx",
@@ -2160,8 +2160,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align wallet grouping, status labels, counters and QR selection."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-promociones.tsx",
@@ -2192,8 +2192,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: align purchases/gifts grouping and status labels."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-promociones/[id].tsx",
@@ -2224,8 +2224,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: verify QR, payment options, comprobante and cancel parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-promociones/[id]/agendar.tsx",
@@ -2255,8 +2255,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6: verify scheduling slot flow and retorno handling."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/mis-promociones/regalo/[invitadoId].tsx",
@@ -2289,8 +2289,8 @@
         "qr": true,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 6/8: verify guest gift claim + QR issuance parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/novedades.tsx",
@@ -2320,8 +2320,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align feed filters, empty and pagination."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/pagos.tsx",
@@ -2354,8 +2354,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify ledger, billing cycle header and comprobante parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/planes.tsx",
@@ -2386,8 +2386,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align global/company plan catalogs and eligibility CTA."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/promociones.tsx",
@@ -2420,8 +2420,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: align promotion rails/feed and save-promo behavior."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/promociones/[id].tsx",
@@ -2450,8 +2450,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 5: verify purchase CTA, retorno and detail composition parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/referidos.tsx",
@@ -2475,7 +2475,7 @@
         "map": false
       },
       "status": "complete",
-      "action": "None: redirect parity with web /cliente/referidos."
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/regalos.tsx",
@@ -2507,7 +2507,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Todo 8: align received/sent gifts and gift-card lists."
+      "action": "Mirrors /cliente/regalos: Residual BFF gap: native cannot accept/reject/cancel gifts (BFF exposes only GET; web uses server actions). See debt ledger."
     },
     {
       "nativeFile": "apps/client/app/regalos/enviar.tsx",
@@ -2537,8 +2537,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify send-gift validation and recipient search."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/regalos/giftcard.tsx",
@@ -2567,8 +2567,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify gift-card min/max amount config parity."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/regalos/regalar.tsx",
@@ -2597,8 +2597,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: verify promo/plan gifting and balance/cost display."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/ruleta.tsx",
@@ -2630,8 +2630,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 8: align wheel, prize mapping and gamification panel."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/vehiculos.tsx",
@@ -2663,8 +2663,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify vehicle cards and principal flag."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     },
     {
       "nativeFile": "apps/client/app/vehiculos/nuevo.tsx",
@@ -2694,8 +2694,8 @@
         "qr": false,
         "map": false
       },
-      "status": "partial",
-      "action": "Todo 7: verify wizard steps, plate validation and next redirect."
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
     }
   ]
 }
