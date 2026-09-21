@@ -3,6 +3,7 @@ import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { PartyPopper, Gift, ArrowRight } from 'lucide-react-native';
+import { useAuth } from '../src/lib/auth-context';
 import { useCelebracion } from '../src/hooks/useCelebracion';
 import { ConfettiCelebration } from '../src/components/growth/ConfettiCelebration';
 import { SinEmpresaTodavia } from '../src/components/cliente/SinEmpresaTodavia';
@@ -13,10 +14,41 @@ import { cn } from '../src/lib/cn';
  * Growth Engine 3.0 · Pantalla de celebración tras registrarse por invitación.
  * Muestra confeti y el beneficio recién desbloqueado.
  * Equivalente RN de src/app/(cliente)/cliente/celebracion/page.tsx
+ *
+ * Web counterpart uses requireRole('CLIENTE') at page.tsx:13.
  */
 export default function CelebracionScreen() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { data, isLoading, isError } = useCelebracion();
+
+  // Auth gate — matches web's requireRole('CLIENTE')
+  if (authLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator size="large" color="#0284c7" />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background p-6">
+        <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
+          <PartyPopper size={32} color="#0284c7" />
+        </View>
+        <Text className="text-xl font-inter-bold text-foreground mb-2 text-center">
+          Inicia sesión para ver tu celebración
+        </Text>
+        <Text className="text-sm text-muted-foreground mb-6 text-center max-w-xs">
+          Accede a tu beneficio de bienvenida.
+        </Text>
+        <Button onPress={() => router.push('/(auth)/login')}>
+          Iniciar Sesión
+        </Button>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (

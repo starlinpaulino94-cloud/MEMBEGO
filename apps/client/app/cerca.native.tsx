@@ -71,8 +71,10 @@ export default function CercaNativeScreen() {
 
   const toggleContexto = (ctx: 'HOME' | 'CURRENT') => {
     if (ctx === 'CURRENT') {
-      // ponytail: sin expo-location, mostrar banner de consentimiento.
-      // Agregar Location.getCurrentPositionAsync() cuando se instale expo-location.
+      // GPS not available on native without expo-location dependency.
+      // Show explicit unavailable state instead of fake consent banner.
+      // Web uses navigator.geolocation at cerca.web.tsx:156-168.
+      // To enable: install expo-location + Location.getCurrentPositionAsync().
       setConsentimientoVisible(true)
     } else {
       setContexto('HOME')
@@ -285,27 +287,22 @@ export default function CercaNativeScreen() {
         </Pressable>
       </ScrollView>
 
-      {/* Consentimiento banner */}
+      {/* GPS unavailable banner — honest about limitation */}
       {consentimientoVisible && (
-        <View className="mx-4 mb-2 rounded-xl border border-border bg-card p-4">
+        <View className="mx-4 mb-2 rounded-xl border border-warning/40 bg-warning/10 p-4">
           <Text className="text-h4 font-inter-bold text-foreground">
-            Autoriza el uso de tu ubicación
+            Ubicación no disponible
           </Text>
           <Text className="mt-1 text-caption text-muted-foreground">
-            Solo usamos tu ubicación para mostrarte negocios cercanos. Nunca la compartimos.
+            La ubicación GPS requiere una compilación de desarrollo con expo-location.{'\n'}
+            Por ahora, usa "Mi vivienda" o busca una dirección manualmente.
           </Text>
           <View className="mt-3 flex-row gap-2">
             <Pressable
               onPress={() => setConsentimientoVisible(false)}
-              className="rounded-lg bg-primary px-4 py-2"
+              className="flex-1 rounded-lg border border-border px-4 py-2 items-center"
             >
-              <Text className="text-small font-inter-semibold text-primary-foreground">Permitir</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setConsentimientoVisible(false)}
-              className="rounded-lg border border-border px-4 py-2"
-            >
-              <Text className="text-small font-inter-semibold text-foreground">Ahora no</Text>
+              <Text className="text-small font-inter-semibold text-foreground">Entendido</Text>
             </Pressable>
           </View>
         </View>
