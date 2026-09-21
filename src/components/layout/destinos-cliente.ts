@@ -37,6 +37,7 @@ export const DESTINOS_CLIENTE: readonly DestinoCliente[] = [
     label: 'Mi QR',
     match: ['/membresia', '/mis-membresias', '/cliente/mis-promociones'],
   },
+  { href: '/cliente/promociones', label: 'Beneficios' },
   { href: '/cliente/menu', label: 'Menú' },
 ]
 

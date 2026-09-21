@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/system/EmptyState'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 import { MobileBottomSheet } from '@/components/ui/mobile-bottom-sheet'
 import { cn } from '@/lib/utils'
 import {
@@ -47,6 +48,14 @@ type ErrorCodigo = 'consentimiento_requerido' | 'sin_ubicacion_vivienda' | 'sin_
 interface EstadoError {
   codigo: ErrorCodigo
   mensaje: string
+}
+
+function codigoError(raw: unknown): ErrorCodigo {
+  return raw === 'consentimiento_requerido' ||
+    raw === 'sin_ubicacion_vivienda' ||
+    raw === 'sin_coordenadas'
+    ? raw
+    : 'error'
 }
 
 const RADIOS = [1, 3, 5, 10, 20] as const
@@ -208,15 +217,23 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
         const res = await fetch(`/api/geo/cercanos?${params.toString()}`, { signal: ctrl.signal })
         const data = await res.json().catch(() => null)
         if (!res.ok || !data) {
-          const codigo: ErrorCodigo = data?.codigo === 'consentimiento_requerido'
-            ? 'consentimiento_requerido'
-            : data?.codigo === 'sin_ubicacion_vivienda'
-              ? 'sin_ubicacion_vivienda'
-              : data?.codigo === 'sin_coordenadas'
-                ? 'sin_coordenadas'
-                : 'error'
-          setError({ codigo, mensaje: data?.mensaje ?? 'No pudimos cargar los negocios cercanos.' })
+          setError({
+            codigo: codigoError(data?.codigo),
+            mensaje: data?.mensaje ?? 'No pudimos cargar los negocios cercanos.',
+          })
           return null
+        }
+        // 200 degradado: la búsqueda no pudo resolverse, pero el servidor manda
+        // el motivo. Se pinta el aviso (con su acción, si la tiene) y no se
+        // dejan marcadores viejos de una búsqueda anterior.
+        if (data.motivo) {
+          setResultados([])
+          setTiposVistos([])
+          setError({
+            codigo: codigoError(data.motivo.codigo),
+            mensaje: data.motivo.mensaje ?? 'No pudimos cargar los negocios cercanos.',
+          })
+          return data as ResultadoCercanos
         }
         const items: SucursalCercana[] = data.resultados ?? []
         setResultados(items)
@@ -1054,28 +1071,30 @@ function ChipsFiltro({
   onToggle: (k: FiltroBooleano) => void
 }) {
   return (
-    <ul className="no-scrollbar flex gap-2 overflow-x-auto lg:flex-wrap lg:overflow-visible">
-      {FILTROS.map((f) => {
-        const activo = Boolean(filtros[f.key])
-        return (
-          <li key={f.key} className="shrink-0">
-            <button
-              type="button"
-              onClick={() => onToggle(f.key)}
-              aria-pressed={activo}
-              className={cn(
-                'inline-flex min-h-11 items-center rounded-full border px-3.5 text-small font-semibold transition',
-                activo
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {f.label}
-            </button>
-          </li>
-        )
-      })}
-    </ul>
+    <RailOverflowHint className="from-card via-card/90 to-transparent text-primary">
+      <ul className="no-scrollbar flex gap-2 overflow-x-auto pr-10 lg:flex-wrap lg:overflow-visible lg:pr-0">
+        {FILTROS.map((f) => {
+          const activo = Boolean(filtros[f.key])
+          return (
+            <li key={f.key} className="shrink-0">
+              <button
+                type="button"
+                onClick={() => onToggle(f.key)}
+                aria-pressed={activo}
+                className={cn(
+                  'inline-flex min-h-11 items-center rounded-full border px-3.5 text-small font-semibold transition',
+                  activo
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {f.label}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </RailOverflowHint>
   )
 }
 

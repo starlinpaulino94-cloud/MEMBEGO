@@ -24,6 +24,21 @@ export function verifyDigest(bytes: Buffer, expected: string): void {
   if (sha256(bytes) !== expected) throw new VisualError('REFERENCE_DRIFT', 'Reference bytes differ from the recorded SHA256; preserve both versions');
 }
 
+/**
+ * El hash de los assets de TEXTO (HTML/DESIGN) se registró sobre el blob de
+ * git, que usa LF. En un checkout con `core.autocrlf=true` —Windows— los
+ * mismos bytes llegan con CRLF y la comprobación byte a byte los lee como
+ * drift aunque el contenido no haya cambiado. Se normalizan los finales de
+ * línea para que el margen mida CONTENIDO y no la plataforma.
+ *
+ * El PNG, que es el artefacto visual, sigue comparándose byte a byte: ahí sí
+ * cualquier diferencia es una diferencia de píxeles.
+ */
+export function verifyTextDigest(bytes: Buffer, expected: string): void {
+  const normalized = Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
+  if (sha256(normalized) !== expected) throw new VisualError('REFERENCE_DRIFT', 'Reference bytes differ from the recorded SHA256; preserve both versions');
+}
+
 export async function loadReference(id: string, sourceRoot?: string) {
   const requestedSource = z.string().min(1).optional().parse(sourceRoot);
   const manifest = manifestSchema.parse(JSON.parse(await readFile('docs/transformacion-membego/stitch-manifest.json', 'utf8')));
@@ -34,13 +49,17 @@ export async function loadReference(id: string, sourceRoot?: string) {
   if (!screen) throw new VisualError('UNKNOWN_SCREEN', `Unknown screen ID: ${id}`);
   const bytes = await readFile(screen.png.path);
   verifyDigest(bytes, screen.png.sha256);
-  for (const asset of [screen.html, manifest.design]) verifyDigest(await readFile(asset.path), asset.sha256);
+  for (const asset of [screen.html, manifest.design]) verifyTextDigest(await readFile(asset.path), asset.sha256);
   if (requestedSource !== undefined) {
     for (const asset of [
-      { path: join(requestedSource, id, 'screen.png'), sha256: screen.png.sha256 },
-      { path: join(requestedSource, id, 'code.html'), sha256: screen.html.sha256 },
-      { path: join(requestedSource, manifest.design.source_relative_path), sha256: manifest.design.sha256 },
-    ]) verifyDigest(await readFile(asset.path), asset.sha256);
+      { path: join(requestedSource, id, 'screen.png'), sha256: screen.png.sha256, text: false },
+      { path: join(requestedSource, id, 'code.html'), sha256: screen.html.sha256, text: true },
+      { path: join(requestedSource, manifest.design.source_relative_path), sha256: manifest.design.sha256, text: true },
+    ]) {
+      const sourceBytes = await readFile(asset.path);
+      if (asset.text) verifyTextDigest(sourceBytes, asset.sha256);
+      else verifyDigest(sourceBytes, asset.sha256);
+    }
   }
   return { bytes, screen, captureMetadata: manifest.capture_metadata, sourceRoot: requestedSource ?? null,
     integrity: requestedSource === undefined ? 'REPOSITORY_VERIFIED' : 'REPOSITORY_AND_EXTERNAL_VERIFIED' };

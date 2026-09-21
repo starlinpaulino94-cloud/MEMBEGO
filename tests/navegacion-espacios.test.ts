@@ -400,13 +400,20 @@ test('el pie del riel vive fuera del contenedor con scroll', () => {
 })
 
 test('el modo compacto se guarda y se aplica antes de pintar', () => {
+  // La responsabilidad vive en tres sitios y la guardia los lee juntos: el
+  // módulo define la clave y el script, el layout raíz lo inyecta antes de
+  // pintar y el shell persiste el cambio.
+  const modulo = leer('src/components/layout/nav-compacto.ts')
+  assert.ok(modulo.includes('membego.nav.compacto.v1'), 'la preferencia dejó de persistirse')
   const src = leer('src/components/layout/AppShell.tsx')
-  assert.ok(src.includes('membego.nav.compacto.v1'), 'la preferencia dejó de persistirse')
   assert.ok(src.includes('localStorage.setItem'), 'no se escribe la preferencia')
+  const layout = leer('src/app/layout.tsx')
   assert.ok(
     // En el código el atributo se escribe como propiedad del DOM
     // (`dataset.navCompacto`); en el CSS, como selector (`data-nav-compacto`).
-    src.includes('dataset.navCompacto') && src.includes('dangerouslySetInnerHTML'),
+    modulo.includes('dataset.navCompacto') &&
+      layout.includes('dangerouslySetInnerHTML') &&
+      layout.includes('SCRIPT_COMPACTO'),
     'sin el script previo al pintado, quien tiene el menú plegado ve el panel ' +
       'ancho un instante y encogerse: el mismo parpadeo del tema claro/oscuro.'
   )

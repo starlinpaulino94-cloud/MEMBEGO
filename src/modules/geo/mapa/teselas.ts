@@ -1,52 +1,45 @@
 /**
  * BASEMAP ÚNICO DE MEMBEGO.
  *
- * Había tres mapas en el producto con tres basemaps distintos: "Cerca de mí"
- * con CARTO, y los dos selectores de ubicación (perfil de empresa y confirmar
- * vivienda) con las teselas crudas de OpenStreetMap. Mismo papel, tres
- * aspectos — el mismo defecto que la Fase 18 saldó con los degradados de
- * cabecera.
+ * Había tres mapas en el producto con tres basemaps distintos. Hoy comparten
+ * uno solo definido aquí, y la prueba `mapa-basemap.test.ts` impide que vuelva
+ * a escribirse a mano.
  *
- * POR QUÉ VOYAGER Y NO POSITRON. La Fase 5 eligió Positron (`light_all`) para
- * que los marcadores destacaran sobre un fondo apagado, y se pasó de frenada:
- * a poco que se aleje el zoom, el país entero queda como una mancha blanca con
- * etiquetas grises. Un mapa sin agua azul ni verde no se lee como un mapa, se
- * lee como un error de carga.
+ * POR QUÉ OSM Y NO CARTO. La Fase 5 eligió las teselas de CARTO (Voyager en
+ * claro, Dark Matter en oscuro) por su acabado. En agosto de 2026 CARTO hizo
+ * obligatoria una API key: sin ella no corta el servicio, pero sirve cada
+ * tesela con la marca de agua "API KEY REQUIRED" —verificado el 2026-09-16:
+ * Voyager, `light_all` y `dark_all` llegan marcadas; `tile.openstreetmap.org`
+ * llega limpia—. Como no hay key de CARTO y conseguir una depende de un alta
+ * externa, se vuelve al proveedor que la decisión G-2 ya documentaba: Leaflet
+ * con las teselas de OpenStreetMap, sin llave y sin cuota registrada.
  *
- * Voyager es el término medio y está diseñado para lo mismo: es un basemap de
- * CARTO pensado para llevar datos encima, pero con agua, parques y carreteras
- * con su color. Los marcadores siguen destacando porque ahora son discos con
- * el logo del negocio y un aro de color, no gotas grises.
- *
- * En oscuro se mantiene Dark Matter: no hay un Voyager oscuro, y las teselas
- * claras dentro de una app oscura son peor problema que la falta de color.
- *
- * Siguen siendo datos de OpenStreetMap: la atribución mantiene a OSM además de
- * CARTO porque lo exige su licencia, no por cortesía.
+ * El filtro oscuro. OpenStreetMap publica un solo estilo, claro. Aplicarlo tal
+ * cual dentro de la app en tema oscuro repetiría el destello blanco que la
+ * Fase 5 quiso evitar, así que en oscuro se invierte el tono por CSS. Es la
+ * técnica habitual para un basemap claro sin variante oscura.
  */
 
 const OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-const CARTO = '&copy; <a href="https://carto.com/attributions">CARTO</a>'
 
-export const ATRIBUCION_MAPA = `${OSM} ${CARTO}`
+export const ATRIBUCION_MAPA = OSM
 
-/** Opciones comunes de la capa de teselas. `subdomains` reparte la carga. */
+/** Opciones comunes de la capa de teselas. `className` da el tono oscuro. */
 export const OPCIONES_TESELAS = {
   attribution: ATRIBUCION_MAPA,
-  maxZoom: 20,
-  subdomains: 'abcd',
+  maxZoom: 19,
+  className: 'dark:invert dark:hue-rotate-180',
 } as const
 
 /**
  * URL de las teselas para el tema pedido.
  *
- * `{r}` lo resuelve Leaflet como `@2x` en pantallas de alta densidad, que es
- * casi todo el parque móvil: sin él, el mapa se ve borroso en el sitio donde
- * más se usa.
+ * Sin `{r}`: OpenStreetMap no publica la variante `@2x`, así que pedirla no
+ * cambiaría nada —y una URL con un marcador que nadie sustituye es una URL
+ * rota esperando a que la lea alguien—.
  */
-export function urlTeselas(oscuro: boolean): string {
-  const estilo = oscuro ? 'dark_all' : 'rastertiles/voyager'
-  return `https://{s}.basemaps.cartocdn.com/${estilo}/{z}/{x}/{y}{r}.png`
+export function urlTeselas(_oscuro: boolean): string {
+  return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 }
 
 /** ¿Está la aplicación en tema oscuro ahora mismo? */

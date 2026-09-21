@@ -9,13 +9,25 @@ export const metadata = {
   description: 'Descubre beneficios cerca de ti y consulta tus membresías',
 }
 
-export default async function InicioCliente() {
+export default async function InicioCliente({
+  searchParams,
+}: {
+  searchParams?: Promise<{ categoria?: string; category?: string }>
+}) {
   const user = await requireRole('CLIENTE')
+  const params = await searchParams
+  const categoria =
+    typeof params?.categoria === 'string'
+      ? params.categoria
+      : typeof params?.category === 'string'
+        ? params.category
+        : undefined
+
   // Las dos mitades se piden a la vez. La comercial SIEMPRE existe: sin
   // composición publicada se arma con los datos del marketplace, así que el
   // diseño no depende de ningún acto administrativo para verse.
   const [comercial, personal] = await Promise.all([
-    getInicioVista(user),
+    getInicioVista(user, categoria),
     cargarPanelPersonal(user),
   ])
   return <InicioRetail comercial={comercial} personal={personal} />

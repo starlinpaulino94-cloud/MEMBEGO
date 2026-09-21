@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * BACKFILL DE PLACAS HISTÓRICAS  (Onboarding v2 · Fase 7)
+ * BACKFILL DE PLACAS Y CATEGORÍAS  (Onboarding v2 · Fase 7)
  *
  * ────────────────────────────────────────────────────────────────────────────
  * QUÉ HACE
@@ -8,6 +8,13 @@
  * Rellena `placaNormalizada` en los vehículos ANTERIORES al rediseño (los que
  * tienen `placa` escrita pero `placaNormalizada` NULL), con la MISMA regla de
  * normalización del dominio: mayúsculas y solo A-Z0-9.
+ *
+ * Y rellena `tipoVehiculoId` en los vehículos sin categoría, PERO SOLO cuando
+ * la empresa tiene UNA sola categoría activa (asignación sin ambigüedad). Un
+ * vehículo sin categoría no cuenta como usable para el motor de elegibilidad
+ * (`modules/elegibilidad/decidir.ts`): el cliente vería «registra tu vehículo»
+ * teniéndolo. Con varias categorías el script NO elige (sería inventarle una
+ * tarifa): los reporta para asignación humana.
  *
  * NUNCA revienta contra el unique (pais, placaNormalizada):
  *   - si dos vehículos históricos normalizan a la misma placa, o la placa ya
@@ -42,7 +49,7 @@ async function main() {
   const prisma = new PrismaClient()
 
   try {
-    console.log(`Backfill de placas históricas ${APLICAR ? '(APLICANDO)' : '(dry-run: nada se escribe)'}`)
+    console.log(`Backfill de placas y categorías históricas ${APLICAR ? '(APLICANDO)' : '(dry-run: nada se escribe)'}`)
     console.log('─'.repeat(64))
 
     const pendientes = await prisma.vehiculo.findMany({
@@ -101,6 +108,65 @@ async function main() {
       }
       if (saltados.length > 30) console.log(`${C.dim}   … y ${saltados.length - 30} más${C.off}`)
     }
+
+    // ── Categorías (tipoVehiculoId) ─────────────────────────────────────────
+    // Con UNA sola categoría activa la asignación no es una suposición. Con
+    // varias, elegir una tarifa por el cliente sí lo sería → se reporta.
+    const sinCategoria = await prisma.vehiculo.findMany({
+      where: { tipoVehiculoId: null },
+      select: { id: true, placa: true, cliente: { select: { companyId: true } } },
+      orderBy: { createdAt: 'asc' },
+    })
+    const categoriasPorEmpresa = new Map()
+    let categorizados = 0
+    const categoriasAmbiguas = []
+
+    for (const v of sinCategoria) {
+      const empresaId = v.cliente?.companyId
+      if (!empresaId) {
+        categoriasAmbiguas.push({ id: v.id, placa: v.placa, opciones: 0 })
+        continue
+      }
+      if (!categoriasPorEmpresa.has(empresaId)) {
+        categoriasPorEmpresa.set(
+          empresaId,
+          await prisma.tipoVehiculo.findMany({
+            where: { companyId: empresaId, activo: true },
+            select: { id: true, nombre: true },
+            orderBy: { orden: 'asc' },
+          })
+        )
+      }
+      const categorias = categoriasPorEmpresa.get(empresaId)
+      if (categorias.length !== 1) {
+        categoriasAmbiguas.push({ id: v.id, placa: v.placa, opciones: categorias.length })
+        continue
+      }
+      if (APLICAR) {
+        try {
+          await prisma.vehiculo.update({
+            where: { id: v.id },
+            data: { tipoVehiculoId: categorias[0].id },
+          })
+        } catch {
+          categoriasAmbiguas.push({ id: v.id, placa: v.placa, opciones: categorias.length })
+          continue
+        }
+      }
+      categorizados++
+    }
+
+    console.log(`\nVehículos sin categoría: ${sinCategoria.length}`)
+    console.log(`${C.ok}✓${C.off} ${APLICAR ? 'Categorizados' : 'Categorizables'}: ${categorizados}`)
+    if (categoriasAmbiguas.length) {
+      console.log(
+        `${C.avi}! Sin categoría única asignable (${categoriasAmbiguas.length}) — requieren revisión humana:${C.off}`
+      )
+      for (const s of categoriasAmbiguas.slice(0, 30)) {
+        console.log(`${C.dim}   vehiculo=${s.id} placa="${s.placa ?? ''}" categorías activas=${s.opciones}${C.off}`)
+      }
+    }
+
     if (!APLICAR) {
       console.log(`\n${C.dim}Dry-run. Para escribir: node scripts/backfill-placas.mjs --aplicar${C.off}`)
     }

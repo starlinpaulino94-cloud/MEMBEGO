@@ -9,6 +9,7 @@ import { buscarCercanos, buscarEnViewport } from '@/modules/geo/cercanos/queries
 import type {
   ContextoUbicacion,
   FiltrosCercanos,
+  MotivoCercanosCodigo,
   ResultadoCercanos,
   ViewportMapa,
 } from '@/modules/geo/cercanos/tipos'
@@ -48,6 +49,31 @@ const cercanosLimiter = createRateLimiter({
 
 function jsonError(status: number, codigo: string, mensaje: string) {
   return NextResponse.json({ codigo, mensaje }, { status })
+}
+
+/**
+ * 200 DEGRADADO, NUNCA 422.
+ *
+ * "Cerca de mí" es una pantalla, no una API de terceros: que falte la vivienda
+ * o el consentimiento es un estado esperado de la persona, no un error de su
+ * petición. El 422 obligaba a la UI a tratar como fallo algo que ya tiene
+ * mensaje y, a veces, acción ("añádela en tu perfil", "Permitir"); y con
+ * `GEOAPIFY_API_KEY` vacía —el estado de este entorno— no hay forma de guardar
+ * esa vivienda, así que el 422 era lo único que el mapa podía recibir.
+ *
+ * Se responde 200 con la lista vacía Y el motivo explícito en el cuerpo: no es
+ * un éxito fabricado, es una degradación que el cliente puede explicar. La
+ * validación de la petición (contexto, radio, filtros, viewport) sigue siendo
+ * 400: un parámetro mal formado sí es culpa de quien lo envía.
+ */
+function resultadoDegradado(codigo: MotivoCercanosCodigo, mensaje: string) {
+  return NextResponse.json({
+    resultados: [],
+    hayMas: false,
+    total: 0,
+    ubicacion: null,
+    motivo: { codigo, mensaje },
+  })
 }
 
 function parseFiltros(raw: string | null): FiltrosCercanos | null {
@@ -144,8 +170,7 @@ export async function GET(req: NextRequest) {
         verificarConsentimiento(tx, dbUserId, tipoNecesario)
       ).catch(() => false)
       if (!ok) {
-        return jsonError(
-          422,
+        return resultadoDegradado(
           'consentimiento_requerido',
           'Autoriza el uso de tu ubicación para ver negocios cercanos.'
         )
@@ -183,7 +208,7 @@ export async function GET(req: NextRequest) {
      */
     if (!viewport) {
       if (e instanceof ErrorContextoUbicacion) {
-        return jsonError(422, e.codigo, e.message)
+        return resultadoDegradado(e.codigo, e.message)
       }
       return jsonError(500, 'error_interno', 'No pudimos resolver la ubicación.')
     }
