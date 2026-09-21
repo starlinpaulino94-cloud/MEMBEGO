@@ -10,13 +10,20 @@ export function useCitas(fecha?: string, enabled = true) {
   })
 }
 
-export function useCrearCita() {
+export function useCrearCita(options?: {
+  onSuccess?: (data: Awaited<ReturnType<typeof api.crearCita>>) => void
+  onError?: (error: Error) => void
+}) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (body: CrearCitaBody) => api.crearCita(body),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['cliente', 'citas'] })
       queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
+      options?.onSuccess?.(data)
+    },
+    onError: (error) => {
+      options?.onError?.(error)
     },
   })
 }

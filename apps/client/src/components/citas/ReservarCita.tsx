@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { View, Text, Pressable, TextInput, Alert } from 'react-native'
 import { CalendarCheck2, Car } from 'lucide-react-native'
 import { Sheet } from '../ui/Sheet'
@@ -51,30 +51,21 @@ export function ReservarCita({
     vehiculos.length === 1 ? vehiculos[0].id : '',
   )
   const [servicio, setServicio] = useState('')
-  const crearCita = useCrearCita()
+  const crearCita = useCrearCita({
+    onSuccess: (data) => {
+      Alert.alert('Cita reservada', data.mensaje ?? 'Tu cita ha sido reservada.')
+      setHoraSeleccionada(null)
+    },
+    onError: (error) => {
+      Alert.alert('Error', error.message ?? 'No se pudo reservar la cita.')
+    },
+  })
 
   // Reset form when sheet closes (inline in the close handler, not in an effect)
   const resetForm = () => {
     setVehiculoId(vehiculos.length === 1 ? vehiculos[0].id : '')
     setServicio('')
   }
-
-  // Close sheet and reset on success (state adjustment during render)
-  const [handledSuccess, setHandledSuccess] = useState(false)
-  if (crearCita.isSuccess && !handledSuccess) {
-    setHandledSuccess(true)
-    Alert.alert('Cita reservada', crearCita.data.mensaje ?? 'Tu cita ha sido reservada.')
-    setHoraSeleccionada(null)
-  }
-  if (!crearCita.isSuccess) {
-    setHandledSuccess(false)
-  }
-
-  useEffect(() => {
-    if (crearCita.isError) {
-      Alert.alert('Error', (crearCita.error as Error)?.message ?? 'No se pudo reservar la cita.')
-    }
-  }, [crearCita.isError, crearCita.error])
 
   const handleReservar = () => {
     if (!horaSeleccionada) return
