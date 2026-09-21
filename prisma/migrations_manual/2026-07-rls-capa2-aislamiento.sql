@@ -302,9 +302,15 @@ BEGIN
   -- contra esa relación, así que una lectura vacía no daría una lista vacía en
   -- pantalla — cerraría TODOS los accesos a TODOS los satélites, y el motivo
   -- que quedaría en el log sería «vertical incompatible».
+  --
+  -- `conectores` (Membego Connect) es el CATÁLOGO de conectores disponibles:
+  -- slug, nombre, categoría, scopes. No tiene `companyId` porque no es de nadie;
+  -- lo administra MembeGo y lo lee toda empresa que abre el hub de integraciones.
+  -- Se añadió después de escribir esta capa, así que el preflight la marcaba
+  -- «sin ruta»: sin esta decisión, con `membego_app` el catálogo saldría vacío.
   FOREACH cond IN ARRAY ARRAY[
     'business_categories', 'campanas_globales', 'sistemas_conectados',
-    'tipos_negocio', 'sistemas_tipos_negocio'
+    'tipos_negocio', 'sistemas_tipos_negocio', 'conectores'
   ] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);

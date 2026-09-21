@@ -17,13 +17,16 @@ import { TabsNav } from '@/components/ui/tabs-nav'
  * navegador.
  */
 
-export type SeccionIntegraciones = 'resumen' | 'catalogo' | 'empresas' | 'salud'
+export type SeccionIntegraciones = 'resumen' | 'catalogo' | 'empresas' | 'salud' | 'uso'
 
 const PESTANAS: { id: SeccionIntegraciones; label: string; href: string }[] = [
   { id: 'resumen', label: 'Resumen', href: '/superadmin/connect' },
   { id: 'catalogo', label: 'Catálogo', href: '/superadmin/connect?seccion=catalogo' },
   { id: 'empresas', label: 'Empresas', href: '/superadmin/connect?seccion=empresas' },
   { id: 'salud', label: 'Salud', href: '/superadmin/integraciones' },
+  // Uso de la API por cada satélite (B-7): peticiones, tasa de error y endpoints
+  // más usados. Es la salud vista desde el lado de QUIEN LLAMA, no de la cola.
+  { id: 'uso', label: 'Uso de la API', href: '/superadmin/integraciones/uso' },
 ]
 
 export function TabsIntegracionesPlataforma({

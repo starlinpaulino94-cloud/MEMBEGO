@@ -16,6 +16,7 @@ import {
   type ChildActividadParaCombo,
 } from '@/modules/excursiones/catalogo/public-queries'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { cookies } from 'next/headers'
 import { VENDEDOR_COOKIE } from '@/modules/excursiones/atribucion/registrar'
 
@@ -205,12 +206,36 @@ export async function actualizarPerfil(
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Empresa requerida.' }
     const clienteId = user.metadata.clienteId
-    await conEmpresa(companyId, (tx) =>
+    const actualizado = await conEmpresa(companyId, (tx) =>
       tx.cliente.update({
         where: { id: clienteId },
         data: { nombre, telefono: telefono || null },
+        select: { id: true, nombre: true, email: true, telefono: true },
       })
     )
+
+    /**
+     * AVISA de que la ficha cambió (B-4 · `customer.updated`).
+     *
+     * El cliente edita SU perfil, pero para una proyección da igual quién lo
+     * cambió: el hecho es el mismo que cuando lo edita una integración por la
+     * API (`editarCliente`), y tiene que emitir el mismo evento o la copia de un
+     * satélite quedaría al día tras una edición y desfasada tras la otra —el peor
+     * de los mundos, porque parece que funciona—. Nunca bloquea el guardado.
+     */
+    await emitirEventoEstrategia({
+      companyId,
+      type: 'cliente.actualizado',
+      subjectId: actualizado.id,
+      payload: {
+        cliente: {
+          id: actualizado.id,
+          nombre: actualizado.nombre,
+          email: actualizado.email,
+          telefono: actualizado.telefono,
+        },
+      },
+    })
 
     revalidatePath('/cliente/perfil')
     revalidatePath('/cliente/dashboard')

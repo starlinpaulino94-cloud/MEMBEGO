@@ -10,6 +10,7 @@ import {
   MENSAJE_RECHAZO,
   aceptarCuerpo,
   nombreDeEvento,
+  partirToken,
 } from '@/modules/connect/entrantesNucleo'
 
 export const dynamic = 'force-dynamic'
@@ -77,9 +78,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   const { token } = await ctx.params
 
   // El freno va ANTES de tocar la base y antes de verificar nada: ver (3).
-  // Se frena por el token presentado, aunque todavía no sepamos si vale — es
-  // justo el caso que hay que frenar, alguien probando.
-  const clave = token.slice(0, 20)
+  // Se frena por el PREFIJO PÚBLICO del token, aunque todavía no sepamos si vale
+  // —es justo el caso que hay que frenar, alguien probando—. Se usa el prefijo y
+  // no `slice(0,20)`: aquél metía 3 caracteres del SECRETO en la clave del
+  // limitador, así que dos intentos contra el mismo endpoint con secretos
+  // distintos caían en cubos distintos y el freno por token no los agregaba. El
+  // prefijo es la parte pública; un token malformado cae a un cubo acotado.
+  const clave = partirToken(token)?.prefijo ?? token.slice(0, 16)
   if (!(await limite(`entrante:${clave}`))) {
     return NextResponse.json({ error: 'Too many requests.' }, { status: 429 })
   }

@@ -1,6 +1,6 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, esViolacionUnica } from '@/lib/prisma-errors'
 import { getPlatformEventPrivateKey } from '@/lib/env'
 import { firmarHmac, EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
 import { sistemasDeEmpresa } from '@/modules/plataforma/registro'
@@ -14,7 +14,13 @@ import {
 } from '@/modules/plataforma/firma'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
 import { programarReintento } from '@/modules/integraciones/programador'
-import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
+import {
+  CONCURRENCIA,
+  CONCURRENCIA_POR_EMPRESA,
+  antesDe,
+  enParalelo,
+  enParaleloPorClave,
+} from '@/modules/integraciones/concurrencia'
 
 /**
  * DESPACHO DE EVENTOS a los sistemas satélite conectados.
@@ -58,6 +64,15 @@ interface EventoParaEnviar {
   payload?: Record<string, unknown>
   /** Hilo de la operación. Sin él, cada evento es su propio hilo. */
   traceId?: string | null
+  /**
+   * Clave de idempotencia del fan-out: el id del `DomainEvent` que originó este
+   * reenvío. Con él, re-despachar el mismo evento (cuando el barrido reclama uno
+   * que quedó a medias) reusa la MISMA fila de outbox por (satélite, evento de
+   * dominio) en vez de acuñar una nueva con id/eventId distintos —que al satélite
+   * le llegaría como un evento nuevo imposible de deduplicar—. Sin él (avisos de
+   * automatización, llamadas legadas) el reenvío es como antes: no idempotente.
+   */
+  domainEventId?: string | null
 }
 
 /**
@@ -233,6 +248,13 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
     // diez segundos. Un satélite lento retrasaba la entrega a los demás sin
     // tener nada que ver con ellos.
     await enParalelo(sistemas, CONCURRENCIA, async (sistema) => {
+      // IDEMPOTENTE POR (satélite, evento de dominio): si el barrido reclama un
+      // evento que quedó a medias, este create choca con el UNIQUE
+      // (sistemaId, domainEventId) y lanza P2002 —señal de «este satélite ya
+      // recibió su fila para este evento»—. Se salta sin anotarlo como fallo: no
+      // lo es. Un `domainEventId` null (avisos de automatización, llamadas
+      // legadas) nunca choca porque el UNIQUE trata los null como distintos, así
+      // que esos flujos siguen acuñando fila nueva como siempre.
       const fila = await conEmpresa(evento.companyId, (tx) =>
         tx.eventoSaliente.create({
           data: {
@@ -240,13 +262,18 @@ export async function reenviarEventoASistemas(evento: EventoParaEnviar): Promise
             companyId: evento.companyId,
             tipo: evento.tipo,
             traceId: evento.traceId ?? null,
+            domainEventId: evento.domainEventId ?? null,
             payload: {
               ...(evento.payload ?? {}),
               ...(evento.subjectId ? { clienteId: evento.subjectId } : {}),
             } as object,
           },
         })
-      ).catch(anotarFallo('integraciones:outbox', { tipo: evento.tipo }))
+      ).catch((e) => {
+        if (esViolacionUnica(e)) return undefined // ya se repartió a este satélite
+        anotarFallo('integraciones:outbox', { tipo: evento.tipo })(e)
+        return undefined
+      })
       if (!fila) return
 
       const error = await entregar(sistema.urlWebhook, sistema.secreto, cuerpoDe(fila), fila.id)
@@ -284,27 +311,56 @@ interface FilaEvento {
  * el sistema pudo suspenderse: entregarlo entonces sería mandar datos a un
  * sistema al que esa empresa ya no pertenece. Con el destino resuelto de nuevo,
  * revocar deja de ser una promesa a futuro y vacía también la cola.
+ *
+ * CERROJO POR COMPARE-AND-SET (#5): antes de enviar se RECLAMA el intento con un
+ * `updateMany` guardado por `intentos = ev.intentos` que lo sube a `+1`. Es
+ * atómico: si dos caminos —el barrido, el botón del panel, y un reintento de
+ * QStash sobre el mismo trabajo— empiezan a la vez con la misma fila, solo uno
+ * gana el `count:1`; el resto ve `count:0` y devuelve `omitido` sin enviar ni
+ * anotar. El chequeo de solo-lectura de `reintentarEventoSaliente` es un
+ * early-out barato, pero deja una ventana entre el read y el write; este cerrojo
+ * la cierra. Sin él, dos reintentos solapados gastaban un intento que nadie
+ * contaba (el evento moría antes de tiempo) y hacían un POST doble al satélite.
  */
 async function intentarEvento(
   ev: FilaEvento,
   destino: { urlWebhook: string; secreto: string } | undefined
-): Promise<'enviado' | 'fallido' | 'agotado'> {
+): Promise<'enviado' | 'fallido' | 'agotado' | 'omitido'> {
   if (!destino) {
-    await sinEmpresa('integraciones: cerrar evento sin destino (cron/cola global)', (tx) =>
-      tx.eventoSaliente.update({
-        where: { id: ev.id },
+    // El cierre por destino ausente también se reclama: solo cierra quien
+    // gane el compare-and-set, para no pisar a otro camino que aún atiende
+    // la fila. Sin destino no hay envío, así que basta con el claim que cierra.
+    const cerrado = await sinEmpresa('integraciones: cerrar evento sin destino (cron/cola global)', (tx) =>
+      tx.eventoSaliente.updateMany({
+        where: { id: ev.id, estado: 'PENDIENTE', intentos: ev.intentos },
         data: {
           estado: DESCARTADO,
           ultimoError: 'Sistema no habilitado para esta empresa, inactivo o sin webhook.',
           proximoIntentoAt: null,
         },
       })
-    ).catch(anotarFallo('integraciones:cerrar', { id: ev.id }))
-    return 'agotado'
+    ).catch((e) => {
+      anotarFallo('integraciones:cerrar', { id: ev.id })(e)
+      return { count: 0 }
+    })
+    return cerrado.count === 0 ? 'omitido' : 'agotado'
   }
 
-  const error = await entregar(destino.urlWebhook, destino.secreto, cuerpoDe(ev), ev.id)
   const intentos = ev.intentos + 1
+  // RECLAMO ATÓMICO antes de gastar la red: subir `intentos` de `ev.intentos` a
+  // `+1` solo si sigue en ese valor y PENDIENTE. Gana uno; el resto se omite.
+  const claim = await sinEmpresa('integraciones: reclamar intento del evento (cron/cola global)', (tx) =>
+    tx.eventoSaliente.updateMany({
+      where: { id: ev.id, estado: 'PENDIENTE', intentos: ev.intentos },
+      data: { intentos },
+    })
+  ).catch((e) => {
+    anotarFallo('integraciones:reclamar', { id: ev.id })(e)
+    return { count: 0 }
+  })
+  if (claim.count === 0) return 'omitido' // lo atendió otro camino entre medias
+
+  const error = await entregar(destino.urlWebhook, destino.secreto, cuerpoDe(ev), ev.id)
   await anotarResultado({
     companyId: ev.companyId,
     eventoId: ev.id,
@@ -319,11 +375,12 @@ async function intentarEvento(
 /**
  * EL REINTENTO PROGRAMADO (trabajo `reintento-entrega`, cola `satelite`).
  *
- * `intentosEsperados` es un cerrojo optimista: si la fila ya no tiene ese
- * número de intentos, la atendió alguien entre medias —el barrido, el botón del
- * panel, o un reintento de QStash sobre este mismo trabajo— y aquí no hay nada
- * que hacer. Sin el cerrojo, ese solapamiento gastaría un intento que nadie
- * contó y el evento moriría antes de tiempo.
+ * `intentosEsperados` es el early-out barato: si la fila ya no tiene ese número
+ * de intentos, la atendió alguien entre medias —el barrido, el botón del panel,
+ * o un reintento de QStash sobre este mismo trabajo— y aquí no hay nada que
+ * hacer. La GARANTÍA de verdad es el compare-and-set atómico de `intentarEvento`
+ * (#5), que reclama el intento antes de enviar; este chequeo solo evita resolver
+ * el destino y abrir el socket cuando ya se ve que otro va por delante.
  */
 export async function reintentarEventoSaliente(
   eventoId: string,
@@ -441,17 +498,23 @@ export async function reintentarPendientes(
     return promesa
   }
 
-  // Acotado por concurrencia Y por tiempo (A-6): ver el mismo cambio en
-  // `reintentarWebhooksPendientes`.
-  const { sinEmpezar } = await enParalelo(
+  // Acotado por concurrencia (global Y POR EMPRESA) y por tiempo (A-6): ver el
+  // mismo cambio y su porqué en `reintentarWebhooksPendientes`. El tope por
+  // empresa impide que un satélite caído de un inquilino acapare el trabajador
+  // compartido y deje sin reintento a los demás.
+  const { sinEmpezar } = await enParaleloPorClave(
     pendientes,
-    CONCURRENCIA,
     async (ev) => {
       const r = await intentarEvento(ev, (await destinosDe(ev.companyId)).get(ev.sistemaId))
       if (r === 'enviado') enviados++
       else if (r === 'agotado') fallidos++
     },
-    { continuar: antesDe(presupuestoMs, 12_000) }
+    {
+      limiteGlobal: CONCURRENCIA,
+      limitePorClave: CONCURRENCIA_POR_EMPRESA,
+      clave: (ev) => ev.companyId,
+      continuar: antesDe(presupuestoMs, 12_000),
+    }
   )
   return { enviados, fallidos, sinTiempo: sinEmpezar }
 }

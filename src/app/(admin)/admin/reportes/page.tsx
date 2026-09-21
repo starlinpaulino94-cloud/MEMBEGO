@@ -1,5 +1,3 @@
-import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { requireRole, requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -9,6 +7,7 @@ import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
 import { getReporte } from '@/modules/reportes/queries'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
+import { NavegacionReportes } from '@/components/reportes/NavegacionReportes'
 import { ReporteEmpresaVista } from '@/components/reportes/ReporteEmpresaVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { BotonExportar } from '@/components/ui/boton-exportar'
@@ -57,6 +56,11 @@ export default async function ReportesPage({
   // usa esta misma función, así que esconder la columna en la vista dejaría el
   // dato saliendo por el archivo.
   const verFinancieros = await puedeFuncion('reportes', 'ver_financieros')
+  // La bitácora responde la pregunta que los agregados no pueden —«¿QUÉ pasó,
+  // cuándo y quién lo hizo?»— y vivía desconectada de Reportes: quien buscaba
+  // «la extensión de vigencia que le hice a este cliente» no tenía cómo llegar.
+  // Se enlaza solo si la persona tiene la sección (permiso aparte de reportes).
+  const verActividad = (await requireSection('actividad')) !== null
   const r = await getReporte(companyId, rango, timeZone, { verFinancieros })
   const qs = paramsDeRango(rango)
 
@@ -67,34 +71,78 @@ export default async function ReportesPage({
       prefs={prefs}
       empresa={empresa?.name ?? 'Tu negocio'}
       generadoEn={formatDateTime(new Date(), prefs)}
+      // Drill-down: cada cifra del resumen abre el reporte que la explica, con
+      // el MISMO periodo. El superadmin monta esta vista sin enlaces porque sus
+      // reportes viven en otras rutas.
+      enlaces={{
+        finanzas: verFinancieros ? `/admin/reportes/finanzas${qs}` : undefined,
+        operacion: `/admin/reportes/operacion${qs}`,
+        clientes: `/admin/reportes/clientes${qs}`,
+        membresias: `/admin/reportes/membresias${qs}`,
+      }}
       eyebrow={
-        <div className="space-y-3">
+        <div className="space-y-4">
           <RangoFechas rango={rango} accion="/admin/reportes" />
-          {/* El ciclo de vida vive aparte porque responde otra pregunta: este
-              reporte dice cuánto entró, aquél dice qué pasó con las membresías.
-              Mezclarlos daría una pantalla que no se puede leer de una vez. */}
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
-            <Link
-              href={`/admin/reportes/membresias${qs}`}
-              className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
-            >
-              Ciclo de vida de las membresías <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              href={`/admin/reportes/operacion${qs}`}
-              className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
-            >
-              Operación y canjes <ArrowRight className="h-4 w-4" />
-            </Link>
-            {verFinancieros && (
-              <Link
-                href={`/admin/reportes/finanzas${qs}`}
-                className="inline-flex items-center gap-1.5 text-small text-primary hover:underline"
-              >
-                Finanzas y cobros <ArrowRight className="h-4 w-4" />
-              </Link>
-            )}
-          </div>
+          {/* Cada reporte responde una pregunta distinta, y por eso viven
+              aparte: mezclarlos daría una pantalla que no se puede leer de una
+              vez. El mapa dice cuál responde la que se trae. */}
+          <NavegacionReportes
+            categorias={[
+              ...(verFinancieros
+                ? [
+                    {
+                      titulo: 'Finanzas y cobros',
+                      pregunta: '¿Cuánto entró, por qué vía y qué quedó sin cobrar?',
+                      href: `/admin/reportes/finanzas${qs}`,
+                    },
+                  ]
+                : []),
+              {
+                titulo: 'Membresías',
+                pregunta: '¿Qué pasó con cada membresía: altas, renovaciones y bajas?',
+                href: `/admin/reportes/membresias${qs}`,
+              },
+              {
+                titulo: 'Clientes',
+                pregunta: '¿Cuánta gente entró, de dónde vino y volvió?',
+                href: `/admin/reportes/clientes${qs}`,
+              },
+              {
+                titulo: 'Operación y canjes',
+                pregunta: '¿Cuánto se trabajó, dónde y con qué beneficio?',
+                href: `/admin/reportes/operacion${qs}`,
+              },
+              {
+                titulo: 'Promociones',
+                pregunta: '¿Qué se vende, qué se entrega y qué se usa de verdad?',
+                href: `/admin/reportes/promociones${qs}`,
+              },
+              {
+                titulo: 'Códigos y regalos',
+                pregunta: '¿Qué le paga un cliente a otro, y llega a su destino?',
+                href: `/admin/reportes/regalos${qs}`,
+              },
+              {
+                titulo: 'Crecimiento',
+                pregunta: '¿Quién trae gente nueva y dónde se cae el embudo?',
+                href: `/admin/reportes/crecimiento${qs}`,
+              },
+              {
+                titulo: 'Citas y asistencia',
+                pregunta: '¿Cómo quedó la agenda y cuántos se presentaron?',
+                href: `/admin/reportes/citas${qs}`,
+              },
+              ...(verActividad
+                ? [
+                    {
+                      titulo: 'Actividad',
+                      pregunta: '¿Qué pasó exactamente, cuándo y quién lo hizo?',
+                      href: '/admin/actividad',
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       }
       controles={

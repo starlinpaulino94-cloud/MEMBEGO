@@ -3,6 +3,9 @@ import { autorizarCron } from '@/lib/cron-auth'
 import { reintentarPendientes } from '@/modules/integraciones/despacho'
 import { reintentarWebhooksPendientes } from '@/modules/connect/webhooks'
 import { purgarEstadosOauth } from '@/modules/connect/oauth'
+import { comprobarSaludConexiones } from '@/modules/connect/salud-conexiones'
+import { inspeccionarSaludWhatsapp } from '@/modules/connect/salud-whatsapp'
+import { limpiarRotacionesVencidas } from '@/modules/plataforma/rotacion-secreto'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -56,5 +59,30 @@ export async function GET(req: NextRequest) {
   // los 15 minutos y dejan de servir para nada, pero conservarlas para siempre
   // sería guardar secretos que ya no protegen nada.
   const estadosOauthPurgados = await purgarEstadosOauth()
-  return NextResponse.json({ ok: true, satelites, webhooks, estadosOauthPurgados })
+  // SALUD ACTIVA (B-3): mira la caducidad de las credenciales sin refresco y
+  // marca las que se acercan a su fin, para que la empresa reconecte ANTES de
+  // que un envío falle. Es una consulta local y barata —no abre sellos ni llama
+  // a ningún proveedor—, así que no compite por el presupuesto de las colas.
+  const salud = await comprobarSaludConexiones()
+  // ROTACIÓN DE SECRETO (A-7): descarta las rotaciones de secreto de satélite que
+  // nadie promovió dentro de su ventana. Se descartan, no se promueven solas:
+  // cambiar el secreto saliente a uno que el satélite quizá no instaló sería el
+  // corte que la rotación existe para evitar.
+  const rotacionesVencidas = await limpiarRotacionesVencidas()
+  // INSPECCIÓN ACTIVA de WhatsApp (B-3): va la ÚLTIMA, y a propósito. A
+  // diferencia de todo lo anterior llama a Meta por conexión, así que es lo más
+  // frágil y lo más caro; ponerla al final significa que si la plataforma corta
+  // la función por tiempo, lo único que se pierde es esto —lo menos urgente, y lo
+  // que se reintenta mañana igual—. Se corta sola por presupuesto para no
+  // arriesgar el minuto del cron.
+  const whatsapp = await inspeccionarSaludWhatsapp()
+  return NextResponse.json({
+    ok: true,
+    satelites,
+    webhooks,
+    estadosOauthPurgados,
+    salud,
+    rotacionesVencidas,
+    whatsapp,
+  })
 }

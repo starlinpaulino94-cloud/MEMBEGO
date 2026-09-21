@@ -45,6 +45,23 @@ import type { Kpi } from '@/modules/reportes/queries'
  * Y miden OPERACIONES, no personas: cuántos canjes registró cada mostrador, que
  * es lo que sirve para repartir turnos. No hay ritmo, ni ranking, ni nada que
  * invite a usar el reporte como vara. `docs/REPORTES.md` lo fija así.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL FILTRO POR SUCURSAL Y POR EMPLEADO
+ *
+ * «¿Cuántos lavados hizo LA SUCURSAL DEL ESTE la semana pasada?» no se podía
+ * responder sin exportar y sumar a mano. El filtro se aplica EN LA CONSULTA
+ * —todas las cifras, la comparación y la serie salen ya recortadas— y el
+ * reporte devuelve qué filtro quedó aplicado de verdad, con su nombre resuelto:
+ * un id inventado en la URL no filtra en silencio, simplemente no se aplica.
+ *
+ * El filtro por empleado va detrás de `ver_empleados`, igual que el desglose:
+ * filtrar por una persona ES ver la cifra de esa persona. Y se descarta AQUÍ,
+ * no en la pantalla, porque la exportación reusa esta función.
+ *
+ * Los QR no se filtran: salen de la bitácora, que no guarda ni sucursal ni
+ * empleado. Con filtro activo ni se consultan y la vista lo dice, porque un
+ * total de empresa pintado bajo un título filtrado sería un número mentiroso.
  */
 
 type Tx = Prisma.TransactionClient
@@ -65,6 +82,22 @@ export interface PuntoOperacion {
 export interface CoberturaVisitas {
   /** Queda histórico sin `companyId`: el relleno por lotes no ha terminado. */
   pendiente: boolean
+}
+
+/** Lo que la URL pide filtrar. Ids sin validar: aquí se validan. */
+export interface FiltroOperacion {
+  sucursalId?: string
+  empleadoId?: string
+}
+
+/**
+ * El filtro que de verdad se aplicó, con los nombres ya resueltos para que la
+ * pantalla y el CSV digan «sucursal Este» y no un id. Si un id pedido no existe
+ * o no es de esta empresa, ese filtro NO se aplica y aquí no aparece.
+ */
+export interface FiltroAplicado {
+  sucursal?: { id: string; nombre: string }
+  empleado?: { id: string; nombre: string }
 }
 
 export interface ReporteOperacion {
@@ -90,6 +123,8 @@ export interface ReporteOperacion {
   qrCompartidos: number
   serie: PuntoOperacion[]
   cobertura: CoberturaVisitas
+  /** `null` = el reporte es de toda la empresa, sin recorte. */
+  filtro: FiltroAplicado | null
   incompleto: boolean
 }
 
@@ -100,21 +135,43 @@ const TOPE_GRUPOS = 50
 
 function enRango(
   companyId: string,
-  rango: { desde: Date; hasta: Date }
+  rango: { desde: Date; hasta: Date },
+  filtro: FiltroAplicado | null
 ): Prisma.VisitWhereInput {
   // El `companyId` va en el WHERE además de en el contexto de `conEmpresa`:
   // RLS es la segunda barrera, no la única.
-  return { companyId, fechaVisita: { gte: rango.desde, lt: rango.hasta } }
+  return {
+    companyId,
+    fechaVisita: { gte: rango.desde, lt: rango.hasta },
+    ...(filtro?.sucursal ? { sucursalId: filtro.sucursal.id } : {}),
+    ...(filtro?.empleado ? { empleadoId: filtro.empleado.id } : {}),
+  }
+}
+
+/**
+ * El MISMO filtro, para las consultas en SQL crudo. Va como fragmento
+ * parametrizado (`Prisma.sql`, nunca `Prisma.raw` con el id dentro): los ids
+ * vienen de la URL y viajan como parámetros, no pegados al texto.
+ */
+function filtroSql(filtro: FiltroAplicado | null): Prisma.Sql {
+  const porSucursal = filtro?.sucursal
+    ? Prisma.sql`AND "sucursalId" = ${filtro.sucursal.id}`
+    : Prisma.empty
+  const porEmpleado = filtro?.empleado
+    ? Prisma.sql`AND "empleadoId" = ${filtro.empleado.id}`
+    : Prisma.empty
+  return Prisma.sql`${porSucursal} ${porEmpleado}`
 }
 
 async function totales(
   tx: Tx,
   companyId: string,
-  rango: { desde: Date; hasta: Date }
+  rango: { desde: Date; hasta: Date },
+  filtro: FiltroAplicado | null
 ): Promise<{ canjes: number; descontados: number }> {
   const filas = await tx.visit.groupBy({
     by: ['descontado'],
-    where: enRango(companyId, rango),
+    where: enRango(companyId, rango, filtro),
     _count: { _all: true },
   })
   let canjes = 0
@@ -137,7 +194,8 @@ async function totales(
 async function clientesAtendidos(
   tx: Tx,
   companyId: string,
-  rango: { desde: Date; hasta: Date }
+  rango: { desde: Date; hasta: Date },
+  filtro: FiltroAplicado | null
 ): Promise<number> {
   const filas = await tx.$queryRaw<{ total: bigint }[]>`
     SELECT count(DISTINCT "clienteId") AS total
@@ -145,6 +203,7 @@ async function clientesAtendidos(
      WHERE "companyId" = ${companyId}
        AND "fechaVisita" >= ${rango.desde}
        AND "fechaVisita" <  ${rango.hasta}
+       ${filtroSql(filtro)}
   `
   return Number(filas[0]?.total ?? 0)
 }
@@ -173,6 +232,7 @@ async function agrupar(
   tx: Tx,
   companyId: string,
   rango: { desde: Date; hasta: Date },
+  filtro: FiltroAplicado | null,
   campo: 'sucursalId' | 'empleadoId' | 'servicio',
   nombres: (ids: string[]) => Promise<Map<string, string>>
 ): Promise<FilaOperacion[]> {
@@ -185,6 +245,7 @@ async function agrupar(
      WHERE "companyId" = ${companyId}
        AND "fechaVisita" >= ${rango.desde}
        AND "fechaVisita" <  ${rango.hasta}
+       ${filtroSql(filtro)}
      GROUP BY 1
      ORDER BY 2 DESC
      LIMIT ${TOPE_GRUPOS}
@@ -250,7 +311,8 @@ async function serieDiaria(
   tx: Tx,
   companyId: string,
   rango: Rango,
-  timeZone: string
+  timeZone: string,
+  filtro: FiltroAplicado | null
 ): Promise<PuntoOperacion[]> {
   // El corte por día se hace en la BASE y en la zona del negocio. Agrupar en
   // JavaScript obligaría a traer una fila por canje, y `AT TIME ZONE` es lo que
@@ -263,6 +325,7 @@ async function serieDiaria(
      WHERE "companyId" = ${companyId}
        AND "fechaVisita" >= ${rango.desde}
        AND "fechaVisita" <  ${rango.hasta}
+       ${filtroSql(filtro)}
      GROUP BY 1, 2
   `
   const porDia = new Map<string, PuntoOperacion>()
@@ -294,6 +357,49 @@ async function rellenoPendiente(tx: Tx): Promise<boolean> {
   return filas.length > 0
 }
 
+/**
+ * Valida el filtro pedido contra la base y devuelve el que SE APLICA.
+ *
+ * Cada id se busca acotado a la empresa: un id de otro inquilino o inventado no
+ * resuelve, y ese filtro se descarta —igual que `leerRango` descarta un preset
+ * inventado—. Descartar es lo contrario de aplicar a ciegas: aplicar un id que
+ * no existe pintaría todo en cero, y el cero es una afirmación sobre el
+ * negocio, no sobre la URL.
+ *
+ * El de empleado ADEMÁS exige `verEmpleados`: sin el permiso ni se busca. Y el
+ * acceso del empleado a la empresa se comprueba por los DOS caminos (empresa
+ * activa y tabla de accesos), como en el desglose por persona de abajo.
+ */
+async function resolverFiltro(
+  tx: Tx,
+  companyId: string,
+  pedido: FiltroOperacion,
+  verEmpleados: boolean
+): Promise<FiltroAplicado | null> {
+  const [sucursal, empleado] = await Promise.all([
+    pedido.sucursalId
+      ? tx.sucursal.findFirst({
+          where: { id: pedido.sucursalId, companyId },
+          select: { id: true, nombre: true },
+        })
+      : null,
+    pedido.empleadoId && verEmpleados
+      ? tx.user.findFirst({
+          where: {
+            id: pedido.empleadoId,
+            OR: [{ companyId }, { empresasAcceso: { some: { companyId } } }],
+          },
+          select: { id: true, name: true },
+        })
+      : null,
+  ])
+  if (!sucursal && !empleado) return null
+  return {
+    ...(sucursal ? { sucursal: { id: sucursal.id, nombre: sucursal.nombre } } : {}),
+    ...(empleado ? { empleado: { id: empleado.id, nombre: empleado.name } } : {}),
+  }
+}
+
 async function seguro<T>(p: Promise<T>, porDefecto: T, fallos: { n: number }): Promise<T> {
   try {
     return await p
@@ -314,12 +420,13 @@ export async function getReporteOperacion(
   companyId: string,
   rango: Rango,
   timeZone: string,
-  opciones: { verEmpleados?: boolean } = {}
+  opciones: { verEmpleados?: boolean; filtro?: FiltroOperacion } = {}
 ): Promise<ReporteOperacion> {
   const fallos = { n: 0 }
   const cero = { canjes: 0, descontados: 0 }
 
-  const [
+  const {
+    filtro,
     actual,
     anterior,
     revertidas,
@@ -330,10 +437,32 @@ export async function getReporteOperacion(
     qr,
     serie,
     pendiente,
-  ] = await conEmpresa(companyId, (tx) =>
-    Promise.all([
-      seguro(totales(tx, companyId, rango), cero, fallos),
-      seguro(totales(tx, companyId, rango.anterior), cero, fallos),
+  } = await conEmpresa(companyId, async (tx) => {
+    // El filtro se resuelve ANTES que todo, porque todo lo demás lo lleva
+    // dentro. Si la validación falla, se sigue SIN filtro y con el aviso de
+    // reporte incompleto: peor que un aviso sería aplicar un filtro a medias.
+    const filtro = opciones.filtro
+      ? await seguro(
+          resolverFiltro(tx, companyId, opciones.filtro, opciones.verEmpleados === true),
+          null,
+          fallos
+        )
+      : null
+
+    const [
+      actual,
+      anterior,
+      revertidas,
+      clientes,
+      sucursales,
+      empleados,
+      servicios,
+      qr,
+      serie,
+      pendiente,
+    ] = await Promise.all([
+      seguro(totales(tx, companyId, rango, filtro), cero, fallos),
+      seguro(totales(tx, companyId, rango.anterior, filtro), cero, fallos),
       seguro(
         tx.visit.count({
           // Se fecha por CUÁNDO SE REVIRTIÓ, no por cuándo fue la visita: la
@@ -341,14 +470,16 @@ export async function getReporteOperacion(
           where: {
             companyId,
             revertidaAt: { gte: rango.desde, lt: rango.hasta },
+            ...(filtro?.sucursal ? { sucursalId: filtro.sucursal.id } : {}),
+            ...(filtro?.empleado ? { empleadoId: filtro.empleado.id } : {}),
           },
         }),
         0,
         fallos
       ),
-      seguro(clientesAtendidos(tx, companyId, rango), 0, fallos),
+      seguro(clientesAtendidos(tx, companyId, rango, filtro), 0, fallos),
       seguro(
-        agrupar(tx, companyId, rango, 'sucursalId', async (ids) => {
+        agrupar(tx, companyId, rango, filtro, 'sucursalId', async (ids) => {
           if (ids.length === 0) return new Map()
           const filas = await tx.sucursal.findMany({
             where: { id: { in: ids }, companyId },
@@ -365,7 +496,7 @@ export async function getReporteOperacion(
       // el archivo.
       opciones.verEmpleados
         ? seguro(
-            agrupar(tx, companyId, rango, 'empleadoId', async (ids) => {
+            agrupar(tx, companyId, rango, filtro, 'empleadoId', async (ids) => {
               if (ids.length === 0) return new Map()
               // Acotado a los usuarios DE ESTA EMPRESA: `users` es global, y
               // cruzarla sin el filtro reconstruiría por detrás lo que la
@@ -392,20 +523,39 @@ export async function getReporteOperacion(
       seguro(
         // `servicio` es texto libre escrito al canjear: no hay catálogo que
         // consultar, el propio valor es el nombre.
-        agrupar(tx, companyId, rango, 'servicio', async (ids) =>
+        agrupar(tx, companyId, rango, filtro, 'servicio', async (ids) =>
           new Map(ids.map((s) => [s, s]))
         ),
         [] as FilaOperacion[],
         fallos
       ),
-      seguro(contarQr(tx, companyId, rango), {} as Record<string, number>, fallos),
-      seguro(serieDiaria(tx, companyId, rango, timeZone), [] as PuntoOperacion[], fallos),
+      // Con filtro los QR NI SE CONSULTAN: la bitácora no guarda ni sucursal
+      // ni empleado, así que no hay forma honesta de recortarlos. La vista y
+      // el CSV esconden la sección y dicen por qué; los ceros no se pintan.
+      filtro
+        ? Promise.resolve({} as Record<string, number>)
+        : seguro(contarQr(tx, companyId, rango), {} as Record<string, number>, fallos),
+      seguro(serieDiaria(tx, companyId, rango, timeZone, filtro), [] as PuntoOperacion[], fallos),
       // Por defecto `true`: si la comprobación falla, se avisa de más. Dar por
       // completa una cobertura que no se pudo verificar es el único error de
       // los dos que hace que alguien confíe en un número incompleto.
       seguro(rellenoPendiente(tx), true, fallos),
     ])
-  )
+
+    return {
+      filtro,
+      actual,
+      anterior,
+      revertidas,
+      clientes,
+      sucursales,
+      empleados,
+      servicios,
+      qr,
+      serie,
+      pendiente,
+    }
+  })
 
   return {
     canjes: kpi(actual.canjes, anterior.canjes),
@@ -423,6 +573,7 @@ export async function getReporteOperacion(
     qrCompartidos: qr.QR_COMPARTIDO ?? 0,
     serie,
     cobertura: { pendiente },
+    filtro,
     incompleto: fallos.n > 0,
   }
 }

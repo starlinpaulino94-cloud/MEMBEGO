@@ -40,6 +40,27 @@ import type { Kpi } from '@/modules/reportes/queries'
  * `PENDING` es una intención, y sumarla a un ingreso es contar dinero que
  * todavía no existe. `CANCELLED` y `REVERTED` van aparte, porque un negocio
  * que anula mucho tiene un problema que el total esconde.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL FILTRO POR SUCURSAL, Y HASTA DÓNDE LLEGA
+ *
+ * «¿Cuánto cobró la sucursal del Este este mes?» se responde filtrando lo que
+ * de verdad tiene sucursal: la caja (`Transaction.sucursalId`) y los cobros de
+ * membresía (`Membership.sucursalPagoId` — dónde se PAGÓ; una transferencia no
+ * se pagó en ninguna y con filtro queda fuera, que es lo correcto).
+ *
+ * Lo que NO tiene sucursal no se recorta ni se disfraza:
+ * - Los intentos de la pasarela (`PagoIntento`) son pagos en línea: no
+ *   pertenecen a ningún mostrador. Con filtro ni se consultan, y la vista y
+ *   el CSV dicen por qué faltan.
+ * - El recurrente estimado es una previsión de la EMPRESA: repartirlo por la
+ *   sucursal donde se pagó diría dónde se cobra, no dónde se atiende.
+ * - «Cobrado sin entregar» es una ALARMA, no una cifra del periodo: se sigue
+ *   mirando entera aunque haya filtro, porque un pago atascado no deja de
+ *   ser un problema por estar mirando otra sucursal.
+ *
+ * Un id que no existe o es de otra empresa NO filtra en silencio: se valida y
+ * se descarta, igual que `leerRango` descarta un preset inventado.
  */
 
 type Tx = Prisma.TransactionClient
@@ -48,6 +69,16 @@ type Tx = Prisma.TransactionClient
 const COBRADOS = ['APPROVED', 'APPLIED'] as const
 /** Deshechos. No restan del ingreso: se cuentan aparte y se miran. */
 const DESHECHOS = ['CANCELLED', 'REVERTED'] as const
+
+/** Lo que la URL pide filtrar. Id sin validar: aquí se valida. */
+export interface FiltroFinanzas {
+  sucursalId?: string
+}
+
+/** El filtro que de verdad se aplicó, con el nombre resuelto para pantalla y CSV. */
+export interface FiltroFinanzasAplicado {
+  sucursal: { id: string; nombre: string }
+}
 
 export interface ReporteFinanzas {
   ingresosCaja: Kpi
@@ -65,14 +96,26 @@ export interface ReporteFinanzas {
   descuentos: number
   /** ESTIMACIÓN, no caja. Ver la cabecera del módulo. */
   recurrenteEstimado: { monto: number; membresias: number }
+  /**
+   * `null` = toda la empresa. Con filtro, la pasarela y el recurrente vienen
+   * en cero porque NI SE CONSULTAN (no tienen sucursal); la vista y el CSV
+   * los esconden con su porqué. «Cobrado sin entregar» sí viene, entero.
+   */
+  filtro: FiltroFinanzasAplicado | null
   incompleto: boolean
 }
 
-function whereCobros(companyId: string, desde: Date, hasta: Date): Prisma.TransactionWhereInput {
+function whereCobros(
+  companyId: string,
+  desde: Date,
+  hasta: Date,
+  filtro: FiltroFinanzasAplicado | null
+): Prisma.TransactionWhereInput {
   return {
     companyId,
     estado: { in: [...COBRADOS] },
     createdAt: { gte: desde, lt: hasta },
+    ...(filtro ? { sucursalId: filtro.sucursal.id } : {}),
   }
 }
 
@@ -80,10 +123,11 @@ async function sumarCaja(
   tx: Tx,
   companyId: string,
   desde: Date,
-  hasta: Date
+  hasta: Date,
+  filtro: FiltroFinanzasAplicado | null
 ): Promise<{ monto: number; operaciones: number }> {
   const agg = await tx.transaction.aggregate({
-    where: whereCobros(companyId, desde, hasta),
+    where: whereCobros(companyId, desde, hasta, filtro),
     _sum: { monto: true },
     _count: { _all: true },
   })
@@ -94,14 +138,21 @@ async function sumarMembresias(
   tx: Tx,
   companyId: string,
   desde: Date,
-  hasta: Date
+  hasta: Date,
+  filtro: FiltroFinanzasAplicado | null
 ): Promise<number> {
   // `whereCobrado` es la única puerta para fechar un cobro: `fechaPago`, con
   // respaldo a `updatedAt` solo en las filas anteriores a esa columna. Fechar
   // por `updatedAt` haría que editar una membresía vieja moviera su cobro de
   // mes, y un informe ya cerrado cambiaría solo.
+  //
+  // El filtro va por `sucursalPagoId`: dónde se PAGÓ. Una transferencia no se
+  // pagó en ninguna sucursal y con filtro queda fuera, que es lo correcto.
   const agg = await tx.membership.aggregate({
-    where: whereCobrado(desde, hasta, { companyId }),
+    where: whereCobrado(desde, hasta, {
+      companyId,
+      ...(filtro ? { sucursalPagoId: filtro.sucursal.id } : {}),
+    }),
     _sum: { montoPagado: true },
   })
   return Number(agg._sum.montoPagado ?? 0)
@@ -111,11 +162,12 @@ async function porMetodo(
   tx: Tx,
   companyId: string,
   desde: Date,
-  hasta: Date
+  hasta: Date,
+  filtro: FiltroFinanzasAplicado | null
 ): Promise<{ metodo: string; operaciones: number; monto: number }[]> {
   const filas = await tx.transaction.groupBy({
     by: ['metodoCobro'],
-    where: whereCobros(companyId, desde, hasta),
+    where: whereCobros(companyId, desde, hasta, filtro),
     _sum: { monto: true },
     _count: { _all: true },
   })
@@ -196,13 +248,15 @@ async function deshechas(
   tx: Tx,
   companyId: string,
   desde: Date,
-  hasta: Date
+  hasta: Date,
+  filtro: FiltroFinanzasAplicado | null
 ): Promise<{ total: number; monto: number }> {
   const agg = await tx.transaction.aggregate({
     where: {
       companyId,
       estado: { in: [...DESHECHOS] },
       createdAt: { gte: desde, lt: hasta },
+      ...(filtro ? { sucursalId: filtro.sucursal.id } : {}),
     },
     _sum: { monto: true },
     _count: { _all: true },
@@ -214,10 +268,18 @@ async function sumarDescuentos(
   tx: Tx,
   companyId: string,
   desde: Date,
-  hasta: Date
+  hasta: Date,
+  filtro: FiltroFinanzasAplicado | null
 ): Promise<number> {
+  // Mismo criterio y mismo camino que `sumarMembresias`: si los cobros de
+  // membresía se recortan por sucursal de pago, sus descuentos también, o la
+  // nota «ya restados de lo cobrado» dejaría de ser verdad bajo filtro.
   const agg = await tx.membership.aggregate({
-    where: whereCobrado(desde, hasta, { companyId, descuentoBienvenida: { not: null } }),
+    where: whereCobrado(desde, hasta, {
+      companyId,
+      descuentoBienvenida: { not: null },
+      ...(filtro ? { sucursalPagoId: filtro.sucursal.id } : {}),
+    }),
     _sum: { descuentoBienvenida: true },
   })
   return Number(agg._sum.descuentoBienvenida ?? 0)
@@ -253,6 +315,24 @@ async function recurrenteEstimado(
   return { monto: Math.round(monto), membresias: filas.length }
 }
 
+/**
+ * Valida el filtro pedido contra la base y devuelve el que SE APLICA. Un id
+ * inventado o de otro inquilino no resuelve, y ese filtro se descarta: aplicar
+ * a ciegas pintaría todo en cero, y el cero es una afirmación sobre la caja.
+ */
+async function resolverFiltro(
+  tx: Tx,
+  companyId: string,
+  pedido: FiltroFinanzas
+): Promise<FiltroFinanzasAplicado | null> {
+  if (!pedido.sucursalId) return null
+  const sucursal = await tx.sucursal.findFirst({
+    where: { id: pedido.sucursalId, companyId },
+    select: { id: true, nombre: true },
+  })
+  return sucursal ? { sucursal } : null
+}
+
 async function seguro<T>(p: Promise<T>, porDefecto: T, fallos: { n: number }): Promise<T> {
   try {
     return await p
@@ -272,13 +352,15 @@ const kpi = (valor: number, anterior: number): Kpi => ({
 export async function getReporteFinanzas(
   companyId: string,
   rango: Rango,
-  ahora: Date = new Date()
+  ahora: Date = new Date(),
+  opciones: { filtro?: FiltroFinanzas } = {}
 ): Promise<ReporteFinanzas> {
   const fallos = { n: 0 }
   const cero = { monto: 0, operaciones: 0 }
   const ceroTotal = { total: 0, monto: 0 }
 
-  const [
+  const {
+    filtro,
     caja,
     cajaAnt,
     membresias,
@@ -290,25 +372,74 @@ export async function getReporteFinanzas(
     anuladas,
     descuentos,
     recurrente,
-  ] = await conEmpresa(companyId, (tx) =>
-    Promise.all([
-      seguro(sumarCaja(tx, companyId, rango.desde, rango.hasta), cero, fallos),
-      seguro(sumarCaja(tx, companyId, rango.anterior.desde, rango.anterior.hasta), cero, fallos),
-      seguro(sumarMembresias(tx, companyId, rango.desde, rango.hasta), 0, fallos),
+  } = await conEmpresa(companyId, async (tx) => {
+    // El filtro se resuelve ANTES que todo, porque casi todo lo lleva dentro.
+    // Si la validación falla, se sigue SIN filtro y con el aviso de reporte
+    // incompleto: peor que un aviso sería aplicar un filtro a medias.
+    const filtro = opciones.filtro
+      ? await seguro(resolverFiltro(tx, companyId, opciones.filtro), null, fallos)
+      : null
+
+    const [
+      caja,
+      cajaAnt,
+      membresias,
+      membresiasAnt,
+      metodos,
+      intentos,
+      motivos,
+      sinEntregar,
+      anuladas,
+      descuentos,
+      recurrente,
+    ] = await Promise.all([
+      seguro(sumarCaja(tx, companyId, rango.desde, rango.hasta, filtro), cero, fallos),
       seguro(
-        sumarMembresias(tx, companyId, rango.anterior.desde, rango.anterior.hasta),
+        sumarCaja(tx, companyId, rango.anterior.desde, rango.anterior.hasta, filtro),
+        cero,
+        fallos
+      ),
+      seguro(sumarMembresias(tx, companyId, rango.desde, rango.hasta, filtro), 0, fallos),
+      seguro(
+        sumarMembresias(tx, companyId, rango.anterior.desde, rango.anterior.hasta, filtro),
         0,
         fallos
       ),
-      seguro(porMetodo(tx, companyId, rango.desde, rango.hasta), [], fallos),
-      seguro(intentosPorEstado(tx, companyId, rango.desde, rango.hasta), [], fallos),
-      seguro(motivosDeRechazo(tx, companyId, rango.desde, rango.hasta), [], fallos),
+      seguro(porMetodo(tx, companyId, rango.desde, rango.hasta, filtro), [], fallos),
+      // La pasarela no tiene sucursal: con filtro NI SE CONSULTA, y la vista
+      // y el CSV dicen por qué falta. Un total de empresa bajo un título
+      // filtrado sería un número mentiroso.
+      filtro
+        ? Promise.resolve([])
+        : seguro(intentosPorEstado(tx, companyId, rango.desde, rango.hasta), [], fallos),
+      filtro
+        ? Promise.resolve([])
+        : seguro(motivosDeRechazo(tx, companyId, rango.desde, rango.hasta), [], fallos),
+      // La ALARMA no se apaga por filtrar: cobrado sin entregar se mira
+      // entero siempre, y la vista lo rotula como de toda la empresa.
       seguro(cobradoSinEntregar(tx, companyId), ceroTotal, fallos),
-      seguro(deshechas(tx, companyId, rango.desde, rango.hasta), ceroTotal, fallos),
-      seguro(sumarDescuentos(tx, companyId, rango.desde, rango.hasta), 0, fallos),
-      seguro(recurrenteEstimado(tx, companyId, ahora), { monto: 0, membresias: 0 }, fallos),
+      seguro(deshechas(tx, companyId, rango.desde, rango.hasta, filtro), ceroTotal, fallos),
+      seguro(sumarDescuentos(tx, companyId, rango.desde, rango.hasta, filtro), 0, fallos),
+      filtro
+        ? Promise.resolve({ monto: 0, membresias: 0 })
+        : seguro(recurrenteEstimado(tx, companyId, ahora), { monto: 0, membresias: 0 }, fallos),
     ])
-  )
+
+    return {
+      filtro,
+      caja,
+      cajaAnt,
+      membresias,
+      membresiasAnt,
+      metodos,
+      intentos,
+      motivos,
+      sinEntregar,
+      anuladas,
+      descuentos,
+      recurrente,
+    }
+  })
 
   const aprobados = intentos.find((i) => i.estado === 'APROBADO')?.total ?? 0
   const rechazados = intentos.find((i) => i.estado === 'RECHAZADO')?.total ?? 0
@@ -329,6 +460,7 @@ export async function getReporteFinanzas(
     deshechas: anuladas,
     descuentos,
     recurrenteEstimado: recurrente,
+    filtro,
     incompleto: fallos.n > 0,
   }
 }

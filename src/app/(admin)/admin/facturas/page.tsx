@@ -1,8 +1,8 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { conEmpresa } from '@/lib/tenant'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
-import { ADMIN_ROLES } from '@/types'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
@@ -79,7 +79,14 @@ export default async function FacturasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requireRole(ADMIN_ROLES)
+  // `requireSection` y no `requireRole(ADMIN_ROLES)`: este historial lleva los
+  // montos de cada venta, y hasta que 'facturas' fue una sección no había forma
+  // de quitárselo a un empleado concreto — el formulario de Permisos no tenía
+  // qué ofrecer. Además `ADMIN_ROLES` incluye MARKETING y SUPERVISOR, a los que
+  // la sección no se les concedió: hasta hoy solo los frenaba el proxy, y esta
+  // pantalla —la que lee los montos— los habría dejado pasar.
+  const user = await requireSection('facturas')
+  if (!user) redirect('/admin/dashboard')
   const companyId = await requireCompanyContext(user)
   const sp = await searchParams
   const { q = '', ver = '' } = sp

@@ -73,6 +73,11 @@ export async function GET(req: NextRequest) {
         ['Renovaciones automaticas', r.renovadasAutomaticas, '', ''],
         ['Cancelaciones', r.canceladas.valor, r.canceladas.anterior, r.canceladas.variacion ?? ''],
         ['Vencimientos', r.vencidas.valor, r.vencidas.anterior, r.vencidas.variacion ?? ''],
+        // El resto del ciclo viaja al archivo IGUAL que a la pantalla: un CSV
+        // al que le faltan cifras que la vista sí enseña es otro reporte.
+        ['Creadas (pendientes de pago)', r.creadas.valor, r.creadas.anterior, r.creadas.variacion ?? ''],
+        ['Pagos rechazados', r.rechazadas.valor, r.rechazadas.anterior, r.rechazadas.variacion ?? ''],
+        ['Ajustes manuales', r.ajustadas.valor, r.ajustadas.anterior, r.ajustadas.variacion ?? ''],
         ['Tasa de renovacion %', r.tasaRenovacion ?? 'sin dato', '', ''],
       ],
     },

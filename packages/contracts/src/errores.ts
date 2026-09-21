@@ -47,6 +47,24 @@ export const CODIGOS_ERROR = {
    * alguien capturó la URL.
    */
   SSO_TOKEN_ALREADY_USED: 409,
+  /**
+   * Un dato único (teléfono, correo) ya pertenece a OTRO cliente de la empresa.
+   *
+   * 409 y no 400: la petición está bien formada, el choque es con el estado
+   * actual. Fusionar dos fichas por un teléfono compartido parte —o une— el
+   * historial de dos personas reales sin vuelta atrás, así que se rechaza y se
+   * dice cuál es el conflicto.
+   */
+  CUSTOMER_CONFLICT: 409,
+  /**
+   * La empresa llegó al máximo que su plan le concede (webhooks, claves…).
+   *
+   * 403 y no 400: la petición está bien formada y el cliente no puede
+   * arreglarla cambiándola. Tampoco 429 —no es un problema de ritmo— ni 402,
+   * que promete una pasarela de pago que aquí no existe: lo resuelve el plan,
+   * no reintentar.
+   */
+  QUOTA_EXCEEDED: 403,
   // 429
   RATE_LIMITED: 429,
   // 5xx

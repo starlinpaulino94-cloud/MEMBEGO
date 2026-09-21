@@ -373,6 +373,13 @@ export interface SenalesConexion {
   claseError: ClaseError | null
   /** CONNECTED pero con fallos recientes: funciona a medias. */
   degradada: boolean
+  /**
+   * SALUD ACTIVA (B-3): el chequeo proactivo la marcó porque una credencial sin
+   * refresco se acerca a su caducidad. Sigue CONNECTED y funcionando, pero hay
+   * que reconectar antes de que se caiga. Condición persistente, no un fallo
+   * transitorio como `degradada`.
+   */
+  reautorizar: boolean
 }
 
 export interface SenalesIntegracion {
@@ -413,6 +420,11 @@ export function decidirEstadoIntegracion(s: SenalesIntegracion): EstadoIntegraci
       if (clase && CLASES_QUE_PIDEN_RECONECTAR.includes(clase)) return 'REAUTORIZAR'
       return 'CON_PROBLEMAS'
     }
+    // CONNECTED. La salud activa (B-3) gana a `degradada`: una credencial que se
+    // acerca a su caducidad solo la arregla reconectar, y decirlo es más
+    // accionable que un «algo falló hace poco» que podría curarse solo. Se pide
+    // reconectar mientras la conexión TODAVÍA funciona, que es el punto.
+    if (viva.reautorizar) return 'REAUTORIZAR'
     return viva.degradada ? 'REQUIERE_ATENCION' : 'CONECTADA'
   }
 

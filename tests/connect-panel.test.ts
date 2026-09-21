@@ -52,15 +52,45 @@ test('panel: ninguna acción acepta el companyId del formulario', () => {
   assert.ok(usos.length >= acciones.length, 'toda acción toma la empresa de la sesión')
 })
 
-test('panel: solo se ofrecen permisos de LECTURA', () => {
-  // Los recursos de escritura de la API v1 exigen credencial de satélite:
-  // ofrecer aquí `benefits:redeem` sería listar un permiso que la guardia va a
-  // rechazar después.
-  assert.match(ACCIONES, /\.filter\(\(s\) => s\.endsWith\(':read'\)\)/)
+test('panel: no se ofrece NINGUNA escritura de negocio', () => {
+  /**
+   * La regla era «solo lectura». Desde la app de Zapier (B-2) hay UNA
+   * excepción nombrada, `webhooks:manage`, y la razón de que se pueda conceder
+   * es que no es una escritura de negocio: no crea clientes ni consume
+   * beneficios, solo cambia a quién avisa MembeGo, y ese «quién» es la propia
+   * empresa que presenta la clave. No hay operación que atribuir.
+   *
+   * Lo que esta guardia vigila ahora es más preciso que antes, no más flojo:
+   * que la lista de excepciones siga siendo minúscula, y que ninguna escritura
+   * de negocio se cuele por ella. Ofrecer `benefits:redeem` seguiría siendo
+   * listar un permiso que la guardia del servidor va a rechazar después — un
+   * interruptor pintado.
+   */
+  const excepciones = [...ACCIONES.matchAll(/SCOPES_DE_ADMINISTRACION = \[([^\]]*)\]/g)]
+    .flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]))
+  // La lista puede crecer, pero SOLO con permisos que no mueven valor de
+  // negocio (config de avisos, editar la propia ficha de un cliente). Un
+  // `:write`/`:redeem`/`:publish` aquí sería abrir una escritura de satélite a
+  // una clave de empresa, que es lo que la guardia de abajo impide.
+  assert.deepEqual(
+    excepciones.slice().sort(),
+    ['customers:manage', 'webhooks:manage'],
+    'cambió la lista de excepciones'
+  )
+
+  const permitido = (v: string) => v.endsWith(':read') || excepciones.includes(v)
+
   const panel = leer('src/components/connect/ClavesApiPanel.tsx')
   const valores = [...panel.matchAll(/valor: '([^']+)'/g)].map((m) => m[1])
   assert.ok(valores.length > 0)
-  for (const v of valores) assert.ok(v.endsWith(':read'), `${v} no es de lectura`)
+  for (const v of valores) {
+    assert.ok(permitido(v), `${v} no es de lectura ni una excepción nombrada`)
+    // Y la comprobación que de verdad importa: nada que escriba negocio.
+    assert.doesNotMatch(v, /:(write|redeem|publish)$/, `${v} es una escritura de negocio`)
+  }
+
+  // El servidor filtra con el mismo criterio que la pantalla ofrece.
+  assert.match(ACCIONES, /s\.endsWith\(':read'\) \|\| SCOPES_DE_ADMINISTRACION\.includes\(s\)/)
 })
 
 test('panel: el catálogo se lee de la base y el vacío se dice', () => {

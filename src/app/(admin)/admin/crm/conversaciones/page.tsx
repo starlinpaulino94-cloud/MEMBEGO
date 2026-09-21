@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { MessageSquare } from 'lucide-react'
-import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Hilo } from '@/components/crm/bandeja/Hilo'
@@ -37,7 +36,7 @@ export default async function ConversacionesPage({
 }: {
   searchParams: Promise<{ c?: string; canal?: string; estado?: string; q?: string }>
 }) {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('leads')
   if (!user?.metadata.companyId) redirect('/admin/dashboard')
   const companyId = user.metadata.companyId
 

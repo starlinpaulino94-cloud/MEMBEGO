@@ -42,18 +42,56 @@ export interface ClavesLegado {
 /** Lo que llega de verdad por el cable: el sobre más las claves de legado. */
 export type CuerpoWebhook = SobreEvento & ClavesLegado
 
-/** Nombre v2 de cada evento interno de MembeGo. */
+/**
+ * Nombre v2 de cada evento interno de MembeGo.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ESTE MAPA ES UNA TABLA DE TRADUCCIÓN, NO UN CATÁLOGO DE EMISIÓN (B-4)
+ *
+ * Que un evento esté aquí no significa que el bus lo emita: significa que, SI
+ * viaja por el cable, este es su nombre. Qué eventos se emiten de verdad lo dice
+ * `EVENTOS_EMITIDOS` (en el servidor), y a qué SATÉLITES se entregan,
+ * `EVENTOS_REENVIADOS`. Separarlo importa: hasta B-4, decenas de eventos que el
+ * bus SÍ emite —`promocion.creada`, `mensaje.recibido`, `cliente.actualizado`—
+ * salían a los webhooks de empresa con su nombre INTERNO en español, porque no
+ * tenían entrada aquí. `tipoV2` devuelve el nombre interno cuando no encuentra
+ * traducción, así que el hueco no daba error: daba un identificador en español
+ * en la superficie que un integrador copia a su Zapier.
+ *
+ * `reserva.creada` y `venta.generada` siguen en el mapa aunque el bus todavía no
+ * los emita: son nombres RESERVADOS para cuando esos flujos los emitan, y
+ * tenerlos aquí evita que el día que se conecten nazcan con dos nombres. No
+ * entran en `EVENTOS_EMITIDOS` hasta que de verdad se disparen.
+ */
 export const TIPO_V2: Record<string, string> = {
   'cliente.registrado': 'customer.created',
+  'cliente.actualizado': 'customer.updated',
+  'cliente.eliminado': 'customer.deleted',
   'cliente.primera_visita': 'visit.first_completed',
   'cliente.visita': 'visit.completed',
   'cliente.compro_servicio': 'purchase.completed',
   'cliente.primera_compra': 'purchase.first_completed',
   'membresia.activada': 'membership.activated',
+  'membresia.cancelada': 'membership.cancelled',
+  'membresia.vencida': 'membership.expired',
   'referido.convirtio': 'referral.converted',
+  'referido.invitado_registrado': 'referral.registered',
+  'mensaje.recibido': 'message.received',
+  'prospecto.creado': 'prospect.created',
+  'promocion.creada': 'promotion.created',
+  'promocion.actualizada': 'promotion.updated',
+  'promocion.eliminada': 'promotion.deleted',
+  'promocion.duplicada': 'promotion.duplicated',
+  'promocion.activada': 'promotion.activated',
+  'promocion.pausada': 'promotion.paused',
+  'promocion.archivada': 'promotion.archived',
   'reserva.creada': 'reservation.created',
   'reserva.pagada': 'reservation.paid',
   'venta.generada': 'sale.created',
+  // Agenda de citas (B-5): la cancelación ya tiene emisor real (el panel, el
+  // propio cliente y la API pública). `cita.creada`/`cita.movida` quedan sin
+  // nombrar hasta que su flujo las emita, por la misma regla de oro.
+  'cita.cancelada': 'appointment.cancelled',
 }
 
 export const TIPO_INTERNO: Record<string, string> = Object.fromEntries(

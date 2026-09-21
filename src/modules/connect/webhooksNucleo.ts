@@ -38,11 +38,39 @@ const HOSTS_PROHIBIDOS = new Set([
 ])
 
 function esHostInterno(host: string): boolean {
-  const h = host.toLowerCase()
+  // Normaliza ANTES de comparar. Dos formas del mismo host se colaban por aquí:
+  //   · el punto DNS final —`metadata.google.internal.` es el MISMO host que sin
+  //     el punto, pero `.endsWith('.internal')` y el `Set` no lo veían—;
+  //   · los corchetes de un literal IPv6 —`[::1]` no es `::1` para el `Set`—.
+  let h = host.toLowerCase()
+  if (h.endsWith('.')) h = h.slice(0, -1)
+  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1)
+
   if (HOSTS_PROHIBIDOS.has(h)) return true
   if (h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.localhost')) return true
-  // Rangos privados IPv4: 10/8, 192.168/16, 172.16–31/12 y el enlace local.
-  if (/^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h)) return true
+
+  // ── IPv6 ──────────────────────────────────────────────────────────────────
+  // Un literal IPv6 en una URL de webhook no es una dirección de negocio: es un
+  // vector de SSRF. `[::1]` (loopback), `[fd00::1]` (ULA), `[fe80::1]` (enlace
+  // local) y sobre todo `[::ffff:169.254.169.254]` (IPv4 mapeada al metadato de
+  // la nube) se colaban todos. Un receptor público de verdad se nombra con un
+  // dominio; así que se RECHAZA cualquier literal IPv6, que cierra la familia
+  // entera sin tener que enumerar sus rangos privados uno a uno.
+  if (h.includes(':')) return true
+
+  // ── IPv4 ──────────────────────────────────────────────────────────────────
+  // Loopback ENTERO (127/8, no solo 127.0.0.1), «este host» (0/8), y los rangos
+  // privados y de enlace local. Antes solo se bloqueaba `127.0.0.1` exacto, así
+  // que `127.0.0.2` o `127.1.2.3` llegaban a un servicio atado a loopback.
+  if (
+    /^127\./.test(h) ||
+    /^0\./.test(h) ||
+    /^10\./.test(h) ||
+    /^192\.168\./.test(h) ||
+    /^169\.254\./.test(h)
+  ) {
+    return true
+  }
   const m = /^172\.(\d{1,3})\./.exec(h)
   if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true
   return false

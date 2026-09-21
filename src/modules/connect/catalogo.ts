@@ -75,6 +75,8 @@ interface FilaConexion {
   claseError: string | null
   ultimoOkAt: Date | null
   ultimoErrorAt: Date | null
+  /** Salud activa (B-3): marcada por el chequeo proactivo, o null si sana. */
+  reautorizarAt: Date | null
   conector: { slug: string }
 }
 
@@ -96,6 +98,7 @@ function senalesDe(fila: FilaConexion | undefined, ahora: number): SenalesConexi
     estado: fila.estado as SenalesConexion['estado'],
     claseError: clase,
     degradada: estaDegradada(fila, ahora),
+    reautorizar: fila.reautorizarAt !== null,
   }
 }
 
@@ -152,6 +155,7 @@ export async function catalogoDeEmpresa(companyId: string): Promise<EntradaCatal
           claseError: true,
           ultimoOkAt: true,
           ultimoErrorAt: true,
+          reautorizarAt: true,
           conector: { select: { slug: true } },
         },
       })

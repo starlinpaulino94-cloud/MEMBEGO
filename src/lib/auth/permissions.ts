@@ -10,6 +10,14 @@ import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
  * server actions sensibles (`requireSection`), que son la barrera real: el
  * gate del middleware no protege las actions (se despachan por ID sobre
  * cualquier path permitido).
+ *
+ * INVARIANTE: toda ruta `/admin/*` que aparezca en el menú lateral tiene que
+ * resolver a una sección de esta lista. Una que no esté aquí no es un módulo
+ * "sin permisos": es un módulo que el panel de PERMISOS POR EMPLEADO no puede
+ * ni conceder ni negar, porque no hay casilla que marcar. Así se coló
+ * `facturas` durante meses. Lo vigila la prueba «toda ruta /admin del menú
+ * resuelve a una sección conocida» (tests/permisos-empleado.test.ts), que
+ * lleva además la lista de las que siguen sin gobernar, que hoy está vacía.
  */
 export const ADMIN_SECTIONS = [
   'dashboard',
@@ -22,6 +30,11 @@ export const ADMIN_SECTIONS = [
   'crecimiento',
   'scanner',
   'pagos',
+  // Comprobantes (`/admin/facturas`): el historial permanente de ventas y
+  // entregas sin cobro, con sus montos. Estaba en el menú y NO aquí, así que
+  // el módulo de Permisos no podía ofrecerlo — no había forma de quitarle a un
+  // empleado concreto el historial de dinero sin quitarle también el rol.
+  'facturas',
   'citas',
   'ofertas',
   'perfil',
@@ -51,14 +64,30 @@ export const ADMIN_SECTIONS = [
   'marketing',
   'gamificacion',
   'personalizacion',
+  // Sinónimos de búsqueda (`/admin/sinonimos`): las equivalencias con las que
+  // los clientes de la empresa encuentran su catálogo. Segundo caso destapado
+  // por la prueba del menú, y más serio que `facturas`: sus dos server actions
+  // (`guardarSinonimoEmpresa`, `eliminarSinonimoEmpresa`) pedían
+  // `requireRole(ADMIN_ROLES)`, que incluye MARKETING y SUPERVISOR. Como las
+  // actions se despachan por ID desde cualquier path permitido, el gate del
+  // proxy no las tapaba: se podían llamar sin poder abrir la pantalla.
+  'sinonimos',
   // Módulo de EXCURSIONES (ventas, vendedores y comisiones). Detrás de la
   // capacidad EXCURSIONES: sin ella encendida, requireSection la niega.
   'excursiones',
-  // CRM: gestión de leads, seguimiento y pipeline comercial.
+  // CRM (`/admin/crm/*`). UNA sección para el módulo entero, y a propósito:
+  // su layout exige 'leads' para todo el subárbol y `SECCION_POR_PREFIJO` le
+  // manda las rutas, así que negarla cierra de una vez prospectos,
+  // conversaciones, seguimientos, métricas y configuración.
+  //
+  // Aquí hubo también 'conversaciones', 'pipeline' y 'configuracion'. Ninguna
+  // se exigió nunca en ningún sitio —cero `requireSection`, y sin ruta propia
+  // que el proxy pudiera cerrar—, así que eran tres casillas del formulario de
+  // Permisos que no cambiaban ningún acceso: exactamente el «interruptor
+  // pintado» que `funciones.ts` prohíbe para las funciones. Si el CRM llega a
+  // necesitar permisos finos, se añaden CON su guardia y no antes; lo vigila
+  // la prueba «toda sección se exige en algún sitio».
   'leads',
-  'conversaciones',
-  'pipeline',
-  'configuracion',
   // Membego Connect (Fase 4): claves de API, webhooks y actividad de las
   // integraciones de la empresa. Es una sección de CONFIGURACIÓN sensible —
   // una clave de API abre los datos de la empresa a un tercero— así que no
@@ -78,6 +107,29 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 // Secciones permitidas por rol acotado (Decisión 2 del plan de onboarding).
 // MARKETING = difusión; SUPERVISOR = operación. Ambos incluyen 'dashboard'
 // como aterrizaje. Todo lo no listado queda denegado (fail-closed).
+//
+// `facturas` NO entra en ninguno de los dos, y es una decisión, no un olvido:
+// Supervisión ya tiene `pagos`, `registros` y `conciliacion`, así que el
+// historial de comprobantes le encajaría… salvo que reimprimir uno pasa por
+// `registrarImpresionTx`, guardada por `SCANNER_ROLES`, que NO incluye
+// SUPERVISOR. Darle la pantalla sin la acción es un botón que contesta "No
+// autorizado". Primero se decide si Supervisión reimprime; después se le abre
+// la sección.
+//
+// Mientras tanto, en la práctica no le cambia el acceso a NADIE: los roles
+// plenos ya entraban y los acotados ya rebotaban en el proxy, que denegaba los
+// paths de /admin sin sección. Lo que sí cambia es que ahora se puede
+// gobernar — y que la pantalla dejó de fiarse solo del proxy: pasó de
+// `requireRole(ADMIN_ROLES)`, que incluye a Marketing y Supervisión, a
+// `requireSection('facturas')`, que no.
+//
+// `sinonimos` tampoco entra, y por el mismo motivo de fondo: el menú nunca se
+// lo enseñó a los roles acotados, y cambiarle el dueño a un módulo no se hace
+// de paso. La diferencia con `facturas` es que aquí sí había una puerta
+// abierta: sus server actions aceptaban `ADMIN_ROLES`, y a las actions el
+// proxy no las cubre. Ahora piden la sección, así que Marketing y Supervisión
+// dejan de poder tocar los sinónimos — que es lo que el menú ya daba a
+// entender.
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // 'riesgo' entra en los dos: Marketing lo necesita para saber a quién
   // dirigir una campaña de retención, y Supervisión para repartir las llamadas.
@@ -224,6 +276,25 @@ export function permisosDesdeSeleccion(
 }
 
 /**
+ * Prefijos cuyo primer segmento NO da su nombre a una sección.
+ *
+ * Hoy solo el CRM. Sus pantallas viven bajo `/admin/crm/*` pero el módulo se
+ * gobierna por `leads`, que es lo que exige su layout para todo el subárbol
+ * (`src/app/(admin)/admin/crm/layout.tsx`) y lo que piden todas sus server
+ * actions. El catálogo de capacidades ya lo decía —«todo /admin/crm cuelga de
+ * la sección 'leads'»—; lo que faltaba era que `adminSectionForPath` lo
+ * supiera, porque hasta ahora devolvía null y el proxy trataba el módulo
+ * entero como una ruta desconocida.
+ *
+ * Inventar una sección `crm` habría sido la otra salida, y es peor: serían
+ * cinco casillas en el formulario de Permisos para un módulo con una sola
+ * puerta, y cuatro de ellas no harían nada.
+ */
+const SECCION_POR_PREFIJO: ReadonlyArray<readonly [string, AdminSection]> = [
+  ['/admin/crm', 'leads'],
+]
+
+/**
  * Deriva la sección de un path del panel: `/admin/promociones/nuevo` →
  * `promociones`. Solo `/admin` exacto → `dashboard`. Devuelve null si el path
  * no es de /admin, tiene un segmento vacío (p. ej. `/admin//x`) o la sección
@@ -232,6 +303,9 @@ export function permisosDesdeSeleccion(
 export function adminSectionForPath(path: string): AdminSection | null {
   if (path === '/admin') return 'dashboard'
   if (!path.startsWith('/admin/')) return null
+  for (const [prefijo, seccion] of SECCION_POR_PREFIJO) {
+    if (path === prefijo || path.startsWith(prefijo + '/')) return seccion
+  }
   const seg = path.split('/')[2]
   if (!seg) return null
   return (ADMIN_SECTIONS as readonly string[]).includes(seg) ? (seg as AdminSection) : null

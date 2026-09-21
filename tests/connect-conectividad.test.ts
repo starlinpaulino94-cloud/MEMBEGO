@@ -70,11 +70,30 @@ test('webhooks: no se entrega a la red interna (SSRF)', () => {
     'https://172.16.0.9/hook',
     'https://172.31.255.1/hook',
     'https://algo.internal/hook',
+    // ── Bypasses que un guard ingenuo dejaba pasar (barrido de bugs ocultos) ──
+    // IPv6: loopback, ULA, enlace local, y la IPv4 MAPEADA al metadato de la nube
+    // —el peor, porque leería credenciales de infraestructura—.
+    'https://[::1]/hook',
+    'https://[fd00::1]/hook',
+    'https://[fe80::1]/hook',
+    'https://[::ffff:169.254.169.254]/latest/meta-data/',
+    // Loopback entero, no solo 127.0.0.1: 127/8 es todo loopback.
+    'https://127.0.0.2/hook',
+    'https://127.1.2.3/admin',
+    // «Este host» (0/8).
+    'https://0.0.0.0/hook',
+    // Punto DNS final: el MISMO host, escrito para esquivar el `endsWith`.
+    'https://metadata.google.internal./x',
+    'https://localhost./hook',
   ]) {
     assert.deepEqual(validarUrlWebhook(url), { ok: false, motivo: 'host_interno' }, url)
   }
   // 172.32 ya está FUERA del rango privado: no se puede bloquear de más.
   assert.equal(validarUrlWebhook('https://172.32.0.1/hook').ok, true)
+  // Un host público con IP decimal/hex que Node normaliza a pública sigue pasando;
+  // y un dominio normal, también. No se bloquea de más.
+  assert.equal(validarUrlWebhook('https://ejemplo.com/hook').ok, true)
+  assert.equal(validarUrlWebhook('https://hooks.zapier.com/abc').ok, true)
 })
 
 test('webhooks: sin eventos elegidos, se reciben todos', () => {
@@ -109,15 +128,30 @@ test('api: el límite por clave se cuenta ANTES de verificar el secreto', () => 
   assert.ok(i > -1 && iLimite > i && iResolver > iLimite, 'probar secretos al azar saldría gratis')
 })
 
-test('api: ninguna ruta de escritura se abrió a claves de empresa', () => {
-  // Las escrituras necesitan saber QUÉ sistema respalda la operación; una
-  // clave de empresa no puede decirlo, y un canje sin sistema no se audita.
+test('api: ninguna ESCRITURA DE NEGOCIO se abrió a claves de empresa', () => {
+  /**
+   * Las escrituras que crean o consumen valor necesitan saber QUÉ sistema las
+   * respalda; una clave de empresa no puede decirlo, y un canje sin sistema no
+   * se audita.
+   *
+   * Se mira el HANDLER concreto y no el archivo entero: desde B-5,
+   * `customers/route.ts` tiene un POST de satélite (crear) Y un GET de clave de
+   * empresa (listar), así que buscar `claveDeEmpresa` en el archivo saltaría
+   * por la lectura, que es legítima. Lo que no puede abrirse es el POST.
+   */
+  const handler = (src: string, verbo: string) => {
+    const i = src.indexOf(`export async function ${verbo}(`)
+    return i < 0 ? '' : src.slice(i, src.indexOf('\nexport ', i + 1) + 1 || src.length)
+  }
   for (const ruta of [
     'src/app/api/platform/v1/redemptions/route.ts',
     'src/app/api/platform/v1/transactions/route.ts',
     'src/app/api/platform/v1/customers/route.ts',
   ]) {
-    assert.ok(!leer(ruta).includes('claveDeEmpresa'), `${ruta} se abrió a claves de empresa`)
+    const post = handler(leer(ruta), 'POST')
+    assert.ok(post.length > 0, `${ruta}: no se encontró el POST`)
+    assert.ok(!post.includes('claveDeEmpresa'), `${ruta}: el POST se abrió a claves de empresa`)
+    assert.ok(post.includes('exigeSistema'), `${ruta}: el POST no exige un satélite`)
   }
 })
 

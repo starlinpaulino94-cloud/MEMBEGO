@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { anotarFallo, esViolacionUnica } from '@/lib/prisma-errors'
 import { firmarHmac } from '@/modules/integraciones/nucleo'
 import {
   CABECERA_ENTREGA,
@@ -24,9 +24,20 @@ import {
   type SecretosDeFirma,
 } from '@/modules/connect/webhooksNucleo'
 import { programarReintento } from '@/modules/integraciones/programador'
-import { CONCURRENCIA, antesDe, enParalelo } from '@/modules/integraciones/concurrencia'
+import {
+  CONCURRENCIA,
+  CONCURRENCIA_POR_EMPRESA,
+  antesDe,
+  enParalelo,
+  enParaleloPorClave,
+} from '@/modules/integraciones/concurrencia'
 import { esEventoEntrante } from '@/modules/connect/entrantesNucleo'
 import { agotoLosIntentos } from '@/modules/integraciones/reintentos'
+import {
+  abrirSecretosFirma,
+  estaSellado,
+  sellarSecretoWebhook,
+} from '@/modules/connect/secreto-webhook'
 
 /**
  * WEBHOOKS SALIENTES a cualquier URL (Membego Connect · Fase 3).
@@ -86,6 +97,8 @@ export async function crearSuscripcion(input: {
     return { ok: false, motivo: 'limite_alcanzado' }
   }
 
+  // Se GENERA en claro (es lo que se le enseña una vez al integrador) y se
+  // GUARDA sellado (A-7): las dos cosas del mismo valor, en momentos distintos.
   const secreto = `whs_${randomBytes(24).toString('hex')}`
   const fila = await conEmpresa(input.companyId, (tx) =>
     tx.suscripcionWebhook.create({
@@ -94,7 +107,7 @@ export async function crearSuscripcion(input: {
         nombre: input.nombre.slice(0, 120),
         url: url.url,
         eventos: input.eventos ?? [],
-        secreto,
+        secreto: sellarSecretoWebhook(input.companyId, secreto),
         creadoPor: input.creadoPor ?? null,
       },
       select: { id: true },
@@ -259,6 +272,12 @@ export async function repartirEventoAWebhooks(input: {
     // 300 s, y el número de suscripciones lo acota el entitlement. Aquí no hay
     // presupuesto que apurar; en el barrido sí.
     await enParalelo(interesadas, CONCURRENCIA, async (s) => {
+      // IDEMPOTENTE POR (suscripción, evento de dominio): re-repartir el mismo
+      // evento (cuando el barrido del bus reclama uno que quedó a medias) choca
+      // con el UNIQUE (suscripcionId, eventoId) y lanza P2002 —«esta suscripción
+      // ya tiene su entrega para este evento»—: se salta sin anotarlo como fallo.
+      // Los avisos de automatización van con `eventoId` null y nunca chocan, así
+      // que ese flujo acuña entrega nueva como siempre.
       const entrega = await conEmpresa(input.companyId, (tx) =>
         tx.entregaWebhook.create({
           data: {
@@ -270,7 +289,11 @@ export async function repartirEventoAWebhooks(input: {
           },
           select: { id: true, createdAt: true },
         })
-      ).catch(anotarFallo('connect:webhook:outbox', { evento: input.evento }))
+      ).catch((e) => {
+        if (esViolacionUnica(e)) return undefined // ya se repartió a esta suscripción
+        anotarFallo('connect:webhook:outbox', { evento: input.evento })(e)
+        return undefined
+      })
       if (!entrega) return
 
       const sobre: SobreWebhook = {
@@ -280,7 +303,9 @@ export async function repartirEventoAWebhooks(input: {
         createdAt: entrega.createdAt.toISOString(),
         data: input.datos,
       }
-      const resultado = await entregar(s.url, s, sobre)
+      // Se abre el secreto (A-7) justo antes de firmar: a partir de aquí es
+      // texto en claro en memoria, como antes de sellar.
+      const resultado = await entregar(s.url, abrirSecretosFirma(input.companyId, s), sobre)
       await registrarResultado(input.companyId, entrega.id, s.id, resultado, 1)
     })
   } catch (e) {
@@ -511,7 +536,11 @@ async function intentarEntrega(e: FilaEntrega): Promise<'enviado' | 'fallido' | 
     createdAt: e.createdAt.toISOString(),
     data: (e.payload ?? {}) as Record<string, unknown>,
   }
-  const r = await entregar(e.suscripcion.url, e.suscripcion, sobre)
+  const r = await entregar(
+    e.suscripcion.url,
+    abrirSecretosFirma(e.companyId, e.suscripcion),
+    sobre
+  )
   const intentos = e.intentos + 1
   await registrarResultado(e.companyId, e.id, e.suscripcion.id, r, intentos)
   if (r.ok) return 'enviado'
@@ -611,8 +640,14 @@ export async function rotarSecretoSuscripcion(
     tx.suscripcionWebhook.updateMany({
       where: { id, companyId },
       data: {
-        secreto: nuevo,
-        secretoAnterior: actual.secreto,
+        // El nuevo se sella (A-7). El que pasa a «anterior» se guarda como
+        // estaba: si ya venía sellado, se deja; si aún estaba en claro —una fila
+        // anterior al sellado que no pasó por el backfill—, se sella ahora, para
+        // no dejar un secreto en claro viviendo los siete días del solape.
+        secreto: sellarSecretoWebhook(companyId, nuevo),
+        secretoAnterior: estaSellado(actual.secreto)
+          ? actual.secreto
+          : sellarSecretoWebhook(companyId, actual.secreto),
         secretoAnteriorHasta: anteriorHasta,
       },
     })
@@ -806,22 +841,32 @@ export async function reintentarWebhooksPendientes(
       })
   ).catch(() => [])
 
-  // Acotado por concurrencia Y por tiempo (A-6). En serie, con un receptor
-  // caído, cada fila costaba sus diez segundos de timeout: el cron procesaba
-  // unas seis de cien y la plataforma lo mataba, sin error y sin traza. Al día
-  // siguiente repetía con las mismas seis.
-  const { sinEmpezar } = await enParalelo(
+  // Acotado por concurrencia (global Y POR EMPRESA) y por tiempo (A-6). En serie,
+  // con un receptor caído, cada fila costaba sus diez segundos de timeout: el
+  // cron procesaba unas seis de cien y la plataforma lo mataba, sin error y sin
+  // traza. Al día siguiente repetía con las mismas seis.
+  //
+  // El tope POR EMPRESA es lo que impide que un inquilino con el endpoint caído
+  // —y por eso con muchas filas acumuladas— se lleve los seis huecos del
+  // trabajador compartido y deje sin reintento a las empresas cuyo destino está
+  // sano. `enParaleloPorClave` salta las filas de una empresa que ya está a tope
+  // y atiende las de otra, en vez de bloquearse.
+  const { sinEmpezar } = await enParaleloPorClave(
     pendientes,
-    CONCURRENCIA,
     async (e) => {
       const r = await intentarEntrega(e)
       if (r === 'enviado') enviados++
       else if (r === 'agotado') agotados++
     },
-    // El margen es para que lo que esté en vuelo termine de escribir su
-    // resultado. Que nos maten a mitad de un `update` deja la fila diciendo
-    // algo que no pasó.
-    { continuar: antesDe(presupuestoMs, 12_000) }
+    {
+      limiteGlobal: CONCURRENCIA,
+      limitePorClave: CONCURRENCIA_POR_EMPRESA,
+      clave: (e) => e.companyId,
+      // El margen es para que lo que esté en vuelo termine de escribir su
+      // resultado. Que nos maten a mitad de un `update` deja la fila diciendo
+      // algo que no pasó.
+      continuar: antesDe(presupuestoMs, 12_000),
+    }
   )
 
   return { enviados, agotados, sinTiempo: sinEmpezar }

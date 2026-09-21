@@ -119,8 +119,22 @@ test('la exportación exige LOS DOS permisos', () => {
 })
 
 test('el enlace al reporte no aparece sin permiso', () => {
+  // La forma cambió cuando los enlaces sueltos pasaron a ser un mapa de
+  // categorías: antes era `verFinancieros && (<Link…>)`, ahora es una entrada
+  // condicional del array. Lo que NO puede cambiar es la regla — el reporte de
+  // dinero no se ofrece a quien no puede verlo, porque una puerta cerrada
+  // ofrecida es peor que no ofrecerla.
   const src = fuente('src', 'app', '(admin)', 'admin', 'reportes', 'page.tsx')
-  assert.match(src, /verFinancieros && \(/)
+  const i = src.indexOf("titulo: 'Finanzas y cobros'")
+  assert.notEqual(i, -1, 'desapareció la categoría de finanzas del mapa de reportes')
+  // La entrada vive DENTRO del condicional del permiso: se busca hacia atrás
+  // desde el título hasta la apertura de la lista.
+  const antes = src.slice(0, i)
+  assert.match(
+    antes.slice(-220),
+    /\.\.\.\(verFinancieros\s*\n?\s*\?/,
+    'la categoría de finanzas dejó de estar detrás de ver_financieros'
+  )
 })
 
 // ── Reglas de la casa ────────────────────────────────────────────────────────

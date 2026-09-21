@@ -226,6 +226,19 @@ export async function obtenerTicket(
   }
 }
 
+/**
+ * Reimprimir un comprobante. La guardia es `SCANNER_ROLES` + dueño de la
+ * transacción, y SE QUEDA ASÍ a propósito aunque `facturas` ya sea una sección
+ * del panel: esta acción también la llaman el escáner (`ComprobanteReceipt`,
+ * `ConfirmPromo`, `TransaccionRecord`), donde quien imprime no está en
+ * /admin/facturas. Atarla a `requireSection('facturas')` rompería el mostrador
+ * para arreglar una pantalla.
+ *
+ * El efecto secundario a tener presente: SUPERVISOR no está en
+ * `SCANNER_ROLES`, así que concederle la sección 'facturas' le daría el
+ * historial pero no el botón. Por eso no se le concedió (ver RESTRICTED_ACCESS
+ * en `src/lib/auth/permissions.ts`).
+ */
 export async function registrarImpresionTx(
   transactionId: string,
   motivo?: string

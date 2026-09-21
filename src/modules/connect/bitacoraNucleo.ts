@@ -28,6 +28,7 @@
 export const EVENTOS_CONECTOR = [
   'clave_api.creada',
   'clave_api.revocada',
+  'clave_api.revocada_por_fuga',
   'webhook.suscrito',
   'webhook.apagado_por_fallos',
   'webhook.probado',
@@ -38,6 +39,7 @@ export const EVENTOS_CONECTOR = [
   'webhook_entrante.eliminado',
   'regla_http.creada',
   'regla_http.archivada',
+  'webhook.retirado_por_api',
   'conexion.creada',
   'conexion.reiniciada',
   'conexion.desconectada',
@@ -66,6 +68,8 @@ export type EventoConector = (typeof EVENTOS_CONECTOR)[number]
 const TECNICO: Record<EventoConector, string> = {
   'clave_api.creada': 'Se creó una clave de API',
   'clave_api.revocada': 'Se revocó una clave de API',
+  'clave_api.revocada_por_fuga':
+    'Se revocó una clave de API automáticamente al detectarla filtrada (GitHub Secret Scanning)',
   'webhook.suscrito': 'Se creó una suscripción de webhook',
   'webhook.apagado_por_fallos': 'Una suscripción se apagó tras fallos consecutivos',
   'webhook.probado': 'Se mandó un evento de prueba a la URL de una suscripción',
@@ -76,6 +80,7 @@ const TECNICO: Record<EventoConector, string> = {
   'webhook_entrante.eliminado': 'Se eliminó un webhook entrante y su URL dejó de valer',
   'regla_http.creada': 'Se creó una regla que llama a una dirección al ocurrir un evento',
   'regla_http.archivada': 'Se archivó una regla de llamada; dejó de dispararse',
+  'webhook.retirado_por_api': 'Una clave de API retiró una suscripción de webhook',
   'conexion.creada': 'Se inició una conexión',
   'conexion.reiniciada': 'Se reinició una conexión',
   'conexion.desconectada': 'Se desconectó una aplicación y se borraron sus credenciales',
@@ -109,6 +114,11 @@ const TECNICO: Record<EventoConector, string> = {
 const NEGOCIO: Record<EventoConector, string | null> = {
   'clave_api.creada': null,
   'clave_api.revocada': null,
+  // Como el resto de eventos de clave: superficie de PROGRAMADOR, no de negocio.
+  // Quien crea y rota las claves —y quien tiene que quitar la filtrada del repo y
+  // emitir una nueva— lee el registro técnico (donde este evento sale en WARN con
+  // su nombre propio), no el historial de «¿qué le pasó a mi WhatsApp?».
+  'clave_api.revocada_por_fuga': null,
   'webhook.suscrito': null,
   'webhook.apagado_por_fallos': null,
   // Los dos son acciones de quien integra, y su resultado se ve en la misma
@@ -122,6 +132,7 @@ const NEGOCIO: Record<EventoConector, string | null> = {
   'webhook_entrante.eliminado': null,
   'regla_http.creada': null,
   'regla_http.archivada': null,
+  'webhook.retirado_por_api': null,
   'conexion.creada': 'Empezaste a conectar esta aplicación',
   'conexion.reiniciada': 'Volviste a empezar la conexión',
   'conexion.desconectada': 'Desconectaste esta aplicación',

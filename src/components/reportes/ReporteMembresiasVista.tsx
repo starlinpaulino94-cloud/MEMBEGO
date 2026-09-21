@@ -1,7 +1,10 @@
 import Link from 'next/link'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { ReporteMembresias } from '@/modules/reportes/membresias'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -39,11 +42,23 @@ export function ReporteMembresiasVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
   const detalle = (tipo: string) =>
     `/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`
 
   const hayMovimiento =
-    r.activadas.valor + r.renovadas.valor + r.canceladas.valor + r.vencidas.valor > 0
+    r.activadas.valor +
+      r.renovadas.valor +
+      r.canceladas.valor +
+      r.vencidas.valor +
+      r.creadas.valor +
+      r.rechazadas.valor +
+      r.ajustadas.valor >
+    0
   const cambios = r.cambiosDePlan
   const totalCambios = cambios.subida + cambios.bajada + cambios.lateral + cambios.desconocido
 
@@ -83,6 +98,26 @@ export function ReporteMembresiasVista({
         <KpiReporte label="Renovaciones" kpi={r.renovadas} formato={entero} />
         <KpiReporte label="Cancelaciones" kpi={r.canceladas} formato={entero} invertido />
         <KpiReporte label="Vencimientos" kpi={r.vencidas} formato={entero} invertido />
+      </div>
+
+      {/* El RESTO del ciclo, que la tabla ya guardaba y el reporte callaba:
+          nacimientos pendientes, pagos rechazados y ajustes manuales (vigencia
+          extendida, lavados corregidos). */}
+      <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <KpiReporte label="Creadas (pendientes de pago)" kpi={r.creadas} formato={entero} />
+        <KpiReporte label="Pagos rechazados" kpi={r.rechazadas} formato={entero} invertido />
+        <KpiReporte label="Ajustes manuales" kpi={r.ajustadas} formato={entero} />
+      </div>
+
+      {/* El detalle no puede vivir escondido en una nota al pie: es LA pantalla
+          que responde «¿cuándo, a quién y quién lo hizo?». */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('RENOVADA')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle evento por evento: quién, cuándo y por qué →
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
@@ -144,9 +179,9 @@ export function ReporteMembresiasVista({
               encabezados={['Plan', 'Activaciones', 'Renovaciones', 'Bajas']}
               filas={r.porPlan.map((p) => [
                 p.plan,
-                entero(p.activadas),
-                entero(p.renovadas),
-                entero(p.bajas),
+                num(p.activadas, entero(p.activadas)),
+                num(p.renovadas, entero(p.renovadas)),
+                num(p.bajas, entero(p.bajas)),
               ])}
               vacio="Ningún plan tuvo movimiento en el periodo."
             />
@@ -160,7 +195,7 @@ export function ReporteMembresiasVista({
               />
               <Tabla
                 encabezados={['Motivo', 'Veces']}
-                filas={r.motivos.map((m) => [m.motivo, entero(m.total)])}
+                filas={r.motivos.map((m) => [m.motivo, num(m.total, entero(m.total))])}
                 vacio=""
               />
             </section>
@@ -170,9 +205,9 @@ export function ReporteMembresiasVista({
             <SectionHeader title="Día a día" />
             <Tabla
               encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
-              filas={r.serie
+              filas={serie
                 .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
-                .map((p) => [p.dia, entero(p.activadas), entero(p.renovadas), entero(p.bajas)])}
+                .map((p) => [p.dia, num(p.activadas, entero(p.activadas)), num(p.renovadas, entero(p.renovadas)), num(p.bajas, entero(p.bajas))])}
               vacio="Sin movimiento diario en el periodo."
             />
           </section>
@@ -200,6 +235,18 @@ export function ReporteMembresiasVista({
         <Link href={detalle('CAMBIO_PLAN')} className="underline">
           cambios de plan
         </Link>
+        {' · '}
+        <Link href={detalle('AJUSTADA')} className="underline">
+          ajustes
+        </Link>
+        {' · '}
+        <Link href={detalle('CREADA')} className="underline">
+          creadas
+        </Link>
+        {' · '}
+        <Link href={detalle('RECHAZADA')} className="underline">
+          rechazadas
+        </Link>
       </p>
     </ReporteImprimible>
   )
@@ -211,52 +258,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

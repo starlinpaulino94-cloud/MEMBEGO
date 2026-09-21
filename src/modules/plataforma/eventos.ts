@@ -41,7 +41,7 @@ import {
   type ClavesLegado,
   type SobreEvento,
 } from '@membego/contracts'
-import { EVENTOS_REENVIADOS } from '@/modules/integraciones/nucleo'
+import { EVENTOS_EMITIDOS } from '@/modules/integraciones/nucleo'
 import { eventosDeSincronizacion } from '@/modules/plataforma/proyecciones'
 
 /**
@@ -120,11 +120,17 @@ export function cuerpoDelSobre(sobre: SobreEvento): string {
 }
 
 /**
- * Eventos que MembeGo puede emitir hoy, con su nombre v2. Es la lista que se
- * copia a la documentación del satélite.
+ * TODOS los eventos que MembeGo emite hoy, con su nombre v2 (B-4).
+ *
+ * Sale de `EVENTOS_EMITIDOS` —lo que el bus dispara de verdad— y no de
+ * `EVENTOS_REENVIADOS` —el subconjunto que llega a los satélites—: este catálogo
+ * es la superficie de INTEGRACIÓN (qué puede recibir un webhook de empresa, qué
+ * documentar), no la lista de entrega a un satélite concreto. Antes salían solo
+ * siete; con B-4, la promoción creada, el mensaje entrante o el cliente
+ * actualizado también aparecen, que es lo que un integrador espera poder elegir.
  */
 export function catalogoV2(): string[] {
-  return [...new Set(EVENTOS_REENVIADOS.map(tipoV2))].sort()
+  return [...new Set(EVENTOS_EMITIDOS.map(tipoV2))].sort()
 }
 
 /**

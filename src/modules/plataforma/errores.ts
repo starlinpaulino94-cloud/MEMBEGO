@@ -77,6 +77,8 @@ const MENSAJES: Record<CodigoError, string> = {
   REDEMPTION_CONFLICT: 'The benefit changed while redeeming. Re-evaluate and retry.',
   SSO_TOKEN_INVALID: 'The SSO token does not verify with your secret, or it expired.',
   SSO_TOKEN_ALREADY_USED: 'This SSO token was already redeemed. Tokens are single use.',
+  CUSTOMER_CONFLICT: 'That phone or email already belongs to another customer of this company.',
+  QUOTA_EXCEEDED: 'This company reached the limit its plan grants for this resource.',
   RATE_LIMITED: 'Too many requests. Slow down and retry later.',
   INTERNAL_ERROR: 'Unexpected error. Retry later; the requestId identifies this call.',
   PLATFORM_API_UNCONFIGURED: 'The platform API is not configured on this deployment.',
@@ -127,8 +129,18 @@ export function errorApi(
 }
 
 /** Respuesta correcta de la API v1, con el mismo `requestId` para correlacionar. */
-export function respuestaApi<T>(datos: T, requestId: string): NextResponse<T> {
+export function respuestaApi<T>(
+  datos: T,
+  requestId: string,
+  /**
+   * Para los recursos que CREAN algo y deben decir 201. Es opcional porque la
+   * inmensa mayoría de las rutas son lecturas, y obligarlas a pasar un 200
+   * explícito sería ruido en todas para servir a dos.
+   */
+  init: { status?: number } = {}
+): NextResponse<T> {
   return NextResponse.json(datos, {
+    ...(init.status ? { status: init.status } : {}),
     headers: { 'X-Request-Id': requestId, 'Cache-Control': 'no-store' },
   })
 }

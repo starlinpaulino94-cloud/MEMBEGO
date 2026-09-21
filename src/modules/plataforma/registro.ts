@@ -260,6 +260,32 @@ export async function sistemasDeEmpresa(
 }
 
 /**
+ * TODOS los sistemas del registro, con la decisión razonada para esta empresa.
+ *
+ * `sistemasDeEmpresa` devuelve solo los que entran, y para el lanzador es lo
+ * correcto: un botón que no abre nada es peor que ningún botón. Quien
+ * administra la empresa necesita justo lo contrario —ver el sistema que está
+ * registrado y NO aparece, y por qué—, porque si no, diagnosticar por qué falta
+ * significa abrir la base de datos a mano.
+ *
+ * El motivo es información sobre la configuración de la plataforma: quien llama
+ * decide si lo enseña, y la pantalla solo se lo enseña a administración.
+ */
+export async function sistemasConDecision(
+  companyId: string
+): Promise<{ sistema: SistemaRegistrado; decision: Decision }[]> {
+  const { tipoNegocio, sistemas } = await leerContexto(companyId, false)
+  return sistemas.map((sistema) => ({
+    sistema,
+    // Sin vertical resuelto no hay nada que comparar: cerrado, y con el motivo
+    // que apunta a lo que de verdad falta.
+    decision: tipoNegocio
+      ? decidirAcceso(sistema, tipoNegocio, sistema.habilitacion)
+      : { permitido: false, motivo: 'VERTICAL_INCOMPATIBLE' },
+  }))
+}
+
+/**
  * Decisión razonada sobre UN sistema identificado por su slug.
  *
  * Devuelve el motivo del rechazo además del veredicto: quien llama lo escribe
@@ -293,31 +319,57 @@ export async function accesoASistema(
  * ACTIVE) y nada más. El acceso de la empresa se decide DESPUÉS de abrir el
  * token, con `accesoASistema`.
  */
-export async function sistemaParaVerificarFirma(
-  slug: string
-): Promise<{ id: string; secreto: string } | null> {
+export interface SistemaParaFirma {
+  id: string
+  secreto: string
+  /** Rotación con solape (A-7): el secreto nuevo y hasta cuándo vale, o null. */
+  secretoSiguiente: string | null
+  secretoSiguienteHasta: Date | null
+}
+
+export async function sistemaParaVerificarFirma(slug: string): Promise<SistemaParaFirma | null> {
   const leer = async <T>(select: object): Promise<T | null> =>
     sinEmpresa('sso entrante: sistema por slug antes de conocer la empresa (catálogo global)', (tx) =>
       tx.sistemaConectado.findUnique({ where: { slug }, select })
     ) as Promise<T | null>
 
+  // Los campos de rotación (A-7) van en el select: la verificación de entrada
+  // acepta el token firmado con el secreto de siempre O con el nuevo mientras
+  // dure el solape, así el satélite puede cambiar su .env sin coordinar el minuto.
+  const rotacion = { secretoSiguiente: true, secretoSiguienteHasta: true }
+
   try {
-    const s = await leer<{ id: string; secreto: string; estado: string }>({
-      id: true,
-      secreto: true,
-      estado: true,
-    })
+    const s = await leer<{
+      id: string
+      secreto: string
+      estado: string
+      secretoSiguiente: string | null
+      secretoSiguienteHasta: Date | null
+    }>({ id: true, secreto: true, estado: true, ...rotacion })
     if (!s) return null
-    return normalizarEstado(s.estado) === 'ACTIVE' ? { id: s.id, secreto: s.secreto } : null
+    if (normalizarEstado(s.estado) !== 'ACTIVE') return null
+    return {
+      id: s.id,
+      secreto: s.secreto,
+      secretoSiguiente: s.secretoSiguiente,
+      secretoSiguienteHasta: s.secretoSiguienteHasta,
+    }
   } catch {
     try {
-      const s = await leer<{ id: string; secreto: string; activo: boolean }>({
-        id: true,
-        secreto: true,
-        activo: true,
-      })
+      const s = await leer<{
+        id: string
+        secreto: string
+        activo: boolean
+        secretoSiguiente: string | null
+        secretoSiguienteHasta: Date | null
+      }>({ id: true, secreto: true, activo: true, ...rotacion })
       if (!s?.activo) return null
-      return { id: s.id, secreto: s.secreto }
+      return {
+        id: s.id,
+        secreto: s.secreto,
+        secretoSiguiente: s.secretoSiguiente,
+        secretoSiguienteHasta: s.secretoSiguienteHasta,
+      }
     } catch (e) {
       console.error('[plataforma] no se pudo leer el sistema por slug:', e)
       return null

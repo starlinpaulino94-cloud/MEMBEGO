@@ -1,9 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireRole } from '@/lib/auth/guards'
+import { requireRole, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { ADMIN_ROLES } from '@/types'
 import { eliminarSinonimo, guardarSinonimo } from './sinonimos'
 
 /**
@@ -11,8 +10,14 @@ import { eliminarSinonimo, guardarSinonimo } from './sinonimos'
  *
  * Dos ámbitos con dueños distintos (decisión del usuario): los GLOBALES los
  * administra la plataforma en /superadmin/busqueda; los DE LA EMPRESA, cada
- * negocio en /admin/sinonimos. La guardia de rol y el companyId se resuelven
- * AQUÍ — el módulo puro no conoce la sesión.
+ * negocio en /admin/sinonimos. La guardia y el companyId se resuelven AQUÍ —
+ * el módulo puro no conoce la sesión.
+ *
+ * Las dos de empresa piden `requireSection('sinonimos')` y no un rol. Las
+ * server actions se despachan por ID desde cualquier path permitido, así que
+ * el gate del proxy no las cubre: con `ADMIN_ROLES` —que incluye MARKETING y
+ * SUPERVISOR— se podían llamar sin poder siquiera abrir la pantalla. Las
+ * globales siguen siendo del superadmin y nada más.
  */
 
 export interface SinonimoState {
@@ -53,7 +58,8 @@ export async function guardarSinonimoEmpresa(
   _prev: SinonimoState,
   fd: FormData
 ): Promise<SinonimoState> {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('sinonimos')
+  if (!user) return { error: 'No autorizado.' }
   const companyId = await resolveCompanyId(user, fd)
   if (!companyId) return { error: 'Empresa requerida.' }
   try {
@@ -66,7 +72,8 @@ export async function guardarSinonimoEmpresa(
 }
 
 export async function eliminarSinonimoEmpresa(fd: FormData): Promise<void> {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('sinonimos')
+  if (!user) return
   const companyId = await resolveCompanyId(user, fd)
   if (!companyId) return
   const id = String(fd.get('id') ?? '')

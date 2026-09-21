@@ -68,7 +68,23 @@ model SistemaConectado {
   /// Secreto COMPARTIDO con el satélite: firma los webhooks y los tokens SSO
   /// (HMAC-SHA256). Se genera al registrar el sistema y se copia una vez al
   /// .env del satélite. Nunca viaja en requests.
+  ///
+  /// Es el secreto PRIMARIO: con él se FIRMA todo lo saliente (tokens SSO,
+  /// webhooks). Rotarlo sin cortar el servicio (auditoría A-7) usa los dos campos
+  /// de abajo.
   secreto String
+
+  /// ROTACIÓN CON SOLAPE (A-7): el secreto NUEVO durante la ventana de cambio.
+  ///
+  /// Al rotar no se toca `secreto` —lo saliente sigue firmándose con el de
+  /// siempre, así que ningún satélite que aún no haya actualizado su .env se
+  /// rompe—: el nuevo se guarda AQUÍ y MembeGo empieza a ACEPTAR lo entrante
+  /// firmado con cualquiera de los dos. El operador instala el nuevo en el
+  /// satélite y, cuando lo confirma, `promover` lo mueve a `secreto` y lo
+  /// saliente pasa a firmarse con él. Una rotación que no se promueve caduca sin
+  /// haber cambiado nada, que es el defecto seguro.
+  secretoSiguiente      String?
+  secretoSiguienteHasta DateTime?
 
   createdAt DateTime @default(now())
 
@@ -310,6 +326,17 @@ model EventoSaliente {
   tipo      String
   payload   Json
 
+  /// Id del `DomainEvent` que originó este reenvío (barrido de bugs ocultos).
+  ///
+  /// Es la clave de IDEMPOTENCIA del fan-out: `@@unique([sistemaId, domainEventId])`
+  /// hace que re-despachar el mismo evento a un satélite —cuando el barrido
+  /// reclama un evento que quedó a medias tras un kill— reuse la MISMA fila en vez
+  /// de acuñar una nueva con otro `eventId` que el satélite no podría deduplicar.
+  /// Null en las filas históricas y en cualquier reenvío que no venga de un
+  /// `DomainEvent`; el `unique` de Postgres trata los null como distintos, así que
+  /// no chocan entre sí ni bloquean la migración.
+  domainEventId String?
+
   /// Hilo que une los eventos de una misma operación. Una visita genera hasta
   /// cuatro eventos hacia dos sistemas; sin esto, reconstruir «qué pasó con la
   /// visita de las 3» es cruzar registros a ojo entre logs de empresas
@@ -334,6 +361,8 @@ model EventoSaliente {
   /// competir con los reintentos ya programados en la cola.
   proximoIntentoAt DateTime?
 
+  /// Una entrega por (satélite, evento de dominio): el fan-out es idempotente.
+  @@unique([sistemaId, domainEventId])
   @@index([estado, createdAt])
   @@index([companyId, tipo, createdAt])
   @@index([estado, proximoIntentoAt])

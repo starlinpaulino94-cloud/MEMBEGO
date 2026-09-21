@@ -23,6 +23,62 @@ export const CAPABILITIES = [
   'VISIT_SYNC',
   'TRANSACTION_SYNC',
   'LOYALTY_EVENT',
+  /**
+   * Administrar las SUSCRIPCIONES DE WEBHOOK de la propia empresa.
+   *
+   * Es lo que necesita una app de Zapier (o Make, o cualquier constructor de
+   * flujos) para funcionar como se espera: al montar un Zap crea la
+   * suscripción, y al apagarlo la retira. Sin esto habría que entrar al panel a
+   * mano cada vez, que es justo lo que nadie hace.
+   *
+   * NO es una escritura de negocio: no crea clientes ni consume beneficios, así
+   * que no necesita decir qué sistema la respalda. Toca la configuración de
+   * avisos de quien presenta la clave, y de nadie más.
+   */
+  'WEBHOOK_SUBSCRIPTION',
+  /**
+   * EDITAR la ficha de contacto de un cliente que YA existe (nombre, teléfono,
+   * correo). No crea ni consume nada.
+   *
+   * Es escritura, pero de otra clase que `CUSTOMER_REGISTRATION`: aquélla la
+   * hace un satélite —el punto de venta que registra a quien llega sin cuenta—
+   * y queda atada al sistema que la respalda, para que se pueda auditar de
+   * dónde salió la ficha. Ésta la hace una clave de EMPRESA —una integración de
+   * trastienda, un Zapier que mantiene los datos al día— sobre clientes que la
+   * empresa ya tiene. No mueve valor, así que no necesita un sistema detrás.
+   *
+   * Por eso su scope es `customers:manage` y no `customers:write`: el `:write`
+   * es de los satélites y arrastra idempotencia y canal de origen; el `:manage`
+   * es «ordena tus propios registros», concedible a una clave de empresa.
+   */
+  'CUSTOMER_UPDATE',
+  /**
+   * CANCELAR una cita que YA existe (B-5).
+   *
+   * No crea la cita ni mueve valor: cambia su estado a CANCELADA dentro de la
+   * máquina de estados de la agenda. Como `CUSTOMER_UPDATE`, es «ordena tus
+   * propios registros» —una integración de agenda que sincroniza cancelaciones—,
+   * así que su scope es `appointments:manage`, separado del `:read` con el que se
+   * pinta la agenda. Incluye `:read` por lo mismo que las demás: la respuesta de
+   * la cancelación devuelve la cita, y conceder cancelar sin leer sería un scope
+   * que miente sobre lo que deja hacer.
+   */
+  'APPOINTMENT_MANAGE',
+  /**
+   * BORRAR un cliente y todos sus datos en la empresa (B-5, derecho al olvido).
+   *
+   * Es la operación más peligrosa de la API: purga la ficha del cliente y todo
+   * lo que cuelga de ella (visitas, membresías, vehículos, tickets, referidos) y
+   * anula sus transacciones. Por eso su scope es PROPIO —`customers:delete`— y no
+   * se mezcla con `customers:manage`: editar y borrar no son el mismo permiso, y
+   * una integración que mantiene datos al día no debería poder borrarlos por
+   * llevar el scope de editar. Se concede aparte, a conciencia.
+   *
+   * BORRA solo la ficha de ESTA empresa, no la cuenta de la persona: una clave de
+   * empresa no puede alcanzar la identidad global de alguien que quizá también es
+   * cliente de otro negocio. Eso —y la cuenta de acceso— es cosa del superadmin.
+   */
+  'CUSTOMER_DELETION',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -52,6 +108,19 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   VISIT_SYNC: ['visits:write'],
   TRANSACTION_SYNC: ['transactions:write'],
   LOYALTY_EVENT: ['events:publish'],
+  WEBHOOK_SUBSCRIPTION: ['webhooks:manage'],
+  // `customers:read` va incluido por el mismo motivo que en el alta: la
+  // respuesta de una edición devuelve la ficha, así que conceder editar sin
+  // leer sería un scope que miente sobre lo que de verdad deja hacer.
+  CUSTOMER_UPDATE: ['customers:read', 'customers:manage'],
+  // `appointments:read` incluido por el mismo motivo que en las demás
+  // escrituras: la cancelación devuelve la cita, así que conceder cancelar sin
+  // leer sería un scope que miente.
+  APPOINTMENT_MANAGE: ['appointments:read', 'appointments:manage'],
+  // `customers:read` incluido como en editar: borrar por id exige poder haberlo
+  // localizado. `customers:delete` es propio y NO incluye `:manage`: borrar no es
+  // editar, y no debe llegar por arrastre de otro permiso.
+  CUSTOMER_DELETION: ['customers:read', 'customers:delete'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

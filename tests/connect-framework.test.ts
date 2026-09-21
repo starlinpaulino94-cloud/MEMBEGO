@@ -51,7 +51,7 @@ test('catálogo: lo no implementado es PRÓXIMAMENTE, digan lo que digan las dem
     publicado: true,
     configuradoEnDespliegue: true,
     permitidoPorPlan: true,
-    conexion: { estado: 'CONNECTED', claseError: null, degradada: false },
+    conexion: { estado: 'CONNECTED', claseError: null, degradada: false, reautorizar: false },
   })
   assert.equal(estado, 'PROXIMAMENTE')
   assert.equal(permiteConectar(estado), false)
@@ -82,7 +82,7 @@ test('catálogo: una conexión VIVA gana a las señales de plataforma y de plan'
     ...SENALES,
     configuradoEnDespliegue: false,
     permitidoPorPlan: false,
-    conexion: { estado: 'CONNECTED', claseError: null, degradada: false },
+    conexion: { estado: 'CONNECTED', claseError: null, degradada: false, reautorizar: false },
   })
   assert.equal(estado, 'CONECTADA')
   assert.equal(ACCION_ESTADO[estado], 'Gestionar')
@@ -92,7 +92,7 @@ test('catálogo: una conexión DESCONECTADA no ocupa sitio — vuelve a ser cone
   assert.equal(
     decidirEstadoIntegracion({
       ...SENALES,
-      conexion: { estado: 'DISCONNECTED', claseError: null, degradada: false },
+      conexion: { estado: 'DISCONNECTED', claseError: null, degradada: false, reautorizar: false },
     }),
     'DISPONIBLE'
   )
@@ -101,7 +101,7 @@ test('catálogo: una conexión DESCONECTADA no ocupa sitio — vuelve a ser cone
 test('catálogo: el alta a medias se puede continuar, no se empieza de cero', () => {
   const estado = decidirEstadoIntegracion({
     ...SENALES,
-    conexion: { estado: 'PENDING', claseError: null, degradada: false },
+    conexion: { estado: 'PENDING', claseError: null, degradada: false, reautorizar: false },
   })
   assert.equal(estado, 'ALTA_SIN_TERMINAR')
   assert.equal(ACCION_ESTADO[estado], 'Continuar')
@@ -112,7 +112,7 @@ test('catálogo: AUTH y PERMISSIONS piden reconectar; el resto de fallos, no', (
   const con = (claseError: (typeof CLASES_ERROR)[number]) =>
     decidirEstadoIntegracion({
       ...SENALES,
-      conexion: { estado: 'ERROR', claseError, degradada: false },
+      conexion: { estado: 'ERROR', claseError, degradada: false, reautorizar: false },
     })
 
   assert.equal(con('AUTH'), 'REAUTORIZAR')
@@ -130,9 +130,34 @@ test('catálogo: conectada pero fallando reciente = requiere atención, no error
   assert.equal(
     decidirEstadoIntegracion({
       ...SENALES,
-      conexion: { estado: 'CONNECTED', claseError: null, degradada: true },
+      conexion: { estado: 'CONNECTED', claseError: null, degradada: true, reautorizar: false },
     }),
     'REQUIERE_ATENCION'
+  )
+})
+
+test('catálogo B-3: salud activa — CONNECTED marcada para reautorizar pide reconectar', () => {
+  // El chequeo proactivo la marcó porque una credencial sin refresco se acerca a
+  // su caducidad. Sigue CONNECTED y funcionando, pero se pide reconectar ANTES de
+  // que se caiga — que es todo el sentido de la salud activa.
+  const estado = decidirEstadoIntegracion({
+    ...SENALES,
+    conexion: { estado: 'CONNECTED', claseError: null, degradada: false, reautorizar: true },
+  })
+  assert.equal(estado, 'REAUTORIZAR')
+  assert.equal(ACCION_ESTADO[estado], 'Reconectar')
+  assert.ok(permiteConectar(estado))
+})
+
+test('catálogo B-3: la reautorización proactiva gana a un fallo transitorio', () => {
+  // Si además hubo un fallo reciente (degradada), reconectar es más accionable
+  // que «algo falló hace poco»: arregla la causa de raíz.
+  assert.equal(
+    decidirEstadoIntegracion({
+      ...SENALES,
+      conexion: { estado: 'CONNECTED', claseError: null, degradada: true, reautorizar: true },
+    }),
+    'REAUTORIZAR'
   )
 })
 

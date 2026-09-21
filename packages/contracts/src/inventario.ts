@@ -26,13 +26,29 @@ export type PrincipalPermitido =
   | 'sistema'
   /** Un satélite O una clave de API de empresa. */
   | 'sistema-o-empresa'
+  /**
+   * SOLO una clave de API de empresa.
+   *
+   * Existe para los recursos que administran la CONFIGURACIÓN de una empresa —
+   * sus suscripciones de webhook— y que a un satélite no le corresponden: un
+   * sistema que atiende a veinte empresas no tiene por qué poder decidir a
+   * quién avisan ellas, ni mucho menos apuntar sus avisos a otro sitio.
+   */
+  | 'empresa'
   /** Nadie: es público (reparte credenciales o publica claves). */
   | 'publico'
   /** Operación de la plataforma: sesión de superadmin. */
   | 'superadmin'
 
 export interface RecursoApi {
-  metodo: 'GET' | 'POST'
+  /**
+   * `DELETE` se admite desde que hay un recurso que de verdad se retira (una
+   * suscripción de webhook). Antes solo había `GET` y `POST`, y añadirlo por
+   * gusto habría sido documentar un verbo que ninguna ruta usaba; hacerlo con
+   * un `/delete` al final de la ruta, en cambio, sería entrenar a quien importe
+   * este OpenAPI a escribir una API que no es la que queremos tener.
+   */
+  metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE'
   /** Ruta bajo `/api/platform/v1`, con `{id}` para los parámetros. */
   ruta: string
   /** Scope exigido, o null si basta con estar autenticado. */
@@ -42,6 +58,16 @@ export interface RecursoApi {
   resumen: string
   /** ¿Escribe? Las escrituras exigen `Idempotency-Key`. */
   idempotente?: boolean
+  /**
+   * ¿Es un listado paginado por cursor? (B-6.)
+   *
+   * Marca las colecciones que pueden crecer sin techo: acepta `?limit=` y
+   * `?cursor=`, y su respuesta trae `page.nextCursor`. Los catálogos pequeños y
+   * acotados (sucursales, tipos de vehículo) NO lo llevan: se devuelven enteros
+   * en una llamada, y decirlo aquí evita que un cliente pagine una lista que
+   * nunca tendrá una segunda página.
+   */
+  paginado?: boolean
 }
 
 export const INVENTARIO_API: readonly RecursoApi[] = [
@@ -95,6 +121,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'promotions:read',
     principal: 'sistema-o-empresa',
     resumen: 'Promociones vigentes de la empresa.',
+    paginado: true,
   },
   {
     metodo: 'GET',
@@ -127,6 +154,28 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     resumen: 'Resuelve un cliente por su identificador exacto (teléfono, correo o QR).',
   },
   {
+    metodo: 'GET',
+    ruta: '/customers',
+    scope: 'customers:read',
+    principal: 'sistema-o-empresa',
+    resumen: 'Lista los clientes de la empresa, en orden alfabético.',
+    paginado: true,
+  },
+  {
+    metodo: 'PATCH',
+    ruta: '/customers/{id}',
+    scope: 'customers:manage',
+    principal: 'empresa',
+    resumen: 'Edita el nombre, el teléfono o el correo de un cliente existente.',
+  },
+  {
+    metodo: 'DELETE',
+    ruta: '/customers/{id}',
+    scope: 'customers:delete',
+    principal: 'empresa',
+    resumen: 'Borra un cliente y purga en cascada todos sus datos en la empresa.',
+  },
+  {
     metodo: 'POST',
     ruta: '/customers',
     scope: 'customers:write',
@@ -156,6 +205,7 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'memberships:read',
     principal: 'sistema-o-empresa',
     resumen: 'Membresías de la empresa.',
+    paginado: true,
   },
   {
     metodo: 'GET',
@@ -177,6 +227,14 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     scope: 'appointments:read',
     principal: 'sistema-o-empresa',
     resumen: 'Citas de la empresa en un rango de fechas.',
+    paginado: true,
+  },
+  {
+    metodo: 'POST',
+    ruta: '/appointments/{id}/cancel',
+    scope: 'appointments:manage',
+    principal: 'empresa',
+    resumen: 'Cancela una cita. Idempotente: repetirla la deja cancelada sin volver a avisar.',
   },
 
   // ── Escrituras (solo satélites) ─────────────────────────────────────────
@@ -211,6 +269,33 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     principal: 'sistema',
     resumen: 'Registra una transacción realizada en el sistema satélite.',
     idempotente: true,
+  },
+  // ── Suscripciones de webhook (solo claves de empresa) ───────────────────
+  //
+  // Son lo que necesita un constructor de flujos —Zapier, Make— para funcionar
+  // como se espera: al montar el flujo crea la suscripción, al apagarlo la
+  // retira. Sin API habría que entrar al panel a mano cada vez, que es justo lo
+  // que nadie hace.
+  {
+    metodo: 'GET',
+    ruta: '/webhooks',
+    scope: 'webhooks:manage',
+    principal: 'empresa',
+    resumen: 'Lista las suscripciones de webhook de la empresa que presenta la clave.',
+  },
+  {
+    metodo: 'POST',
+    ruta: '/webhooks',
+    scope: 'webhooks:manage',
+    principal: 'empresa',
+    resumen: 'Crea una suscripción de webhook y devuelve su secreto de firma.',
+  },
+  {
+    metodo: 'DELETE',
+    ruta: '/webhooks/{id}',
+    scope: 'webhooks:manage',
+    principal: 'empresa',
+    resumen: 'Retira una suscripción de webhook. Deja de entregarse de inmediato.',
   },
   {
     metodo: 'POST',

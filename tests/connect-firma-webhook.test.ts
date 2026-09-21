@@ -361,10 +361,12 @@ test('el vigente va SIEMPRE el primero de la lista', () => {
 test('rotar dos veces no deja tres secretos vivos', () => {
   // La segunda rotación retira el de la primera, no el de antes. Quien rota dos
   // veces en la misma tarde —porque se equivocó al copiar— quiere que el
-  // penúltimo muera.
+  // penúltimo muera. El «anterior» recibe SIEMPRE el `actual.secreto`, sea el
+  // sello tal cual o sellándolo si venía en claro (A-7): en los dos casos es el
+  // secreto de AHORA el que pasa a anterior, no uno más viejo.
   const src = codigo('src/modules/connect/webhooks.ts')
   const fn = src.slice(src.indexOf('export async function rotarSecretoSuscripcion'))
-  assert.match(fn.slice(0, 1500), /secretoAnterior: actual\.secreto/)
+  assert.match(fn.slice(0, 1500), /secretoAnterior: estaSellado\(actual\.secreto\)[\s\S]{0,120}actual\.secreto/)
 })
 
 test('rotar está acotado por empresa en la lectura Y en la escritura', () => {

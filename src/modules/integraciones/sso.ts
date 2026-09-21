@@ -1,8 +1,12 @@
 import 'server-only'
 import { crearTokenSSO } from '@/modules/integraciones/nucleo'
 import { conEmpresa } from '@/lib/tenant'
-import { mensajeDenegado } from '@/modules/plataforma/acceso'
-import { accesoASistema, sistemasDeEmpresa } from '@/modules/plataforma/registro'
+import { mensajeDenegado, type MotivoDenegado } from '@/modules/plataforma/acceso'
+import {
+  accesoASistema,
+  sistemasConDecision,
+  sistemasDeEmpresa,
+} from '@/modules/plataforma/registro'
 import {
   TTL_SSO_SEGUNDOS,
   accesoDeUsuario,
@@ -139,6 +143,81 @@ export async function sistemasParaLanzador(user: SessionUser): Promise<SistemaEx
     return accesibles
   } catch (e) {
     console.error('[sso] sistemasParaLanzador:', e)
+    return []
+  }
+}
+
+/** Una aplicación satélite tal como la enseña la pantalla de Integraciones. */
+export interface AplicacionConectada {
+  slug: string
+  nombre: string
+  /** Dominio del satélite: se enseña para que se sepa a dónde lleva el botón. */
+  urlBase: string
+  /** ¿Puede esta persona abrirlo ahora mismo? */
+  disponible: boolean
+  /**
+   * Por qué no, cuando no. `USUARIO_SIN_ACCESO` es el nivel de `UsuarioSistema`
+   * —la empresa lo tiene, esta persona no—; el resto vienen de la decisión de
+   * empresa. Solo se enseña a quien administra: para el resto del equipo, una
+   * aplicación que no pueden abrir simplemente no está.
+   */
+  motivo: MotivoDenegado | 'USUARIO_SIN_ACCESO' | null
+}
+
+/**
+ * Las aplicaciones satélite de la empresa, PARA LA PANTALLA.
+ *
+ * Se diferencia de `sistemasParaLanzador` en que no oculta lo que no entra:
+ * devuelve también los sistemas registrados que esta empresa no puede abrir,
+ * con el motivo. La cabecera necesita una lista limpia; la pantalla de
+ * Integraciones necesita la verdad completa, porque es donde alguien viene
+ * cuando algo debería estar y no está.
+ *
+ * Quien llama filtra: a quien no administra se le enseñan solo las disponibles.
+ *
+ * Nunca lanza: un fallo aquí no puede tumbar la pantalla entera.
+ */
+export async function aplicacionesDeEmpresa(user: SessionUser): Promise<AplicacionConectada[]> {
+  try {
+    const companyId = await empresaDelUsuario(user)
+    if (!companyId) return []
+
+    const registradas = await sistemasConDecision(companyId)
+    const aplicaciones: AplicacionConectada[] = []
+
+    for (const { sistema, decision } of registradas) {
+      if (!decision.permitido) {
+        aplicaciones.push({
+          slug: sistema.slug,
+          nombre: sistema.nombre,
+          urlBase: sistema.urlBase,
+          disponible: false,
+          motivo: decision.motivo,
+        })
+        continue
+      }
+
+      // La empresa lo tiene y esta persona puede no tenerlo: con
+      // `accesoPorUsuario` en false entra todo el equipo, que es el caso normal.
+      const acceso = await accesoDeUsuario({
+        userId: user.metadata.dbUserId ?? null,
+        companyId,
+        sistemaId: sistema.id,
+        accesoPorUsuario: sistema.accesoPorUsuario,
+      })
+
+      aplicaciones.push({
+        slug: sistema.slug,
+        nombre: sistema.nombre,
+        urlBase: sistema.urlBase,
+        disponible: acceso.permitido,
+        motivo: acceso.permitido ? null : 'USUARIO_SIN_ACCESO',
+      })
+    }
+
+    return aplicaciones
+  } catch (e) {
+    console.error('[sso] aplicacionesDeEmpresa:', e)
     return []
   }
 }

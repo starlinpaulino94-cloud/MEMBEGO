@@ -188,7 +188,10 @@ test('el canje verifica con el secreto de QUIEN LLAMA', () => {
   )
   // `exigeSistema(ctx)` desde Connect · F3 (ver platform-canje).
   assert.match(src, /where:\s*\{\s*id:\s*sistema\.sistemaId\s*\}/)
-  assert.ok(src.includes('verificarTokenSSO(secreto.secreto, token)'))
+  // Se verifica con el/los secreto(s) de QUIEN LLAMA. Desde A-7 puede haber dos
+  // vivos durante una rotación, así que se prueba contra `secretosVivos(secreto)`
+  // —los del sistema llamante—, nunca con el que aparezca en el token.
+  assert.match(src, /verificarConVivos\(secretosVivos\(secreto\),\s*\(s\)\s*=>\s*verificarTokenSSO\(s,\s*token\)\)/)
 })
 
 test('el canje vuelve a comprobar la habilitación de la empresa', () => {

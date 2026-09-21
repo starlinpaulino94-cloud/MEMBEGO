@@ -43,7 +43,17 @@ export async function GET(req: NextRequest) {
   // El permiso se vuelve a comprobar AQUÍ. Con solo `exportar`, el desglose por
   // persona que la pantalla esconde se sacaría cambiando de ruta.
   const verEmpleados = await puedeFuncion('reportes', 'ver_empleados')
-  const r = await getReporteOperacion(companyId, rango, timeZone, { verEmpleados })
+  // El filtro viaja en la misma query string que el rango, así que el archivo
+  // sale con EL MISMO corte que la pantalla. La validación (¿existe?, ¿es de
+  // esta empresa?, ¿hay permiso para filtrar por persona?) vive en la
+  // consulta, no aquí: esta ruta no puede ser la barrera floja.
+  const r = await getReporteOperacion(companyId, rango, timeZone, {
+    verEmpleados,
+    filtro: {
+      sucursalId: sp.sucursal?.trim() || undefined,
+      empleadoId: sp.empleado?.trim() || undefined,
+    },
+  })
 
   const csv = armarCsvBloques([
     {
@@ -54,6 +64,10 @@ export async function GET(req: NextRequest) {
         ['Periodo', `${rango.desdeDia} a ${rango.hastaDia}`],
         ['Dias', rango.dias],
         ['Comparado contra', rango.etiquetaComparacion],
+        // El filtro APLICADO, con nombre: un CSV filtrado sin esta línea es
+        // indistinguible del reporte completo una vez descargado.
+        ['Filtro por sucursal', r.filtro?.sucursal ? r.filtro.sucursal.nombre : '(todas)'],
+        ['Filtro por empleado', r.filtro?.empleado ? r.filtro.empleado.nombre : '(todos)'],
         ['Datos completos', r.incompleto ? 'NO - alguna consulta fallo' : 'Si'],
         [
           'Cobertura de visitas',
@@ -76,9 +90,16 @@ export async function GET(req: NextRequest) {
         ['Sin descontar', r.sinDescontar, '', ''],
         ['Clientes atendidos', r.clientesAtendidos, '', ''],
         ['Visitas revertidas', r.revertidas, '', ''],
-        ['QR generados', r.qrGenerados, '', ''],
-        ['QR usados', r.qrUsados, '', ''],
-        ['QR compartidos', r.qrCompartidos, '', ''],
+        // Con filtro los QR no van: la bitácora no guarda sucursal ni
+        // empleado, y un total de empresa dentro de un archivo filtrado se
+        // leería como parte del recorte. La fila lo dice en vez de callar.
+        ...(r.filtro
+          ? [['QR (generados, usados, compartidos)', 'OMITIDO - no se pueden filtrar', '', '']]
+          : [
+              ['QR generados', r.qrGenerados, '', ''],
+              ['QR usados', r.qrUsados, '', ''],
+              ['QR compartidos', r.qrCompartidos, '', ''],
+            ]),
       ],
     },
     {
