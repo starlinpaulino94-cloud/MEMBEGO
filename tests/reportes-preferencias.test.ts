@@ -198,3 +198,22 @@ test('la columna nueva tiene su migración idempotente', () => {
   // Y está sellada, o `migrate dev` pedirá un reset al siguiente que toque el esquema.
   assert.match(leer('prisma/migrations/SUMAS.txt'), /20260929_reportes_preferencias/)
 })
+
+test('sin la columna aplicada, el panel no se ofrece y no se intenta guardar', () => {
+  // Las migraciones se aplican A MANO en Supabase (docs/MIGRACIONES.md), así
+  // que entre el despliegue y el SQL hay una ventana sin columna. La lectura
+  // ya se caía a «de fábrica»; la escritura habría reventado al primer clic.
+  const acciones = leer('src/modules/reportes/preferenciasActions.ts')
+  assert.match(acciones, /disponible: boolean/)
+  assert.match(acciones, /if \(!disponible\) return/, 'se intentaría escribir sin columna')
+  // El centinela distingue «la consulta falló» de «el usuario no tiene nada»:
+  // sin él, un usuario sin preferencias parecería una base sin migrar.
+  assert.match(acciones, /const FALLO = Symbol\(/)
+
+  const pagina = leer('src/app/(admin)/admin/reportes/page.tsx')
+  assert.match(
+    pagina,
+    /sePuedePersonalizar \? \(/,
+    'el panel se pintaría aunque no haya dónde guardar'
+  )
+})
