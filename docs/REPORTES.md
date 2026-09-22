@@ -308,6 +308,42 @@ sería peor que no tenerla.
   **única puerta**: separador `;` (Excel en español), BOM al inicio y escapado
   común. `tests/reportes-plataforma.test.ts` prohíbe volver a armarlo a mano.
 
+### Los dos formatos
+
+Cada reporte se descarga en **CSV** o en **Excel** (`?formato=xlsx`). El CSV es
+la salida por defecto y no cambió: quien ya automatizó una descarga sigue
+recibiendo exactamente el mismo archivo.
+
+Los dos salen de **la misma lista de bloques**. Si cada formato armara la suya,
+la segunda se quedaría atrás a la primera cifra nueva — y ese fallo no se ve, se
+descarga. Una guardia lo comprueba ruta por ruta.
+
+Qué añade el Excel (`lib/xlsx.ts`):
+
+- **Una hoja por bloque.** Es lo que `lib/csv.ts` dice que no puede hacer: «las
+  hojas de un libro de Excel no caben en un CSV». En el CSV los bloques van
+  apilados con una línea en blanco y hay que recortarlos a mano.
+- **Un número es un número.** En un CSV todo es texto y el número lo reconstruye
+  Excel leyendo la configuración regional de quien abre el archivo: con
+  separador decimal español, «1234.50» no es mil doscientos treinta y cuatro con
+  cincuenta. **La misma descarga da cifras distintas en dos ordenadores.** Una
+  celda numérica de verdad no tiene nada que interpretar, y se puede sumar sin
+  volver a teclearla.
+- Encabezado en negrita y **fijo al bajar**, y ancho de columna según el
+  contenido: un número que sale como `####` no es un dato.
+
+**Lo que NO se adivina.** Convertir «todo lo que parezca un número» rompe
+archivos en silencio: un código `01234` pierde el cero y un identificador largo
+se vuelve notación científica. Solo se convierten dos cosas, las dos
+deterministas: lo que **ya es** un número de JavaScript, y una cadena con la
+forma **exacta** que produce `toFixed(2)` —que es como las rutas escriben el
+dinero—. Todo lo demás es texto, incluidas las fechas ya formateadas:
+convertirlas las movería de día según la zona de quien abre el archivo.
+
+El nombre de la pestaña se sanea porque Excel **rechaza el libro entero** si
+pasa de 31 caracteres, trae `[ ] : * ? / \` o se repite: se recorta y se numera
+en vez de romper la descarga.
+
 ## Imprimir
 
 `ReporteImprimible` + `BotonImprimir` (`@/components/ui/…`). Un solo bloque

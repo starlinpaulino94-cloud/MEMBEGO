@@ -216,8 +216,21 @@ test('las quince pantallas dicen lo mismo', () => {
   // variantes de botón y dos tamaños de icono. La misma acción tiene que
   // reconocerse de una pantalla a otra.
   assert.match(EXPORTAR, /label = 'Exportar CSV'/)
+
+  // Se cuentan también las que descargan por `BotonesExportar` —el par
+  // CSV + Excel de los reportes—, porque ESE componente pinta el mismo
+  // `BotonExportar` por dentro: la regla que esta prueba protege es que el
+  // botón salga del design system, no que cada pantalla lo importe. Contar
+  // solo los usos directos convertía un envoltorio correcto en un fallo.
+  const ENVOLTORIO = 'src/components/reportes/BotonesExportar.tsx'
+  assert.match(
+    readFileSync(ENVOLTORIO, 'utf8'),
+    /<BotonExportar/,
+    `${ENVOLTORIO} dejó de apoyarse en BotonExportar: ahí se rompe la consistencia`
+  )
+
   const usos = fuentes(join('src', 'app')).filter((f) =>
-    /<BotonExportar/.test(readFileSync(f, 'utf8'))
+    /<Boton(?:es)?Exportar/.test(readFileSync(f, 'utf8'))
   )
   assert.ok(usos.length >= 15, `solo ${usos.length} pantallas lo usan; eran quince`)
 })

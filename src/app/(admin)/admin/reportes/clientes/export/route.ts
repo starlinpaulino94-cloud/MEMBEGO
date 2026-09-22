@@ -5,6 +5,7 @@ import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
 import { TZ_PLATAFORMA } from '@/lib/format'
 import { armarCsvBloques, respuestaCsv } from '@/lib/csv'
+import { armarXlsxBloques, pideXlsx, respuestaXlsx } from '@/lib/xlsx'
 import { leerRango } from '@/modules/reportes/rango'
 import { getReporteClientes } from '@/modules/reportes/clientes'
 
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     verDatosPersonales,
   })
 
-  const csv = armarCsvBloques([
+  const bloques = [
     {
       titulo: 'Alcance del reporte',
       encabezados: ['Concepto', 'Valor'],
@@ -140,7 +141,15 @@ export async function GET(req: NextRequest) {
       encabezados: ['Dia', 'Altas'],
       filas: r.serie.map((p) => [p.dia, p.nuevos]),
     },
-  ])
+  ]
+
+  // El MISMO reporte, en un libro de Excel con una hoja por bloque.
+  // El CSV no se toca: quien ya automatizó una descarga sigue igual.
+  if (pideXlsx(req.nextUrl.searchParams)) {
+    return respuestaXlsx(await armarXlsxBloques(bloques), `clientes-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
+  }
+
+  const csv = armarCsvBloques(bloques)
 
   return respuestaCsv(csv, `clientes-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
 }

@@ -12,7 +12,7 @@ import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteCitasVista } from '@/components/reportes/ReporteCitasVista'
 import { Button } from '@/components/ui/button'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -144,7 +144,7 @@ export default async function ReporteCitasPage({
       }
       controles={
         <>
-          <BotonExportar href={`/admin/reportes/citas/export${qsExport ? `?${qsExport}` : ''}`} />
+          <BotonesExportar base="/admin/reportes/citas/export" qs={qsExport} />
           <BotonImprimir />
         </>
       }
