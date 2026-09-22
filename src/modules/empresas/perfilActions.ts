@@ -9,6 +9,7 @@ import {
   coordenadasDeEnlaceGoogleMaps,
   esEnlaceCortoGoogleMaps,
 } from '@/modules/geo/enlace-google-maps'
+import { esZonaValida } from '@/lib/zona-horaria'
 
 // F4.1: la empresa administra su propio perfil público del marketplace.
 // Solo puede tocar campos de presentación — nunca isActive/isPublished/
@@ -41,6 +42,28 @@ export async function actualizarPerfilPublico(
   const companyId = await resolveCompanyId(user, formData)
   if (!companyId) {
     return { error: 'Empresa requerida.' }
+  }
+
+  /**
+   * LA ZONA HORARIA SE VALIDA ANTES DE GUARDARLA, NO DESPUÉS.
+   *
+   * Es una caja de texto libre, y lo que se teclee se guarda tal cual. Pero
+   * `Intl.DateTimeFormat` no tolera un valor que no reconozca: LANZA. Una
+   * «GMT-4» o una «Santo Domingo» guardadas aquí reaparecen como «No se pudo
+   * cargar esta sección» en Reportes, en todas sus pantallas y para siempre,
+   * a kilómetros de la pantalla donde se escribieron.
+   *
+   * Se rechaza con el valor delante, que es lo único que permite corregirlo.
+   * `zonaSegura` cubre lo que YA está mal guardado; esto impide que vuelva a
+   * entrar.
+   */
+  const zonaHoraria = val(formData, 'zonaHoraria')
+  if (zonaHoraria && !esZonaValida(zonaHoraria)) {
+    return {
+      error:
+        `«${zonaHoraria}» no es una zona horaria válida. Se escribe en formato IANA, ` +
+        'como America/Santo_Domingo o America/New_York.',
+    }
   }
 
   const galleryImages = formData
@@ -107,7 +130,7 @@ export async function actualizarPerfilPublico(
           // zonaHoraria son NOT NULL: si vinieran vacíos se conserva el default.
           moneda: val(formData, 'moneda') ?? undefined,
           idioma: val(formData, 'idioma') ?? undefined,
-          zonaHoraria: val(formData, 'zonaHoraria') ?? undefined,
+          zonaHoraria: zonaHoraria ?? undefined,
           colorPrimario: val(formData, 'colorPrimario'),
           politicaCancelacion: val(formData, 'politicaCancelacion'),
           politicaPrivacidad: val(formData, 'politicaPrivacidad'),
