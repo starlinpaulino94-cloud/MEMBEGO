@@ -209,6 +209,91 @@ Al imprimir, los controles desaparecen y la tabla sale entera y en el orden que
 se esté mirando. Si hay una búsqueda puesta, **el aviso de «filtrado» también se
 imprime**: un papel con menos filas de las que hay tiene que decirlo.
 
+## Qué cifras ve cada quien
+
+El resumen ejecutivo del índice enseñaba las mismas cinco cifras a todo el
+mundo. A quien lleva el mostrador, «cobros de membresías» no le dice nada el
+lunes por la mañana; a quien lleva las cuentas, «entregas sin cobro» es ruido.
+**Cinco tarjetas donde dos sobran hacen que las tres que importan se lean
+peor.**
+
+Cada persona elige cuáles ve y en qué orden, desde el propio índice
+(`components/reportes/PersonalizarResumen.tsx`). La preferencia es **de la
+persona, no de la empresa**: dos empleados del mismo negocio miran cosas
+distintas, y una configuración única obligaría a que uno aguantara la del otro.
+Se guarda en `users.preferenciasReportes` (migración
+`20260929_reportes_preferencias`), junto a `permisos`, que es el mismo caso: un
+ajuste pequeño que siempre se lee con el usuario.
+
+### Se guarda lo OCULTO, no lo visible
+
+Parece lo mismo y no lo es. Si se guardara la lista de las que **sí** se ven, la
+cifra que se añada mañana no estaría en ningún sobre ya guardado — y quedaría
+escondida para todo el que hubiera personalizado alguna vez, **sin que nada
+fallara**. Una métrica nueva que nadie ve es peor que no añadirla.
+
+Guardando lo oculto, lo que no se nombra se enseña: una tarjeta nueva aparece
+sola para todos, y quien no la quiera la quita. Hay una prueba que lo comprueba
+simulando exactamente ese caso.
+
+### Las reglas que no se negocian
+
+- **El permiso manda.** Sin `ver_financieros` las cifras de dinero no aparecen
+  aunque el sobre diga lo contrario, y ni siquiera se ofrecen en el panel. La
+  server action vuelve a comprobarlo: se despacha por su id desde cualquier
+  ruta permitida, así que esconder el formulario no la protege.
+- **Nunca un resumen vacío.** No se puede apagar la última cifra —su botón sale
+  deshabilitado— y, aunque el sobre las oculte todas, la pantalla enseña una.
+  Un encabezado con una caja vacía debajo se lee como un fallo, no como una
+  elección.
+- **El sobre lo arma el núcleo, no el formulario.** Llega una clave y una
+  dirección; la lista nueva la calcula `modules/reportes/preferencias.ts` a
+  partir de la guardada. Un formulario manipulado no puede escribir cualquier
+  cosa.
+- **Se puede volver atrás.** Una personalización sin vuelta a lo de fábrica es
+  una trampa.
+- **Un sobre raro no tumba la pantalla.** `leerPreferencias` nunca lanza: lo que
+  no entiende se cae a «sin preferencias», y las claves de tarjetas retiradas se
+  descartan al leer.
+
+El panel no se imprime —en el papel no hay nada que pulsar— y las cifras ocultas
+siguen listadas en gris: si desaparecieran, no habría forma de encenderlas.
+
+## Qué dicen estos números
+
+El índice de reportes cierra con unas frases que interpretan las cifras:
+«los ingresos de caja bajaron 18 % frente al periodo anterior». Viven en
+`modules/reportes/insights.ts`, que es **puro** — se prueba con números
+inventados y sin base de datos.
+
+**Regla de oro:** solo sale lo que tiene algo que decir. Hay umbrales
+(`UMBRAL_VARIACION`, `MINIMO_OPERACIONES`, `UMBRAL_ENTREGAS`) y por debajo de
+ellos la sección entera desaparece. Una sección que siempre está encendida
+enseña a ignorarla.
+
+### Cada frase dice a dónde ir
+
+Un titular sin sitio a donde ir deja a quien lo lee **peor que antes**: sabe que
+algo pasa y no tiene el siguiente paso. Así que cada frase declara un destino
+—`finanzas`, `clientes`, `operacion`, `membresias`— y una etiqueta que dice
+**qué se va a mirar**, nunca «ver más»: un enlace que no promete nada no se
+pulsa.
+
+El núcleo **no arma URLs**, y eso es deliberado por dos razones:
+
+- Se prueba sin base de datos ni router.
+- El mismo reporte se monta en **dos sitios**: `/admin/reportes` para el dueño
+  y `/superadmin/reportes/[id]` para soporte, donde esos enlaces no existen.
+
+Los destinos son las mismas claves que `EnlacesReporte`, que es lo que ya usan
+las tarjetas de KPI. De ahí salen gratis dos comportamientos: el enlace **lleva
+el mismo periodo** que se está mirando, y el de finanzas **no aparece sin
+`ver_financieros`**. Donde el montaje no tiene esa ruta, la frase se enseña
+igual y sin enlace roto.
+
+El enlace no se imprime —en el papel no hay nada que pulsar— pero la frase sí,
+entera.
+
 ## Gráficos
 
 Todo gráfico va dentro de `components/reportes/graficos/PanelGrafico.tsx`, que
@@ -272,6 +357,42 @@ sería peor que no tenerla.
 - El armado va por `armarCsv` / `armarCsvBloques` (`lib/csv.ts`), que es la
   **única puerta**: separador `;` (Excel en español), BOM al inicio y escapado
   común. `tests/reportes-plataforma.test.ts` prohíbe volver a armarlo a mano.
+
+### Los dos formatos
+
+Cada reporte se descarga en **CSV** o en **Excel** (`?formato=xlsx`). El CSV es
+la salida por defecto y no cambió: quien ya automatizó una descarga sigue
+recibiendo exactamente el mismo archivo.
+
+Los dos salen de **la misma lista de bloques**. Si cada formato armara la suya,
+la segunda se quedaría atrás a la primera cifra nueva — y ese fallo no se ve, se
+descarga. Una guardia lo comprueba ruta por ruta.
+
+Qué añade el Excel (`lib/xlsx.ts`):
+
+- **Una hoja por bloque.** Es lo que `lib/csv.ts` dice que no puede hacer: «las
+  hojas de un libro de Excel no caben en un CSV». En el CSV los bloques van
+  apilados con una línea en blanco y hay que recortarlos a mano.
+- **Un número es un número.** En un CSV todo es texto y el número lo reconstruye
+  Excel leyendo la configuración regional de quien abre el archivo: con
+  separador decimal español, «1234.50» no es mil doscientos treinta y cuatro con
+  cincuenta. **La misma descarga da cifras distintas en dos ordenadores.** Una
+  celda numérica de verdad no tiene nada que interpretar, y se puede sumar sin
+  volver a teclearla.
+- Encabezado en negrita y **fijo al bajar**, y ancho de columna según el
+  contenido: un número que sale como `####` no es un dato.
+
+**Lo que NO se adivina.** Convertir «todo lo que parezca un número» rompe
+archivos en silencio: un código `01234` pierde el cero y un identificador largo
+se vuelve notación científica. Solo se convierten dos cosas, las dos
+deterministas: lo que **ya es** un número de JavaScript, y una cadena con la
+forma **exacta** que produce `toFixed(2)` —que es como las rutas escriben el
+dinero—. Todo lo demás es texto, incluidas las fechas ya formateadas:
+convertirlas las movería de día según la zona de quien abre el archivo.
+
+El nombre de la pestaña se sanea porque Excel **rechaza el libro entero** si
+pasa de 31 caracteres, trae `[ ] : * ? / \` o se repite: se recorta y se numera
+en vez de romper la descarga.
 
 ## Imprimir
 

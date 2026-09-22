@@ -175,8 +175,10 @@ más que estética.
 clave foránea contra `tipos_negocio` es una migración de datos de negocio, no de
 catálogo, y merece su propia fase.
 
-**No hay panel para conceder habilitaciones todavía.** Se conceden por SQL. La
-pantalla llega con el App Launcher, cuando haya más de un sistema que ofrecer.
+**No hay panel para conceder habilitaciones todavía.** Se conceden por SQL —
+`prisma/migrations_manual/2026-09-conectar-park-and-tours.sql` es un alta completa
+escrita así, de principio a fin—. La pantalla llega con el App Launcher, cuando
+haya más de un sistema que ofrecer.
 
 ---
 

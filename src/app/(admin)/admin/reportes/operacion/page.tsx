@@ -10,7 +10,7 @@ import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { FiltroReporteForm } from '@/components/reportes/FiltroReporteForm'
 import { ReporteOperacionVista } from '@/components/reportes/ReporteOperacionVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -128,9 +128,7 @@ export default async function ReporteOperacionPage({
       }
       controles={
         <>
-          <BotonExportar
-            href={`/admin/reportes/operacion/export${qsExport ? `?${qsExport}` : ''}`}
-          />
+          <BotonesExportar base="/admin/reportes/operacion/export" qs={qsExport} />
           <BotonImprimir />
         </>
       }

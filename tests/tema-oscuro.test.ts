@@ -74,10 +74,27 @@ function archivosTsx(dir: string, salida: string[] = []): string[] {
 }
 
 /** Contenido del archivo sin las líneas que ya declaran su variante `dark:`. */
+/**
+ * El cuerpo que se inspecciona: sin variantes `dark:` y SIN COMENTARIOS.
+ *
+ * Lo de los comentarios se añadió porque la guardia señalaba a un archivo que
+ * hacía lo correcto y lo explicaba: la cabecera del cliente pinta píldoras
+ * blancas sobre un degradado de marca a propósito, y el comentario que dice
+ * «con `text-foreground` el tema oscuro lo pintaba claro sobre blanco» bastaba
+ * para que saltara. Una guardia que castiga explicar la regla enseña a no
+ * explicarla, y el comentario es justo lo que evita que alguien lo «arregle»
+ * mal dentro de seis meses.
+ *
+ * Solo se quitan los bloques `/* … *\/` —que son también los comentarios de
+ * JSX— y las líneas que EMPIEZAN por `//`. Un `//` a media línea no se toca: en
+ * una URL dentro de una cadena, cortar ahí se llevaría por delante las clases
+ * que vinieran después y la mezcla quedaría sin detectar.
+ */
 function cuerpoSinVariantes(ruta: string): string {
   return readFileSync(ruta, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n')
-    .filter((l) => !l.includes('dark:'))
+    .filter((l) => !l.includes('dark:') && !/^\s*\/\//.test(l))
     .join('\n')
 }
 

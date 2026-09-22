@@ -5,6 +5,7 @@ import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
 import { TZ_PLATAFORMA } from '@/lib/format'
 import { armarCsvBloques, respuestaCsv } from '@/lib/csv'
+import { armarXlsxBloques, pideXlsx, respuestaXlsx } from '@/lib/xlsx'
 import { leerRango } from '@/modules/reportes/rango'
 import { getReportePromociones } from '@/modules/reportes/promociones'
 
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
   const verFinancieros = await puedeFuncion('reportes', 'ver_financieros')
   const r = await getReportePromociones(companyId, rango, timeZone, { verFinancieros })
 
-  const csv = armarCsvBloques([
+  const bloques = [
     {
       titulo: 'Alcance del reporte',
       encabezados: ['Concepto', 'Valor'],
@@ -138,7 +139,15 @@ export async function GET(req: NextRequest) {
         ['Compartidos acumulados', r.vitrina.compartidos],
       ],
     },
-  ])
+  ]
+
+  // El MISMO reporte, en un libro de Excel con una hoja por bloque.
+  // El CSV no se toca: quien ya automatizó una descarga sigue igual.
+  if (pideXlsx(req.nextUrl.searchParams)) {
+    return respuestaXlsx(await armarXlsxBloques(bloques), `promociones-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
+  }
+
+  const csv = armarCsvBloques(bloques)
 
   return respuestaCsv(csv, `promociones-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
 }

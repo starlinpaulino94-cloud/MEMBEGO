@@ -9,7 +9,7 @@ import { getReporteClientes } from '@/modules/reportes/clientes'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteClientesVista } from '@/components/reportes/ReporteClientesVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -66,7 +66,7 @@ export default async function ReporteClientesPage({
       eyebrow={<RangoFechas rango={rango} accion="/admin/reportes/clientes" />}
       controles={
         <>
-          <BotonExportar href={`/admin/reportes/clientes/export${qs}`} />
+          <BotonesExportar base="/admin/reportes/clientes/export" qs={qs} />
           <BotonImprimir />
         </>
       }

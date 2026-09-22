@@ -43,13 +43,22 @@ const ICONOS: Record<string, LucideIcon> = {
 }
 
 const CLASE_BOTON = 'flex items-center rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm outline-none transition-[box-shadow,transform,border-color] duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-95'
+/**
+ * Los seis colores de las fichas, como clases de `globals.css`.
+ *
+ * Estaban escritos con la paleta de Tailwind (`from-amber-500 to-orange-500`…),
+ * que no cambia con el tema: en modo oscuro se veían igual que en claro. Los
+ * degradados del rediseño violeta ya vivían en el CSS por esa misma razón —está
+ * explicado junto a `grad-vibe-header`— y estos se les unen, con el color
+ * exacto de antes. Ahora hay un solo sitio donde darles una variante oscura.
+ */
 const COLORES = [
-  'bg-gradient-to-r from-vibe-violet to-vibe-cobalt',
-  'bg-gradient-to-r from-amber-500 to-orange-500',
-  'bg-gradient-to-r from-emerald-500 to-teal-500',
-  'bg-gradient-to-r from-cyan-500 to-sky-500',
-  'bg-gradient-to-r from-indigo-500 to-blue-500',
-  'bg-gradient-to-r from-pink-500 to-rose-500',
+  'grad-vibe',
+  'grad-categoria-1',
+  'grad-categoria-2',
+  'grad-categoria-3',
+  'grad-categoria-4',
+  'grad-categoria-5',
 ] as const
 
 export function VibeCategorias({

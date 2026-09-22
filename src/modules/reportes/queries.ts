@@ -348,6 +348,20 @@ export function reporteToCsv(
   r: Reporte,
   contexto: { empresa: string; desdeDia: string; hastaDia: string; dias: number }
 ): string {
+  return armarCsvBloques(reporteToBloques(r, contexto))
+}
+
+/**
+ * Los bloques del reporte, antes de convertirse en un archivo.
+ *
+ * Están separados de `reporteToCsv` para que el MISMO contenido pueda salir en
+ * CSV y en Excel. Si cada formato armara su lista, la segunda se quedaría atrás
+ * a la primera cifra nueva — y el fallo no se ve, se descarga.
+ */
+export function reporteToBloques(
+  r: Reporte,
+  contexto: { empresa: string; desdeDia: string; hastaDia: string; dias: number }
+): { titulo: string; encabezados: string[]; filas: unknown[][] }[] {
   const totalSerie = r.serie.reduce(
     (acc, p) => ({
       ventas: acc.ventas + p.ventas,
@@ -365,7 +379,7 @@ export function reporteToCsv(
       ? [label, 'sin permiso', 'sin permiso', '']
       : [label, dinero ? k.valor.toFixed(2) : k.valor, dinero ? k.anterior.toFixed(2) : k.anterior, k.variacion ?? '']
 
-  return armarCsvBloques([
+  return [
     {
       titulo: 'Alcance del reporte',
       encabezados: ['Concepto', 'Valor'],
@@ -429,5 +443,5 @@ export function reporteToCsv(
       encabezados: ['Plan', 'Activas'],
       filas: r.activasPorPlan.map((p) => [p.plan, p.count]),
     },
-  ])
+  ]
 }

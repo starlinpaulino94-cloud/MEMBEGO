@@ -9,7 +9,7 @@ import { getReporteCrecimiento } from '@/modules/reportes/crecimiento'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteCrecimientoVista } from '@/components/reportes/ReporteCrecimientoVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -58,7 +58,7 @@ export default async function ReporteCrecimientoPage({
       eyebrow={<RangoFechas rango={rango} accion="/admin/reportes/crecimiento" />}
       controles={
         <>
-          <BotonExportar href={`/admin/reportes/crecimiento/export${qs}`} />
+          <BotonesExportar base="/admin/reportes/crecimiento/export" qs={qs} />
           <BotonImprimir />
         </>
       }

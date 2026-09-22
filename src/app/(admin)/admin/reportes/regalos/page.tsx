@@ -9,7 +9,7 @@ import { getReporteRegalos } from '@/modules/reportes/regalos'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteRegalosVista } from '@/components/reportes/ReporteRegalosVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -64,7 +64,7 @@ export default async function ReporteRegalosPage({
       eyebrow={<RangoFechas rango={rango} accion="/admin/reportes/regalos" />}
       controles={
         <>
-          <BotonExportar href={`/admin/reportes/regalos/export${qs}`} />
+          <BotonesExportar base="/admin/reportes/regalos/export" qs={qs} />
           <BotonImprimir />
         </>
       }

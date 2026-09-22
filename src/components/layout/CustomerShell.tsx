@@ -36,9 +36,18 @@ export function CustomerShell({
   return (
     <>
       {/* Cabecera del rediseño violeta (Stitch «amazon style»): buscador en
-          píldora translúcida, escáner, campana (→ novedades) y avatar sobre
-          el degradado; debajo, la píldora oscura de ubicación. El micrófono
-          es decorativo (el diseño lo trae; dictar no existe todavía). */}
+          píldora blanca, campana (→ novedades) y avatar sobre el degradado;
+          debajo, la píldora oscura de ubicación. El micrófono es decorativo
+          (el diseño lo trae; dictar no existe todavía).
+
+          El atajo al escáner ya no está aquí: «Mi QR» es uno de los destinos
+          del dock, y repetirlo en la cabecera gastaba el sitio de una acción
+          que ya se alcanza desde abajo en cualquier pantalla.
+
+          Las píldoras son blancas en los DOS temas, no `bg-card`: van sobre un
+          degradado de marca que no cambia con el tema, así que una superficie
+          que sí cambiara se volvería casi negra sobre violeta. Por eso su texto
+          es fijo (`text-vibe-deep`) y no un token del tema. */}
       <div className="sticky top-0 z-30">
         <div className="grad-vibe-header px-4 pb-2.5 pt-3">
           <div className="mx-auto flex w-full max-w-md items-center gap-2 md:max-w-3xl lg:max-w-7xl">
@@ -57,7 +66,11 @@ export function CustomerShell({
                 type="search"
                 autoComplete="off"
                 placeholder="Buscar beneficios, membresías…"
-                className="h-full w-full min-w-0 bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                // La píldora del buscador es BLANCA en los dos temas —va sobre
+                // el degradado de marca, como la campana y el avatar—, así que
+                // su texto tiene que ser fijo también. Con `text-foreground` el
+                // tema oscuro lo pintaba claro sobre blanco: invisible.
+                className="h-full w-full min-w-0 bg-transparent px-2 text-sm text-vibe-deep outline-none placeholder:text-vibe-deep/60"
               />
               <Mic className="h-4 w-4 shrink-0 text-vibe-deep" aria-hidden />
             </form>
