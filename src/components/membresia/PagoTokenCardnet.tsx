@@ -1233,6 +1233,36 @@ export function PagoTokenCardnet({
               </div>
             </div>
 
+            {/* LAS DOS NEGATIVAS, JUNTO AL EJEMPLO.
+
+                El ejemplo enseña QUÉ buscar. Faltaba lo que hace que la gente
+                no llegue a buscarlo nunca:
+
+                  · NO llega por mensaje. El cliente acaba de pasar el 3DS de
+                    su banco —con su SMS de verdad— dentro de la ventana de
+                    captura. Pedirle «un código» media pantalla después hace
+                    que espere otro mensaje, y mientras espera no abre el
+                    movimiento, que es el único sitio donde el código existe.
+
+                  · NO es inmediato. El código aparece cuando el cargo se
+                    ASIENTA: minutos u horas. Quien mira a los treinta segundos
+                    no ve nada y concluye que el pago se rompió.
+
+                Van en amarillo y no en gris: esto no es letra pequeña, es la
+                instrucción sin la cual la pantalla no se puede completar. */}
+            <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs leading-relaxed text-muted-foreground">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+              <span>
+                <strong className="font-semibold text-foreground">
+                  No te va a llegar ningún mensaje.
+                </strong>{' '}
+                El código no viene por SMS ni por correo: está dentro del detalle
+                de ese movimiento, en tu app del banco. Y puede tardar de unos
+                minutos a varias horas en aparecer — si todavía no está, sal con{' '}
+                «Lo haré después» y vuelve: tu tarjeta sigue registrada.
+              </span>
+            </p>
+
             <div>
               <label
                 htmlFor="codigo-activacion"
