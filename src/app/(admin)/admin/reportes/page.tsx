@@ -11,6 +11,8 @@ import { NavegacionReportes } from '@/components/reportes/NavegacionReportes'
 import { ReporteEmpresaVista } from '@/components/reportes/ReporteEmpresaVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
 import { BotonesExportar } from '@/components/reportes/BotonesExportar'
+import { PersonalizarResumen } from '@/components/reportes/PersonalizarResumen'
+import { misPreferenciasReportes } from '@/modules/reportes/preferenciasActions'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -63,6 +65,10 @@ export default async function ReportesPage({
   const verActividad = (await requireSection('actividad')) !== null
   const r = await getReporte(companyId, rango, timeZone, { verFinancieros })
   const qs = paramsDeRango(rango)
+  // Qué cifras ve ESTA persona. Va con el resto de la carga y no en un efecto:
+  // pintar las cinco y quitar dos después es el salto que el esqueleto de carga
+  // existe para evitar.
+  const preferencias = await misPreferenciasReportes()
 
   return (
     <ReporteEmpresaVista
@@ -71,6 +77,10 @@ export default async function ReportesPage({
       prefs={prefs}
       empresa={empresa?.name ?? 'Tu negocio'}
       generadoEn={formatDateTime(new Date(), prefs)}
+      preferencias={preferencias}
+      personalizar={
+        <PersonalizarResumen pref={preferencias} verFinancieros={verFinancieros} />
+      }
       // Drill-down: cada cifra del resumen abre el reporte que la explica, con
       // el MISMO periodo. El superadmin monta esta vista sin enlaces porque sus
       // reportes viven en otras rutas.

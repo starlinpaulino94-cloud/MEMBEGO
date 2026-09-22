@@ -3,6 +3,11 @@ import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
 import { calcularInsights } from '@/modules/reportes/insights'
+import {
+  PREFERENCIAS_VACIAS,
+  resolverCifras,
+  type PreferenciasReportes,
+} from '@/modules/reportes/preferencias'
 import { TIPO_TX_LABEL, METODO_LABEL, type Reporte } from '@/modules/reportes/queries'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
@@ -14,6 +19,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { ArrowRight, Lightbulb, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+
+/**
+ * Cuántas columnas según cuántas cifras quedan.
+ *
+ * Escritas enteras y no armadas con `lg:grid-cols-${n}`: Tailwind lee las
+ * clases del código fuente, y una clase construida en tiempo de ejecución no
+ * llega al CSS. El síntoma sería una rejilla de una sola columna sin que nada
+ * falle. En el papel se usa el mismo número, que es el que cabe en A4.
+ */
+const REJILLA: Record<number, string> = {
+  1: 'lg:grid-cols-1 print:grid-cols-1',
+  2: 'lg:grid-cols-2 print:grid-cols-2',
+  3: 'lg:grid-cols-3 print:grid-cols-3',
+  4: 'lg:grid-cols-4 print:grid-cols-4',
+  5: 'lg:grid-cols-5 print:grid-cols-5',
+}
 
 /** A dónde lleva investigar cada cifra. Vacío en el montaje del superadmin. */
 export interface EnlacesReporte {
@@ -69,6 +90,8 @@ export function ReporteEmpresaVista({
   controles,
   generadoEn,
   enlaces,
+  preferencias = PREFERENCIAS_VACIAS,
+  personalizar,
 }: {
   reporte: Reporte
   rango: Rango
@@ -80,6 +103,10 @@ export function ReporteEmpresaVista({
   generadoEn: string
   /** Rutas de drill-down. El superadmin no las pasa: sus reportes viven en otro sitio. */
   enlaces?: EnlacesReporte
+  /** Qué cifras ve ESTA persona. El montaje del superadmin no las pasa. */
+  preferencias?: PreferenciasReportes
+  /** El panel para cambiarlas. Va aquí y no dentro para no atar la vista a una action. */
+  personalizar?: React.ReactNode
 }) {
   const dinero = (n: number) => formatMoney(n, prefs)
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
@@ -101,6 +128,67 @@ export function ReporteEmpresaVista({
   const serieEntregas = serie.map((p) => p.entregas)
 
   const ingresoTotal = (r.ingresosCaja?.valor ?? 0) + (r.ingresosMembresias?.valor ?? 0)
+
+  // Las cifras del resumen, en el orden que eligió quien mira. El permiso
+  // financiero ya viene resuelto en el propio reporte —sin él, `ingresosCaja`
+  // llega en `null`—, así que aquí se le pasa eso mismo y no una comprobación
+  // paralela que pudiera discrepar.
+  const cifras = resolverCifras(preferencias, { verFinancieros: r.ingresosCaja !== null })
+  const tarjetas: Record<string, React.ReactNode> = {
+    ingresosCaja: (
+      <KpiReporte
+        key="ingresosCaja"
+        label="Ingresos de caja"
+        kpi={r.ingresosCaja}
+        formato={dinero}
+        serie={serieIngresos}
+        href={enlaces?.finanzas}
+        definicion="Dinero cobrado por el mostrador en el periodo. Solo transacciones aprobadas o aplicadas: una intención de pago no es un ingreso."
+      />
+    ),
+    cobrosMembresias: (
+      <KpiReporte
+        key="cobrosMembresias"
+        label="Cobros de membresías"
+        kpi={r.ingresosMembresias}
+        formato={dinero}
+        href={enlaces?.finanzas}
+        definicion="Lo cobrado por activaciones y renovaciones, fechado por la fecha de pago. Va aparte de la caja porque entra por otro camino."
+      />
+    ),
+    ventas: (
+      <KpiReporte
+        key="ventas"
+        label="Ventas"
+        kpi={r.operaciones}
+        formato={entero}
+        serie={serieVentas}
+        href={enlaces?.operacion}
+        definicion="Operaciones cobradas en el periodo. No incluye las entregas sin cobro, que se cuentan aparte."
+      />
+    ),
+    entregas: (
+      <KpiReporte
+        key="entregas"
+        label="Entregas sin cobro"
+        kpi={r.entregas}
+        formato={entero}
+        serie={serieEntregas}
+        href={enlaces?.operacion}
+        definicion="Beneficios entregados sin cobrar: canjes de membresía, recompensas y regalos. Es trabajo hecho, no dinero perdido."
+      />
+    ),
+    clientesNuevos: (
+      <KpiReporte
+        key="clientesNuevos"
+        label="Clientes nuevos"
+        kpi={r.clientesNuevos}
+        formato={entero}
+        href={enlaces?.clientes}
+        definicion="Clientes dados de alta en el periodo, por su fecha de registro. No mide si llegaron a venir: eso lo dice la tasa de activación del reporte de clientes."
+      />
+    ),
+  }
 
   return (
     <ReporteImprimible
@@ -131,45 +219,11 @@ export function ReporteEmpresaVista({
           title="Resumen ejecutivo"
           description="Las cinco cifras que dicen cómo va el negocio. Cada una abre el reporte que la explica."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 print:grid-cols-5 print:gap-2">
-          <KpiReporte
-            label="Ingresos de caja"
-            kpi={r.ingresosCaja}
-            formato={dinero}
-            serie={serieIngresos}
-            href={enlaces?.finanzas}
-            definicion="Dinero cobrado por el mostrador en el periodo. Solo transacciones aprobadas o aplicadas: una intención de pago no es un ingreso."
-          />
-          <KpiReporte
-            label="Cobros de membresías"
-            kpi={r.ingresosMembresias}
-            formato={dinero}
-            href={enlaces?.finanzas}
-            definicion="Lo cobrado por activaciones y renovaciones, fechado por la fecha de pago. Va aparte de la caja porque entra por otro camino."
-          />
-          <KpiReporte
-            label="Ventas"
-            kpi={r.operaciones}
-            formato={entero}
-            serie={serieVentas}
-            href={enlaces?.operacion}
-            definicion="Operaciones cobradas en el periodo. No incluye las entregas sin cobro, que se cuentan aparte."
-          />
-          <KpiReporte
-            label="Entregas sin cobro"
-            kpi={r.entregas}
-            formato={entero}
-            serie={serieEntregas}
-            href={enlaces?.operacion}
-            definicion="Beneficios entregados sin cobrar: canjes de membresía, recompensas y regalos. Es trabajo hecho, no dinero perdido."
-          />
-          <KpiReporte
-            label="Clientes nuevos"
-            kpi={r.clientesNuevos}
-            formato={entero}
-            href={enlaces?.clientes}
-            definicion="Clientes dados de alta en el periodo, por su fecha de registro. No mide si llegaron a venir: eso lo dice la tasa de activación del reporte de clientes."
-          />
+        {personalizar}
+        <div
+          className={`mt-4 grid gap-4 sm:grid-cols-2 ${REJILLA[cifras.length] ?? 'lg:grid-cols-5'} print:gap-2`}
+        >
+          {cifras.map((c) => tarjetas[c.clave])}
         </div>
       </section>
 

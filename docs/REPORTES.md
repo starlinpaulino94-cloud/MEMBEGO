@@ -209,6 +209,56 @@ Al imprimir, los controles desaparecen y la tabla sale entera y en el orden que
 se esté mirando. Si hay una búsqueda puesta, **el aviso de «filtrado» también se
 imprime**: un papel con menos filas de las que hay tiene que decirlo.
 
+## Qué cifras ve cada quien
+
+El resumen ejecutivo del índice enseñaba las mismas cinco cifras a todo el
+mundo. A quien lleva el mostrador, «cobros de membresías» no le dice nada el
+lunes por la mañana; a quien lleva las cuentas, «entregas sin cobro» es ruido.
+**Cinco tarjetas donde dos sobran hacen que las tres que importan se lean
+peor.**
+
+Cada persona elige cuáles ve y en qué orden, desde el propio índice
+(`components/reportes/PersonalizarResumen.tsx`). La preferencia es **de la
+persona, no de la empresa**: dos empleados del mismo negocio miran cosas
+distintas, y una configuración única obligaría a que uno aguantara la del otro.
+Se guarda en `users.preferenciasReportes` (migración
+`20260929_reportes_preferencias`), junto a `permisos`, que es el mismo caso: un
+ajuste pequeño que siempre se lee con el usuario.
+
+### Se guarda lo OCULTO, no lo visible
+
+Parece lo mismo y no lo es. Si se guardara la lista de las que **sí** se ven, la
+cifra que se añada mañana no estaría en ningún sobre ya guardado — y quedaría
+escondida para todo el que hubiera personalizado alguna vez, **sin que nada
+fallara**. Una métrica nueva que nadie ve es peor que no añadirla.
+
+Guardando lo oculto, lo que no se nombra se enseña: una tarjeta nueva aparece
+sola para todos, y quien no la quiera la quita. Hay una prueba que lo comprueba
+simulando exactamente ese caso.
+
+### Las reglas que no se negocian
+
+- **El permiso manda.** Sin `ver_financieros` las cifras de dinero no aparecen
+  aunque el sobre diga lo contrario, y ni siquiera se ofrecen en el panel. La
+  server action vuelve a comprobarlo: se despacha por su id desde cualquier
+  ruta permitida, así que esconder el formulario no la protege.
+- **Nunca un resumen vacío.** No se puede apagar la última cifra —su botón sale
+  deshabilitado— y, aunque el sobre las oculte todas, la pantalla enseña una.
+  Un encabezado con una caja vacía debajo se lee como un fallo, no como una
+  elección.
+- **El sobre lo arma el núcleo, no el formulario.** Llega una clave y una
+  dirección; la lista nueva la calcula `modules/reportes/preferencias.ts` a
+  partir de la guardada. Un formulario manipulado no puede escribir cualquier
+  cosa.
+- **Se puede volver atrás.** Una personalización sin vuelta a lo de fábrica es
+  una trampa.
+- **Un sobre raro no tumba la pantalla.** `leerPreferencias` nunca lanza: lo que
+  no entiende se cae a «sin preferencias», y las claves de tarjetas retiradas se
+  descartan al leer.
+
+El panel no se imprime —en el papel no hay nada que pulsar— y las cifras ocultas
+siguen listadas en gris: si desaparecieran, no habría forma de encenderlas.
+
 ## Qué dicen estos números
 
 El índice de reportes cierra con unas frases que interpretan las cifras:
