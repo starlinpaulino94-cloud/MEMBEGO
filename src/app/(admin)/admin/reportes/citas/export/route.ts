@@ -3,7 +3,7 @@ import { getUser } from '@/lib/auth'
 import { requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
-import { TZ_PLATAFORMA } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { armarCsvBloques, respuestaCsv } from '@/lib/csv'
 import { armarXlsxBloques, pideXlsx, respuestaXlsx } from '@/lib/xlsx'
 import { leerRango } from '@/modules/reportes/rango'
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company.findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
   ).catch(() => null)
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const rango = leerRango(sp, timeZone)

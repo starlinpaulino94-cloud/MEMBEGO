@@ -10,6 +10,8 @@
  * Sin Prisma ni React: se puede probar con un reloj fijo.
  */
 
+import { zonaSegura } from '@/lib/zona-horaria'
+
 export const PRESETS = [
   { clave: 'hoy', label: 'Hoy' },
   { clave: 'ayer', label: 'Ayer' },
@@ -122,10 +124,18 @@ export interface Rango {
 
 const ES_DIA = /^\d{4}-\d{2}-\d{2}$/
 
-/** Minutos que la zona horaria va por delante de UTC en un instante dado. */
+/**
+ * Minutos que la zona horaria va por delante de UTC en un instante dado.
+ *
+ * `zonaSegura` y no `timeZone` a pelo: `companies.zonaHoraria` es texto libre
+ * del perfil de la empresa, e `Intl` LANZA ante un valor que no reconoce. Este
+ * núcleo lo llama una vez por corte de periodo desde trece pantallas; dejar
+ * que lance aquí es tumbar el módulo entero de Reportes por una cadena mal
+ * tecleada en otra pantalla. Misma decisión que `formatDate` desde siempre.
+ */
 function offsetMin(date: Date, timeZone: string): number {
   const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+    timeZone: zonaSegura(timeZone),
     hourCycle: 'h23',
     year: 'numeric',
     month: '2-digit',
@@ -145,7 +155,7 @@ function offsetMin(date: Date, timeZone: string): number {
 /** El día local (`YYYY-MM-DD`) al que pertenece un instante. */
 export function diaLocal(fecha: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+    timeZone: zonaSegura(timeZone),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
