@@ -151,9 +151,106 @@ redirección: `/login?error=membego&motivo=…`
 | `motivo` | Dónde mirar |
 |---|---|
 | `token` | El `MEMBEGO_SECRETO` del satélite no es el del paso 3, o el token se reutilizó |
-| `vinculo` | El correo que entra no administra ninguna organización en el satélite |
+| `vinculo` | El correo que entra no administra ninguna organización en el satélite — ver abajo |
 | `cuenta` | Rol `CLIENTE`: el SSO trae al equipo, no a los clientes finales |
 | `sesion` | Falta `MEMBEGO_SECRETO`, o falló Supabase Auth en el satélite |
+
+---
+
+## «Esta empresa de MembeGo aún no está vinculada»
+
+Es el `motivo=vinculo` de la tabla de arriba, y conviene leerlo al revés de como
+suena: **es la primera pantalla que demuestra que todo lo nuestro funciona**. El
+satélite solo llega a comprobar el vínculo después de verificar la firma del
+token, comprobar que no ha caducado y canjear su `jti`. Si el secreto estuviera
+mal, el motivo sería `token`; si fallara Supabase allá, sería `sesion`. Que diga
+`vinculo` significa que el token viajó, se verificó y se entendió.
+
+Lo que falta es del satélite, y es una decisión suya: saber **a qué organización
+de Park & Tours** entra esta empresa de MembeGo. Su `resolveLink` lo resuelve
+solo la primera vez, y exige las dos pruebas a la vez —el token firmado prueba
+que administras la empresa en MembeGo; la membresía local prueba que administras
+la organización de allá— con cinco salidas posibles:
+
+| Razón interna | Qué pasó |
+|---|---|
+| `suspendido` | El vínculo existe, pero alguien lo suspendió desde el panel del satélite |
+| `sin_vinculo` | El rol del token no puede vincular (solo `SUPERADMIN`, `ADMINISTRADOR`, `ADMIN_EMPRESA`) |
+| `sin_permiso` | El token no trae correo |
+| `sin_organizacion` | Ese correo no tiene cuenta allá, **o no es `owner`/`admin` activo de ninguna organización** |
+| `ambiguo` | Administra dos o más, o su organización ya está atada a otra empresa de MembeGo |
+
+La trampa real está en `sin_organizacion`, y es fácil de pisar precisamente
+porque es tu propia plataforma: el rol `superadmin` de Park & Tours **no cuenta**
+como administrador de una organización. `resolveLink` busca `role in
+('owner','admin')` a propósito —el superadmin ve todas las organizaciones, y
+elegir por él cuál ve el dinero de esta empresa sería peor que pedírselo—. Una
+cuenta que allá es dueña de la plataforma y aquí es `SUPERADMIN` llega a esta
+pantalla con todo bien configurado.
+
+### Diagnóstico, en una consulta
+
+En el SQL de **Park & Tours** (no el de MembeGo), cambiando el correo por el que
+entra:
+
+```sql
+with u as (
+  select id, email from auth.users
+   where lower(email) = lower('CORREO@QUE.ENTRA')
+)
+select 'cuenta' as que,
+       coalesce((select id::text from u), '— NO EXISTE —') as valor,
+       coalesce((select email from u), '') as detalle
+union all
+select 'membresia', m.role || ' / ' || m.status, o.name || '  [' || o.kind || ']'
+  from organization_memberships m
+  join u on u.id = m.user_id
+  join organizations o on o.id = m.organization_id
+union all
+select 'organizacion', o.id::text, o.name || '  [' || o.kind || ' / ' || o.status || ']'
+  from organizations o where o.kind = 'tenant'
+union all
+select 'vinculo', l.membego_company_id, l.organization_id::text || '  (' || l.status || ')'
+  from membego_link l;
+```
+
+Se lee de arriba abajo: si `cuenta` dice `— NO EXISTE —`, el correo no tiene
+cuenta allá. Si hay `cuenta` pero ninguna `membresia` con `owner / active` o
+`admin / active`, es el caso del superadmin. Si hay dos, es `ambiguo`. Y si ya
+sale una fila `vinculo` con esta empresa, el problema es su `status`.
+
+### El arreglo
+
+Dos caminos, y el segundo es el bueno cuando la cuenta es la dueña de la
+plataforma:
+
+1. **Darle la membresía que falta** — en Park & Tours, hacer a ese correo
+   `owner` o `admin` activo de **exactamente una** organización. El siguiente
+   SSO crea el vínculo solo, que es como está pensado.
+
+2. **Escribir el vínculo a mano** — lo mismo que habría escrito el primer SSO.
+   Hace falta el `companyId` de MembeGo (en el SQL de MembeGo:
+   `select id, name from companies order by name;`) y el `id` de la organización
+   de la consulta de arriba:
+
+```sql
+insert into membego_link (organization_id, membego_company_id, linked_by, notes)
+select 'ORG_ID_DE_PARK_AND_TOURS'::uuid,
+       'COMPANY_ID_DE_MEMBEGO',
+       (select id from auth.users where lower(email) = lower('CORREO@QUE.ENTRA')),
+       'Vínculo escrito a mano: la cuenta administra la plataforma, no una organización'
+on conflict do nothing
+returning organization_id, membego_company_id, status;
+```
+
+   Si no devuelve ninguna fila, el vínculo ya existía: la organización o la
+   empresa ya estaban atadas (las dos columnas son `unique`, a propósito —dos
+   organizaciones leyendo los clientes de la misma empresa es un cruce de datos,
+   no una integración).
+
+Ninguno de los dos toca MembeGo. Y ninguno degrada a nadie: el satélite solo
+gobierna el rol de las membresías que **él mismo** creó (`role_managed`), así que
+una cuenta que allá ya era superadmin sigue siéndolo después de entrar por SSO.
 
 ---
 
