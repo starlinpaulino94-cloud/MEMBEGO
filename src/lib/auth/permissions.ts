@@ -1,4 +1,4 @@
-import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
+import { ADMIN_ROLES, FULL_ADMIN_ROLES, type AppRole } from '@/types'
 
 /**
  * Autorización FINA del panel /admin por sección (Onboarding Fase 2 · O-5).
@@ -281,6 +281,49 @@ export function seccionPermitida(
   const base = canAccessAdminSection(role, section)
   if (ROLES_EXENTOS_PERMISOS.includes(role)) return base
   return permisos?.secciones?.[section] ?? base
+}
+
+/**
+ * ¿Esta sección se le CONCEDIÓ a esta persona de forma explícita?
+ *
+ * Distinto de `seccionPermitida`, que responde «puede o no puede» sumando el
+ * rol. Esto responde «alguien se sentó a dárselo»: solo mira el ajuste, y
+ * solo el valor `true`. Lo necesitan las superficies que deben tratar una
+ * concesión como una decisión deliberada —abrirle el panel a quien su rol no
+ * lo trae, o enseñarle en el menú un módulo por encima de su rango—, sin que
+ * eso valga para lo que simplemente viene heredado.
+ */
+export function seccionConcedida(
+  section: AdminSection,
+  permisos: PermisosUsuario | null | undefined
+): boolean {
+  return permisos?.secciones?.[section] === true
+}
+
+/**
+ * ¿Puede esta persona ENTRAR al panel de empresa?
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LA PUERTA QUE HACÍA DECORATIVO AL MÓDULO DE PERMISOS
+ *
+ * La entrada a `/admin` se decidía SOLO por rol (`ADMIN_ROLES`), y esa
+ * comprobación ocurre ANTES de que nadie mire los permisos. Un EMPLEADO al
+ * que se le concedían Clientes, Membresías y Pagos veía en su pantalla de
+ * Permisos «Concedido», se guardaba en la base, y el proxy lo rebotaba a su
+ * escáner sin llegar a consultarlo: tres módulos concedidos y ninguno
+ * alcanzable.
+ *
+ * Ahora la puerta admite las dos llaves. El rol sigue abriendo de par en par;
+ * una concesión explícita abre solo para lo concedido, porque en cuanto se
+ * pasa esta puerta manda `seccionPermitida` sección por sección —ni siquiera
+ * el panel de inicio, que para un rol de mostrador no está concedido—.
+ */
+export function puedeEntrarAlPanel(
+  role: AppRole,
+  permisos: PermisosUsuario | null | undefined
+): boolean {
+  if (ADMIN_ROLES.includes(role)) return true
+  return ADMIN_SECTIONS.some((s) => seccionConcedida(s, permisos))
 }
 
 /**

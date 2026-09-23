@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/env'
 import { sessionCookieDomain } from '@/lib/site'
-import { ROLE_HOME, ROUTE_PROTECTION, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
+import { ROLE_HOME, ROUTE_PROTECTION, ADMIN_ROLES, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
 import {
   adminSectionForPath,
+  puedeEntrarAlPanel,
   resolverPermisosUsuario,
   seccionPermitida,
 } from '@/lib/auth/permissions'
@@ -226,7 +227,18 @@ export async function proxy(request: NextRequest) {
       }
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
-      if (!matched.roles.includes(role)) {
+      const permisos = resolverPermisosUsuario(metadata.permisos)
+      // LA PUERTA DEL PANEL ADMITE DOS LLAVES. El rol la abre de par en par;
+      // una sección CONCEDIDA la abre solo para lo concedido —lo de dentro lo
+      // sigue decidiendo `seccionPermitida`, una por una—. Sin esto, conceder
+      // Clientes a un empleado se guardaba en la base y el rebote ocurría aquí,
+      // antes de mirarlo: el módulo de Permisos prometía algo que esta línea
+      // deshacía. En el resto de prefijos manda el rol, como siempre.
+      const puedeEntrar =
+        matched.prefix === '/admin'
+          ? puedeEntrarAlPanel(role, permisos)
+          : matched.roles.includes(role)
+      if (!puedeEntrar) {
         const url = request.nextUrl.clone()
         url.pathname = ROLE_HOME[role]
         return redirectWithCookies(url, response)
@@ -240,15 +252,22 @@ export async function proxy(request: NextRequest) {
       // barrera inmediata son las server actions (requireSection lee la BD).
       if (path.startsWith('/admin')) {
         const section = adminSectionForPath(path)
-        const permisos = resolverPermisosUsuario(metadata.permisos)
+        // El panel de inicio es gratis para quien el ROL mete en /admin, y
+        // solo para ese: es el destino del rebote y no puede fallar su propio
+        // gate. Quien entra por una concesión no lo tiene concedido —ni debe—,
+        // así que a él se le mide como a cualquier otra sección y su rebote va
+        // a su casa. Darle el dashboard habría sido un bucle o una pantalla de
+        // la que no es dueño.
+        const deSerie = ADMIN_ROLES.includes(role)
         const bloqueado = section
-          ? section !== 'dashboard' && !seccionPermitida(role, section, permisos)
+          ? !(deSerie && section === 'dashboard') &&
+            !seccionPermitida(role, section, permisos)
           : // Path de /admin no reconocido: mismo trato de siempre — los
             // roles plenos pasan, los acotados no (fail-closed).
             !FULL_ADMIN_ROLES.includes(role)
         if (bloqueado) {
           const url = request.nextUrl.clone()
-          url.pathname = '/admin/dashboard'
+          url.pathname = deSerie ? '/admin/dashboard' : ROLE_HOME[role]
           return redirectWithCookies(url, response)
         }
       }

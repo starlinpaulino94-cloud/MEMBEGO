@@ -9,6 +9,8 @@ import {
   permisosDesdeSeleccion,
   puedeEditarPermisos,
   canAccessAdminSection,
+  puedeEntrarAlPanel,
+  seccionConcedida,
   adminSectionForPath,
   ADMIN_SECTIONS,
 } from '../src/lib/auth/permissions'
@@ -16,6 +18,8 @@ import {
   navForRole,
   allLinks,
   hrefsNegadosPorPermisos,
+  visibleWorkspaces,
+  visibleGroups,
 } from '../src/components/layout/nav-config'
 import { FULL_ADMIN_ROLES, type AppRole } from '../src/types'
 
@@ -497,4 +501,70 @@ test('acotar a un rol no le quita lo que se le conceda a mano', () => {
   const p = resolverPermisosUsuario({ v: 1, secciones: { campanas: true } })
   assert.equal(seccionPermitida('GERENTE', 'campanas', null), false)
   assert.equal(seccionPermitida('GERENTE', 'campanas', p), true)
+})
+
+// -- Conceder a un empleado tiene que servir para algo ------------------------
+
+/**
+ * EL FALLO QUE ESTO ARREGLA, TAL COMO SE VIO.
+ *
+ * A una empleada se le concedieron Clientes, Membresías, Pagos, Comprobantes
+ * y Citas. La pantalla decía «Concedido», se guardaba en la base… y su menú
+ * seguía teniendo dos cosas: escanear y caja.
+ *
+ * Había tres puertas cerradas antes de que nadie mirara un permiso: el proxy
+ * y el layout decidían la entrada a /admin SOLO por rol, y el menú del
+ * mostrador ni siquiera construía el árbol del panel. Cinco módulos
+ * concedidos y ninguno alcanzable: el módulo de Permisos prometía algo que
+ * esas tres líneas deshacían.
+ */
+const empleadaCon = (...secciones: string[]) =>
+  resolverPermisosUsuario({
+    v: 1,
+    secciones: Object.fromEntries(secciones.map((s) => [s, true])),
+  })
+
+test('un rol sin panel entra si se le concede algo, y no antes', () => {
+  assert.equal(puedeEntrarAlPanel('EMPLEADO', null), false)
+  assert.equal(puedeEntrarAlPanel('EMPLEADO', empleadaCon('clientes')), true)
+  // Negar no abre nada: solo el `true` explícito es una concesión.
+  const negada = resolverPermisosUsuario({ v: 1, secciones: { clientes: false } })
+  assert.equal(puedeEntrarAlPanel('EMPLEADO', negada), false)
+  assert.equal(seccionConcedida('clientes', negada), false)
+})
+
+test('quien tiene panel por su rol sigue entrando sin concesiones', () => {
+  for (const role of ['ADMINISTRADOR', 'GERENTE', 'CAJERO', 'MARKETING', 'SUPERVISOR'] as const) {
+    assert.equal(puedeEntrarAlPanel(role, null), true, `${role} perdió la entrada al panel`)
+  }
+  // Y quien no es del equipo no entra ni con la puerta nueva.
+  assert.equal(puedeEntrarAlPanel('CLIENTE', null), false)
+})
+
+test('entrar por concesión abre SOLO lo concedido, ni siquiera el panel de inicio', () => {
+  const p = empleadaCon('clientes')
+  assert.equal(seccionPermitida('EMPLEADO', 'clientes', p), true)
+  for (const s of ['membresias', 'pagos', 'campanas', 'empleados', 'dashboard'] as const) {
+    assert.equal(
+      seccionPermitida('EMPLEADO', s, p),
+      false,
+      `conceder clientes no puede abrir ${s}`
+    )
+  }
+})
+
+test('el menú del mostrador enseña lo concedido, y solo eso', () => {
+  const enlaces = (permisos: ReturnType<typeof resolverPermisosUsuario>) => {
+    const ctx = { role: 'EMPLEADO' as AppRole, scope: 'COMPANY' as const, permisos }
+    return visibleWorkspaces(ctx)
+      .flatMap((w) => visibleGroups(w, ctx))
+      .flatMap((g) => allLinks([g]))
+      .map((l) => l.href)
+  }
+  // Sin concesiones, su menú es el de siempre: ni un enlace del panel.
+  assert.ok(!enlaces(null).some((h) => h.startsWith('/admin')))
+  // Con dos concedidas, aparecen esas dos. Y ninguna más del panel.
+  const con = enlaces(empleadaCon('clientes', 'membresias'))
+  const delPanel = con.filter((h) => h.startsWith('/admin'))
+  assert.deepEqual(delPanel.sort(), ['/admin/clientes', '/admin/membresias'])
 })

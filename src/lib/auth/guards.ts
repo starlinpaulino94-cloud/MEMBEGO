@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth'
-import { FULL_ADMIN_ROLES, type AppRole, type SessionUser } from '@/types'
+import { ADMIN_ROLES, FULL_ADMIN_ROLES, ROLE_HOME, type AppRole, type SessionUser } from '@/types'
 import {
   ROLES_EXENTOS_PERMISOS,
   funcionPermitida,
+  puedeEntrarAlPanel,
   resolverPermisosUsuario,
   seccionPermitida,
   type AdminSection,
@@ -54,6 +55,40 @@ export async function requireRole(
  * las mutaciones exigen admin pleno por defecto. Las pocas acciones que un rol
  * acotado sí puede ejecutar usan `requireSection(...)` en su lugar.
  */
+/**
+ * Puerta del PANEL DE EMPRESA para el layout de `/admin`.
+ *
+ * Igual que la del proxy y por el mismo motivo: el rol la abre de par en par,
+ * y a quien no lo tiene se la abre una seccion CONCEDIDA —solo para lo
+ * concedido, porque dentro sigue mandando `requireSection` una por una—.
+ *
+ * Lee los permisos VIVOS de la base, no del token: quitarle a alguien su
+ * ultima seccion concedida le cierra el panel en su siguiente clic, sin
+ * esperar a que su sesion se refresque. Ante cualquier duda —sin fila en la
+ * base, fallo de la consulta— se le manda a su casa.
+ */
+export async function requirePanel(): Promise<SessionUser> {
+  const user = await requireUser()
+  const role = user.metadata.role
+  if (ADMIN_ROLES.includes(role)) return user
+
+  let permisos: PermisosUsuario | null = null
+  if (user.metadata.dbUserId) {
+    try {
+      const { prisma } = await import('@/lib/prisma')
+      const fila = await prisma.user.findUnique({
+        where: { id: user.metadata.dbUserId },
+        select: { permisos: true },
+      })
+      permisos = resolverPermisosUsuario(fila?.permisos)
+    } catch {
+      permisos = null
+    }
+  }
+  if (!puedeEntrarAlPanel(role, permisos)) redirect(ROLE_HOME[role] ?? '/login')
+  return user
+}
+
 export async function requireAdminUser(): Promise<SessionUser | null> {
   const user = await getUser()
   if (!user || !FULL_ADMIN_ROLES.includes(user.metadata.role)) return null

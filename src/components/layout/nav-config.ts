@@ -50,7 +50,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react'
-import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
+import { ADMIN_ROLES, FULL_ADMIN_ROLES, type AppRole } from '@/types'
 import {
   adminSectionForPath,
   seccionPermitida,
@@ -1392,9 +1392,40 @@ export function ofreceSalidaAPlataforma(ctx: ContextoNav): boolean {
 
 /** Los espacios que esta persona ve, con sus grupos ya filtrados. */
 export function visibleWorkspaces(ctx: ContextoNav): EspacioVisible[] {
-  return workspacesForRole(ctx.role)
+  return espaciosDe(ctx)
     .filter((w) => canSeeWorkspace(w, ctx))
     .map((w) => ({ ...w, groups: visibleGroups(w, ctx) }))
+}
+
+/**
+ * Los espacios de los que parte el menú de esta persona.
+ *
+ * `workspacesForRole` reparte por rol, y a un rol de mostrador le da el
+ * mostrador: los espacios del panel NO ESTÁN EN SU ÁRBOL. Por eso conceder
+ * Clientes a un empleado no le enseñaba nada — no es que el módulo se
+ * filtrara, es que no había dónde filtrarlo.
+ *
+ * Con alguna sección concedida se le suman los espacios del panel, y de ahí
+ * en adelante manda el filtro de siempre: `visibleGroups` deja solo los
+ * módulos permitidos y un espacio sin ninguno no se pinta. Un empleado con
+ * Clientes concedido ve Clientes, y nada más.
+ *
+ * NO HACE FALTA AFLOJAR NADA MÁS, y se comprobó: probé además a saltarme el
+ * rol y el rango del item y del espacio para quien tuviera concesiones, y las
+ * pruebas seguían pasando con y sin ello — porque hoy ningún módulo ni
+ * espacio del menú declara `roles` ni `rangoMinimo`. Era código que no hacía
+ * nada, con una prueba que no podía fallar. Fuera los dos.
+ */
+function espaciosDe(ctx: ContextoNav): Workspace[] {
+  const base = workspacesForRole(ctx.role)
+  if (ADMIN_ROLES.includes(ctx.role) || !tieneAlgunaConcesion(ctx)) return base
+  const yaEstan = new Set(base.map((w) => w.id))
+  return [...base, ...ESPACIOS_ADMIN.filter((w) => !yaEstan.has(w.id))]
+}
+
+/** ¿Tiene concedida ALGUNA sección? Abre el árbol; el contenido se filtra aparte. */
+function tieneAlgunaConcesion(ctx: ContextoNav): boolean {
+  return Object.values(ctx.permisos?.secciones ?? {}).some((v) => v === true)
 }
 
 /**
