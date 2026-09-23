@@ -1,4 +1,5 @@
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
@@ -48,6 +49,7 @@ export function ReportePromocionesVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+  const fEntero = formatoEntero(prefs)
   const dinero = (n: number) => formatMoney(n, prefs)
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
@@ -175,7 +177,7 @@ export function ReportePromocionesVista({
                 datos={serie.map((p) => ({ dia: p.dia, valor: p.adquiridas, anterior: p.usadas }))}
                 etiqueta="Adquiridas"
                 etiquetaAnterior="Usadas"
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={
@@ -199,7 +201,7 @@ export function ReportePromocionesVista({
                 filas={r.topPromociones
                   .slice(0, 8)
                   .map((p) => ({ nombre: p.titulo, valor: p.usadas }))}
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={<TablaPromociones filas={r.topPromociones} entero={entero} />}

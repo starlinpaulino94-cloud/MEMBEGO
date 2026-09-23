@@ -1,4 +1,5 @@
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
+import { formatoDinero, formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
@@ -109,7 +110,9 @@ export function ReporteEmpresaVista({
   personalizar?: React.ReactNode
 }) {
   const dinero = (n: number) => formatMoney(n, prefs)
+  const fDinero = formatoDinero(prefs)
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+  const fEntero = formatoEntero(prefs)
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
@@ -244,7 +247,7 @@ export function ReporteEmpresaVista({
             <GraficoTendencia
               datos={serie.map((p) => ({ dia: p.dia, valor: p.ingresos }))}
               etiqueta="Ingresos de caja"
-              formato={dinero}
+              formato={fDinero}
             />
           ) : (
             <p className="py-10 text-center text-small text-muted-foreground">
@@ -290,7 +293,7 @@ export function ReporteEmpresaVista({
                   valor: m.ingresos,
                 }))}
                 total={r.porMetodo.reduce((s, m) => s + m.ingresos, 0)}
-                formato={dinero}
+                formato={fDinero}
               />
             ) : (
               <p className="py-10 text-center text-small text-muted-foreground">
@@ -339,7 +342,7 @@ export function ReporteEmpresaVista({
                   nombre: TIPO_TX_LABEL[t.tipo] ?? t.tipo,
                   valor: t.operaciones,
                 }))}
-                formato={entero}
+                formato={fEntero}
               />
             ) : (
               <p className="py-10 text-center text-small text-muted-foreground">
