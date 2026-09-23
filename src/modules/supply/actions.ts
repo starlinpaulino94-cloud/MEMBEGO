@@ -24,6 +24,7 @@ import { recalcularCubetas } from './movimientos'
 import { abrirSesionQr, resolverNonce } from './qr'
 import { cancelarReserva, reservar } from './reservas'
 import { esDestino, ORIGEN_POR_DESTINO } from './catalogo'
+import { entregar } from './distribucion'
 import { claveIdempotencia } from './codigos'
 
 /**
@@ -775,5 +776,58 @@ export async function escanearSupplyAction(
     }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'No se pudo leer el código.' }
+  }
+}
+
+// ── Reclamar una oferta de Membego (Fases 21, 56, 57) ───────────────────────
+
+/**
+ * El cliente reclama un beneficio publicado por Membego.
+ *
+ * TODA la comprobación ocurre antes de mover una unidad y dentro de la misma
+ * transacción que la mueve: elegibilidad, cupo de la campaña y saldo del lote.
+ * El prompt lo pide con estas palabras — «no permitir claim y verificar
+ * después»— y la razón es concreta: una campaña de 200 con el límite «una por
+ * persona» comprobado a posteriori reparte 260 vouchers y deja a Membego
+ * eligiendo a quién decepcionar.
+ */
+export async function reclamarOfertaAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'Inicia sesión para obtener tu beneficio.' }
+
+    const clienteId = texto(fd, 'clienteId', 60)
+    const asignacionId = texto(fd, 'asignacionId', 60)
+    if (!clienteId || !asignacionId) return { error: 'Falta información de la oferta.' }
+
+    const res = await entregar({
+      clienteId,
+      destino: 'CAMPANA',
+      asignacionId,
+      precioCliente: 0,
+      referencia: 'marketplace',
+    })
+    if (!res.ok) return { error: res.mensaje }
+
+    await auditar('SUPPLY_DERECHO_EMITIDO', 'SupplyDerecho', res.derechoId, {
+      asignacionId,
+      clienteId,
+      canal: 'MARKETPLACE',
+      reutilizado: res.reutilizado,
+    })
+
+    revalidatePath('/cliente/beneficios')
+    revalidatePath('/cliente/explorar')
+    return {
+      success: res.reutilizado
+        ? 'Ya tenías este beneficio: está en «Beneficios Membego».'
+        : '¡Listo! Tu beneficio está en «Beneficios Membego».',
+      id: res.derechoId,
+    }
+  } catch (e) {
+    return comoError(e)
   }
 }

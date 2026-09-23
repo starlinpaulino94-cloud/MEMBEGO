@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Gift } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
@@ -57,6 +58,14 @@ export default async function BeneficiosPage() {
       <PageHeader
         title="Beneficios Membego"
         description="Lo que Membego ya pagó por ti. Enséñalo en el negocio y te lo entregan."
+        action={
+          <Link
+            href="/cliente/beneficios/disponibles"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
+          >
+            Ver disponibles
+          </Link>
+        }
       />
 
       {beneficios.length === 0 ? (
@@ -65,6 +74,14 @@ export default async function BeneficiosPage() {
           icon={<Gift className="size-6" />}
           title="Todavía no tienes beneficios de Membego"
           description="Cuando participes en una campaña, invites a un amigo o consigas una recompensa, tus beneficios aparecen aquí listos para usar."
+          action={
+            <Link
+              href="/cliente/beneficios/disponibles"
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Ver lo que hay disponible
+            </Link>
+          }
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
