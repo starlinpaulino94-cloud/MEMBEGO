@@ -17,7 +17,7 @@ import {
   allLinks,
   hrefsNegadosPorPermisos,
 } from '../src/components/layout/nav-config'
-import type { AppRole } from '../src/types'
+import { FULL_ADMIN_ROLES, type AppRole } from '../src/types'
 
 /**
  * Módulo de PERMISOS por empleado (14-08-2026): el rol da la base y el
@@ -80,10 +80,13 @@ test('negar una función bloquea esa función y solo esa', () => {
     v: 1,
     funciones: { promociones: { eliminar: false } },
   })
-  assert.equal(funcionPermitida('CAJERO', 'promociones', 'eliminar', p), false)
-  assert.equal(funcionPermitida('CAJERO', 'promociones', 'crear', p), true)
+  // Con GERENTE y no con CAJERO: desde que el mostrador está acotado por
+  // oficio, el cajero no trae 'promociones' y la prueba mediría otra cosa
+  // —una sección que su rol ya no da— en vez de la negación quirúrgica.
+  assert.equal(funcionPermitida('GERENTE', 'promociones', 'eliminar', p), false)
+  assert.equal(funcionPermitida('GERENTE', 'promociones', 'crear', p), true)
   // La sección sigue abierta: la negación fue quirúrgica.
-  assert.equal(seccionPermitida('CAJERO', 'promociones', p), true)
+  assert.equal(seccionPermitida('GERENTE', 'promociones', p), true)
 })
 
 test('una sección negada cierra también todas sus funciones', () => {
@@ -235,17 +238,24 @@ const RAIZ = join(__dirname, '..')
 
 test('Sinónimos de búsqueda es una sección gobernable', () => {
   const p = resolverPermisosUsuario({ v: 1, secciones: { sinonimos: false } })
-  assert.equal(seccionPermitida('GERENTE', 'sinonimos', p), false)
+  // Con ADMINISTRADOR y no con GERENTE: los sinónimos son configuración del
+  // catálogo y desde que el gerente está acotado por oficio ya no los trae de
+  // serie. Probarlo con él comprobaría que se niega algo que su rol tampoco da.
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'sinonimos', p), false)
   // Su vecina en el menú («Experiencia cliente») no se toca.
-  assert.equal(seccionPermitida('GERENTE', 'personalizacion', p), true)
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'personalizacion', p), true)
   // Y con la columna limpia sigue siendo lo que su rol dice.
-  assert.equal(seccionPermitida('GERENTE', 'sinonimos', null), true)
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'sinonimos', null), true)
 })
 
 test('los sinónimos no se le conceden a ningún rol acotado', () => {
   // El menú nunca se los enseñó; ahora la sección dice lo mismo, y las
   // actions —que son la barrera real— también.
-  for (const role of ['MARKETING', 'SUPERVISOR'] as const) {
+  //
+  // CAJERO y GERENTE entran ahora en este bucle, y no como excepción: desde
+  // que tienen paquete por oficio son roles acotados como los otros dos. El
+  // título de esta prueba lo pedía desde el principio.
+  for (const role of ['MARKETING', 'SUPERVISOR', 'CAJERO', 'GERENTE'] as const) {
     assert.equal(
       canAccessAdminSection(role, 'sinonimos'),
       false,
@@ -253,7 +263,6 @@ test('los sinónimos no se le conceden a ningún rol acotado', () => {
     )
   }
   assert.equal(canAccessAdminSection('ADMINISTRADOR', 'sinonimos'), true)
-  assert.equal(canAccessAdminSection('GERENTE', 'sinonimos'), true)
 })
 
 test('negar Sinónimos lo borra también del menú', () => {
@@ -395,4 +404,97 @@ test('el CRM tiene UNA sección, no cinco', () => {
   )
   assert.deepEqual(delCrm, ['leads'])
   assert.equal(adminSectionForPath('/admin/crm/conversaciones'), 'leads')
+})
+
+// -- El mostrador y la operación, acotados por oficio -------------------------
+
+/**
+ * LO QUE ESTO VIENE A ARREGLAR.
+ *
+ * `canAccessAdminSection` miraba PRIMERO `FULL_ADMIN_ROLES`, así que un CAJERO
+ * y un GERENTE traían las 44 secciones: campañas, audiencia, automatizaciones
+ * y la configuración comercial incluidas. El módulo de Permisos no estaba
+ * roto —negar funcionaba— pero no había nada que negar hasta que alguien se
+ * sentaba a quitar cuarenta casillas por empleado, una por una.
+ */
+test('el mostrador no trae marketing ni configuración', () => {
+  for (const s of ['campanas', 'audiencia', 'adquisicion', 'marketing',
+                   'automatizaciones', 'publicaciones', 'planes', 'metodos-pago',
+                   'personalizacion', 'integraciones', 'empleados'] as const) {
+    assert.equal(
+      canAccessAdminSection('CAJERO', s),
+      false,
+      `un cajero no debería traer ${s} de serie`
+    )
+  }
+})
+
+test('el mostrador sí trae lo suyo', () => {
+  for (const s of ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas',
+                   'citas', 'scanner', 'conciliacion'] as const) {
+    assert.equal(
+      canAccessAdminSection('CAJERO', s),
+      true,
+      `un cajero necesita ${s} para trabajar`
+    )
+  }
+})
+
+test('la operación dirige, pero no hace marketing ni toca la configuración comercial', () => {
+  for (const s of ['reportes', 'actividad', 'empleados', 'sucursales', 'seguimiento'] as const) {
+    assert.equal(canAccessAdminSection('GERENTE', s), true, `un gerente necesita ${s}`)
+  }
+  for (const s of ['campanas', 'audiencia', 'adquisicion', 'marketing',
+                   'automatizaciones', 'planes', 'metodos-pago', 'perfil',
+                   'personalizacion', 'integraciones'] as const) {
+    assert.equal(
+      canAccessAdminSection('GERENTE', s),
+      false,
+      `un gerente no debería traer ${s} de serie`
+    )
+  }
+})
+
+test('quien administra de verdad sigue trayéndolo todo', () => {
+  for (const role of ['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA'] as const) {
+    for (const s of ADMIN_SECTIONS) {
+      assert.equal(
+        canAccessAdminSection(role, s),
+        true,
+        `${role} dejó de traer ${s}: acotar al equipo no puede acotar a quien manda`
+      )
+    }
+  }
+})
+
+/**
+ * LA TRAMPA QUE ESTO VIGILA, Y NO ES TEÓRICA.
+ *
+ * `FULL_ADMIN_ROLES` parece «qué secciones trae el rol» y NO es eso: responde
+ * «¿es admin pleno para MUTAR?», y la consultan 41 guardias de server action
+ * (`requireAdminUser`), el reparto de avisos, los comprobantes y el
+ * onboarding.
+ *
+ * El arreglo obvio para acotar al cajero era sacarlo de esa lista. Le habría
+ * dejado el panel a la vista y las manos atadas: vería sus clientes y no
+ * podría cobrar. Por eso el acotado se hace con un PAQUETE y esa lista no se
+ * toca — y por eso esta prueba existe, para que el atajo no vuelva.
+ */
+test('acotar por sección no desarma las mutaciones', () => {
+  for (const role of ['CAJERO', 'GERENTE'] as const) {
+    assert.ok(
+      FULL_ADMIN_ROLES.includes(role),
+      `${role} salió de FULL_ADMIN_ROLES: eso no acota su panel, le quita las 41 ` +
+        'guardias de mutación que dependen de esa lista'
+    )
+  }
+})
+
+test('acotar a un rol no le quita lo que se le conceda a mano', () => {
+  // El paquete es el PUNTO DE PARTIDA, no un techo: un gerente que sí lleva
+  // las campañas las recupera desde su pantalla de Permisos, sin cambiarle el
+  // rol ni tocar el paquete de los demás.
+  const p = resolverPermisosUsuario({ v: 1, secciones: { campanas: true } })
+  assert.equal(seccionPermitida('GERENTE', 'campanas', null), false)
+  assert.equal(seccionPermitida('GERENTE', 'campanas', p), true)
 })

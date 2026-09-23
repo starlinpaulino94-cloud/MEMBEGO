@@ -137,12 +137,63 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // Sin 'aplicaciones': el módulo se retiró a propósito (los genéricos —QR,
   // citas, seguimiento— volvieron al menú lateral como secciones propias).
   SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app', 'riesgo', 'retencion', 'conciliacion'],
+  /**
+   * EL MOSTRADOR. Lo que hace falta para cobrar, registrar una visita y
+   * atender a quien está delante: el cliente, su membresía, el cobro, el
+   * comprobante, la cita y el canje. Nada de marketing, nada de configuración
+   * y nada de analítica.
+   */
+  //
+  // Sin 'regalos' A PROPÓSITO, aunque un regalo VIP se entregue en el
+  // mostrador: en el menú vive bajo el grupo «Marketing», y era el único
+  // enlace que hacía que a un cajero le siguiera apareciendo ese título. Un
+  // cajero que sí entregue regalos lo recibe desde su pantalla de Permisos.
+  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion'],
+  /**
+   * LA OPERACIÓN. Todo lo del mostrador más lo que hace falta para dirigirla:
+   * los reportes, la bitácora, el seguimiento, el equipo y las sucursales.
+   *
+   * Fuera queda el marketing —campañas, audiencia, adquisición,
+   * automatizaciones, publicaciones— y la configuración comercial de la
+   * empresa: planes, métodos de pago, perfil público, personalización e
+   * integraciones. Eso lo decide quien es dueño del negocio, no quien dirige
+   * el turno. Cualquiera de esas se concede a un gerente concreto desde su
+   * pantalla de Permisos.
+   */
+  GERENTE: [
+    'dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner',
+    'ofertas', 'regalos', 'promociones', 'registros', 'actividad', 'reportes',
+    'seguimiento', 'riesgo', 'retencion', 'conciliacion', 'empleados', 'invitaciones',
+    'sucursales', 'tickets', 'comunicacion', 'app', 'excursiones',
+  ],
 }
 
-/** ¿Puede este rol abrir esta sección del panel? */
+/**
+ * ¿Puede este rol abrir esta sección del panel?
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DOS PREGUNTAS QUE ERAN LA MISMA Y NO LO SON
+ *
+ * Esto miraba PRIMERO `FULL_ADMIN_ROLES`, así que un CAJERO y un GERENTE
+ * traían TODAS las secciones: campañas, audiencia, automatizaciones y la
+ * configuración comercial incluidas. No era un fallo del módulo de Permisos
+ * —negar funcionaba— sino que no había nada que negar hasta que alguien se
+ * sentaba a quitarle cuarenta casillas a cada empleado, una por una.
+ *
+ * `FULL_ADMIN_ROLES` NO se toca, y es deliberado: esa lista responde otra
+ * pregunta —«¿es admin pleno para MUTAR?»— y la consultan 41 guardias de
+ * server action, el reparto de avisos, los comprobantes y el onboarding.
+ * Sacar de ahí al cajero le habría dejado el panel a la vista y las manos
+ * atadas, que es peor que el problema.
+ *
+ * Así que el orden se invierte: un rol con paquete acotado se rige POR SU
+ * PAQUETE; solo quien no tiene paquete cae en «admin pleno lo trae todo».
+ * Administrador y superadmin siguen sin paquete, y siguen trayéndolo todo.
+ */
 export function canAccessAdminSection(role: AppRole, section: AdminSection): boolean {
-  if (FULL_ADMIN_ROLES.includes(role)) return true
-  return RESTRICTED_ACCESS[role]?.includes(section) ?? false
+  const paquete = RESTRICTED_ACCESS[role]
+  if (paquete) return paquete.includes(section)
+  return FULL_ADMIN_ROLES.includes(role)
 }
 
 // ── Permisos POR EMPLEADO (módulo de Permisos, 14-08-2026) ───────────────────
