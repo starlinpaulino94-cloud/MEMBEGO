@@ -12,6 +12,7 @@
  */
 
 import { conEmpresa } from '@/lib/tenant'
+import { consumirCupoPromocion } from '@/modules/promociones/cupo'
 import type { Prisma, GrowthTrigger, GrowthRule, GrowthBeneficiario } from '@prisma/client'
 import {
   calcularVencimientoBeneficio,
@@ -228,8 +229,27 @@ async function otorgarBeneficio(
 
 /**
  * Crea un ProductoCompra ACTIVO (Beneficio Digital E8) con su QR para el
- * cliente, sin pago ni consumo de cupo. Devuelve el id o null si la promoción
- * no existe o no pertenece a la empresa.
+ * cliente, sin pago. Devuelve el id, o null si la promoción no existe, no
+ * pertenece a la empresa, o YA NO QUEDA STOCK.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL STOCK TAMBIÉN CUENTA AQUÍ (23-09-2026)
+ *
+ * Antes decía «sin pago ni consumo de cupo», y era deliberado. El efecto:
+ * una promoción con `maxCanjes = 100` podía repartir 150 —las cien vendidas
+ * más cincuenta regaladas como recompensa—, porque esta vía entregaba la
+ * compra en `ACTIVA` sin pasar por `activarCompraPromocion`, que es donde vive
+ * el descuento.
+ *
+ * Decisión del dueño de la plataforma: el campo se llama «Límite de canjes
+ * (stock)» en el formulario, y stock son las unidades que EXISTEN. Una
+ * recompensa entregada es una unidad entregada, la pague alguien o no.
+ *
+ * Cuando no queda, se devuelve null y NO se crea nada. No hace falta más:
+ * `aplicarEfecto` ya traduce ese null a una recompensa en estado `PENDIENTE`
+ * —el mismo que usan los descuentos, que se entregan a mano—, así que el
+ * negocio ve que la debe y puede honrarla cuando reponga. Fallar en silencio
+ * habría sido perder la recompensa sin dejar rastro.
  */
 async function crearBeneficioCompra(
   tx: Tx,
@@ -246,6 +266,10 @@ async function crearBeneficioCompra(
     },
   })
   if (!promo || promo.companyId !== companyId) return null
+
+  // El stock, antes de crear nada: si se crea la compra y luego no hay cupo,
+  // el cliente ya tiene el beneficio en su wallet y el contador dice otra cosa.
+  if (!(await consumirCupoPromocion(tx, promo.id))) return null
 
   const now = new Date()
   const usos = promo.usosPorCompra > 0 ? promo.usosPorCompra : 1
