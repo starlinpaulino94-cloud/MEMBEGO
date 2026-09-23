@@ -26,6 +26,7 @@ import {
   MessageCircle,
   Newspaper,
   Package,
+  PackageSearch,
   Palette,
   Plug,
   QrCode,
@@ -110,7 +111,13 @@ import {
  * importa el catálogo entero para no meterlo en el paquete del navegador; la
  * prueba de sincronía se encarga de que no se separen.
  */
-export type CapacidadNav = 'CITAS' | 'SEGUIMIENTO' | 'RULETA' | 'EXCURSIONES' | 'POS_CAJA'
+export type CapacidadNav =
+  | 'CITAS'
+  | 'SEGUIMIENTO'
+  | 'RULETA'
+  | 'EXCURSIONES'
+  | 'POS_CAJA'
+  | 'MEMBEGO_SUPPLIER'
 
 /** Verticales de negocio (espejo de `CATEGORIAS`, por el mismo motivo). */
 export type TipoEmpresaNav = 'CAR_WASH' | 'BARBERIA' | 'RESTAURANTE' | 'GYM' | 'EXCURSIONES'
@@ -615,6 +622,18 @@ const G_ADM_CONEXIONES: NavGroup = {
   label: 'Conexiones',
   items: [
     {
+      // NO va en el grupo de oferta ni junto al inventario, y es deliberado:
+      // esto no es lo que la empresa vende, es lo que Membego le compró y ella
+      // está obligada a entregar. Ponerlo junto a sus promociones invitaría a
+      // confundir «vendí esta pizza yo» con «entregué una que Membego ya pagó».
+      href: '/admin/supply',
+      label: 'Membego Supply',
+      icon: PackageSearch,
+      description: 'Compromisos con la plataforma: qué te compró Membego y cuánto llevas entregado.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['supply', 'membego', 'compromisos', 'vouchers', 'liquidacion', 'contratos'],
+    },
+    {
       href: '/admin/integraciones',
       label: 'Integraciones',
       icon: Plug,
@@ -770,7 +789,17 @@ const HUB_ANALITICA: NavGroup = {
 const HUB_AJUSTES: NavGroup = {
   id: 'ajustes',
   label: 'Ajustes',
-  items: deAdmin('/admin/perfil', '/admin/sucursales', '/admin/empleados', '/admin/integraciones'),
+  // `/admin/supply` va aquí, junto a integraciones, y no en Catálogo ni en
+  // Operaciones: no es lo que la empresa vende, es su relación contractual con
+  // la plataforma. Detrás de la capacidad MEMBEGO_SUPPLIER, así que solo
+  // aparece en las empresas que de verdad le venden supply a Membego.
+  items: deAdmin(
+    '/admin/perfil',
+    '/admin/sucursales',
+    '/admin/empleados',
+    '/admin/integraciones',
+    '/admin/supply'
+  ),
 }
 
 export const GRUPOS_HUB_ADMIN: readonly NavGroup[] = [
@@ -853,6 +882,21 @@ const G_CLI_MIO: NavGroup = {
   id: 'mi-membego',
   label: 'Mi Membego',
   items: [
+    {
+      // «Mis beneficios» va en MI MEMBEGO y no en Descubrir: esto ya es suyo.
+      // Son unidades que Membego compró y le entregó — de cualquier empresa de
+      // la red, no de una en particular—, así que tampoco cabe en
+      // «Mis promociones», que son las que ella misma compró.
+      href: '/cliente/beneficios',
+      // «Beneficios Membego» y no «Mis beneficios»: esa etiqueta ya es de
+      // /cliente/mis-promociones, que son las que la persona compró ella misma
+      // en una empresa. Dos entradas con el mismo nombre y distinto destino es
+      // exactamente la confusión entre las capas 1 y 3 de la arquitectura.
+      label: 'Beneficios Membego',
+      icon: Gift,
+      description: 'Lo que Membego ya pagó por ti y puedes usar en la red.',
+      keywords: ['beneficios', 'membego', 'gratis', 'regalo', 'voucher', 'supply'],
+    },
     {
       href: '/cliente/mis-promociones',
       label: 'Mis beneficios',
@@ -1117,6 +1161,22 @@ const G_SA_OPERACION: NavGroup = {
       description: 'Sistemas satélite conectados a Membego.',
       badge: 'colaAtascada',
       keywords: ['integraciones', 'satelites', 'cola', 'webhooks', 'salud'],
+    },
+    {
+      href: '/superadmin/supply',
+      label: 'Supply',
+      icon: PackageSearch,
+      description: 'Inventario patrocinado: lo que Membego compró para regalar, vender o premiar.',
+      keywords: [
+        'supply',
+        'inventario',
+        'proveedores',
+        'lotes',
+        'compras',
+        'vouchers',
+        'redenciones',
+        'liquidaciones',
+      ],
     },
     {
       href: '/superadmin/connect',
