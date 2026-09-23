@@ -1,6 +1,7 @@
 'use client'
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { formatear, type FormatoCifra } from '@/modules/reportes/formato'
 
 export interface PorcionDistribucion {
   nombre: string
@@ -35,7 +36,16 @@ export function GraficoDistribucion({
   alto = 'h-64',
 }: {
   datos: PorcionDistribucion[]
-  formato: (n: number) => string
+  /**
+   * La RECETA del formato, no el formateador.
+   *
+   * Era `(n: number) => string`, y una función no cruza de un componente de
+   * servidor a uno de cliente: Next devuelve un 500 en el render. Ver
+   * `modules/reportes/formato.ts`, donde está el fallo entero y cómo se
+   * reprodujo. El eje y el tooltip formatean números que el servidor no ha
+   * visto, así que hace falta la receta y no las cifras ya escritas.
+   */
+  formato: FormatoCifra
   /** El total que se reparte; se pinta en el centro del anillo. */
   total: number
   alto?: string
@@ -69,7 +79,7 @@ export function GraficoDistribucion({
                 borderRadius: 12,
                 fontSize: 12,
               }}
-              formatter={(v: number | string, n: string) => [formato(Number(v)), n]}
+              formatter={(v: number | string, n: string) => [formatear(formato, Number(v)), n]}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -78,7 +88,7 @@ export function GraficoDistribucion({
       <ul className="w-full space-y-1.5 sm:w-1/2">
         <li className="mb-2 border-b border-border/60 pb-2">
           <span className="text-overline">Total</span>
-          <span className="block text-h3 tabular-nums text-foreground">{formato(total)}</span>
+          <span className="block text-h3 tabular-nums text-foreground">{formatear(formato, total)}</span>
         </li>
         {datos.map((d, i) => (
           <li key={d.nombre} className="flex items-center gap-2 text-small">
@@ -87,7 +97,7 @@ export function GraficoDistribucion({
               aria-hidden
             />
             <span className="min-w-0 flex-1 truncate text-foreground">{d.nombre}</span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">{formato(d.valor)}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{formatear(formato, d.valor)}</span>
             <span className="w-10 shrink-0 text-right tabular-nums font-semibold text-foreground">
               {pct(d.valor)} %
             </span>

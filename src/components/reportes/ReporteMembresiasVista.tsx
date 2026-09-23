@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
@@ -50,6 +51,7 @@ export function ReporteMembresiasVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const fEntero = formatoEntero(null)
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
@@ -193,7 +195,7 @@ export function ReporteMembresiasVista({
                   nombre: p.plan,
                   valor: p.activadas + p.renovadas,
                 }))}
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={
@@ -234,7 +236,7 @@ export function ReporteMembresiasVista({
                 datos={serie.map((p) => ({ dia: p.dia, valor: p.activadas, anterior: p.bajas }))}
                 etiqueta="Activaciones"
                 etiquetaAnterior="Bajas"
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={
