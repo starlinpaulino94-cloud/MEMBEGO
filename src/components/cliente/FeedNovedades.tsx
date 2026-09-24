@@ -5,8 +5,10 @@ import {
   CalendarDays,
   Newspaper,
   BadgeCheck,
+  CreditCard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { formatMoneyRD } from '@/lib/format'
 import { RetailSeccionHeader, RetailSeccionPie } from '@/components/cliente/inicio/RetailSeccion'
 import type { NovedadInicio } from '@/modules/social/queries'
 
@@ -34,6 +36,7 @@ interface TipoMeta {
 
 const TIPO_META: Record<string, TipoMeta> = {
   PROMOCION: { label: 'Promoción', icon: Megaphone, cta: 'Ver oferta' },
+  MEMBRESIA: { label: 'Membresía', icon: CreditCard, cta: 'Ver plan' },
   EVENTO: { label: 'Evento', icon: CalendarDays, cta: 'Ver evento' },
   NOTICIA: { label: 'Noticia', icon: Newspaper, cta: 'Leer más' },
   BENEFICIO: { label: 'Beneficio', icon: BadgeCheck, cta: 'Ver beneficio' },
@@ -60,6 +63,26 @@ function fmtFechaHora(d: Date) {
 
 /** La línea de dato de cada tipo: lo que decide, no relleno. */
 function Dato({ n }: { n: NovedadInicio }) {
+  if (n.tipo === 'MEMBRESIA') {
+    // Precio y qué incluye. Un plan compite en la misma lista con promociones
+    // que enseñan su descuento: sin estas dos cifras, la fila sería el único
+    // renglón del feed que no dice nada con lo que decidir.
+    return (
+      <span className="min-w-0 truncate">
+        {n.precio != null ? (
+          <span className="text-price-sm tabular-nums text-primary">
+            {formatMoneyRD(n.precio)}
+          </span>
+        ) : null}
+        {n.incluye ? (
+          <span className="text-caption">
+            {n.precio != null ? ' · ' : ''}
+            {n.incluye}
+          </span>
+        ) : null}
+      </span>
+    )
+  }
   if (n.tipo === 'PROMOCION') {
     return (
       <span className="min-w-0 truncate">
@@ -126,6 +149,15 @@ export function FeedNovedades({ novedades }: { novedades: NovedadInicio[] }) {
                   <span className="absolute bottom-1 left-1 rounded bg-foreground/80 px-1.5 py-0.5 text-label-sm font-semibold leading-none text-background">
                     {meta.label}
                   </span>
+                  {/* El feed enseña TODO lo vigente, no solo lo de esta
+                      quincena. Este sello es lo que mantiene el sentido de la
+                      palabra «Novedades»: lo nuevo se distingue, el resto no
+                      se esconde. */}
+                  {n.nuevo && (
+                    <span className="absolute right-1 top-1 rounded bg-primary px-1.5 py-0.5 text-label-sm font-semibold leading-none text-primary-foreground">
+                      Nuevo
+                    </span>
+                  )}
                 </span>
 
                 <span className="min-w-0 flex-1">
