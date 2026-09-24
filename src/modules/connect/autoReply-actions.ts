@@ -18,7 +18,7 @@ export interface AutoReplyActionState {
  * Obtiene todas las configuraciones de auto-reply de la empresa.
  */
 export async function getAutoReplyConfigs(companyId: string) {
-  const user = await requireSection('clientes', 'auto_reply_leer')
+  const user = await requireSection('leads', 'auto_reply_leer')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -55,7 +55,7 @@ export async function createAutoReplyConfig(
     orden?: number
   }
 ): Promise<AutoReplyActionState> {
-  const user = await requireSection('clientes', 'auto_reply_crear')
+  const user = await requireSection('leads', 'auto_reply_crear')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -110,7 +110,7 @@ export async function updateAutoReplyConfig(
     orden?: number
   }
 ): Promise<AutoReplyActionState> {
-  const user = await requireSection('clientes', 'auto_reply_editar')
+  const user = await requireSection('leads', 'auto_reply_editar')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -160,7 +160,7 @@ export async function deleteAutoReplyConfig(
   id: string,
   companyId: string
 ): Promise<AutoReplyActionState> {
-  const user = await requireSection('clientes', 'auto_reply_eliminar')
+  const user = await requireSection('leads', 'auto_reply_eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {

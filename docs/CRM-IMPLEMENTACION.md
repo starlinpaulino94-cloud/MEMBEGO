@@ -109,6 +109,17 @@ conservó tal cual, movido de la raíz a `/admin/crm/leads`.
 - `/admin/crm/leads/page.tsx` existe (Todo 15) e importa `PipelineBoard`.
 - Cada acción valida permiso de sección (`requireSection`), pertenencia a
   `companyId` y que la sección esté habilitada.
+- **Corregido el 24-09-2026:** nueve de esas guardias validaban la sección
+  EQUIVOCADA. `lead-actions.ts` (crear, editar, eliminar, mover de etapa,
+  asignar) y `autoReply-actions.ts` (leer, crear, editar, eliminar) pedían
+  `requireSection('clientes', …)` mientras el resto del CRM pide `'leads'`.
+  CAJERO, SUPERVISOR y GERENTE traen `clientes` y no `leads`: no podían abrir
+  `/admin/crm` y aun así pasaban las nueve, porque una server action se
+  despacha por su id desde cualquier ruta permitida. Además, al no estar esos
+  códigos en `FUNCIONES_POR_SECCION`, el editor de Permisos los descartaba al
+  validar y **nadie podía negarlos**. Hoy las nueve piden `'leads'`, están en
+  el catálogo con su casilla, y `scripts/permisos-catalogo.mjs` lo vigila en
+  el CI en las dos direcciones.
 - `queries.ts` / `types.ts` del CRM de leads **no** referencian
   `Conversacion`/`Mensaje` (desacoplados en la reconciliación).
 
@@ -219,7 +230,7 @@ CRM: ['leads', 'seguimiento', 'conversaciones', 'pipeline', 'configuracion'],
 | Dónde | Qué hay |
 |---|---|
 | `src/lib/auth/permissions.ts` | Sección `leads` registrada |
-| `src/lib/auth/funciones.ts` | Función `leads: 'Leads'` |
+| `src/lib/auth/funciones.ts` | Sección `leads` con sus 9 funciones (prospectos y respuestas automáticas) |
 | `src/modules/capacidades/catalogo.ts` | Capacidad `CRM` con sus secciones |
 
 - Guard por sección: `requireSection('leads')` en `layout.tsx` del CRM (y

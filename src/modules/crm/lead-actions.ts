@@ -44,7 +44,7 @@ export async function createLead(
   _prev: LeadActionState,
   formData: FormData
 ): Promise<LeadActionState> {
-  const user = await requireSection('clientes', 'lead_crear')
+  const user = await requireSection('leads', 'lead_crear')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId
@@ -98,7 +98,7 @@ export async function updateLead(
   _prev: LeadActionState,
   formData: FormData
 ): Promise<LeadActionState> {
-  const user = await requireSection('clientes', 'lead_editar')
+  const user = await requireSection('leads', 'lead_editar')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId
@@ -155,7 +155,7 @@ export async function deleteLead(
   _prev: LeadActionState,
   formData: FormData
 ): Promise<LeadActionState> {
-  const user = await requireSection('clientes', 'lead_eliminar')
+  const user = await requireSection('leads', 'lead_eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId
@@ -190,7 +190,7 @@ export async function moveToStage(
   _prev: LeadActionState,
   formData: FormData
 ): Promise<LeadActionState> {
-  const user = await requireSection('clientes', 'lead_mover_etapa')
+  const user = await requireSection('leads', 'lead_mover_etapa')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId
@@ -232,7 +232,7 @@ export async function assignLead(
   _prev: LeadActionState,
   formData: FormData
 ): Promise<LeadActionState> {
-  const user = await requireSection('clientes', 'lead_asignar')
+  const user = await requireSection('leads', 'lead_asignar')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId

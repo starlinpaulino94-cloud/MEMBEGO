@@ -58,6 +58,15 @@ jobs:
       # casos vivos en `main` que nadie había visto.
       - name: Transacciones anidadas
         run: node scripts/transacciones-anidadas.mjs
+      # Las dos direcciones del catálogo de permisos. La que faltaba era la
+      # segunda: una guardia que nombra una sección equivocada queda MUERTA sin
+      # avisar, porque el editor descarta al validar todo código que no esté en
+      # el catálogo y ese permiso ya no se puede negar nunca. Así pasaron nueve
+      # actions del CRM pidiendo 'clientes' mientras el módulo se gobierna con
+      # 'leads': CAJERO y SUPERVISOR no podían ni abrir el CRM y aun así las
+      # pasaban, porque una server action se despacha por su id.
+      - name: Catálogo de permisos
+        run: node scripts/permisos-catalogo.mjs
       - name: Preflight RLS Capa 2 (tablas sin ruta al inquilino)
         # Falla si una tabla nueva se quedaría DENEGADA con membego_app y nadie lo
         # decidió en el SQL. `rls:probar` no lo ve —solo siembra ciertas tablas—,

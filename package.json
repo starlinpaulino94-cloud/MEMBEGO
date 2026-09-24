@@ -36,6 +36,7 @@
     "verificar:rls-cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-rls-cliente-global.mts",
     "rls:probar": "node scripts/probar-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",
+    "permisos:catalogo": "node scripts/permisos-catalogo.mjs",
     "rls:preflight": "node scripts/rls-capa2-preflight.mjs",
     "auditar:placas": "node scripts/auditar-placas.mjs",
     "reparar:qrs-membresias": "node scripts/reparar-qrs-membresias-activas.mjs"

@@ -100,6 +100,31 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'renovar', label: 'Renovar membresías' },
     { codigo: 'ajustar_lavados', label: 'Sumar o restar lavados a una membresía' },
   ],
+  /**
+   * CRM (`/admin/crm/*`). La sección entera se gobierna con `leads`; estas
+   * funciones afinan DENTRO de ella, y cada una tiene su guardia viva en
+   * `crm/lead-actions.ts` y `connect/autoReply-actions.ts`.
+   *
+   * Nacieron mal: esas nueve guardias pedían `requireSection('clientes', …)`
+   * mientras el layout del CRM y sus otras actions piden `leads`. Eso abría
+   * dos huecos a la vez. El grave: CAJERO y SUPERVISOR traen `clientes` y NO
+   * `leads`, así que no podían ni abrir el CRM y aun así pasaban estas nueve
+   * actions — y una server action se despacha por su id desde cualquier ruta
+   * permitida, igual que pasó con `sinonimos`. El otro: al no estar el código
+   * en este catálogo, `guardarPermisosEmpleado` lo descartaba al validar, así
+   * que la casilla no existía y NADIE podía negar ninguna de las nueve.
+   */
+  leads: [
+    { codigo: 'lead_crear', label: 'Crear prospectos' },
+    { codigo: 'lead_editar', label: 'Editar prospectos' },
+    { codigo: 'lead_eliminar', label: 'Eliminar prospectos' },
+    { codigo: 'lead_mover_etapa', label: 'Mover prospectos de etapa' },
+    { codigo: 'lead_asignar', label: 'Asignar prospectos a otra persona' },
+    { codigo: 'auto_reply_leer', label: 'Ver las respuestas automáticas' },
+    { codigo: 'auto_reply_crear', label: 'Crear respuestas automáticas' },
+    { codigo: 'auto_reply_editar', label: 'Editar respuestas automáticas' },
+    { codigo: 'auto_reply_eliminar', label: 'Eliminar respuestas automáticas' },
+  ],
   clientes: [
     { codigo: 'nota_crear', label: 'Agregar notas al cliente' },
     { codigo: 'nota_eliminar', label: 'Eliminar notas del cliente' },
