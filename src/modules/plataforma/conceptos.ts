@@ -75,6 +75,13 @@ export const FUNCIONES_EMPRESA = [
   // CRM (leads, seguimiento y pipeline comercial): misma razón que
   // EXCURSIONES — vive en el Core, se enciende por empresa.
   'CRM',
+  // Membego Supply. Son funciones de EMPRESA y no módulos de vertical, y la
+  // razón es la que hace interesante al módulo: una pizzería, un car wash, una
+  // barbería y una agencia de excursiones le venden supply a Membego
+  // EXACTAMENTE igual. Si dependieran del vertical habría que replicarlas
+  // cinco veces, que es el síntoma de un modelo mal diseñado (Fase 74).
+  'MEMBEGO_SUPPLIER',
+  'MEMBEGO_SUPPLY_FULFILLMENT',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]

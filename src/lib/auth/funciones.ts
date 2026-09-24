@@ -58,6 +58,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   excursiones: 'Excursiones',
   leads: 'Prospectos (todo el CRM)',
   integraciones: 'Integraciones',
+  supply: 'Membego Supply (compromisos con la plataforma)',
 }
 
 export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[]>> = {

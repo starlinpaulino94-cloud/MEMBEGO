@@ -99,6 +99,15 @@ export const ADMIN_SECTIONS = [
   // extracción y su guardia tiene que seguir existiendo. Ya no se enlazan desde
   // ningún sitio: son alcanzables por URL y nada más.
   'app',
+  // Membego Supply (`/admin/supply/*`): los compromisos de la empresa COMO
+  // PROVEEDORA de la plataforma — cuánto contrató Membego, cuánto lleva
+  // entregado, sus liquidaciones y sus incidencias.
+  //
+  // Va detrás de la capacidad MEMBEGO_SUPPLIER, y NO entra en los roles
+  // acotados: aquí se leen cifras contractuales y de liquidación, que es
+  // información de dirección, no de mostrador. Escanear vouchers vive en
+  // 'scanner', que sí tiene Supervisión.
+  'supply',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

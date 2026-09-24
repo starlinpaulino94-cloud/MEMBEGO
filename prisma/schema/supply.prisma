@@ -1,0 +1,939 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MEMBEGO SUPPLY · inventario patrocinado  (docs/membego-supply-architecture.md)
+//
+// Cuando Membego compra 1.000 pizzas a una pizzería NO adquiere 1.000 pizzas:
+// adquiere 1.000 DERECHOS DE CONSUMO que el proveedor está obligado a cumplir
+// cuando exista una redención válida. Por eso aquí no hay `stock`, hay un
+// LEDGER; y por eso este dominio no toca `productos_inventario` (lo que el
+// comercio tiene) ni `producto_compras` (lo que un cliente le compra a una
+// empresa). Son las tres capas del §1.3 del documento de arquitectura y
+// mezclarlas es el error que este archivo existe para impedir.
+//
+// POR QUÉ NO SE REUTILIZAN `proveedores` NI `ordenes_compra`: esas son las
+// compras DEL COMERCIO a sus proveedores de insumos, con el `companyId` del
+// comprador. Aquí el comprador es la plataforma. Reutilizarlas obligaría a
+// inventar una "empresa Membego" dentro de su propio multi-tenant y a mezclar
+// el gasto operativo de un lavadero con la inversión promocional de Membego.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ── Vocabulario del dominio ─────────────────────────────────────────────────
+
+/// Cómo cumple el proveedor la unidad comprada. NO cambia el modelo de datos:
+/// cambia qué se valida al emitir y al redimir. Una arquitectura, seis
+/// industrias (restaurante, car wash, barbería, café, turismo, producto físico).
+enum SupplyTipo {
+  /// Se prepara cuando llega el cliente. Ej.: una pizza.
+  ON_DEMAND
+  /// Unidades físicas apartadas en el comercio. Ej.: 500 termos.
+  STOCK_RESERVADO
+  /// Capacidad de servicio comprometida. Ej.: 500 lavados.
+  CAPACIDAD_SERVICIO
+  /// Capacidad con fecha y cupo. Ej.: 100 excursiones. Exige reserva.
+  CAPACIDAD_AGENDADA
+}
+
+/// LA DISTINCIÓN QUE NO SE PUEDE PERDER (§5 de la arquitectura).
+///
+/// COMPRA_UNIDAD_COMPLETA: Membego pagó la unidad entera. El cliente NO vuelve
+/// a pagarle la unidad base al comercio — solo los extras. Si Membego la
+/// revende, el dinero lo cobra Membego.
+///
+/// SUBSIDIO: Membego financia una parte. El cliente le paga el resto AL
+/// COMERCIO. No es una compra: es una promoción cofinanciada.
+enum SupplyModeloComercial {
+  COMPRA_UNIDAD_COMPLETA
+  SUBSIDIO
+}
+
+/// Cuándo cobra el proveedor. Protege el flujo de caja de Membego: prometer
+/// 1.000 unidades no obliga a desembolsar 1.000 unidades por adelantado.
+enum SupplyModalidadPago {
+  PREPAGO_TOTAL
+  PREPAGO_PARCIAL
+  PAGO_POR_REDENCION
+  SUBSIDIO
+}
+
+/// Qué pasa con lo que no se usó antes de vencer. Se negocia en el contrato;
+/// el motor de vencimientos PROPONE según esta política y nunca aplica sola.
+enum SupplyPoliticaSobrante {
+  EXPIRAR
+  EXTENDER
+  REEMBOLSO
+  CREDITO_COMERCIO
+  CONVERTIR
+  RENEGOCIAR
+}
+
+enum SupplyAcuerdoEstado {
+  BORRADOR
+  PENDIENTE_APROBACION
+  APROBADO
+  ACTIVO
+  COMPLETADO
+  VENCIDO
+  CANCELADO
+}
+
+enum SupplyOrdenEstado {
+  BORRADOR
+  PENDIENTE_APROBACION
+  APROBADA
+  CONFIRMADA
+  PARCIALMENTE_FONDEADA
+  FONDEADA
+  ACTIVA
+  COMPLETADA
+  CANCELADA
+}
+
+enum SupplyLoteEstado {
+  PROGRAMADO
+  ACTIVO
+  AGOTADO
+  VENCIDO
+  CANCELADO
+  CERRADO
+}
+
+/// LAS SEIS CUBETAS DE UN LOTE. El invariante del §3.2:
+///   comprado = DISPONIBLE + ASIGNADO + RETENIDO + EMITIDO + REDIMIDO + CERRADO
+///
+/// ASIGNADO no es consumido y EMITIDO no es entregado: son las dos confusiones
+/// que destruyen la contabilidad de una campaña. Un voucher emitido que nadie
+/// canjea no le costó nada a Membego todavía.
+enum SupplyCubeta {
+  DISPONIBLE
+  ASIGNADO
+  RETENIDO
+  EMITIDO
+  REDIMIDO
+  CERRADO
+}
+
+/// Tipos de asiento del ledger. Cada uno declara un traslado entre cubetas
+/// (ver `MOVIMIENTO_TRASLADO` en src/modules/supply/ledger.ts, que es la
+/// fuente de verdad ejecutable de esta tabla).
+enum SupplyMovimientoTipo {
+  COMPRA
+  ASIGNACION
+  LIBERACION_ASIGNACION
+  RETENCION
+  LIBERACION_RETENCION
+  EMISION
+  DEVOLUCION_EMISION
+  REDENCION
+  REVERSA_REDENCION
+  EXPIRACION
+  CANCELACION
+  AJUSTE
+  TRANSFERENCIA
+}
+
+/// De dónde salió el derecho que posee un cliente. Es la dimensión con la que
+/// se compara el costo de adquisición entre canales.
+enum SupplyOrigenDerecho {
+  CAMPANA_BIENVENIDA
+  REGALO
+  OFERTA
+  COMPRA
+  MEMBRESIA
+  RECOMPENSA
+  REFERIDO
+  INFLUENCER
+  SOPORTE
+  MANUAL
+}
+
+enum SupplyDerechoEstado {
+  /// Hold temporal de checkout/reserva. Tiene `retencionExpiraAt`.
+  RETENIDO
+  ACTIVO
+  REDIMIDO
+  VENCIDO
+  CANCELADO
+  REVOCADO
+}
+
+enum SupplyVoucherEstado {
+  ACTIVO
+  REDIMIDO
+  VENCIDO
+  CANCELADO
+  REVOCADO
+}
+
+enum SupplyIncidenciaTipo {
+  BENEFICIO_NEGADO
+  PRODUCTO_NO_DISPONIBLE
+  PRODUCTO_INCORRECTO
+  COBRO_INDEBIDO
+  EMPRESA_CERRADA
+  CALIDAD_INSUFICIENTE
+  SUCURSAL_NO_ACEPTO
+  OTRO
+}
+
+enum SupplyIncidenciaEstado {
+  ABIERTA
+  EN_REVISION
+  RESUELTA_CLIENTE
+  RESUELTA_COMERCIO
+  RESUELTA_MEMBEGO
+  CERRADA
+}
+
+/// Asientos del ledger FINANCIERO del proveedor (§6). El saldo nunca se guarda:
+/// se suma. `COMPROMISO_COMPRA` es memorando (no mueve caja) y por eso no entra
+/// en el saldo por pagar; está para poder contrastar contratado contra pagado.
+enum SupplyAsientoTipo {
+  COMPROMISO_COMPRA
+  DEPOSITO
+  REDENCION_POR_PAGAR
+  PAGO
+  REEMBOLSO
+  CREDITO
+  AJUSTE
+  REVERSA
+}
+
+enum SupplyPagoTipo {
+  ANTICIPO
+  DEPOSITO
+  LIQUIDACION_REDENCIONES
+  LIQUIDACION_FINAL
+  REEMBOLSO
+  AJUSTE
+  CREDITO
+}
+
+// ── Contrato ────────────────────────────────────────────────────────────────
+
+/// EL CONTRATO. La orden de compra dice QUÉ se compró; el acuerdo dice CÓMO
+/// funciona: vigencia, sucursales, capacidad, sustituciones, qué pasa con lo
+/// que sobre y qué pasa si el comercio cierra.
+///
+/// `proveedorId` es una `Company` normal con la capacidad MEMBEGO_SUPPLIER
+/// encendida. No se crea una segunda empresa: la misma organización es comercio
+/// y proveedora a la vez (Fase 1 del prompt).
+model SupplyAcuerdo {
+  id          String  @id @default(cuid())
+  /// Código legible para hablar con el proveedor: "MBG-LITRE-2026-001".
+  codigo      String  @unique
+  proveedorId String
+  proveedor   Company @relation("SupplyProveedorAcuerdos", fields: [proveedorId], references: [id], onDelete: Restrict)
+
+  estado SupplyAcuerdoEstado @default(BORRADOR)
+
+  tipo             SupplyTipo
+  modeloComercial  SupplyModeloComercial  @default(COMPRA_UNIDAD_COMPLETA)
+  modalidadPago    SupplyModalidadPago    @default(PREPAGO_PARCIAL)
+  politicaSobrante SupplyPoliticaSobrante @default(EXPIRAR)
+
+  // ── Qué se compra ────────────────────────────────────────────────────────
+  // NO se crea un catálogo paralelo: el acuerdo APUNTA al ítem del catálogo
+  // existente cuando lo hay (un Servicio o una Promoción de esa empresa) y
+  // siempre guarda el nombre con el que se contrató. `varianteEtiqueta` es la
+  // variante ("Grande pepperoni") sin obligar a modelar variantes en verticales
+  // que no las tienen.
+  servicioId       String?
+  servicio         Servicio?  @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  promocionId      String?
+  promocion        Promocion? @relation(fields: [promocionId], references: [id], onDelete: SetNull)
+  itemNombre       String
+  itemDescripcion  String?
+  varianteEtiqueta String?
+
+  // ── Economía contratada ──────────────────────────────────────────────────
+  cantidad           Int
+  costoUnitario      Decimal  @db.Decimal(12, 2)
+  /// Precio público de referencia al firmar. Sirve para medir el descuento
+  /// conseguido; NO es lo que se le cobra a nadie.
+  precioReferencia   Decimal? @db.Decimal(12, 2)
+  /// En SUBSIDIO: cuánto aporta Membego por unidad. En compra completa es null
+  /// porque el aporte ES el costo unitario.
+  aporteMembego      Decimal? @db.Decimal(12, 2)
+  moneda             String   @default("DOP")
+  /// Porcentaje de anticipo en PREPAGO_PARCIAL (0-100).
+  anticipoPorcentaje Decimal? @db.Decimal(5, 2)
+  condicionesPago    String?
+
+  // ── Vigencia y alcance ───────────────────────────────────────────────────
+  inicioAt DateTime
+  finAt    DateTime
+
+  /// Sucursales donde se puede canjear. Vacío = todas las de la empresa.
+  /// Ids de `sucursales`; sin tabla puente porque es una lista corta de solo
+  /// lectura que se copia al lote y ahí queda congelada.
+  sucursalIds String[] @default([])
+
+  // ── Capacidad operativa (Fase 18) ────────────────────────────────────────
+  // No se compran 1.000 pizzas para que aparezcan 700 personas el sábado.
+  capacidadDiaria  Int?
+  capacidadHoraria Int?
+  /// Fechas bloqueadas (ISO yyyy-mm-dd).
+  diasBloqueados   String[] @default([])
+  /// Ventana de atención, texto libre acordado ("11:00-22:00").
+  horarioTexto     String?
+
+  reglasRedencion     String?
+  reglasSustitucion   String?
+  reglasCumplimiento  String?
+  politicaCancelacion String?
+  notas               String?
+
+  creadoPorId   String?
+  creadoPor     User?     @relation("SupplyAcuerdoCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  aprobadoPorId String?
+  aprobadoPor   User?     @relation("SupplyAcuerdoAprobadoPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+  aprobadoAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enmiendas SupplyEnmienda[]
+  ordenes   SupplyOrden[]
+  lotes     SupplyLote[]
+  pagos     SupplyPago[]
+  asientos  SupplyAsientoFinanciero[]
+
+  @@index([proveedorId, estado])
+  @@index([estado, finAt])
+  @@index([servicioId])
+  @@index([promocionId])
+  @@map("supply_acuerdos")
+}
+
+/// CAMBIO CONTRACTUAL AUDITADO (Fase 20). El comercio ve sus números pero no
+/// los edita: pasar de 1.000 a 800 unidades, o de RD$300 a RD$400, solo ocurre
+/// por aquí, con antes, después, motivo y quién aprobó.
+model SupplyEnmienda {
+  id        String        @id @default(cuid())
+  acuerdoId String
+  acuerdo   SupplyAcuerdo @relation(fields: [acuerdoId], references: [id], onDelete: Cascade)
+
+  /// Qué se cambió: 'VIGENCIA' | 'CANTIDAD' | 'CAPACIDAD' | 'SUCURSALES' |
+  /// 'SUSTITUCION' | 'COSTO' | 'POLITICA'.
+  campo   String
+  antes   Json   @default("{}")
+  despues Json   @default("{}")
+  motivo  String
+
+  /// Si la enmienda amplió o redujo unidades, el asiento de AJUSTE que lo
+  /// reflejó en el ledger del lote. Sin esto, cambiar la cantidad del contrato
+  /// dejaría el lote y el acuerdo diciendo cosas distintas.
+  movimientoId String? @unique
+
+  solicitadoPorId String?
+  solicitadoPor   User?     @relation("SupplyEnmiendaSolicitadaPor", fields: [solicitadoPorId], references: [id], onDelete: SetNull)
+  aprobadoPorId   String?
+  aprobadoPor     User?     @relation("SupplyEnmiendaAprobadaPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+  aprobadoAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([acuerdoId, createdAt])
+  @@map("supply_enmiendas")
+}
+
+// ── Procurement ─────────────────────────────────────────────────────────────
+
+/// LA ORDEN DE COMPRA DE MEMBEGO AL PROVEEDOR.
+///
+/// `creadoPor` ≠ `aprobadoPor` no es burocracia: una orden es un compromiso
+/// financiero de cientos de miles de pesos y no puede nacer de un solo clic de
+/// cualquiera con sesión.
+model SupplyOrden {
+  id          String        @id @default(cuid())
+  /// Correlativo legible: "MBG-PO-000127".
+  numero      String        @unique
+  acuerdoId   String
+  acuerdo     SupplyAcuerdo @relation(fields: [acuerdoId], references: [id], onDelete: Restrict)
+  /// Denormalizado desde el acuerdo: el portal del proveedor filtra por aquí y
+  /// no puede depender de un join para su aislamiento.
+  proveedorId String
+  proveedor   Company       @relation("SupplyProveedorOrdenes", fields: [proveedorId], references: [id], onDelete: Restrict)
+
+  estado SupplyOrdenEstado @default(BORRADOR)
+
+  moneda    String  @default("DOP")
+  subtotal  Decimal @db.Decimal(14, 2)
+  impuestos Decimal @default(0) @db.Decimal(14, 2)
+  total     Decimal @db.Decimal(14, 2)
+
+  condicionesPago String?
+  notas           String?
+
+  creadoPorId     String?
+  creadoPor       User?     @relation("SupplyOrdenCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  aprobadoPorId   String?
+  aprobadoPor     User?     @relation("SupplyOrdenAprobadaPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+  aprobadoAt      DateTime?
+  confirmadaAt    DateTime?
+  canceladaAt     DateTime?
+  canceladaMotivo String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineas   SupplyOrdenLinea[]
+  lotes    SupplyLote[]
+  pagos    SupplyPago[]
+  asientos SupplyAsientoFinanciero[]
+
+  @@index([proveedorId, estado])
+  @@index([acuerdoId])
+  @@index([estado, createdAt])
+  @@map("supply_ordenes")
+}
+
+model SupplyOrdenLinea {
+  id      String      @id @default(cuid())
+  ordenId String
+  orden   SupplyOrden @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+
+  /// Copia del nombre al comprar: sobrevive a que el proveedor renombre el
+  /// producto tres meses después.
+  itemNombre       String
+  varianteEtiqueta String?
+  cantidad         Int
+  costoUnitario    Decimal @db.Decimal(12, 2)
+  subtotal         Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  lotes SupplyLote[]
+
+  @@index([ordenId])
+  @@map("supply_orden_lineas")
+}
+
+// ── El lote ─────────────────────────────────────────────────────────────────
+
+/// EL LOTE DE DERECHOS ADQUIRIDOS. La pieza central.
+///
+/// NO ES `stock = 1000`. Es un conjunto de derechos con condiciones económicas
+/// CONGELADAS: si mañana la pizza sube a RD$800 o cambia de nombre, este lote
+/// sigue valiendo lo que valía. Por eso todos los campos `snapshot*` se copian
+/// al crear y no se vuelven a tocar nunca.
+///
+/// Los contadores (`disponibles`, `asignadas`…) son CACHÉ del ledger, no la
+/// verdad. La verdad es `supply_movimientos`; la conciliación compara ambos y
+/// el recálculo siempre va del ledger al contador, nunca al revés.
+model SupplyLote {
+  id     String @id @default(cuid())
+  /// Código del lote: "MBG-LITRE-2026-001".
+  codigo String @unique
+
+  acuerdoId   String
+  acuerdo     SupplyAcuerdo     @relation(fields: [acuerdoId], references: [id], onDelete: Restrict)
+  ordenId     String?
+  orden       SupplyOrden?      @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  lineaId     String?
+  linea       SupplyOrdenLinea? @relation(fields: [lineaId], references: [id], onDelete: SetNull)
+  proveedorId String
+  proveedor   Company           @relation("SupplyProveedorLotes", fields: [proveedorId], references: [id], onDelete: Restrict)
+
+  estado SupplyLoteEstado @default(PROGRAMADO)
+
+  // ── Snapshot económico congelado ─────────────────────────────────────────
+  snapshotItemNombre       String
+  snapshotVariante         String?
+  snapshotCostoUnitario    Decimal               @db.Decimal(12, 2)
+  snapshotPrecioReferencia Decimal?              @db.Decimal(12, 2)
+  snapshotAporteMembego    Decimal?              @db.Decimal(12, 2)
+  snapshotModelo           SupplyModeloComercial
+  snapshotTipo             SupplyTipo
+  snapshotMoneda           String                @default("DOP")
+  /// Sucursales habilitadas al crear el lote. Copiadas, no consultadas: añadir
+  /// una sucursal a un contrato firmado es una ENMIENDA, no un efecto lateral
+  /// de que la empresa abra un local nuevo.
+  snapshotSucursalIds      String[]              @default([])
+  snapshotCapacidadDiaria  Int?
+  snapshotCapacidadHoraria Int?
+
+  inicioAt DateTime
+  venceAt  DateTime
+
+  // ── Cubetas (caché del ledger) ───────────────────────────────────────────
+  compradas   Int @default(0)
+  disponibles Int @default(0)
+  asignadas   Int @default(0)
+  retenidas   Int @default(0)
+  emitidas    Int @default(0)
+  redimidas   Int @default(0)
+  cerradas    Int @default(0)
+
+  /// Versión optimista: cada mutación de cubetas la incrementa. Es la segunda
+  /// red bajo el `FOR UPDATE`, y lo que deja ver en la conciliación si dos
+  /// caminos escribieron el mismo lote.
+  version Int @default(0)
+
+  notas     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movimientos  SupplyMovimiento[]
+  asignaciones SupplyAsignacion[]
+  derechos     SupplyDerecho[]
+
+  @@index([proveedorId, estado])
+  @@index([estado, venceAt])
+  @@index([acuerdoId])
+  @@index([ordenId])
+  @@map("supply_lotes")
+}
+
+/// EL LEDGER. Un asiento = un traslado de `cantidad` unidades de la cubeta
+/// `origen` a la cubeta `destino`. `origen` nulo = entran al lote (compra o
+/// ajuste que amplía); `destino` nulo = salen del lote (transferencia).
+///
+/// NUNCA SE BORRA UN ASIENTO. Un error se corrige con REVERSA_REDENCION,
+/// AJUSTE o CANCELACION, con motivo, actor, fecha y referencia. Esta tabla es
+/// la única fuente de verdad de cuánto supply queda.
+model SupplyMovimiento {
+  id     String     @id @default(cuid())
+  loteId String
+  lote   SupplyLote @relation(fields: [loteId], references: [id], onDelete: Restrict)
+
+  tipo     SupplyMovimientoTipo
+  origen   SupplyCubeta?
+  destino  SupplyCubeta?
+  /// SIEMPRE positiva. El signo lo da el par (origen, destino), no el número:
+  /// una cantidad negativa haría que dos asientos distintos pudieran significar
+  /// lo mismo y que el invariante dependiera de quién lo escribió.
+  cantidad Int
+
+  // ── A qué se debe este asiento ───────────────────────────────────────────
+  asignacionId String?
+  derechoId    String?
+  redencionId  String?
+  /// Referencia externa libre: nº de enmienda, id de campaña, lote destino de
+  /// una transferencia. Los dos asientos de una transferencia la comparten.
+  referencia   String?
+  motivo       String?
+
+  actorId       String?
+  actor         User?   @relation("SupplyMovimientoActor", fields: [actorId], references: [id], onDelete: SetNull)
+  /// Correlación con la petición que lo provocó (auditoría, Fase 43).
+  correlationId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([loteId, createdAt])
+  @@index([loteId, tipo])
+  @@index([asignacionId])
+  @@index([derechoId])
+  @@index([redencionId])
+  @@index([referencia])
+  @@map("supply_movimientos")
+}
+
+// ── Asignación ──────────────────────────────────────────────────────────────
+
+/// RESERVA DE UNIDADES PARA UN DESTINO (Fase 8). Membego no tiene que decidir
+/// el destino de las 1.000 unidades al comprarlas: asigna cuando quiere y
+/// libera lo que no usa.
+///
+/// ASIGNAR NO ES CONSUMIR. `cantidad` es lo apartado; `emitidas` lo que ya se
+/// entregó a clientes desde esta asignación. `cantidad - emitidas` es lo que
+/// queda por emitir en la campaña.
+model SupplyAsignacion {
+  id     String     @id @default(cuid())
+  loteId String
+  lote   SupplyLote @relation(fields: [loteId], references: [id], onDelete: Restrict)
+
+  /// Para qué se aparta: 'CAMPANA' | 'OFERTA' | 'MEMBRESIA' | 'RECOMPENSA' |
+  /// 'REFERIDO' | 'INFLUENCER' | 'REGALO' | 'RESERVA'.
+  destinoTipo String
+  /// Id de la entidad del destino cuando existe (campaña, plan, programa…).
+  /// Sin FK: los destinos viven en cinco tablas distintas y una FK obligaría a
+  /// cinco columnas nulables que nadie mantendría al añadir la sexta.
+  destinoId   String?
+  /// Nombre con el que se lee en los reportes ("Bienvenida Membego").
+  etiqueta    String
+
+  cantidad  Int
+  emitidas  Int @default(0)
+  /// Unidades devueltas al lote por liberación explícita o por cierre.
+  liberadas Int @default(0)
+
+  activa    Boolean   @default(true)
+  cerradaAt DateTime?
+
+  creadoPorId String?
+  creadoPor   User?   @relation("SupplyAsignacionCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  derechos SupplyDerecho[]
+
+  @@index([loteId, activa])
+  @@index([destinoTipo, destinoId])
+  @@map("supply_asignaciones")
+}
+
+// ── Derecho del cliente ─────────────────────────────────────────────────────
+
+/// LO QUE UNA PERSONA POSEE HOY (Fase 11). "Carlos tiene derecho a una pizza
+/// grande de pepperoni del lote MBG-LITRE-001, vence el 30 de noviembre."
+///
+/// RETENIDO es el hold del §10: el checkout aparta la unidad antes de cobrar y
+/// la suelta si no paga. Sin él, dos personas compran la última unidad.
+model SupplyDerecho {
+  id           String            @id @default(cuid())
+  loteId       String
+  lote         SupplyLote        @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  asignacionId String?
+  asignacion   SupplyAsignacion? @relation(fields: [asignacionId], references: [id], onDelete: SetNull)
+
+  clienteId   String
+  cliente     Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  /// Empresa que cumple. Denormalizada para que el portal del proveedor filtre
+  /// sin joins y su aislamiento no dependa de tres saltos.
+  proveedorId String
+  proveedor   Company @relation("SupplyProveedorDerechos", fields: [proveedorId], references: [id], onDelete: Restrict)
+
+  estado SupplyDerechoEstado @default(ACTIVO)
+  origen SupplyOrigenDerecho
+
+  /// Costo de ESTA unidad congelado al emitir: el snapshot del lote puede
+  /// cambiar por enmienda y el costo de adquisición de Carlos no.
+  costoUnitario Decimal @db.Decimal(12, 2)
+  moneda        String  @default("DOP")
+  /// Lo que el cliente pagó A MEMBEGO por este derecho (0 = regalo).
+  precioCliente Decimal @default(0) @db.Decimal(12, 2)
+
+  vencAt        DateTime
+  emitidoAt     DateTime  @default(now())
+  redimidoAt    DateTime?
+  cerradoAt     DateTime?
+  cerradoMotivo String?
+
+  /// Hold: hasta cuándo vale la retención. Solo con estado RETENIDO.
+  retencionExpiraAt DateTime?
+  /// De qué cubeta salió al retenerse/emitirse, para devolverla a la correcta.
+  cubetaOrigen      SupplyCubeta @default(DISPONIBLE)
+
+  /// IDEMPOTENCIA (Fase 44): un reintento de "reclamar mi pizza" devuelve el
+  /// mismo derecho en vez de emitir dos. Único a nivel de base.
+  claveIdempotencia String? @unique
+
+  meta Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vouchers SupplyVoucher[]
+  reservas SupplyReserva[]
+
+  @@index([clienteId, estado])
+  @@index([loteId, estado])
+  @@index([proveedorId, estado])
+  @@index([asignacionId])
+  @@index([estado, vencAt])
+  @@index([estado, retencionExpiraAt])
+  @@map("supply_derechos")
+}
+
+/// CÓMO SE PRESENTA EL DERECHO EN EL MOSTRADOR (Fase 12).
+///
+/// NO ES UN CUPÓN. Un cupón modifica un precio; un voucher representa el
+/// derecho a RECIBIR algo. Se separa del derecho porque un derecho puede
+/// reemitir su voucher (se perdió, se revocó) sin dejar de ser el mismo
+/// derecho, y porque el historial de códigos emitidos tiene que sobrevivir.
+model SupplyVoucher {
+  id        String        @id @default(cuid())
+  derechoId String
+  derecho   SupplyDerecho @relation(fields: [derechoId], references: [id], onDelete: Cascade)
+
+  /// Código al portador. 24 bytes de `randomBytes` en base64url, igual que los
+  /// QR de membresía: no es un identificador, es una credencial.
+  codigo String @unique
+
+  estado SupplyVoucherEstado @default(ACTIVO)
+
+  proveedorId String
+  proveedor   Company  @relation("SupplyProveedorVouchers", fields: [proveedorId], references: [id], onDelete: Restrict)
+  /// Sucursales donde vale, copiadas del lote. Vacío = todas las del proveedor.
+  sucursalIds String[] @default([])
+
+  vigenteDesde DateTime @default(now())
+  vigenteHasta DateTime
+
+  emitidoAt     DateTime  @default(now())
+  redimidoAt    DateTime?
+  cerradoAt     DateTime?
+  cerradoMotivo String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sesionesQr  SupplyQrSesion[]
+  redenciones SupplyRedencion[]
+
+  @@index([derechoId])
+  @@index([proveedorId, estado])
+  @@index([estado, vigenteHasta])
+  @@map("supply_vouchers")
+}
+
+/// QR DINÁMICO (Fase 13). El cliente pulsa "Usar beneficio" y se abre una
+/// sesión de cinco minutos. El QR lleva un `nonce` que no dice nada por sí
+/// mismo: no hay datos manipulables dentro, solo una llave que apunta aquí.
+///
+/// ANTIREPLAY: `consumidoAt` no nulo invalida el segundo escaneo del mismo
+/// código aunque el voucher siguiera activo, y `nonce` es único en toda la
+/// tabla. Reenviar la misma foto del QR no entrega dos pizzas.
+model SupplyQrSesion {
+  id        String        @id @default(cuid())
+  voucherId String
+  voucher   SupplyVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  nonce    String   @unique
+  expiraAt DateTime
+
+  /// Sucursal que el cliente eligió al abrir la sesión, si la hubo. El escáner
+  /// de otra sucursal rechaza el código.
+  sucursalId String?
+
+  consumidoAt    DateTime?
+  consumidoPorId String?
+  consumidoPor   User?     @relation("SupplyQrConsumidoPor", fields: [consumidoPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([voucherId, createdAt])
+  @@index([expiraAt])
+  @@map("supply_qr_sesiones")
+}
+
+/// RESERVA DE RECOGIDA (Fases 17-18). Para ON_DEMAND y CAPACIDAD_AGENDADA:
+/// sucursal, día y hora dentro de la capacidad que el proveedor comprometió.
+model SupplyReserva {
+  id        String        @id @default(cuid())
+  derechoId String
+  derecho   SupplyDerecho @relation(fields: [derechoId], references: [id], onDelete: Cascade)
+
+  proveedorId String
+  proveedor   Company  @relation("SupplyProveedorReservas", fields: [proveedorId], references: [id], onDelete: Restrict)
+  sucursalId  String
+  sucursal    Sucursal @relation("SupplyReservaSucursal", fields: [sucursalId], references: [id], onDelete: Restrict)
+
+  /// Día en ISO local (yyyy-mm-dd) del proveedor. Se guarda como texto porque
+  /// la capacidad diaria se cuenta por día DEL COMERCIO, no por ventana UTC:
+  /// con `DateTime` un pedido de las 22:30 caería en el cupo del día siguiente.
+  dia      String
+  /// Hora local 0-23 para el cupo por hora. Null = el acuerdo no limita por hora.
+  hora     Int?
+  inicioAt DateTime
+
+  /// 'CONFIRMADA' | 'CANCELADA' | 'CUMPLIDA' | 'NO_ASISTIO'.
+  estado String @default("CONFIRMADA")
+
+  canceladaAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  /// Un derecho tiene como mucho una reserva viva; reprogramar cancela la
+  /// anterior. Parcial en SQL sobre estado = 'CONFIRMADA'.
+  @@index([proveedorId, dia, hora])
+  @@index([derechoId])
+  @@index([sucursalId, dia])
+  @@map("supply_reservas")
+}
+
+// ── Redención ───────────────────────────────────────────────────────────────
+
+/// LA ENTREGA (Fase 15). Con todo el contexto que hace falta para no tener que
+/// preguntarle nunca al comercio cuántas unidades entregó este mes.
+///
+/// Una redención NO SE BORRA. Si el empleado se equivocó, se marca
+/// `reversadaAt` y el ledger recibe un REVERSA_REDENCION; la fila original se
+/// queda donde está.
+model SupplyRedencion {
+  id        String        @id @default(cuid())
+  voucherId String
+  voucher   SupplyVoucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  derechoId String
+  clienteId String
+  cliente   Cliente @relation("SupplyRedencionCliente", fields: [clienteId], references: [id], onDelete: Restrict)
+
+  proveedorId String
+  proveedor   Company   @relation("SupplyProveedorRedenciones", fields: [proveedorId], references: [id], onDelete: Restrict)
+  sucursalId  String?
+  sucursal    Sucursal? @relation("SupplyRedencionSucursal", fields: [sucursalId], references: [id], onDelete: SetNull)
+
+  loteId       String
+  acuerdoId    String
+  asignacionId String?
+  /// Campaña/destino que financió esta unidad, copiado de la asignación para
+  /// que el reporte por campaña no dependa de que la asignación siga viva.
+  destinoTipo  String?
+  destinoId    String?
+
+  /// Empleado que la entregó. La pregunta "¿quién la entregó?" tiene respuesta.
+  empleadoId String?
+  empleado   User?   @relation("SupplyRedencionEmpleado", fields: [empleadoId], references: [id], onDelete: SetNull)
+
+  /// Costo consumido por Membego en esta entrega. Congelado aquí: es la cifra
+  /// que alimenta unit economics y la liquidación al proveedor.
+  costoUnitario Decimal @db.Decimal(12, 2)
+  moneda        String  @default("DOP")
+
+  /// Extras cobrados por el comercio al cliente EN ESTA ENTREGA (queso, refresco).
+  /// Separado a propósito: `coveredByMembego` y `customerPaysMerchant` no se
+  /// mezclan contablemente nunca (Fase 59).
+  extrasMonto Decimal @default(0) @db.Decimal(12, 2)
+  extrasNota  String?
+
+  /// En SUBSIDIO: lo que el cliente le pagó al comercio por la unidad base.
+  /// En COMPRA_UNIDAD_COMPLETA esto es 0 y tiene que seguir siendo 0.
+  aporteClienteComercio Decimal @default(0) @db.Decimal(12, 2)
+
+  canal String @default("SCANNER")
+
+  reversadaAt     DateTime?
+  reversadaPorId  String?
+  reversadaPor    User?     @relation("SupplyRedencionReversadaPor", fields: [reversadaPorId], references: [id], onDelete: SetNull)
+  reversadaMotivo String?
+
+  /// Idempotencia del escáner: dos toques del botón no entregan dos pizzas.
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+
+  incidencias SupplyIncidencia[]
+
+  @@index([proveedorId, createdAt])
+  @@index([loteId, createdAt])
+  @@index([clienteId, createdAt])
+  @@index([sucursalId, createdAt])
+  @@index([acuerdoId, createdAt])
+  @@index([destinoTipo, destinoId])
+  @@map("supply_redenciones")
+}
+
+// ── Incidentes y disputas ───────────────────────────────────────────────────
+
+/// INCUMPLIMIENTO (Fases 29-30). "Me negaron el beneficio", "me cobraron la
+/// pizza igual", "la sucursal no aceptó el voucher". Se liga a todo lo que
+/// haya: voucher, redención, lote, campaña, sucursal.
+model SupplyIncidencia {
+  id          String  @id @default(cuid())
+  proveedorId String
+  proveedor   Company @relation("SupplyProveedorIncidencias", fields: [proveedorId], references: [id], onDelete: Restrict)
+
+  clienteId String?
+  cliente   Cliente? @relation("SupplyIncidenciaCliente", fields: [clienteId], references: [id], onDelete: SetNull)
+
+  redencionId String?
+  redencion   SupplyRedencion? @relation(fields: [redencionId], references: [id], onDelete: SetNull)
+  voucherId   String?
+  derechoId   String?
+  loteId      String?
+  acuerdoId   String?
+  sucursalId  String?
+  destinoTipo String?
+  destinoId   String?
+
+  tipo   SupplyIncidenciaTipo
+  estado SupplyIncidenciaEstado @default(ABIERTA)
+
+  detalle    String
+  resolucion String?
+
+  reportadoPorId String?
+  reportadoPor   User?     @relation("SupplyIncidenciaReportadaPor", fields: [reportadoPorId], references: [id], onDelete: SetNull)
+  resueltoPorId  String?
+  resueltoPor    User?     @relation("SupplyIncidenciaResueltaPor", fields: [resueltoPorId], references: [id], onDelete: SetNull)
+  resueltoAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([proveedorId, estado])
+  @@index([estado, createdAt])
+  @@index([loteId])
+  @@index([redencionId])
+  @@map("supply_incidencias")
+}
+
+// ── Dinero con el proveedor ─────────────────────────────────────────────────
+
+/// PAGO DE MEMBEGO AL PROVEEDOR (Fase 33). Anticipo, liquidación de
+/// redenciones, saldo final, reembolso, crédito.
+model SupplyPago {
+  id          String        @id @default(cuid())
+  acuerdoId   String
+  acuerdo     SupplyAcuerdo @relation(fields: [acuerdoId], references: [id], onDelete: Restrict)
+  ordenId     String?
+  orden       SupplyOrden?  @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  proveedorId String
+  proveedor   Company       @relation("SupplyProveedorPagos", fields: [proveedorId], references: [id], onDelete: Restrict)
+
+  tipo   SupplyPagoTipo
+  monto  Decimal        @db.Decimal(14, 2)
+  moneda String         @default("DOP")
+
+  /// 'PENDIENTE' | 'CONFIRMADO' | 'ANULADO'.
+  estado     String  @default("PENDIENTE")
+  metodo     String?
+  referencia String?
+  notas      String?
+
+  /// Ventana de redenciones que liquida este pago, cuando es una liquidación.
+  periodoDesde DateTime?
+  periodoHasta DateTime?
+
+  registradoPorId String?
+  registradoPor   User?     @relation("SupplyPagoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  confirmadoAt    DateTime?
+
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asientos SupplyAsientoFinanciero[]
+
+  @@index([proveedorId, estado])
+  @@index([acuerdoId, createdAt])
+  @@map("supply_pagos")
+}
+
+/// LEDGER FINANCIERO DEL PROVEEDOR (Fase 34). No existe `supplierBalance`:
+/// el saldo es la suma de estos asientos. `monto` positivo = a favor del
+/// proveedor (le debemos más), negativo = a favor de Membego.
+model SupplyAsientoFinanciero {
+  id          String         @id @default(cuid())
+  proveedorId String
+  proveedor   Company        @relation("SupplyProveedorAsientos", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId   String?
+  acuerdo     SupplyAcuerdo? @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+  ordenId     String?
+  orden       SupplyOrden?   @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  pagoId      String?
+  pago        SupplyPago?    @relation(fields: [pagoId], references: [id], onDelete: SetNull)
+
+  tipo   SupplyAsientoTipo
+  monto  Decimal           @db.Decimal(14, 2)
+  moneda String            @default("DOP")
+
+  /// Redención que lo originó, en PAGO_POR_REDENCION.
+  redencionId String?
+  referencia  String?
+  motivo      String?
+
+  actorId String?
+  actor   User?   @relation("SupplyAsientoActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([proveedorId, createdAt])
+  @@index([acuerdoId, tipo])
+  @@index([pagoId])
+  @@index([redencionId])
+  @@map("supply_asientos_financieros")
+}

@@ -172,6 +172,49 @@ enum AuditAccion {
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.
   CAMPANA_DIRIGIDA_ENVIADA
+  // ── Membego Supply (docs/membego-supply-architecture.md · Fase 43) ────────
+  // Aquí se compromete el capital de la plataforma con empresas de terceros.
+  // Cada una de estas acciones mueve dinero, supply o el derecho de una
+  // persona a recibir algo, y ninguna puede quedar sin nombre y sin fecha.
+  /// Se creó un acuerdo de supply con un proveedor.
+  SUPPLY_ACUERDO_CREADO
+  /// Un acuerdo cambió de estado (aprobado, activado, cancelado).
+  SUPPLY_ACUERDO_ESTADO
+  /// Se enmendó un contrato ya firmado (cantidad, vigencia, capacidad…).
+  SUPPLY_ENMIENDA_REGISTRADA
+  /// Se creó una orden de compra de supply.
+  SUPPLY_ORDEN_CREADA
+  /// Una orden de compra cambió de estado. Incluye la APROBACIÓN, que es el
+  /// momento en que la plataforma se compromete financieramente.
+  SUPPLY_ORDEN_ESTADO
+  /// Se activó un lote: los derechos comprados entran al pool.
+  SUPPLY_LOTE_ACTIVADO
+  /// Se apartaron unidades para una campaña o destino.
+  SUPPLY_ASIGNACION_CREADA
+  /// Se devolvieron al pool unidades apartadas.
+  SUPPLY_ASIGNACION_LIBERADA
+  /// Se emitió un derecho a un cliente.
+  SUPPLY_DERECHO_EMITIDO
+  /// Se canceló o revocó un derecho ya emitido.
+  SUPPLY_DERECHO_CANCELADO
+  /// Se generó un voucher (o se reemitió).
+  SUPPLY_VOUCHER_EMITIDO
+  /// El comercio entregó la unidad.
+  SUPPLY_REDENCION_REGISTRADA
+  /// Se deshizo una entrega. La operación original NO se borra.
+  SUPPLY_REDENCION_REVERSADA
+  /// Se abrió una incidencia de cumplimiento.
+  SUPPLY_INCIDENCIA_ABIERTA
+  /// Se resolvió una disputa.
+  SUPPLY_INCIDENCIA_RESUELTA
+  /// Se registró un pago a un proveedor.
+  SUPPLY_PAGO_REGISTRADO
+  /// Se confirmó un pago y se asentó en el ledger financiero.
+  SUPPLY_PAGO_CONFIRMADO
+  /// Se corrigió el ledger de un lote con un ajuste manual.
+  SUPPLY_AJUSTE_LEDGER
+  /// Se recalcularon los contadores de un lote desde el ledger.
+  SUPPLY_LOTE_RECALCULADO
 }
 
 // ─────────────────────────────────────────────
@@ -213,7 +256,7 @@ model User {
   updatedAt          DateTime  @updatedAt
 
   memberships      Membership[]
-  eventosMembresia MembresiaEvento[] @relation("EventosMembresia")
+  eventosMembresia MembresiaEvento[]   @relation("EventosMembresia")
   visits           Visit[]             @relation("EmpleadoVisits")
   /// Visitas que ESTE usuario deshizo. Va aparte de `visits`: quien registra un
   /// lavado y quien lo devuelve rara vez son la misma persona.
@@ -234,31 +277,47 @@ model User {
   geoConsents       GeoConsent[]
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
-  transaccionesComoEmpleado Transaction[]              @relation("TransactionEmpleado")
-  cajasAbiertas             CajaSesion[]               @relation("CajaAbiertaPor")
-  cajasCerradas             CajaSesion[]               @relation("CajaCerradaPor")
-  transicionesTransaccion   TransactionTransicion[]
-  impresionesRecibo         ReceiptImpresion[]
-  citasAtendidas            Cita[]                     @relation("CitaAtendidaPor")
-  ofertasCreadas            OfertaPrivada[]            @relation("OfertaCreadaPor")
-  ofertaUsosRegistrados     OfertaUso[]                @relation("OfertaUsoRegistradoPor")
-  comprasAprobadas          ProductoCompra[]           @relation("CompraAprobadaPor")
-  transicionesCompra        ProductoCompraTransicion[]
+  transaccionesComoEmpleado   Transaction[]              @relation("TransactionEmpleado")
+  cajasAbiertas               CajaSesion[]               @relation("CajaAbiertaPor")
+  cajasCerradas               CajaSesion[]               @relation("CajaCerradaPor")
+  transicionesTransaccion     TransactionTransicion[]
+  impresionesRecibo           ReceiptImpresion[]
+  citasAtendidas              Cita[]                     @relation("CitaAtendidaPor")
+  ofertasCreadas              OfertaPrivada[]            @relation("OfertaCreadaPor")
+  ofertaUsosRegistrados       OfertaUso[]                @relation("OfertaUsoRegistradoPor")
+  comprasAprobadas            ProductoCompra[]           @relation("CompraAprobadaPor")
+  transicionesCompra          ProductoCompraTransicion[]
   // App Car Wash · E5.
-  colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
-  colaAtendida              ColaVehiculo[]             @relation("ColaAtendidaPor")
-  campanasGlobales          CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
-  movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
-  evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
+  colaRegistrada              ColaVehiculo[]             @relation("ColaRegistradaPor")
+  colaAtendida                ColaVehiculo[]             @relation("ColaAtendidaPor")
+  campanasGlobales            CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
+  movimientosInventario       MovimientoInventario[]     @relation("MovInventarioPor")
+  evidenciasSubidas           EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
   // App Car Wash · Fase 2.
-  comisiones                Comision[]                 @relation("ComisionLavador")
-  incidenciasReportadas     Incidencia[]               @relation("IncidenciaReportadaPor")
-  incidenciasAsignadas      Incidencia[]               @relation("IncidenciaResponsable")
+  comisiones                  Comision[]                 @relation("ComisionLavador")
+  incidenciasReportadas       Incidencia[]               @relation("IncidenciaReportadaPor")
+  incidenciasAsignadas        Incidencia[]               @relation("IncidenciaResponsable")
   // App Car Wash · Fase 3.
-  ordenesCompra             OrdenCompra[]              @relation("OrdenCompraCreadaPor")
-  mantenimientos            Mantenimiento[]            @relation("MantenimientoPor")
-  turnos                    Turno[]                    @relation("TurnoEmpleado")
-  turnosCerrados            Turno[]                    @relation("TurnoCerradoPor")
+  ordenesCompra               OrdenCompra[]              @relation("OrdenCompraCreadaPor")
+  mantenimientos              Mantenimiento[]            @relation("MantenimientoPor")
+  turnos                      Turno[]                    @relation("TurnoEmpleado")
+  turnosCerrados              Turno[]                    @relation("TurnoCerradoPor")
+  // ── Membego Supply ────────────────────────────────────────────────────────
+  supplyAcuerdosCreados       SupplyAcuerdo[]            @relation("SupplyAcuerdoCreadoPor")
+  supplyAcuerdosAprobados     SupplyAcuerdo[]            @relation("SupplyAcuerdoAprobadoPor")
+  supplyEnmiendasSolicitadas  SupplyEnmienda[]           @relation("SupplyEnmiendaSolicitadaPor")
+  supplyEnmiendasAprobadas    SupplyEnmienda[]           @relation("SupplyEnmiendaAprobadaPor")
+  supplyOrdenesCreadas        SupplyOrden[]              @relation("SupplyOrdenCreadaPor")
+  supplyOrdenesAprobadas      SupplyOrden[]              @relation("SupplyOrdenAprobadaPor")
+  supplyMovimientos           SupplyMovimiento[]         @relation("SupplyMovimientoActor")
+  supplyAsignacionesCreadas   SupplyAsignacion[]         @relation("SupplyAsignacionCreadaPor")
+  supplyQrConsumidos          SupplyQrSesion[]           @relation("SupplyQrConsumidoPor")
+  supplyRedencionesEntregadas SupplyRedencion[]          @relation("SupplyRedencionEmpleado")
+  supplyRedencionesReversadas SupplyRedencion[]          @relation("SupplyRedencionReversadaPor")
+  supplyIncidenciasReportadas SupplyIncidencia[]         @relation("SupplyIncidenciaReportadaPor")
+  supplyIncidenciasResueltas  SupplyIncidencia[]         @relation("SupplyIncidenciaResueltaPor")
+  supplyPagosRegistrados      SupplyPago[]               @relation("SupplyPagoRegistradoPor")
+  supplyAsientosFinancieros   SupplyAsientoFinanciero[]  @relation("SupplyAsientoActor")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
@@ -477,14 +536,14 @@ model Company {
   campanasDirigidas CampanaDirigida[]
 
   // Módulo de Citas.
-  agendaConfig   AgendaConfig?
-  citas          Cita[]
+  agendaConfig      AgendaConfig?
+  citas             Cita[]
   // Home comercial (F2): revisiones de composición y sinónimos de búsqueda.
-  homeRevisiones   HomeRevision[]
+  homeRevisiones    HomeRevision[]
   busquedaSinonimos BusquedaSinonimo[]
-  ofertaPrivadas OfertaPrivada[]
-  regalos        Regalo[]
-  giftCards      GiftCard[]
+  ofertaPrivadas    OfertaPrivada[]
+  regalos           Regalo[]
+  giftCards         GiftCard[]
 
   // App Car Wash · E5.
   colaVehiculos         ColaVehiculo[]
@@ -503,6 +562,20 @@ model Company {
   ordenesCompra         OrdenCompra[]
   activos               Activo[]
   turnos                Turno[]
+
+  // ── Membego Supply (docs/membego-supply-architecture.md) ──────────────────
+  // La MISMA organización es comercio y proveedora de Membego cuando tiene la
+  // capacidad MEMBEGO_SUPPLIER encendida. No hay una segunda empresa.
+  supplyAcuerdos    SupplyAcuerdo[]           @relation("SupplyProveedorAcuerdos")
+  supplyOrdenes     SupplyOrden[]             @relation("SupplyProveedorOrdenes")
+  supplyLotes       SupplyLote[]              @relation("SupplyProveedorLotes")
+  supplyDerechos    SupplyDerecho[]           @relation("SupplyProveedorDerechos")
+  supplyVouchers    SupplyVoucher[]           @relation("SupplyProveedorVouchers")
+  supplyReservas    SupplyReserva[]           @relation("SupplyProveedorReservas")
+  supplyRedenciones SupplyRedencion[]         @relation("SupplyProveedorRedenciones")
+  supplyIncidencias SupplyIncidencia[]        @relation("SupplyProveedorIncidencias")
+  supplyPagos       SupplyPago[]              @relation("SupplyProveedorPagos")
+  supplyAsientos    SupplyAsientoFinanciero[] @relation("SupplyProveedorAsientos")
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -533,6 +606,10 @@ model Sucursal {
   citas           Cita[]
   colaVehiculos   ColaVehiculo[]
   bahias          Bahia[]
+
+  // Membego Supply: dónde se recoge y dónde se entrega.
+  supplyReservas    SupplyReserva[]   @relation("SupplyReservaSucursal")
+  supplyRedenciones SupplyRedencion[] @relation("SupplyRedencionSucursal")
 
   // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
   // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.
@@ -615,8 +692,8 @@ model Notificacion {
   /// varios NULL en índice único: no se altera el pasado).
   dedupeKey String?
 
+  @@unique([userId, dedupeKey])
   @@index([userId, leida])
   @@index([userId, createdAt])
-  @@unique([userId, dedupeKey])
   @@map("notificaciones")
 }

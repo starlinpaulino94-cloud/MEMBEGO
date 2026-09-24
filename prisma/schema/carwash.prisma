@@ -209,8 +209,12 @@ model Servicio {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  precios ServicioPrecio[]
-  lineas  ColaServicio[]
+  precios        ServicioPrecio[]
+  lineas         ColaServicio[]
+  /// Membego Supply: acuerdos en los que Membego compró este servicio por
+  /// adelantado. El servicio sigue vendiéndose normalmente: lo comprometido
+  /// con Membego es una obligación aparte, no un descuento del catálogo.
+  supplyAcuerdos SupplyAcuerdo[]
 
   @@unique([companyId, nombre])
   @@index([companyId, activo, orden])

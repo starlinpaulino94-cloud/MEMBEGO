@@ -129,6 +129,13 @@ model Cliente {
   campanaInscripciones CampanaInscripcion[]
   pagoIntentos         PagoIntento[]
 
+  // Membego Supply: lo que Membego le compró a un tercero y le entregó a esta
+  // persona. No son beneficios de ESTA empresa: son derechos financiados por
+  // la plataforma que un proveedor está obligado a cumplir.
+  supplyDerechos    SupplyDerecho[]
+  supplyRedenciones SupplyRedencion[]  @relation("SupplyRedencionCliente")
+  supplyIncidencias SupplyIncidencia[] @relation("SupplyIncidenciaCliente")
+
   @@unique([supabaseId, companyId])
   // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).
   // El unique (supabaseId, companyId) no cubre búsquedas por companyId solo.
