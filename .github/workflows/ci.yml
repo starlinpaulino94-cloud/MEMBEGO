@@ -50,6 +50,14 @@ jobs:
         run: npm test
       - name: Cobertura RLS (envoltorio de tenant)
         run: node scripts/rls-cobertura.mjs
+      # El riesgo número uno de este código: un envoltorio de inquilino que
+      # dentro llama a algo que abre OTRO. Cada uno es una conexión del pool, y
+      # en un bucle se multiplican hasta agotarlo y tumbar lo que esté sirviendo
+      # a la vez. El script existía desde hacía meses y NO estaba conectado aquí:
+      # solo corría si alguien se acordaba, y para cuando se conectó había dos
+      # casos vivos en `main` que nadie había visto.
+      - name: Transacciones anidadas
+        run: node scripts/transacciones-anidadas.mjs
       - name: Preflight RLS Capa 2 (tablas sin ruta al inquilino)
         # Falla si una tabla nueva se quedaría DENEGADA con membego_app y nadie lo
         # decidió en el SQL. `rls:probar` no lo ve —solo siembra ciertas tablas—,

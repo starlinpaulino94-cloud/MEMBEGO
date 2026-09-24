@@ -948,15 +948,26 @@ export async function sincronizarEstadoAgotada(companyId: string, excursionId: s
   })
 }
 
-/** Recalcula AGOTADA para todas las excursiones de una empresa (job nocturno). */
+/**
+ * Recalcula AGOTADA para todas las excursiones de una empresa (job nocturno).
+ *
+ * La lista se lee en su PROPIA transacción, que se cierra antes del bucle.
+ * `sincronizarEstadoAgotada` abre la suya, así que llamarla desde dentro de
+ * otra mantenía dos conexiones del pool ocupadas a la vez —una por excursión—
+ * durante todo el recorrido. En una empresa con catálogo grande eso agota el
+ * pool y tumba lo que esté sirviendo a la vez.
+ *
+ * El resultado es el mismo: cada excursión se recalcula igual, solo que cada
+ * una en su transacción corta en vez de todas dentro de una larga.
+ */
 export async function sincronizarTodasAgotadas(companyId: string): Promise<void> {
-  await conEmpresa(companyId, async (tx) => {
-    const excursiones = await tx.excursion.findMany({
+  const excursiones = await conEmpresa(companyId, (tx) =>
+    tx.excursion.findMany({
       where: { companyId, estado: { not: 'ARCHIVADA' } },
       select: { id: true },
     })
-    for (const exc of excursiones) {
-      await sincronizarEstadoAgotada(companyId, exc.id)
-    }
-  })
+  )
+  for (const exc of excursiones) {
+    await sincronizarEstadoAgotada(companyId, exc.id)
+  }
 }

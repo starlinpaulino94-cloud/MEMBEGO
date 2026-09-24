@@ -608,8 +608,15 @@ test('cada sección del panel tiene guardia viva en su layout', () => {
     // Sin comentarios: el porqué de esto está escrito en la fábrica y nombra
     // a `requireSection`, así que un fichero que solo lo MENCIONE pasaría.
     const codigo = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    // `guardiaProveedor` cuenta porque es MÁS fuerte, no más débil: llama a
+    // `requireSection('supply')` y ADEMÁS exige que la empresa sea proveedora.
+    // El portal del proveedor no puede usar la fábrica por eso mismo, y hacerle
+    // llamar también a `requireSection` para contentar a esta prueba sería una
+    // segunda lectura de la base para preguntar lo que ya se preguntó.
     const guarda =
-      /guardarSeccion\(/.test(codigo) || /requireSection\(/.test(codigo)
+      /guardarSeccion\(/.test(codigo) ||
+      /requireSection\(/.test(codigo) ||
+      /guardiaProveedor\(/.test(codigo)
     if (!guarda) sinCubrir.push(`${d.name} (layout sin guardia)`)
   }
 
