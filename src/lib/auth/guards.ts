@@ -110,7 +110,53 @@ export async function requirePanel(): Promise<SessionUser> {
   return user
 }
 
-export async function requireAdminUser(): Promise<SessionUser | null> {
+/**
+ * Guard NO-redirect para server actions: admin PLENO **y** con la sección.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ LA SECCIÓN ES OBLIGATORIA
+ *
+ * Una server action se despacha por su ID desde CUALQUIER path permitido, así
+ * que el gate por sección del proxy no la toca y el guardia del layout —que
+ * vive en el render— tampoco. La única barrera de una action es la que lleva
+ * dentro.
+ *
+ * Este guardia solo preguntaba «¿es admin pleno?», y esa lista incluye al
+ * cajero y al gerente. Mientras los dos traían las 44 secciones daba igual;
+ * desde que están acotados por oficio, dejaba un hueco con forma concreta: un
+ * cajero ya no VE las campañas, y una action de campañas guardada solo así no
+ * le habría dicho que no.
+ *
+ * El parámetro NO tiene valor por defecto, a propósito. Uno opcional habría
+ * dejado los cuarenta llamadores compilando sin cambiar nada: el arreglo
+ * habría sido invisible y el hueco seguiría abierto. Sin defecto, el
+ * compilador obliga a que cada action diga de qué módulo es — que es la
+ * decisión que hay que tomar una vez y dejar por escrito.
+ *
+ * Sigue siendo fail-closed para los roles acotados: MARKETING y SUPERVISOR no
+ * pasan de aquí aunque tengan la sección. Lo que ellos sí pueden ejecutar usa
+ * `requireSection(...)`, que no exige admin pleno.
+ */
+export async function requireAdminUser(section: AdminSection): Promise<SessionUser | null> {
+  const user = await requireSection(section)
+  if (!user || !FULL_ADMIN_ROLES.includes(user.metadata.role)) return null
+  return user
+}
+
+/**
+ * La MISMA barrera sin sección, para lo que de verdad no tiene ninguna.
+ *
+ * Existe para un solo caso y quiere seguir así: el conmutador de empresa vive
+ * en la cabecera del panel, no dentro de un módulo, y no hay sección que
+ * exigirle. Pedirle una a martillazos —'dashboard', pongamos— sería mentir
+ * sobre qué permiso la gobierna.
+ *
+ * El `motivo` no decide nada: se exige para que la renuncia quede escrita en
+ * el propio llamador, igual que en `sinEmpresa`. Y una prueba enumera quién
+ * puede llamarla, para que la excepción no se extienda sola.
+ */
+export async function requireAdminSinSeccion(motivo: string): Promise<SessionUser | null> {
+  void motivo
   const user = await getUser()
   if (!user || !FULL_ADMIN_ROLES.includes(user.metadata.role)) return null
   return user

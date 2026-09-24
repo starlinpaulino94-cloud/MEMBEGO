@@ -641,3 +641,81 @@ test('la sección que se guarda es la de su carpeta, no otra', () => {
   }
   assert.deepEqual(cruzadas, [], 'un layout guarda una sección que no es la suya')
 })
+
+// -- Las server actions también dicen de qué módulo son ----------------------
+
+/**
+ * UNA ACTION SE DESPACHA POR SU ID, NO POR SU RUTA.
+ *
+ * El gate por sección del proxy mira el path, y el guardia del layout vive en
+ * el render: ninguno de los dos toca una server action. La única barrera de
+ * una action es la que lleva dentro.
+ *
+ * `requireAdminUser` solo preguntaba «¿es admin pleno?», y esa lista incluye
+ * al cajero y al gerente. Mientras traían las 44 secciones daba igual; desde
+ * que están acotados por oficio dejaba un hueco con forma concreta: un cajero
+ * ya no VE las campañas, y una action de campañas guardada solo así no le
+ * habría dicho que no.
+ */
+test('ninguna server action pide admin pleno sin decir su sección', () => {
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('guards.ts'))
+  const desnudas: string[] = []
+  for (const f of fuente) {
+    const src = readFileSync(join(RAIZ, 'src', f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+    if (/requireAdminUser\(\s*\)/.test(src)) desnudas.push(f)
+  }
+  assert.deepEqual(
+    desnudas,
+    [],
+    'estas actions piden admin pleno sin sección: un cajero acotado las ' +
+      'ejecutaría igual, porque una action no pasa por el proxy ni por el layout'
+  )
+})
+
+/**
+ * LA EXCEPCIÓN, ENUMERADA.
+ *
+ * `requireAdminSinSeccion` existe para lo que de verdad no tiene sección: hoy
+ * el conmutador de empresa, que vive en la cabecera y no dentro de un módulo.
+ * Pedirle una a martillazos sería mentir sobre qué permiso lo gobierna.
+ *
+ * La lista está escrita para que la excepción no se extienda sola: añadir un
+ * llamador nuevo obliga a pasar por aquí y a justificarlo.
+ */
+test('la salida sin sección tiene un solo llamador, y está escrito', () => {
+  const PERMITIDOS = new Set(['modules/admin/empresaActivaActions.ts'])
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('guards.ts'))
+  const usan = fuente.filter((f) => {
+    const src = readFileSync(join(RAIZ, 'src', f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+    return /requireAdminSinSeccion\(/.test(src)
+  })
+  const nuevos = usan.filter((f) => !PERMITIDOS.has(f.replace(/\\/g, '/')))
+  assert.deepEqual(
+    nuevos,
+    [],
+    'un llamador nuevo de la salida sin sección: si de verdad no tiene módulo, ' +
+      'añádelo a la lista con su motivo; si lo tiene, usa requireAdminUser(seccion)'
+  )
+})
+
+test('la sección que pide una action es una del catálogo', () => {
+  // Una cadena suelta —un typo, o una sección que se renombró— haría que
+  // `seccionPermitida` devolviera siempre false y la action quedara muerta
+  // para todo el mundo. Falla ruidoso aquí antes que en silencio allí.
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+  const malas: string[] = []
+  for (const f of fuente) {
+    const src = readFileSync(join(RAIZ, 'src', f), 'utf8')
+    for (const m of src.matchAll(/requireAdminUser\('([^']+)'\)/g)) {
+      if (!(ADMIN_SECTIONS as readonly string[]).includes(m[1]!)) malas.push(`${f}: '${m[1]}'`)
+    }
+  }
+  assert.deepEqual(malas, [], 'una action pide una sección que no existe')
+})

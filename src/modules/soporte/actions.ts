@@ -63,7 +63,7 @@ export async function guardarComunicacionConfig(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = resolveCompanyId(user, formData)
@@ -124,7 +124,7 @@ export async function enviarCorreoPrueba(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
 
   const parsed = correoPruebaSchema.safeParse({
@@ -162,7 +162,7 @@ export async function crearFaq(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   const companyId = resolveCompanyId(user, formData)
   if (!companyId) return { error: 'Selecciona una empresa.' }
@@ -196,7 +196,7 @@ export async function actualizarFaq(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   const parsed = faqActualizarSchema.safeParse({
     id: String(formData.get('id') ?? ''),
@@ -232,7 +232,7 @@ export async function actualizarFaq(
 }
 
 export async function eliminarFaq(id: string): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   try {
     const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
@@ -253,7 +253,7 @@ export async function eliminarFaq(id: string): Promise<ActionState> {
 }
 
 export async function toggleFaq(id: string, activo: boolean): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   try {
     const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
@@ -395,7 +395,7 @@ export async function responderTicket(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('tickets')
   if (!user) return { error: 'No autorizado.' }
 
   const parsed = responderTicketSchema.safeParse({
@@ -457,7 +457,7 @@ export async function agregarNotaInterna(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('tickets')
   if (!user) return { error: 'No autorizado.' }
 
   const parsed = notaInternaSchema.safeParse({
@@ -494,7 +494,7 @@ export async function cambiarEstadoTicket(
   ticketId: string,
   estado: string
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('tickets')
   if (!user) return { error: 'No autorizado.' }
   const parsed = cambiarEstadoTicketSchema.safeParse({ estado })
   if (!parsed.success) return { error: primerErrorZod(parsed.error) }

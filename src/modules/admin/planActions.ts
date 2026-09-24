@@ -165,7 +165,7 @@ export async function crearPlan(
   _prev: PlanActionState,
   formData: FormData
 ): Promise<PlanActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('planes')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId =
@@ -244,7 +244,7 @@ export async function actualizarPlan(
   _prev: PlanActionState,
   formData: FormData
 ): Promise<PlanActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('planes')
   if (!user) return { error: 'No autorizado.' }
 
   const planId = String(formData.get('planId') ?? '').trim()
@@ -309,7 +309,7 @@ export async function alternarPlanActivo(
   _prev: PlanActionState,
   formData: FormData
 ): Promise<PlanActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('planes')
   if (!user) return { error: 'No autorizado.' }
 
   const planId = String(formData.get('planId') ?? '').trim()
@@ -346,7 +346,7 @@ export async function eliminarPlan(
   _prev: PlanActionState,
   formData: FormData
 ): Promise<PlanActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('planes')
   if (!user) return { error: 'No autorizado.' }
 
   const planId = String(formData.get('planId') ?? '').trim()
@@ -424,7 +424,7 @@ export async function eliminarMembresia(
   _prev: PlanActionState,
   formData: FormData
 ): Promise<PlanActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('membresias')
   if (!user) return { error: 'No autorizado.' }
 
   const membershipId = String(formData.get('membershipId') ?? '').trim()

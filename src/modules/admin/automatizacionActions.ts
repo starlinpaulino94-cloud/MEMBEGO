@@ -18,7 +18,7 @@ export async function ejecutarAutomatizaciones(
   _prev: AutomatizacionState,
   _formData: FormData
 ): Promise<AutomatizacionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('automatizaciones')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = await resolveCompanyId(user)

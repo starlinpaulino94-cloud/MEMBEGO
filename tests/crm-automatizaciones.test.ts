@@ -143,7 +143,9 @@ test('las pantallas del CRM leen datos reales y guardan con la empresa de la ses
   assert.match(leer(`${CRM}/prospectos/[id]/page.tsx`), /prospectoDe\(user\.metadata\.companyId, id\)/)
   const acciones = codigo('src/modules/crm/actions.ts')
   assert.match(acciones, /^'use server'/)
-  assert.match(acciones, /requireAdminUser\(\)/)
+  // CON SU SECCIÓN: todo /admin/crm cuelga de 'leads', y una action sin
+  // sección la ejecutaría igual un rol acotado que ya no ve la pantalla.
+  assert.match(acciones, /requireAdminUser\('leads'\)/)
   assert.ok(!/formData\.get\(['"]companyId['"]\)/.test(acciones))
   const exportadas = (acciones.match(/export async function (\w+)/g) ?? []).map((a) => a.replace('export async function ', ''))
   assert.deepEqual(exportadas, ['cambiarEtapaAction', 'guardarNotasAction', 'convertirEnClienteAction', 'crearSeguimientoAction', 'marcarSeguimientoHechoAction'])

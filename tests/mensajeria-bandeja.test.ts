@@ -59,7 +59,10 @@ test('acciones: admin pleno, empresa de la sesión, ids validados; nunca company
     const cuerpo = src.slice(src.indexOf(a), src.indexOf('export async function', src.indexOf(a) + 1) === -1 ? undefined : src.indexOf('export async function', src.indexOf(a) + 1))
     assert.match(cuerpo, /const yo = await quien\(\)/, `${a} no pasa por quien()`)
   }
-  assert.match(src, /requireAdminUser\(\)/)
+  // CON SU SECCIÓN, y no a secas: una action se despacha por su ID desde
+  // cualquier path, así que ni el proxy ni el layout la tocan. La bandeja vive
+  // en /admin/crm, que se gobierna con 'leads'.
+  assert.match(src, /requireAdminUser\('leads'\)/)
   assert.match(src, /companyId: user\.metadata\.companyId/)
   assert.ok(!/formData\.get\(['"]companyId['"]\)/.test(src), 'la empresa nunca sale del formulario')
   assert.match(src, /ID_VALIDO = \/\^\[a-z0-9\]\{10,40\}\$\/i/)
