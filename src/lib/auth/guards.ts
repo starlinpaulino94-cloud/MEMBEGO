@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES, ROLE_HOME, type AppRole, type SessionUser } from '@/types'
@@ -56,6 +57,31 @@ export async function requireRole(
  * acotado sí puede ejecutar usan `requireSection(...)` en su lugar.
  */
 /**
+ * Los ajustes de permisos de un usuario, UNA SOLA LECTURA POR PETICIÓN.
+ *
+ * `requireSection` lee la base viva a propósito: negarle algo a alguien surte
+ * efecto en su siguiente clic, sin esperar al refresco del token. El precio es
+ * una consulta por llamada, y desde que cada sección tiene guardia en su
+ * layout ADEMÁS de en sus páginas y sus actions, una misma pantalla la pedía
+ * dos y tres veces.
+ *
+ * `cache` de React deduplica dentro de una misma petición y no entre
+ * peticiones: se mantiene intacto lo que hace que esto valga —cada request
+ * vuelve a preguntar— y desaparece lo que solo era repetirse.
+ */
+const permisosVivos = cache(async (dbUserId: string): Promise<PermisosUsuario | null> => {
+  const { prisma } = await import('@/lib/prisma')
+  const fila = await prisma.user.findUnique({
+    where: { id: dbUserId },
+    select: { permisos: true },
+  })
+  // `undefined` = no hay fila para ese id. Distinto de «sin ajustes», y quien
+  // llama tiene que poder negar en ese caso en vez de tratarlo como «hereda».
+  if (!fila) throw new Error('usuario sin fila')
+  return resolverPermisosUsuario(fila.permisos)
+})
+
+/**
  * Puerta del PANEL DE EMPRESA para el layout de `/admin`.
  *
  * Igual que la del proxy y por el mismo motivo: el rol la abre de par en par,
@@ -75,12 +101,7 @@ export async function requirePanel(): Promise<SessionUser> {
   let permisos: PermisosUsuario | null = null
   if (user.metadata.dbUserId) {
     try {
-      const { prisma } = await import('@/lib/prisma')
-      const fila = await prisma.user.findUnique({
-        where: { id: user.metadata.dbUserId },
-        select: { permisos: true },
-      })
-      permisos = resolverPermisosUsuario(fila?.permisos)
+      permisos = await permisosVivos(user.metadata.dbUserId)
     } catch {
       permisos = null
     }
@@ -116,13 +137,8 @@ export async function usuarioPuedeFuncion(
   if (ROLES_EXENTOS_PERMISOS.includes(role)) return true
   if (!user.metadata.dbUserId) return false
   try {
-    const { prisma } = await import('@/lib/prisma')
-    const fila = await prisma.user.findUnique({
-      where: { id: user.metadata.dbUserId },
-      select: { permisos: true },
-    })
-    if (!fila) return false
-    return funcionPermitida(role, section, funcion, resolverPermisosUsuario(fila.permisos))
+    const permisos = await permisosVivos(user.metadata.dbUserId)
+    return funcionPermitida(role, section, funcion, permisos)
   } catch {
     return false
   }
@@ -147,13 +163,7 @@ export async function requireSection(
   let permisos: PermisosUsuario | null = null
   if (!ROLES_EXENTOS_PERMISOS.includes(role) && user.metadata.dbUserId) {
     try {
-      const { prisma } = await import('@/lib/prisma')
-      const fila = await prisma.user.findUnique({
-        where: { id: user.metadata.dbUserId },
-        select: { permisos: true },
-      })
-      if (!fila) return null
-      permisos = resolverPermisosUsuario(fila.permisos)
+      permisos = await permisosVivos(user.metadata.dbUserId)
     } catch {
       return null
     }

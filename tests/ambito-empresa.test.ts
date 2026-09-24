@@ -78,16 +78,30 @@ test('solo dos páginas declaran lectura cross-tenant, ambas con selección expl
 
 // ── Guards fail-closed: el error de lectura niega, no hereda ─────────────────
 
+/**
+ * LA FILA QUE FALTA NO ES «SIN AJUSTES».
+ *
+ * Es la distinción que sostiene estas dos guardias: si un usuario no tiene
+ * fila en la base, `resolverPermisosUsuario(fila?.permisos)` devolvería null
+ * —que significa «hereda su rol tal cual»— y le abriría todo lo que su rol
+ * trae. Un id que no existe tiene que NEGAR, no heredar.
+ *
+ * El `if (!fila)` que estas pruebas vigilaban por su letra vive ahora en
+ * `permisosVivos`, la lectura memoizada por petición que comparten los tres
+ * guardias. Cambió el sitio, no la regla: allí LANZA, y cada llamador lo
+ * atrapa con su propia negativa. Se comprueban las dos mitades, porque una
+ * sin la otra no niega nada.
+ */
 test('usuarioPuedeFuncion niega cuando la lectura falla o la fila falta', () => {
   const src = leer('src/lib/auth/guards.ts')
+  assert.match(src, /if \(!fila\) throw/)
   assert.match(src, /catch \{\s*return false\s*\}/)
-  assert.match(src, /if \(!fila\) return false/)
 })
 
 test('requireSection niega cuando la lectura falla o la fila falta', () => {
   const src = leer('src/lib/auth/guards.ts')
+  assert.match(src, /if \(!fila\) throw/)
   assert.match(src, /catch \{\s*return null\s*\}/)
-  assert.match(src, /if \(!fila\) return null/)
 })
 
 test('tieneCapacidad falla cerrada ante errores', () => {

@@ -568,3 +568,76 @@ test('el menú del mostrador enseña lo concedido, y solo eso', () => {
   const delPanel = con.filter((h) => h.startsWith('/admin'))
   assert.deepEqual(delPanel.sort(), ['/admin/clientes', '/admin/membresias'])
 })
+
+// -- La barrera viva, sección por sección ------------------------------------
+
+/**
+ * CADA SECCIÓN CON CARPETA TIENE SU GUARDIA EN EL LAYOUT.
+ *
+ * Es más estricta que «toda sección se exige en algún sitio», y a propósito.
+ * Aquella acepta que baste con tener carpeta, porque entonces el proxy cierra
+ * la vista — pero el proxy lee los permisos del TOKEN. Quitarle un módulo a
+ * alguien no le cerraba la puerta hasta que su sesión se refrescara, y de las
+ * 147 pantallas del panel había 92 que no tenían ninguna barrera viva detrás.
+ *
+ * El layout la tiene: `requireSection` lee la base en cada render, y cubre
+ * todo el subárbol —incluidas las pantallas que alguien añada mañana sin
+ * acordarse de la guardia—.
+ *
+ * `dashboard` queda fuera, y es la única excepción: es el destino al que
+ * rebota todo lo negado, aquí y en el proxy, así que guardarlo sería rebotar
+ * a sí mismo.
+ */
+test('cada sección del panel tiene guardia viva en su layout', () => {
+  const BASE = join(RAIZ, 'src/app/(admin)/admin')
+  const SIN_GUARDIA = new Set(['dashboard'])
+
+  const sinCubrir: string[] = []
+  for (const d of readdirSync(BASE, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue
+    if (!(ADMIN_SECTIONS as readonly string[]).includes(d.name)) continue
+    if (SIN_GUARDIA.has(d.name)) continue
+    const lay = join(BASE, d.name, 'layout.tsx')
+    let src = ''
+    try {
+      src = readFileSync(lay, 'utf8')
+    } catch {
+      sinCubrir.push(`${d.name} (sin layout)`)
+      continue
+    }
+    // Sin comentarios: el porqué de esto está escrito en la fábrica y nombra
+    // a `requireSection`, así que un fichero que solo lo MENCIONE pasaría.
+    const codigo = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    const guarda =
+      /guardarSeccion\(/.test(codigo) || /requireSection\(/.test(codigo)
+    if (!guarda) sinCubrir.push(`${d.name} (layout sin guardia)`)
+  }
+
+  assert.deepEqual(
+    sinCubrir,
+    [],
+    'estas secciones no tienen barrera VIVA: sus pantallas solo las cierra el ' +
+      'proxy, que lee los permisos del token y va con un refresco de retraso'
+  )
+})
+
+test('la sección que se guarda es la de su carpeta, no otra', () => {
+  // Una fábrica hace muy fácil copiar el fichero de al lado y olvidar cambiar
+  // el nombre: el layout de «pagos» guardando 'clientes' pasaría la prueba de
+  // arriba y dejaría pagos abierto a quien tenga clientes.
+  const BASE = join(RAIZ, 'src/app/(admin)/admin')
+  const cruzadas: string[] = []
+  for (const d of readdirSync(BASE, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue
+    if (!(ADMIN_SECTIONS as readonly string[]).includes(d.name)) continue
+    let src = ''
+    try {
+      src = readFileSync(join(BASE, d.name, 'layout.tsx'), 'utf8')
+    } catch {
+      continue
+    }
+    const m = /guardarSeccion\('([a-z-]+)'\)/.exec(src)
+    if (m && m[1] !== d.name) cruzadas.push(`${d.name} guarda '${m[1]}'`)
+  }
+  assert.deepEqual(cruzadas, [], 'un layout guarda una sección que no es la suya')
+})
