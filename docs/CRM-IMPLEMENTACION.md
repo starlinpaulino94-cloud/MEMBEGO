@@ -120,6 +120,20 @@ conservó tal cual, movido de la raíz a `/admin/crm/leads`.
   validar y **nadie podía negarlos**. Hoy las nueve piden `'leads'`, están en
   el catálogo con su casilla, y `scripts/permisos-catalogo.mjs` lo vigila en
   el CI en las dos direcciones.
+- **Bitácora (24-09-2026):** investigando lo anterior se descubrió que el CRM
+  no auditaba NADA. Otros 44 módulos sí; este no, y ni `Lead` ni
+  `AutoReplyConfig` guardan autor, así que no había forma de saber quién creó,
+  editó o descartó un prospecto. Las ocho actions de escritura asientan ahora
+  en `audit_logs` con IP y navegador: `PROSPECTO_CREADO`,
+  `PROSPECTO_ACTUALIZADO`, `PROSPECTO_DESCARTADO`, `PROSPECTO_ETAPA_CAMBIADA`,
+  `PROSPECTO_ASIGNADO`, `AUTO_RESPUESTA_CREADA`, `AUTO_RESPUESTA_ACTUALIZADA`
+  y `AUTO_RESPUESTA_ELIMINADA` (migración `20260930_crm_auditoria`).
+  El asiento es **fail-open y va fuera de la transacción**: las migraciones de
+  este proyecto se aplican a mano, y si el código llegara antes que la suya,
+  auditar dentro de la transacción dejaría el CRM de solo lectura. El payload
+  lleva los NOMBRES de los campos tocados, nunca teléfonos, correos ni el
+  texto de las notas: la bitácora la lee más gente que el CRM.
+  Lo fija `tests/crm-auditoria.test.ts`.
 - `queries.ts` / `types.ts` del CRM de leads **no** referencian
   `Conversacion`/`Mensaje` (desacoplados en la reconciliación).
 

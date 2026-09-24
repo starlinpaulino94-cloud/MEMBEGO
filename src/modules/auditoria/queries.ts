@@ -142,6 +142,15 @@ export const ACCION_LABEL: Record<string, string> = {
   COMPOSICION_PUBLICADA: 'Inicio publicado',
   COMPOSICION_PAUSADA: 'Inicio pausado',
   COMPOSICION_ARCHIVADA: 'Inicio archivado',
+  // CRM: prospectos y las respuestas automáticas que contestan por la empresa.
+  PROSPECTO_CREADO: 'Prospecto creado',
+  PROSPECTO_ACTUALIZADO: 'Prospecto editado',
+  PROSPECTO_DESCARTADO: 'Prospecto descartado',
+  PROSPECTO_ETAPA_CAMBIADA: 'Prospecto movido de etapa',
+  PROSPECTO_ASIGNADO: 'Prospecto asignado a otra persona',
+  AUTO_RESPUESTA_CREADA: 'Respuesta automática creada',
+  AUTO_RESPUESTA_ACTUALIZADA: 'Respuesta automática editada',
+  AUTO_RESPUESTA_ELIMINADA: 'Respuesta automática eliminada',
   // Integraciones: lo que sale hacia sistemas de terceros.
   INTEGRACION_SONDEADA: 'Webhook probado',
   INTEGRACION_REINTENTADA: 'Cola de eventos reenviada',

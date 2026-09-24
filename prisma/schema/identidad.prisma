@@ -215,6 +215,36 @@ enum AuditAccion {
   SUPPLY_AJUSTE_LEDGER
   /// Se recalcularon los contadores de un lote desde el ledger.
   SUPPLY_LOTE_RECALCULADO
+  // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
+  // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
+  // alguien había pasado por el hueco de permisos que tenían estas mismas
+  // actions, y la respuesta fue que no se podía saber: ni auditoría, ni
+  // columna de autor en `Lead` ni en `AutoReplyConfig`. Un prospecto es un
+  // cliente potencial con su teléfono y su correo, y descartarlo o
+  // reasignarlo le quita trabajo —y comisión— a alguien: no puede seguir
+  // pasando sin nombre y sin fecha.
+  /// Se creó un prospecto.
+  PROSPECTO_CREADO
+  /// Se editó un prospecto (el payload lleva solo los campos que cambiaron).
+  PROSPECTO_ACTUALIZADO
+  /// Se descartó un prospecto. Es un borrado blando: la fila sigue ahí en
+  /// estado DESCARTADO, así que este asiento es lo único que dice quién lo
+  /// sacó del embudo y cuándo.
+  PROSPECTO_DESCARTADO
+  /// Un prospecto cambió de etapa del embudo (el payload lleva de dónde a
+  /// dónde). Va aparte de PROSPECTO_ACTUALIZADO porque es la pregunta que se
+  /// hace sola: «¿quién dio este trato por perdido?».
+  PROSPECTO_ETAPA_CAMBIADA
+  /// Un prospecto se asignó a otra persona (o se dejó sin asignar).
+  PROSPECTO_ASIGNADO
+  /// Se creó una respuesta automática. Contesta en nombre de la empresa a
+  /// quien escribe por WhatsApp o redes: cambiarla cambia lo que el negocio
+  /// le dice a sus clientes sin que nadie lo lea antes.
+  AUTO_RESPUESTA_CREADA
+  /// Se editó una respuesta automática.
+  AUTO_RESPUESTA_ACTUALIZADA
+  /// Se eliminó una respuesta automática.
+  AUTO_RESPUESTA_ELIMINADA
 }
 
 // ─────────────────────────────────────────────
