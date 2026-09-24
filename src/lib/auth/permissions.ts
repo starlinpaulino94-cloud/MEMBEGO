@@ -238,6 +238,18 @@ export const ROLES_EXENTOS_PERMISOS: readonly AppRole[] = ['SUPERADMIN']
 const ROLES_ADMIN_EMPRESA: readonly AppRole[] = ['ADMINISTRADOR', 'ADMIN_EMPRESA']
 
 /**
+ * Quién puede ABRIR el módulo de Permisos: la ficha de un empleado y el mapa
+ * de accesos del equipo. `puedeEditarPermisos` decide después a quién de la
+ * lista puede tocar cada uno; esto es solo la puerta de entrada.
+ *
+ * Vive aquí y no en la pantalla porque ya son dos las que la necesitan. Una
+ * lista copiada a mano en una tercera —con un rol de más— es una puerta
+ * abierta que no se ve en ninguna revisión: el código compila igual. Una
+ * prueba vigila que nadie vuelva a escribirla suelta.
+ */
+export const ROLES_CON_PERMISOS: AppRole[] = ['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA']
+
+/**
  * ¿Puede `editor` ajustar los permisos de `objetivo`?
  *  · SUPERADMIN → a cualquiera menos a otro superadmin.
  *  · Admin de empresa → a su equipo, nunca a otro admin (ni a la plataforma).
