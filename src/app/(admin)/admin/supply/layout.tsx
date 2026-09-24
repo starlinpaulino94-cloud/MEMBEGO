@@ -1,31 +1,27 @@
 import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
-import { getUser } from '@/lib/auth'
+import { requireUser } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { guardiaProveedor } from '@/modules/supply/permisos'
 
 /**
- * GUARDIA VIVA DE `supply`, en su layout.
+ * La barrera VIVA del portal del proveedor, para todo el subárbol.
  *
- * No usa la fábrica `guardarSeccion` como las otras 38 secciones, y el motivo
- * es el contrato propio del portal del proveedor: aquí no basta con que la
- * sesión tenga la sección permitida, la EMPRESA tiene que ser proveedora.
- * `guardiaProveedor` comprueba las dos cosas —incluye el `requireSection` que
- * haría la fábrica— y no se la salta ni el superadmin: una pantalla vacía con
- * datos de otro inquilino es peor que un «no autorizado».
+ * `/admin/supply` era la única sección del panel sin guardia de layout: sus
+ * pantallas se cerraban sola con la del proxy, que lee los permisos del TOKEN
+ * y va con un refresco de retraso. Quitarle Supply a alguien no le cerraba la
+ * puerta hasta que su sesión se renovara.
  *
- * Que esté en el LAYOUT y no solo en cada página es lo que cubre el subárbol
- * entero, incluidas las pantallas que alguien añada mañana sin acordarse.
- * Las páginas mantienen la suya: esto guarda la VISTA, y las server actions se
- * despachan por su id desde cualquier path, así que se guardan donde se
- * ejecutan.
+ * No usa la fábrica `guardarSeccion('supply')` porque aquí la sección no basta:
+ * `guardiaProveedor` es esa misma comprobación —lee `requireSection('supply')`
+ * contra la base en cada render— MÁS la que de verdad delimita este portal, que
+ * la empresa activa sea proveedora. Poner las dos juntas y en el layout es lo
+ * que hace que una pantalla nueva bajo esta carpeta nazca cubierta en vez de
+ * depender de que quien la escriba se acuerde.
  */
-export default async function LayoutSupply({ children }: { children: ReactNode }) {
-  const user = await getUser()
-  if (!user) redirect('/login')
-
+export default async function LayoutPortalProveedor({ children }: { children: ReactNode }) {
+  const user = await requireUser()
   const companyId = await requireCompanyContext(user)
   if (!(await guardiaProveedor(companyId))) redirect('/admin/dashboard')
-
   return children
 }

@@ -588,6 +588,32 @@ test('el menú del mostrador enseña lo concedido, y solo eso', () => {
  * rebota todo lo negado, aquí y en el proxy, así que guardarlo sería rebotar
  * a sí mismo.
  */
+/**
+ * ¿La guardia del layout la pone una función de módulo, y esa función lee la
+ * sección en vivo?
+ *
+ * Una sección puede necesitar MÁS que la sección —el portal del proveedor
+ * exige además que la empresa activa sea proveedora— y entonces su layout no
+ * llama a la fábrica sino a la guardia del módulo. Aceptarla por su nombre
+ * sería una lista de bendecidos; lo que se comprueba es la PROPIEDAD: que el
+ * ayudante que importa ese layout lea `requireSection('<su sección>')`. Si
+ * mañana esa función dejara de consultar la base, esto falla.
+ */
+function guardiaPrestada(codigo: string, seccion: string): boolean {
+  const modulos = [...codigo.matchAll(/from '@\/modules\/([^']+)'/g)].map((m) => m[1])
+  return modulos.some((rel) => {
+    for (const ext of ['.ts', '.tsx']) {
+      try {
+        const fuente = readFileSync(join(RAIZ, 'src', 'modules', rel + ext), 'utf8')
+        if (fuente.includes(`requireSection('${seccion}'`)) return true
+      } catch {
+        // Ese módulo no existe con esa extensión; se prueba la siguiente.
+      }
+    }
+    return false
+  })
+}
+
 test('cada sección del panel tiene guardia viva en su layout', () => {
   const BASE = join(RAIZ, 'src/app/(admin)/admin')
   const SIN_GUARDIA = new Set(['dashboard'])
@@ -608,15 +634,10 @@ test('cada sección del panel tiene guardia viva en su layout', () => {
     // Sin comentarios: el porqué de esto está escrito en la fábrica y nombra
     // a `requireSection`, así que un fichero que solo lo MENCIONE pasaría.
     const codigo = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
-    // `guardiaProveedor` cuenta porque es MÁS fuerte, no más débil: llama a
-    // `requireSection('supply')` y ADEMÁS exige que la empresa sea proveedora.
-    // El portal del proveedor no puede usar la fábrica por eso mismo, y hacerle
-    // llamar también a `requireSection` para contentar a esta prueba sería una
-    // segunda lectura de la base para preguntar lo que ya se preguntó.
     const guarda =
       /guardarSeccion\(/.test(codigo) ||
       /requireSection\(/.test(codigo) ||
-      /guardiaProveedor\(/.test(codigo)
+      guardiaPrestada(codigo, d.name)
     if (!guarda) sinCubrir.push(`${d.name} (layout sin guardia)`)
   }
 

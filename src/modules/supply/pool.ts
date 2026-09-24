@@ -667,7 +667,19 @@ export interface BeneficioCliente {
   /** true = hay que reservar antes de poder enseñar el QR. */
   exigeReserva: boolean
   precioPagado: number
+  /**
+   * ¿Se le acaba el plazo en menos de una semana? Se resuelve AQUÍ, al leer.
+   *
+   * Lo decidía la tarjeta con un `Date.now()` dentro del render, y eso el
+   * compilador de React lo rechaza por impuro: el mismo beneficio podía
+   * pintarse «vence pronto» o no según cuándo le tocara volver a renderizar.
+   * Es el mismo arreglo que ya llevaban las invitaciones del panel.
+   */
+  vencePronto: boolean
 }
+
+/** Cuánto antes del vencimiento se avisa al cliente. */
+const AVISO_VENCIMIENTO_MS = 7 * 86_400_000
 
 /**
  * "Mis beneficios": lo que esta persona tiene de Membego Supply.
@@ -710,6 +722,10 @@ export async function beneficiosDelCliente(
       },
     })
 
+    // Una sola lectura del reloj para toda la tanda: si se tomara dentro del
+    // map, dos beneficios que vencen en el mismo instante podrían salir con
+    // avisos distintos.
+    const ahora = Date.now()
     return derechos.map((d) => ({
       derechoId: d.id,
       voucherId: d.vouchers[0]?.id ?? null,
@@ -725,6 +741,7 @@ export async function beneficiosDelCliente(
       reservaAt: d.reservas[0]?.inicioAt ?? null,
       exigeReserva: d.lote.snapshotTipo === 'CAPACIDAD_AGENDADA',
       precioPagado: Number(d.precioCliente),
+      vencePronto: d.vencAt.getTime() - ahora < AVISO_VENCIMIENTO_MS,
     }))
   })
 }
